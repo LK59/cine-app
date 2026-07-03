@@ -1,26 +1,91 @@
 # Cine App
 
-Dashboard unifié pour piloter Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin et Jellyseerr depuis une seule interface.
+Self-hosted PWA dashboard for managing a cinema/media stack from one mobile-friendly interface.
 
-## Prérequis
+Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr into a single dashboard designed for daily use.
 
-- Le conteneur doit rejoindre le même réseau Docker externe que vos services (`media_net` dans cette config).
-- Les clés API de chaque service (visibles dans Settings > General de chaque `*arr`, Settings de Jellyfin/Jellyseerr, ou la conf de Jackett).
+## Features
 
-## Déploiement
+- Unified dashboard for media services
+- Radarr and Sonarr library views
+- Jellyfin resume watching and playback shortcuts
+- Jellyseerr request management
+- qBittorrent monitoring and actions
+- Calendar and timeline views
+- Watchlist and recommendations
+- Service health page
+- Installable PWA
+- Web Push notifications, including iOS PWA support
+- Mobile-first navigation
+
+## Requirements
+
+- Docker / Docker Compose
+- Existing media stack services
+- API keys for Radarr, Sonarr, Bazarr, Jackett, Jellyfin and Jellyseerr
+- A shared Docker network with your media services
+
+## Deployment
 
 ```bash
 cp .env.example .env
-# éditer .env : renseigner APP_ADMIN_USER / APP_ADMIN_PASSWORD / SESSION_SECRET
-# et les API keys + URLs internes de chaque service
+```
 
+Edit `.env` and configure:
+
+- app admin credentials
+- service URLs
+- API keys
+- qBittorrent credentials
+- optional TMDb / OMDb keys
+- optional VAPID keys for push notifications
+
+Then start the app:
+
+```bash
 docker compose up -d --build
 ```
 
-L'app écoute sur le port `3000` à l'intérieur du réseau Docker. Exposez-la via votre reverse proxy (ex. Nginx Proxy Manager déjà présent sur `media_net`) en pointant vers `cine-app:3000`, ou décommentez la section `ports` du `docker-compose.yml` pour un test direct.
+The app listens on port `3000` inside Docker. Use a reverse proxy such as Nginx Proxy Manager, Traefik or Caddy, or expose the port directly for testing.
+
+## Push Notifications
+
+Cine App supports Web Push notifications for installed PWAs, including iOS Safari / Apple Web Push.
+
+Generate VAPID keys with:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Then set:
+
+```env
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@example.com
+```
+
+## Security
+
+Never commit:
+
+```text
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+```
+
+All service API keys are kept server-side and are not exposed to the browser.
 
 ## Notes
 
-- qBittorrent est joint via `gluetun` (le client partage son network namespace), d'où `QBITTORRENT_URL=http://gluetun:8080`.
-- Toutes les clés API restent côté serveur (routes API Next.js) et ne sont jamais envoyées au navigateur.
-- L'authentification de l'app est un compte unique défini par variables d'environnement, à protéger en plus par votre reverse proxy si besoin.
+qBittorrent can be reached through a Gluetun container when it shares the same network namespace:
+
+```env
+QBITTORRENT_URL=http://gluetun:8080
+```
+
+Adjust this value depending on your own stack.
