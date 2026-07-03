@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-slate-100 antialiased;
+    background-color: #020617;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(124, 92, 255, 0.16), transparent 45%),
+      radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.1), transparent 40%),
+      radial-gradient(circle at 50% 100%, rgba(124, 92, 255, 0.08), transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-white/10 bg-slate-900/40 backdrop-blur-xl shadow-glow;
+  }
+  .glass-panel {
+    @apply border border-white/10 bg-slate-950/60 backdrop-blur-2xl;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur-sm transition-colors;
+  }
+  .btn-primary {
+    @apply btn bg-accent-600/90 text-white hover:bg-accent-600;
+  }
+  .btn-ghost {
+    @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10;
+  }
+  .btn-danger {
+    @apply btn bg-red-600/80 text-white hover:bg-red-600;
+  }
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-sm placeholder:text-slate-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium backdrop-blur-sm;
+  }
+  .select {
+    @apply rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgb(30 41 59) 0%,
+      rgb(51 65 85) 50%,
+      rgb(30 41 59) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* Stagger animation helpers */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.10s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.20s; }
+  .stagger-5 { animation-delay: 0.25s; }
+}

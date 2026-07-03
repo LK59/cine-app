@@ -1,0 +1,25 @@
+networks:
+  media_net:
+    external: true
+
+services:
+  cine-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cine-app:latest
+    container_name: cine-app
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - /mnt/media/video:/mnt/media/video:ro
+      - ./data:/app/data
+      - /mnt/media/cloud/louis/clara:/app/gallery/clara:ro
+    # Décommenter pour tester un accès direct sans reverse proxy :
+    # ports:
+    #   - "3000:3000"
+    networks:
+      - media_net
+    restart: unless-stopped

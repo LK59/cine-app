@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background circle -->
+  <rect width="32" height="32" rx="8" fill="#0f172a"/>
+  <!-- Clapperboard body -->
+  <rect x="5" y="13" width="22" height="14" rx="2" fill="#7c5cff"/>
+  <!-- Clapperboard top (moving part) -->
+  <rect x="5" y="8" width="22" height="6" rx="2" fill="#6438f5"/>
+  <!-- Clapper stripes on top -->
+  <rect x="8" y="8" width="3" height="6" fill="#0f172a" opacity="0.4"/>
+  <rect x="14" y="8" width="3" height="6" fill="#0f172a" opacity="0.4"/>
+  <rect x="20" y="8" width="3" height="6" fill="#0f172a" opacity="0.4"/>
+  <!-- Play triangle in body -->
+  <path d="M13 18.5 L13 23.5 L20 21 Z" fill="white" opacity="0.9"/>
+</svg>

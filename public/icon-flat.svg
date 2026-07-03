@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="0" fill="#0f172a"/>
+  <!-- Clapperboard body -->
+  <rect x="106" y="213" width="300" height="149" rx="18" fill="#7c5cff"/>
+  <!-- Clapperboard top bar -->
+  <rect x="106" y="150" width="300" height="70" rx="18" fill="#6438f5"/>
+  <!-- Stripe dividers on top bar -->
+  <rect x="156" y="150" width="24" height="70" fill="#0f172a" opacity="0.35"/>
+  <rect x="236" y="150" width="24" height="70" fill="#0f172a" opacity="0.35"/>
+  <rect x="316" y="150" width="24" height="70" fill="#0f172a" opacity="0.35"/>
+  <!-- Play triangle -->
+  <path d="M218 248 L218 326 L310 287 Z" fill="#ffffff" opacity="0.95"/>
+</svg>
