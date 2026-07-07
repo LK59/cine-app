@@ -217,57 +217,6 @@ function ApiChecksSection() {
   );
 }
 
-// ─── PWA update section ───────────────────────────────────────────────────────
-
-function PwaSection() {
-  const [status, setStatus] = useState<"idle" | "checking" | "updated" | "latest">("idle");
-
-  const update = useCallback(async () => {
-    if (!("serviceWorker" in navigator)) return;
-    setStatus("checking");
-    try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) { setStatus("idle"); return; }
-      await reg.update();
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        setTimeout(() => window.location.reload(), 300);
-        setStatus("updated");
-      } else {
-        setStatus("latest");
-        setTimeout(() => setStatus("idle"), 3000);
-      }
-    } catch { setStatus("idle"); }
-  }, []);
-
-  return (
-    <div className="mt-8">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-white">Application</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Mise à jour de la PWA sans réinstallation</p>
-      </div>
-      <div className="card p-5 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-white">Mettre à jour la PWA</p>
-          <p className="text-xs text-slate-500 mt-0.5">Vérifie et installe la dernière version du Service Worker</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {status === "latest" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle size={13} /> Déjà à jour</span>}
-          {status === "updated" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle size={13} /> Mise à jour appliquée</span>}
-          <button
-            onClick={update}
-            disabled={status === "checking"}
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
-          >
-            <RefreshCw size={13} className={status === "checking" ? "animate-spin" : ""} />
-            {status === "checking" ? "Vérification…" : "Mettre à jour"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function HealthPage() {
@@ -357,8 +306,6 @@ export default function HealthPage() {
           {/* API routes section */}
           <ApiChecksSection />
 
-          {/* PWA update */}
-          <PwaSection />
 
         </>
       )}
