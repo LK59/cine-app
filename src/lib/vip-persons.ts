@@ -1,8 +1,9 @@
 export interface VipPerson {
   tmdbId: number;
   galleryPath: string;
-  links: { instagram?: string; imdb?: string; wikipedia?: string; agency?: string };
+  links: { instagram?: string; imdb?: string; wikipedia?: string; agency?: string; tiktok?: string };
   bio: { fr: string; es: string; en: string };
+  videos?: { id: string; title: string }[];
 }
 
 export const VIP_PERSONS: Record<number, VipPerson> = {
@@ -11,10 +12,22 @@ export const VIP_PERSONS: Record<number, VipPerson> = {
     galleryPath: "/app/gallery/clara",
     links: {
       instagram: "https://www.instagram.com/claaragalle/",
+      tiktok: "https://www.tiktok.com/@claaragalle",
       imdb: "https://www.imdb.com/name/nm12494183",
       wikipedia: "https://fr.wikipedia.org/wiki/Clara_Galle",
       agency: "https://cramtalent.com/talentos/clara-galle/",
     },
+    videos: [
+      { id: "q2XtW18Wh8M", title: "Interview" },
+      { id: "W8_5TyR0dDY", title: "Interview" },
+      { id: "L-XeaV9rQb0", title: "Interview" },
+      { id: "HLa1o1s4hSk", title: "Interview" },
+      { id: "1n1QcURZ7fU", title: "Interview" },
+      { id: "fw98mndzgug", title: "Interview" },
+      { id: "-5t_9ixSB-M", title: "Interview" },
+      { id: "jHok5LGZQ74", title: "Interview" },
+      { id: "PuZ-DlboJhw", title: "Interview" },
+    ],
     bio: {
       fr: `Clara Gallé, de son vrai nom Clara Huete Sánchez, est née le 15 avril 2002 à Pampelune, en Espagne. Dès son plus jeune âge, elle se passionne pour les arts du spectacle et intègre l'Instituto Plaza de la Cruz, où elle se forme à l'art dramatique tout en suivant des cours de danse contemporaine et urbaine. En 2020, elle s'installe à Madrid pour étudier l'histoire de l'art à l'Université Complutense, conjuguant formation académique et ambitions artistiques.
 

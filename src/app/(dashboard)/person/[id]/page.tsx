@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { VipPerson } from "@/lib/vip-persons";
 import { isVip, isClaraGalleryEnabled } from "@/lib/vip-persons";
+import type { NewsArticle } from "@/app/api/news/clara/route";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import { selectBio } from "@/lib/format";
 
@@ -196,6 +197,96 @@ function GalleryLightbox({
 
 // â”€â”€â”€ VIP page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// ─── VIP sub-components ───────────────────────────────────────────────────────
+
+function VideoCard({ videoId, title }: { videoId: string; title: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [thumbSrc, setThumbSrc] = useState(`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`);
+
+  return (
+    <div className="group relative aspect-video overflow-hidden rounded-2xl bg-slate-900 shadow-xl ring-1 ring-white/10">
+      {playing ? (
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
+          title={title}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="absolute inset-0 h-full w-full"
+        />
+      ) : (
+        <button onClick={() => setPlaying(true)} className="absolute inset-0 h-full w-full" aria-label={"Lire " + title}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={thumbSrc}
+            alt={title}
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            loading="lazy"
+            decoding="async"
+            onError={() => setThumbSrc(`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`)}
+          />
+          <div className="absolute inset-0 bg-black/30 transition group-hover:bg-black/20" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600 shadow-2xl shadow-red-600/40 transition group-hover:scale-110">
+              <svg viewBox="0 0 24 24" fill="white" className="ml-1 h-7 w-7"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </div>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function NewsSection() {
+  const { data } = useSWR<{ articles: NewsArticle[] }>(
+    "/api/news/clara",
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
+  );
+  const articles = data?.articles ?? [];
+  if (!data || articles.length === 0) return null;
+
+  return (
+    <section className="mb-10">
+      <div className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Presse</p>
+        <h2 className="mt-2 text-3xl font-bold text-white">Actualités</h2>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {articles.map((a, i) => {
+          const date = a.pubDate ? new Date(a.pubDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : null;
+          return (
+            <a
+              key={i}
+              href={a.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex flex-col justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-4 transition hover:border-amber-200/30 hover:bg-white/[0.09]"
+            >
+              <p className="line-clamp-3 text-sm font-medium leading-6 text-white/90 group-hover:text-white">{a.title}</p>
+              <div className="flex items-center justify-between text-xs text-white/40">
+                <span>{a.source}</span>
+                {date && <span>{date}</span>}
+              </div>
+            </a>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex justify-end">
+        <a
+          href="https://news.google.com/search?q=Clara+Gall%C3%A9&hl=fr"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-xs text-white/40 transition hover:text-white/70"
+        >
+          Voir plus sur Google News <ExternalLink size={12} />
+        </a>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 type Lang = "fr" | "es" | "en";
 
 function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
@@ -368,6 +459,14 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
                   <span className="flex items-center gap-3"><Instagram size={16} /> Instagram</span><ExternalLink size={14} />
                 </a>
               )}
+              {vip?.links.tiktok && (
+                <a href={vip.links.tiktok} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-2xl border border-slate-300/20 bg-slate-300/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-300/20">
+                  <span className="flex items-center gap-3">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.22 8.22 0 0 0 4.81 1.54V6.78a4.85 4.85 0 0 1-1.04-.09z"/></svg>
+                    TikTok
+                  </span><ExternalLink size={14} />
+                </a>
+              )}
               {vip?.links.imdb && (
                 <a href={vip.links.imdb} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/20">
                   <span className="flex items-center gap-3"><Star size={16} /> IMDb</span><ExternalLink size={14} />
@@ -455,7 +554,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
         )}
 
         {tvShows.length > 0 && (
-          <section>
+          <section className="mb-16">
             <h2 className="mb-5 flex items-center gap-2 text-xl font-bold text-white">
               <Tv size={18} className="text-amber-200" /> Series <span className="text-sm font-normal text-white/40">({tvShows.length})</span>
             </h2>
@@ -464,6 +563,20 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
             </div>
           </section>
         )}
+
+        {vip?.videos && vip.videos.length > 0 && (
+          <section className="mb-16">
+            <div className="mb-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Médias</p>
+              <h2 className="mt-2 text-3xl font-bold text-white">Interviews & Vidéos</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {vip.videos.map((v) => <VideoCard key={v.id} videoId={v.id} title={v.title} />)}
+            </div>
+          </section>
+        )}
+
+        <NewsSection />
       </main>
 
       {lightboxIndex !== null && (
