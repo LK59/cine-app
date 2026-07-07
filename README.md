@@ -80,9 +80,9 @@ data/
 
 All service API keys are kept server-side and are not exposed to the browser.
 
-## Clara Gallé gallery page
+## Clara Galle gallery page
 
-Cine App includes an optional enriched page for the actress Clara Gallé, with a full-screen photo gallery, detailed biography and external links.
+Cine App includes an optional enriched page for the actress Clara Galle, with a full-screen photo gallery, detailed biography and external links.
 
 This feature is **disabled by default** and requires a local photo folder on your host.
 
