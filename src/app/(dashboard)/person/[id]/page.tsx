@@ -206,6 +206,7 @@ function TimelineSection({ items }: { items: NonNullable<import("@/lib/vip-perso
     Clip: "bg-pink-500/20 text-pink-300 border-pink-500/30",
     Formation: "bg-sky-500/20 text-sky-300 border-sky-500/30",
     Publicité: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+    Tournage: "bg-orange-500/20 text-orange-300 border-orange-500/30",
   };
   return (
     <section className="mb-16">

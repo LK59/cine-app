@@ -41,6 +41,8 @@ export const VIP_PERSONS: Record<number, VipPerson> = {
       { date: "31 mai 2024", event: "Ni una más — Netflix", detail: "Rôle de Greta dans le thriller espagnol.", tag: "Netflix" },
       { date: "2024", event: "The Head — Saison 3", detail: "Rôle d'Alba dans la série internationale.", tag: "Série" },
       { date: "20 juin 2025", event: "Olympo — Netflix", detail: "Rôle d'Amaia, capitaine d'une équipe de natation synchronisée.", tag: "Netflix" },
+      { date: "Fév. – Avr. 2025", event: "Tournage de Esa noche à Pamplona", detail: "Tournage entre la République Dominicaine et le Palacio Baluarte de Pamplona, avec Claudia Salas et Paula Usero.", tag: "Tournage" },
+      { date: "13 mars 2026", event: "Esa noche — Netflix", detail: "Minisérie de 8 épisodes. Rôle d'Elena, adaptée du roman That Night de Gillian McAllister (Txintxua Films).", tag: "Netflix" },
     ],
     quotes: [
       {
