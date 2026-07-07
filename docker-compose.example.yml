@@ -20,7 +20,7 @@ services:
       # Base de données persistante de l'app (watchlist, push subscriptions, etc.)
       - ./data:/app/data
 
-      # ── Galerie photo Clara Gallé (optionnel) ──────────────────────────────
+      # ── Galerie photo Clara Galle (optionnel) ──────────────────────────────
       # Décommenter et adapter le chemin si CLARA_GALLERY_ENABLED=true dans .env.
       # Le dossier doit contenir :
       #   - des photos au format JPG / PNG / WebP (affichées dans la galerie)

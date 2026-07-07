@@ -29,7 +29,7 @@ export const VIP_PERSONS: Record<number, VipPerson> = {
       { id: "PuZ-DlboJhw", title: "Interview" },
     ],
     bio: {
-      fr: `Clara Gallé, de son vrai nom Clara Huete Sánchez, est née le 15 avril 2002 à Pampelune, en Espagne. Dès son plus jeune âge, elle se passionne pour les arts du spectacle et intègre l'Instituto Plaza de la Cruz, où elle se forme à l'art dramatique tout en suivant des cours de danse contemporaine et urbaine. En 2020, elle s'installe à Madrid pour étudier l'histoire de l'art à l'Université Complutense, conjuguant formation académique et ambitions artistiques.
+      fr: `Clara Galle, de son vrai nom Clara Huete Sánchez, est née le 15 avril 2002 à Pampelune, en Espagne. Dès son plus jeune âge, elle se passionne pour les arts du spectacle et intègre l'Instituto Plaza de la Cruz, où elle se forme à l'art dramatique tout en suivant des cours de danse contemporaine et urbaine. En 2020, elle s'installe à Madrid pour étudier l'histoire de l'art à l'Université Complutense, conjuguant formation académique et ambitions artistiques.
 
 Sa carrière débute dans la publicité : en avril 2019, elle tourne pour la campagne de Noël de la marque de bijoux Tous, aux côtés d'Emma Roberts. Elle prête ensuite son image à des campagnes touristiques pour Andorre, à un spot Fanta, et collabore avec plusieurs enseignes de mode. En octobre 2021, elle apparaît dans le clip du single Tacones rojos du chanteur colombien Sebastián Yatra, qui lui offre une première exposition musicale notable.
 
@@ -37,7 +37,7 @@ C'est en mai 2021 qu'elle est confirmée pour deux projets qui vont définir sa 
 
 La suite de sa carrière confirme sa polyvalence. En 2024, elle incarne Greta dans Ni una más, série abordant des thématiques sociales fortes. En 2025, elle rejoint le casting principal de la série Netflix Olympo, dans laquelle elle joue Amaia Olaberria — un nouveau rôle ambitieux qui marque une étape supplémentaire dans la construction d'une carrière sérielle variée et engagée.`,
 
-      es: `Clara Gallé, cuyo nombre real es Clara Huete Sánchez, nació el 15 de abril de 2002 en Pamplona, España. Desde pequeña sintió una profunda atracción por las artes escénicas, por lo que se formó en el Instituto Plaza de la Cruz, donde estudió arte dramático al tiempo que tomaba clases de danza contemporánea y urbana. En 2020, se trasladó a Madrid para cursar Historia del Arte en la Universidad Complutense, combinando su formación académica con sus ambiciones artísticas.
+      es: `Clara Galle, cuyo nombre real es Clara Huete Sánchez, nació el 15 de abril de 2002 en Pamplona, España. Desde pequeña sintió una profunda atracción por las artes escénicas, por lo que se formó en el Instituto Plaza de la Cruz, donde estudió arte dramático al tiempo que tomaba clases de danza contemporánea y urbana. En 2020, se trasladó a Madrid para cursar Historia del Arte en la Universidad Complutense, combinando su formación académica con sus ambiciones artísticas.
 
 Su carrera comenzó en el mundo de la publicidad: en abril de 2019 participó en la campaña navideña de la joyería Tous junto a Emma Roberts. Posteriormente prestó su imagen a campañas turísticas de Andorra, a un spot de Fanta, y colaboró con varias marcas de moda. En octubre de 2021, apareció en el videoclip del sencillo Tacones rojos del cantante colombiano Sebastián Yatra, lo que le dio una primera y notable proyección musical.
 
@@ -45,7 +45,7 @@ En mayo de 2021 se confirmaron dos proyectos que definirían su trayectoria. Por
 
 El resto de su carrera confirma su versatilidad. En 2024, encarnó a Greta en Ni una más, serie que aborda temáticas sociales de calado. En 2025, se incorporó al reparto principal de la serie de Netflix Olympo, donde interpreta a Amaia Olaberria — un papel ambicioso que representa un nuevo paso en la construcción de una carrera televisiva variada y comprometida.`,
 
-      en: `Clara Gallé, born Clara Huete Sánchez on April 15, 2002, in Pamplona, Spain, discovered a passion for the performing arts at an early age. She trained at the Instituto Plaza de la Cruz, where she studied dramatic arts alongside contemporary and urban dance. In 2020, she moved to Madrid to study Art History at the Universidad Complutense, balancing her academic pursuits with her growing artistic ambitions.
+      en: `Clara Galle, born Clara Huete Sánchez on April 15, 2002, in Pamplona, Spain, discovered a passion for the performing arts at an early age. She trained at the Instituto Plaza de la Cruz, where she studied dramatic arts alongside contemporary and urban dance. In 2020, she moved to Madrid to study Art History at the Universidad Complutense, balancing her academic pursuits with her growing artistic ambitions.
 
 Her career began in advertising: in April 2019, she appeared in the Christmas campaign for jewellery brand Tous, alongside Emma Roberts. She went on to front tourism campaigns for Andorra, a Fanta commercial, and collaborated with various fashion brands. In October 2021, she featured in the music video for Tacones rojos by Colombian singer Sebastián Yatra, earning her a first wave of wider public attention.
 

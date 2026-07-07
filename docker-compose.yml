@@ -20,7 +20,7 @@ services:
       # Base de données persistante de l'app
       - ./data:/app/data
 
-      # Galerie photo Clara Gallé — requis si CLARA_GALLERY_ENABLED=true
+      # Galerie photo Clara Galle — requis si CLARA_GALLERY_ENABLED=true
       # Voir docker-compose.example.yml et la section README pour le contenu attendu
       - /mnt/media/cloud/louis/clara:/app/gallery/clara:ro
     # Décommenter pour tester un accès direct sans reverse proxy :

@@ -273,7 +273,7 @@ function NewsSection() {
       </div>
       <div className="mt-4 flex justify-end">
         <a
-          href="https://news.google.com/search?q=Clara+Gall%C3%A9&hl=fr"
+          href="https://news.google.com/search?q=Clara+Galle&hl=fr"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 text-xs text-white/40 transition hover:text-white/70"

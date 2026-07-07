@@ -15,7 +15,7 @@ function cdata(s: string): string {
 }
 
 async function fetchNews(): Promise<NewsArticle[]> {
-  const url = "https://news.google.com/rss/search?q=Clara+Gall%C3%A9&hl=fr&gl=FR&ceid=FR:fr";
+  const url = "https://news.google.com/rss/search?q=Clara+Galle&hl=fr&gl=FR&ceid=FR:fr";
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) return [];
   const xml = await res.text();
