@@ -99,7 +99,7 @@ export async function withCacheSafe<T>(
   try {
     const data = await withCache<T>(key, ttlMs, fn, options);
     const stale = staleStore.get(key) as StaleEntry<T> | undefined;
-    const isStale = !!stale && (store.get(key)?.exp ?? 0) < Date.now() + ttlMs * 0.9;
+    const isStale = !!stale && (store.get(key)?.exp ?? 0) < Date.now() + ttlMs * 0.1;
     return { data, available: true, error: null, updatedAt: stale?.fetchedAt ?? null, stale: isStale };
   } catch (err) {
     const stale = staleStore.get(key) as StaleEntry<T> | undefined;

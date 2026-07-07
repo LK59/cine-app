@@ -40,11 +40,11 @@ export const jellyseerr = {
     fetchJson<void>(`${url}/api/v1/request/${id}/approve`, { method: "POST", headers }),
   declineRequest: (id: number) =>
     fetchJson<void>(`${url}/api/v1/request/${id}/decline`, { method: "POST", headers }),
-  createRequest: (mediaType: "movie" | "tv", mediaId: number) =>
+  createRequest: (mediaType: "movie" | "tv", mediaId: number, userId?: number) =>
     fetchJson<{ id: number }>(`${url}/api/v1/request`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ mediaType, mediaId }),
+      body: JSON.stringify({ mediaType, mediaId, ...(userId != null ? { userId } : {}) }),
     }),
   getMovieMedia: (tmdbId: number) =>
     fetchJson<{ title?: string; posterPath?: string | null; mediaInfo?: { status: number } }>(

@@ -3,6 +3,24 @@ import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { withCache } from "@/lib/server-cache";
+
+const USERS_TTL = 5 * 60_000; // 5 min — user list rarely changes
+
+async function getJellyseerrUsers() {
+  return withCache("jellyseerr:users", USERS_TTL, () => jellyseerr.getUsers());
+}
+
+async function resolveJellyseerrUserId(jfUser: string): Promise<number | undefined> {
+  try {
+    const usersData = await getJellyseerrUsers();
+    return usersData.results.find(
+      (u) => u.jellyfinUsername?.toLowerCase() === jfUser.toLowerCase()
+    )?.id;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function GET(req: NextRequest) {
   const filter = (req.nextUrl.searchParams.get("filter") as "pending" | "approved" | "all") || "pending";
@@ -11,12 +29,9 @@ export async function GET(req: NextRequest) {
 
   if (session?.role === "guest" && session.jfUser) {
     return withErrorHandling(async () => {
-      const usersData = await jellyseerr.getUsers();
-      const match = usersData.results.find(
-        (u) => u.jellyfinUsername?.toLowerCase() === session.jfUser!.toLowerCase()
-      );
-      if (!match) return { results: [], pageInfo: { results: 0 } };
-      const data = await jellyseerr.getRequestsByUser(match.id);
+      const jellyseerrUserId = await resolveJellyseerrUserId(session.jfUser!);
+      if (!jellyseerrUserId) return { results: [], pageInfo: { results: 0 } };
+      const data = await jellyseerr.getRequestsByUser(jellyseerrUserId);
       return { ...data, results: await enrichRequests(data.results) };
     });
   }
@@ -36,5 +51,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   }
 
-  return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId));
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  const session = await verifySessionToken(token);
+
+  const jellyseerrUserId = session?.jfUser
+    ? await resolveJellyseerrUserId(session.jfUser)
+    : undefined;
+
+  return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId, jellyseerrUserId));
 }

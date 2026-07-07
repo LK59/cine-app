@@ -278,7 +278,7 @@ export function GlobalSearch() {
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Personnes</p>
               {persons.map((p, i) => {
                 const idx = localResults.length + i;
-                const isVip = p.id === 3247402;
+                const isVip = p.id === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
                 return (
                   <button
                     key={`person-${p.id}`}

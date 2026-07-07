@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 
+const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+
 export async function GET(req: NextRequest) {
   const itemId = req.nextUrl.searchParams.get("itemId");
   const tag = req.nextUrl.searchParams.get("tag");
-  if (!itemId) return new NextResponse(null, { status: 400 });
+  if (!itemId || !JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
 
-  const url = `${config.jellyfin.url}/Items/${itemId}/Images/Primary?tag=${tag ?? ""}&quality=90&maxWidth=300`;
+  const params = new URLSearchParams({ quality: "90", maxWidth: "300" });
+  if (tag) params.set("tag", tag);
+  const url = `${config.jellyfin.url}/Items/${itemId}/Images/Primary?${params}`;
 
   try {
     const res = await fetch(url, {

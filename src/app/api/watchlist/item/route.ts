@@ -11,7 +11,7 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
 // GET /api/watchlist/item?mediaType=movie&tmdbId=123
 export async function GET(req: NextRequest) {
   const userId = await resolveUserId(req);
-  if (!userId) return NextResponse.json({ item: null });
+  if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   const mediaType = req.nextUrl.searchParams.get("mediaType") ?? "";
   const tmdbId = parseInt(req.nextUrl.searchParams.get("tmdbId") ?? "0");

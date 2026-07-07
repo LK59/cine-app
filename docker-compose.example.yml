@@ -1,0 +1,36 @@
+networks:
+  media_net:
+    external: true
+
+services:
+  cine-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cine-app:latest
+    container_name: cine-app
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      # Dossier média principal (lecture seule) — adapter le chemin à votre configuration
+      - /mnt/media/video:/mnt/media/video:ro
+
+      # Base de données persistante de l'app (watchlist, push subscriptions, etc.)
+      - ./data:/app/data
+
+      # ── Galerie photo Clara Gallé (optionnel) ──────────────────────────────
+      # Décommenter et adapter le chemin si CLARA_GALLERY_ENABLED=true dans .env.
+      # Le dossier doit contenir :
+      #   - des photos au format JPG / PNG / WebP (affichées dans la galerie)
+      #   - une image nommée "clarabanner.jpg" (utilisée comme bannière en haut de page)
+      # - /chemin/vers/vos/photos/clara:/app/gallery/clara:ro
+
+    # Décommenter pour exposer le port directement (sans reverse proxy) :
+    # ports:
+    #   - "3000:3000"
+
+    networks:
+      - media_net
+    restart: unless-stopped

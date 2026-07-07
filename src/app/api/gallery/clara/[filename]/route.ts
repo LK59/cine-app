@@ -4,12 +4,17 @@ import path from "path";
 
 const GALLERY_DIR = "/app/gallery/clara";
 
-// In-memory thumbnail cache: filename → compressed Buffer
+const THUMB_CACHE_MAX = 200;
 const thumbCache = new Map<string, Buffer>();
 
 async function buildThumb(filepath: string, filename: string): Promise<Buffer | null> {
   const cached = thumbCache.get(filename);
-  if (cached) return cached;
+  if (cached) {
+    // Move to end to maintain LRU order (Map preserves insertion order)
+    thumbCache.delete(filename);
+    thumbCache.set(filename, cached);
+    return cached;
+  }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const sharp = require("sharp") as (input: string) => {
@@ -19,6 +24,9 @@ async function buildThumb(filepath: string, filename: string): Promise<Buffer | 
       .resize({ width: 400, withoutEnlargement: true })
       .jpeg({ quality: 75 })
       .toBuffer();
+    if (thumbCache.size >= THUMB_CACHE_MAX) {
+      thumbCache.delete(thumbCache.keys().next().value!);
+    }
     thumbCache.set(filename, buf);
     return buf;
   } catch {

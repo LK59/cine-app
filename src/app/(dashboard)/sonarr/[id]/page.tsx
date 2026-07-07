@@ -426,7 +426,7 @@ export default function SonarrSeriesDetailPage() {
         <Collapsible title="Casting" badge={info.tmdb.cast.length} icon={<Tv size={15} className="text-accent-400" />} className="mb-6">
           <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
             {info.tmdb.cast.map((actor) => {
-              const isVip = actor.tmdbId === 3247402;
+              const isVip = actor.tmdbId === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
               return (
                 <button
                   key={actor.tmdbId}

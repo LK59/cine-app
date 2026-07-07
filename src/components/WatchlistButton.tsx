@@ -24,7 +24,7 @@ export function WatchlistButton({
   const [busy, setBusy] = useState(false);
 
   const itemKey = `/api/watchlist/item?mediaType=${mediaType}&tmdbId=${tmdbId}`;
-  const { data } = useSWR<{ item: WatchlistItem | null }>(itemKey, fetcher);
+  const { data } = useSWR<{ item: WatchlistItem | null }>(itemKey, fetcher, { shouldRetryOnError: false });
   const inList = !!data?.item;
 
   async function toggle() {

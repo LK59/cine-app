@@ -47,5 +47,6 @@ export function isVip(tmdbId: number): boolean {
   return tmdbId in VIP_PERSONS;
 }
 
-// Jellyfin usernames who see the standard actor page instead of the VIP page
-export const VIP_BLOCKED_USERS = new Set(["charlotte", "olivier", "tv"]);
+export function isClaraGalleryEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
+}

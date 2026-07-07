@@ -12,10 +12,9 @@ import {
   Instagram, ExternalLink, X, ChevronLeft, ChevronRight, Globe, PlusCircle,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import { useRole } from "@/lib/useRole";
 import { createPortal } from "react-dom";
 import type { VipPerson } from "@/lib/vip-persons";
-import { isVip, VIP_BLOCKED_USERS } from "@/lib/vip-persons";
+import { isVip, isClaraGalleryEnabled } from "@/lib/vip-persons";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import { selectBio } from "@/lib/format";
 
@@ -667,14 +666,11 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 export default function PersonPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useSWR<PersonData>(`/api/tmdb/person/${id}`, fetcher);
-  const { jfUser } = useRole();
-
   if (isLoading) return <LoadingState label="Chargement de la fiche personne…" />;
   if (error || !data) return <ErrorState message="Impossible de charger cette fiche." />;
 
   const numId = Number(id);
-  const blocked = jfUser !== null && VIP_BLOCKED_USERS.has(jfUser);
-  if (isVip(numId) && !blocked) {
+  if (isVip(numId) && isClaraGalleryEnabled()) {
     return <VipPersonPage id={id} data={data} />;
   }
 

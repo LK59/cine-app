@@ -7,6 +7,7 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? "",
+    NEXT_PUBLIC_CLARA_GALLERY_ENABLED: process.env.CLARA_GALLERY_ENABLED ?? "true",
   },
   // sharp and web-push are handled outside webpack (runtime install / externals)
   webpack: (config, { isServer }) => {
