@@ -400,7 +400,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
                 <Calendar size={14} className="text-amber-200" /> 15 avril 2002
               </span>
               <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 backdrop-blur-md">
-                <MapPin size={14} className="text-amber-200" /> Nee a Pampelune
+                <MapPin size={14} className="text-amber-200" /> Née à Pampelune
               </span>
               <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 backdrop-blur-md">
                 <Briefcase size={14} className="text-amber-200" /> Actrice
