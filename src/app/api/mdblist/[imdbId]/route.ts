@@ -19,7 +19,7 @@ const IMDB_RE = /^tt\d{6,8}$/;
 async function fetchRatings(imdbId: string): Promise<MdbRatings> {
   const key = process.env.MDBLIST_API_KEY;
   if (!key) throw new Error("no key");
-  const res = await fetch(`https://api.mdblist.com/?apikey=${key}&i=${imdbId}`, {
+  const res = await fetch(`https://mdblist.com/api/?apikey=${key}&i=${imdbId}`, {
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`mdblist ${res.status}`);
