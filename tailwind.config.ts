@@ -7,16 +7,16 @@ const config: Config = {
     extend: {
       colors: {
         accent: {
-          50: "#f1f0ff",
-          100: "#e3e0ff",
-          400: "#9b8cff",
-          500: "#7c5cff",
-          600: "#6438f5",
-          700: "#5128cf",
+          50:  "rgb(var(--accent-50)  / <alpha-value>)",
+          100: "rgb(var(--accent-100) / <alpha-value>)",
+          400: "rgb(var(--accent-400) / <alpha-value>)",
+          500: "rgb(var(--accent-500) / <alpha-value>)",
+          600: "rgb(var(--accent-600) / <alpha-value>)",
+          700: "rgb(var(--accent-700) / <alpha-value>)",
         },
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(124,92,255,0.15), 0 8px 24px -8px rgba(124,92,255,0.25)",
+        glow: "0 0 0 1px rgb(var(--accent-500) / 0.15), 0 8px 24px -8px rgb(var(--accent-500) / 0.25)",
       },
       keyframes: {
         "fade-in": {

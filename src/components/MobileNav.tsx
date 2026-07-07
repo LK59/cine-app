@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Bell } from "lucide-react";
+import { LogOut, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Settings } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
 
 const PINNED = [
@@ -23,7 +23,7 @@ const SECTION_CONTENT = [
 
 const SECTION_GESTION = [
   { href: "/qbittorrent",  label: "Téléchargements", icon: Download },
-  { href: "/notifications",label: "Notifications",    icon: Bell },
+  { href: "/parametres",   label: "Paramètres",       icon: Settings },
   { href: "/bazarr",       label: "Sous-titres",     icon: Captions },
   { href: "/jackett",      label: "Indexeurs",        icon: Search },
   { href: "/jellyfin",     label: "Jellyfin",         icon: PlayCircle },

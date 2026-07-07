@@ -14,7 +14,7 @@ import {
   Clock,
   Sparkles,
   Activity,
-  Bell,
+  Settings,
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -27,7 +27,7 @@ export const NAV_ITEMS = [
   { href: "/radarr", label: "Films · Radarr", icon: Film, primary: true },
   { href: "/sonarr", label: "Séries · Sonarr", icon: Tv, primary: true },
   { href: "/qbittorrent", label: "Téléchargements", icon: Download, primary: true },
-  { href: "/notifications", label: "Notifications", icon: Bell, primary: true },
+  { href: "/parametres", label: "Paramètres", icon: Settings, primary: true },
   { href: "/stats", label: "Statistiques", icon: BarChart2, primary: true },
   { href: "/bazarr", label: "Sous-titres · Bazarr", icon: Captions, primary: false },
   { href: "/jackett", label: "Indexeurs · Jackett", icon: Search, primary: false },

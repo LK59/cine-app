@@ -3,6 +3,7 @@ import "./globals.css";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Cine App",
@@ -33,10 +34,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className="dark">
+      <head>
+        {/* Apply saved theme before first paint to avoid flash */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;if(localStorage.getItem("cine-amoled")==="1")document.documentElement.dataset.amoled="";}catch(e){}` }} />
+      </head>
       <body>
-        <SWRProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </SWRProvider>
+        <ThemeProvider>
+          <SWRProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </SWRProvider>
+        </ThemeProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>
