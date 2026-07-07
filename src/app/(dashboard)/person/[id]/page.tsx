@@ -197,6 +197,65 @@ function GalleryLightbox({
 
 // â”€â”€â”€ VIP page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// ─── VIP timeline & quotes ────────────────────────────────────────────────────
+
+function TimelineSection({ items }: { items: NonNullable<import("@/lib/vip-persons").VipPerson["timeline"]> }) {
+  const tagColors: Record<string, string> = {
+    Netflix: "bg-red-500/20 text-red-300 border-red-500/30",
+    Série: "bg-violet-500/20 text-violet-300 border-violet-500/30",
+    Clip: "bg-pink-500/20 text-pink-300 border-pink-500/30",
+    Formation: "bg-sky-500/20 text-sky-300 border-sky-500/30",
+    Publicité: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+  };
+  return (
+    <section className="mb-16">
+      <div className="mb-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Parcours</p>
+        <h2 className="mt-2 text-3xl font-bold text-white">Carrière</h2>
+      </div>
+      <div className="relative ml-4 border-l border-white/10 pl-8 sm:ml-8 sm:pl-10">
+        {items.map((item, i) => (
+          <div key={i} className="group relative mb-8 last:mb-0">
+            <div className="absolute -left-[2.6rem] top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-amber-300/60 bg-[#050712] transition group-hover:border-amber-300 group-hover:bg-amber-300/20 sm:-left-[2.8rem]" />
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-white/20 hover:bg-white/[0.07] sm:p-5">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-amber-200/80">{item.date}</span>
+                {item.tag && (
+                  <span className={["rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", tagColors[item.tag] ?? "bg-white/10 text-white/60 border-white/10"].join(" ")}>
+                    {item.tag}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm font-bold text-white sm:text-base">{item.event}</p>
+              {item.detail && <p className="mt-1 text-sm leading-6 text-white/55">{item.detail}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function QuotesSection({ quotes }: { quotes: NonNullable<import("@/lib/vip-persons").VipPerson["quotes"]> }) {
+  return (
+    <section className="mb-16">
+      <div className="mb-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">En sus palabras</p>
+        <h2 className="mt-2 text-3xl font-bold text-white">Citas</h2>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {quotes.map((q, i) => (
+          <blockquote key={i} className="relative rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+            <span className="absolute -top-3 left-5 font-serif text-5xl leading-none text-amber-300/40 select-none">&ldquo;</span>
+            <p className="relative text-sm italic leading-8 text-slate-200/85 sm:text-base">{q.text}</p>
+            {q.context && <footer className="mt-4 text-xs text-white/35">— {q.context}</footer>}
+          </blockquote>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ─── VIP sub-components ───────────────────────────────────────────────────────
 
 function VideoCard({ videoId, title }: { videoId: string; title: string }) {
@@ -540,6 +599,14 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
               </div>
             )}
           </section>
+        )}
+
+        {vip?.quotes && vip.quotes.length > 0 && (
+          <QuotesSection quotes={vip.quotes} />
+        )}
+
+        {vip?.timeline && vip.timeline.length > 0 && (
+          <TimelineSection items={vip.timeline} />
         )}
 
         {movies.length > 0 && (

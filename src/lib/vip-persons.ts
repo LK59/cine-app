@@ -4,6 +4,8 @@ export interface VipPerson {
   links: { instagram?: string; imdb?: string; wikipedia?: string; agency?: string; tiktok?: string };
   bio: { fr: string; es: string; en: string };
   videos?: { id: string; title: string }[];
+  timeline?: { date: string; event: string; detail?: string; tag?: string }[];
+  quotes?: { text: string; context?: string }[];
 }
 
 export const VIP_PERSONS: Record<number, VipPerson> = {
@@ -27,6 +29,32 @@ export const VIP_PERSONS: Record<number, VipPerson> = {
       { id: "-5t_9ixSB-M", title: "Interview" },
       { id: "jHok5LGZQ74", title: "Interview" },
       { id: "PuZ-DlboJhw", title: "Interview" },
+    ],
+    timeline: [
+      { date: "Avril 2019", event: "Première campagne publicitaire", detail: "Campagne de Noël Tous aux côtés d'Emma Roberts", tag: "Publicité" },
+      { date: "2020", event: "Installation à Madrid", detail: "Inscription en histoire de l'art à l'Universidad Complutense", tag: "Formation" },
+      { date: "Octobre 2021", event: "« Tacones Rojos » de Sebastián Yatra", detail: "Clip musical à 440 millions de vues sur YouTube", tag: "Clip" },
+      { date: "4 février 2022", event: "A través de mi ventana — Netflix", detail: "Rôle de Raquel, ses débuts au cinéma. Premier film de la trilogie.", tag: "Netflix" },
+      { date: "1er avril 2022", event: "El Internado: Las Cumbres S2 — Prime Video", detail: "Rôle d'Eva Merino dans la série de Prime Video.", tag: "Série" },
+      { date: "23 juin 2023", event: "A través del mar — Netflix", detail: "Deuxième volet de la trilogie À travers ma fenêtre.", tag: "Netflix" },
+      { date: "23 février 2024", event: "A través de tu mirada — Netflix", detail: "Troisième et dernier volet de la trilogie.", tag: "Netflix" },
+      { date: "31 mai 2024", event: "Ni una más — Netflix", detail: "Rôle de Greta dans le thriller espagnol.", tag: "Netflix" },
+      { date: "2024", event: "The Head — Saison 3", detail: "Rôle d'Alba dans la série internationale.", tag: "Série" },
+      { date: "20 juin 2025", event: "Olympo — Netflix", detail: "Rôle d'Amaia, capitaine d'une équipe de natation synchronisée.", tag: "Netflix" },
+    ],
+    quotes: [
+      {
+        text: "Es complicado de asimilar. A veces no entiendo nada, y es normal, porque al final tan repente hay tanto trabajo y tan poco tiempo para la vida que a veces no sabes donde estás. Pero estoy muy agradecida y es un momento de pensar que es solo el principio y que ojalá poder contar un montón de historias más.",
+        context: "eCartelera, 2022",
+      },
+      {
+        text: "Te mentiría si te digo que lo estoy llevando realmente bien. Me encanta todo, porque al final esto es precioso, pero a la vez hay partes que son complicadas.",
+        context: "eCartelera, 2022",
+      },
+      {
+        text: "Todos los personajes van a contar su historia. Y eso me parece muy bonito y muy justo, y me alegro mucho de que podamos hacer eso.",
+        context: "eCartelera, 2022",
+      },
     ],
     bio: {
       fr: `Clara Galle, de son vrai nom Clara Huete Sánchez, est née le 15 avril 2002 à Pampelune, en Espagne. Dès son plus jeune âge, elle se passionne pour les arts du spectacle et intègre l'Instituto Plaza de la Cruz, où elle se forme à l'art dramatique tout en suivant des cours de danse contemporaine et urbaine. En 2020, elle s'installe à Madrid pour étudier l'histoire de l'art à l'Université Complutense, conjuguant formation académique et ambitions artistiques.
