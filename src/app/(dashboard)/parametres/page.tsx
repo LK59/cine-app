@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCircle, Loader2, Moon, Palette, RefreshCw, Send, Settings, Smartphone, XCircle } from "lucide-react";
+import { Bell, CheckCircle, Clapperboard, Loader2, Moon, Palette, RefreshCw, Send, Settings, Smartphone, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
@@ -12,7 +12,7 @@ import { ACCENT_PRESETS } from "@/lib/theme";
 type TestState = "idle" | "sending" | "sent" | "error";
 
 export default function ParametresPage() {
-  const { accent, amoled, setAccent, setAmoled } = useTheme();
+  const { accent, amoled, autoTrailer, setAccent, setAmoled, setAutoTrailer } = useTheme();
 
   // Notification state
   const [preferences, setPreferences] = useState<Record<NotificationCategory, boolean>>(getDefaultNotificationPreferences);
@@ -125,6 +125,24 @@ export default function ParametresPage() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Auto-trailer toggle */}
+            <div className="card p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+                    <Clapperboard size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Bandes-annonces automatiques</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Sur les fiches films et séries, la bannière affiche automatiquement la bande-annonce en muet après quelques secondes.
+                    </p>
+                  </div>
+                </div>
+                <Toggle checked={autoTrailer} onChange={setAutoTrailer} />
               </div>
             </div>
 

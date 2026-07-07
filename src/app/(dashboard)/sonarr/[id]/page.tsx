@@ -36,6 +36,9 @@ import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { BannerTrailer } from "@/components/BannerTrailer";
+import { MediaRatings } from "@/components/MediaRatings";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface SeriesInfo {
   trailerKey: string | null;
@@ -77,6 +80,7 @@ export default function SonarrSeriesDetailPage() {
   const { isGuest, jfId } = useRole();
   const toast = useToast();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
+  const { autoTrailer } = useTheme();
   const seriesKey = `/api/sonarr/series/${id}`;
   const episodesKey = `/api/sonarr/series/${id}/episodes`;
 
@@ -237,8 +241,7 @@ export default function SonarrSeriesDetailPage() {
       {/* ── Backdrop — natural 16:9 ratio, absolute so it never clips, gradient fades to bg ── */}
       {backdrop && (
         <div className="pointer-events-none absolute inset-x-0 top-0 aspect-video">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={backdrop} alt="" className="h-full w-full object-cover object-top animate-fade-in" />
+          <BannerTrailer backdropUrl={backdrop} trailerKey={info?.trailerKey ?? null} enabled={autoTrailer} />
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
           <div
             className="absolute inset-0"
@@ -379,7 +382,8 @@ export default function SonarrSeriesDetailPage() {
       {info?.tmdb?.tagline && (
         <p className="mb-2 text-sm italic text-slate-500">{info.tmdb.tagline}</p>
       )}
-      {overview && <p className="mb-6 max-w-2xl text-sm text-slate-400">{overview}</p>}
+      {overview && <p className="mb-4 max-w-2xl text-sm text-slate-400">{overview}</p>}
+      <MediaRatings imdbId={series.imdbId} />
 
       {/* ── Settings card ──────────────────────────────────────── */}
       {isGuest ? (
