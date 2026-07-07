@@ -80,6 +80,52 @@ data/
 
 All service API keys are kept server-side and are not exposed to the browser.
 
+## Clara Gallé gallery page
+
+Cine App includes an optional enriched page for the actress Clara Gallé, with a full-screen photo gallery, detailed biography and external links.
+
+This feature is **disabled by default** and requires a local photo folder on your host.
+
+### Enable it
+
+**1. Prepare the photos folder**
+
+Create a folder anywhere on your host and add your photos (JPG, PNG or WebP).  
+Also place a file named exactly `clarabanner.jpg` in the same folder — it is used as the full-width banner at the top of the page.
+
+Do not commit this folder or its contents to git.
+
+**2. Mount the folder in your compose file**
+
+In your `docker-compose.yml`, add the volume:
+
+```yaml
+volumes:
+  - /path/to/your/clara/photos:/app/gallery/clara:ro
+```
+
+See `docker-compose.example.yml` for the full example.
+
+**3. Set the env var**
+
+In your `.env`:
+
+```env
+CLARA_GALLERY_ENABLED=true
+```
+
+**4. Rebuild**
+
+```bash
+docker compose up -d --build
+```
+
+### Disable it
+
+Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and rebuild. The volume mount can be left in place or removed — the feature is fully controlled by the env var.
+
+---
+
 ## Notes
 
 qBittorrent can be reached through a Gluetun container when it shares the same network namespace:
