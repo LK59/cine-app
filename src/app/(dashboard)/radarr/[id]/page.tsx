@@ -37,9 +37,7 @@ import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
-import { BannerTrailer } from "@/components/BannerTrailer";
 import { MediaRatings } from "@/components/MediaRatings";
-import { useTheme } from "@/components/ThemeProvider";
 
 interface MovieInfo {
   trailerKey: string | null;
@@ -110,7 +108,6 @@ export default function RadarrMovieDetailPage() {
   const [requesting, setRequesting] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
   const [activeTab, setActiveTab] = useState<"infos" | "casting" | "fichier">("infos");
-  const { autoTrailer } = useTheme();
 
   useEffect(() => {
     if (movie) setQualityProfileId(movie.qualityProfileId);
@@ -220,7 +217,8 @@ export default function RadarrMovieDetailPage() {
       {/* ── Backdrop — natural 16:9 ratio, absolute so it never clips, gradient fades to bg ── */}
       {backdrop && (
         <div className="pointer-events-none absolute inset-x-0 top-0 aspect-video">
-          <BannerTrailer backdropUrl={backdrop} trailerKey={info?.trailerKey ?? null} enabled={autoTrailer} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={backdrop} alt="" className="h-full w-full object-cover object-top animate-fade-in" />
           {/* Left vignette for text contrast */}
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
           {/* Vertical fade: transparent at top → fully opaque slate-950 at 72% height

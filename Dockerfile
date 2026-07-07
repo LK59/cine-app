@@ -15,10 +15,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
-# Runtime: libstdc++ for better-sqlite3, sharp for image optimization, yt-dlp for trailer streaming
-RUN apk add --no-cache libstdc++ python3 py3-pip && \
-    pip3 install --no-cache-dir --break-system-packages yt-dlp && \
-    npm install --no-save sharp
+# Runtime: libstdc++ for better-sqlite3, sharp for image optimization
+RUN apk add --no-cache libstdc++ && npm install --no-save sharp
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
