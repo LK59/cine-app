@@ -66,6 +66,18 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@example.com
 ```
 
+## Ratings (MDBList)
+
+Cine App can display multi-source ratings on movie and series pages: IMDb, Rotten Tomatoes, Metacritic, Letterboxd, and Trakt — all from a single API call.
+
+Get a free key at **mdblist.com → Settings → API Key** (free tier: 1 000 req/day).
+
+```env
+MDBLIST_API_KEY=your_key_here
+```
+
+Without this key the rating section is simply not shown. No rebuild needed if the key is added after first launch — the app reads it at runtime.
+
 ## Security
 
 Never commit:
