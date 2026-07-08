@@ -146,6 +146,18 @@ function correctPersonName(name: string): string {
   return best;
 }
 
+function titleMatchScore(title: string, query: string): number {
+  const titleNorm = normalize(title);
+  const queryNorm = normalize(query);
+  if (!titleNorm || !queryNorm) return 0;
+  if (titleNorm === queryNorm) return 100;
+  if (titleNorm.startsWith(queryNorm)) return 90;
+  if (titleNorm.includes(queryNorm)) return 75;
+  const words = queryNorm.split(/\s+/).filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+  if (words.length > 1 && words.every((w) => titleNorm.includes(w))) return 60;
+  return 0;
+}
+
 function splitPeople(value: string): string[] {
   return value
     .split(/\s+(?:et|avec)\s+|[,/&+]/i)
@@ -264,6 +276,15 @@ function makeEntry(
   };
 }
 
+function makePersonCreditEntry(
+  item: { id: number; title?: string; name?: string; poster_path?: string | null; release_date?: string; first_air_date?: string; vote_average?: number },
+  mediaType: "movie" | "series",
+  radarrByTmdb: Map<number, number>,
+  sonarrByTmdb: Map<number, number>,
+): UnifiedSearchResult {
+  return makeEntry({ ...item, overview: "" }, mediaType, radarrByTmdb, sonarrByTmdb);
+}
+
 function debugKey(entry: Pick<UnifiedSearchResult, "type" | "tmdbId">) {
   return `${entry.type}:${entry.tmdbId}`;
 }
@@ -292,6 +313,34 @@ async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: numbe
   return hasAll(directorsAndCreators, directorIds);
 }
 
+async function findSharedSeriesByCast(castIds: number[]) {
+  if (castIds.length === 0) return [];
+
+  const creditLists = await Promise.all(
+    castIds.map((id) =>
+      withCache(`search:person-credits:${id}`, 7 * 24 * 3600_000, () =>
+        tmdb.getPersonCredits(id).catch(() => ({ cast: [] }))
+      )
+    )
+  );
+
+  const [first, ...rest] = creditLists;
+  const candidates = new Map(
+    first.cast
+      .filter((c) => c.media_type === "tv")
+      .map((c) => [c.id, c])
+  );
+
+  for (const credits of rest) {
+    const ids = new Set(credits.cast.filter((c) => c.media_type === "tv").map((c) => c.id));
+    for (const id of [...candidates.keys()]) {
+      if (!ids.has(id)) candidates.delete(id);
+    }
+  }
+
+  return [...candidates.values()].sort((a, b) => b.popularity - a.popularity);
+}
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
@@ -302,12 +351,14 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
   if (!tmdb.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
-  const cacheKey = `search:v4:${includeDebug ? "debug" : "normal"}:${type}:${q}`;
+  const cacheKey = `search:v7:${includeDebug ? "debug" : "normal"}:${type}:${q}`;
 
   const result = await withCache<SearchResponse>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
     const searchSeries = type === "all" || type === "series";
     const natural = parseNaturalQuery(q, type);
+    const allowMovieResults = searchMovie && natural.mediaType !== "series";
+    const allowSeriesResults = searchSeries && natural.mediaType !== "movie";
 
     const personQuery = correctPersonName(q);
 
@@ -363,7 +414,7 @@ export async function GET(req: NextRequest) {
       const missingCast = natural.castNames.length > 0 && castIds.length === 0;
       const missingDirector = natural.directorNames.length > 0 && directorIds.length === 0;
 
-      if (!missingCast && !missingDirector && searchMovie && natural.mediaType !== "series") {
+      if (!missingCast && !missingDirector && allowMovieResults) {
         discoverCalls.push(tmdb.discover({
           mediaType: "movie",
           genreId: genreIds?.movie ?? undefined,
@@ -371,7 +422,7 @@ export async function GET(req: NextRequest) {
           crewIds: directorIds,
         }));
       }
-      if (!missingCast && !missingDirector && searchSeries && natural.mediaType !== "movie") {
+      if (!missingCast && !missingDirector && allowSeriesResults) {
         discoverCalls.push(tmdb.discover({
           mediaType: "tv",
           genreId: genreIds?.tv ?? undefined,
@@ -400,16 +451,39 @@ export async function GET(req: NextRequest) {
           );
         }
       }
+
+      if (!missingCast && castIds.length > 0 && directorIds.length === 0 && allowSeriesResults) {
+        const sharedSeries = await findSharedSeriesByCast(castIds);
+        for (const item of sharedSeries.slice(0, 30)) {
+          if (genreIds?.tv) {
+            const details = await withCache<TmdbTv | null>(`search:genre-check:series:${item.id}`, 7 * 24 * 3600_000, () =>
+              tmdb.getTv(item.id).catch(() => null)
+            );
+            if (!details?.genres?.some((g) => g.id === genreIds?.tv)) continue;
+          }
+          const entry = makePersonCreditEntry(item, "series", radarrByTmdb, sonarrByTmdb);
+          addResult(
+            entry,
+            `natural: person credits intersection series; genre=${natural.genreName ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}`
+          );
+        }
+      }
     }
 
     for (const item of multiResults.results.slice(0, 30)) {
       if (item.media_type === "person") continue;
 
       const isMovie = item.media_type === "movie";
-      if (isMovie && !searchMovie) continue;
-      if (!isMovie && !searchSeries) continue;
+      if (isMovie && !allowMovieResults) continue;
+      if (!isMovie && !allowSeriesResults) continue;
 
-      addResult(makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb), "tmdb: searchMulti fallback");
+      const entry = makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb);
+      const score = titleMatchScore(entry.title, q);
+      if (score < 75) {
+        addDebug(entry, `tmdb: rejected searchMulti title score ${score}`);
+        continue;
+      }
+      addResult(entry, `tmdb: searchMulti fallback; title score ${score}`);
     }
 
     // Persons

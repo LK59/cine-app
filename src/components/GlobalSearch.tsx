@@ -32,6 +32,13 @@ function looksLikeNaturalOnlyQuery(s: string): boolean {
   return /^(de|par|avec)\s+\w+$/.test(q);
 }
 
+function requestedMediaType(s: string): "movie" | "series" | "all" {
+  const q = norm(s);
+  if (/\b(film|films|movie|movies)\b/.test(q)) return "movie";
+  if (/\b(serie|series|série|séries|tv|show)\b/.test(q)) return "series";
+  return "all";
+}
+
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (!a) return b.length;
@@ -206,12 +213,13 @@ export function GlobalSearch() {
   const localResults: LocalResult[] = useMemo(() => {
     const term = query.trim();
     if (term.length < 1) return [];
-    const movieResults: LocalResult[] = (movies ?? [])
+    const mediaType = requestedMediaType(term);
+    const movieResults: LocalResult[] = mediaType === "series" ? [] : (movies ?? [])
       .map((m) => ({ ...m, score: fuzzyScore(m.title, term), poster: posterUrl(m.images), href: `/radarr/${m.id}`, type: "movie" as const, tmdbId: m.tmdbId, debugOrigin: "local" as const }))
       .filter((m) => m.score >= 45)
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
-    const seriesResults: LocalResult[] = (series ?? [])
+    const seriesResults: LocalResult[] = mediaType === "movie" ? [] : (series ?? [])
       .map((s) => ({ ...s, score: fuzzyScore(s.title, term), poster: posterUrl(s.images), href: `/sonarr/${s.id}`, type: "series" as const, tmdbId: s.tmdbId ?? 0, debugOrigin: "local" as const }))
       .filter((s) => s.score >= 45)
       .sort((a, b) => b.score - a.score)
