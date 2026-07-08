@@ -12,7 +12,7 @@ export async function GET() {
   if (!files.length) return new NextResponse("No photos", { status: 404 });
 
   const file = files[Math.floor(Math.random() * files.length)];
-  const src = `/api/gallery/clara/${encodeURIComponent(file)}`;
+  const src = `https://cine.kakol.fr/api/gallery/clara/${encodeURIComponent(file)}`;
 
   const html = `<!doctype html>
 <html>
