@@ -134,6 +134,24 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@example.com
 ```
 
+## Authentication
+
+Cine App supports two authentication methods:
+
+### Jellyfin users, recommended
+
+Existing Jellyfin users can log in with their Jellyfin username and password.
+
+This is the recommended login method for normal users because Cine App can associate the session with the Jellyfin user account, enabling per-user resume watching, play history and watched/unwatched actions.
+
+Jellyfin administrator accounts are granted admin access in Cine App. Non-admin Jellyfin users are logged in as guest/read-only users.
+
+### Local admin fallback
+
+`ADMIN_USERNAME` and `ADMIN_PASSWORD` define a local Cine App admin account, independent from Jellyfin.
+
+Use it as a fallback/admin account for setup and maintenance.
+
 ---
 
 ## Ratings
