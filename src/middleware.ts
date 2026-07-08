@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/jellyfin"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/jellyfin", "/api/gallery/clara"];
 
 // The guest role is read-only everywhere except requesting a new movie/series
 // (the Radarr/Sonarr "add" endpoints) and logging out. Every other mutation
