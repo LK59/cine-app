@@ -39,6 +39,15 @@ function requestedMediaType(s: string): "movie" | "series" | "all" {
   return "all";
 }
 
+function hasStructuredPersonQuery(s: string): boolean {
+  const q = norm(s);
+  const matches = [...q.matchAll(/\b(?:avec|de|par)\s+([a-z0-9 ]+)/g)];
+  const last = matches.at(-1);
+  if (!last) return false;
+  const words = last[1].split(/\s+/).filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+  return words.length >= 2;
+}
+
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (!a) return b.length;
@@ -213,6 +222,7 @@ export function GlobalSearch() {
   const localResults: LocalResult[] = useMemo(() => {
     const term = query.trim();
     if (term.length < 1) return [];
+    if (hasStructuredPersonQuery(term)) return [];
     const mediaType = requestedMediaType(term);
     const movieResults: LocalResult[] = mediaType === "series" ? [] : (movies ?? [])
       .map((m) => ({ ...m, score: fuzzyScore(m.title, term), poster: posterUrl(m.images), href: `/radarr/${m.id}`, type: "movie" as const, tmdbId: m.tmdbId, debugOrigin: "local" as const }))
