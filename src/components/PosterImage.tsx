@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 
 interface PosterImageProps {
   src: string | null | undefined;
@@ -24,13 +25,14 @@ export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-[2
   return (
     <div className={`${aspectRatio} ${className} relative overflow-hidden`}>
       {!loaded && <div className="absolute inset-0 skeleton" />}
-      <img
+      <Image
         src={src}
         alt={alt}
-        className={`h-full w-full object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
+        fill
+        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+        className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         onLoad={() => setLoaded(true)}
         onError={() => setErrored(true)}
-        loading="lazy"
       />
     </div>
   );

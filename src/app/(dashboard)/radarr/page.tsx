@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalState } from "@/hooks/useLocalState";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
@@ -52,22 +53,12 @@ export default function RadarrPage() {
   const { data: movies, error, isLoading } = useSWR<RadarrMovie[]>("/api/radarr/movies", fetcher);
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortKey>("added");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [genreFilter, setGenreFilter] = useState("");
-  const [decadeFilter, setDecadeFilter] = useState<DecadeFilter>("all");
-  const [qualityFilter, setQualityFilter] = useState<QualityFilter>("all");
-  const [view, setView] = useState<ViewMode>("grid");
-
-  // Persist view preference
-  useEffect(() => {
-    const saved = localStorage.getItem("movieView") as ViewMode | null;
-    if (saved) setView(saved);
-  }, []);
-  function setViewAndSave(v: ViewMode) {
-    setView(v);
-    localStorage.setItem("movieView", v);
-  }
+  const [sort, setSort] = useLocalState<SortKey>("radarr-sort", "added");
+  const [statusFilter, setStatusFilter] = useLocalState<StatusFilter>("radarr-status", "all");
+  const [genreFilter, setGenreFilter] = useLocalState("radarr-genre", "");
+  const [decadeFilter, setDecadeFilter] = useLocalState<DecadeFilter>("radarr-decade", "all");
+  const [qualityFilter, setQualityFilter] = useLocalState<QualityFilter>("radarr-quality", "all");
+  const [view, setView] = useLocalState<ViewMode>("radarr-view", "grid");
 
   const genres = useMemo(() => {
     if (!movies) return [];
@@ -176,14 +167,14 @@ export default function RadarrPage() {
               </div>
               <div className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
                 <button
-                  onClick={() => setViewAndSave("grid")}
+                  onClick={() => setView("grid")}
                   className={`rounded p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
                   title="Vue grille"
                 >
                   <LayoutGrid size={15} />
                 </button>
                 <button
-                  onClick={() => setViewAndSave("list")}
+                  onClick={() => setView("list")}
                   className={`rounded p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
                   title="Vue liste"
                 >

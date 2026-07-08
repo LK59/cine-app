@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, EmptyState } from "@/components/StateViews";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { Film, Tv, Download, PackageCheck, Clock } from "lucide-react";
-import { useState } from "react";
+import { useLocalState } from "@/hooks/useLocalState";
 
 interface ImportEvent {
   id: string;
@@ -109,7 +109,7 @@ function EventRow({ ev }: { ev: ImportEvent }) {
 interface ImportsResponse { events: ImportEvent[] }
 
 export default function TimelinePage() {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useLocalState<Filter>("timeline-filter", "all");
 
   const { data, isLoading } = useSWR<ImportsResponse>(
     "/api/timeline/imports",

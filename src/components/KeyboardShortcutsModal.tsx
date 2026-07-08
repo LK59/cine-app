@@ -9,6 +9,10 @@ const SHORTCUTS = [
   { keys: ["j"], label: "Item suivant (listes)" },
   { keys: ["k"], label: "Item précédent (listes)" },
   { keys: ["↵"], label: "Ouvrir l'item sélectionné" },
+  { keys: ["f"], label: "Ajouter / retirer de la liste (fiche)" },
+  { keys: ["1"], label: "Onglet Infos (fiche)" },
+  { keys: ["2"], label: "Onglet Casting (fiche)" },
+  { keys: ["3"], label: "Onglet Fichier / Saisons (fiche)" },
   { keys: ["?"], label: "Afficher cette aide" },
   { keys: ["Échap"], label: "Fermer la fenêtre / désélectionner" },
 ];

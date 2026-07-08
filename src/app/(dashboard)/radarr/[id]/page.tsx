@@ -39,6 +39,7 @@ import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
 import { SimilarMedia } from "@/components/SimilarMedia";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface MovieInfo {
   trailerKey: string | null;
@@ -113,6 +114,21 @@ export default function RadarrMovieDetailPage() {
   useEffect(() => {
     if (movie) setQualityProfileId(movie.qualityProfileId);
   }, [movie]);
+
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+      if (e.key === "f") {
+        (document.querySelector('button[title="Ajouter à la liste"],button[title="Retirer de la liste"]') as HTMLButtonElement)?.click();
+      }
+      if (e.key === "1") setActiveTab("infos");
+      if (e.key === "2") setActiveTab("casting");
+      if (e.key === "3") setActiveTab("fichier");
+    }
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   async function save(payload: Partial<RadarrMovie>) {
     if (!movie) return;
@@ -384,7 +400,7 @@ export default function RadarrMovieDetailPage() {
         <p className="mb-2 text-sm italic text-slate-500">{info.tmdb.tagline}</p>
       )}
       {overview && <p className="mb-4 max-w-2xl text-sm text-slate-400">{overview}</p>}
-      <MediaRatings imdbId={movie.imdbId} />
+      <ErrorBoundary><MediaRatings imdbId={movie.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
       {isGuest ? (
@@ -438,7 +454,7 @@ export default function RadarrMovieDetailPage() {
           </div>
         </div>
       )}
-      <SimilarMedia apiUrl={`/api/radarr/movies/${movie.id}/similar`} type="movie" />
+      <ErrorBoundary><SimilarMedia apiUrl={`/api/radarr/movies/${movie.id}/similar`} type="movie" /></ErrorBoundary>
       </div>{/* end infos tab */}
 
       {/* ── File + Subtitles ────────────────────────────────────── */}

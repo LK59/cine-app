@@ -53,6 +53,7 @@ function SheetSection({
               key={href}
               href={href}
               onTouchStart={() => prefetchRoute(href)}
+              onMouseEnter={() => prefetchRoute(href)}
               onClick={onClose}
               className={`flex flex-col items-center gap-1.5 rounded-xl p-3 text-center text-[11px] transition-colors ${
                 active
@@ -200,6 +201,7 @@ export function MobileNav() {
                 key={href}
                 href={href}
                 onTouchStart={() => prefetchRoute(href)}
+                onMouseEnter={() => prefetchRoute(href)}
                 className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1 ${
                   active ? "text-accent-400" : "text-slate-500"
                 }`}

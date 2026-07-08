@@ -38,6 +38,7 @@ import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
 import { SimilarMedia } from "@/components/SimilarMedia";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface SeriesInfo {
   trailerKey: string | null;
@@ -111,6 +112,21 @@ export default function SonarrSeriesDetailPage() {
   useEffect(() => {
     if (series) setQualityProfileId(series.qualityProfileId);
   }, [series]);
+
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+      if (e.key === "f") {
+        (document.querySelector('button[title="Ajouter à la liste"],button[title="Retirer de la liste"]') as HTMLButtonElement)?.click();
+      }
+      if (e.key === "1") setActiveTab("infos");
+      if (e.key === "2") setActiveTab("casting");
+      if (e.key === "3") setActiveTab("saisons");
+    }
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   const episodesBySeason = useMemo(() => {
     const map = new Map<number, SonarrEpisode[]>();
@@ -382,7 +398,7 @@ export default function SonarrSeriesDetailPage() {
         <p className="mb-2 text-sm italic text-slate-500">{info.tmdb.tagline}</p>
       )}
       {overview && <p className="mb-4 max-w-2xl text-sm text-slate-400">{overview}</p>}
-      <MediaRatings imdbId={series.imdbId} />
+      <ErrorBoundary><MediaRatings imdbId={series.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
       {isGuest ? (
@@ -421,7 +437,7 @@ export default function SonarrSeriesDetailPage() {
         </div>
       )}
 
-      <SimilarMedia apiUrl={`/api/sonarr/series/${series.id}/similar`} type="series" />
+      <ErrorBoundary><SimilarMedia apiUrl={`/api/sonarr/series/${series.id}/similar`} type="series" /></ErrorBoundary>
       </div>{/* end infos tab */}
 
       {/* ── Cast ────────────────────────────────────────────────── */}

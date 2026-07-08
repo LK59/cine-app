@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { withCache } from "@/lib/server-cache";
+import { createRateLimiter } from "@/lib/rateLimiter";
 
 export const dynamic = "force-dynamic";
+
+const mdblistRateLimit = createRateLimiter(60, 60_000);
 
 export interface MdbRatings {
   imdb: number | null;        // 0–100, display as /10 (÷10)
@@ -40,7 +43,11 @@ async function fetchRatings(imdbId: string): Promise<MdbRatings> {
   };
 }
 
-export async function GET(_req: Request, { params }: { params: { imdbId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { imdbId: string } }) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+  if (!mdblistRateLimit(ip)) {
+    return NextResponse.json({ ratings: null }, { status: 429 });
+  }
   const { imdbId } = params;
   if (!IMDB_RE.test(imdbId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });

@@ -33,7 +33,7 @@ export function MediaRatings({ imdbId }: Props) {
   const { data } = useSWR<{ ratings: MdbRatings | null }>(
     imdbId ? `/api/mdblist/${imdbId}` : null,
     fetcher,
-    { revalidateOnFocus: false, shouldRetryOnError: false }
+    { revalidateOnFocus: false, shouldRetryOnError: false, dedupingInterval: 86_400_000 }
   );
 
   const r = data?.ratings;

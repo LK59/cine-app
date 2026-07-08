@@ -57,6 +57,7 @@ export function SimilarMedia({ apiUrl, type }: Props) {
   const { data } = useSWR<{ items: Item[] }>(apiUrl, fetcher, {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
+    dedupingInterval: 3_600_000,
   });
 
   const items = data?.items ?? [];
