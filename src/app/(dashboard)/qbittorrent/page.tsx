@@ -96,8 +96,27 @@ export default function QbittorrentPage() {
           </div>
 
           <div className="card divide-y divide-slate-800">
-          {visibleTorrents.map((t) => (
-            <div key={t.hash} className="flex items-center gap-4 p-3">
+          {visibleTorrents.map((t, i) => {
+            const prev = visibleTorrents[i - 1];
+            const curPriority = statePriority(t.state);
+            const prevPriority = prev ? statePriority(prev.state) : -1;
+            const sectionLabel =
+              curPriority !== prevPriority
+                ? curPriority === 0 ? "En cours"
+                  : curPriority === 1 ? "Seed / Upload"
+                  : "Pausés"
+                : null;
+            return (
+            <div key={t.hash}>
+              {sectionLabel && (
+                <div className={`flex items-center gap-2 px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${
+                  curPriority === 0 ? "text-accent-400" : curPriority === 1 ? "text-emerald-400" : "text-slate-600"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${curPriority === 0 ? "bg-accent-400 animate-pulse" : curPriority === 1 ? "bg-emerald-500" : "bg-slate-700"}`} />
+                  {sectionLabel}
+                </div>
+              )}
+            <div className="flex items-center gap-4 p-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-white">{t.name}</p>
                 <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
@@ -134,7 +153,9 @@ export default function QbittorrentPage() {
                 </div>
               )}
             </div>
-          ))}
+            </div>
+            );
+          })}
           </div>
 
           {hasMore && (

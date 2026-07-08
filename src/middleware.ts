@@ -14,6 +14,10 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/auth/logout",
   "POST /api/jellyfin/played",
   "POST /api/jellyseerr/requests",
+  // Watchlist is per-user: guests can manage their own list
+  "POST /api/watchlist",
+  "DELETE /api/watchlist",
+  "PATCH /api/watchlist/item",
 ]);
 
 export async function middleware(req: NextRequest) {
