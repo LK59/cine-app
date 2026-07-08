@@ -204,6 +204,27 @@ export const tmdb = {
     fetchJson<{ results: TmdbMultiResult[] }>(
       `${BASE}/search/multi?api_key=${apiKey}&language=fr-FR&query=${encodeURIComponent(query)}&include_adult=false`
     ),
+  discover: (params: {
+    mediaType: "movie" | "tv";
+    genreId?: number;
+    castIds?: number[];
+    crewIds?: number[];
+    query?: string;
+  }) => {
+    const query = new URLSearchParams({
+      api_key: apiKey,
+      language: "fr-FR",
+      sort_by: "popularity.desc",
+      include_adult: "false",
+    });
+    if (params.genreId) query.set("with_genres", String(params.genreId));
+    if (params.castIds?.length) query.set("with_cast", params.castIds.join(","));
+    if (params.crewIds?.length) query.set(params.mediaType === "movie" ? "with_crew" : "with_people", params.crewIds.join(","));
+    if (params.query) query.set("query", params.query);
+    return fetchJson<{ results: (TmdbTrendingMovie | TmdbTrendingTv)[] }>(
+      `${BASE}/discover/${params.mediaType}?${query.toString()}`
+    );
+  },
   discoverByPerson: (personId: number, mediaType: "movie" | "tv") => {
     const key = mediaType === "movie" ? "with_cast" : "with_cast";
     const endpoint = mediaType === "movie" ? "movie" : "tv";

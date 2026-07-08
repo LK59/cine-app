@@ -1,24 +1,66 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import {
-  Search, Film, Tv, X, ExternalLink, Send, Bookmark,
+  Search, Film, Tv, X, Send, Bookmark,
   User, Star, Loader2, BookmarkCheck,
 } from "lucide-react";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
 import { posterUrl } from "@/lib/images";
-import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { useSWRConfig } from "swr";
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
 function norm(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").trim();
+}
+
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a) return b.length;
+  if (!b) return a.length;
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const curr = Array.from({ length: b.length + 1 }, () => 0);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+  return prev[b.length];
+}
+
+function tokenFuzzyScore(title: string, query: string): number {
+  const titleWords = norm(title).split(/\s+/).filter(Boolean);
+  const queryWords = norm(query).split(/\s+/).filter(Boolean);
+  if (!titleWords.length || !queryWords.length) return 0;
+
+  let total = 0;
+  for (const qWord of queryWords) {
+    let best = 0;
+    for (const tWord of titleWords) {
+      if (tWord === qWord) best = Math.max(best, 100);
+      else if (tWord.startsWith(qWord) || qWord.startsWith(tWord)) best = Math.max(best, 82);
+      else {
+        const distance = editDistance(tWord, qWord);
+        const longest = Math.max(tWord.length, qWord.length);
+        const similarity = 1 - distance / longest;
+        if ((qWord.length >= 4 || tWord.length >= 4) && distance <= 1) best = Math.max(best, 76);
+        else if (longest >= 6 && distance <= 2) best = Math.max(best, Math.round(similarity * 70));
+      }
+    }
+    total += best;
+  }
+
+  const average = total / queryWords.length;
+  return queryWords.length > 1 && average >= 55 ? average + 8 : average;
 }
 
 function fuzzyScore(title: string, query: string): number {
@@ -31,7 +73,7 @@ function fuzzyScore(title: string, query: string): number {
   const words = q.split(/\s+/).filter(Boolean);
   if (words.length > 1 && words.every((w) => t.includes(w))) return 50;
   if (words.some((w) => t.startsWith(w))) return 30;
-  return 0;
+  return tokenFuzzyScore(title, query);
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -83,26 +125,6 @@ function ResultPoster({ src, type }: { src: string | null; type: "movie" | "seri
   );
 }
 
-// ─── Intent detection ─────────────────────────────────────────────────────────
-
-function detectPersonIntent(q: string): { personQuery: string; isPersonIntent: boolean } {
-  const patterns = [
-    /^avec\s+(.+)$/i,
-    /^r[eé]alis[eé]\s+par\s+(.+)$/i,
-    /^film\s+de\s+(.+)$/i,
-    /^acteur\s+(.+)$/i,
-    /^actrice\s+(.+)$/i,
-    /^directeur\s+(.+)$/i,
-    /^r[eé]alisateur\s+(.+)$/i,
-    /^de\s+(.+)$/i,
-  ];
-  for (const pattern of patterns) {
-    const match = q.match(pattern);
-    if (match) return { personQuery: match[1].trim(), isPersonIntent: true };
-  }
-  return { personQuery: q, isPersonIntent: false };
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function GlobalSearch() {
@@ -126,14 +148,10 @@ export function GlobalSearch() {
   const { data: movies } = useSWR<RadarrMovie[]>("/api/radarr/movies", fetcher);
   const { data: series } = useSWR<SonarrSeries[]>("/api/sonarr/series", fetcher);
 
-  // Intent detection
-  const { personQuery, isPersonIntent } = detectPersonIntent(debouncedQuery);
-  const searchQuery = isPersonIntent ? personQuery : debouncedQuery;
-
   // Remote search (TMDb + persons) — only fire when query ≥ 2 chars
   const { data: remoteData, isLoading: remoteLoading } = useSWR<SearchResponse>(
     open && debouncedQuery.length >= 2
-      ? `/api/search?q=${encodeURIComponent(searchQuery)}`
+      ? `/api/search?q=${encodeURIComponent(debouncedQuery)}`
       : null,
     fetcher
   );
@@ -174,12 +192,30 @@ export function GlobalSearch() {
     return [...movieResults, ...seriesResults].sort((a, b) => b.score - a.score).slice(0, 8);
   }, [query, movies, series]);
 
+  const remoteLibraryResults: LocalResult[] = useMemo(() => {
+    const localKeys = new Set(localResults.map((r) => `${r.type}:${r.tmdbId}`));
+    return (remoteData?.library ?? [])
+      .filter((r) => !localKeys.has(`${r.type}:${r.tmdbId}`))
+      .map((r) => ({
+        id: r.radarrId ?? r.sonarrId ?? r.tmdbId,
+        title: r.title,
+        year: r.year ?? 0,
+        poster: r.posterPath,
+        href: r.type === "movie" && r.radarrId ? `/radarr/${r.radarrId}` : r.type === "series" && r.sonarrId ? `/sonarr/${r.sonarrId}` : `/person/${r.tmdbId}`,
+        type: r.type,
+        score: 80,
+        tmdbId: r.tmdbId,
+      }));
+  }, [localResults, remoteData?.library]);
+
+  const libraryResults = [...localResults, ...remoteLibraryResults].slice(0, 10);
+
   // ── TMDb results not in library ──
   const tmdbResults: UnifiedSearchResult[] = remoteData?.tmdb ?? [];
   const persons: PersonResult[] = remoteData?.persons ?? [];
 
   // Total navigable results
-  const allResults = [...localResults, ...tmdbResults, ...persons];
+  const allResults = [...libraryResults, ...tmdbResults, ...persons];
 
   function navigate(href: string) { setOpen(false); router.push(href); }
 
@@ -226,7 +262,7 @@ export function GlobalSearch() {
 
   if (!open) return null;
 
-  const showEmpty = query.length >= 2 && !remoteLoading && localResults.length === 0 && tmdbResults.length === 0 && persons.length === 0;
+  const showEmpty = query.length >= 2 && !remoteLoading && libraryResults.length === 0 && tmdbResults.length === 0 && persons.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]" onClick={() => setOpen(false)}>
@@ -254,51 +290,11 @@ export function GlobalSearch() {
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto">
-          {/* ── Persons (top when intent detected) ── */}
-          {isPersonIntent && persons.length > 0 && (
-            <div>
-              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Personnes</p>
-              {persons.map((p, i) => {
-                const idx = i;
-                const isVip = p.id === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
-                return (
-                  <button
-                    key={`person-intent-${p.id}`}
-                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === cursor ? "bg-white/10" : "hover:bg-white/5"}`}
-                    onMouseEnter={() => setCursor(idx)}
-                    onClick={() => { setOpen(false); router.push(`/person/${p.id}`); }}
-                  >
-                    <div className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-800 ${isVip ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-slate-900 shadow-[0_0_8px_rgba(250,204,21,0.4)]" : ""}`}>
-                      {p.profilePath
-                        ? <img src={p.profilePath} alt={p.name} className="h-full w-full object-cover" />
-                        : <div className="flex h-full items-center justify-center"><User size={14} className="text-slate-600" /></div>
-                      }
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`truncate text-sm font-medium ${isVip ? "text-yellow-400" : "text-white"}`}>{p.name}</p>
-                      <p className="truncate text-xs text-slate-500">{p.department}</p>
-                      {p.libraryTitles.length > 0 && (
-                        <div className="mt-0.5 flex flex-wrap gap-1">
-                          {p.libraryTitles.map((t) => (
-                            <span key={t} className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{t}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {p.libraryCount > 0 && (
-                      <span className="shrink-0 text-xs font-medium text-accent-400">{p.libraryCount} dans ta biblio</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {/* ── Library results ── */}
-          {localResults.length > 0 && (
+          {libraryResults.length > 0 && (
             <div>
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Dans votre bibliothèque</p>
-              {localResults.map((r, i) => {
+              {libraryResults.map((r, i) => {
                 const isActive = i === cursor;
                 const wKey = `${r.type}:${r.tmdbId}`;
                 const inList = watchlisted.has(wKey);
@@ -336,12 +332,12 @@ export function GlobalSearch() {
             </div>
           )}
 
-          {/* ── Persons (standard, shown when no intent) ── */}
-          {!isPersonIntent && persons.length > 0 && (
+          {/* ── Persons ── */}
+          {persons.length > 0 && (
             <div>
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Personnes</p>
               {persons.map((p, i) => {
-                const idx = localResults.length + i;
+                const idx = libraryResults.length + i;
                 const isVip = p.id === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
                 return (
                   <button
@@ -384,7 +380,7 @@ export function GlobalSearch() {
                 Pas dans la bibliothèque
               </p>
               {tmdbResults.slice(0, 6).map((r, i) => {
-                const idx = localResults.length + persons.length + i;
+                const idx = libraryResults.length + persons.length + i;
                 const isActive = idx === cursor;
                 const wKey = `${r.type}:${r.tmdbId}`;
                 const inList = watchlisted.has(wKey);
