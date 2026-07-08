@@ -2,21 +2,79 @@
 
 Self-hosted PWA dashboard for managing a cinema/media stack from one mobile-friendly interface.
 
-Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr into a single dashboard designed for daily use.
+Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr into a single dashboard designed for daily use — on desktop and mobile.
+
+---
 
 ## Features
 
-- Unified dashboard for media services
-- Radarr and Sonarr library views
-- Jellyfin resume watching and playback shortcuts
-- Jellyseerr request management
-- qBittorrent monitoring and actions
-- Calendar and timeline views
-- Watchlist and recommendations
-- Service health page
+### Library & Media Management
+
+- **Radarr and Sonarr library views** — grid and list modes, filtering, quick search, keyboard navigation
+- **Movie and series detail pages** — poster, metadata, cast carousel, active downloads, file info, IMDb/RT/Metacritic ratings
+- **Watchlist** — add any title from TMDB, classify with 5 statuses (À voir, Favoris, Vus, À demander, Abandonnés), personal notes, search and sort, IMDb rating badge on every card
+- **Discover** — trending movies and series with genre filters, TMDB search, "Pour vous" tab based on Jellyfin play history
+- **Recommendations** — personalised rows based on recently watched Jellyfin history
+- **Release search modal** — browse and grab releases directly from Radarr/Sonarr inside the app
+- **Interactive search** — admin-only Telescope button on Watchlist, Discover and Recommendations cards to add a title and open the release search in one step
+- **Remove from Radarr/Sonarr** — discrete button on detail pages with in-app confirmation modal (no browser `confirm()`)
+
+### Unified Visual Identity
+
+All media grids (Watchlist, Discover, Recommendations) share the same card design:
+
+- Poster-only card with `aspect-[2/3]`
+- **Desktop** — hover overlay with 5 status buttons, Voir la fiche / Demander, and admin Recherche interactive
+- **Mobile** — tap → ActionSheet that slides up with real-time swipe-to-close gesture
+- **IMDb rating badge** — always visible bottom-left, fetched via OMDB API (never hover-only)
+- **"Dispo" badge** (green) — file actually downloaded
+- **"Attente" badge** (amber) — monitored in Radarr/Sonarr but not yet available
+- **Delete confirmation** — native in-app modal before removing from watchlist
+
+### Jellyfin Integration
+
+- Resume watching section with per-user progress
+- Recently added and recently played
+- Mark watched / unwatched from any detail page
+- Per-user recommendations based on play history
+
+### Requests & Downloads
+
+- **Jellyseerr request management** — send, track and display requests with status badges
+- **qBittorrent monitoring** — live torrent list with section separators (En cours / Seed / Pausés), progress bars, speed indicators, start/stop/remove actions
+
+### Calendar & Timeline
+
+- Media release calendar (upcoming Radarr/Sonarr entries)
+- Activity timeline
+
+### Ratings
+
+- **MDBList** — IMDb, Rotten Tomatoes, Metacritic, Letterboxd, Trakt on detail pages
+- **OMDB** — IMDb rating fetched per-item on Watchlist cards (cached 24 h server-side)
+- TMDB vote average shown on Discover and Recommendations cards
+
+### Stats
+
+- Top actors and directors ranked by number of titles in the library
+- Accurate counts: only titles with a downloaded file are considered; cast cap of 50 per title
+
+### Other
+
+- Service health dashboard
+- Calendar of upcoming releases
+- Bazarr subtitle management per episode
+- NFO viewer
+- Actor / person modal with filmography
+- Collection modal (saga grouping)
+- Trailer modal
 - Installable PWA
-- Web Push notifications, including iOS PWA support
-- Mobile-first navigation
+- Web Push notifications including iOS Safari / Apple Web Push
+- Mobile-first navigation with haptic feedback
+- Guest mode (read-only, watchlist allowed)
+- Admin mode (full access including interactive search and deletion)
+
+---
 
 ## Requirements
 
@@ -24,6 +82,8 @@ Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin 
 - Existing media stack services
 - API keys for Radarr, Sonarr, Bazarr, Jackett, Jellyfin and Jellyseerr
 - A shared Docker network with your media services
+
+---
 
 ## Deployment
 
@@ -33,12 +93,18 @@ cp .env.example .env
 
 Edit `.env` and configure:
 
-- app admin credentials
-- service URLs
-- API keys
-- qBittorrent credentials
-- optional TMDb / OMDb keys
-- optional VAPID keys for push notifications
+| Variable | Description |
+|---|---|
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | App admin credentials |
+| `RADARR_URL` / `RADARR_API_KEY` | Radarr connection |
+| `SONARR_URL` / `SONARR_API_KEY` | Sonarr connection |
+| `JELLYFIN_URL` / `JELLYFIN_API_KEY` | Jellyfin connection |
+| `JELLYSEERR_URL` / `JELLYSEERR_API_KEY` | Jellyseerr connection |
+| `QBITTORRENT_URL` / `QBITTORRENT_*` | qBittorrent credentials |
+| `TMDB_API_KEY` | Required for Discover, Recommendations and Ratings |
+| `OMDB_API_KEY` | Optional — IMDb ratings on Watchlist cards |
+| `MDBLIST_API_KEY` | Optional — multi-source ratings on detail pages |
+| `VAPID_*` | Optional — Web Push notifications |
 
 Then start the app:
 
@@ -46,7 +112,9 @@ Then start the app:
 docker compose up -d --build
 ```
 
-The app listens on port `3000` inside Docker. Use a reverse proxy such as Nginx Proxy Manager, Traefik or Caddy, or expose the port directly for testing.
+The app listens on port `3000` inside Docker. Use a reverse proxy (Nginx Proxy Manager, Traefik, Caddy) or expose the port directly for testing.
+
+---
 
 ## Push Notifications
 
@@ -66,9 +134,13 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@example.com
 ```
 
-## Ratings (MDBList)
+---
 
-Cine App can display multi-source ratings on movie and series pages: IMDb, Rotten Tomatoes, Metacritic, Letterboxd, and Trakt — all from a single API call.
+## Ratings
+
+### MDBList (detail pages)
+
+Multi-source ratings on movie and series pages: IMDb, Rotten Tomatoes, Metacritic, Letterboxd, Trakt — all from a single API call.
 
 Get a free key at **mdblist.com → Settings → API Key** (free tier: 1 000 req/day).
 
@@ -76,7 +148,19 @@ Get a free key at **mdblist.com → Settings → API Key** (free tier: 1 000 req
 MDBLIST_API_KEY=your_key_here
 ```
 
-Without this key the rating section is simply not shown. No rebuild needed if the key is added after first launch — the app reads it at runtime.
+### OMDB (Watchlist cards)
+
+IMDb ratings displayed as a badge on each Watchlist card, fetched via the OMDB API and cached 24 h server-side.
+
+Get a free key at **omdbapi.com** (free tier: 1 000 req/day).
+
+```env
+OMDB_API_KEY=your_key_here
+```
+
+Without these keys the rating sections are simply not shown. No rebuild needed if keys are added after first launch — the app reads them at runtime.
+
+---
 
 ## Security
 
@@ -90,7 +174,9 @@ data/
 *.db-shm
 ```
 
-All service API keys are kept server-side and are not exposed to the browser.
+All service API keys are kept server-side and are never exposed to the browser.
+
+---
 
 ## Clara Galle gallery page
 
@@ -102,14 +188,12 @@ This feature is **disabled by default** and requires a local photo folder on you
 
 **1. Prepare the photos folder**
 
-Create a folder anywhere on your host and add your photos (JPG, PNG or WebP).  
+Create a folder anywhere on your host and add your photos (JPG, PNG or WebP).
 Also place a file named exactly `clarabanner.jpg` in the same folder — it is used as the full-width banner at the top of the page.
 
 Do not commit this folder or its contents to git.
 
 **2. Mount the folder in your compose file**
-
-In your `docker-compose.yml`, add the volume:
 
 ```yaml
 volumes:
@@ -119,8 +203,6 @@ volumes:
 See `docker-compose.example.yml` for the full example.
 
 **3. Set the env var**
-
-In your `.env`:
 
 ```env
 CLARA_GALLERY_ENABLED=true
@@ -134,7 +216,7 @@ docker compose up -d --build
 
 ### Disable it
 
-Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and rebuild. The volume mount can be left in place or removed — the feature is fully controlled by the env var.
+Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and rebuild.
 
 ---
 
