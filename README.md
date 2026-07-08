@@ -79,7 +79,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 ## Requirements
 
 - Docker / Docker Compose
-- Existing media stack services
+- Existing media stack services (see https://github.com/LK59/cinema)
 - API keys for Radarr, Sonarr, Bazarr, Jackett, Jellyfin and Jellyseerr
 - A shared Docker network with your media services
 
