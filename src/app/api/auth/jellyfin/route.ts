@@ -38,10 +38,13 @@ export async function POST(req: NextRequest) {
 
   const data = await jellyfinRes.json();
   const isAdmin = data.User?.Policy?.IsAdministrator === true;
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Accès réservé aux administrateurs Jellyfin" }, { status: 403 });
+  }
   const jellyfinUsername: string = data.User?.Name ?? username;
   const jellyfinId: string = data.User?.Id ?? "";
   const jellyfinToken: string = data.AccessToken ?? "";
-  const role: Role = isAdmin ? "admin" : "guest";
+  const role: Role = "admin";
 
   const token = await createSessionToken(jellyfinUsername, role, jellyfinUsername, jellyfinId, jellyfinToken);
   const res = NextResponse.json({ ok: true, role });
