@@ -37,6 +37,13 @@ export interface TmdbCastMember {
   profile_path: string | null;
 }
 
+export interface TmdbCrewMember {
+  id: number;
+  name: string;
+  job: string;
+  profile_path: string | null;
+}
+
 export interface TmdbPersonCredit {
   id: number;
   title?: string;
@@ -57,7 +64,7 @@ export interface TmdbMovie {
   poster_path: string | null;
   runtime: number | null;
   tagline?: string;
-  credits?: { cast: TmdbCastMember[] };
+  credits?: { cast: TmdbCastMember[]; crew?: TmdbCrewMember[] };
   belongs_to_collection?: { id: number; name: string; poster_path: string | null } | null;
 }
 
@@ -83,7 +90,7 @@ export interface TmdbTv {
   episode_run_time?: number[];
   tagline?: string;
   created_by?: { id: number; name: string; profile_path: string | null }[];
-  credits?: { cast: TmdbCastMember[] };
+  credits?: { cast: TmdbCastMember[]; crew?: TmdbCrewMember[] };
 }
 
 export interface TmdbTrendingMovie {
@@ -218,15 +225,20 @@ export const tmdb = {
       include_adult: "false",
     });
     if (params.genreId) query.set("with_genres", String(params.genreId));
-    if (params.castIds?.length) query.set("with_cast", params.castIds.join(","));
-    if (params.crewIds?.length) query.set(params.mediaType === "movie" ? "with_crew" : "with_people", params.crewIds.join(","));
+    if (params.mediaType === "movie") {
+      if (params.castIds?.length) query.set("with_cast", params.castIds.join(","));
+      if (params.crewIds?.length) query.set("with_crew", params.crewIds.join(","));
+    } else {
+      const peopleIds = [...(params.castIds ?? []), ...(params.crewIds ?? [])];
+      if (peopleIds.length) query.set("with_people", peopleIds.join(","));
+    }
     if (params.query) query.set("query", params.query);
     return fetchJson<{ results: (TmdbTrendingMovie | TmdbTrendingTv)[] }>(
       `${BASE}/discover/${params.mediaType}?${query.toString()}`
     );
   },
   discoverByPerson: (personId: number, mediaType: "movie" | "tv") => {
-    const key = mediaType === "movie" ? "with_cast" : "with_cast";
+    const key = mediaType === "movie" ? "with_cast" : "with_people";
     const endpoint = mediaType === "movie" ? "movie" : "tv";
     return fetchJson<{ results: (TmdbTrendingMovie | TmdbTrendingTv)[] }>(
       `${BASE}/discover/${endpoint}?api_key=${apiKey}&language=fr-FR&${key}=${personId}&sort_by=popularity.desc`

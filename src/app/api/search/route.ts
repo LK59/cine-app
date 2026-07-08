@@ -112,6 +112,8 @@ const PERSON_NAME_HINTS = [
   "martin scorsese",
 ];
 
+const STOPWORDS = new Set(["de", "du", "des", "le", "la", "les", "un", "une", "et", "avec", "par"]);
+
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (!a) return b.length;
@@ -148,7 +150,11 @@ function splitPeople(value: string): string[] {
   return value
     .split(/\s+(?:et|avec)\s+|[,/&+]/i)
     .map((p) => p.replace(/\b(film|films|serie|series|série|séries|de|du|des|avec|par)\b/gi, " ").replace(/\s+/g, " ").trim())
-    .filter((p) => p.length >= 2);
+    .filter((p) => {
+      const normalized = normalize(p);
+      const words = normalized.split(/\s+/).filter((w) => w && !STOPWORDS.has(w));
+      return PERSON_NAME_HINTS.includes(normalized) || words.length >= 2;
+    });
 }
 
 function extractPeople(q: string, patterns: RegExp[]): { names: string[]; rest: string } {
@@ -193,7 +199,7 @@ function parseNaturalQuery(raw: string, forcedType: "movie" | "series" | "all"):
   ]);
   q = director.rest;
 
-  const enabled = Boolean(genreName || cast.names.length || director.names.length || detectedType !== forcedType);
+  const enabled = Boolean(genreName || cast.names.length || director.names.length);
   return {
     enabled,
     mediaType: detectedType,
@@ -262,6 +268,30 @@ function debugKey(entry: Pick<UnifiedSearchResult, "type" | "tmdbId">) {
   return `${entry.type}:${entry.tmdbId}`;
 }
 
+function hasAll(ids: Set<number>, required: number[]) {
+  return required.every((id) => ids.has(id));
+}
+
+async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: number, castIds: number[], directorIds: number[]) {
+  if (castIds.length === 0 && directorIds.length === 0) return true;
+
+  const details = await withCache(`search:credits-check:${mediaType}:${tmdbId}`, 7 * 24 * 3600_000, () =>
+    mediaType === "movie"
+      ? tmdb.getMovie(tmdbId).catch(() => null)
+      : tmdb.getTv(tmdbId).catch(() => null)
+  );
+  if (!details) return false;
+
+  const credits = details.credits;
+  const cast = new Set((credits?.cast ?? []).map((p) => p.id));
+  if (!hasAll(cast, castIds)) return false;
+
+  const crewDirectors = new Set((credits?.crew ?? []).filter((p) => p.job === "Director").map((p) => p.id));
+  const creators = new Set("created_by" in details ? (details.created_by ?? []).map((p) => p.id) : []);
+  const directorsAndCreators = new Set([...crewDirectors, ...creators]);
+  return hasAll(directorsAndCreators, directorIds);
+}
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
@@ -272,7 +302,7 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
   if (!tmdb.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
-  const cacheKey = `search:v3:${includeDebug ? "debug" : "normal"}:${type}:${q}`;
+  const cacheKey = `search:v4:${includeDebug ? "debug" : "normal"}:${type}:${q}`;
 
   const result = await withCache<SearchResponse>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
@@ -330,8 +360,10 @@ export async function GET(req: NextRequest) {
       directorIds = resolvedDirectorIds;
       genreIds = resolveGenreIds(natural.genreName, movieGenres.genres, tvGenres.genres);
       const discoverCalls: Promise<{ results: any[] }>[] = [];
+      const missingCast = natural.castNames.length > 0 && castIds.length === 0;
+      const missingDirector = natural.directorNames.length > 0 && directorIds.length === 0;
 
-      if (searchMovie && natural.mediaType !== "series") {
+      if (!missingCast && !missingDirector && searchMovie && natural.mediaType !== "series") {
         discoverCalls.push(tmdb.discover({
           mediaType: "movie",
           genreId: genreIds?.movie ?? undefined,
@@ -339,7 +371,7 @@ export async function GET(req: NextRequest) {
           crewIds: directorIds,
         }));
       }
-      if (searchSeries && natural.mediaType !== "movie") {
+      if (!missingCast && !missingDirector && searchSeries && natural.mediaType !== "movie") {
         discoverCalls.push(tmdb.discover({
           mediaType: "tv",
           genreId: genreIds?.tv ?? undefined,
@@ -353,10 +385,18 @@ export async function GET(req: NextRequest) {
         if (batch.status !== "fulfilled") continue;
         for (const item of batch.value.results.slice(0, 30)) {
           const mediaType = "title" in item ? "movie" : "series";
+          const personMatch = await matchesNaturalPeople(mediaType, item.id, castIds, directorIds);
           const entry = makeEntry(item, mediaType, radarrByTmdb, sonarrByTmdb);
+          if (!personMatch) {
+            addDebug(
+              entry,
+              `natural: rejected by credits check; required cast=${castIds.join(",") || "none"}; director=${directorIds.join(",") || "none"}`
+            );
+            continue;
+          }
           addResult(
             entry,
-            `natural: discover ${mediaType}; genre=${natural.genreName ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}; director=${natural.directorNames.join(",") || "none"} -> ${directorIds.join(",") || "none"}`
+            `natural: discover ${mediaType}; credits verified; genre=${natural.genreName ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}; director=${natural.directorNames.join(",") || "none"} -> ${directorIds.join(",") || "none"}`
           );
         }
       }

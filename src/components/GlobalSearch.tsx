@@ -21,6 +21,17 @@ function norm(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").trim();
 }
 
+const STOPWORDS = new Set(["de", "du", "des", "le", "la", "les", "un", "une", "et", "avec", "par", "film", "films", "serie", "series"]);
+
+function meaningfulWords(s: string): string[] {
+  return norm(s).split(/\s+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+function looksLikeNaturalOnlyQuery(s: string): boolean {
+  const q = norm(s);
+  return /^(de|par|avec)\s+\w+$/.test(q);
+}
+
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (!a) return b.length;
@@ -39,8 +50,8 @@ function editDistance(a: string, b: string): number {
 }
 
 function tokenFuzzyScore(title: string, query: string): number {
-  const titleWords = norm(title).split(/\s+/).filter(Boolean);
-  const queryWords = norm(query).split(/\s+/).filter(Boolean);
+  const titleWords = meaningfulWords(title);
+  const queryWords = meaningfulWords(query);
   if (!titleWords.length || !queryWords.length) return 0;
 
   let total = 0;
@@ -65,13 +76,14 @@ function tokenFuzzyScore(title: string, query: string): number {
 }
 
 function fuzzyScore(title: string, query: string): number {
+  if (looksLikeNaturalOnlyQuery(query)) return 0;
   const t = norm(title);
   const q = norm(query);
   if (!q) return 0;
   if (t === q) return 100;
   if (t.startsWith(q)) return 90;
   if (t.includes(q)) return 70;
-  const words = q.split(/\s+/).filter((w) => w.length >= 3);
+  const words = meaningfulWords(query);
   if (words.length > 1 && words.every((w) => t.includes(w))) return 50;
   if (words.length === 1 && words.some((w) => t.startsWith(w))) return 30;
   return tokenFuzzyScore(title, query);
