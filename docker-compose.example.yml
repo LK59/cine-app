@@ -1,6 +1,16 @@
+# Copy this file to docker-compose.yml, then adapt paths, network name and timezone.
+#
+#   cp docker-compose.example.yml docker-compose.yml
+#   nano docker-compose.yml
+#
+# Cine App must be able to reach your media services from inside the container.
+# Recommended: attach it to the same external Docker network as Radarr/Sonarr/etc.
+
 networks:
   media_net:
     external: true
+    # If your existing Docker network has another name, change both this key
+    # and the service network reference below.
 
 services:
   cine-app:
@@ -12,22 +22,26 @@ services:
     env_file:
       - .env
     environment:
+      # Adapt to your timezone.
       - TZ=Europe/Paris
     volumes:
-      # Dossier média principal (lecture seule) — adapter le chemin à votre configuration
-      - /mnt/media/video:/mnt/media/video:ro
-
-      # Base de données persistante de l'app (watchlist, push subscriptions, etc.)
+      # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
       - ./data:/app/data
 
-      # ── Galerie photo Clara Galle (optionnel) ──────────────────────────────
-      # Décommenter et adapter le chemin si CLARA_GALLERY_ENABLED=true dans .env.
-      # Le dossier doit contenir :
-      #   - des photos au format JPG / PNG / WebP (affichées dans la galerie)
-      #   - une image nommée "clarabanner.jpg" (utilisée comme bannière en haut de page)
-      # - /chemin/vers/vos/photos/clara:/app/gallery/clara:ro
+      # Optional media root, read-only.
+      # Keep this enabled if you want disk/media-size stats based on your host path.
+      # Replace the left side with your own media folder.
+      - /path/to/your/media:/mnt/media/video:ro
 
-    # Décommenter pour exposer le port directement (sans reverse proxy) :
+      # Optional Clara Galle gallery.
+      # Enable only if CLARA_GALLERY_ENABLED=true in .env.
+      # The folder must contain:
+      #   - JPG / PNG / WebP photos
+      #   - clarabanner.jpg, used as the page banner
+      # - /path/to/your/clara/photos:/app/gallery/clara:ro
+
+    # Optional direct access without a reverse proxy.
+    # If you use Nginx Proxy Manager, Traefik or Caddy, you can leave this commented.
     # ports:
     #   - "3000:3000"
 

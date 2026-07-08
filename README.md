@@ -38,25 +38,6 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Mark watched / unwatched from any detail page
 - Per-user recommendations based on play history
 
-## Authentication
-
-Cine App supports two authentication methods:
-
-### Jellyfin users, recommended
-
-Existing Jellyfin users can log in with their Jellyfin username and password.
-
-This is the recommended login method for normal users because Cine App can associate the session with the Jellyfin user account, enabling per-user resume watching, play history and watched/unwatched actions.
-
-Jellyfin administrator accounts are granted admin access in Cine App. Non-admin Jellyfin users are logged in as guest/read-only users.
-
-### Local admin fallback
-
-`ADMIN_USERNAME` and `ADMIN_PASSWORD` define a local Cine App admin account, independent from Jellyfin.
-
-Use it as a fallback/admin account for setup and maintenance.
-
-
 ### Requests & Downloads
 
 - **Jellyseerr request management** - send, track and display requests with status badges
@@ -127,6 +108,63 @@ Edit `.env` and configure:
 | `MDBLIST_API_KEY` | Optional - multi-source ratings on detail pages |
 | `VAPID_*` | Optional - Web Push notifications |
 
+### Docker Compose Setup
+
+Copy the example compose file, then adapt it to your infrastructure:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+nano docker-compose.yml
+```
+
+`docker-compose.yml` is intentionally ignored by git. Keep your production compose local to your server, and commit changes to `docker-compose.example.yml` when you want to update the public template.
+
+Use `docker-compose.example.yml` as the reference for a complete setup. A minimal service looks like this:
+
+```yaml
+services:
+  cine-app:
+    image: cine-app:latest
+    build: .
+    container_name: cine-app
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - media
+
+networks:
+  media:
+    external: true
+```
+
+The `data` volume stores local app data such as the SQLite database. Do not commit it to git.
+
+In your local `docker-compose.yml`, adapt:
+
+- the external Docker network name;
+- the timezone (`TZ`);
+- the host media path mounted read-only;
+- optional gallery/photo mounts;
+- the `ports` section if you want direct access without a reverse proxy.
+
+### Network / Service URLs
+
+Cine App must be able to reach Radarr, Sonarr, Jellyfin, Jellyseerr, qBittorrent and the other services from inside the container.
+
+Recommended setup:
+
+- Put Cine App on the same Docker network as the rest of your media stack.
+- Use Docker service names in `.env`, for example `http://radarr:7878`, `http://sonarr:8989`, `http://jellyfin:8096`.
+
+Alternative setup:
+
+- Use reachable LAN URLs or reverse-proxy URLs if your services are not on the same Docker network.
+- Make sure those URLs are reachable from the Cine App container, not only from your browser.
+
 Start the app:
 
 ```bash
@@ -134,6 +172,24 @@ docker compose up -d --build
 ```
 
 The app listens on port `3000` inside Docker. Use a reverse proxy (Nginx Proxy Manager, Traefik, Caddy) or expose the port directly for testing.
+
+### First Login
+
+Open Cine App through your configured URL.
+
+For normal users, log in with an existing Jellyfin username and password.
+
+For setup or maintenance, use the local admin account configured with `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
+
+### After Changing `.env`
+
+Most configuration is read by the server process. After changing `.env`, restart the container so the new values are loaded:
+
+```bash
+docker compose up -d --build
+```
+
+This rebuild/restart command is safe to use after any configuration change.
 
 ---
 
@@ -287,6 +343,61 @@ data/
 ```
 
 All service API keys are kept server-side and are never exposed to the browser.
+
+---
+
+## Troubleshooting
+
+### App Cannot Reach Radarr / Sonarr / Jellyfin
+
+Check that:
+
+- the service URL in `.env` is reachable from inside the Cine App container;
+- Cine App is attached to the same Docker network as your media services, or uses reachable LAN/proxy URLs;
+- the API key is correct;
+- the target service is running.
+
+If you use Docker service names, the name must match the service/container DNS name on the shared network.
+
+### Jellyfin Login Fails
+
+Check that:
+
+- `JELLYFIN_URL` points to the internal URL reachable by Cine App, for example `http://jellyfin:8096`;
+- the Jellyfin username/password works directly in Jellyfin;
+- the Jellyfin server is reachable from the Cine App container.
+
+The local admin login (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) is independent from Jellyfin and can be used as a fallback.
+
+### Push Notifications Do Not Appear
+
+Check that:
+
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` are set in `.env`;
+- the app was rebuilt/restarted after setting them;
+- the app is served over HTTPS, which is required by most browsers for Web Push;
+- notifications are enabled in **Settings -> Notifications** for the current browser or installed PWA;
+- browser or OS notification permissions are not blocked.
+
+On iOS, install the app to the Home Screen first, then enable notifications from inside the installed PWA.
+
+### Recommendations Are Empty
+
+Check that:
+
+- `TMDB_API_KEY` is configured;
+- the logged-in Jellyfin user has watch history;
+- Cine App was opened with Jellyfin authentication, so it can associate the session with a Jellyfin user.
+
+### Ratings Are Missing
+
+Check that:
+
+- `MDBLIST_API_KEY` is set for detail-page multi-source ratings;
+- `OMDB_API_KEY` is set for IMDb badges on Watchlist cards;
+- API free-tier limits have not been reached.
+
+Without these keys, the app still works; the rating sections are simply hidden.
 
 ---
 
