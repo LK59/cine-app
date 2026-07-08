@@ -8,7 +8,7 @@ import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { Modal } from "@/components/Modal";
-import { Plus, Trash2, Search, Film, ChevronDown, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, Film, ChevronDown, LayoutGrid, List } from "lucide-react";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
@@ -123,17 +123,6 @@ export default function RadarrPage() {
   }, []);
 
   const visible = filtered.slice(0, visibleCount);
-
-  async function deleteMovie(id: number) {
-    if (!confirm("Supprimer ce film de Radarr ?")) return;
-    try {
-      await fetch(`/api/radarr/movies/${id}`, { method: "DELETE" });
-      mutate("/api/radarr/movies");
-      toast.success("Film supprimé de Radarr");
-    } catch {
-      toast.error("Échec de la suppression");
-    }
-  }
 
   return (
     <div>
@@ -260,14 +249,6 @@ export default function RadarrPage() {
                         className={`absolute right-2 top-2 h-2 w-2 rounded-full ${movie.hasFile ? "bg-emerald-400" : "bg-amber-400"}`}
                         title={movie.hasFile ? "Téléchargé" : "Manquant"}
                       />
-                      {!isGuest && (
-                        <button
-                          onClick={(e) => { e.preventDefault(); deleteMovie(movie.id); }}
-                          className="absolute bottom-2 right-2 hidden rounded-md bg-red-600/90 p-1.5 text-white group-hover:flex"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
                     </Link>
                     {(movie.overview || (movie.genres?.length ?? 0) > 0) && (
                       <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-900/95 p-3 opacity-0 shadow-xl backdrop-blur-sm transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
@@ -319,14 +300,6 @@ export default function RadarrPage() {
                       )}
                       <span className="text-xs text-slate-600">{relDate(movie.added)}</span>
                     </div>
-                    {!isGuest && (
-                      <button
-                        onClick={(e) => { e.preventDefault(); deleteMovie(movie.id); }}
-                        className="hidden rounded-md p-1.5 text-slate-600 hover:bg-red-600/90 hover:text-white group-hover:block"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
                   </Link>
                 ))}
               </div>
