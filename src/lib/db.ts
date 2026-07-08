@@ -96,6 +96,9 @@ function migrate(db: Database.Database): void {
       UNIQUE(media_type, tmdb_id)
     );
   `);
+
+  // Additive migrations — safe to run multiple times
+  try { db.exec("ALTER TABLE watchlist ADD COLUMN vote_average REAL"); } catch { /* already exists */ }
 }
 
 // ─── Watchlist helpers ────────────────────────────────────────────────────────
@@ -109,6 +112,7 @@ export interface WatchlistItem {
   title: string;
   year: number | null;
   posterPath: string | null;
+  voteAverage: number | null;
   status: WatchlistStatus;
   note: string | null;
   createdAt: number;
@@ -120,17 +124,18 @@ export type WatchlistStatus = "to_watch" | "to_request" | "favorite" | "watched"
 const SELECT_WATCHLIST = `
   SELECT
     id,
-    user_id      AS userId,
-    media_type   AS mediaType,
-    tmdb_id      AS tmdbId,
-    tvdb_id      AS tvdbId,
+    user_id       AS userId,
+    media_type    AS mediaType,
+    tmdb_id       AS tmdbId,
+    tvdb_id       AS tvdbId,
     title,
     year,
-    poster_path  AS posterPath,
+    poster_path   AS posterPath,
+    vote_average  AS voteAverage,
     status,
     note,
-    created_at   AS createdAt,
-    updated_at   AS updatedAt
+    created_at    AS createdAt,
+    updated_at    AS updatedAt
   FROM watchlist
 `;
 
@@ -152,12 +157,13 @@ export const watchlistDb = {
     const db = getDb();
     const now = Date.now();
     db.prepare(`
-      INSERT INTO watchlist (user_id, media_type, tmdb_id, tvdb_id, title, year, poster_path, status, note, created_at, updated_at)
-      VALUES (@userId, @mediaType, @tmdbId, @tvdbId, @title, @year, @posterPath, @status, @note, @now, @now)
+      INSERT INTO watchlist (user_id, media_type, tmdb_id, tvdb_id, title, year, poster_path, vote_average, status, note, created_at, updated_at)
+      VALUES (@userId, @mediaType, @tmdbId, @tvdbId, @title, @year, @posterPath, @voteAverage, @status, @note, @now, @now)
       ON CONFLICT (user_id, media_type, tmdb_id) DO UPDATE SET
         status = excluded.status,
         note = excluded.note,
         poster_path = excluded.poster_path,
+        vote_average = COALESCE(excluded.vote_average, vote_average),
         title = excluded.title,
         year = excluded.year,
         updated_at = excluded.updated_at

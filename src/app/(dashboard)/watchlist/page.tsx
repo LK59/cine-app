@@ -4,10 +4,11 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/StateViews";
+import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import {
   Eye, Heart, X, Clock, CheckCircle2, Film, Tv, Trash2,
   PlusCircle, ExternalLink, Search, BookCheck, MessageSquare,
-  Plus,
+  Plus, Star,
 } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
@@ -33,7 +34,7 @@ const STATUS_META: Record<WatchlistStatus, {
 
 const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
 
-type SortKey = "date" | "title" | "year";
+type SortKey = "date" | "title" | "year" | "rating";
 
 function posterSrc(path: string | null | undefined, size = "w342"): string | null {
   if (!path) return null;
@@ -61,15 +62,54 @@ function NoteModal({ item, onSave, onClose }: {
           ref={ref}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onSave(text); onClose(); } if (e.key === "Escape") onClose(); }}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onSave(text); onClose(); }
+            if (e.key === "Escape") onClose();
+          }}
           placeholder="Ajoute une note…"
           rows={4}
           className="w-full resize-none rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
         />
         <div className="mt-3 flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">Annuler</button>
-          {item.note && <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={14} /></button>}
-          <button onClick={() => { onSave(text); onClose(); }} className="flex-1 rounded-xl bg-accent-500 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">Enregistrer</button>
+          {item.note && (
+            <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+              <Trash2 size={14} />
+            </button>
+          )}
+          <button onClick={() => { onSave(text); onClose(); }} className="flex-1 rounded-xl bg-accent-500 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">
+            Enregistrer
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── Confirm Delete Modal ─────────────────────────────────────────────────────
+
+function ConfirmDeleteModal({ title, onConfirm, onClose }: {
+  title: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-white">Supprimer de la liste ?</p>
+        <p className="mt-1 truncate text-xs text-slate-400">{title}</p>
+        <p className="mt-2 text-xs text-slate-500">Cette action ne peut pas être annulée.</p>
+        <div className="mt-4 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+            Annuler
+          </button>
+          <button
+            onClick={() => { onConfirm(); onClose(); }}
+            className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
+          >
+            Supprimer
+          </button>
         </div>
       </div>
     </div>,
@@ -84,6 +124,7 @@ type SearchResult = {
   title: string;
   year: number | null;
   posterPath: string | null;
+  rating: number;
   inLibrary: boolean;
 };
 
@@ -118,7 +159,12 @@ function AddModal({ existingKeys, onClose, onAdded }: {
     await fetch("/api/watchlist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tmdbId: r.tmdbId, mediaType, title: r.title, year: r.year, posterPath: r.posterPath, status }),
+      body: JSON.stringify({
+        tmdbId: r.tmdbId, mediaType, title: r.title,
+        year: r.year, posterPath: r.posterPath,
+        voteAverage: r.rating ?? null,
+        status,
+      }),
     });
     setAdded((prev) => new Set(prev).add(r.tmdbId));
     onAdded();
@@ -133,7 +179,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
         <div className="shrink-0 border-b border-white/10 p-4">
           <div className="mb-3 flex items-center gap-2">
             <div className="relative flex-1">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 ref={inputRef}
                 value={q}
@@ -161,26 +207,21 @@ function AddModal({ existingKeys, onClose, onAdded }: {
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          {loading && (
-            <div className="space-y-1">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex gap-3 rounded-xl p-2 animate-pulse">
-                  <div className="w-10 shrink-0 rounded-lg bg-slate-800" style={{ aspectRatio: "2/3" }} />
-                  <div className="flex-1 space-y-2 pt-1">
-                    <div className="h-3 w-2/3 rounded bg-slate-800" />
-                    <div className="h-2.5 w-1/4 rounded bg-slate-800" />
-                  </div>
-                </div>
-              ))}
+          {loading && Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex animate-pulse gap-3 rounded-xl p-2">
+              <div className="w-10 shrink-0 rounded-lg bg-slate-800" style={{ aspectRatio: "2/3" }} />
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-3 w-2/3 rounded bg-slate-800" />
+                <div className="h-2.5 w-1/4 rounded bg-slate-800" />
+              </div>
             </div>
-          )}
+          ))}
 
           {!loading && q.trim().length < 2 && (
             <p className="py-10 text-center text-sm text-slate-600">Tapez au moins 2 caractères pour rechercher</p>
           )}
-
           {!loading && q.trim().length >= 2 && results.length === 0 && (
-            <p className="py-10 text-center text-sm text-slate-600">Aucun résultat pour &laquo;{q}&raquo;</p>
+            <p className="py-10 text-center text-sm text-slate-600">Aucun résultat pour «{q}»</p>
           )}
 
           {!loading && results.map((r) => {
@@ -196,7 +237,19 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-white">{r.title}</p>
-                  <p className="text-xs text-slate-500">{r.year ?? "—"}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-slate-500">{r.year ?? "—"}</p>
+                    {r.rating > 0 && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                        <Star size={9} className="fill-current" /> {r.rating.toFixed(1)}
+                      </span>
+                    )}
+                    {r.inLibrary && (
+                      <span className="flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+                        <BookCheck size={8} /> Dispo
+                      </span>
+                    )}
+                  </div>
                   {inList ? (
                     <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-500/10 px-2 py-0.5 text-[10px] font-medium text-accent-400">
                       ✓ Déjà en liste
@@ -218,11 +271,6 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                           </button>
                         );
                       })}
-                      {r.inLibrary && (
-                        <span className="ml-1 flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
-                          <BookCheck size={8} /> Dispo
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -236,7 +284,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
   );
 }
 
-// ─── Request Button ───────────────────────────────────────────────────────────
+// ─── Request Button (desktop overlay) ────────────────────────────────────────
 
 function RequestButton({ item }: { item: WatchlistItem }) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -256,9 +304,8 @@ function RequestButton({ item }: { item: WatchlistItem }) {
     <button
       onClick={doRequest}
       disabled={state === "loading" || state === "done"}
-      title={state === "done" ? "Demandé !" : "Demander via Jellyseerr"}
       className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
-        state === "done"  ? "bg-emerald-500/20 text-emerald-400" :
+        state === "done" ? "bg-emerald-500/20 text-emerald-400" :
         state === "error" ? "bg-red-500/20 text-red-400" :
         "bg-white/10 text-white hover:bg-white/20"
       }`}
@@ -278,128 +325,159 @@ function WatchlistCard({ item, libraryHref, onStatusChange, onNoteEdit, onRemove
   onNoteEdit: () => void;
   onRemove: () => void;
 }) {
-  const [tapped, setTapped] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
   const m = STATUS_META[item.status];
   const poster = posterSrc(item.posterPath);
 
-  // Close tap overlay when clicking outside the card
-  useEffect(() => {
-    if (!tapped) return;
-    function onDown(e: MouseEvent | TouchEvent) {
-      if (!cardRef.current?.contains(e.target as Node)) setTapped(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("touchstart", onDown);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("touchstart", onDown); };
-  }, [tapped]);
-
-  const overlayVisible = tapped ? "opacity-100" : "opacity-0 group-hover:opacity-100";
+  // Build ActionSheet actions for mobile
+  const sheetActions: SheetAction[] = [
+    // Status section
+    ...ALL_STATUSES.map((s) => {
+      const meta = STATUS_META[s];
+      const Icon = meta.icon;
+      const isActive = item.status === s;
+      return {
+        label: meta.label,
+        icon: <Icon size={16} />,
+        onClick: () => onStatusChange(s),
+        variant: (isActive ? "accent" : "default") as "accent" | "default",
+        disabled: isActive,
+      };
+    }),
+    // Library or request
+    ...(libraryHref
+      ? [{ label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => { window.location.href = libraryHref; } }]
+      : [{ label: "Demander", icon: <PlusCircle size={16} />, onClick: async () => {
+          await fetch("/api/jellyseerr/requests", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mediaType: item.mediaType === "movie" ? "movie" : "tv", mediaId: item.tmdbId }),
+          });
+        }}]
+    ),
+    { label: item.note ? "Modifier la note" : "Ajouter une note", icon: <MessageSquare size={16} />, onClick: onNoteEdit },
+    { label: "Supprimer de la liste", icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
+  ];
 
   return (
-    <div ref={cardRef} className="group relative flex flex-col overflow-hidden rounded-xl border border-white/5 bg-slate-900 shadow-lg transition-all duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
-      {/* Poster */}
-      <div
-        className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-slate-800 cursor-pointer select-none"
-        onClick={() => setTapped((v) => !v)}
-      >
-        {poster
-          ? <img src={poster} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
-          : <div className="flex h-full items-center justify-center">{item.mediaType === "movie" ? <Film size={28} className="text-slate-700" /> : <Tv size={28} className="text-slate-700" />}</div>
-        }
+    <>
+      <div className="group flex flex-col overflow-hidden rounded-xl border border-white/5 bg-slate-900 shadow-lg transition-all duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
+        {/* Poster */}
+        <div
+          className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-slate-800 cursor-pointer select-none"
+          onClick={() => {
+            // Mobile (touch): open ActionSheet; desktop: hover overlay handles it
+            if (window.matchMedia("(pointer: coarse)").matches) setSheetOpen(true);
+          }}
+        >
+          {poster
+            ? <img src={poster} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
+            : <div className="flex h-full items-center justify-center">{item.mediaType === "movie" ? <Film size={28} className="text-slate-700" /> : <Tv size={28} className="text-slate-700" />}</div>
+          }
 
-        {/* Type badge */}
-        <div className="absolute left-1.5 top-1.5 rounded-md bg-black/60 p-1 backdrop-blur-sm pointer-events-none">
-          {item.mediaType === "movie" ? <Film size={9} className="text-slate-300" /> : <Tv size={9} className="text-slate-300" />}
-        </div>
-
-        {/* Library badge */}
-        {libraryHref && (
-          <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white pointer-events-none">
-            <BookCheck size={8} /> Dispo
-          </div>
-        )}
-
-        {/* Note dot */}
-        {item.note && (
-          <div className="absolute bottom-1.5 right-1.5 rounded-full bg-amber-400/90 p-1 pointer-events-none">
-            <MessageSquare size={7} className="text-slate-900" />
-          </div>
-        )}
-
-        {/* Overlay — hover on desktop, tap on mobile */}
-        <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/78 backdrop-blur-[1.5px] transition-opacity duration-200 ${overlayVisible}`}>
-          {/* Close button (visible on mobile tap) */}
-          <button
-            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/20 md:hidden"
-            onClick={(e) => { e.stopPropagation(); setTapped(false); }}
-          >
-            <X size={9} />
-          </button>
-
-          {/* Status quick-change */}
-          <div className="flex gap-1">
-            {ALL_STATUSES.map((s) => {
-              const meta = STATUS_META[s];
-              const Icon = meta.icon;
-              const active = item.status === s;
-              return (
-                <button
-                  key={s}
-                  onClick={(e) => { e.stopPropagation(); onStatusChange(s); setTapped(false); }}
-                  title={meta.label}
-                  className={`flex h-6 w-6 items-center justify-center rounded-full border transition-all duration-150 ${
-                    active
-                      ? `${meta.bgSolid} border-white/30 text-white shadow-md scale-110`
-                      : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
-                  }`}
-                >
-                  <Icon size={10} />
-                </button>
-              );
-            })}
+          {/* Type badge */}
+          <div className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/60 p-1 backdrop-blur-sm">
+            {item.mediaType === "movie" ? <Film size={9} className="text-slate-300" /> : <Tv size={9} className="text-slate-300" />}
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1">
-            {libraryHref ? (
-              <Link
-                href={libraryHref}
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
+          {/* Library badge */}
+          {libraryHref && (
+            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+              <BookCheck size={8} /> Dispo
+            </div>
+          )}
+
+          {/* TMDB rating badge */}
+          {item.voteAverage != null && item.voteAverage > 0 && (
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-sm">
+              <Star size={7} className="fill-current" /> {item.voteAverage.toFixed(1)}
+            </div>
+          )}
+
+          {/* Note dot */}
+          {item.note && (
+            <div className="pointer-events-none absolute bottom-1.5 right-1.5 rounded-full bg-amber-400/90 p-1">
+              <MessageSquare size={7} className="text-slate-900" />
+            </div>
+          )}
+
+          {/* Desktop hover overlay */}
+          <div className="absolute inset-0 hidden flex-col items-center justify-center gap-2 bg-black/78 backdrop-blur-[1.5px] opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
+            <div className="flex gap-1">
+              {ALL_STATUSES.map((s) => {
+                const meta = STATUS_META[s];
+                const Icon = meta.icon;
+                const active = item.status === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={(e) => { e.stopPropagation(); onStatusChange(s); }}
+                    title={meta.label}
+                    className={`flex h-6 w-6 items-center justify-center rounded-full border transition-all duration-150 ${
+                      active
+                        ? `${meta.bgSolid} border-white/30 text-white shadow-md scale-110`
+                        : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
+                    }`}
+                  >
+                    <Icon size={10} />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-1">
+              {libraryHref ? (
+                <Link href={libraryHref} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors">
+                  <ExternalLink size={9} /> Voir la fiche
+                </Link>
+              ) : (
+                <RequestButton item={item} />
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onNoteEdit(); }}
+                title={item.note ? "Modifier la note" : "Ajouter une note"}
+                className={`flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${item.note ? "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30" : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"}`}
               >
-                <ExternalLink size={9} /> Voir la fiche
-              </Link>
-            ) : (
-              <RequestButton item={item} />
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); onNoteEdit(); setTapped(false); }}
-              title={item.note ? "Modifier la note" : "Ajouter une note"}
-              className={`flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${
-                item.note ? "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30" : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"
-              }`}
-            >
-              <MessageSquare size={9} />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onRemove(); }}
-              className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
-            >
-              <Trash2 size={9} />
-            </button>
+                <MessageSquare size={9} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPendingDelete(true); }}
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
+              >
+                <Trash2 size={9} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Info strip */}
+        <div className={`flex items-center border-l-[3px] px-2 py-1.5 ${m.borderAccent}`}>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold leading-tight text-white">{item.title}</p>
+            {item.year && <p className="text-[9px] text-slate-500">{item.year}</p>}
           </div>
         </div>
       </div>
 
-      {/* Info strip */}
-      <div className={`flex items-center border-l-[3px] px-2 py-1.5 ${m.borderAccent}`}>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-semibold leading-tight text-white">{item.title}</p>
-          {item.year && <p className="text-[9px] text-slate-500">{item.year}</p>}
-        </div>
-      </div>
-    </div>
+      {/* Mobile bottom sheet */}
+      <ActionSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title={item.title}
+        subtitle={`${item.year ?? ""} · ${item.mediaType === "movie" ? "Film" : "Série"}${item.voteAverage ? ` · ★ ${item.voteAverage.toFixed(1)}` : ""}`}
+        poster={poster}
+        actions={sheetActions}
+      />
+
+      {/* Delete confirmation */}
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          title={item.title}
+          onConfirm={onRemove}
+          onClose={() => setPendingDelete(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -421,7 +499,7 @@ function SkeletonGrid() {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WatchlistPage() {
   const [activeStatus, setActiveStatus] = useState<WatchlistStatus | "all">("all");
@@ -455,7 +533,6 @@ export default function WatchlistPage() {
 
   const availableCount = useMemo(() => allItems.filter((i) => getLibraryHref(i) !== null).length, [allItems, getLibraryHref]);
 
-  // Set of "mediaType:tmdbId" keys for fast lookup in AddModal
   const existingKeys = useMemo(() => new Set(allItems.map((i) => `${i.mediaType}:${i.tmdbId}`)), [allItems]);
 
   const filtered = useMemo(() => {
@@ -467,6 +544,7 @@ export default function WatchlistPage() {
     return [...items].sort((a, b) => {
       if (sort === "title") return a.title.localeCompare(b.title, "fr");
       if (sort === "year") return (b.year ?? 0) - (a.year ?? 0);
+      if (sort === "rating") return (b.voteAverage ?? 0) - (a.voteAverage ?? 0);
       return b.updatedAt - a.updatedAt;
     });
   }, [allItems, activeStatus, search, sort]);
@@ -543,12 +621,13 @@ export default function WatchlistPage() {
           <option value="date">Date d&apos;ajout</option>
           <option value="title">Titre A–Z</option>
           <option value="year">Année</option>
+          <option value="rating">Note TMDB</option>
         </select>
         <button
           onClick={() => setShowAdd(true)}
           className="flex shrink-0 items-center gap-1.5 rounded-xl border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 transition-colors hover:bg-accent-500/20"
         >
-          <Plus size={14} /> Ajouter
+          <Plus size={14} /> <span className="hidden sm:inline">Ajouter</span>
         </button>
       </div>
 
@@ -615,11 +694,7 @@ export default function WatchlistPage() {
         <NoteModal item={noteItem} onSave={(note) => saveNote(noteItem, note)} onClose={() => setNoteItem(null)} />
       )}
       {mounted && showAdd && (
-        <AddModal
-          existingKeys={existingKeys}
-          onClose={() => setShowAdd(false)}
-          onAdded={() => mutate("/api/watchlist")}
-        />
+        <AddModal existingKeys={existingKeys} onClose={() => setShowAdd(false)} onAdded={() => mutate("/api/watchlist")} />
       )}
     </div>
   );

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   const body = await req.json();
-  const { mediaType, tmdbId, tvdbId, title, year, posterPath, status, note } = body;
+  const { mediaType, tmdbId, tvdbId, title, year, posterPath, voteAverage, status, note } = body;
 
   if (!mediaType || !tmdbId || !title) {
     return NextResponse.json({ error: "mediaType, tmdbId et title sont requis" }, { status: 400 });
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     title,
     year: year ?? null,
     posterPath: posterPath ?? null,
+    voteAverage: voteAverage ?? null,
     status: status ?? "to_watch",
     note: note ?? null,
   });
