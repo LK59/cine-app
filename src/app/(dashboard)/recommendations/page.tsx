@@ -9,12 +9,15 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/StateViews";
 import type { RecommendationGroup, RecommendedMovie } from "@/app/api/recommendations/route";
 import {
-  Star, PlusCircle, ExternalLink, Eye, Heart, X, Clock, CheckCircle2, BookCheck,
+  Star, PlusCircle, ExternalLink, Eye, Heart, X, Clock, CheckCircle2, BookCheck, Telescope,
 } from "lucide-react";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import type { WatchlistStatus } from "@/lib/db";
+import { useRole } from "@/lib/useRole";
+import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
+import { useToast } from "@/components/Toast";
 
 // ─── Status meta (same palette as watchlist) ──────────────────────────────────
 
@@ -37,12 +40,36 @@ const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_
 
 function MovieCard({ m }: { m: RecommendedMovie }) {
   const router = useRouter();
+  const { role } = useRole();
+  const isAdmin = role === "admin";
+  const toast = useToast();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
   const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(null);
+  const [addingSearch, setAddingSearch] = useState(false);
+  const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string } | null>(null);
 
   const libraryHref = m.radarrId ? `/radarr/${m.radarrId}` : null;
+
+  async function doInteractiveSearch(e?: React.MouseEvent) {
+    e?.preventDefault(); e?.stopPropagation();
+    setAddingSearch(true);
+    try {
+      const res = await fetch("/api/discover/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "movie", tmdbId: m.tmdbId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || "Erreur"); return; }
+      if (data.radarrId) {
+        setReleaseModal({ searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${data.radarrId}/releases/grab` });
+      }
+    } finally {
+      setAddingSearch(false);
+    }
+  }
 
   async function addToWatchlist(status: WatchlistStatus) {
     setAddedStatus(status);
@@ -100,6 +127,12 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
           variant: requested ? "accent" as const : "default" as const,
         }]
     ),
+    ...(isAdmin && !libraryHref ? [{
+      label: "Recherche interactive",
+      icon: <Telescope size={16} />,
+      onClick: () => doInteractiveSearch(),
+      disabled: addingSearch,
+    }] : []),
   ];
 
   const AddedIcon = addedStatus ? STATUS_META[addedStatus].icon : null;
@@ -146,7 +179,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/78 backdrop-blur-[1.5px] opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             {/* 5 status buttons — fitted for w-32 cards */}
             <div className="flex gap-0.5">
               {ALL_STATUSES.map((s) => {
@@ -170,27 +203,39 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
               })}
             </div>
 
-            {/* Fiche or Request */}
-            {libraryHref ? (
-              <Link
-                href={libraryHref}
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
-              >
-                <ExternalLink size={9} /> Voir la fiche
-              </Link>
-            ) : (
-              <button
-                onClick={(e) => doRequest(e)}
-                disabled={requested || requesting}
-                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
-                  requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                <PlusCircle size={9} />
-                {requested ? "Demandé ✓" : requesting ? "…" : "Demander"}
-              </button>
-            )}
+            {/* Fiche or Request + admin search */}
+            <div className="flex items-center gap-1">
+              {libraryHref ? (
+                <Link
+                  href={libraryHref}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
+                >
+                  <ExternalLink size={9} /> Voir la fiche
+                </Link>
+              ) : (
+                <button
+                  onClick={(e) => doRequest(e)}
+                  disabled={requested || requesting}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
+                    requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+                >
+                  <PlusCircle size={9} />
+                  {requested ? "Demandé ✓" : requesting ? "…" : "Demander"}
+                </button>
+              )}
+              {isAdmin && !libraryHref && (
+                <button
+                  onClick={(e) => doInteractiveSearch(e)}
+                  disabled={addingSearch}
+                  title="Recherche interactive"
+                  className="flex h-[22px] w-[22px] items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  <Telescope size={9} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -210,6 +255,16 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
         poster={m.posterPath}
         actions={sheetActions}
       />
+
+      {/* Interactive search modal */}
+      {releaseModal && (
+        <ReleaseSearchModal
+          title={m.title}
+          searchEndpoint={releaseModal.searchEndpoint}
+          grabEndpoint={releaseModal.grabEndpoint}
+          onClose={() => setReleaseModal(null)}
+        />
+      )}
     </>
   );
 }

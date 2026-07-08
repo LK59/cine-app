@@ -8,13 +8,15 @@ import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import {
   Eye, Heart, X, Clock, CheckCircle2, Film, Tv, Trash2,
   PlusCircle, ExternalLink, Search, BookCheck, MessageSquare,
-  Plus, Star,
+  Plus, Star, Telescope,
 } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import Link from "next/link";
 import { createPortal } from "react-dom";
+import { useRole } from "@/lib/useRole";
+import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -326,10 +328,35 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
   onNoteEdit: () => void;
   onRemove: () => void;
 }) {
+  const { role } = useRole();
+  const isAdmin = role === "admin";
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
+  const [addingSearch, setAddingSearch] = useState(false);
+  const [releaseModal, setReleaseModal] = useState<{ title: string; searchEndpoint: string; grabEndpoint: string } | null>(null);
   const m = STATUS_META[item.status];
   const poster = posterSrc(item.posterPath);
+
+  async function doInteractiveSearch(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setAddingSearch(true);
+    try {
+      const res = await fetch("/api/discover/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: item.mediaType, tmdbId: item.tmdbId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      if (item.mediaType === "movie" && data.radarrId) {
+        setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${data.radarrId}/releases/grab` });
+      } else if (item.mediaType === "series" && data.sonarrId) {
+        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${data.sonarrId}/releases`, grabEndpoint: `/api/sonarr/series/${data.sonarrId}/releases/grab` });
+      }
+    } finally {
+      setAddingSearch(false);
+    }
+  }
 
   // Build ActionSheet actions for mobile
   const sheetActions: SheetAction[] = [
@@ -358,6 +385,7 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
         }}]
     ),
     { label: item.note ? "Modifier la note" : "Ajouter une note", icon: <MessageSquare size={16} />, onClick: onNoteEdit },
+    ...(isAdmin ? [{ label: "Recherche interactive", icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
     { label: "Supprimer de la liste", icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
   ];
 
@@ -404,7 +432,7 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden flex-col items-center justify-center gap-2 bg-black/78 backdrop-blur-[1.5px] opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
+          <div className="absolute inset-0 hidden flex-col items-center justify-center gap-2 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
             <div className="flex gap-1">
               {ALL_STATUSES.map((s) => {
                 const meta = STATUS_META[s];
@@ -441,6 +469,16 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
               >
                 <MessageSquare size={9} />
               </button>
+              {isAdmin && (
+                <button
+                  onClick={(e) => doInteractiveSearch(e)}
+                  disabled={addingSearch}
+                  title="Recherche interactive"
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  <Telescope size={9} />
+                </button>
+              )}
               <button
                 onClick={(e) => { e.stopPropagation(); setPendingDelete(true); }}
                 className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
@@ -476,6 +514,16 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
           title={item.title}
           onConfirm={onRemove}
           onClose={() => setPendingDelete(false)}
+        />
+      )}
+
+      {/* Interactive search modal */}
+      {releaseModal && (
+        <ReleaseSearchModal
+          title={releaseModal.title}
+          searchEndpoint={releaseModal.searchEndpoint}
+          grabEndpoint={releaseModal.grabEndpoint}
+          onClose={() => setReleaseModal(null)}
         />
       )}
     </>

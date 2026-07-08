@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
@@ -11,8 +11,9 @@ import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { Film, Tv, Star, BookCheck, Send, Telescope, Sparkles, SearchIcon, X } from "lucide-react";
-import { WatchlistButton } from "@/components/WatchlistButton";
+import { Film, Tv, Star, BookCheck, Telescope, Sparkles, SearchIcon, X, Eye, Heart, Clock, CheckCircle2, PlusCircle, ExternalLink } from "lucide-react";
+import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
+import type { WatchlistStatus } from "@/lib/db";
 
 interface DiscoverItem {
   tmdbId: number;
@@ -39,6 +40,25 @@ interface ReleaseModal {
   grabEndpoint: string;
 }
 
+// ─── Status meta ──────────────────────────────────────────────────────────────
+
+const STATUS_META: Record<WatchlistStatus, {
+  label: string;
+  icon: React.ElementType;
+  textColor: string;
+  bgSolid: string;
+}> = {
+  to_watch:   { label: "À voir",     icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
+  to_request: { label: "À demander", icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
+  favorite:   { label: "Favoris",    icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
+  watched:    { label: "Vus",        icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
+  abandoned:  { label: "Abandonnés", icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
+};
+
+const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
+
+// ─── PosterCard ───────────────────────────────────────────────────────────────
+
 function PosterCard({
   item,
   type,
@@ -56,6 +76,10 @@ function PosterCard({
   requesting: boolean;
   requested: boolean;
 }) {
+  const router = useRouter();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(null);
+
   const libraryHref =
     type === "movie" && item.radarrId
       ? `/radarr/${item.radarrId}`
@@ -63,91 +87,184 @@ function PosterCard({
         ? `/sonarr/${item.sonarrId}`
         : null;
 
+  async function addToWatchlist(status: WatchlistStatus) {
+    setAddedStatus(status);
+    await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tmdbId: item.tmdbId,
+        mediaType: type === "movie" ? "movie" : "series",
+        title: item.title,
+        year: item.year,
+        posterPath: item.posterPath,
+        voteAverage: item.rating ?? null,
+        status,
+      }),
+    });
+  }
+
+  function handlePosterClick() {
+    if (window.matchMedia("(pointer: coarse)").matches) {
+      setSheetOpen(true);
+    } else if (libraryHref) {
+      router.push(libraryHref);
+    }
+  }
+
+  const AddedIcon = addedStatus ? STATUS_META[addedStatus].icon : null;
+
+  const sheetActions: SheetAction[] = [
+    ...ALL_STATUSES.map((s) => {
+      const meta = STATUS_META[s];
+      const Icon = meta.icon;
+      return {
+        label: meta.label,
+        icon: <Icon size={16} />,
+        onClick: () => addToWatchlist(s),
+        variant: (addedStatus === s ? "accent" : "default") as "accent" | "default",
+        disabled: addedStatus === s,
+      };
+    }),
+    ...(libraryHref
+      ? [{ label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
+      : [{
+          label: requested ? "Demande envoyée ✓" : requesting ? "Envoi…" : "Demander",
+          icon: <PlusCircle size={16} />,
+          onClick: () => onRequest(item),
+          disabled: requested || requesting,
+          variant: requested ? "accent" as const : "default" as const,
+        }]
+    ),
+    ...(isAdmin && !libraryHref ? [{
+      label: "Recherche interactive",
+      icon: <Telescope size={16} />,
+      onClick: () => onInteractiveSearch(item),
+      disabled: requesting,
+    }] : []),
+  ];
+
   return (
-    <div className="card flex flex-col overflow-hidden">
-      <div className="relative aspect-[2/3] shrink-0 bg-slate-800">
-        {item.posterPath ? (
-          <Image
-            src={`${TMDB_IMAGE_BASE}/w342${item.posterPath}`}
-            alt={item.title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-slate-600">
-            {type === "movie" ? <Film size={40} /> : <Tv size={40} />}
-          </div>
-        )}
-        {item.inLibrary && (
-          <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-emerald-600/90 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-            <BookCheck size={10} />
-            Bibliothèque
-          </div>
-        )}
-        {item.rating > 0 && (
-          <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-amber-400 backdrop-blur-sm">
-            <Star size={10} className="fill-amber-400" />
-            {item.rating.toFixed(1)}
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div>
-          <p className="line-clamp-2 text-sm font-medium leading-snug text-white">{item.title}</p>
-          {item.year && <p className="text-xs text-slate-500">{item.year}</p>}
-        </div>
-
-        {item.genres.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {item.genres.slice(0, 2).map((g) => (
-              <span key={g} className="badge bg-white/5 text-[9px] text-slate-400">
-                {g}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-auto flex flex-col gap-1.5">
-          {item.inLibrary && libraryHref ? (
-            <Link href={libraryHref} className="btn-secondary w-full text-center text-xs">
-              Voir dans la bibliothèque
-            </Link>
+    <>
+      <div className="group relative flex flex-col select-none">
+        {/* Poster */}
+        <div
+          className="relative overflow-hidden rounded-xl aspect-[2/3] bg-slate-800 cursor-pointer"
+          onClick={handlePosterClick}
+        >
+          {item.posterPath ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`${TMDB_IMAGE_BASE}/w342${item.posterPath}`}
+              alt={item.title}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+              loading="lazy"
+            />
           ) : (
-            <>
-              <button
-                onClick={() => onRequest(item)}
-                disabled={requested || requesting}
-                className="btn-primary w-full text-xs disabled:opacity-60"
-              >
-                <Send size={12} className="inline mr-1" />
-                {requested ? "Demandé" : requesting ? "En cours…" : "Demander"}
-              </button>
-              {isAdmin && (
-                <button
-                  onClick={() => onInteractiveSearch(item)}
-                  disabled={requesting}
-                  className="btn-secondary w-full text-xs disabled:opacity-60"
+            <div className="flex h-full items-center justify-center text-slate-600">
+              {type === "movie" ? <Film size={40} /> : <Tv size={40} />}
+            </div>
+          )}
+
+          {/* In library badge */}
+          {item.inLibrary && (
+            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+              <BookCheck size={8} /> Dispo
+            </div>
+          )}
+
+          {/* Rating badge */}
+          {item.rating > 0 && (
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-sm">
+              <Star size={7} className="fill-current" /> {item.rating.toFixed(1)}
+            </div>
+          )}
+
+          {/* Added to watchlist indicator */}
+          {AddedIcon && (
+            <div className={`pointer-events-none absolute bottom-1.5 right-1.5 rounded-full bg-black/70 p-1 ${STATUS_META[addedStatus!].textColor}`}>
+              <AddedIcon size={8} />
+            </div>
+          )}
+
+          {/* Desktop hover overlay */}
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            {/* Status buttons */}
+            <div className="flex gap-0.5">
+              {ALL_STATUSES.map((s) => {
+                const meta = STATUS_META[s];
+                const Icon = meta.icon;
+                const active = addedStatus === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={(e) => { e.stopPropagation(); addToWatchlist(s); }}
+                    title={meta.label}
+                    className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border transition-all duration-150 ${
+                      active
+                        ? `${meta.bgSolid} border-white/30 text-white scale-110 shadow-md`
+                        : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
+                    }`}
+                  >
+                    <Icon size={9} />
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Actions row */}
+            <div className="flex items-center gap-1">
+              {libraryHref ? (
+                <Link
+                  href={libraryHref}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
                 >
-                  <Telescope size={12} className="inline mr-1" />
-                  Recherche interactive
+                  <ExternalLink size={9} /> Voir la fiche
+                </Link>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRequest(item); }}
+                  disabled={requested || requesting}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
+                    requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+                >
+                  <PlusCircle size={9} />
+                  {requested ? "Demandé ✓" : requesting ? "…" : "Demander"}
                 </button>
               )}
-            </>
-          )}
-          <WatchlistButton
-            mediaType={type === "movie" ? "movie" : "series"}
-            tmdbId={item.tmdbId}
-            title={item.title}
-            year={item.year}
-            posterPath={item.posterPath}
-            size="md"
-            className="w-full justify-center text-xs"
-          />
+              {isAdmin && !libraryHref && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onInteractiveSearch(item); }}
+                  disabled={requesting}
+                  title="Recherche interactive"
+                  className="flex h-[22px] w-[22px] items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  <Telescope size={9} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Info strip */}
+        <div className="mt-1.5 px-0.5">
+          <p className="truncate text-[11px] font-medium text-slate-400 group-hover:text-slate-200 transition-colors">{item.title}</p>
+          {item.year && <p className="text-[10px] text-slate-600">{item.year}</p>}
         </div>
       </div>
-    </div>
+
+      {/* Mobile ActionSheet */}
+      <ActionSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title={item.title}
+        subtitle={[item.year, type === "movie" ? "Film" : "Série", item.rating > 0 ? `★ ${item.rating.toFixed(1)}` : null].filter(Boolean).join(" · ")}
+        poster={item.posterPath ? `${TMDB_IMAGE_BASE}/w342${item.posterPath}` : null}
+        actions={sheetActions}
+      />
+    </>
   );
 }
 
