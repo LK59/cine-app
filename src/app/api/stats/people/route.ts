@@ -97,12 +97,12 @@ export async function GET() {
     const topActors: PeopleStat[] = [...actorCount.entries()]
       .map(([id, v]) => ({ tmdbId: id, ...v }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 20);
+      .slice(0, 30);
 
     const topDirectors: PeopleStat[] = [...directorCount.entries()]
       .map(([id, v]) => ({ tmdbId: id, ...v }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 20);
+      .slice(0, 30);
 
     return { topActors, topDirectors };
   });
