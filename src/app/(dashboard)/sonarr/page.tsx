@@ -230,30 +230,49 @@ export default function SonarrPage() {
             <>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {visible.map((show, i) => (
-                  <Link
-                    key={show.id}
-                    href={`/sonarr/${show.id}`}
-                    data-nav-idx={i}
-                    onMouseEnter={() => prefetchSeriesDetail(show.id)}
-                    onFocus={() => prefetchSeriesDetail(show.id)}
-                    className={`card group relative block overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
-                  >
-                    <PosterImage src={poster(show)} alt={show.title} />
-                    <div className="p-2">
-                      <p className="truncate text-xs font-medium text-white">{show.title}</p>
-                      <p className="text-xs text-slate-500">
-                        {show.statistics?.episodeFileCount ?? 0}/{show.statistics?.episodeCount ?? 0} épisodes
-                      </p>
-                    </div>
-                    {!isGuest && (
-                      <button
-                        onClick={(e) => { e.preventDefault(); deleteSeries(show.id); }}
-                        className="absolute bottom-2 right-2 hidden rounded-md bg-red-600/90 p-1.5 text-white group-hover:flex"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                  <div key={show.id} className="group/card relative">
+                    <Link
+                      href={`/sonarr/${show.id}`}
+                      data-nav-idx={i}
+                      onMouseEnter={() => prefetchSeriesDetail(show.id)}
+                      onFocus={() => prefetchSeriesDetail(show.id)}
+                      className={`card group relative block overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
+                    >
+                      <PosterImage src={poster(show)} alt={show.title} />
+                      <div className="p-2">
+                        <p className="truncate text-xs font-medium text-white">{show.title}</p>
+                        <p className="text-xs text-slate-500">
+                          {show.statistics?.episodeFileCount ?? 0}/{show.statistics?.episodeCount ?? 0} épisodes
+                        </p>
+                      </div>
+                      {!isGuest && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); deleteSeries(show.id); }}
+                          className="absolute bottom-2 right-2 hidden rounded-md bg-red-600/90 p-1.5 text-white group-hover:flex"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </Link>
+                    {(show.overview || (show.genres?.length ?? 0) > 0) && (
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-900/95 p-3 opacity-0 shadow-xl backdrop-blur-sm transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
+                        <p className="mb-0.5 text-xs font-semibold leading-tight text-white">{show.title}</p>
+                        <p className="mb-2 text-[10px] text-slate-500">
+                          {show.year} · {show.statistics?.episodeCount ?? 0} épisodes
+                        </p>
+                        {(show.genres?.length ?? 0) > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-1">
+                            {show.genres!.slice(0, 3).map((g) => (
+                              <span key={g} className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-slate-300">{g}</span>
+                            ))}
+                          </div>
+                        )}
+                        {show.overview && (
+                          <p className="line-clamp-3 text-[10px] leading-4 text-slate-400">{show.overview}</p>
+                        )}
+                      </div>
                     )}
-                  </Link>
+                  </div>
                 ))}
               </div>
               <div ref={sentinelRef} className="h-1" />

@@ -192,7 +192,7 @@ export function MobileNav() {
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) * 2)",
         }}
       >
-        <div className="flex w-full items-center justify-around px-1 py-1">
+        <div className="flex w-full items-center justify-around px-1 py-1 [@media(max-height:500px)_and_(orientation:landscape)]:py-0.5">
           {PINNED.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
@@ -200,12 +200,12 @@ export function MobileNav() {
                 key={href}
                 href={href}
                 onTouchStart={() => prefetchRoute(href)}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors ${
+                className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1 ${
                   active ? "text-accent-400" : "text-slate-500"
                 }`}
               >
                 <Icon size={20} />
-                <span className="truncate px-0.5 leading-tight">{label}</span>
+                <span className="truncate px-0.5 leading-tight [@media(max-height:500px)_and_(orientation:landscape)]:hidden">{label}</span>
               </Link>
             );
           })}
@@ -213,21 +213,21 @@ export function MobileNav() {
           {/* Search */}
           <button
             onClick={openSearch}
-            className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] text-slate-500 rounded-lg transition-colors hover:text-white"
+            className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] text-slate-500 rounded-lg transition-colors hover:text-white [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1"
           >
             <Search size={20} />
-            <span>Recherche</span>
+            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">Recherche</span>
           </button>
 
           {/* More */}
           <button
             onClick={() => setOpen(true)}
-            className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors ${
+            className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] rounded-lg transition-colors [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1 ${
               open ? "text-accent-400" : "text-slate-500"
             }`}
           >
             <MoreHorizontal size={20} />
-            <span>Plus</span>
+            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">Plus</span>
           </button>
         </div>
       </nav>

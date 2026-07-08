@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden" style={{ height: "100dvh" }}>
       <Sidebar />
-      <MainScroll className="scrollbar-thin flex-1 overflow-y-auto px-4 pb-24 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:pb-6 sm:pt-[calc(1.5rem+env(safe-area-inset-top))] md:px-8">
+      <MainScroll className="scrollbar-thin flex-1 overflow-y-auto px-4 pb-24 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:pb-6 sm:pt-[calc(1.5rem+env(safe-area-inset-top))] md:px-8 [@media(max-height:500px)_and_(orientation:landscape)]:pb-16 [@media(max-height:500px)_and_(orientation:landscape)]:pt-3">
         <ScrollRestorer />
         <div className="w-full">
           <PageTransition>{children}</PageTransition>
