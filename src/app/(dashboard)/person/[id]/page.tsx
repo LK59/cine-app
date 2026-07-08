@@ -355,7 +355,14 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
   const router = useRouter();
   const { data: vip } = useSWR<VipPerson>(`/api/vip/${id}`, fetcher, { revalidateOnFocus: false });
   const { data: galleryData } = useSWR<{ files: string[] }>("/api/gallery/clara", fetcher, { revalidateOnFocus: false });
-  const files = (galleryData?.files ?? []).filter((file) => file !== "clarabanner.jpg");
+  const files = useMemo(() => {
+    const arr = (galleryData?.files ?? []).filter((file) => file !== "clarabanner.jpg");
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [galleryData]);
 
   const { data: tmdbPhotosData } = useSWR<{ photos: PersonPhoto[] }>(
     `/api/tmdb/person/${id}/photos`,
@@ -561,7 +568,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Galerie</p>
-                <h2 className="mt-2 text-3xl font-bold text-white">Banque d'image</h2>
+                <h2 className="mt-2 text-3xl font-bold text-white">Galería</h2>
 
               </div>
               <p className="text-sm font-medium text-white/50">{visibleFiles.length} / {files.length} visibles</p>
