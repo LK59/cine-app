@@ -318,9 +318,10 @@ function RequestButton({ item }: { item: WatchlistItem }) {
 
 // ─── Watchlist Card ───────────────────────────────────────────────────────────
 
-function WatchlistCard({ item, libraryHref, onStatusChange, onNoteEdit, onRemove }: {
+function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEdit, onRemove }: {
   item: WatchlistItem;
   libraryHref: string | null;
+  imdbRating: string | null;
   onStatusChange: (s: WatchlistStatus) => void;
   onNoteEdit: () => void;
   onRemove: () => void;
@@ -388,10 +389,10 @@ function WatchlistCard({ item, libraryHref, onStatusChange, onNoteEdit, onRemove
             </div>
           )}
 
-          {/* TMDB rating badge */}
-          {item.voteAverage != null && item.voteAverage > 0 && (
+          {/* IMDb rating badge — always visible */}
+          {imdbRating && (
             <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-sm">
-              <Star size={7} className="fill-current" /> {item.voteAverage.toFixed(1)}
+              <Star size={7} className="fill-current" /> {imdbRating}
             </div>
           )}
 
@@ -464,7 +465,7 @@ function WatchlistCard({ item, libraryHref, onStatusChange, onNoteEdit, onRemove
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         title={item.title}
-        subtitle={`${item.year ?? ""} · ${item.mediaType === "movie" ? "Film" : "Série"}${item.voteAverage ? ` · ★ ${item.voteAverage.toFixed(1)}` : ""}`}
+        subtitle={`${item.year ?? ""} · ${item.mediaType === "movie" ? "Film" : "Série"}${imdbRating ? ` · IMDb ${imdbRating}` : ""}`}
         poster={poster}
         actions={sheetActions}
       />
@@ -517,6 +518,17 @@ export default function WatchlistPage() {
   );
 
   const allItems = allData?.items ?? [];
+
+  // Build IMDb ratings query once the list is loaded
+  const ratingsKey = useMemo(() => {
+    if (!allItems.length) return null;
+    const q = allItems.map((i) => `${i.mediaType}:${i.tmdbId}`).join(",");
+    return `/api/watchlist/ratings?items=${q}`;
+  }, [allItems]);
+
+  const { data: ratingsMap } = useSWR<Record<string, string | null>>(
+    ratingsKey, fetcher, { revalidateOnFocus: false }
+  );
 
   const getLibraryHref = useCallback((item: WatchlistItem): string | null => {
     if (!libMap) return null;
@@ -681,6 +693,7 @@ export default function WatchlistPage() {
               key={item.id}
               item={item}
               libraryHref={getLibraryHref(item)}
+              imdbRating={ratingsMap?.[`${item.mediaType}:${item.tmdbId}`] ?? null}
               onStatusChange={(status) => changeStatus(item, status)}
               onNoteEdit={() => setNoteItem(item)}
               onRemove={() => removeItem(item)}

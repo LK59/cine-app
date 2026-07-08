@@ -64,6 +64,7 @@ export interface TmdbMovie {
   poster_path: string | null;
   runtime: number | null;
   tagline?: string;
+  imdb_id?: string | null;
   credits?: { cast: TmdbCastMember[]; crew?: TmdbCrewMember[] };
   belongs_to_collection?: { id: number; name: string; poster_path: string | null } | null;
 }
@@ -91,6 +92,7 @@ export interface TmdbTv {
   tagline?: string;
   created_by?: { id: number; name: string; profile_path: string | null }[];
   credits?: { cast: TmdbCastMember[]; crew?: TmdbCrewMember[] };
+  external_ids?: { imdb_id?: string | null };
 }
 
 export interface TmdbTrendingMovie {
@@ -133,7 +135,7 @@ export const tmdb = {
     ),
   getTv: (tmdbTvId: number) =>
     fetchJson<TmdbTv>(
-      `${BASE}/tv/${tmdbTvId}?api_key=${apiKey}&language=fr-FR&append_to_response=credits`
+      `${BASE}/tv/${tmdbTvId}?api_key=${apiKey}&language=fr-FR&append_to_response=credits,external_ids`
     ),
   trendingMovies: () =>
     fetchJson<{ results: TmdbTrendingMovie[] }>(
