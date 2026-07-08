@@ -37,6 +37,7 @@ import { useToast } from "@/components/Toast";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
+import { SimilarMedia } from "@/components/SimilarMedia";
 
 interface SeriesInfo {
   trailerKey: string | null;
@@ -420,6 +421,7 @@ export default function SonarrSeriesDetailPage() {
         </div>
       )}
 
+      <SimilarMedia apiUrl={`/api/sonarr/series/${series.id}/similar`} type="series" />
       </div>{/* end infos tab */}
 
       {/* ── Cast ────────────────────────────────────────────────── */}

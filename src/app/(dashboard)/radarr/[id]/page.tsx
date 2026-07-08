@@ -38,6 +38,7 @@ import { useRole } from "@/lib/useRole";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
+import { SimilarMedia } from "@/components/SimilarMedia";
 
 interface MovieInfo {
   trailerKey: string | null;
@@ -437,6 +438,7 @@ export default function RadarrMovieDetailPage() {
           </div>
         </div>
       )}
+      <SimilarMedia apiUrl={`/api/radarr/movies/${movie.id}/similar`} type="movie" />
       </div>{/* end infos tab */}
 
       {/* ── File + Subtitles ────────────────────────────────────── */}

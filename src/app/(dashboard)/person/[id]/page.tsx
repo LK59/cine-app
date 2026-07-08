@@ -17,6 +17,8 @@ import type { VipPerson } from "@/lib/vip-persons";
 import { isVip, isClaraGalleryEnabled } from "@/lib/vip-persons";
 import type { NewsArticle } from "@/app/api/news/clara/route";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
+import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
+import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { selectBio } from "@/lib/format";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -355,9 +357,17 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
   const { data: galleryData } = useSWR<{ files: string[] }>("/api/gallery/clara", fetcher, { revalidateOnFocus: false });
   const files = (galleryData?.files ?? []).filter((file) => file !== "clarabanner.jpg");
 
+  const { data: tmdbPhotosData } = useSWR<{ photos: PersonPhoto[] }>(
+    `/api/tmdb/person/${id}/photos`,
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
+  );
+  const tmdbPhotos = tmdbPhotosData?.photos ?? [];
+
   const [lang, setLang] = useState<Lang>("fr");
   const [photoLimit, setPhotoLimit] = useState(36);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [tmdbPhotoIndex, setTmdbPhotoIndex] = useState<number | null>(null);
 
   const visibleFiles = files.slice(0, photoLimit);
   const hasMorePhotos = photoLimit < files.length;
@@ -602,6 +612,33 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           </section>
         )}
 
+        {tmdbPhotos.length > 0 && (
+          <section className="mb-10">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">TMDb</p>
+              <h2 className="mt-1 text-2xl font-bold text-white">Photos</h2>
+            </div>
+            <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory">
+              {tmdbPhotos.map((photo, i) => (
+                <button
+                  key={photo.filePath}
+                  onClick={() => setTmdbPhotoIndex(i)}
+                  className="group snap-start shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:ring-amber-200/40"
+                  style={{ width: photo.aspectRatio > 1 ? 200 : 112 }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photo.filePath}
+                    alt={`Photo ${i + 1}`}
+                    className="h-40 w-full object-cover transition duration-300 group-hover:scale-105"
+                    loading={i < 6 ? "eager" : "lazy"}
+                  />
+                </button>
+              ))}
+            </HorizontalCarousel>
+          </section>
+        )}
+
         {vip?.quotes && vip.quotes.length > 0 && (
           <QuotesSection quotes={vip.quotes} />
         )}
@@ -654,6 +691,39 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           onClose={() => setLightboxIndex(null)}
         />
       )}
+      {tmdbPhotoIndex !== null && tmdbPhotos.length > 0 &&
+        createPortal(
+          <TmdbPhotoLightbox
+            photos={tmdbPhotos}
+            startIndex={tmdbPhotoIndex}
+            onClose={() => setTmdbPhotoIndex(null)}
+          />,
+          document.body
+        )
+      }
+    </div>
+  );
+}
+
+function TmdbPhotoLightbox({ photos, startIndex, onClose }: { photos: PersonPhoto[]; startIndex: number; onClose: () => void }) {
+  const [idx, setIdx] = useState(startIndex);
+  const prev = useCallback(() => setIdx((i) => (i - 1 + photos.length) % photos.length), [photos.length]);
+  const next = useCallback(() => setIdx((i) => (i + 1) % photos.length), [photos.length]);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); if (e.key === "ArrowLeft") prev(); if (e.key === "ArrowRight") next(); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose, prev, next]);
+  return (
+    <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-[#05040a]/95 p-4 backdrop-blur-xl sm:p-6" onClick={onClose}>
+      <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:left-6"><ChevronLeft size={24} /></button>
+      <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:right-6"><ChevronRight size={24} /></button>
+      <button onClick={onClose} className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:right-6 sm:top-6"><X size={20} /></button>
+      <figure className="relative grid max-h-[calc(100vh-2rem)] w-full max-w-[min(92vw,1000px)] place-items-center gap-4" onClick={(e) => e.stopPropagation()}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photos[idx].fullPath} alt={`Photo ${idx + 1}`} className="max-h-[calc(100vh-7rem)] max-w-full rounded-2xl object-contain shadow-[0_30px_90px_rgba(0,0,0,0.65)] ring-1 ring-white/10" decoding="async" />
+        <figcaption className="rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-medium text-white/75 backdrop-blur-md">{idx + 1} / {photos.length}</figcaption>
+      </figure>
     </div>
   );
 }
