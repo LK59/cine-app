@@ -127,7 +127,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
           variant: requested ? "accent" as const : "default" as const,
         }]
     ),
-    ...(isAdmin && !libraryHref ? [{
+    ...(isAdmin && !m.inLibrary ? [{
       label: "Recherche interactive",
       icon: <Telescope size={16} />,
       onClick: () => doInteractiveSearch(),
@@ -225,7 +225,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
                   {requested ? "Demandé ✓" : requesting ? "…" : "Demander"}
                 </button>
               )}
-              {isAdmin && !libraryHref && (
+              {isAdmin && !m.inLibrary && (
                 <button
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}

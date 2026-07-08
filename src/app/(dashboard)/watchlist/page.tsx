@@ -385,7 +385,7 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
         }}]
     ),
     { label: item.note ? "Modifier la note" : "Ajouter une note", icon: <MessageSquare size={16} />, onClick: onNoteEdit },
-    ...(isAdmin ? [{ label: "Recherche interactive", icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
+    ...(isAdmin && !libraryHref ? [{ label: "Recherche interactive", icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
     { label: "Supprimer de la liste", icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
   ];
 
@@ -469,7 +469,7 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
               >
                 <MessageSquare size={9} />
               </button>
-              {isAdmin && (
+              {isAdmin && !libraryHref && (
                 <button
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}

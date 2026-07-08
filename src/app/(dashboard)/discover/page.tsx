@@ -136,7 +136,7 @@ function PosterCard({
           variant: requested ? "accent" as const : "default" as const,
         }]
     ),
-    ...(isAdmin && !libraryHref ? [{
+    ...(isAdmin && !item.inLibrary ? [{
       label: "Recherche interactive",
       icon: <Telescope size={16} />,
       onClick: () => onInteractiveSearch(item),
@@ -234,7 +234,7 @@ function PosterCard({
                   {requested ? "Demandé ✓" : requesting ? "…" : "Demander"}
                 </button>
               )}
-              {isAdmin && !libraryHref && (
+              {isAdmin && !item.inLibrary && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onInteractiveSearch(item); }}
                   disabled={requesting}
