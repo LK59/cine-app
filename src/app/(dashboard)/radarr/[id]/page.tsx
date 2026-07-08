@@ -171,7 +171,7 @@ export default function RadarrMovieDetailPage() {
     const newPlayed = !jfItem.UserData?.Played;
     setTogglingWatched(true);
     // Optimistic flip
-    mutateJf({ item: { ...jfItem, UserData: { ...jfItem.UserData, Played: newPlayed } } }, { revalidate: false });
+    mutateJf({ item: { ...jfItem, UserData: { PlayCount: 0, ...jfItem.UserData, Played: newPlayed } } }, { revalidate: false });
     try {
       const res = await fetch("/api/jellyfin/played", {
         method: "POST",
