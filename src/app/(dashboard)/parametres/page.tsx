@@ -8,11 +8,13 @@ import { Toggle } from "@/components/Toggle";
 import { NOTIFICATION_CATEGORIES, getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
 import { useTheme } from "@/components/ThemeProvider";
 import { ACCENT_PRESETS } from "@/lib/theme";
+import { useRole } from "@/lib/useRole";
 
 type TestState = "idle" | "sending" | "sent" | "error";
 
 export default function ParametresPage() {
   const { accent, amoled, setAccent, setAmoled } = useTheme();
+  const { role } = useRole();
 
   // Notification state
   const [preferences, setPreferences] = useState<Record<NotificationCategory, boolean>>(getDefaultNotificationPreferences);
@@ -20,6 +22,7 @@ export default function ParametresPage() {
   const [saving, setSaving] = useState<NotificationCategory | null>(null);
   const [testState, setTestState] = useState<TestState>("idle");
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [searchDebug, setSearchDebug] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -27,6 +30,16 @@ export default function ParametresPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => { if (json?.preferences) setPreferences(json.preferences); })
       .finally(() => setLoadingPrefs(false));
+  }, []);
+
+  useEffect(() => {
+    setSearchDebug(localStorage.getItem("cine:search-debug") === "1");
+  }, []);
+
+  const toggleSearchDebug = useCallback((enabled: boolean) => {
+    setSearchDebug(enabled);
+    localStorage.setItem("cine:search-debug", enabled ? "1" : "0");
+    window.dispatchEvent(new Event("search-debug-change"));
   }, []);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
@@ -245,6 +258,32 @@ export default function ParametresPage() {
           </div>
           <PwaUpdateCard />
         </section>
+
+        {role === "admin" && (
+          <section>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-400 ring-1 ring-inset ring-amber-500/20">
+                <Settings size={18} />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-white">Diagnostic admin</h2>
+                <p className="text-xs text-slate-500">Outils temporaires pour comprendre les résultats de recherche</p>
+              </div>
+            </div>
+
+            <div className="card p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Debug recherche</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Affiche dans la modale pourquoi chaque résultat apparaît : fuzzy local, recherche TMDb classique ou requête naturelle.
+                  </p>
+                </div>
+                <Toggle checked={searchDebug} onChange={toggleSearchDebug} />
+              </div>
+            </div>
+          </section>
+        )}
 
       </div>
     </div>

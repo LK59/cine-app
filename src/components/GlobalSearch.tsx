@@ -13,6 +13,7 @@ import type { SonarrSeries } from "@/lib/clients/sonarr";
 import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
 import { posterUrl } from "@/lib/images";
 import { useSWRConfig } from "swr";
+import { useRole } from "@/lib/useRole";
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
@@ -70,9 +71,9 @@ function fuzzyScore(title: string, query: string): number {
   if (t === q) return 100;
   if (t.startsWith(q)) return 90;
   if (t.includes(q)) return 70;
-  const words = q.split(/\s+/).filter(Boolean);
+  const words = q.split(/\s+/).filter((w) => w.length >= 3);
   if (words.length > 1 && words.every((w) => t.includes(w))) return 50;
-  if (words.some((w) => t.startsWith(w))) return 30;
+  if (words.length === 1 && words.some((w) => t.startsWith(w))) return 30;
   return tokenFuzzyScore(title, query);
 }
 
@@ -87,6 +88,7 @@ interface LocalResult {
   type: "movie" | "series";
   score: number;
   tmdbId: number;
+  debugOrigin: "local" | "remote-library";
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -137,6 +139,19 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const { role } = useRole();
+  const [searchDebug, setSearchDebug] = useState(false);
+
+  useEffect(() => {
+    setSearchDebug(localStorage.getItem("cine:search-debug") === "1");
+    const sync = () => setSearchDebug(localStorage.getItem("cine:search-debug") === "1");
+    window.addEventListener("storage", sync);
+    window.addEventListener("search-debug-change", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("search-debug-change", sync);
+    };
+  }, []);
 
   // Debounce query for API call
   useEffect(() => {
@@ -151,7 +166,7 @@ export function GlobalSearch() {
   // Remote search (TMDb + persons) — only fire when query ≥ 2 chars
   const { data: remoteData, isLoading: remoteLoading } = useSWR<SearchResponse>(
     open && debouncedQuery.length >= 2
-      ? `/api/search?q=${encodeURIComponent(debouncedQuery)}`
+      ? `/api/search?q=${encodeURIComponent(debouncedQuery)}${role === "admin" && searchDebug ? "&debug=1" : ""}`
       : null,
     fetcher
   );
@@ -180,13 +195,13 @@ export function GlobalSearch() {
     const term = query.trim();
     if (term.length < 1) return [];
     const movieResults: LocalResult[] = (movies ?? [])
-      .map((m) => ({ ...m, score: fuzzyScore(m.title, term), poster: posterUrl(m.images), href: `/radarr/${m.id}`, type: "movie" as const, tmdbId: m.tmdbId }))
-      .filter((m) => m.score > 0)
+      .map((m) => ({ ...m, score: fuzzyScore(m.title, term), poster: posterUrl(m.images), href: `/radarr/${m.id}`, type: "movie" as const, tmdbId: m.tmdbId, debugOrigin: "local" as const }))
+      .filter((m) => m.score >= 45)
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
     const seriesResults: LocalResult[] = (series ?? [])
-      .map((s) => ({ ...s, score: fuzzyScore(s.title, term), poster: posterUrl(s.images), href: `/sonarr/${s.id}`, type: "series" as const, tmdbId: s.tmdbId ?? 0 }))
-      .filter((s) => s.score > 0)
+      .map((s) => ({ ...s, score: fuzzyScore(s.title, term), poster: posterUrl(s.images), href: `/sonarr/${s.id}`, type: "series" as const, tmdbId: s.tmdbId ?? 0, debugOrigin: "local" as const }))
+      .filter((s) => s.score >= 45)
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
     return [...movieResults, ...seriesResults].sort((a, b) => b.score - a.score).slice(0, 8);
@@ -205,6 +220,7 @@ export function GlobalSearch() {
         type: r.type,
         score: 80,
         tmdbId: r.tmdbId,
+        debugOrigin: "remote-library" as const,
       }));
   }, [localResults, remoteData?.library]);
 
@@ -310,6 +326,13 @@ export function GlobalSearch() {
                         {r.title}
                       </button>
                       <p className="text-xs text-slate-500">{r.year}</p>
+                      {role === "admin" && searchDebug && (
+                        <p className="mt-0.5 text-[10px] text-amber-400/80">
+                          {r.debugOrigin === "local"
+                            ? `local fuzzy: score ${Math.round(r.score)}`
+                            : remoteData?.debug?.results?.[`${r.type}:${r.tmdbId}`]?.join(" · ") ?? "remote"}
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <SourceBadge source={r.type === "movie" ? "radarr" : "sonarr"} />
@@ -403,6 +426,11 @@ export function GlobalSearch() {
                           </span>
                         )}
                       </div>
+                      {role === "admin" && searchDebug && (
+                        <p className="mt-0.5 line-clamp-2 text-[10px] text-amber-400/80">
+                          {remoteData?.debug?.results?.[`${r.type}:${r.tmdbId}`]?.join(" · ") ?? "tmdb"}
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <SourceBadge source="tmdb" />
@@ -437,6 +465,22 @@ export function GlobalSearch() {
             <div className="hidden md:flex items-center justify-between px-4 py-3 text-xs text-slate-500">
               <span>↑↓ naviguer · Entrée sélectionner</span>
               <span><kbd className="rounded bg-white/10 px-1.5 py-0.5">⌘K</kbd> ouvrir/fermer</span>
+            </div>
+          )}
+
+          {role === "admin" && searchDebug && remoteData?.debug && query && (
+            <div className="border-t border-white/10 px-4 py-3 text-[10px] leading-5 text-slate-500">
+              <p className="font-semibold uppercase tracking-wider text-amber-400/80">Debug recherche</p>
+              <p>normalisé: {remoteData.debug.normalizedQuery}</p>
+              <p>
+                naturel: {remoteData.debug.natural.enabled ? "oui" : "non"}
+                {" · "}type: {remoteData.debug.natural.mediaType}
+                {" · "}genre: {remoteData.debug.natural.genreName ?? "aucun"}
+              </p>
+              <p>
+                acteurs: {remoteData.debug.natural.castNames.join(", ") || "aucun"}
+                {" · "}réalisateurs: {remoteData.debug.natural.directorNames.join(", ") || "aucun"}
+              </p>
             </div>
           )}
         </div>

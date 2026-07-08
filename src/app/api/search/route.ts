@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,16 @@ export interface SearchResponse {
   library: UnifiedSearchResult[];
   tmdb: UnifiedSearchResult[];
   persons: PersonResult[];
+  debug?: SearchDebug;
+}
+
+export interface SearchDebug {
+  query: string;
+  normalizedQuery: string;
+  type: "movie" | "series" | "all";
+  natural: NaturalQuery & { movieGenreId: number | null; tvGenreId: number | null; castIds: number[]; directorIds: number[] };
+  personQuery: string;
+  results: Record<string, string[]>;
 }
 
 // ─── Natural query parsing ────────────────────────────────────────────────────
@@ -247,14 +258,21 @@ function makeEntry(
   };
 }
 
+function debugKey(entry: Pick<UnifiedSearchResult, "type" | "tmdbId">) {
+  return `${entry.type}:${entry.tmdbId}`;
+}
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
+  const wantsDebug = req.nextUrl.searchParams.get("debug") === "1";
+  const session = wantsDebug ? await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value) : null;
+  const includeDebug = session?.role === "admin";
 
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
   if (!tmdb.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
-  const cacheKey = `search:v2:${type}:${q}`;
+  const cacheKey = `search:v3:${includeDebug ? "debug" : "normal"}:${type}:${q}`;
 
   const result = await withCache<SearchResponse>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
@@ -277,23 +295,40 @@ export async function GET(req: NextRequest) {
     const library: UnifiedSearchResult[] = [];
     const tmdbNotInLib: UnifiedSearchResult[] = [];
     const seenResults = new Set<string>();
+    const resultDebug: Record<string, string[]> = {};
 
-    function addResult(entry: UnifiedSearchResult) {
+    const addDebug = (entry: UnifiedSearchResult, reason: string) => {
+      if (!includeDebug) return;
+      const key = debugKey(entry);
+      resultDebug[key] = [...(resultDebug[key] ?? []), reason];
+    };
+
+    function addResult(entry: UnifiedSearchResult, reason: string) {
       const key = `${entry.type}:${entry.tmdbId}`;
-      if (seenResults.has(key)) return;
+      if (seenResults.has(key)) {
+        addDebug(entry, reason);
+        return;
+      }
       seenResults.add(key);
+      addDebug(entry, reason);
       if (entry.inLibrary) library.push(entry);
       else tmdbNotInLib.push(entry);
     }
 
+    let castIds: number[] = [];
+    let directorIds: number[] = [];
+    let genreIds: { movie: number | null; tv: number | null } | null = null;
+
     if (natural.enabled) {
-      const [castIds, directorIds, movieGenres, tvGenres] = await Promise.all([
+      const [resolvedCastIds, resolvedDirectorIds, movieGenres, tvGenres] = await Promise.all([
         resolvePersonIds(natural.castNames),
         resolvePersonIds(natural.directorNames),
         tmdb.movieGenres().catch(() => ({ genres: [] })),
         tmdb.tvGenres().catch(() => ({ genres: [] })),
       ]);
-      const genreIds = resolveGenreIds(natural.genreName, movieGenres.genres, tvGenres.genres);
+      castIds = resolvedCastIds;
+      directorIds = resolvedDirectorIds;
+      genreIds = resolveGenreIds(natural.genreName, movieGenres.genres, tvGenres.genres);
       const discoverCalls: Promise<{ results: any[] }>[] = [];
 
       if (searchMovie && natural.mediaType !== "series") {
@@ -318,7 +353,11 @@ export async function GET(req: NextRequest) {
         if (batch.status !== "fulfilled") continue;
         for (const item of batch.value.results.slice(0, 30)) {
           const mediaType = "title" in item ? "movie" : "series";
-          addResult(makeEntry(item, mediaType, radarrByTmdb, sonarrByTmdb));
+          const entry = makeEntry(item, mediaType, radarrByTmdb, sonarrByTmdb);
+          addResult(
+            entry,
+            `natural: discover ${mediaType}; genre=${natural.genreName ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}; director=${natural.directorNames.join(",") || "none"} -> ${directorIds.join(",") || "none"}`
+          );
         }
       }
     }
@@ -330,7 +369,7 @@ export async function GET(req: NextRequest) {
       if (isMovie && !searchMovie) continue;
       if (!isMovie && !searchSeries) continue;
 
-      addResult(makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb));
+      addResult(makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb), "tmdb: searchMulti fallback");
     }
 
     // Persons
@@ -348,7 +387,24 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return { library, tmdb: tmdbNotInLib, persons };
+    const debug = includeDebug
+      ? {
+          query: q,
+          normalizedQuery: normalize(q),
+          type,
+          natural: {
+            ...natural,
+            movieGenreId: genreIds?.movie ?? null,
+            tvGenreId: genreIds?.tv ?? null,
+            castIds,
+            directorIds,
+          },
+          personQuery,
+          results: resultDebug,
+        }
+      : undefined;
+
+    return { library, tmdb: tmdbNotInLib, persons, debug };
   });
 
   return NextResponse.json(result);
