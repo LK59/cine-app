@@ -13,6 +13,7 @@ Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin 
 - **Radarr and Sonarr library views** - grid and list modes, filtering, quick search, keyboard navigation
 - **Movie and series detail pages** - poster, metadata, cast carousel, active downloads, file info, IMDb/RT/Metacritic ratings
 - **Watchlist** - add any title from TMDB, classify with 5 statuses (A voir, Favoris, Vus, A demander, Abandonnes), personal notes, search and sort, IMDb rating badge on every card
+- **Natural language search** - find titles with queries like `film de guerre de Christopher Nolan`, `serie avec Clara Galle` or `film comedie avec Ryan Gosling`
 - **Discover** - trending movies and series with genre filters, TMDB search, "Pour vous" tab based on Jellyfin play history
 - **Recommendations** - personalised rows based on recently watched Jellyfin history
 - **Release search modal** - browse and grab releases directly from Radarr/Sonarr inside the app
