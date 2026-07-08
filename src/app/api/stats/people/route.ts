@@ -27,14 +27,14 @@ interface CreditsResult {
 export async function GET() {
   if (!tmdb.isEnabled()) return NextResponse.json({ topActors: [], topDirectors: [] } satisfies PeopleStats);
 
-  const data = await withCache<PeopleStats>("stats:people:v4", 6 * 3600_000, async () => {
+  const data = await withCache<PeopleStats>("stats:people:v5", 6 * 3600_000, async () => {
     const [movies, series] = await Promise.all([
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
     ]);
 
-    const eligibleMovies = movies.filter((m) => m.tmdbId);
-    const eligibleSeries = series.filter((s) => s.tmdbId);
+    const eligibleMovies = movies.filter((m) => m.tmdbId && m.hasFile);
+    const eligibleSeries = series.filter((s) => s.tmdbId && (s.statistics?.episodeFileCount ?? 0) > 0);
 
     // Fetch credits for movies and series in parallel (cached per item for 7 days)
     const [movieResults, seriesResults] = await Promise.all([
@@ -71,7 +71,7 @@ export async function GET() {
       if (result.status !== "fulfilled" || !result.value) return;
       const credits = result.value.credits;
 
-      for (const actor of (credits?.cast ?? []).slice(0, 30)) {
+      for (const actor of (credits?.cast ?? []).slice(0, 50)) {
         const existing = actorCount.get(actor.id);
         if (existing) existing.count++;
         else actorCount.set(actor.id, {
