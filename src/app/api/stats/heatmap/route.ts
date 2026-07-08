@@ -10,7 +10,7 @@ export interface HeatmapData {
 }
 
 export async function GET() {
-  const data = await withCache<HeatmapData>("heatmap:365", 30 * 60_000, () => {
+  const data = await withCache<HeatmapData>("heatmap:365", 30 * 60_000, async () => {
     const db = getDb();
     const cutoff = Date.now() - 365 * 24 * 3600_000;
     const rows = db.prepare(`

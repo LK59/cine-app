@@ -25,7 +25,7 @@ export async function GET() {
     const results = await Promise.allSettled(
       movies.map((m) =>
         withCache(`movie-credits:${m.tmdbId}`, 7 * 24 * 3600_000, () =>
-          tmdb.getMovieDetails(m.tmdbId).catch(() => null)
+          tmdb.getMovie(m.tmdbId).catch(() => null)
         )
       )
     );
