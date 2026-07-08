@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
@@ -275,7 +275,7 @@ function hasAll(ids: Set<number>, required: number[]) {
 async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: number, castIds: number[], directorIds: number[]) {
   if (castIds.length === 0 && directorIds.length === 0) return true;
 
-  const details = await withCache(`search:credits-check:${mediaType}:${tmdbId}`, 7 * 24 * 3600_000, () =>
+  const details = await withCache<TmdbMovie | TmdbTv | null>(`search:credits-check:${mediaType}:${tmdbId}`, 7 * 24 * 3600_000, () =>
     mediaType === "movie"
       ? tmdb.getMovie(tmdbId).catch(() => null)
       : tmdb.getTv(tmdbId).catch(() => null)
