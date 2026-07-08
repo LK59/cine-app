@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/StateViews";
 import {
   Eye, Heart, X, Clock, CheckCircle2, Film, Tv, Trash2,
   PlusCircle, ExternalLink, Search, BookCheck, MessageSquare,
-  ChevronDown,
+  Plus,
 } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
@@ -35,10 +35,10 @@ const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_
 
 type SortKey = "date" | "title" | "year";
 
-function posterSrc(path: string | null): string | null {
+function posterSrc(path: string | null | undefined, size = "w342"): string | null {
   if (!path) return null;
   if (path.startsWith("http")) return path;
-  return `${TMDB_IMAGE_BASE}/w342${path}`;
+  return `${TMDB_IMAGE_BASE}/${size}${path}`;
 }
 
 // ─── Note Modal ───────────────────────────────────────────────────────────────
@@ -50,50 +50,185 @@ function NoteModal({ item, onSave, onClose }: {
 }) {
   const [text, setText] = useState(item.note ?? "");
   const ref = useRef<HTMLTextAreaElement>(null);
-
   useEffect(() => { ref.current?.focus(); }, []);
 
-  function handleKey(e: React.KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onSave(text); onClose(); }
-    if (e.key === "Escape") onClose();
-  }
-
   return createPortal(
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <p className="mb-0.5 text-sm font-semibold text-white truncate">{item.title}</p>
-        <p className="mb-3 text-xs text-slate-500">Note personnelle</p>
+        <p className="mb-3 text-xs text-slate-500">Note personnelle · ⌘ + Entrée pour sauvegarder</p>
         <textarea
           ref={ref}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKey}
+          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onSave(text); onClose(); } if (e.key === "Escape") onClose(); }}
           placeholder="Ajoute une note…"
           rows={4}
           className="w-full resize-none rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
         />
-        <p className="mt-1.5 mb-3 text-[10px] text-slate-600">⌘ + Entrée pour sauvegarder</p>
-        <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-            Annuler
-          </button>
-          {item.note && (
-            <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
-              <Trash2 size={14} />
+        <div className="mt-3 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">Annuler</button>
+          {item.note && <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={14} /></button>}
+          <button onClick={() => { onSave(text); onClose(); }} className="flex-1 rounded-xl bg-accent-500 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">Enregistrer</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── Add to Watchlist Modal ───────────────────────────────────────────────────
+
+type SearchResult = {
+  tmdbId: number;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  inLibrary: boolean;
+};
+
+function AddModal({ existingKeys, onClose, onAdded }: {
+  existingKeys: Set<string>;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [type, setType] = useState<"movie" | "tv">("movie");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [added, setAdded] = useState<Set<number>>(new Set());
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/discover/search?q=${encodeURIComponent(q.trim())}&type=${type}`);
+        const data = await res.json();
+        setResults(data.items ?? []);
+      } finally { setLoading(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, type]);
+
+  async function addItem(r: SearchResult, status: WatchlistStatus) {
+    const mediaType = type === "movie" ? "movie" : "series";
+    await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tmdbId: r.tmdbId, mediaType, title: r.title, year: r.year, posterPath: r.posterPath, status }),
+    });
+    setAdded((prev) => new Set(prev).add(r.tmdbId));
+    onAdded();
+  }
+
+  const typeKey = (id: number) => `${type === "movie" ? "movie" : "series"}:${id}`;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex w-full max-w-lg flex-col rounded-2xl border border-white/10 bg-slate-900 shadow-2xl" style={{ maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="shrink-0 border-b border-white/10 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              <input
+                ref={inputRef}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Titre du film ou de la série…"
+                className="w-full rounded-xl border border-white/10 bg-slate-800 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
+              />
+            </div>
+            <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:text-white transition-colors">
+              <X size={15} />
             </button>
+          </div>
+          <div className="flex gap-1.5">
+            {([["movie", "Films", Film], ["tv", "Séries", Tv]] as const).map(([t, label, Icon]) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${type === t ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"}`}
+              >
+                <Icon size={11} /> {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {loading && (
+            <div className="space-y-1">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex gap-3 rounded-xl p-2 animate-pulse">
+                  <div className="w-10 shrink-0 rounded-lg bg-slate-800" style={{ aspectRatio: "2/3" }} />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-3 w-2/3 rounded bg-slate-800" />
+                    <div className="h-2.5 w-1/4 rounded bg-slate-800" />
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-          <button
-            onClick={() => { onSave(text); onClose(); }}
-            className="flex-1 rounded-xl bg-accent-500 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors"
-          >
-            Enregistrer
-          </button>
+
+          {!loading && q.trim().length < 2 && (
+            <p className="py-10 text-center text-sm text-slate-600">Tapez au moins 2 caractères pour rechercher</p>
+          )}
+
+          {!loading && q.trim().length >= 2 && results.length === 0 && (
+            <p className="py-10 text-center text-sm text-slate-600">Aucun résultat pour &laquo;{q}&raquo;</p>
+          )}
+
+          {!loading && results.map((r) => {
+            const key = typeKey(r.tmdbId);
+            const inList = existingKeys.has(key) || added.has(r.tmdbId);
+            return (
+              <div key={r.tmdbId} className="flex gap-3 rounded-xl p-2 transition-colors hover:bg-white/5">
+                <div className="w-10 shrink-0 overflow-hidden rounded-lg bg-slate-800" style={{ aspectRatio: "2/3" }}>
+                  {r.posterPath
+                    ? <img src={`${TMDB_IMAGE_BASE}/w92${r.posterPath}`} alt="" className="h-full w-full object-cover" />
+                    : <div className="flex h-full items-center justify-center">{type === "movie" ? <Film size={14} className="text-slate-700" /> : <Tv size={14} className="text-slate-700" />}</div>
+                  }
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-white">{r.title}</p>
+                  <p className="text-xs text-slate-500">{r.year ?? "—"}</p>
+                  {inList ? (
+                    <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-500/10 px-2 py-0.5 text-[10px] font-medium text-accent-400">
+                      ✓ Déjà en liste
+                    </span>
+                  ) : (
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <span className="mr-0.5 text-[10px] text-slate-600">Ajouter :</span>
+                      {ALL_STATUSES.map((s) => {
+                        const m = STATUS_META[s];
+                        const Icon = m.icon;
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => addItem(r, s)}
+                            title={m.label}
+                            className={`flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-black/30 ${m.textColor} transition-colors hover:bg-white/10 hover:border-white/30`}
+                          >
+                            <Icon size={10} />
+                          </button>
+                        );
+                      })}
+                      {r.inLibrary && (
+                        <span className="ml-1 flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+                          <BookCheck size={8} /> Dispo
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>,
@@ -121,13 +256,14 @@ function RequestButton({ item }: { item: WatchlistItem }) {
     <button
       onClick={doRequest}
       disabled={state === "loading" || state === "done"}
-      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+      title={state === "done" ? "Demandé !" : "Demander via Jellyseerr"}
+      className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
         state === "done"  ? "bg-emerald-500/20 text-emerald-400" :
         state === "error" ? "bg-red-500/20 text-red-400" :
         "bg-white/10 text-white hover:bg-white/20"
       }`}
     >
-      <PlusCircle size={11} />
+      <PlusCircle size={9} />
       {state === "done" ? "Demandé ✓" : state === "loading" ? "…" : "Demander"}
     </button>
   );
@@ -142,55 +278,67 @@ function WatchlistCard({ item, libraryHref, onStatusChange, onNoteEdit, onRemove
   onNoteEdit: () => void;
   onRemove: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [tapped, setTapped] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const m = STATUS_META[item.status];
-  const StatusIcon = m.icon;
   const poster = posterSrc(item.posterPath);
 
-  // Close mobile menu on outside click
+  // Close tap overlay when clicking outside the card
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!tapped) return;
     function onDown(e: MouseEvent | TouchEvent) {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      if (!cardRef.current?.contains(e.target as Node)) setTapped(false);
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("touchstart", onDown); };
-  }, [menuOpen]);
+  }, [tapped]);
+
+  const overlayVisible = tapped ? "opacity-100" : "opacity-0 group-hover:opacity-100";
 
   return (
-    <div className="group relative flex flex-col overflow-visible rounded-xl border border-white/5 bg-slate-900 shadow-lg transition-all duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
-      {/* Poster area */}
-      <div className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-slate-800">
+    <div ref={cardRef} className="group relative flex flex-col overflow-hidden rounded-xl border border-white/5 bg-slate-900 shadow-lg transition-all duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
+      {/* Poster */}
+      <div
+        className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-slate-800 cursor-pointer select-none"
+        onClick={() => setTapped((v) => !v)}
+      >
         {poster
           ? <img src={poster} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
-          : <div className="flex h-full items-center justify-center">{item.mediaType === "movie" ? <Film size={32} className="text-slate-700" /> : <Tv size={32} className="text-slate-700" />}</div>
+          : <div className="flex h-full items-center justify-center">{item.mediaType === "movie" ? <Film size={28} className="text-slate-700" /> : <Tv size={28} className="text-slate-700" />}</div>
         }
 
-        {/* Type pill */}
-        <div className="absolute left-2 top-2 rounded-md bg-black/60 p-1 backdrop-blur-sm">
-          {item.mediaType === "movie" ? <Film size={10} className="text-slate-300" /> : <Tv size={10} className="text-slate-300" />}
+        {/* Type badge */}
+        <div className="absolute left-1.5 top-1.5 rounded-md bg-black/60 p-1 backdrop-blur-sm pointer-events-none">
+          {item.mediaType === "movie" ? <Film size={9} className="text-slate-300" /> : <Tv size={9} className="text-slate-300" />}
         </div>
 
-        {/* Available badge */}
+        {/* Library badge */}
         {libraryHref && (
-          <div className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-lg backdrop-blur-sm">
-            <BookCheck size={9} /> Dispo
+          <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white pointer-events-none">
+            <BookCheck size={8} /> Dispo
           </div>
         )}
 
         {/* Note dot */}
         {item.note && (
-          <div className="absolute bottom-2 right-2 rounded-full bg-amber-400/90 p-1 shadow-md" title={item.note}>
-            <MessageSquare size={8} className="text-slate-900" />
+          <div className="absolute bottom-1.5 right-1.5 rounded-full bg-amber-400/90 p-1 pointer-events-none">
+            <MessageSquare size={7} className="text-slate-900" />
           </div>
         )}
 
-        {/* Desktop hover overlay */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 opacity-0 backdrop-blur-[2px] transition-opacity duration-200 group-hover:opacity-100 hidden md:flex">
-          {/* Status quick-change row */}
-          <div className="flex gap-2">
+        {/* Overlay — hover on desktop, tap on mobile */}
+        <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/78 backdrop-blur-[1.5px] transition-opacity duration-200 ${overlayVisible}`}>
+          {/* Close button (visible on mobile tap) */}
+          <button
+            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/20 md:hidden"
+            onClick={(e) => { e.stopPropagation(); setTapped(false); }}
+          >
+            <X size={9} />
+          </button>
+
+          {/* Status quick-change */}
+          <div className="flex gap-1">
             {ALL_STATUSES.map((s) => {
               const meta = STATUS_META[s];
               const Icon = meta.icon;
@@ -198,121 +346,57 @@ function WatchlistCard({ item, libraryHref, onStatusChange, onNoteEdit, onRemove
               return (
                 <button
                   key={s}
-                  onClick={(e) => { e.stopPropagation(); onStatusChange(s); }}
+                  onClick={(e) => { e.stopPropagation(); onStatusChange(s); setTapped(false); }}
                   title={meta.label}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-150 ${
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border transition-all duration-150 ${
                     active
-                      ? `${meta.bgSolid} border-white/30 text-white shadow-lg scale-110`
-                      : "border-white/20 bg-black/40 text-white/60 hover:border-white/40 hover:bg-white/15 hover:text-white hover:scale-105"
+                      ? `${meta.bgSolid} border-white/30 text-white shadow-md scale-110`
+                      : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
                   }`}
                 >
-                  <Icon size={14} />
+                  <Icon size={10} />
                 </button>
               );
             })}
           </div>
 
-          {/* Action row */}
-          <div className="flex items-center gap-2">
+          {/* Actions */}
+          <div className="flex items-center gap-1">
             {libraryHref ? (
               <Link
                 href={libraryHref}
                 onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/25 transition-colors"
+                className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
               >
-                <ExternalLink size={11} /> Voir la fiche
+                <ExternalLink size={9} /> Voir la fiche
               </Link>
             ) : (
               <RequestButton item={item} />
             )}
             <button
-              onClick={(e) => { e.stopPropagation(); onNoteEdit(); }}
+              onClick={(e) => { e.stopPropagation(); onNoteEdit(); setTapped(false); }}
               title={item.note ? "Modifier la note" : "Ajouter une note"}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${
                 item.note ? "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30" : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"
               }`}
             >
-              <MessageSquare size={12} />
+              <MessageSquare size={9} />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(); }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
             >
-              <Trash2 size={12} />
+              <Trash2 size={9} />
             </button>
           </div>
         </div>
       </div>
 
       {/* Info strip */}
-      <div className={`flex items-center gap-1.5 border-l-[3px] px-2.5 py-2 ${m.borderAccent}`}>
+      <div className={`flex items-center border-l-[3px] px-2 py-1.5 ${m.borderAccent}`}>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold leading-tight text-white">{item.title}</p>
-          {item.year && <p className="text-[10px] text-slate-500">{item.year}</p>}
-        </div>
-
-        {/* Mobile menu trigger */}
-        <div className="relative md:hidden" ref={menuRef}>
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className={`flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[10px] font-medium transition-colors ${m.textColor} hover:bg-white/5`}
-          >
-            <StatusIcon size={9} />
-            <ChevronDown size={8} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {menuOpen && (
-            <div className="absolute bottom-full right-0 z-50 mb-1 w-44 overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl">
-              <div className="p-1">
-                {ALL_STATUSES.map((s) => {
-                  const meta = STATUS_META[s];
-                  const Icon = meta.icon;
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => { onStatusChange(s); setMenuOpen(false); }}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
-                        item.status === s
-                          ? `${meta.textColor} bg-white/10 font-semibold`
-                          : "text-slate-400 hover:bg-white/5 hover:text-white"
-                      }`}
-                    >
-                      <Icon size={11} /> {meta.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="border-t border-white/10 p-1">
-                {libraryHref ? (
-                  <Link
-                    href={libraryHref}
-                    onClick={() => setMenuOpen(false)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
-                  >
-                    <ExternalLink size={11} /> Voir la fiche
-                  </Link>
-                ) : (
-                  <div className="px-1 py-0.5">
-                    <RequestButton item={item} />
-                  </div>
-                )}
-                <button
-                  onClick={() => { onNoteEdit(); setMenuOpen(false); }}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
-                    item.note ? "text-amber-400 hover:bg-amber-400/10" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <MessageSquare size={11} /> {item.note ? "Modifier la note" : "Ajouter une note"}
-                </button>
-                <button
-                  onClick={() => { onRemove(); setMenuOpen(false); }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <Trash2 size={11} /> Supprimer
-                </button>
-              </div>
-            </div>
-          )}
+          <p className="truncate text-[11px] font-semibold leading-tight text-white">{item.title}</p>
+          {item.year && <p className="text-[9px] text-slate-500">{item.year}</p>}
         </div>
       </div>
     </div>
@@ -325,10 +409,10 @@ function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="animate-pulse rounded-xl border border-white/5 bg-slate-900 overflow-hidden">
+        <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-white/5 bg-slate-900">
           <div className="aspect-[2/3] bg-slate-800" />
-          <div className="p-2.5 space-y-1.5">
-            <div className="h-2.5 w-3/4 rounded bg-slate-800" />
+          <div className="space-y-1.5 p-2">
+            <div className="h-2 w-3/4 rounded bg-slate-800" />
             <div className="h-2 w-1/3 rounded bg-slate-800" />
           </div>
         </div>
@@ -344,6 +428,7 @@ export default function WatchlistPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("date");
   const [noteItem, setNoteItem] = useState<WatchlistItem | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -369,6 +454,9 @@ export default function WatchlistPage() {
   }, [allItems]);
 
   const availableCount = useMemo(() => allItems.filter((i) => getLibraryHref(i) !== null).length, [allItems, getLibraryHref]);
+
+  // Set of "mediaType:tmdbId" keys for fast lookup in AddModal
+  const existingKeys = useMemo(() => new Set(allItems.map((i) => `${i.mediaType}:${i.tmdbId}`)), [allItems]);
 
   const filtered = useMemo(() => {
     let items = activeStatus === "all" ? allItems : allItems.filter((i) => i.status === activeStatus);
@@ -435,27 +523,33 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* Search + Sort */}
+      {/* Controls */}
       <div className="mb-4 flex gap-2">
         <div className="relative flex-1">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher dans la liste…"
-            className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50 transition-colors"
+            className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none transition-colors focus:border-accent-500/50"
           />
         </div>
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-none cursor-pointer"
+          className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-none"
           style={{ colorScheme: "dark" }}
         >
           <option value="date">Date d&apos;ajout</option>
           <option value="title">Titre A–Z</option>
           <option value="year">Année</option>
         </select>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex shrink-0 items-center gap-1.5 rounded-xl border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 transition-colors hover:bg-accent-500/20"
+        >
+          <Plus size={14} /> Ajouter
+        </button>
       </div>
 
       {/* Status tabs */}
@@ -463,9 +557,7 @@ export default function WatchlistPage() {
         <button
           onClick={() => setActiveStatus("all")}
           className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-            activeStatus === "all"
-              ? "border-accent-500/50 bg-accent-500/10 text-accent-400"
-              : "border-white/10 text-slate-500 hover:text-white"
+            activeStatus === "all" ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"
           }`}
         >
           Tout · {counts.all}
@@ -478,14 +570,10 @@ export default function WatchlistPage() {
               key={s}
               onClick={() => setActiveStatus(s)}
               className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeStatus === s
-                  ? `${meta.textColor} border-current/50 bg-white/5`
-                  : "border-white/10 text-slate-500 hover:text-white"
+                activeStatus === s ? `${meta.textColor} border-current/50 bg-white/5` : "border-white/10 text-slate-500 hover:text-white"
               }`}
             >
-              <Icon size={11} />
-              {meta.label}
-              <span className="opacity-60">· {counts[s] ?? 0}</span>
+              <Icon size={11} /> {meta.label} <span className="opacity-60">· {counts[s] ?? 0}</span>
             </button>
           );
         })}
@@ -495,7 +583,12 @@ export default function WatchlistPage() {
       {isLoading && <SkeletonGrid />}
 
       {!isLoading && allItems.length === 0 && (
-        <EmptyState label="Votre liste est vide. Ajoutez des films ou séries via la recherche ou les fiches détail." />
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <p className="text-slate-500">Votre liste est vide.</p>
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 rounded-xl bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">
+            <Plus size={14} /> Ajouter un titre
+          </button>
+        </div>
       )}
 
       {!isLoading && allItems.length > 0 && filtered.length === 0 && (
@@ -517,12 +610,15 @@ export default function WatchlistPage() {
         </div>
       )}
 
-      {/* Note modal */}
+      {/* Modals */}
       {mounted && noteItem && (
-        <NoteModal
-          item={noteItem}
-          onSave={(note) => saveNote(noteItem, note)}
-          onClose={() => setNoteItem(null)}
+        <NoteModal item={noteItem} onSave={(note) => saveNote(noteItem, note)} onClose={() => setNoteItem(null)} />
+      )}
+      {mounted && showAdd && (
+        <AddModal
+          existingKeys={existingKeys}
+          onClose={() => setShowAdd(false)}
+          onAdded={() => mutate("/api/watchlist")}
         />
       )}
     </div>
