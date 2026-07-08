@@ -372,7 +372,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
   const tmdbPhotos = tmdbPhotosData?.photos ?? [];
 
   const [lang, setLang] = useState<Lang>("fr");
-  const [photoLimit, setPhotoLimit] = useState(36);
+  const [photoLimit, setPhotoLimit] = useState(18);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [tmdbPhotoIndex, setTmdbPhotoIndex] = useState<number | null>(null);
 
@@ -588,15 +588,11 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={"/api/gallery/clara/" + encodeURIComponent(file) + "?thumb=1"}
-                    alt={"Photo " + (i + 1)}
+                    alt=""
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                    loading={i < 8 ? "eager" : "lazy"}
+                    loading={i < 6 ? "eager" : "lazy"}
                     decoding="async"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
-                  <span className="absolute bottom-3 left-3 rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[11px] font-semibold text-white/80 opacity-0 backdrop-blur-md transition group-hover:opacity-100">
-                    #{i + 1}
-                  </span>
                 </button>
               ))}
             </div>

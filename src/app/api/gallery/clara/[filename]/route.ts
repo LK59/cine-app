@@ -3,34 +3,31 @@ import fs from "fs";
 import path from "path";
 
 const GALLERY_DIR = "/app/gallery/clara";
+const THUMB_DIR = "/app/data/thumbs/clara";
 
-const THUMB_CACHE_MAX = 200;
-const thumbCache = new Map<string, Buffer>();
+// Prevent concurrent generation of the same thumbnail
+const generating = new Set<string>();
 
-async function buildThumb(filepath: string, filename: string): Promise<Buffer | null> {
-  const cached = thumbCache.get(filename);
-  if (cached) {
-    // Move to end to maintain LRU order (Map preserves insertion order)
-    thumbCache.delete(filename);
-    thumbCache.set(filename, cached);
-    return cached;
-  }
+async function getOrBuildThumb(filepath: string, thumbPath: string): Promise<boolean> {
+  if (fs.existsSync(thumbPath)) return true;
+  if (generating.has(thumbPath)) return false; // being built by another request — caller falls back to full image
+
+  generating.add(thumbPath);
   try {
+    fs.mkdirSync(THUMB_DIR, { recursive: true });
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const sharp = require("sharp") as (input: string) => {
-      resize(opts: { width: number; withoutEnlargement: boolean }): { jpeg(opts: { quality: number }): { toBuffer(): Promise<Buffer> } };
-    };
-    const buf = await sharp(filepath)
+    const sharp = require("sharp");
+    const tmpPath = thumbPath + ".tmp";
+    await sharp(filepath)
       .resize({ width: 400, withoutEnlargement: true })
       .jpeg({ quality: 75 })
-      .toBuffer();
-    if (thumbCache.size >= THUMB_CACHE_MAX) {
-      thumbCache.delete(thumbCache.keys().next().value!);
-    }
-    thumbCache.set(filename, buf);
-    return buf;
+      .toFile(tmpPath);
+    fs.renameSync(tmpPath, thumbPath);
+    return true;
   } catch {
-    return null;
+    return false;
+  } finally {
+    generating.delete(thumbPath);
   }
 }
 
@@ -38,7 +35,6 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { filename: string } },
 ) {
-  // Sanitize: use basename to strip any path traversal attempts
   const filename = path.basename(params.filename);
   if (!filename || filename !== params.filename) {
     return new NextResponse("Forbidden", { status: 403 });
@@ -49,30 +45,28 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const ext = path.extname(filename).toLowerCase();
   const isThumb = req.nextUrl.searchParams.get("thumb") === "1";
 
   if (isThumb) {
-    const buf = await buildThumb(filepath, filename);
-    if (buf) {
-      return new NextResponse(buf, {
+    const thumbName = filename.replace(/\.[^.]+$/, ".jpg");
+    const thumbPath = path.join(THUMB_DIR, thumbName);
+    const ok = await getOrBuildThumb(filepath, thumbPath);
+    if (ok) {
+      return new NextResponse(fs.readFileSync(thumbPath), {
         headers: {
           "Content-Type": "image/jpeg",
           "Cache-Control": "public, max-age=604800, immutable",
         },
       });
     }
-    // Fallback to full image if sharp fails
+    // Fall through to full image if thumb unavailable
   }
 
-  // Streaming full-quality image
-  const stat = fs.statSync(filepath);
+  const ext = path.extname(filename).toLowerCase();
   const ct = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
-  const buf = fs.readFileSync(filepath);
-  return new NextResponse(buf, {
+  return new NextResponse(fs.readFileSync(filepath), {
     headers: {
       "Content-Type": ct,
-      "Content-Length": String(stat.size),
       "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
     },
   });
