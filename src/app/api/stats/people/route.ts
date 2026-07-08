@@ -17,6 +17,7 @@ export interface PeopleStats {
 }
 
 interface CreditsResult {
+  created_by?: { id: number; name: string; profile_path?: string | null }[];
   credits?: {
     cast?: { id: number; name: string; profile_path?: string | null }[];
     crew?: { id: number; name: string; job: string; profile_path?: string | null }[];
@@ -26,14 +27,14 @@ interface CreditsResult {
 export async function GET() {
   if (!tmdb.isEnabled()) return NextResponse.json({ topActors: [], topDirectors: [] } satisfies PeopleStats);
 
-  const data = await withCache<PeopleStats>("stats:people", 6 * 3600_000, async () => {
+  const data = await withCache<PeopleStats>("stats:people:v4", 6 * 3600_000, async () => {
     const [movies, series] = await Promise.all([
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
     ]);
 
-    const eligibleMovies = movies.filter((m) => m.tmdbId && m.hasFile);
-    const eligibleSeries = series.filter((s) => s.tmdbId && (s.statistics?.episodeFileCount ?? 0) > 0);
+    const eligibleMovies = movies.filter((m) => m.tmdbId);
+    const eligibleSeries = series.filter((s) => s.tmdbId);
 
     // Fetch credits for movies and series in parallel (cached per item for 7 days)
     const [movieResults, seriesResults] = await Promise.all([
@@ -56,12 +57,21 @@ export async function GET() {
     const actorCount = new Map<number, { name: string; count: number; photoUrl: string | null }>();
     const directorCount = new Map<number, { name: string; count: number; photoUrl: string | null }>();
 
+    function addDirector(id: number, name: string, profilePath?: string | null) {
+      const existing = directorCount.get(id);
+      if (existing) existing.count++;
+      else directorCount.set(id, {
+        name,
+        count: 1,
+        photoUrl: profilePath ? `${TMDB_IMAGE_BASE}/w185${profilePath}` : null,
+      });
+    }
+
     function processCredits(result: PromiseSettledResult<CreditsResult | null>) {
       if (result.status !== "fulfilled" || !result.value) return;
       const credits = result.value.credits;
-      if (!credits) return;
 
-      for (const actor of (credits.cast ?? []).slice(0, 20)) {
+      for (const actor of (credits?.cast ?? []).slice(0, 30)) {
         const existing = actorCount.get(actor.id);
         if (existing) existing.count++;
         else actorCount.set(actor.id, {
@@ -71,15 +81,13 @@ export async function GET() {
         });
       }
 
-      for (const crew of credits.crew ?? []) {
+      for (const creator of result.value.created_by ?? []) {
+        addDirector(creator.id, creator.name, creator.profile_path);
+      }
+
+      for (const crew of credits?.crew ?? []) {
         if (crew.job !== "Director") continue;
-        const existing = directorCount.get(crew.id);
-        if (existing) existing.count++;
-        else directorCount.set(crew.id, {
-          name: crew.name,
-          count: 1,
-          photoUrl: crew.profile_path ? `${TMDB_IMAGE_BASE}/w185${crew.profile_path}` : null,
-        });
+        addDirector(crew.id, crew.name, crew.profile_path);
       }
     }
 
@@ -89,12 +97,12 @@ export async function GET() {
     const topActors: PeopleStat[] = [...actorCount.entries()]
       .map(([id, v]) => ({ tmdbId: id, ...v }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+      .slice(0, 20);
 
     const topDirectors: PeopleStat[] = [...directorCount.entries()]
       .map(([id, v]) => ({ tmdbId: id, ...v }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+      .slice(0, 20);
 
     return { topActors, topDirectors };
   });

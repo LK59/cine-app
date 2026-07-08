@@ -7,9 +7,8 @@ import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
-import { Film, Tv, HardDrive, Layers, Download, Upload, Zap, type LucideIcon } from "lucide-react";
+import { Film, Tv, HardDrive, Layers, Zap, type LucideIcon } from "lucide-react";
 import type { LibraryStats } from "@/app/api/stats/library/route";
-import type { HeatmapData } from "@/app/api/stats/heatmap/route";
 import type { PeopleStats } from "@/app/api/stats/people/route";
 import { fmtSize } from "@/lib/format";
 
@@ -17,11 +16,6 @@ interface DiskStats {
   moviesBytes: number;
   tvBytes: number;
   disk: { total: number; used: number; free: number };
-}
-
-interface TransferInfo {
-  alltime_dl: number;
-  alltime_ul: number;
 }
 
 function qualityBucket(name: string): string {
@@ -82,66 +76,9 @@ function HBar({ label, value, max, color, fmt }: {
   );
 }
 
-function HeatmapChart({ data }: { data: HeatmapData }) {
-  const weeks: { date: string; count: number }[][] = [];
-  let week: { date: string; count: number }[] = [];
-
-  const firstDay = new Date(data.days[0].date);
-  const startPad = (firstDay.getDay() + 6) % 7;
-  for (let i = 0; i < startPad; i++) week.push({ date: "", count: -1 });
-
-  for (const day of data.days) {
-    week.push(day);
-    if (week.length === 7) { weeks.push(week); week = []; }
-  }
-  if (week.length > 0) weeks.push(week);
-
-  function cellColor(count: number, max: number): string {
-    if (count <= 0) return "bg-white/5";
-    const ratio = count / max;
-    if (ratio < 0.25) return "bg-accent-900/60";
-    if (ratio < 0.5) return "bg-accent-700/70";
-    if (ratio < 0.75) return "bg-accent-500/80";
-    return "bg-accent-400";
-  }
-
-  return (
-    <div className="card p-5">
-      <h3 className="mb-4 text-sm font-semibold text-slate-300">Activité de téléchargement — 12 mois</h3>
-      <div className="overflow-x-auto pb-1">
-        <div className="flex gap-1 min-w-max">
-          {weeks.map((w, wi) => (
-            <div key={wi} className="flex flex-col gap-1">
-              {w.map((d, di) => (
-                <div
-                  key={di}
-                  title={d.date && d.count >= 0 ? `${d.date} : ${d.count} téléchargement${d.count !== 1 ? "s" : ""}` : ""}
-                  className={`h-3 w-3 rounded-sm transition-colors ${d.count === -1 ? "opacity-0" : cellColor(d.count, data.max)}`}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-600">
-        <span>Moins</span>
-        {[0, 1, 2, 3, 4].map((level) => (
-          <div key={level} className={`h-3 w-3 rounded-sm ${
-            level === 0 ? "bg-white/5"
-            : level === 1 ? "bg-accent-900/60"
-            : level === 2 ? "bg-accent-700/70"
-            : level === 3 ? "bg-accent-500/80"
-            : "bg-accent-400"
-          }`} />
-        ))}
-        <span>Plus</span>
-      </div>
-    </div>
-  );
-}
 
 function TopPeopleSection({ people }: { people: PeopleStats }) {
-  const PersonRow = ({ p, i, unit }: { p: PeopleStats["topActors"][number]; i: number; unit: string }) => (
+  const PersonRow = ({ p, i }: { p: PeopleStats["topActors"][number]; i: number }) => (
     <Link href={`/person/${p.tmdbId}`} className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5 transition-colors">
       <span className="w-5 shrink-0 text-right text-xs text-slate-600">{i + 1}</span>
       {p.photoUrl ? (
@@ -153,7 +90,7 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
         </div>
       )}
       <span className="flex-1 truncate text-sm text-slate-300">{p.name}</span>
-      <span className="shrink-0 text-xs font-semibold text-accent-400">{p.count} {unit}{p.count > 1 ? "s" : ""}</span>
+      <span className="shrink-0 text-xs font-semibold text-accent-400">{p.count} films & séries</span>
     </Link>
   );
 
@@ -162,13 +99,13 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
       <div className="card p-5">
         <h3 className="mb-3 text-sm font-semibold text-slate-300">Acteurs les plus présents</h3>
         <div className="space-y-1">
-          {people.topActors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} unit="film" />)}
+          {people.topActors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} />)}
         </div>
       </div>
       <div className="card p-5">
-        <h3 className="mb-3 text-sm font-semibold text-slate-300">Réalisateurs les plus présents</h3>
+        <h3 className="mb-3 text-sm font-semibold text-slate-300">Réalisateurs / créateurs les plus présents</h3>
         <div className="space-y-1">
-          {people.topDirectors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} unit="film" />)}
+          {people.topDirectors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} />)}
         </div>
       </div>
     </div>
@@ -182,8 +119,6 @@ export default function StatsPage() {
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
   const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
-  const { data: transfer } = useSWR<TransferInfo>("/api/qbittorrent/transfer", fetcher, { refreshInterval: INTERVALS.SLOW });
-  const { data: heatmap } = useSWRImmutable<HeatmapData>("/api/stats/heatmap", fetcher);
   const { data: people } = useSWRImmutable<PeopleStats>("/api/stats/people", fetcher);
 
   const months = lastMonths(12);
@@ -243,16 +178,6 @@ export default function StatsPage() {
               sub={disk && disk.disk.total > 0 ? `${fmtSize(disk.disk.free)} libres` : undefined}
               color="text-amber-400" />
           </div>
-
-          {/* qBit transfer stats */}
-          {transfer && (transfer.alltime_dl > 0 || transfer.alltime_ul > 0) && (
-            <div className="mb-8 grid grid-cols-2 gap-4">
-              <StatCard icon={Download} label="Téléchargé (total)" value={fmtSize(transfer.alltime_dl)}
-                color="text-emerald-400" />
-              <StatCard icon={Upload} label="Uploadé (total)" value={fmtSize(transfer.alltime_ul)}
-                color="text-sky-400" />
-            </div>
-          )}
 
           {/* Disk bar */}
           {disk && disk.disk.total > 0 && (
@@ -399,13 +324,6 @@ export default function StatsPage() {
               </section>
             )}
           </div>
-
-          {/* Heatmap */}
-          {heatmap && (
-            <section className="mb-8">
-              <HeatmapChart data={heatmap} />
-            </section>
-          )}
 
           {/* Top actors & directors */}
           {people && (people.topActors.length > 0 || people.topDirectors.length > 0) && (

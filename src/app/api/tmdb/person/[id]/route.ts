@@ -34,8 +34,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     }
 
     const credits = [...seen.values()]
-      .sort((a, b) => b.popularity - a.popularity)
-      .slice(0, 40)
       .map((c) => {
         const isMovie = c.media_type === "movie";
         const libraryId = isMovie ? movieByTmdb.get(c.id) : seriesByTmdb.get(c.id);
@@ -52,6 +50,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
             ? isMovie ? `/radarr/${libraryId}` : `/sonarr/${libraryId}`
             : null,
         };
+      })
+      .sort((a, b) => {
+        if (a.inLibrary !== b.inLibrary) return a.inLibrary ? -1 : 1;
+        return b.voteAverage - a.voteAverage;
       });
 
     return {

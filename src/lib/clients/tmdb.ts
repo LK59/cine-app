@@ -82,6 +82,7 @@ export interface TmdbTv {
   poster_path: string | null;
   episode_run_time?: number[];
   tagline?: string;
+  created_by?: { id: number; name: string; profile_path: string | null }[];
   credits?: { cast: TmdbCastMember[] };
 }
 
