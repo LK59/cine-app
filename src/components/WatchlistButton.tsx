@@ -30,22 +30,29 @@ export function WatchlistButton({
   async function toggle() {
     if (busy) return;
     setBusy(true);
+    const wasInList = !!data?.item;
+    // Optimistic flip — update UI immediately
+    mutate(itemKey, { item: wasInList ? null : { tmdbId, mediaType, title } as WatchlistItem }, { revalidate: false });
     try {
-      if (inList) {
-        await fetch("/api/watchlist", {
+      if (wasInList) {
+        const res = await fetch("/api/watchlist", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tmdbId, mediaType }),
         });
+        if (!res.ok) throw new Error();
       } else {
-        await fetch("/api/watchlist", {
+        const res = await fetch("/api/watchlist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mediaType, tmdbId, title, year, posterPath, status: defaultStatus }),
         });
+        if (!res.ok) throw new Error();
       }
       mutate(itemKey);
       mutate("/api/watchlist");
+    } catch {
+      mutate(itemKey); // rollback on error
     } finally {
       setBusy(false);
     }

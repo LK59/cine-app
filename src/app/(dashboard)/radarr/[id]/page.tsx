@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
+import useSWRImmutable from "swr/immutable";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { Toggle } from "@/components/Toggle";
-import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
-import { MediaInfoModal } from "@/components/MediaInfoModal";
-import { TrailerModal } from "@/components/TrailerModal";
-import { ActorModal } from "@/components/ActorModal";
-import { CollectionModal } from "@/components/CollectionModal";
+import dynamic from "next/dynamic";
+const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
+const MediaInfoModal = dynamic(() => import("@/components/MediaInfoModal").then((m) => m.MediaInfoModal), { ssr: false });
+const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
+const ActorModal = dynamic(() => import("@/components/ActorModal").then((m) => m.ActorModal), { ssr: false });
+const CollectionModal = dynamic(() => import("@/components/CollectionModal").then((m) => m.CollectionModal), { ssr: false });
 import { Collapsible } from "@/components/Collapsible";
 import { haptic } from "@/lib/haptic";
 import { useToast } from "@/components/Toast";
@@ -84,7 +86,7 @@ export default function RadarrMovieDetailPage() {
   const movieKey = `/api/radarr/movies/${id}`;
   const { data: movie, error, isLoading } = useSWR<RadarrMovie>(movieKey, fetcher);
   const { data: info } = useSWR<MovieInfo>(`/api/radarr/movies/${id}/info`, fetcher);
-  const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[] }>(
+  const { data: meta } = useSWRImmutable<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[] }>(
     "/api/radarr/meta",
     fetcher
   );
@@ -168,6 +170,8 @@ export default function RadarrMovieDetailPage() {
     if (!jfItem) return;
     const newPlayed = !jfItem.UserData?.Played;
     setTogglingWatched(true);
+    // Optimistic flip
+    mutateJf({ item: { ...jfItem, UserData: { ...jfItem.UserData, Played: newPlayed } } }, { revalidate: false });
     try {
       const res = await fetch("/api/jellyfin/played", {
         method: "POST",
@@ -178,6 +182,7 @@ export default function RadarrMovieDetailPage() {
       mutateJf();
       toast.success(newPlayed ? "Marqué comme vu" : "Marqué comme non vu");
     } catch {
+      mutateJf(); // rollback
       toast.error("Échec — vérifiez votre connexion Jellyfin");
     } finally {
       setTogglingWatched(false);

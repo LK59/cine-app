@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
+import useSWRImmutable from "swr/immutable";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { Toggle } from "@/components/Toggle";
-import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
-import { TrailerModal } from "@/components/TrailerModal";
-import { ActorModal } from "@/components/ActorModal";
+import dynamic from "next/dynamic";
+const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
+const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
+const ActorModal = dynamic(() => import("@/components/ActorModal").then((m) => m.ActorModal), { ssr: false });
 import { Collapsible } from "@/components/Collapsible";
 import { haptic } from "@/lib/haptic";
 import {
@@ -85,7 +87,7 @@ export default function SonarrSeriesDetailPage() {
 
   const { data: series, error, isLoading } = useSWR<SonarrSeries>(seriesKey, fetcher);
   const { data: episodes, error: episodesError } = useSWR<SonarrEpisode[]>(episodesKey, fetcher);
-  const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[] }>("/api/sonarr/meta", fetcher);
+  const { data: meta } = useSWRImmutable<{ qualityProfiles: { id: number; name: string }[] }>("/api/sonarr/meta", fetcher);
   const { data: info } = useSWR<SeriesInfo>(`/api/sonarr/series/${id}/info`, fetcher);
   const { data: jfData, mutate: mutateJf } = useSWR<{ item: JellyfinItem | null }>(
     series
@@ -174,6 +176,8 @@ export default function SonarrSeriesDetailPage() {
     if (!jfItem) return;
     const newPlayed = !jfItem.UserData?.Played;
     setTogglingWatched(true);
+    // Optimistic flip
+    mutateJf({ item: { ...jfItem, UserData: { ...jfItem.UserData, Played: newPlayed } } }, { revalidate: false });
     try {
       const res = await fetch("/api/jellyfin/played", {
         method: "POST",
@@ -184,6 +188,7 @@ export default function SonarrSeriesDetailPage() {
       mutateJf();
       toast.success(newPlayed ? "Série marquée comme vue" : "Série marquée comme non vue");
     } catch {
+      mutateJf(); // rollback
       toast.error("Échec — vérifiez votre connexion Jellyfin");
     } finally {
       setTogglingWatched(false);

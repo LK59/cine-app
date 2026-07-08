@@ -222,7 +222,7 @@ export default function SonarrPage() {
             <>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {visible.map((show, i) => (
-                  <div key={show.id} className="group/card relative">
+                  <div key={show.id} className="group/card relative [content-visibility:auto] [contain-intrinsic-size:0_320px]">
                     <Link
                       href={`/sonarr/${show.id}`}
                       data-nav-idx={i}

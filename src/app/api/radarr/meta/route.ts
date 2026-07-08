@@ -1,12 +1,17 @@
+import { NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
-import { withErrorHandling } from "@/lib/api-helpers";
 
 export async function GET() {
-  return withErrorHandling(async () => {
+  try {
     const [qualityProfiles, rootFolders] = await Promise.all([
       radarr.getQualityProfiles(),
       radarr.getRootFolders(),
     ]);
-    return { qualityProfiles, rootFolders };
-  });
+    return NextResponse.json({ qualityProfiles, rootFolders }, {
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }

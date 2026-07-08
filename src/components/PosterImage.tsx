@@ -54,6 +54,8 @@ export function BackdropImage({ src, alt = "", className = "" }: BackdropImagePr
         <img
           src={src}
           alt={alt}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {...({ fetchpriority: "high" } as any)}
           className={`h-full w-full object-cover object-top transition-opacity duration-700 ${loaded ? "opacity-100" : "opacity-0"}`}
           onLoad={() => setLoaded(true)}
           loading="eager"
