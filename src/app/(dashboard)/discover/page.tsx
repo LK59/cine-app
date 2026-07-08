@@ -172,6 +172,11 @@ function PosterCard({
               <BookCheck size={8} /> Dispo
             </div>
           )}
+          {!item.inLibrary && (item.radarrId || item.sonarrId) && (
+            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+              <Clock size={8} /> Attente
+            </div>
+          )}
 
           {/* Rating badge */}
           {item.rating > 0 && (

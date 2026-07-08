@@ -14,7 +14,7 @@ export async function GET() {
   ]);
 
   const genreMap = new Map(genres.genres.map((g) => [g.id, g.name]));
-  const inLibrary = new Map(radarrMovies.map((m) => [m.tmdbId, m.id]));
+  const radarrMap = new Map(radarrMovies.map((m) => [m.tmdbId, { id: m.id, hasFile: m.hasFile }]));
 
   const items = trending.results.map((m) => ({
     tmdbId: m.id,
@@ -25,8 +25,8 @@ export async function GET() {
     backdropPath: m.backdrop_path,
     rating: Math.round(m.vote_average * 10) / 10,
     genres: m.genre_ids.map((id) => genreMap.get(id)).filter(Boolean) as string[],
-    radarrId: inLibrary.get(m.id) ?? null,
-    inLibrary: inLibrary.has(m.id),
+    radarrId: radarrMap.get(m.id)?.id ?? null,
+    inLibrary: radarrMap.get(m.id)?.hasFile ?? false,
   }));
 
   return NextResponse.json({ items, genres: genres.genres.map((g) => g.name) });

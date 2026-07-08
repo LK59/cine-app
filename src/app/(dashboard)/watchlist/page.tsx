@@ -320,9 +320,10 @@ function RequestButton({ item }: { item: WatchlistItem }) {
 
 // ─── Watchlist Card ───────────────────────────────────────────────────────────
 
-function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEdit, onRemove }: {
+function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusChange, onNoteEdit, onRemove }: {
   item: WatchlistItem;
   libraryHref: string | null;
+  isAvailable: boolean;
   imdbRating: string | null;
   onStatusChange: (s: WatchlistStatus) => void;
   onNoteEdit: () => void;
@@ -385,7 +386,7 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
         }}]
     ),
     { label: item.note ? "Modifier la note" : "Ajouter une note", icon: <MessageSquare size={16} />, onClick: onNoteEdit },
-    ...(isAdmin && !libraryHref ? [{ label: "Recherche interactive", icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
+    ...(isAdmin && !isAvailable ? [{ label: "Recherche interactive", icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
     { label: "Supprimer de la liste", icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
   ];
 
@@ -411,9 +412,14 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
           </div>
 
           {/* Library badge */}
-          {libraryHref && (
+          {libraryHref && isAvailable && (
             <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
               <BookCheck size={8} /> Dispo
+            </div>
+          )}
+          {libraryHref && !isAvailable && (
+            <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+              <Clock size={8} /> Attente
             </div>
           )}
 
@@ -469,7 +475,7 @@ function WatchlistCard({ item, libraryHref, imdbRating, onStatusChange, onNoteEd
               >
                 <MessageSquare size={9} />
               </button>
-              {isAdmin && !libraryHref && (
+              {isAdmin && !isAvailable && (
                 <button
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}
@@ -561,9 +567,12 @@ export default function WatchlistPage() {
 
   const { mutate } = useSWRConfig();
   const { data: allData, isLoading } = useSWR<{ items: WatchlistItem[] }>("/api/watchlist", fetcher);
-  const { data: libMap } = useSWR<{ movieMap: Record<number, number>; seriesMap: Record<number, number> }>(
-    "/api/library/map", fetcher, { revalidateOnFocus: false }
-  );
+  const { data: libMap } = useSWR<{
+    movieMap: Record<number, number>;
+    seriesMap: Record<number, number>;
+    hasFileMovieIds: number[];
+    hasFileSeriesIds: number[];
+  }>("/api/library/map", fetcher, { revalidateOnFocus: false });
 
   const allItems = allData?.items ?? [];
 
@@ -583,6 +592,12 @@ export default function WatchlistPage() {
     const id = item.mediaType === "movie" ? libMap.movieMap[item.tmdbId] : libMap.seriesMap[item.tmdbId];
     if (!id) return null;
     return item.mediaType === "movie" ? `/radarr/${id}` : `/sonarr/${id}`;
+  }, [libMap]);
+
+  const getIsAvailable = useCallback((item: WatchlistItem): boolean => {
+    if (!libMap) return false;
+    if (item.mediaType === "movie") return libMap.hasFileMovieIds.includes(item.tmdbId);
+    return libMap.hasFileSeriesIds.includes(item.tmdbId);
   }, [libMap]);
 
   const counts = useMemo(() => {
@@ -741,6 +756,7 @@ export default function WatchlistPage() {
               key={item.id}
               item={item}
               libraryHref={getLibraryHref(item)}
+              isAvailable={getIsAvailable(item)}
               imdbRating={ratingsMap?.[`${item.mediaType}:${item.tmdbId}`] ?? null}
               onStatusChange={(status) => changeStatus(item, status)}
               onNoteEdit={() => setNoteItem(item)}

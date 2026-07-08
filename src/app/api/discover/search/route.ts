@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
       tmdb.movieGenres().catch(() => ({ genres: [] })),
     ]);
 
-    const radarrByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
+    const radarrByTmdb = new Map(movies.map((m) => [m.tmdbId, { id: m.id, hasFile: m.hasFile }]));
     const genreMap = new Map(movieGenres.genres.map((g) => [g.id, g.name]));
 
     const items = results.results.slice(0, 20).map((m) => {
-      const radarrId = radarrByTmdb.get(m.id) ?? null;
+      const radarr = radarrByTmdb.get(m.id) ?? null;
       return {
         tmdbId: m.id,
         title: m.title,
@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
         posterPath: m.poster_path,
         rating: m.vote_average,
         genres: m.genre_ids.map((id) => genreMap.get(id)).filter(Boolean),
-        radarrId,
-        inLibrary: radarrId != null,
+        radarrId: radarr?.id ?? null,
+        inLibrary: radarr?.hasFile ?? false,
       };
     });
 
@@ -48,11 +48,13 @@ export async function GET(req: NextRequest) {
       tmdb.tvGenres().catch(() => ({ genres: [] })),
     ]);
 
-    const sonarrByTmdb = new Map(series.map((s) => [s.tmdbId, s.id]).filter(([k]) => k != null) as [number, number][]);
+    const sonarrByTmdb = new Map(
+      series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, { id: s.id, hasFile: (s.statistics?.episodeFileCount ?? 0) > 0 }])
+    );
     const genreMap = new Map(tvGenres.genres.map((g) => [g.id, g.name]));
 
     const items = results.results.slice(0, 20).map((s) => {
-      const sonarrId = sonarrByTmdb.get(s.id) ?? null;
+      const sonarr = sonarrByTmdb.get(s.id) ?? null;
       return {
         tmdbId: s.id,
         title: s.name,
@@ -61,8 +63,8 @@ export async function GET(req: NextRequest) {
         posterPath: s.poster_path,
         rating: s.vote_average,
         genres: s.genre_ids.map((id) => genreMap.get(id)).filter(Boolean),
-        sonarrId,
-        inLibrary: sonarrId != null,
+        sonarrId: sonarr?.id ?? null,
+        inLibrary: sonarr?.hasFile ?? false,
       };
     });
 
