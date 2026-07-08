@@ -4,19 +4,27 @@ import path from "path";
 
 const GALLERY_DIR = "/app/gallery/clara";
 const EXCLUDE = new Set(["clarabanner.jpg", "favicon.jpeg"]);
+const BASE = "https://cine.kakol.fr/api/gallery/clara/";
 
 export const dynamic = "force-dynamic";
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export async function GET() {
-  const files = fs.readdirSync(GALLERY_DIR).filter((f) => !EXCLUDE.has(f));
-  if (!files.length) return new NextResponse("No photos", { status: 404 });
+  const raw = fs.readdirSync(GALLERY_DIR).filter((f) => !EXCLUDE.has(f));
+  if (!raw.length) return new NextResponse("No photos", { status: 404 });
 
-  const file = files[Math.floor(Math.random() * files.length)];
-  const src = `https://cine.kakol.fr/api/gallery/clara/${encodeURIComponent(file)}`;
-
-  // Pick a different file for preload
-  const nextFile = files.filter((f) => f !== file)[Math.floor(Math.random() * (files.length - 1))];
-  const nextSrc = `https://cine.kakol.fr/api/gallery/clara/${encodeURIComponent(nextFile)}`;
+  const files = shuffle(raw);
+  const urls = JSON.stringify(files.map((f) => BASE + encodeURIComponent(f)));
+  const first = BASE + encodeURIComponent(files[0]);
+  const second = files.length > 1 ? BASE + encodeURIComponent(files[1]) : first;
 
   const html = `<!doctype html>
 <html lang="fr">
@@ -24,71 +32,61 @@ export async function GET() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clara Galle</title>
-<link rel="icon" href="https://cine.kakol.fr/api/gallery/clara/favicon.jpeg">
+<link rel="icon" href="${BASE}favicon.jpeg">
 <meta property="og:title" content="Clara Galle">
-<meta property="og:description" content="Une photo au hasard parmi la galerie Clara Galle — actualisez pour en voir une autre.">
-<meta property="og:image" content="https://cine.kakol.fr/api/gallery/clara/clarabanner.jpg">
+<meta property="og:description" content="Une photo au hasard parmi la galerie Clara Galle — cliquez pour en voir une autre.">
+<meta property="og:image" content="${BASE}clarabanner.jpg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Clara Galle">
-<meta name="twitter:image" content="https://cine.kakol.fr/api/gallery/clara/clarabanner.jpg">
+<meta name="twitter:image" content="${BASE}clarabanner.jpg">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-  #wrap { position: relative; width: 100%; height: 100%; }
-  img {
+  #wrap { position: relative; width: 100%; height: 100%; cursor: pointer; }
+  .photo {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
     object-fit: contain;
-    cursor: pointer;
-    transition: opacity 0.4s ease;
+    transition: opacity 0.45s ease;
   }
-  #current { opacity: 1; }
-  #next { opacity: 0; pointer-events: none; }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <img id="current" src="${src}" />
-  <img id="next" src="${nextSrc}" />
+  <img class="photo" id="a" src="${first}" style="opacity:1">
+  <img class="photo" id="b" src="${second}" style="opacity:0">
 </div>
 <script>
-  const current = document.getElementById('current');
-  const next = document.getElementById('next');
-  let busy = false;
+  const urls = ${urls};
+  let idx = 0;
+  let front = document.getElementById('a');
+  let back  = document.getElementById('b');
+  let busy  = false;
 
-  function swap() {
-    if (busy || !next.complete || !next.naturalWidth) {
-      location.reload();
-      return;
-    }
+  function doSwap() {
     busy = true;
-    current.style.opacity = '0';
-    next.style.opacity = '1';
-    next.style.pointerEvents = 'auto';
-    current.style.pointerEvents = 'none';
+    front.style.opacity = '0';
+    back.style.opacity  = '1';
+    const tmp = front; front = back; back = tmp;
 
     setTimeout(() => {
-      // After fade, preload a new next image via the random endpoint
-      fetch('/').then(r => r.text()).then(html => {
-        const m = html.match(/id="current" src="([^"]+)"/);
-        if (m) {
-          const old = current;
-          // shift: next becomes current, old becomes next for new image
-          old.style.opacity = '0';
-          old.src = m[1];
-          old.style.pointerEvents = 'none';
-          next.id = 'current';
-          old.id = 'next';
-          busy = false;
-        } else {
-          location.reload();
-        }
-      }).catch(() => location.reload());
-    }, 420);
+      idx = (idx + 1) % urls.length;
+      const preload = (idx + 1) % urls.length;
+      back.src = urls[preload];
+      back.style.opacity = '0';
+      busy = false;
+    }, 460);
   }
 
-  document.getElementById('wrap').addEventListener('click', swap);
+  document.getElementById('wrap').addEventListener('click', () => {
+    if (busy) return;
+    if (back.complete && back.naturalWidth) {
+      doSwap();
+    } else {
+      back.onload = () => { back.onload = null; doSwap(); };
+    }
+  });
 </script>
 </body>
 </html>`;
