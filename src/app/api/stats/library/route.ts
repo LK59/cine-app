@@ -30,6 +30,7 @@ export interface LibraryStats {
   monthlyMovies: Record<string, number>;
   monthlySeries: Record<string, number>;
   genres: Record<string, number>;
+  decades: Record<string, number>;
 }
 
 export async function GET() {
@@ -85,6 +86,20 @@ export async function GET() {
     for (const g of s.genres ?? []) genres[g] = (genres[g] ?? 0) + 1;
   }
 
+  const decades: Record<string, number> = {};
+  for (const m of movies) {
+    if (m.year && m.year > 1900) {
+      const decade = `${Math.floor(m.year / 10) * 10}s`;
+      decades[decade] = (decades[decade] ?? 0) + 1;
+    }
+  }
+  for (const s of series) {
+    if (s.year && s.year > 1900) {
+      const decade = `${Math.floor(s.year / 10) * 10}s`;
+      decades[decade] = (decades[decade] ?? 0) + 1;
+    }
+  }
+
   const stats: LibraryStats = {
     movies: { total: movies.length, withFile: moviesWithFile },
     series: { total: series.length, totalEpisodes, episodesWithFile },
@@ -95,6 +110,7 @@ export async function GET() {
     monthlyMovies,
     monthlySeries,
     genres,
+    decades,
   };
 
   return NextResponse.json(stats);

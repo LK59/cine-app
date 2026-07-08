@@ -1,12 +1,17 @@
 "use client";
 
 import useSWR from "swr";
+import useSWRImmutable from "swr/immutable";
+import Link from "next/link";
 import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
-import { Film, Tv, HardDrive, Layers, Download, Upload, Languages, Cpu, Zap, type LucideIcon } from "lucide-react";
+import { Film, Tv, HardDrive, Layers, Download, Upload, Zap, type LucideIcon } from "lucide-react";
 import type { LibraryStats } from "@/app/api/stats/library/route";
+import type { HeatmapData } from "@/app/api/stats/heatmap/route";
+import type { PeopleStats } from "@/app/api/stats/people/route";
+import { fmtSize } from "@/lib/format";
 
 interface DiskStats {
   moviesBytes: number;
@@ -19,8 +24,6 @@ interface TransferInfo {
   alltime_ul: number;
 }
 
-import { fmtSize } from "@/lib/format";
-
 function qualityBucket(name: string): string {
   const n = name.toLowerCase();
   if (n.includes("2160") || n.includes("4k") || n.includes("uhd") || n.includes("remux")) return "4K / UHD";
@@ -30,7 +33,6 @@ function qualityBucket(name: string): string {
   return name;
 }
 
-// Last N months as YYYY-MM strings
 function lastMonths(n: number): string[] {
   const result: string[] = [];
   const now = new Date();
@@ -80,7 +82,100 @@ function HBar({ label, value, max, color, fmt }: {
   );
 }
 
-const CHART_H = 120; // px height for bar chart area
+function HeatmapChart({ data }: { data: HeatmapData }) {
+  const weeks: { date: string; count: number }[][] = [];
+  let week: { date: string; count: number }[] = [];
+
+  const firstDay = new Date(data.days[0].date);
+  const startPad = (firstDay.getDay() + 6) % 7;
+  for (let i = 0; i < startPad; i++) week.push({ date: "", count: -1 });
+
+  for (const day of data.days) {
+    week.push(day);
+    if (week.length === 7) { weeks.push(week); week = []; }
+  }
+  if (week.length > 0) weeks.push(week);
+
+  function cellColor(count: number, max: number): string {
+    if (count <= 0) return "bg-white/5";
+    const ratio = count / max;
+    if (ratio < 0.25) return "bg-accent-900/60";
+    if (ratio < 0.5) return "bg-accent-700/70";
+    if (ratio < 0.75) return "bg-accent-500/80";
+    return "bg-accent-400";
+  }
+
+  return (
+    <div className="card p-5">
+      <h3 className="mb-4 text-sm font-semibold text-slate-300">Activité de téléchargement — 12 mois</h3>
+      <div className="overflow-x-auto pb-1">
+        <div className="flex gap-1 min-w-max">
+          {weeks.map((w, wi) => (
+            <div key={wi} className="flex flex-col gap-1">
+              {w.map((d, di) => (
+                <div
+                  key={di}
+                  title={d.date && d.count >= 0 ? `${d.date} : ${d.count} téléchargement${d.count !== 1 ? "s" : ""}` : ""}
+                  className={`h-3 w-3 rounded-sm transition-colors ${d.count === -1 ? "opacity-0" : cellColor(d.count, data.max)}`}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-600">
+        <span>Moins</span>
+        {[0, 1, 2, 3, 4].map((level) => (
+          <div key={level} className={`h-3 w-3 rounded-sm ${
+            level === 0 ? "bg-white/5"
+            : level === 1 ? "bg-accent-900/60"
+            : level === 2 ? "bg-accent-700/70"
+            : level === 3 ? "bg-accent-500/80"
+            : "bg-accent-400"
+          }`} />
+        ))}
+        <span>Plus</span>
+      </div>
+    </div>
+  );
+}
+
+function TopPeopleSection({ people }: { people: PeopleStats }) {
+  const PersonRow = ({ p, i, unit }: { p: PeopleStats["topActors"][number]; i: number; unit: string }) => (
+    <Link href={`/person/${p.tmdbId}`} className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5 transition-colors">
+      <span className="w-5 shrink-0 text-right text-xs text-slate-600">{i + 1}</span>
+      {p.photoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={p.photoUrl} alt={p.name} className="h-8 w-8 shrink-0 rounded-full object-cover" />
+      ) : (
+        <div className="h-8 w-8 shrink-0 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-400">
+          {p.name[0]}
+        </div>
+      )}
+      <span className="flex-1 truncate text-sm text-slate-300">{p.name}</span>
+      <span className="shrink-0 text-xs font-semibold text-accent-400">{p.count} {unit}{p.count > 1 ? "s" : ""}</span>
+    </Link>
+  );
+
+  return (
+    <div className="grid gap-5 md:grid-cols-2">
+      <div className="card p-5">
+        <h3 className="mb-3 text-sm font-semibold text-slate-300">Acteurs les plus présents</h3>
+        <div className="space-y-1">
+          {people.topActors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} unit="film" />)}
+        </div>
+      </div>
+      <div className="card p-5">
+        <h3 className="mb-3 text-sm font-semibold text-slate-300">Réalisateurs les plus présents</h3>
+        <div className="space-y-1">
+          {people.topDirectors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} unit="film" />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CHART_H = 120;
 
 export default function StatsPage() {
   const { data: lib, error: libError, isLoading } = useSWR<LibraryStats>(
@@ -88,6 +183,8 @@ export default function StatsPage() {
   );
   const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
   const { data: transfer } = useSWR<TransferInfo>("/api/qbittorrent/transfer", fetcher, { refreshInterval: INTERVALS.SLOW });
+  const { data: heatmap } = useSWRImmutable<HeatmapData>("/api/stats/heatmap", fetcher);
+  const { data: people } = useSWRImmutable<PeopleStats>("/api/stats/people", fetcher);
 
   const months = lastMonths(12);
 
@@ -116,6 +213,11 @@ export default function StatsPage() {
     ? Object.entries(lib.genres).sort((a, b) => b[1] - a[1]).slice(0, 10)
     : [];
   const maxGenre = topGenres[0]?.[1] ?? 1;
+
+  const sortedDecades = lib?.decades
+    ? Object.entries(lib.decades).sort(([a], [b]) => parseInt(a) - parseInt(b))
+    : [];
+  const maxDecade = sortedDecades[0] ? Math.max(...sortedDecades.map(([, v]) => v), 1) : 1;
 
   return (
     <div>
@@ -181,7 +283,7 @@ export default function StatsPage() {
             </section>
           )}
 
-          {/* Monthly additions — bar chart with fixed px heights */}
+          {/* Monthly additions */}
           <section className="mb-8">
             <h2 className="mb-3 text-sm font-semibold text-white">Ajouts mensuels (12 derniers mois)</h2>
             <div className="card p-4">
@@ -193,22 +295,16 @@ export default function StatsPage() {
                   const barPx = total > 0 ? Math.max(4, Math.round((total / maxMonthly) * CHART_H)) : 0;
                   return (
                     <div key={m} className="group relative flex flex-1 flex-col items-center gap-1">
-                      {/* Tooltip */}
                       {total > 0 && (
                         <div className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           {mv > 0 && <span className="text-accent-400">{mv}F </span>}
                           {sv > 0 && <span className="text-sky-400">{sv}S</span>}
                         </div>
                       )}
-                      {/* Bar */}
-                      <div
-                        className="w-full overflow-hidden rounded-t-sm flex flex-col"
-                        style={{ height: `${barPx}px` }}
-                      >
+                      <div className="w-full overflow-hidden rounded-t-sm flex flex-col" style={{ height: `${barPx}px` }}>
                         {sv > 0 && <div className="w-full bg-sky-500" style={{ flex: sv }} />}
                         {mv > 0 && <div className="w-full bg-accent-500" style={{ flex: mv }} />}
                       </div>
-                      {/* Label */}
                       <span className="text-[9px] text-slate-600 leading-none">{monthLabel(m)}</span>
                     </div>
                   );
@@ -229,12 +325,10 @@ export default function StatsPage() {
                 <div className="card p-4 space-y-3">
                   {bucketOrder.filter((b) => buckets[b]).map((b) => (
                     <HBar key={b} label={b} value={buckets[b]} max={maxBucket}
-                      color={bucketColors[b] ?? "bg-slate-400"}
-                      fmt={(n) => `${n} films`} />
+                      color={bucketColors[b] ?? "bg-slate-400"} fmt={(n) => `${n} films`} />
                   ))}
                   {Object.entries(buckets).filter(([b]) => !bucketOrder.includes(b)).map(([b, count]) => (
-                    <HBar key={b} label={b} value={count} max={maxBucket} color="bg-slate-400"
-                      fmt={(n) => `${n} films`} />
+                    <HBar key={b} label={b} value={count} max={maxBucket} color="bg-slate-400" fmt={(n) => `${n} films`} />
                   ))}
                 </div>
               </section>
@@ -252,8 +346,7 @@ export default function StatsPage() {
                     const colors = { vfvo: "bg-accent-500", vf: "bg-emerald-500", vo: "bg-sky-500", other: "bg-slate-500" };
                     return (
                       <HBar key={cat} label={labels[cat]} value={count}
-                        max={lib.movies.withFile} color={colors[cat]}
-                        fmt={(n) => `${n} films`} />
+                        max={lib.movies.withFile} color={colors[cat]} fmt={(n) => `${n} films`} />
                     );
                   })}
                 </div>
@@ -287,13 +380,40 @@ export default function StatsPage() {
                 <h2 className="mb-3 text-sm font-semibold text-white">Top genres</h2>
                 <div className="card p-4 space-y-2.5">
                   {topGenres.map(([genre, count]) => (
-                    <HBar key={genre} label={genre} value={count} max={maxGenre}
-                      color="bg-accent-500/60" />
+                    <HBar key={genre} label={genre} value={count} max={maxGenre} color="bg-accent-500/60" />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Decades */}
+            {sortedDecades.length > 0 && (
+              <section>
+                <h2 className="mb-3 text-sm font-semibold text-white">Répartition par décennie</h2>
+                <div className="card p-4 space-y-2.5">
+                  {sortedDecades.map(([decade, count]) => (
+                    <HBar key={decade} label={decade} value={count} max={maxDecade}
+                      color="bg-sky-500/60" fmt={(n) => `${n} titres`} />
                   ))}
                 </div>
               </section>
             )}
           </div>
+
+          {/* Heatmap */}
+          {heatmap && (
+            <section className="mb-8">
+              <HeatmapChart data={heatmap} />
+            </section>
+          )}
+
+          {/* Top actors & directors */}
+          {people && (people.topActors.length > 0 || people.topDirectors.length > 0) && (
+            <section className="mb-8">
+              <h2 className="mb-3 text-sm font-semibold text-white">Personnes les plus présentes</h2>
+              <TopPeopleSection people={people} />
+            </section>
+          )}
         </>
       )}
     </div>

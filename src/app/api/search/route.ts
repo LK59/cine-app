@@ -26,6 +26,8 @@ export interface PersonResult {
   profilePath: string | null;
   department: string;
   knownFor: string[];
+  libraryCount: number;
+  libraryTitles: string[];
 }
 
 export interface SearchResponse {
@@ -107,13 +109,19 @@ export async function GET(req: NextRequest) {
     }
 
     // Persons
-    const persons: PersonResult[] = personResults.results.slice(0, 5).map((p) => ({
-      id: p.id,
-      name: p.name,
-      profilePath: p.profile_path ? `${TMDB_IMAGE_BASE}/w185${p.profile_path}` : null,
-      department: p.known_for_department ?? "",
-      knownFor: p.known_for?.slice(0, 3).map((k) => k.title ?? k.name ?? "").filter(Boolean) ?? [],
-    }));
+    const persons: PersonResult[] = personResults.results.slice(0, 5).map((p) => {
+      const knownForItems = p.known_for?.slice(0, 5) ?? [];
+      const libraryKnown = knownForItems.filter((k: { id: number }) => radarrByTmdb.has(k.id) || sonarrByTmdb.has(k.id));
+      return {
+        id: p.id,
+        name: p.name,
+        profilePath: p.profile_path ? `${TMDB_IMAGE_BASE}/w185${p.profile_path}` : null,
+        department: p.known_for_department ?? "",
+        knownFor: knownForItems.map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
+        libraryCount: libraryKnown.length,
+        libraryTitles: libraryKnown.slice(0, 3).map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
+      };
+    });
 
     return { library, tmdb: tmdbNotInLib, persons };
   });

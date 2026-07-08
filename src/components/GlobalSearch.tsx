@@ -83,6 +83,26 @@ function ResultPoster({ src, type }: { src: string | null; type: "movie" | "seri
   );
 }
 
+// ─── Intent detection ─────────────────────────────────────────────────────────
+
+function detectPersonIntent(q: string): { personQuery: string; isPersonIntent: boolean } {
+  const patterns = [
+    /^avec\s+(.+)$/i,
+    /^r[eé]alis[eé]\s+par\s+(.+)$/i,
+    /^film\s+de\s+(.+)$/i,
+    /^acteur\s+(.+)$/i,
+    /^actrice\s+(.+)$/i,
+    /^directeur\s+(.+)$/i,
+    /^r[eé]alisateur\s+(.+)$/i,
+    /^de\s+(.+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = q.match(pattern);
+    if (match) return { personQuery: match[1].trim(), isPersonIntent: true };
+  }
+  return { personQuery: q, isPersonIntent: false };
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function GlobalSearch() {
@@ -106,10 +126,14 @@ export function GlobalSearch() {
   const { data: movies } = useSWR<RadarrMovie[]>("/api/radarr/movies", fetcher);
   const { data: series } = useSWR<SonarrSeries[]>("/api/sonarr/series", fetcher);
 
+  // Intent detection
+  const { personQuery, isPersonIntent } = detectPersonIntent(debouncedQuery);
+  const searchQuery = isPersonIntent ? personQuery : debouncedQuery;
+
   // Remote search (TMDb + persons) — only fire when query ≥ 2 chars
   const { data: remoteData, isLoading: remoteLoading } = useSWR<SearchResponse>(
     open && debouncedQuery.length >= 2
-      ? `/api/search?q=${encodeURIComponent(debouncedQuery)}`
+      ? `/api/search?q=${encodeURIComponent(searchQuery)}`
       : null,
     fetcher
   );
@@ -220,7 +244,7 @@ export function GlobalSearch() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
             onKeyDown={handleKeyDown}
-            placeholder="Film, série, acteur, réalisateur…"
+            placeholder="Titre, acteur, réalisateur… (ex: avec Brad Pitt)"
             className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none"
           />
           {remoteLoading && <Loader2 size={14} className="shrink-0 animate-spin text-slate-500" />}
@@ -230,6 +254,46 @@ export function GlobalSearch() {
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto">
+          {/* ── Persons (top when intent detected) ── */}
+          {isPersonIntent && persons.length > 0 && (
+            <div>
+              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Personnes</p>
+              {persons.map((p, i) => {
+                const idx = i;
+                const isVip = p.id === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
+                return (
+                  <button
+                    key={`person-intent-${p.id}`}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === cursor ? "bg-white/10" : "hover:bg-white/5"}`}
+                    onMouseEnter={() => setCursor(idx)}
+                    onClick={() => { setOpen(false); router.push(`/person/${p.id}`); }}
+                  >
+                    <div className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-800 ${isVip ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-slate-900 shadow-[0_0_8px_rgba(250,204,21,0.4)]" : ""}`}>
+                      {p.profilePath
+                        ? <img src={p.profilePath} alt={p.name} className="h-full w-full object-cover" />
+                        : <div className="flex h-full items-center justify-center"><User size={14} className="text-slate-600" /></div>
+                      }
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`truncate text-sm font-medium ${isVip ? "text-yellow-400" : "text-white"}`}>{p.name}</p>
+                      <p className="truncate text-xs text-slate-500">{p.department}</p>
+                      {p.libraryTitles.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {p.libraryTitles.map((t) => (
+                            <span key={t} className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{t}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {p.libraryCount > 0 && (
+                      <span className="shrink-0 text-xs font-medium text-accent-400">{p.libraryCount} dans ta biblio</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* ── Library results ── */}
           {localResults.length > 0 && (
             <div>
@@ -272,8 +336,8 @@ export function GlobalSearch() {
             </div>
           )}
 
-          {/* ── Persons ── */}
-          {persons.length > 0 && (
+          {/* ── Persons (standard, shown when no intent) ── */}
+          {!isPersonIntent && persons.length > 0 && (
             <div>
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Personnes</p>
               {persons.map((p, i) => {
@@ -294,9 +358,19 @@ export function GlobalSearch() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`truncate text-sm font-medium ${isVip ? "text-yellow-400" : "text-white"}`}>{p.name}</p>
-                      <p className="truncate text-xs text-slate-500">{p.department}{p.knownFor.length > 0 ? ` · ${p.knownFor.join(", ")}` : ""}</p>
+                      <p className="truncate text-xs text-slate-500">{p.department}{p.knownFor.length > 0 ? ` · ${p.knownFor.slice(0, 2).join(", ")}` : ""}</p>
+                      {p.libraryTitles.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {p.libraryTitles.map((t) => (
+                            <span key={t} className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{t}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <User size={12} className={`shrink-0 ${isVip ? "text-yellow-400" : "text-slate-500"}`} />
+                    {p.libraryCount > 0
+                      ? <span className="shrink-0 text-xs font-medium text-accent-400">{p.libraryCount} dans ta biblio</span>
+                      : <User size={12} className={`shrink-0 ${isVip ? "text-yellow-400" : "text-slate-500"}`} />
+                    }
                   </button>
                 );
               })}

@@ -11,6 +11,18 @@ export const NOTIFICATION_CATEGORIES = [
     description: "Quand un nouveau téléchargement démarre.",
     enabledByDefault: false,
   },
+  {
+    id: "watchlist-available",
+    label: "Film/Série disponible",
+    description: "Quand un contenu de ta liste devient disponible dans Jellyfin.",
+    enabledByDefault: true,
+  },
+  {
+    id: "new-episode",
+    label: "Nouvel épisode",
+    description: "Quand un nouvel épisode est importé pour une série suivie.",
+    enabledByDefault: true,
+  },
 ] as const;
 
 export type NotificationCategory = typeof NOTIFICATION_CATEGORIES[number]["id"];

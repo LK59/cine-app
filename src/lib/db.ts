@@ -87,6 +87,14 @@ function migrate(db: Database.Database): void {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, category)
     );
+
+    CREATE TABLE IF NOT EXISTS availability_notifications (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      media_type  TEXT    NOT NULL,
+      tmdb_id     INTEGER NOT NULL,
+      notified_at INTEGER NOT NULL,
+      UNIQUE(media_type, tmdb_id)
+    );
   `);
 }
 
@@ -283,6 +291,20 @@ export const pushDb = {
 
   getByUser(userId: string): PushSubscription[] {
     return getDb().prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId) as PushSubscription[];
+  },
+};
+
+// ─── Availability notifications ──────────────────────────────────────────────
+
+export const availabilityNotifDb = {
+  hasBeenNotified(mediaType: string, tmdbId: number): boolean {
+    return !!getDb().prepare("SELECT 1 FROM availability_notifications WHERE media_type = ? AND tmdb_id = ?").get(mediaType, tmdbId);
+  },
+  markNotified(mediaType: string, tmdbId: number): void {
+    getDb().prepare("INSERT OR REPLACE INTO availability_notifications (media_type, tmdb_id, notified_at) VALUES (?, ?, ?)").run(mediaType, tmdbId, Date.now());
+  },
+  cleanup(olderThanMs: number): void {
+    getDb().prepare("DELETE FROM availability_notifications WHERE notified_at < ?").run(Date.now() - olderThanMs);
   },
 };
 
