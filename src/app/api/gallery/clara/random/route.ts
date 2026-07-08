@@ -20,7 +20,7 @@ export async function GET() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clara Gallé</title>
-<link rel="icon" href="https://cine.kakol.fr/api/gallery/clara/clarabanner.jpg">
+<link rel="icon" href="https://cine.kakol.fr/api/gallery/clara/favicon.jpeg">
 <meta property="og:title" content="Clara Gallé">
 <meta property="og:description" content="Une photo au hasard parmi la galerie Clara Gallé — actualisez pour en voir une autre.">
 <meta property="og:image" content="https://cine.kakol.fr/api/gallery/clara/clarabanner.jpg">
