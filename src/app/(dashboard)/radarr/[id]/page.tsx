@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRImmutable from "swr/immutable";
@@ -108,6 +109,8 @@ export default function RadarrMovieDetailPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [showNfo, setShowNfo] = useState(false);
   const [deletingFile, setDeletingFile] = useState(false);
+  const [deletingFromRadarr, setDeletingFromRadarr] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<null | "file" | "radarr">(null);
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -151,7 +154,6 @@ export default function RadarrMovieDetailPage() {
   }
 
   async function deleteFile() {
-    if (!confirm("Supprimer le fichier du disque ? Le film restera dans Radarr.")) return;
     setDeletingFile(true);
     try {
       const res = await fetch(`/api/radarr/movies/${id}/file`, { method: "DELETE" });
@@ -162,6 +164,20 @@ export default function RadarrMovieDetailPage() {
       toast.error("Échec de la suppression");
     } finally {
       setDeletingFile(false);
+    }
+  }
+
+  async function deleteFromRadarr() {
+    setDeletingFromRadarr(true);
+    try {
+      const res = await fetch(`/api/radarr/movies/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      await fetch("/api/cache/invalidate", { method: "POST" });
+      toast.success(`« ${movie?.title} » supprimé de Radarr`);
+      router.back();
+    } catch {
+      toast.error("Échec de la suppression");
+      setDeletingFromRadarr(false);
     }
   }
 
@@ -441,6 +457,13 @@ export default function RadarrMovieDetailPage() {
               ))}
             </select>
           </label>
+          <button
+            onClick={() => setConfirmModal("radarr")}
+            disabled={deletingFromRadarr}
+            className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red-400/70 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+          >
+            <Trash2 size={12} /> Supprimer de Radarr
+          </button>
         </div>
       )}
 
@@ -488,7 +511,7 @@ export default function RadarrMovieDetailPage() {
               </div>
               {!isGuest && (
                 <button
-                  onClick={deleteFile}
+                  onClick={() => setConfirmModal("file")}
                   disabled={deletingFile}
                   className="btn-danger px-2 py-1.5"
                   title="Supprimer le fichier"
@@ -604,6 +627,33 @@ export default function RadarrMovieDetailPage() {
         <TrailerModal youtubeKey={info.trailerKey} title={`${movie.title} — Bande-annonce`} onClose={() => setShowTrailer(false)} />
       )}
       {showNfo && movie && <MediaInfoModal movie={movie} onClose={() => setShowNfo(false)} />}
+
+      {confirmModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setConfirmModal(null)}>
+          <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-semibold text-white">
+              {confirmModal === "file" ? "Supprimer le fichier ?" : "Supprimer de Radarr ?"}
+            </p>
+            <p className="mt-1.5 text-xs text-slate-400">
+              {confirmModal === "file"
+                ? "Le fichier sera supprimé du disque. Le film restera dans Radarr et pourra être retéléchargé."
+                : `« ${movie?.title} » sera retiré de Radarr. Le fichier sur disque ne sera pas supprimé.`}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setConfirmModal(null)} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+                Annuler
+              </button>
+              <button
+                onClick={() => { setConfirmModal(null); if (confirmModal === "file") deleteFile(); else deleteFromRadarr(); }}
+                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       </div>{/* end max-w-4xl */}
       </div>{/* end px wrapper */}
     </div>

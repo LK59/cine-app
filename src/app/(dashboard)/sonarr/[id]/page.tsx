@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRImmutable from "swr/immutable";
@@ -29,6 +30,7 @@ import {
   ExternalLink,
   Send,
   PlayCircle,
+  Trash2,
 } from "lucide-react";
 import type { SonarrSeries, SonarrEpisode } from "@/lib/clients/sonarr";
 import type { BazarrEpisodeDetails } from "@/lib/clients/bazarr";
@@ -109,6 +111,8 @@ export default function SonarrSeriesDetailPage() {
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingFromSonarr, setDeletingFromSonarr] = useState(false);
   const [activeTab, setActiveTab] = useState<"infos" | "casting" | "saisons">("infos");
 
   useEffect(() => {
@@ -241,6 +245,20 @@ export default function SonarrSeriesDetailPage() {
       toast.error("Échec de la demande");
     } finally {
       setRequesting(false);
+    }
+  }
+
+  async function deleteFromSonarr() {
+    setDeletingFromSonarr(true);
+    try {
+      const res = await fetch(`/api/sonarr/series/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      await fetch("/api/cache/invalidate", { method: "POST" });
+      toast.success(`« ${series?.title} » supprimé de Sonarr`);
+      router.back();
+    } catch {
+      toast.error("Échec de la suppression");
+      setDeletingFromSonarr(false);
     }
   }
 
@@ -439,6 +457,13 @@ export default function SonarrSeriesDetailPage() {
               ))}
             </select>
           </label>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deletingFromSonarr}
+            className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red-400/70 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+          >
+            <Trash2 size={12} /> Supprimer de Sonarr
+          </button>
         </div>
       )}
 
@@ -622,6 +647,29 @@ export default function SonarrSeriesDetailPage() {
           grabEndpoint="/api/sonarr/releases"
           onClose={() => setActiveSearch(null)}
         />
+      )}
+
+      {showDeleteConfirm && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-semibold text-white">Supprimer de Sonarr ?</p>
+            <p className="mt-1.5 text-xs text-slate-400">
+              {`« ${series.title} » sera retiré de Sonarr. Les fichiers sur disque ne seront pas supprimés.`}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+                Annuler
+              </button>
+              <button
+                onClick={() => { setShowDeleteConfirm(false); deleteFromSonarr(); }}
+                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
       </div>{/* end max-w-4xl */}
       </div>{/* end px wrapper */}
