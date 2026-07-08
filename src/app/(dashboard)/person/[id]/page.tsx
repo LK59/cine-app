@@ -11,7 +11,7 @@ import {
   ArrowLeft, Star, Film, Tv, BookCheck, User, Calendar, MapPin, Briefcase,
   Instagram, ExternalLink, X, ChevronLeft, ChevronRight, Globe, PlusCircle,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { VipPerson } from "@/lib/vip-persons";
 import { isVip, isClaraGalleryEnabled } from "@/lib/vip-persons";
