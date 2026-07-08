@@ -173,8 +173,14 @@ export const watchlistDb = {
 
   updateStatus(userId: string, id: number, status: WatchlistStatus, note?: string): boolean {
     const db = getDb();
-    const r = db.prepare("UPDATE watchlist SET status = ?, note = COALESCE(?, note), updated_at = ? WHERE id = ? AND user_id = ?")
-      .run(status, note ?? null, Date.now(), id, userId);
+    let r;
+    if (note === undefined) {
+      r = db.prepare("UPDATE watchlist SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+        .run(status, Date.now(), id, userId);
+    } else {
+      r = db.prepare("UPDATE watchlist SET status = ?, note = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+        .run(status, note || null, Date.now(), id, userId);
+    }
     return r.changes > 0;
   },
 
@@ -193,14 +199,16 @@ export const watchlistDb = {
   getBulkStatus(userId: string, ids: { mediaType: string; tmdbId: number }[]): Set<string> {
     if (!ids.length) return new Set();
     const db = getDb();
-    const placeholders = ids.map(() => "(?,?)").join(",");
-    const params = ids.flatMap((i) => [i.mediaType, i.tmdbId]);
-    // SQLite doesn't support multi-column IN with flat params cleanly, so we iterate
-    const set = new Set<string>();
+    const rows = db.prepare(
+      "SELECT media_type, tmdb_id FROM watchlist WHERE user_id = ?"
+    ).all(userId) as { media_type: string; tmdb_id: number }[];
+    const all = new Set(rows.map((r) => `${r.media_type}:${r.tmdb_id}`));
+    const result = new Set<string>();
     for (const { mediaType, tmdbId } of ids) {
-      if (this.isInWatchlist(userId, mediaType, tmdbId)) set.add(`${mediaType}:${tmdbId}`);
+      const key = `${mediaType}:${tmdbId}`;
+      if (all.has(key)) result.add(key);
     }
-    return set;
+    return result;
   },
 };
 

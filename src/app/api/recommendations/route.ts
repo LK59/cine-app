@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       : await cachedJellyfinMoviesAdmin().catch(() => null);
 
     const radarrMovies = await cachedMovies().catch(() => []);
-    const libraryTmdbIds = new Set(radarrMovies.map((m) => m.tmdbId).filter(Boolean));
+    const libraryTmdbIds = new Set(radarrMovies.filter((m) => m.hasFile).map((m) => m.tmdbId).filter(Boolean));
     const radarrByTmdb = new Map(radarrMovies.map((m) => [m.tmdbId, m.id]));
 
     if (!jfMovies) return [];
@@ -61,7 +61,9 @@ export async function GET(req: NextRequest) {
     const watched = jfMovies
       .filter((m) => m.UserData?.Played && m.ProviderIds)
       .map((m) => {
-        const tmdbId = Number(m.ProviderIds?.Tmdb ?? 0);
+        const tmdbId = Number(
+          Object.entries(m.ProviderIds ?? {}).find(([k]) => k.toLowerCase() === "tmdb")?.[1] ?? 0
+        );
         return { tmdbId, name: m.Name, posterPath: null as string | null };
       })
       .filter((m) => m.tmdbId > 0)

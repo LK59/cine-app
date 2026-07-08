@@ -44,12 +44,9 @@ export async function GET(req: NextRequest) {
 
   const result: Record<string, string | null> = {};
 
-  // Batch 5 at a time to avoid overwhelming downstream APIs
-  for (let i = 0; i < items.length; i += 5) {
-    const batch = items.slice(i, i + 5);
-    const ratings = await Promise.all(batch.map((item) => getImdbRating(item.tmdbId, item.mediaType)));
-    batch.forEach((item, j) => { result[item.key] = ratings[j]; });
-  }
+  // All resolved concurrently — each call is individually cached so no stampede risk
+  const ratings = await Promise.all(items.map((item) => getImdbRating(item.tmdbId, item.mediaType)));
+  items.forEach((item, i) => { result[item.key] = ratings[i]; });
 
   return NextResponse.json(result, {
     headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" },

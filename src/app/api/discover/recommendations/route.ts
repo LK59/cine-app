@@ -27,23 +27,26 @@ export async function GET(req: NextRequest) {
       tmdb.tvGenres().catch(() => ({ genres: [] })),
     ]);
 
-  const radarrTmdbIds = new Set(radarrMovies.map((m) => m.tmdbId));
-  const sonarrTmdbIds = new Set(sonarrSeries.map((s) => s.tmdbId).filter(Boolean));
+  const radarrTmdbIds = new Set(radarrMovies.filter((m) => m.hasFile).map((m) => m.tmdbId));
+  const sonarrTmdbIds = new Set(sonarrSeries.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0).map((s) => s.tmdbId).filter(Boolean));
 
   const movieGenreMap = new Map(movieGenres.genres.map((g) => [g.id, g.name]));
   const tvGenreMap = new Map(tvGenres.genres.map((g) => [g.id, g.name]));
 
   // Collect unique TMDB IDs from recently played (limit source items)
+  const getCI = (ids: Record<string, string> | undefined) =>
+    Object.entries(ids ?? {}).find(([k]) => k.toLowerCase() === "tmdb")?.[1];
+
   const movieTmdbIds = [
     ...new Set(
-      playedMovies.Items.map((i) => Number(i.ProviderIds?.Tmdb)).filter(Boolean)
+      playedMovies.Items.map((i) => Number(getCI(i.ProviderIds))).filter(Boolean)
     ),
   ].slice(0, 5);
 
   // For series, pull parent series IDs from recently played episodes
   const seriesTmdbIds = [
     ...new Set(
-      playedSeries.Items.map((i) => Number(i.ProviderIds?.Tmdb)).filter(Boolean)
+      playedSeries.Items.map((i) => Number(getCI(i.ProviderIds))).filter(Boolean)
     ),
   ].slice(0, 5);
 

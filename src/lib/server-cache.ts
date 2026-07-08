@@ -165,7 +165,7 @@ export const cachedTvInfo = (tmdbId: number, opts?: { forceRefresh?: boolean }) 
 
 // ─── Jellyfin lookup helpers ──────────────────────────────────────────────────
 
-function getProviderIdCI(ids: Record<string, string> | undefined, key: string): string | undefined {
+export function getProviderIdCI(ids: Record<string, string> | undefined, key: string): string | undefined {
   if (!ids) return undefined;
   const lower = key.toLowerCase();
   for (const [k, v] of Object.entries(ids)) {

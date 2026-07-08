@@ -350,9 +350,9 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return;
       if (item.mediaType === "movie" && data.radarrId) {
-        setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${data.radarrId}/releases/grab` });
+        setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/releases` });
       } else if (item.mediaType === "series" && data.sonarrId) {
-        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${data.sonarrId}/releases`, grabEndpoint: `/api/sonarr/series/${data.sonarrId}/releases/grab` });
+        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${data.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
       }
     } finally {
       setAddingSearch(false);

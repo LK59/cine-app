@@ -64,7 +64,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.error || "Erreur"); return; }
       if (data.radarrId) {
-        setReleaseModal({ searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${data.radarrId}/releases/grab` });
+        setReleaseModal({ searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/releases` });
       }
     } finally {
       setAddingSearch(false);

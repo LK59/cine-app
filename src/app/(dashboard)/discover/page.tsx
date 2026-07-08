@@ -338,7 +338,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
         setReleaseModal({
           title: item.title,
           searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`,
-          grabEndpoint: `/api/radarr/movies/${data.radarrId}/releases/grab`,
+          grabEndpoint: `/api/radarr/releases`,
         });
       } else if (type === "tv" && data.sonarrId) {
         setReleaseModal({
@@ -478,7 +478,7 @@ function RecommendationsGrid() {
       if (item.type === "movie" && d.radarrId) {
         setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${d.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${d.radarrId}/releases/grab` });
       } else if (item.type === "tv" && d.sonarrId) {
-        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${d.sonarrId}/releases`, grabEndpoint: `/api/sonarr/series/${d.sonarrId}/releases/grab` });
+        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${d.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Impossible d'ajouter");
@@ -578,7 +578,7 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
       if (type === "movie" && d.radarrId) {
         setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${d.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${d.radarrId}/releases/grab` });
       } else if (type === "tv" && d.sonarrId) {
-        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${d.sonarrId}/releases`, grabEndpoint: `/api/sonarr/series/${d.sonarrId}/releases/grab` });
+        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${d.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Impossible d'ajouter");

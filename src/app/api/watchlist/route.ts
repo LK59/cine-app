@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { watchlistDb, type WatchlistStatus } from "@/lib/db";
 
-function getUserId(req: NextRequest) {
-  return req.cookies.get(SESSION_COOKIE)?.value ?? null;
-}
-
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  const token = getUserId(req);
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionToken(token);
   return session?.jfId ?? session?.u ?? null;
 }
