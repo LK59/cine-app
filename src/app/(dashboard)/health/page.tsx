@@ -59,25 +59,25 @@ interface ApiEndpointResult extends ApiEndpointDef {
 }
 
 const API_ENDPOINTS: ApiEndpointDef[] = [
-  { group: "Dashboard", name: "Agrégat dashboard",    route: "/api/dashboard",             validate: (j) => typeof j === "object" && j !== null },
-  { group: "Radarr",      name: "Métadonnées",           route: "/api/radarr/meta",            validate: (j) => Array.isArray((j as Record<string, unknown>)?.qualityProfiles) },
-  { group: "Radarr",      name: "Calendrier",            route: "/api/radarr/calendar",        validate: Array.isArray },
-  { group: "Radarr",      name: "File d'attente",        route: "/api/radarr/queue",           validate: (j) => Array.isArray((j as Record<string, unknown>)?.records) },
-  { group: "Sonarr",      name: "Métadonnées",           route: "/api/sonarr/meta",            validate: (j) => Array.isArray((j as Record<string, unknown>)?.qualityProfiles) },
-  { group: "Sonarr",      name: "Calendrier",            route: "/api/sonarr/calendar",        validate: Array.isArray },
-  { group: "Sonarr",      name: "File d'attente",        route: "/api/sonarr/queue",           validate: (j) => Array.isArray((j as Record<string, unknown>)?.records) },
-  { group: "Jellyfin",    name: "Bibliothèque",          route: "/api/jellyfin/library",       validate: (j) => typeof (j as Record<string, unknown>)?.counts === "object" },
-  { group: "Jellyfin",    name: "Reprises en cours",     route: "/api/jellyfin/resume",        validate: (j) => Array.isArray((j as Record<string, unknown>)?.items) },
-  { group: "Jellyfin",    name: "Sessions actives",      route: "/api/jellyfin/sessions",      validate: Array.isArray },
-  { group: "Jellyseerr",  name: "Mes demandes",          route: "/api/jellyseerr/my-requests", validate: (j) => Array.isArray((j as Record<string, unknown>)?.results) },
-  { group: "qBittorrent", name: "Torrents",              route: "/api/qbittorrent/torrents",   validate: Array.isArray },
-  { group: "qBittorrent", name: "Transfert",             route: "/api/qbittorrent/transfer",   validate: (j) => typeof j === "object" && j !== null },
-  { group: "Bazarr",      name: "Sous-titres manquants", route: "/api/bazarr/wanted",          validate: (j) => typeof (j as Record<string, unknown>)?.movies === "object" },
-  { group: "Jackett",     name: "Indexeurs",             route: "/api/jackett/indexers",       validate: Array.isArray },
-  { group: "TMDB",        name: "Films tendance",        route: "/api/discover/movies",        validate: (j) => Array.isArray((j as Record<string, unknown>)?.items) },
-  { group: "Multi-source",name: "Calendrier agrégé",     route: "/api/calendar",               validate: (j) => Array.isArray((j as Record<string, unknown>)?.events) },
-  { group: "Multi-source",name: "Activité récente",      route: "/api/activity",               validate: Array.isArray },
-  { group: "Système",     name: "Stats disque",          route: "/api/stats",                  validate: (j) => typeof (j as Record<string, unknown>)?.disk === "object" },
+  { group: "health.groups.dashboard",   name: "health.endpoints.dashboard",       route: "/api/dashboard",             validate: (j) => typeof j === "object" && j !== null },
+  { group: "health.groups.radarr",      name: "health.endpoints.metadata",        route: "/api/radarr/meta",            validate: (j) => Array.isArray((j as Record<string, unknown>)?.qualityProfiles) },
+  { group: "health.groups.radarr",      name: "health.endpoints.calendar",        route: "/api/radarr/calendar",        validate: Array.isArray },
+  { group: "health.groups.radarr",      name: "health.endpoints.queue",           route: "/api/radarr/queue",           validate: (j) => Array.isArray((j as Record<string, unknown>)?.records) },
+  { group: "health.groups.sonarr",      name: "health.endpoints.metadata",        route: "/api/sonarr/meta",            validate: (j) => Array.isArray((j as Record<string, unknown>)?.qualityProfiles) },
+  { group: "health.groups.sonarr",      name: "health.endpoints.calendar",        route: "/api/sonarr/calendar",        validate: Array.isArray },
+  { group: "health.groups.sonarr",      name: "health.endpoints.queue",           route: "/api/sonarr/queue",           validate: (j) => Array.isArray((j as Record<string, unknown>)?.records) },
+  { group: "health.groups.jellyfin",    name: "health.endpoints.library",         route: "/api/jellyfin/library",       validate: (j) => typeof (j as Record<string, unknown>)?.counts === "object" },
+  { group: "health.groups.jellyfin",    name: "health.endpoints.resumeItems",     route: "/api/jellyfin/resume",        validate: (j) => Array.isArray((j as Record<string, unknown>)?.items) },
+  { group: "health.groups.jellyfin",    name: "health.endpoints.activeSessions",  route: "/api/jellyfin/sessions",      validate: Array.isArray },
+  { group: "health.groups.jellyseerr",  name: "health.endpoints.myRequests",      route: "/api/jellyseerr/my-requests", validate: (j) => Array.isArray((j as Record<string, unknown>)?.results) },
+  { group: "health.groups.qbittorrent", name: "health.endpoints.torrents",        route: "/api/qbittorrent/torrents",   validate: Array.isArray },
+  { group: "health.groups.qbittorrent", name: "health.endpoints.transfer",        route: "/api/qbittorrent/transfer",   validate: (j) => typeof j === "object" && j !== null },
+  { group: "health.groups.bazarr",      name: "health.endpoints.missingSubtitles",route: "/api/bazarr/wanted",          validate: (j) => typeof (j as Record<string, unknown>)?.movies === "object" },
+  { group: "health.groups.jackett",     name: "health.endpoints.indexers",        route: "/api/jackett/indexers",       validate: Array.isArray },
+  { group: "health.groups.tmdb",        name: "health.endpoints.trendingMovies",  route: "/api/discover/movies",        validate: (j) => Array.isArray((j as Record<string, unknown>)?.items) },
+  { group: "health.groups.multiSource", name: "health.endpoints.aggregatedCalendar", route: "/api/calendar",            validate: (j) => Array.isArray((j as Record<string, unknown>)?.events) },
+  { group: "health.groups.multiSource", name: "health.endpoints.recentActivity",  route: "/api/activity",               validate: Array.isArray },
+  { group: "health.groups.system",      name: "health.endpoints.diskStats",       route: "/api/stats",                  validate: (j) => typeof (j as Record<string, unknown>)?.disk === "object" },
 ];
 
 async function runApiCheck(ep: ApiEndpointDef): Promise<ApiEndpointResult> {
@@ -184,14 +184,14 @@ function ApiChecksSection() {
                   {groupStatus === "pending" && <Loader2 size={13} className="animate-spin text-slate-500" />}
                   {groupStatus === "ok"      && <CheckCircle size={13} className="text-emerald-400" />}
                   {groupStatus === "error"   && <XCircle size={13} className="text-red-400" />}
-                  <span className="text-sm font-semibold text-white">{group}</span>
+                  <span className="text-sm font-semibold text-white">{t(group)}</span>
                 </div>
                 <div className="divide-y divide-white/5">
                   {groupResults.map((r) => (
                     <div key={r.route} className="flex items-center gap-3 px-4 py-2.5">
                       <ApiStatusBadge status={r.status} />
                       <div className="min-w-0 flex-1">
-                        <span className="text-sm text-slate-200">{r.name}</span>
+                        <span className="text-sm text-slate-200">{t(r.name)}</span>
                         <span className="ml-2 font-mono text-[10px] text-slate-600">{r.route}</span>
                       </div>
                       <div className="shrink-0 text-right">
