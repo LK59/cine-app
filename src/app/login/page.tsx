@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Clapperboard } from "lucide-react";
+import { useT } from "@/components/TranslationProvider";
 
 export default function LoginPage() {
   return (
@@ -15,6 +16,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +34,11 @@ function LoginForm() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Connexion échouée");
+        throw new Error(data.error || t('auth.error.failed'));
       }
       router.replace(searchParams.get("next") || "/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
+      setError(err instanceof Error ? err.message : t('auth.error.unknown'));
     } finally {
       setLoading(false);
     }
@@ -51,7 +53,7 @@ function LoginForm() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-white">Cine App</h1>
-            <p className="text-xs text-slate-400">Connexion au tableau de bord</p>
+            <p className="text-xs text-slate-400">{t('auth.title')}</p>
           </div>
         </div>
 
@@ -64,7 +66,7 @@ function LoginForm() {
         >
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-400">
-              Utilisateur Jellyfin
+              {t('auth.jellyfin.username')}
             </label>
             <input
               className="input"
@@ -75,7 +77,7 @@ function LoginForm() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-400">Mot de passe</label>
+            <label className="mb-1 block text-xs font-medium text-slate-400">{t('auth.jellyfin.password')}</label>
             <input
               type="password"
               className="input"
@@ -86,7 +88,7 @@ function LoginForm() {
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
-            {loading ? "Connexion..." : "Se connecter avec Jellyfin"}
+            {loading ? t('auth.jellyfin.submitting') : t('auth.jellyfin.submit')}
           </button>
         </form>
 
@@ -96,7 +98,7 @@ function LoginForm() {
               onClick={() => setShowLocalForm(true)}
               className="w-full text-center text-xs text-slate-500 hover:text-slate-300"
             >
-              Connexion administrateur locale
+              {t('auth.local.heading')}
             </button>
           ) : (
             <form
@@ -106,10 +108,10 @@ function LoginForm() {
               }}
               className="space-y-3"
             >
-              <p className="text-xs font-medium text-slate-400">Compte administrateur local</p>
+              <p className="text-xs font-medium text-slate-400">{t('auth.local.username')}</p>
               <input
                 className="input"
-                placeholder="Utilisateur"
+                placeholder={t('auth.local.usernamePlaceholder')}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -124,7 +126,7 @@ function LoginForm() {
               />
               {error && <p className="text-sm text-red-400">{error}</p>}
               <button type="submit" disabled={loading} className="btn-ghost w-full justify-center">
-                {loading ? "Connexion..." : "Se connecter"}
+                {loading ? t('auth.jellyfin.submitting') : t('auth.local.submit')}
               </button>
             </form>
           )}

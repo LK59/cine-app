@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/StateViews";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import type { CalendarEvent } from "@/app/api/calendar/route";
 import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, PlusCircle, X } from "lucide-react";
+import { useT, useLocale } from "@/components/TranslationProvider";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,11 +17,11 @@ function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const SOURCE_STYLE: Record<CalendarEvent["source"], { dot: string; badge: string; label: string }> = {
-  "cinema":        { dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-400", label: "Cinéma" },
-  "upcoming":      { dot: "bg-amber-400",   badge: "bg-amber-500/15 text-amber-400",     label: "Bientôt" },
-  "library-movie": { dot: "bg-accent-400",  badge: "bg-accent-500/15 text-accent-400",   label: "Film" },
-  "library-series":{ dot: "bg-sky-400",     badge: "bg-sky-500/15 text-sky-400",         label: "Série" },
+const SOURCE_STYLE: Record<CalendarEvent["source"], { dot: string; badge: string; labelKey: string }> = {
+  "cinema":        { dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-400", labelKey: "calendar.sources.cinema" },
+  "upcoming":      { dot: "bg-amber-400",   badge: "bg-amber-500/15 text-amber-400",     labelKey: "calendar.sources.upcoming" },
+  "library-movie": { dot: "bg-accent-400",  badge: "bg-accent-500/15 text-accent-400",   labelKey: "calendar.sources.libraryMovie" },
+  "library-series":{ dot: "bg-sky-400",     badge: "bg-sky-500/15 text-sky-400",         labelKey: "calendar.sources.librarySeries" },
 };
 
 type ViewMode = "month" | "list";
@@ -29,6 +30,7 @@ type FilterMode = "all" | "cinema" | "library";
 // ── Action buttons for non-library events ─────────────────────────────────────
 
 function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: boolean }) {
+  const t = useT();
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested]   = useState(false);
 
@@ -59,7 +61,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
           }`}
         >
           <PlusCircle size={9} />
-          {requested ? "Demandé" : requesting ? "…" : "Demander"}
+          {requested ? t('calendar.actionRequested') : requesting ? "…" : t('calendar.actionRequest')}
         </button>
       </div>
     );
@@ -76,7 +78,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
         }`}
       >
         <PlusCircle size={12} />
-        {requested ? "Demandé" : requesting ? "En cours…" : "Demander"}
+        {requested ? t('calendar.actionRequested') : requesting ? t('calendar.actionRequesting') : t('calendar.actionRequest')}
       </button>
     </div>
   );
@@ -85,6 +87,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
 // ── Selected event detail panel (for month grid) ──────────────────────────────
 
 function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => void }) {
+  const t = useT();
   const style = SOURCE_STYLE[ev.source];
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
   return (
@@ -98,14 +101,14 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-2">
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{style.label}</span>
-          <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</span>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
+          <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long" })}</span>
         </div>
         <p className="font-semibold text-white">{ev.title}</p>
         {ev.detail && <p className="mt-0.5 text-xs text-slate-400">{ev.detail}</p>}
         <div className="mt-3">
           {isLibrary && ev.href
-            ? <Link href={ev.href} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600/20 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-600/30">Voir la fiche</Link>
+            ? <Link href={ev.href} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600/20 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-600/30">{t('calendar.viewSheet')}</Link>
             : <EventActions ev={ev} />
           }
         </div>
@@ -145,6 +148,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
   onSelectEvent: (ev: CalendarEvent | null) => void;
   detailRef: React.RefObject<HTMLDivElement>;
 }) {
+  const t = useT();
   const firstDay    = new Date(year, month, 1);
   const lastDay     = new Date(year, month + 1, 0);
   const startOffset = (firstDay.getDay() + 6) % 7;
@@ -161,7 +165,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
     days.push({ date: isoDate(new Date(year, month + 1, i)), inMonth: false });
   }
 
-  const HEADERS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+  const HEADERS = [t('calendar.days.mon'), t('calendar.days.tue'), t('calendar.days.wed'), t('calendar.days.thu'), t('calendar.days.fri'), t('calendar.days.sat'), t('calendar.days.sun')];
 
   return (
     <>
@@ -195,7 +199,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
                       onClick={() => onSelectEvent(evs[MAX_SHOWN])}
                       className="pl-1 text-[10px] text-slate-500 hover:text-slate-300"
                     >
-                      +{evs.length - MAX_SHOWN} autre{evs.length - MAX_SHOWN > 1 ? "s" : ""}
+                      {t('calendar.moreItems', { n: evs.length - MAX_SHOWN })}
                     </button>
                   )}
                 </div>
@@ -215,7 +219,8 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
 
 // ── List view ─────────────────────────────────────────────────────────────────
 
-function ListView({ events, today }: { events: CalendarEvent[]; today: string }) {
+function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; today: string; dateLocale: string }) {
+  const t = useT();
   const groups = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const ev of events) {
@@ -230,13 +235,13 @@ function ListView({ events, today }: { events: CalendarEvent[]; today: string })
     <div className="space-y-6">
       {groups.map(([date, dayEvs]) => {
         const isToday = date === today;
-        const label = new Date(date + "T12:00:00").toLocaleDateString("fr-FR", {
+        const label = new Date(date + "T12:00:00").toLocaleDateString(dateLocale, {
           weekday: "long", day: "numeric", month: "long",
         });
         return (
           <div key={date}>
             <h2 className={`mb-2 text-sm font-semibold ${isToday ? "text-accent-400" : "text-slate-400"}`}>
-              {label}{isToday && " · aujourd'hui"}
+              {label}{isToday && ` · ${t('calendar.todaySuffix')}`}
             </h2>
             <div className="card divide-y divide-white/5">
               {dayEvs.map((ev) => {
@@ -259,7 +264,7 @@ function ListView({ events, today }: { events: CalendarEvent[]; today: string })
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {!isLibrary && <EventActions ev={ev} compact />}
-                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${style.badge}`}>{style.label}</span>
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
                     </div>
                   </div>
                 );
@@ -278,6 +283,9 @@ function ListView({ events, today }: { events: CalendarEvent[]; today: string })
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
+  const t = useT();
+  const { locale } = useLocale();
+  const dateLocale = locale === "en" ? "en-US" : locale === "es" ? "es-ES" : "fr-FR";
   const today = useMemo(() => isoDate(new Date()), []);
   const [view, setView]       = useState<ViewMode>("month");
   const [filter, setFilter]   = useState<FilterMode>("all");
@@ -339,17 +347,17 @@ export default function CalendarPage() {
     selectEvent(null);
   }
 
-  const monthLabel = new Date(navYear, navMonth, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const monthLabel = new Date(navYear, navMonth, 1).toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
 
   const FILTERS: { key: FilterMode; label: string; icon: React.ReactNode }[] = [
-    { key: "all",     label: "Tout",             icon: <CalendarDays size={11} /> },
-    { key: "cinema",  label: "Cinéma / Bientôt", icon: <Clapperboard size={11} /> },
-    { key: "library", label: "Ma bibliothèque",  icon: <Film size={11} /> },
+    { key: "all",     label: t('calendar.filters.all'),     icon: <CalendarDays size={11} /> },
+    { key: "cinema",  label: t('calendar.filters.cinema'),  icon: <Clapperboard size={11} /> },
+    { key: "library", label: t('calendar.filters.library'), icon: <Film size={11} /> },
   ];
 
   return (
     <div>
-      <PageHeader title="Calendrier" subtitle="Sorties ciné, nouveautés et épisodes à venir" />
+      <PageHeader title={t('calendar.pageTitle')} subtitle={t('calendar.subtitle')} />
 
       {/* Controls row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -363,14 +371,14 @@ export default function CalendarPage() {
           </button>
         </div>
         <button onClick={goToday} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-400 hover:text-white hover:border-white/20 transition-colors">
-          Aujourd'hui
+          {t('calendar.today')}
         </button>
         <div className="ml-auto flex items-center gap-1">
           <div className="flex rounded-lg border border-white/10 overflow-hidden">
             {([["month", <CalendarDays size={13} key="m" />], ["list", <LayoutList size={13} key="l" />]] as [ViewMode, React.ReactNode][]).map(([v, icon]) => (
               <button key={v} onClick={() => { setView(v); setSelectedEvent(null); }}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${view === v ? "bg-accent-600/20 text-accent-400" : "text-slate-500 hover:text-slate-300"}`}>
-                {icon}{v === "month" ? "Mois" : "Liste"}
+                {icon}{v === "month" ? t('calendar.viewMonth') : t('calendar.viewList')}
               </button>
             ))}
           </div>
@@ -390,13 +398,13 @@ export default function CalendarPage() {
         <div className="ml-auto flex items-center gap-3">
           {(Object.entries(SOURCE_STYLE) as [CalendarEvent["source"], typeof SOURCE_STYLE["cinema"]][]).map(([src, s]) => (
             <div key={src} className="flex items-center gap-1 text-[10px] text-slate-500">
-              <span className={`h-2 w-2 rounded-full ${s.dot}`} />{s.label}
+              <span className={`h-2 w-2 rounded-full ${s.dot}`} />{t(s.labelKey)}
             </div>
           ))}
         </div>
       </div>
 
-      {isLoading && <LoadingState label="Chargement du calendrier…" />}
+      {isLoading && <LoadingState label={t('calendar.loading')} />}
 
       {!isLoading && view === "month" && (
         <MonthGrid
@@ -408,8 +416,8 @@ export default function CalendarPage() {
       )}
       {!isLoading && view === "list" && (
         monthEvents.length === 0
-          ? <p className="py-12 text-center text-sm text-slate-500">Aucun événement ce mois-ci.</p>
-          : <ListView events={monthEvents} today={today} />
+          ? <p className="py-12 text-center text-sm text-slate-500">{t('calendar.empty')}</p>
+          : <ListView events={monthEvents} today={today} dateLocale={dateLocale} />
       )}
     </div>
   );

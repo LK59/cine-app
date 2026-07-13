@@ -11,6 +11,7 @@ import { Film, Tv, HardDrive, Layers, Zap, type LucideIcon } from "lucide-react"
 import type { LibraryStats } from "@/app/api/stats/library/route";
 import type { PeopleStats } from "@/app/api/stats/people/route";
 import { fmtSize } from "@/lib/format";
+import { useT } from "@/components/TranslationProvider";
 
 interface DiskStats {
   moviesBytes: number;
@@ -37,9 +38,16 @@ function lastMonths(n: number): string[] {
   return result;
 }
 
-function monthLabel(key: string): string {
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+function monthLabel(key: string, t: TFn): string {
   const [y, m] = key.split("-");
-  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+  const months = [
+    t('stats.months.jan'), t('stats.months.feb'), t('stats.months.mar'),
+    t('stats.months.apr'), t('stats.months.may'), t('stats.months.jun'),
+    t('stats.months.jul'), t('stats.months.aug'), t('stats.months.sep'),
+    t('stats.months.oct'), t('stats.months.nov'), t('stats.months.dec'),
+  ];
   return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
 }
 
@@ -78,6 +86,7 @@ function HBar({ label, value, max, color, fmt }: {
 
 
 function TopPeopleSection({ people }: { people: PeopleStats }) {
+  const t = useT();
   const PersonRow = ({ p, i }: { p: PeopleStats["topActors"][number]; i: number }) => (
     <Link href={`/person/${p.tmdbId}`} className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5 transition-colors">
       <span className="w-5 shrink-0 text-right text-xs text-slate-600">{i + 1}</span>
@@ -90,20 +99,20 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
         </div>
       )}
       <span className="flex-1 truncate text-sm text-slate-300">{p.name}</span>
-      <span className="shrink-0 text-xs font-semibold text-accent-400">{p.count} films & séries</span>
+      <span className="shrink-0 text-xs font-semibold text-accent-400">{t('stats.topPeopleCount', { n: p.count })}</span>
     </Link>
   );
 
   return (
     <div className="grid gap-5 md:grid-cols-2">
       <div className="card p-5">
-        <h3 className="mb-3 text-sm font-semibold text-slate-300">Acteurs les plus présents</h3>
+        <h3 className="mb-3 text-sm font-semibold text-slate-300">{t('stats.topActors')}</h3>
         <div className="space-y-1">
           {people.topActors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} />)}
         </div>
       </div>
       <div className="card p-5">
-        <h3 className="mb-3 text-sm font-semibold text-slate-300">Réalisateurs / créateurs les plus présents</h3>
+        <h3 className="mb-3 text-sm font-semibold text-slate-300">{t('stats.topDirectors')}</h3>
         <div className="space-y-1">
           {people.topDirectors.map((p, i) => <PersonRow key={p.tmdbId} p={p} i={i} />)}
         </div>
@@ -115,6 +124,7 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
 const CHART_H = 120;
 
 export default function StatsPage() {
+  const t = useT();
   const { data: lib, error: libError, isLoading } = useSWR<LibraryStats>(
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
@@ -156,42 +166,42 @@ export default function StatsPage() {
 
   return (
     <div>
-      <PageHeader title="Statistiques" subtitle="Vue d'ensemble de votre médiathèque" />
+      <PageHeader title={t('stats.pageTitle')} subtitle={t('stats.subtitle')} />
 
-      {isLoading && <LoadingState label="Calcul des statistiques…" />}
-      {libError && <ErrorState message="Impossible de récupérer les statistiques." />}
+      {isLoading && <LoadingState label={t('stats.loading')} />}
+      {libError && <ErrorState message={t('stats.error')} />}
 
       {lib && (
         <>
           {/* Summary cards */}
           <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <StatCard icon={Film} label="Films" value={lib.movies.total}
-              sub={`${lib.movies.withFile} téléchargés`} />
-            <StatCard icon={Tv} label="Séries" value={lib.series.total}
+            <StatCard icon={Film} label={t('stats.cards.movies')} value={lib.movies.total}
+              sub={t('stats.cards.downloaded', { n: lib.movies.withFile })} />
+            <StatCard icon={Tv} label={t('stats.cards.series')} value={lib.series.total}
               color="text-sky-400" />
-            <StatCard icon={Layers} label="Épisodes"
-              value={lib.series.episodesWithFile.toLocaleString("fr-FR")}
-              sub={`sur ${lib.series.totalEpisodes.toLocaleString("fr-FR")}`}
+            <StatCard icon={Layers} label={t('stats.cards.episodes')}
+              value={lib.series.episodesWithFile.toLocaleString()}
+              sub={t('stats.episodesOf', { n: lib.series.totalEpisodes.toLocaleString() })}
               color="text-emerald-400" />
-            <StatCard icon={HardDrive} label="Stockage média"
+            <StatCard icon={HardDrive} label={t('stats.cards.storage')}
               value={disk ? fmtSize(disk.moviesBytes + disk.tvBytes) : "—"}
-              sub={disk && disk.disk.total > 0 ? `${fmtSize(disk.disk.free)} libres` : undefined}
+              sub={disk && disk.disk.total > 0 ? t('stats.cards.free', { n: fmtSize(disk.disk.free) }) : undefined}
               color="text-amber-400" />
           </div>
 
           {/* Disk bar */}
           {disk && disk.disk.total > 0 && (
             <section className="mb-8">
-              <h2 className="mb-3 text-sm font-semibold text-white">Stockage disque</h2>
+              <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.diskStorage')}</h2>
               <div className="card p-4">
                 <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
                   {disk.moviesBytes > 0 && (
                     <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }}
-                      title={`Films : ${fmtSize(disk.moviesBytes)}`} />
+                      title={`${t('stats.diskLegend.movies')} : ${fmtSize(disk.moviesBytes)}`} />
                   )}
                   {disk.tvBytes > 0 && (
                     <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }}
-                      title={`Séries : ${fmtSize(disk.tvBytes)}`} />
+                      title={`${t('stats.diskLegend.series')} : ${fmtSize(disk.tvBytes)}`} />
                   )}
                   {disk.disk.used - disk.moviesBytes - disk.tvBytes > 0 && (
                     <div className="h-full bg-slate-600"
@@ -199,10 +209,10 @@ export default function StatsPage() {
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />Films — {fmtSize(disk.moviesBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />Séries — {fmtSize(disk.tvBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />Autre — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes))}</span>
-                  <span className="ml-auto text-slate-500">{((disk.disk.used / disk.disk.total) * 100).toFixed(1)}% utilisé</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('stats.diskLegend.movies')} — {fmtSize(disk.moviesBytes)}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('stats.diskLegend.series')} — {fmtSize(disk.tvBytes)}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes))}</span>
+                  <span className="ml-auto text-slate-500">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
                 </div>
               </div>
             </section>
@@ -210,7 +220,7 @@ export default function StatsPage() {
 
           {/* Monthly additions */}
           <section className="mb-8">
-            <h2 className="mb-3 text-sm font-semibold text-white">Ajouts mensuels (12 derniers mois)</h2>
+            <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.monthlyAdditions')}</h2>
             <div className="card p-4">
               <div className="flex items-end gap-1.5" style={{ height: `${CHART_H + 20}px` }}>
                 {months.map((m) => {
@@ -230,14 +240,14 @@ export default function StatsPage() {
                         {sv > 0 && <div className="w-full bg-sky-500" style={{ flex: sv }} />}
                         {mv > 0 && <div className="w-full bg-accent-500" style={{ flex: mv }} />}
                       </div>
-                      <span className="text-[9px] text-slate-600 leading-none">{monthLabel(m)}</span>
+                      <span className="text-[9px] text-slate-600 leading-none">{monthLabel(m, t)}</span>
                     </div>
                   );
                 })}
               </div>
               <div className="mt-2 flex gap-4 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" /> Films</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> Séries</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" /> {t('stats.monthlyLegend.movies')}</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> {t('stats.monthlyLegend.series')}</span>
               </div>
             </div>
           </section>
@@ -246,14 +256,14 @@ export default function StatsPage() {
             {/* Quality breakdown */}
             {Object.keys(buckets).length > 0 && (
               <section>
-                <h2 className="mb-3 text-sm font-semibold text-white">Qualité des films</h2>
+                <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.movieQuality')}</h2>
                 <div className="card p-4 space-y-3">
                   {bucketOrder.filter((b) => buckets[b]).map((b) => (
                     <HBar key={b} label={b} value={buckets[b]} max={maxBucket}
-                      color={bucketColors[b] ?? "bg-slate-400"} fmt={(n) => `${n} films`} />
+                      color={bucketColors[b] ?? "bg-slate-400"} fmt={(n) => t('stats.movieQualityCount', { n })} />
                   ))}
                   {Object.entries(buckets).filter(([b]) => !bucketOrder.includes(b)).map(([b, count]) => (
-                    <HBar key={b} label={b} value={count} max={maxBucket} color="bg-slate-400" fmt={(n) => `${n} films`} />
+                    <HBar key={b} label={b} value={count} max={maxBucket} color="bg-slate-400" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   ))}
                 </div>
               </section>
@@ -262,16 +272,16 @@ export default function StatsPage() {
             {/* Language stats */}
             {lib.movies.withFile > 0 && (
               <section>
-                <h2 className="mb-3 text-sm font-semibold text-white">Langues audio (films)</h2>
+                <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.audioLanguages')}</h2>
                 <div className="card p-4 space-y-3">
                   {(["vfvo", "vf", "vo", "other"] as const).map((cat) => {
                     const count = lib.languages[cat];
                     if (!count) return null;
-                    const labels = { vfvo: "VF + VO", vf: "VF uniquement", vo: "VO uniquement", other: "Autre" };
+                    const labels = { vfvo: t('stats.audioLang.vfvo'), vf: t('stats.audioLang.vf'), vo: t('stats.audioLang.vo'), other: t('stats.audioLang.other') };
                     const colors = { vfvo: "bg-accent-500", vf: "bg-emerald-500", vo: "bg-sky-500", other: "bg-slate-500" };
                     return (
                       <HBar key={cat} label={labels[cat]} value={count}
-                        max={lib.movies.withFile} color={colors[cat]} fmt={(n) => `${n} films`} />
+                        max={lib.movies.withFile} color={colors[cat]} fmt={(n) => t('stats.movieQualityCount', { n })} />
                     );
                   })}
                 </div>
@@ -281,19 +291,19 @@ export default function StatsPage() {
             {/* Codec breakdown */}
             {lib.movies.withFile > 0 && (
               <section>
-                <h2 className="mb-3 text-sm font-semibold text-white">Encodage vidéo</h2>
+                <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.videoEncoding')}</h2>
                 <div className="card p-4 space-y-3">
                   <HBar label="H.265 / HEVC" value={lib.codecs.hevc} max={lib.movies.withFile}
-                    color="bg-accent-500" fmt={(n) => `${n} films`} />
+                    color="bg-accent-500" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   <HBar label="H.264 / AVC" value={lib.codecs.h264} max={lib.movies.withFile}
-                    color="bg-sky-500" fmt={(n) => `${n} films`} />
+                    color="bg-sky-500" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   {lib.codecs.other > 0 && (
-                    <HBar label="Autre" value={lib.codecs.other} max={lib.movies.withFile}
-                      color="bg-slate-500" fmt={(n) => `${n} films`} />
+                    <HBar label={t('stats.audioLang.other')} value={lib.codecs.other} max={lib.movies.withFile}
+                      color="bg-slate-500" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   )}
                   <div className="border-t border-white/5 pt-3 flex items-center gap-3 text-xs text-slate-400">
                     <Zap size={12} className="text-amber-400" />
-                    <span><span className="text-white font-medium">{lib.hdr}</span> films HDR ({Math.round(lib.hdr / lib.movies.withFile * 100)}%)</span>
+                    <span>{t('stats.hdrCount', { n: lib.hdr, pct: Math.round(lib.hdr / lib.movies.withFile * 100) })}</span>
                   </div>
                 </div>
               </section>
@@ -302,7 +312,7 @@ export default function StatsPage() {
             {/* Top genres */}
             {topGenres.length > 0 && (
               <section>
-                <h2 className="mb-3 text-sm font-semibold text-white">Top genres</h2>
+                <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.topGenres')}</h2>
                 <div className="card p-4 space-y-2.5">
                   {topGenres.map(([genre, count]) => (
                     <HBar key={genre} label={genre} value={count} max={maxGenre} color="bg-accent-500/60" />
@@ -314,11 +324,11 @@ export default function StatsPage() {
             {/* Decades */}
             {sortedDecades.length > 0 && (
               <section>
-                <h2 className="mb-3 text-sm font-semibold text-white">Répartition par décennie</h2>
+                <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.byDecade')}</h2>
                 <div className="card p-4 space-y-2.5">
                   {sortedDecades.map(([decade, count]) => (
                     <HBar key={decade} label={decade} value={count} max={maxDecade}
-                      color="bg-sky-500/60" fmt={(n) => `${n} titres`} />
+                      color="bg-sky-500/60" fmt={(n) => t('stats.decadeTitles', { n })} />
                   ))}
                 </div>
               </section>
@@ -328,7 +338,7 @@ export default function StatsPage() {
           {/* Top actors & directors */}
           {people && (people.topActors.length > 0 || people.topDirectors.length > 0) && (
             <section className="mb-8">
-              <h2 className="mb-3 text-sm font-semibold text-white">Personnes les plus présentes</h2>
+              <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.topPeople')}</h2>
               <TopPeopleSection people={people} />
             </section>
           )}

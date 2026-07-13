@@ -17,21 +17,22 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useRole } from "@/lib/useRole";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
+import { useT } from "@/components/TranslationProvider";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<WatchlistStatus, {
-  label: string;
+  labelKey: string;
   icon: React.ElementType;
   textColor: string;
   bgSolid: string;
   borderAccent: string;
 }> = {
-  to_watch:   { label: "À voir",     icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500",     borderAccent: "border-l-sky-400" },
-  to_request: { label: "À demander", icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500",   borderAccent: "border-l-amber-400" },
-  favorite:   { label: "Favoris",    icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500",    borderAccent: "border-l-rose-400" },
-  watched:    { label: "Vus",        icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500", borderAccent: "border-l-emerald-400" },
-  abandoned:  { label: "Abandonnés", icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500",   borderAccent: "border-l-slate-400" },
+  to_watch:   { labelKey: "watchlist.statuses.toWatch",    icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500",     borderAccent: "border-l-sky-400" },
+  to_request: { labelKey: "watchlist.statuses.toRequest",  icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500",   borderAccent: "border-l-amber-400" },
+  favorite:   { labelKey: "watchlist.statuses.favorites",  icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500",    borderAccent: "border-l-rose-400" },
+  watched:    { labelKey: "watchlist.statuses.watched",    icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500", borderAccent: "border-l-emerald-400" },
+  abandoned:  { labelKey: "watchlist.statuses.abandoned",  icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500",   borderAccent: "border-l-slate-400" },
 };
 
 const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
@@ -51,6 +52,7 @@ function NoteModal({ item, onSave, onClose }: {
   onSave: (note: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(item.note ?? "");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { ref.current?.focus(); }, []);
@@ -59,7 +61,7 @@ function NoteModal({ item, onSave, onClose }: {
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <p className="mb-0.5 text-sm font-semibold text-white truncate">{item.title}</p>
-        <p className="mb-3 text-xs text-slate-500">Note personnelle · ⌘ + Entrée pour sauvegarder</p>
+        <p className="mb-3 text-xs text-slate-500">{t('watchlist.noteModal.title')}</p>
         <textarea
           ref={ref}
           value={text}
@@ -68,19 +70,19 @@ function NoteModal({ item, onSave, onClose }: {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onSave(text); onClose(); }
             if (e.key === "Escape") onClose();
           }}
-          placeholder="Ajoute une note…"
+          placeholder={t('watchlist.noteModal.placeholder')}
           rows={4}
           className="w-full resize-none rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
         />
         <div className="mt-3 flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">Annuler</button>
+          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">{t('watchlist.noteModal.cancel')}</button>
           {item.note && (
             <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
               <Trash2 size={14} />
             </button>
           )}
           <button onClick={() => { onSave(text); onClose(); }} className="flex-1 rounded-xl bg-accent-500 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">
-            Enregistrer
+            {t('watchlist.noteModal.save')}
           </button>
         </div>
       </div>
@@ -96,21 +98,22 @@ function ConfirmDeleteModal({ title, onConfirm, onClose }: {
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-semibold text-white">Supprimer de la liste ?</p>
+        <p className="text-sm font-semibold text-white">{t('watchlist.confirmDelete.title')}</p>
         <p className="mt-1 truncate text-xs text-slate-400">{title}</p>
-        <p className="mt-2 text-xs text-slate-500">Cette action ne peut pas être annulée.</p>
+        <p className="mt-2 text-xs text-slate-500">{t('watchlist.confirmDelete.body')}</p>
         <div className="mt-4 flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-            Annuler
+            {t('watchlist.confirmDelete.cancel')}
           </button>
           <button
             onClick={() => { onConfirm(); onClose(); }}
             className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
           >
-            Supprimer
+            {t('watchlist.confirmDelete.confirm')}
           </button>
         </div>
       </div>
@@ -135,6 +138,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const [type, setType] = useState<"movie" | "tv">("movie");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -145,7 +149,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
 
   useEffect(() => {
     if (q.trim().length < 2) { setResults([]); return; }
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const res = await fetch(`/api/discover/search?q=${encodeURIComponent(q.trim())}&type=${type}`);
@@ -153,7 +157,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
         setResults(data.items ?? []);
       } finally { setLoading(false); }
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [q, type]);
 
   async function addItem(r: SearchResult, status: WatchlistStatus) {
@@ -186,7 +190,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                 ref={inputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Titre du film ou de la série…"
+                placeholder={t('watchlist.addModal.searchPlaceholder')}
                 className="w-full rounded-xl border border-white/10 bg-slate-800 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
               />
             </div>
@@ -195,11 +199,11 @@ function AddModal({ existingKeys, onClose, onAdded }: {
             </button>
           </div>
           <div className="flex gap-1.5">
-            {([["movie", "Films", Film], ["tv", "Séries", Tv]] as const).map(([t, label, Icon]) => (
+            {([["movie", t('watchlist.addModal.tabMovies'), Film], ["tv", t('watchlist.addModal.tabSeries'), Tv]] as const).map(([tabType, label, Icon]) => (
               <button
-                key={t}
-                onClick={() => setType(t)}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${type === t ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"}`}
+                key={tabType}
+                onClick={() => setType(tabType)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${type === tabType ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"}`}
               >
                 <Icon size={11} /> {label}
               </button>
@@ -220,10 +224,10 @@ function AddModal({ existingKeys, onClose, onAdded }: {
           ))}
 
           {!loading && q.trim().length < 2 && (
-            <p className="py-10 text-center text-sm text-slate-600">Tapez au moins 2 caractères pour rechercher</p>
+            <p className="py-10 text-center text-sm text-slate-600">{t('watchlist.addModal.minChars')}</p>
           )}
           {!loading && q.trim().length >= 2 && results.length === 0 && (
-            <p className="py-10 text-center text-sm text-slate-600">Aucun résultat pour «{q}»</p>
+            <p className="py-10 text-center text-sm text-slate-600">{t('watchlist.addModal.noResults', { q })}</p>
           )}
 
           {!loading && results.map((r) => {
@@ -248,17 +252,17 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                     )}
                     {r.inLibrary && (
                       <span className="flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
-                        <BookCheck size={8} /> Dispo
+                        <BookCheck size={8} /> {t('watchlist.addModal.available')}
                       </span>
                     )}
                   </div>
                   {inList ? (
                     <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-500/10 px-2 py-0.5 text-[10px] font-medium text-accent-400">
-                      ✓ Déjà en liste
+                      ✓ {t('watchlist.addModal.alreadyInList')}
                     </span>
                   ) : (
                     <div className="mt-1.5 flex items-center gap-1">
-                      <span className="mr-0.5 text-[10px] text-slate-600">Ajouter :</span>
+                      <span className="mr-0.5 text-[10px] text-slate-600">{t('watchlist.addModal.addLabel')}</span>
                       {ALL_STATUSES.map((s) => {
                         const m = STATUS_META[s];
                         const Icon = m.icon;
@@ -266,7 +270,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                           <button
                             key={s}
                             onClick={() => addItem(r, s)}
-                            title={m.label}
+                            title={t(m.labelKey)}
                             className={`flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-black/30 ${m.textColor} transition-colors hover:bg-white/10 hover:border-white/30`}
                           >
                             <Icon size={10} />
@@ -289,6 +293,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
 // ─── Request Button (desktop overlay) ────────────────────────────────────────
 
 function RequestButton({ item }: { item: WatchlistItem }) {
+  const t = useT();
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   async function doRequest(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation();
@@ -313,7 +318,7 @@ function RequestButton({ item }: { item: WatchlistItem }) {
       }`}
     >
       <PlusCircle size={9} />
-      {state === "done" ? "Demandé ✓" : state === "loading" ? "…" : "Demander"}
+      {state === "done" ? t('common.requested') : state === "loading" ? "…" : t('common.request')}
     </button>
   );
 }
@@ -329,6 +334,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
   onNoteEdit: () => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const { role } = useRole();
   const isAdmin = role === "admin";
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -367,7 +373,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
       const Icon = meta.icon;
       const isActive = item.status === s;
       return {
-        label: meta.label,
+        label: t(meta.labelKey),
         icon: <Icon size={16} />,
         onClick: () => onStatusChange(s),
         variant: (isActive ? "accent" : "default") as "accent" | "default",
@@ -376,8 +382,8 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
     }),
     // Library or request
     ...(libraryHref
-      ? [{ label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => { window.location.href = libraryHref; } }]
-      : [{ label: "Demander", icon: <PlusCircle size={16} />, onClick: async () => {
+      ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => { window.location.href = libraryHref; } }]
+      : [{ label: t('common.request'), icon: <PlusCircle size={16} />, onClick: async () => {
           await fetch("/api/jellyseerr/requests", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -385,9 +391,9 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
           });
         }}]
     ),
-    { label: item.note ? "Modifier la note" : "Ajouter une note", icon: <MessageSquare size={16} />, onClick: onNoteEdit },
-    ...(isAdmin && !isAvailable ? [{ label: "Recherche interactive", icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
-    { label: "Supprimer de la liste", icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
+    { label: item.note ? t('watchlist.editNote') : t('watchlist.addNote'), icon: <MessageSquare size={16} />, onClick: onNoteEdit },
+    ...(isAdmin && !isAvailable ? [{ label: t('common.interactiveSearch'), icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
+    { label: t('watchlist.removeFromList'), icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
   ];
 
   return (
@@ -414,12 +420,12 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
           {/* Library badge */}
           {libraryHref && isAvailable && (
             <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
-              <BookCheck size={8} /> Dispo
+              <BookCheck size={8} /> {t('common.available')}
             </div>
           )}
           {libraryHref && !isAvailable && (
             <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
-              <Clock size={8} /> Attente
+              <Clock size={8} /> {t('common.pending')}
             </div>
           )}
 
@@ -448,7 +454,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                   <button
                     key={s}
                     onClick={(e) => { e.stopPropagation(); onStatusChange(s); }}
-                    title={meta.label}
+                    title={t(meta.labelKey)}
                     className={`flex h-6 w-6 items-center justify-center rounded-full border transition-all duration-150 ${
                       active
                         ? `${meta.bgSolid} border-white/30 text-white shadow-md scale-110`
@@ -463,14 +469,14 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
             <div className="flex items-center gap-1">
               {libraryHref ? (
                 <Link href={libraryHref} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors">
-                  <ExternalLink size={9} /> Voir la fiche
+                  <ExternalLink size={9} /> {t('common.viewSheet')}
                 </Link>
               ) : (
                 <RequestButton item={item} />
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); onNoteEdit(); }}
-                title={item.note ? "Modifier la note" : "Ajouter une note"}
+                title={item.note ? t('watchlist.editNote') : t('watchlist.addNote')}
                 className={`flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${item.note ? "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30" : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"}`}
               >
                 <MessageSquare size={9} />
@@ -479,7 +485,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                 <button
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}
-                  title="Recherche interactive"
+                  title={t('common.interactiveSearch')}
                   className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
                 >
                   <Telescope size={9} />
@@ -509,7 +515,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         title={item.title}
-        subtitle={`${item.year ?? ""} · ${item.mediaType === "movie" ? "Film" : "Série"}${imdbRating ? ` · IMDb ${imdbRating}` : ""}`}
+        subtitle={`${item.year ?? ""} · ${item.mediaType === "movie" ? t('common.film') : t('common.series')}${imdbRating ? ` · IMDb ${imdbRating}` : ""}`}
         poster={poster}
         actions={sheetActions}
       />
@@ -557,6 +563,7 @@ function SkeletonGrid() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WatchlistPage() {
+  const t = useT();
   const [activeStatus, setActiveStatus] = useState<WatchlistStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("date");
@@ -656,22 +663,22 @@ export default function WatchlistPage() {
 
   return (
     <div>
-      <PageHeader title="Ma liste" subtitle="Films et séries à suivre, voir ou demander" />
+      <PageHeader title={t('watchlist.pageTitle')} subtitle={t('watchlist.subtitle')} />
 
       {/* Stats */}
       {allItems.length > 0 && (
         <div className="mb-6 grid grid-cols-3 gap-3">
           <div className="rounded-xl border border-white/5 bg-slate-900/80 p-3 sm:p-4">
             <p className="text-2xl font-bold text-white">{allItems.length}</p>
-            <p className="mt-0.5 text-xs text-slate-500">titres en liste</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t('watchlist.stats.total')}</p>
           </div>
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 sm:p-4">
             <p className="text-2xl font-bold text-emerald-400">{availableCount}</p>
-            <p className="mt-0.5 text-xs text-slate-500">disponibles</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t('watchlist.stats.available')}</p>
           </div>
           <div className="rounded-xl border border-white/5 bg-slate-900/80 p-3 sm:p-4">
             <p className="text-2xl font-bold text-white">{counts["watched"] ?? 0}</p>
-            <p className="mt-0.5 text-xs text-slate-500">vus</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t('watchlist.stats.watched')}</p>
           </div>
         </div>
       )}
@@ -683,7 +690,7 @@ export default function WatchlistPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher dans la liste…"
+            placeholder={t('watchlist.searchPlaceholder')}
             className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none transition-colors focus:border-accent-500/50"
           />
         </div>
@@ -693,16 +700,16 @@ export default function WatchlistPage() {
           className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-none"
           style={{ colorScheme: "dark" }}
         >
-          <option value="date">Date d&apos;ajout</option>
-          <option value="title">Titre A–Z</option>
-          <option value="year">Année</option>
-          <option value="rating">Note TMDB</option>
+          <option value="date">{t('watchlist.sortDate')}</option>
+          <option value="title">{t('common.sortTitleAZ')}</option>
+          <option value="year">{t('common.sortYear')}</option>
+          <option value="rating">{t('watchlist.sortRating')}</option>
         </select>
         <button
           onClick={() => setShowAdd(true)}
           className="flex shrink-0 items-center gap-1.5 rounded-xl border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 transition-colors hover:bg-accent-500/20"
         >
-          <Plus size={14} /> <span className="hidden sm:inline">Ajouter</span>
+          <Plus size={14} /> <span className="hidden sm:inline">{t('common.add')}</span>
         </button>
       </div>
 
@@ -714,7 +721,7 @@ export default function WatchlistPage() {
             activeStatus === "all" ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"
           }`}
         >
-          Tout · {counts.all}
+          {t('watchlist.tabAll')} · {counts.all}
         </button>
         {ALL_STATUSES.map((s) => {
           const meta = STATUS_META[s];
@@ -727,7 +734,7 @@ export default function WatchlistPage() {
                 activeStatus === s ? `${meta.textColor} border-current/50 bg-white/5` : "border-white/10 text-slate-500 hover:text-white"
               }`}
             >
-              <Icon size={11} /> {meta.label} <span className="opacity-60">· {counts[s] ?? 0}</span>
+              <Icon size={11} /> {t(meta.labelKey)} <span className="opacity-60">· {counts[s] ?? 0}</span>
             </button>
           );
         })}
@@ -738,15 +745,15 @@ export default function WatchlistPage() {
 
       {!isLoading && allItems.length === 0 && (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <p className="text-slate-500">Votre liste est vide.</p>
+          <p className="text-slate-500">{t('watchlist.empty')}</p>
           <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 rounded-xl bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">
-            <Plus size={14} /> Ajouter un titre
+            <Plus size={14} /> {t('watchlist.addTitle')}
           </button>
         </div>
       )}
 
       {!isLoading && allItems.length > 0 && filtered.length === 0 && (
-        <EmptyState label="Aucun résultat pour cette recherche ou ce filtre." />
+        <EmptyState label={t('watchlist.emptyFilter')} />
       )}
 
       {filtered.length > 0 && (

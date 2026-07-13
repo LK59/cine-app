@@ -307,6 +307,7 @@
       "downloaded": "{n} téléchargés",
       "free": "{n} libres"
     },
+    "episodesOf": "sur {n}",
     "diskStorage": "Stockage disque",
     "diskLegend": {
       "movies": "Films",
@@ -627,6 +628,23 @@
     }
   },
   "watchlist": {
+    "pageTitle": "Ma liste",
+    "subtitle": "Films et séries à suivre, voir ou demander",
+    "stats": {
+      "total": "titres en liste",
+      "available": "disponibles",
+      "watched": "vus"
+    },
+    "searchPlaceholder": "Rechercher dans la liste…",
+    "sortDate": "Date d'ajout",
+    "sortRating": "Note TMDB",
+    "addTitle": "Ajouter un titre",
+    "tabAll": "Tout",
+    "removeFromList": "Supprimer de la liste",
+    "editNote": "Modifier la note",
+    "addNote": "Ajouter une note",
+    "empty": "Votre liste est vide.",
+    "emptyFilter": "Aucun résultat pour cette recherche ou ce filtre.",
     "statuses": {
       "toWatch": "À voir",
       "favorites": "Favoris",

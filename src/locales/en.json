@@ -307,6 +307,7 @@
       "downloaded": "{n} downloaded",
       "free": "{n} free"
     },
+    "episodesOf": "of {n}",
     "diskStorage": "Disk storage",
     "diskLegend": {
       "movies": "Movies",
@@ -627,6 +628,23 @@
     }
   },
   "watchlist": {
+    "pageTitle": "My List",
+    "subtitle": "Movies and series to follow, watch or request",
+    "stats": {
+      "total": "titles in list",
+      "available": "available",
+      "watched": "watched"
+    },
+    "searchPlaceholder": "Search in list…",
+    "sortDate": "Date added",
+    "sortRating": "TMDB rating",
+    "addTitle": "Add a title",
+    "tabAll": "All",
+    "removeFromList": "Remove from list",
+    "editNote": "Edit note",
+    "addNote": "Add note",
+    "empty": "Your list is empty.",
+    "emptyFilter": "No results for this search or filter.",
     "statuses": {
       "toWatch": "To watch",
       "favorites": "Favorites",
