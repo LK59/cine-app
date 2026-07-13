@@ -198,16 +198,14 @@ function extractPeople(q: string, patterns: RegExp[], locale: Locale = "fr"): { 
   return { names, rest: rest.replace(/\s+/g, " ").trim() };
 }
 
-function parseNaturalQuery(raw: string, forcedType: "movie" | "series" | "all", locale: Locale = "fr"): NaturalQuery {
+function parseNaturalQuery(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
   let q = normalize(raw);
-
-  // Media type detection — keywords work across FR/EN/ES
   const detectedType =
-    /\b(film|films|movie|movies|pelicula|peliculas)\b/.test(q) ? "movie"
-    : /\b(serie|series|série|séries|tv|show|shows)\b/.test(q) ? "series"
+    /\b(film|films|movie|movies)\b/.test(q) ? "movie"
+    : /\b(serie|series|série|séries|tv|show)\b/.test(q) ? "series"
     : forcedType;
 
-  q = q.replace(/\b(film|films|movie|movies|pelicula|peliculas|serie|series|série|séries|tv|show|shows)\b/g, " ");
+  q = q.replace(/\b(film|films|movie|movies|serie|series|série|séries|tv|show)\b/g, " ");
 
   let genreName: string | null = null;
   for (const [canonical, aliases] of Object.entries(GENRE_ALIASES)) {
@@ -219,38 +217,15 @@ function parseNaturalQuery(raw: string, forcedType: "movie" | "series" | "all", 
     }
   }
 
-  let cast: { names: string[]; rest: string };
-  let director: { names: string[]; rest: string };
+  const cast = extractPeople(q, [
+    /\b(?:avec|joue(?: avec)?|joué par|jouee par|jouée par|acteur|actrice|casting)\s+(.+?)(?=\s+\b(?:realise|réalisé|realisee|réalisée|par|de)\b|$)/gi,
+  ]);
+  q = cast.rest;
 
-  if (locale === "en") {
-    cast = extractPeople(q, [
-      /\b(?:with|starring|actor|actress|cast)\s+(.+?)(?=\s+\b(?:directed|by)\b|$)/gi,
-    ], locale);
-    q = cast.rest;
-    director = extractPeople(q, [
-      /\b(?:directed by|director)\s+(.+)$/gi,
-      /\bby\s+([a-z][a-z ]{2,})$/gi,
-    ], locale);
-  } else if (locale === "es") {
-    cast = extractPeople(q, [
-      /\b(?:con|protagonizada por|actuando|actor|actriz)\s+(.+?)(?=\s+\b(?:dirigida|dirigido|por|de)\b|$)/gi,
-    ], locale);
-    q = cast.rest;
-    director = extractPeople(q, [
-      /\b(?:dirigida por|dirigido por|director|direccion|dirección|por)\s+(.+)$/gi,
-      /\bde\s+([a-z][a-z ]{2,})$/gi,
-    ], locale);
-  } else {
-    // FR (default)
-    cast = extractPeople(q, [
-      /\b(?:avec|joue(?: avec)?|joué par|jouee par|jouée par|acteur|actrice|casting)\s+(.+?)(?=\s+\b(?:realise|réalisé|realisee|réalisée|par|de)\b|$)/gi,
-    ], locale);
-    q = cast.rest;
-    director = extractPeople(q, [
-      /\b(?:realise par|réalisé par|realisee par|réalisée par|realisateur|réalisateur|realisation|réalisation|par)\s+(.+)$/gi,
-      /\bde\s+([a-z][a-z ]{2,})$/gi,
-    ], locale);
-  }
+  const director = extractPeople(q, [
+    /\b(?:realise par|réalisé par|realisee par|réalisée par|realisateur|réalisateur|realisation|réalisation|par)\s+(.+)$/gi,
+    /\bde\s+([a-z][a-z ]{2,})$/gi,
+  ]);
   q = director.rest;
 
   const enabled = Boolean(genreName || cast.names.length || director.names.length);
