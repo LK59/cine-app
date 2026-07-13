@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, type Role } from "@/lib/auth";
+import { sessionDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
 
 export async function POST(req: NextRequest) {
@@ -43,7 +44,9 @@ export async function POST(req: NextRequest) {
   const jellyfinToken: string = data.AccessToken ?? "";
   const role: Role = isAdmin ? "admin" : "guest";
 
-  const token = await createSessionToken(jellyfinUsername, role, jellyfinUsername, jellyfinId, jellyfinToken);
+  const { token, jti } = await createSessionToken(jellyfinUsername, role, jellyfinUsername, jellyfinId, jellyfinToken);
+  const userId = jellyfinId || jellyfinUsername;
+  sessionDb.create(jti, userId);
   const res = NextResponse.json({ ok: true, role });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

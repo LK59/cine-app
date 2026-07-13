@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCircle, Loader2, Moon, Palette, RefreshCw, Send, Settings, Smartphone, XCircle } from "lucide-react";
+import { Bell, CheckCircle, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
@@ -245,6 +245,20 @@ export default function ParametresPage() {
           </div>
         </section>
 
+        {/* ── Sécurité ── */}
+        <section>
+          <div className="mb-4 flex items-center gap-3">
+            <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+              <Shield size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">Sécurité</h2>
+              <p className="text-xs text-slate-500">Sessions actives sur d'autres appareils</p>
+            </div>
+          </div>
+          <SessionsCard />
+        </section>
+
         {/* ── Application ── */}
         <section>
           <div className="mb-4 flex items-center gap-3">
@@ -286,6 +300,58 @@ export default function ParametresPage() {
         )}
 
       </div>
+    </div>
+  );
+}
+
+function SessionsCard() {
+  const [count, setCount] = useState<number | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const [revoked, setRevoked] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/sessions")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j != null) setCount(j.count); });
+  }, []);
+
+  async function revokeOthers() {
+    setRevoking(true);
+    try {
+      const res = await fetch("/api/auth/sessions", { method: "DELETE" });
+      if (res.ok) { setCount(0); setRevoked(true); }
+    } finally {
+      setRevoking(false);
+    }
+  }
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-white">Autres appareils connectés</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {count === null
+              ? "Chargement…"
+              : count === 0
+              ? "Aucune autre session active"
+              : `${count} autre${count > 1 ? "s" : ""} session${count > 1 ? "s" : ""} active${count > 1 ? "s" : ""}`}
+          </p>
+        </div>
+        <button
+          onClick={revokeOthers}
+          disabled={revoking || count === 0 || revoked}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {revoking ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />}
+          {revoked ? "Déconnecté" : "Déconnecter tous les autres"}
+        </button>
+      </div>
+      {revoked && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400">
+          <CheckCircle size={13} /> Toutes les autres sessions ont été révoquées.
+        </p>
+      )}
     </div>
   );
 }

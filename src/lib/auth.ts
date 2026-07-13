@@ -1,4 +1,5 @@
 import { config } from "@/lib/config";
+import { sessionDb } from "@/lib/db";
 
 const COOKIE_NAME = "cine_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -9,6 +10,7 @@ export interface SessionPayload {
   u: string;
   role: Role;
   exp: number;
+  jti: string;       // Unique session ID — used for server-side revocation
   jfUser?: string;   // Jellyfin username — set when authenticated via Jellyfin SSO
   jfId?: string;     // Jellyfin user UUID — required for watch status operations
   jfToken?: string;  // Jellyfin access token — used for deep-link auth redirect
@@ -50,24 +52,32 @@ async function sign(payload: string): Promise<string> {
   return base64url(sig);
 }
 
+function generateJti(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return base64url(bytes);
+}
+
 export async function createSessionToken(
   username: string,
   role: Role,
   jellyfinUser?: string,
   jellyfinId?: string,
   jellyfinToken?: string
-): Promise<string> {
+): Promise<{ token: string; jti: string }> {
+  const jti = generateJti();
   const payload: SessionPayload = {
     u: username,
     role,
     exp: Date.now() + MAX_AGE_SECONDS * 1000,
+    jti,
     ...(jellyfinUser ? { jfUser: jellyfinUser } : {}),
     ...(jellyfinId ? { jfId: jellyfinId } : {}),
     ...(jellyfinToken ? { jfToken: jellyfinToken } : {}),
   };
   const encodedPayload = base64url(new TextEncoder().encode(JSON.stringify(payload)));
   const signature = await sign(encodedPayload);
-  return `${encodedPayload}.${signature}`;
+  return { token: `${encodedPayload}.${signature}`, jti };
 }
 
 export async function verifySessionToken(
@@ -97,6 +107,8 @@ export async function verifySessionToken(
     const payload = JSON.parse(new TextDecoder().decode(fromBase64url(encodedPayload))) as SessionPayload;
     if (typeof payload.exp !== "number" || payload.exp <= Date.now()) return null;
     if (payload.role !== "admin" && payload.role !== "guest") return null;
+    // Check server-side revocation — sessions without jti (issued before this feature) are still accepted
+    if (payload.jti && !sessionDb.exists(payload.jti)) return null;
     return payload;
   } catch {
     return null;

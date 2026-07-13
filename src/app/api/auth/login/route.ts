@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
+import { sessionDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
 
 export async function POST(req: NextRequest) {
@@ -26,7 +27,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Identifiants invalides" }, { status: 401 });
   }
 
-  const token = await createSessionToken(username, "admin");
+  const { token, jti } = await createSessionToken(username, "admin");
+  sessionDb.create(jti, username);
   const res = NextResponse.json({ ok: true, role: "admin" });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

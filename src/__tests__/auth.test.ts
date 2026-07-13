@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// Mock the DB so verifySessionToken doesn't require a real SQLite file in tests
+vi.mock("@/lib/db", () => ({
+  sessionDb: { exists: () => true, create: () => {}, delete: () => {}, countOthers: () => 0, deleteOthers: () => 0 },
+  getDb: () => { throw new Error("getDb not available in test"); },
+}));
+
 import { createSessionToken, verifySessionToken, type Role } from "@/lib/auth";
 
 // Creates a token with a custom exp using the same signing algorithm
@@ -21,7 +28,7 @@ async function createTokenWithExp(username: string, role: Role, exp: number): Pr
 describe("auth", () => {
   describe("createSessionToken + verifySessionToken round-trip", () => {
     it("verifies a freshly created admin token", async () => {
-      const token = await createSessionToken("louis", "admin");
+      const { token } = await createSessionToken("louis", "admin");
       const payload = await verifySessionToken(token);
       expect(payload).not.toBeNull();
       expect(payload?.u).toBe("louis");
@@ -29,7 +36,7 @@ describe("auth", () => {
     });
 
     it("verifies a guest token", async () => {
-      const token = await createSessionToken("viewer", "guest");
+      const { token } = await createSessionToken("viewer", "guest");
       const payload = await verifySessionToken(token);
       expect(payload?.role).toBe("guest");
       expect(payload?.u).toBe("viewer");
@@ -37,7 +44,7 @@ describe("auth", () => {
 
     it("includes exp in the future", async () => {
       const before = Date.now();
-      const token = await createSessionToken("louis", "admin");
+      const { token } = await createSessionToken("louis", "admin");
       const payload = await verifySessionToken(token);
       expect(payload?.exp).toBeGreaterThan(before);
       // Should expire roughly 7 days from now
@@ -45,7 +52,7 @@ describe("auth", () => {
     });
 
     it("stores jellyfin fields when provided", async () => {
-      const token = await createSessionToken("louis", "admin", "louis_jf", "jf-uuid-123", "jf-token-abc");
+      const { token } = await createSessionToken("louis", "admin", "louis_jf", "jf-uuid-123", "jf-token-abc");
       const payload = await verifySessionToken(token);
       expect(payload?.jfUser).toBe("louis_jf");
       expect(payload?.jfId).toBe("jf-uuid-123");
@@ -71,7 +78,7 @@ describe("auth", () => {
     });
 
     it("returns null for tampered payload", async () => {
-      const token = await createSessionToken("louis", "admin");
+      const { token } = await createSessionToken("louis", "admin");
       const [, sig] = token.split(".");
       // Replace payload with a different one but keep original sig
       const fakePayload = Buffer.from(JSON.stringify({ u: "hacker", role: "admin", exp: Date.now() + 999999 })).toString("base64url");
@@ -80,7 +87,7 @@ describe("auth", () => {
     });
 
     it("returns null for tampered signature", async () => {
-      const token = await createSessionToken("louis", "admin");
+      const { token } = await createSessionToken("louis", "admin");
       const [payload] = token.split(".");
       const tampered = `${payload}.aW52YWxpZHNpZ25hdHVyZQ`;
       expect(await verifySessionToken(tampered)).toBeNull();

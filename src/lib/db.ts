@@ -95,6 +95,15 @@ function migrate(db: Database.Database): void {
       notified_at INTEGER NOT NULL,
       UNIQUE(media_type, tmdb_id)
     );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      jti          TEXT    PRIMARY KEY,
+      user_id      TEXT    NOT NULL,
+      created_at   INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
   `);
 
   // Additive migrations — safe to run multiple times
@@ -348,5 +357,38 @@ export const notificationPrefsDb = {
 
   isEnabled(userId: string, category: NotificationCategory): boolean {
     return this.getForUser(userId)[category];
+  },
+};
+
+// ─── Session store ────────────────────────────────────────────────────────────
+
+const SESSION_MAX_AGE_MS = 7 * 24 * 3600_000;
+
+export const sessionDb = {
+  create(jti: string, userId: string): void {
+    const db = getDb();
+    const now = Date.now();
+    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at) VALUES (?, ?, ?, ?)").run(jti, userId, now, now);
+    // Opportunistic cleanup of expired sessions
+    db.prepare("DELETE FROM sessions WHERE last_seen_at < ?").run(now - SESSION_MAX_AGE_MS);
+  },
+
+  exists(jti: string): boolean {
+    const db = getDb();
+    return !!(db.prepare("SELECT 1 FROM sessions WHERE jti = ?").get(jti));
+  },
+
+  delete(jti: string): void {
+    getDb().prepare("DELETE FROM sessions WHERE jti = ?").run(jti);
+  },
+
+  countOthers(userId: string, currentJti: string): number {
+    const row = getDb().prepare("SELECT COUNT(*) as n FROM sessions WHERE user_id = ? AND jti != ?").get(userId, currentJti) as { n: number };
+    return row.n;
+  },
+
+  deleteOthers(userId: string, currentJti: string): number {
+    const r = getDb().prepare("DELETE FROM sessions WHERE user_id = ? AND jti != ?").run(userId, currentJti);
+    return r.changes;
   },
 };
