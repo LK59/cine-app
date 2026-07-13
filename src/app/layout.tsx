@@ -4,6 +4,7 @@ import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistratio
 import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { TranslationProvider } from "@/components/TranslationProvider";
 
 export const metadata: Metadata = {
   title: "Cine App",
@@ -39,11 +40,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;if(localStorage.getItem("cine-amoled")==="1")document.documentElement.dataset.amoled="";}catch(e){}` }} />
       </head>
       <body>
-        <ThemeProvider>
-          <SWRProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </SWRProvider>
-        </ThemeProvider>
+        <TranslationProvider>
+          <ThemeProvider>
+            <SWRProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </SWRProvider>
+          </ThemeProvider>
+        </TranslationProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCircle, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, XCircle } from "lucide-react";
+import { Bell, CheckCircle, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
@@ -9,6 +9,8 @@ import { NOTIFICATION_CATEGORIES, getDefaultNotificationPreferences, type Notifi
 import { useTheme } from "@/components/ThemeProvider";
 import { ACCENT_PRESETS } from "@/lib/theme";
 import { useRole } from "@/lib/useRole";
+import { useLocale } from "@/components/TranslationProvider";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 
 type TestState = "idle" | "sending" | "sent" | "error";
 
@@ -92,6 +94,9 @@ export default function ParametresPage() {
       />
 
       <div className="space-y-8">
+
+        {/* ── Langue ── */}
+        <LanguageSection />
 
         {/* ── Apparence ── */}
         <section>
@@ -301,6 +306,72 @@ export default function ParametresPage() {
 
       </div>
     </div>
+  );
+}
+
+function LanguageSection() {
+  const { locale, setLocale } = useLocale();
+  const [pending, setPending] = useState<Locale | null>(null);
+
+  function select(l: Locale) {
+    if (l === locale) return;
+    setPending(l);
+  }
+
+  function apply() {
+    if (!pending) return;
+    setLocale(pending);
+    // Small delay so the cookie is written before reload
+    setTimeout(() => window.location.reload(), 80);
+  }
+
+  const active = pending ?? locale;
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center gap-3">
+        <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+          <Globe size={18} />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-white">Langue</h2>
+          <p className="text-xs text-slate-500">Interface, synopsis et moteur de recherche</p>
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <div className="flex flex-wrap gap-3">
+          {LOCALES.map((l) => (
+            <button
+              key={l}
+              onClick={() => select(l)}
+              className={[
+                "rounded-lg border px-5 py-2 text-sm font-medium transition-colors",
+                active === l
+                  ? "border-accent-500 bg-accent-500/20 text-accent-300"
+                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white",
+              ].join(" ")}
+            >
+              {LOCALE_LABELS[l]}
+            </button>
+          ))}
+        </div>
+
+        {pending && pending !== locale && (
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+            <p className="text-xs text-amber-300">
+              Rechargement nécessaire pour appliquer <span className="font-semibold">{LOCALE_LABELS[pending]}</span>
+            </p>
+            <button
+              onClick={apply}
+              className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90"
+            >
+              Appliquer
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
