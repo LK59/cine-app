@@ -16,6 +16,7 @@ import { prefetchMovieDetail } from "@/lib/prefetch";
 import { useListKeyNav } from "@/lib/useListKeyNav";
 import { useToast } from "@/components/Toast";
 import { PosterImage } from "@/components/PosterImage";
+import { useT } from "@/components/TranslationProvider";
 
 function poster(movie: RadarrMovie) {
   return posterUrl(movie.images);
@@ -47,6 +48,7 @@ function decadeOf(year: number): DecadeFilter {
 }
 
 export default function RadarrPage() {
+  const t = useT();
   const { mutate } = useSWRConfig();
   const { isGuest } = useRole();
   const toast = useToast();
@@ -127,18 +129,18 @@ export default function RadarrPage() {
   return (
     <div>
       <PageHeader
-        title="Films"
-        subtitle={movies ? `${movies.length} films dans la bibliothèque Radarr` : undefined}
+        title={t('radarr.pageTitle')}
+        subtitle={movies ? t('radarr.subtitle', { n: movies.length }) : undefined}
         action={
           <button className="btn-primary" onClick={() => setShowAdd(true)}>
-            <Plus size={16} /> Ajouter un film
+            <Plus size={16} /> {t('radarr.addMovie')}
           </button>
         }
       />
 
       {isLoading && <LoadingState />}
-      {error && <ErrorState message="Impossible de contacter Radarr." />}
-      {movies && movies.length === 0 && <EmptyState label="Aucun film pour le moment." />}
+      {error && <ErrorState message={t('radarr.serviceDown')} />}
+      {movies && movies.length === 0 && <EmptyState label={t('radarr.noMovies')} />}
 
       {movies && movies.length > 0 && (
         <>
@@ -149,7 +151,7 @@ export default function RadarrPage() {
                 <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
                   className="input w-full pl-8"
-                  placeholder="Rechercher un film…"
+                  placeholder={t('radarr.searchPlaceholder')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -158,14 +160,14 @@ export default function RadarrPage() {
                 <button
                   onClick={() => setView("grid")}
                   className={`rounded p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  title="Vue grille"
+                  title={t('common.viewGrid')}
                 >
                   <LayoutGrid size={15} />
                 </button>
                 <button
                   onClick={() => setView("list")}
                   className={`rounded p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  title="Vue liste"
+                  title={t('common.viewList')}
                 >
                   <List size={15} />
                 </button>
@@ -176,25 +178,25 @@ export default function RadarrPage() {
             <div className="scrollbar-none flex gap-2 overflow-x-auto pb-0.5 [touch-action:pan-x] sm:flex-wrap sm:overflow-visible">
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-                  <option value="added">Récemment ajouté</option>
-                  <option value="title">Titre A–Z</option>
-                  <option value="year">Année</option>
-                  <option value="size">Taille</option>
+                  <option value="added">{t('common.sortRecentlyAdded')}</option>
+                  <option value="title">{t('common.sortTitleAZ')}</option>
+                  <option value="year">{t('common.sortYear')}</option>
+                  <option value="size">{t('common.sortSize')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
-                  <option value="all">Tous les statuts</option>
-                  <option value="downloaded">Téléchargé</option>
-                  <option value="missing">Manquant</option>
+                  <option value="all">{t('radarr.statusAll')}</option>
+                  <option value="downloaded">{t('radarr.statusDownloaded')}</option>
+                  <option value="missing">{t('radarr.statusMissing')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
               {genres.length > 0 && (
                 <div className="relative shrink-0">
                   <select className="input appearance-none pr-7 text-sm" value={genreFilter} onChange={(e) => setGenreFilter(e.target.value)}>
-                    <option value="">Tous les genres</option>
+                    <option value="">{t('common.allGenres')}</option>
                     {genres.map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
                   <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -202,22 +204,22 @@ export default function RadarrPage() {
               )}
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={decadeFilter} onChange={(e) => setDecadeFilter(e.target.value as DecadeFilter)}>
-                  <option value="all">Toutes les époques</option>
+                  <option value="all">{t('common.allDecades')}</option>
                   <option value="2020s">2020s</option>
                   <option value="2010s">2010s</option>
                   <option value="2000s">2000s</option>
                   <option value="1990s">1990s</option>
-                  <option value="older">Avant 1990</option>
+                  <option value="older">{t('common.decadeBefore1990')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value as QualityFilter)}>
-                  <option value="all">Toutes les qualités</option>
-                  <option value="4K">4K / UHD</option>
+                  <option value="all">{t('common.allQualities')}</option>
+                  <option value="4K">{t('radarr.quality4K')}</option>
                   <option value="1080p">1080p</option>
                   <option value="720p">720p</option>
-                  <option value="missing">Non téléchargé</option>
+                  <option value="missing">{t('common.notDownloaded')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>

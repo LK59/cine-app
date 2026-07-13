@@ -175,7 +175,13 @@
     "inCinemas": "au cinéma",
     "notReleased": "non sorti",
     "releaseNotice": "Film ajouté et surveillé, mais encore {status}. Il sera téléchargé automatiquement dès sa sortie vidéo.",
-    "forced": "forcé"
+    "forced": "forcé",
+    "remainingMovies": "{n} films restants…",
+    "addedToRadarr": "« {title} » ajouté à Radarr",
+    "alreadyAdded": "Déjà ajouté",
+    "alreadyInRadarr": "Ce film est déjà dans Radarr",
+    "addFailed": "Échec de l'ajout",
+    "addMoviePlaceholder": "Titre du film..."
   },
   "sonarr": {
     "pageTitle": "Séries",
