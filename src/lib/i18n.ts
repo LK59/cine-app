@@ -43,11 +43,11 @@ export async function loadLocaleDict(locale: Locale): Promise<Record<string, unk
   return (await import("@/locales/fr.json")).default as Record<string, unknown>;
 }
 
-export function getLocaleFromCookie(cookieStr: string): Locale {
+export function getLocaleFromCookie(cookieStr: string): Locale | null {
   const match = cookieStr.match(/(?:^|;\s*)cine-lang=([^;]+)/);
   const val = match?.[1];
   if (val === "fr" || val === "en" || val === "es" || val === "de") return val;
-  return DEFAULT_LOCALE;
+  return null;
 }
 
 export function getTmdbLocale(locale: string | undefined | null): string {

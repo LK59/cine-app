@@ -13,6 +13,7 @@ import {
   getLocaleFromCookie,
   loadLocaleDict,
   LOCALE_COOKIE,
+  LOCALES,
   type Locale,
 } from "@/lib/i18n";
 import frDict from "@/locales/fr.json";
@@ -39,7 +40,9 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   const [t, setT] = useState<TFn>(() => defaultT);
 
   useEffect(() => {
-    const detected = getLocaleFromCookie(document.cookie);
+    const instanceDefault = (process.env.NEXT_PUBLIC_APP_LANGUAGE as Locale | undefined);
+    const fallback: Locale = (instanceDefault && LOCALES.includes(instanceDefault)) ? instanceDefault : DEFAULT_LOCALE;
+    const detected = getLocaleFromCookie(document.cookie) ?? fallback;
     if (detected === "fr") {
       setLocaleState("fr");
       setT(() => defaultT);
