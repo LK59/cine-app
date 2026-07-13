@@ -110,7 +110,20 @@
     "waitingSeeds": "Waiting for seeds",
     "showMore": "+{n} more — see all",
     "sheetLink": "Details",
-    "downloadedTooltip": "Downloaded"
+    "downloadedTooltip": "Downloaded",
+    "pageTitle": "Overview",
+    "pageSubtitle": "Real-time status of your media stack",
+    "storageTitle": "Storage",
+    "computingStorage": "Computing…",
+    "storageFree": "{free} free of {total}",
+    "storageFilms": "Movies — {size}",
+    "storageSeries": "Series — {size}",
+    "storageOther": "Other — {size}",
+    "storageUsed": "{pct}% used",
+    "activityTitle": "Recent activity",
+    "noActivity": "No recent activity.",
+    "servicesStatus": "Services status",
+    "unavailableWord": "unavailable"
   },
   "serviceStats": {
     "movies": "Movies",

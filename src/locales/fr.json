@@ -110,7 +110,20 @@
     "waitingSeeds": "En attente de seeds",
     "showMore": "+{n} autres — voir tout",
     "sheetLink": "Fiche",
-    "downloadedTooltip": "Téléchargé"
+    "downloadedTooltip": "Téléchargé",
+    "pageTitle": "Vue d'ensemble",
+    "pageSubtitle": "État en temps réel de votre stack média",
+    "storageTitle": "Stockage",
+    "computingStorage": "Calcul en cours…",
+    "storageFree": "{free} libres sur {total}",
+    "storageFilms": "Films — {size}",
+    "storageSeries": "Séries — {size}",
+    "storageOther": "Autre — {size}",
+    "storageUsed": "{pct}% utilisé",
+    "activityTitle": "Activité récente",
+    "noActivity": "Aucune activité récente.",
+    "servicesStatus": "Statut des services",
+    "unavailableWord": "indisponible"
   },
   "serviceStats": {
     "movies": "Films",

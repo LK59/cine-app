@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { LoadingState, EmptyState } from "@/components/StateViews";
 import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play } from "lucide-react";
 import { useRole } from "@/lib/useRole";
+import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
@@ -46,25 +47,28 @@ const SERVICE_META: Record<string, { label: string; icon: React.ElementType; hre
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SectionUnavailable({ label, error }: { label: string; error: string | null }) {
+  const t = useT();
   return (
     <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-400">
       <AlertTriangle size={14} className="shrink-0" />
-      <span><strong>{label}</strong> indisponible{error ? ` — ${error}` : ""}</span>
+      <span><strong>{label}</strong> {t('dashboard.unavailableWord')}{error ? ` — ${error}` : ""}</span>
     </div>
   );
 }
 
 function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
+  const t = useT();
   if (!updatedAt) return null;
   return (
-    <span className="ml-2 text-[11px] text-slate-600" title="Données en cache">
-      · mis à jour {relativeTimeAbs(updatedAt)}
+    <span className="ml-2 text-[11px] text-slate-600" title={t('common.cachedData')}>
+      · {t('common.updatedAt')} {relativeTimeAbs(updatedAt)}
     </span>
   );
 }
 
 function ResumeCard({ item }: { item: ResumeItem }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const lp = useLongPress(() => setOpen(true));
   return (
@@ -92,7 +96,7 @@ function ResumeCard({ item }: { item: ResumeItem }) {
             </a>
             {item.cinemaHref && (
               <Link href={item.cinemaHref} className="rounded bg-white/5 px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10">
-                Fiche
+                {t('dashboard.sheetLink')}
               </Link>
             )}
           </div>
@@ -104,8 +108,8 @@ function ResumeCard({ item }: { item: ResumeItem }) {
         title={item.name}
         subtitle={item.subtitle ?? undefined}
         actions={[
-          { label: "Ouvrir dans Jellyfin", icon: <Play size={16} />, onClick: () => window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank") },
-          ...(item.cinemaHref ? [{ label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => router.push(item.cinemaHref!) }] : []),
+          { label: t('common.openJellyfin'), icon: <Play size={16} />, onClick: () => window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank") },
+          ...(item.cinemaHref ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(item.cinemaHref!) }] : []),
         ]}
       />
     </>
@@ -114,6 +118,7 @@ function ResumeCard({ item }: { item: ResumeItem }) {
 
 function RecentMovieCard({ m }: { m: RecentItem }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const lp = useLongPress(() => setOpen(true));
   return (
@@ -121,7 +126,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
       <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-accent-500/40 [touch-action:manipulation] select-none">
         <div className="relative">
           <PosterImage src={m.posterUrl} alt={m.title} />
-          {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title="Téléchargé" />}
+          {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
         </div>
         <div className="p-2">
           <p className="truncate text-xs font-medium text-white">{m.title}</p>
@@ -134,7 +139,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
         title={m.title}
         poster={m.posterUrl}
         actions={[
-          { label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => router.push(`/radarr/${m.id}`) },
+          { label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(`/radarr/${m.id}`) },
         ]}
       />
     </>
@@ -143,6 +148,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
 
 function RecentSeriesCard({ s }: { s: RecentItem }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const lp = useLongPress(() => setOpen(true));
   return (
@@ -160,7 +166,7 @@ function RecentSeriesCard({ s }: { s: RecentItem }) {
         title={s.title}
         poster={s.posterUrl}
         actions={[
-          { label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => router.push(`/sonarr/${s.id}`) },
+          { label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(`/sonarr/${s.id}`) },
         ]}
       />
     </>
@@ -188,10 +194,11 @@ function SkeletonSection() {
 }
 
 function ResumeSection({ items }: { items: ResumeItem[] }) {
+  const t = useT();
   if (!items.length) return null;
   return (
     <>
-      <h2 className="mb-3 text-sm font-semibold text-white">Continuer à regarder</h2>
+      <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.resumeWatching')}</h2>
       <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
         {items.map((item) => <ResumeCard key={item.id} item={item} />)}
       </HorizontalCarousel>
@@ -200,13 +207,14 @@ function ResumeSection({ items }: { items: ResumeItem[] }) {
 }
 
 function RecentSection({ movies, series }: { movies: RecentItem[] | null; series: RecentItem[] | null }) {
+  const t = useT();
   if (!movies?.length && !series?.length) return null;
   return (
     <>
-      <h2 className="mb-3 text-sm font-semibold text-white">Récemment ajouté à la bibliothèque</h2>
+      <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.recentlyAdded')}</h2>
       {movies && movies.length > 0 && (
         <div className="mb-5">
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500"><Film size={12} /> Films</p>
+          <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500"><Film size={12} /> {t('common.movies')}</p>
           <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
             {movies.map((m) => <RecentMovieCard key={m.id} m={m} />)}
           </HorizontalCarousel>
@@ -214,7 +222,7 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
       )}
       {series && series.length > 0 && (
         <div className="mb-8">
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500"><Tv size={12} /> Séries</p>
+          <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500"><Tv size={12} /> {t('common.seriesPlural')}</p>
           <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
             {series.map((s) => <RecentSeriesCard key={s.id} s={s} />)}
           </HorizontalCarousel>
@@ -225,23 +233,24 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
 }
 
 function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
-  const active = torrents.filter((t) => ["downloading", "stalledDL", "metaDL", "forcedDL"].includes(t.state));
+  const t = useT();
+  const active = torrents.filter((item) => ["downloading", "stalledDL", "metaDL", "forcedDL"].includes(item.state));
   if (!active.length) return null;
   const shown = active.slice(0, 4);
   return (
     <>
-      <h2 className="mb-3 text-sm font-semibold text-white">Téléchargements en cours</h2>
+      <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.activeDownloads')}</h2>
       <div className="mb-8 card divide-y divide-white/5">
-        {shown.map((t) => {
-          const pct = Math.round(t.progress * 100);
-          const speed = t.dlspeed > 0 ? `${fmtSize(t.dlspeed)}/s` : null;
-          const eta = t.eta > 0 && t.eta < 86400 * 7
-            ? t.eta < 3600 ? `${Math.ceil(t.eta / 60)} min` : `${(t.eta / 3600).toFixed(1)} h`
+        {shown.map((torrent) => {
+          const pct = Math.round(torrent.progress * 100);
+          const speed = torrent.dlspeed > 0 ? `${fmtSize(torrent.dlspeed)}/s` : null;
+          const eta = torrent.eta > 0 && torrent.eta < 86400 * 7
+            ? torrent.eta < 3600 ? `${Math.ceil(torrent.eta / 60)} min` : `${(torrent.eta / 3600).toFixed(1)} h`
             : null;
           return (
-            <div key={t.hash} className="p-3">
+            <div key={torrent.hash} className="p-3">
               <div className="mb-1.5 flex items-center justify-between gap-3">
-                <p className="truncate text-xs font-medium text-white">{t.name}</p>
+                <p className="truncate text-xs font-medium text-white">{torrent.name}</p>
                 <span className="shrink-0 text-[11px] text-slate-500">{pct}%</span>
               </div>
               <div className="mb-1 h-1 w-full rounded-full bg-slate-800">
@@ -250,7 +259,7 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
               <div className="flex items-center gap-2 text-[11px] text-slate-500">
                 {speed && <span className="flex items-center gap-0.5"><Zap size={9} />{speed}</span>}
                 {eta && <span>ETA {eta}</span>}
-                {t.state === "stalledDL" && <span className="text-amber-500">En attente de seeds</span>}
+                {torrent.state === "stalledDL" && <span className="text-amber-500">{t('dashboard.waitingSeeds')}</span>}
               </div>
             </div>
           );
@@ -258,7 +267,7 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
         {active.length > 4 && (
           <div className="p-3 text-center">
             <Link href="/qbittorrent" className="text-xs text-slate-500 hover:text-slate-300">
-              +{active.length - 4} autres — voir tout
+              {t('dashboard.showMore', { n: String(active.length - 4) })}
             </Link>
           </div>
         )}
@@ -313,32 +322,33 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
 }
 
 function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedAt: number | null; computing: boolean }) {
+  const t = useT();
   if (disk.disk.total <= 0 && !computing) return null;
   return (
     <>
       <h2 className="mb-3 mt-8 flex items-center gap-2 text-sm font-semibold text-white">
-        Stockage
+        {t('dashboard.storageTitle')}
         {computing && <RefreshCw size={12} className="animate-spin text-slate-500" />}
         {updatedAt && !computing && <StaleIndicator updatedAt={updatedAt} />}
       </h2>
       {computing && disk.disk.total <= 0 ? (
-        <div className="card mb-6 p-4 text-sm text-slate-500">Calcul en cours…</div>
+        <div className="card mb-6 p-4 text-sm text-slate-500">{t('dashboard.computingStorage')}</div>
       ) : (
         <div className="card mb-6 p-4">
           <div className="mb-4 flex items-center gap-3">
             <HardDrive size={16} className="text-accent-400" />
-            <span className="text-sm text-slate-300">{fmtSize(disk.disk.free)} libres sur {fmtSize(disk.disk.total)}</span>
+            <span className="text-sm text-slate-300">{t('dashboard.storageFree', { free: fmtSize(disk.disk.free), total: fmtSize(disk.disk.total) })}</span>
           </div>
           <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
-            {disk.moviesBytes > 0 && <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }} title={`Films : ${fmtSize(disk.moviesBytes)}`} />}
-            {disk.tvBytes > 0 && <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }} title={`Séries : ${fmtSize(disk.tvBytes)}`} />}
-            {disk.disk.used - disk.moviesBytes - disk.tvBytes > 0 && <div className="h-full bg-slate-600" style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes) / disk.disk.total) * 100}%` }} title="Autre" />}
+            {disk.moviesBytes > 0 && <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })} />}
+            {disk.tvBytes > 0 && <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })} />}
+            {disk.disk.used - disk.moviesBytes - disk.tvBytes > 0 && <div className="h-full bg-slate-600" style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes) / disk.disk.total) * 100}%` }} title={t('dashboard.storageOther', { size: "" })} />}
           </div>
           <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />Films — {fmtSize(disk.moviesBytes)}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />Séries — {fmtSize(disk.tvBytes)}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />Autre — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes))}</span>
-            <span className="ml-auto text-slate-500">{((disk.disk.used / disk.disk.total) * 100).toFixed(1)}% utilisé</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('dashboard.storageOther', { size: fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes)) })}</span>
+            <span className="ml-auto text-slate-500">{t('dashboard.storageUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
           </div>
         </div>
       )}
@@ -347,11 +357,12 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
 }
 
 function ActivitySection({ items }: { items: ActivityItem[] }) {
+  const t = useT();
   return (
     <>
-      <h2 className="mb-3 mt-8 text-sm font-semibold text-white">Activité récente</h2>
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-white">{t('dashboard.activityTitle')}</h2>
       {items.length === 0 ? (
-        <EmptyState label="Aucune activité récente." />
+        <EmptyState label={t('dashboard.noActivity')} />
       ) : (
         <div className="card divide-y divide-white/5">
           {items.map((item) => {
@@ -380,14 +391,14 @@ function ActivitySection({ items }: { items: ActivityItem[] }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  // Single aggregated call — server-side cache handles per-section TTLs
+  const t = useT();
   const { data, isLoading } = useSWR<DashboardPayload>("/api/dashboard", fetcher, {
     refreshInterval: INTERVALS.FAST,
   });
 
   return (
     <div>
-      <PageHeader title="Vue d'ensemble" subtitle="État en temps réel de votre stack média" />
+      <PageHeader title={t('dashboard.pageTitle')} subtitle={t('dashboard.pageSubtitle')} />
 
       {isLoading && !data && <SkeletonSection />}
 
@@ -415,7 +426,7 @@ export default function DashboardPage() {
           {data.services.available && data.services.data ? (
             <ServicesSection services={data.services.data} />
           ) : (
-            <SectionUnavailable label="Statut des services" error={data.services.error} />
+            <SectionUnavailable label={t('dashboard.servicesStatus')} error={data.services.error} />
           )}
 
           {/* Stockage */}
@@ -431,7 +442,7 @@ export default function DashboardPage() {
           {data.activity.available && data.activity.data ? (
             <ActivitySection items={data.activity.data} />
           ) : (
-            <SectionUnavailable label="Activité récente" error={data.activity.error} />
+            <SectionUnavailable label={t('dashboard.activityTitle')} error={data.activity.error} />
           )}
         </>
       )}
