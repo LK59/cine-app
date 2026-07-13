@@ -22,7 +22,7 @@ function get(obj: Record<string, unknown>, path: string): string | undefined {
 
 function interpolate(str: string, vars?: Record<string, string | number>): string {
   if (!vars) return str;
-  return str.replace(/\{\{(\w+)\}\}/g, (_, key) => String(vars[key] ?? `{{${key}}}`));
+  return str.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? `{${key}}`));
 }
 
 export function createT(

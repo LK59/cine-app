@@ -5,31 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Settings } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
-
-const PINNED = [
-  { href: "/",         label: "Accueil",  icon: LayoutDashboard },
-  { href: "/radarr",   label: "Films",    icon: Film },
-  { href: "/sonarr",   label: "Séries",   icon: Tv },
-  { href: "/watchlist",label: "Ma liste", icon: Bookmark },
-];
-
-const SECTION_CONTENT = [
-  { href: "/discover",        label: "Découverte",      icon: Telescope },
-  { href: "/recommendations", label: "Recommandations", icon: Sparkles },
-  { href: "/calendar",        label: "Calendrier",      icon: CalendarDays },
-  { href: "/timeline",        label: "Timeline",        icon: Clock },
-  { href: "/stats",           label: "Statistiques",    icon: BarChart2 },
-];
-
-const SECTION_GESTION = [
-  { href: "/qbittorrent",  label: "Téléchargements", icon: Download },
-  { href: "/parametres",   label: "Paramètres",       icon: Settings },
-  { href: "/bazarr",       label: "Sous-titres",     icon: Captions },
-  { href: "/jackett",      label: "Indexeurs",        icon: Search },
-  { href: "/jellyfin",     label: "Jellyfin",         icon: PlayCircle },
-  { href: "/jellyseerr",   label: "Demandes",         icon: ListChecks },
-  { href: "/health",       label: "Santé système",    icon: Activity },
-];
+import { useT } from "@/components/TranslationProvider";
 
 function SheetSection({
   title,
@@ -77,6 +53,32 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const t = useT();
+
+  const PINNED = [
+    { href: "/",          label: t('nav.mobile.home'),    icon: LayoutDashboard },
+    { href: "/radarr",    label: t('nav.mobile.movies'),  icon: Film },
+    { href: "/sonarr",    label: t('nav.mobile.series'),  icon: Tv },
+    { href: "/watchlist", label: t('nav.watchlist'),      icon: Bookmark },
+  ];
+
+  const SECTION_CONTENT = [
+    { href: "/discover",        label: t('nav.discover'),         icon: Telescope },
+    { href: "/recommendations", label: t('nav.recommendations'),  icon: Sparkles },
+    { href: "/calendar",        label: t('nav.calendar'),         icon: CalendarDays },
+    { href: "/timeline",        label: t('nav.timeline'),         icon: Clock },
+    { href: "/stats",           label: t('nav.stats'),            icon: BarChart2 },
+  ];
+
+  const SECTION_GESTION = [
+    { href: "/qbittorrent",  label: t('nav.qbittorrent'),  icon: Download },
+    { href: "/parametres",   label: t('nav.settings'),     icon: Settings },
+    { href: "/bazarr",       label: t('nav.bazarr'),       icon: Captions },
+    { href: "/jackett",      label: t('nav.jackett'),      icon: Search },
+    { href: "/jellyfin",     label: t('nav.jellyfin'),     icon: PlayCircle },
+    { href: "/jellyseerr",   label: t('nav.jellyseerr'),   icon: ListChecks },
+    { href: "/health",       label: t('nav.health'),       icon: Activity },
+  ];
 
   // Close on navigation back
   useEffect(() => {
@@ -218,7 +220,7 @@ export function MobileNav() {
             className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] text-slate-500 rounded-lg transition-colors hover:text-white [@media(max-height:500px)_and_(orientation:landscape)]:flex-row [@media(max-height:500px)_and_(orientation:landscape)]:justify-center [@media(max-height:500px)_and_(orientation:landscape)]:gap-1.5 [@media(max-height:500px)_and_(orientation:landscape)]:py-1"
           >
             <Search size={20} />
-            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">Recherche</span>
+            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">{t('nav.mobile.search')}</span>
           </button>
 
           {/* More */}
@@ -229,7 +231,7 @@ export function MobileNav() {
             }`}
           >
             <MoreHorizontal size={20} />
-            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">Plus</span>
+            <span className="[@media(max-height:500px)_and_(orientation:landscape)]:hidden">{t('nav.mobile.more')}</span>
           </button>
         </div>
       </nav>
@@ -265,19 +267,19 @@ export function MobileNav() {
             className="mb-4 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-400 hover:bg-white/10 transition-colors"
           >
             <Search size={15} />
-            <span className="flex-1 text-left">Film, série, acteur…</span>
+            <span className="flex-1 text-left">{t('nav.mobile.searchHint')}</span>
             <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
           </button>
 
-          <SheetSection title="Contenu" items={SECTION_CONTENT} isActive={isActive} onClose={() => setOpen(false)} />
-          <SheetSection title="Gestion" items={SECTION_GESTION} isActive={isActive} onClose={() => setOpen(false)} />
+          <SheetSection title={t('nav.mobile.sectionContent')} items={SECTION_CONTENT} isActive={isActive} onClose={() => setOpen(false)} />
+          <SheetSection title={t('nav.mobile.sectionManage')} items={SECTION_GESTION} isActive={isActive} onClose={() => setOpen(false)} />
 
           {/* Logout */}
           <button
             onClick={logout}
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors"
           >
-            <LogOut size={16} /> Déconnexion
+            <LogOut size={16} /> {t('nav.logout')}
           </button>
           </div>{/* end px-4 pb-4 */}
         </div>

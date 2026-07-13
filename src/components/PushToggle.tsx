@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Bell, BellOff, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { useT } from "@/components/TranslationProvider";
 
 type State = "unsupported" | "denied" | "unsubscribed" | "subscribed" | "loading";
 
@@ -25,6 +26,7 @@ export function PushToggle() {
   const [state, setState] = useState<State>("loading");
   const [sub, setSub] = useState<PushSubscription | null>(null);
   const swReg = useRef<ServiceWorkerRegistration | null>(null);
+  const t = useT();
 
   const detect = useCallback(async () => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -89,21 +91,21 @@ export function PushToggle() {
   if (state === "unsupported") return (
     <div className="flex items-center gap-2 text-sm text-slate-500">
       <XCircle size={15} />
-      Notifications non supportées sur ce navigateur
+      {t('notifications.pushToggle.unsupported')}
     </div>
   );
 
   if (state === "denied") return (
     <div className="flex items-center gap-2 text-sm text-amber-400">
       <BellOff size={15} />
-      Notifications bloquées — autorisez-les dans les réglages du navigateur
+      {t('notifications.pushToggle.blocked')}
     </div>
   );
 
   if (state === "loading") return (
     <div className="flex items-center gap-2 text-sm text-slate-500">
       <Loader2 size={15} className="animate-spin" />
-      Chargement…
+      {t('notifications.pushToggle.loading')}
     </div>
   );
 
@@ -111,14 +113,14 @@ export function PushToggle() {
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2 text-sm text-emerald-400">
         <CheckCircle size={15} />
-        Notifications activées
+        {t('notifications.pushToggle.enabled')}
       </div>
       <button
         onClick={unsubscribe}
         className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-colors"
       >
         <BellOff size={12} />
-        Désactiver
+        {t('notifications.pushToggle.disable')}
       </button>
     </div>
   );
@@ -129,7 +131,7 @@ export function PushToggle() {
       className="flex items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-500/10 px-4 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20 transition-colors"
     >
       <Bell size={15} />
-      Activer les notifications push
+      {t('notifications.pushToggle.enable')}
     </button>
   );
 }

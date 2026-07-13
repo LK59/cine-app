@@ -9,22 +9,24 @@ import { INTERVALS } from "@/lib/refresh-intervals";
 import { Film, Tv, Download, PackageCheck, Clock } from "lucide-react";
 import { useLocalState } from "@/hooks/useLocalState";
 import { type ImportEvent, groupByDay } from "@/lib/timeline";
+import { useT } from "@/components/TranslationProvider";
 
 type Filter = "all" | "movie" | "series";
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: TFn): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "à l'instant";
-  if (m < 60) return `${m} min`;
+  if (m < 1) return t('timeline.timeAgo.now');
+  if (m < 60) return t('timeline.timeAgo.minutes', { m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} h`;
+  if (h < 24) return t('timeline.timeAgo.hours', { h });
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d} j`;
+  if (d < 7) return t('timeline.timeAgo.days', { d });
   return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-function EventRow({ ev }: { ev: ImportEvent }) {
+function EventRow({ ev, t }: { ev: ImportEvent; t: TFn }) {
   const Icon = ev.type === "movie" ? Film : Tv;
   const isImport = ev.eventKind === "import";
 
@@ -62,12 +64,12 @@ function EventRow({ ev }: { ev: ImportEvent }) {
       {/* Badges + time */}
       <div className="flex shrink-0 items-center gap-2">
         <span className={`hidden rounded px-1.5 py-0.5 text-[10px] font-medium sm:inline ${ev.source === "radarr" ? "bg-accent-600/15 text-accent-400" : "bg-sky-600/15 text-sky-400"}`}>
-          {ev.type === "movie" ? "Film" : "Série"}
+          {ev.type === "movie" ? t('timeline.badges.movie') : t('timeline.badges.series')}
         </span>
         <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isImport ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700/60 text-slate-400"}`}>
-          {isImport ? "Importé" : "Récupéré"}
+          {isImport ? t('timeline.badges.imported') : t('timeline.badges.grabbed')}
         </span>
-        <span className="w-10 text-right text-[11px] text-slate-600">{timeAgo(ev.date)}</span>
+        <span className="w-10 text-right text-[11px] text-slate-600">{timeAgo(ev.date, t)}</span>
       </div>
     </div>
   );
@@ -77,6 +79,7 @@ interface ImportsResponse { events: ImportEvent[] }
 
 export default function TimelinePage() {
   const [filter, setFilter] = useLocalState<Filter>("timeline-filter", "all");
+  const t = useT();
 
   const { data, isLoading } = useSWR<ImportsResponse>(
     "/api/timeline/imports",
@@ -94,14 +97,18 @@ export default function TimelinePage() {
   return (
     <div>
       <PageHeader
-        title="Téléchargements"
-        subtitle={`${allEvents.length} événements récents — Radarr & Sonarr`}
+        title={t('timeline.pageTitle')}
+        subtitle={t('timeline.subtitle', { n: allEvents.length })}
       />
 
       {/* Filters */}
       <div className="mb-5 flex items-center gap-2">
         {(["all", "movie", "series"] as Filter[]).map((f) => {
-          const label = f === "all" ? `Tout (${allEvents.length})` : f === "movie" ? `Films (${movieCount})` : `Séries (${seriesCount})`;
+          const label = f === "all"
+            ? t('timeline.filters.all', { n: allEvents.length })
+            : f === "movie"
+            ? t('timeline.filters.movies', { n: movieCount })
+            : t('timeline.filters.series', { n: seriesCount });
           return (
             <button
               key={f}
@@ -121,8 +128,8 @@ export default function TimelinePage() {
         })}
       </div>
 
-      {isLoading && <LoadingState label="Chargement…" />}
-      {!isLoading && filtered.length === 0 && <EmptyState label="Aucun événement récent." />}
+      {isLoading && <LoadingState label={t('timeline.loading')} />}
+      {!isLoading && filtered.length === 0 && <EmptyState label={t('timeline.empty')} />}
 
       {groups.length > 0 && (
         <div className="space-y-6">
@@ -130,7 +137,7 @@ export default function TimelinePage() {
             <div key={label}>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
               <div className="card divide-y divide-white/5 overflow-hidden">
-                {items.map((ev) => <EventRow key={ev.id} ev={ev} />)}
+                {items.map((ev) => <EventRow key={ev.id} ev={ev} t={t} />)}
               </div>
             </div>
           ))}

@@ -35,7 +35,20 @@
     "jackett": "Indexers · Jackett",
     "jellyfin": "Playback · Jellyfin",
     "jellyseerr": "Requests · Jellyseerr",
-    "health": "System health"
+    "health": "System health",
+    "logout": "Log out",
+    "guest": "Guest",
+    "searchPlaceholder": "Search…",
+    "mobile": {
+      "home": "Home",
+      "movies": "Movies",
+      "series": "Series",
+      "more": "More",
+      "search": "Search",
+      "searchHint": "Movie, series, actor…",
+      "sectionContent": "Content",
+      "sectionManage": "Management"
+    }
   },
   "common": {
     "loading": "Loading...",
@@ -602,6 +615,15 @@
       "subtitle": "Temporary tools to understand search results",
       "debugSearch": "Debug search",
       "debugSearchDesc": "Shows in the modal why each result appears: local fuzzy, classic TMDb search or natural language query."
+    },
+    "notifications": {
+      "subtitle": "Push alerts by device and by category"
+    },
+    "language": {
+      "title": "Language",
+      "subtitle": "Interface, synopses and search engine",
+      "reloadNotice": "Reload required to apply {lang}",
+      "apply": "Apply"
     }
   },
   "watchlist": {

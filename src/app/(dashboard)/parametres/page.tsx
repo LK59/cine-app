@@ -9,7 +9,7 @@ import { NOTIFICATION_CATEGORIES, getDefaultNotificationPreferences, type Notifi
 import { useTheme } from "@/components/ThemeProvider";
 import { ACCENT_PRESETS } from "@/lib/theme";
 import { useRole } from "@/lib/useRole";
-import { useLocale } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 
 type TestState = "idle" | "sending" | "sent" | "error";
@@ -17,6 +17,7 @@ type TestState = "idle" | "sending" | "sent" | "error";
 export default function ParametresPage() {
   const { accent, amoled, setAccent, setAmoled } = useTheme();
   const { role } = useRole();
+  const t = useT();
 
   // Notification state
   const [preferences, setPreferences] = useState<Record<NotificationCategory, boolean>>(getDefaultNotificationPreferences);
@@ -89,8 +90,8 @@ export default function ParametresPage() {
   return (
     <div>
       <PageHeader
-        title="Paramètres"
-        subtitle="Personnalise l'apparence et les notifications"
+        title={t('settings.pageTitle')}
+        subtitle={t('settings.subtitle')}
       />
 
       <div className="space-y-8">
@@ -105,15 +106,15 @@ export default function ParametresPage() {
               <Palette size={18} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">Apparence</h2>
-              <p className="text-xs text-slate-500">Couleur d'accent et mode d'affichage</p>
+              <h2 className="text-base font-semibold text-white">{t('settings.appearance.title')}</h2>
+              <p className="text-xs text-slate-500">{t('settings.appearance.subtitle')}</p>
             </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Accent color picker */}
             <div className="card p-5">
-              <p className="mb-4 text-sm font-medium text-white">Couleur d'accent</p>
+              <p className="mb-4 text-sm font-medium text-white">{t('settings.appearance.accentColor')}</p>
               <div className="flex flex-wrap gap-3">
                 {ACCENT_PRESETS.map((preset) => {
                   const active = accent === preset.key;
@@ -154,9 +155,9 @@ export default function ParametresPage() {
                     <Moon size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Mode ultra-sombre</p>
+                    <p className="text-sm font-medium text-white">{t('settings.appearance.ultraDark')}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Fond noir pur (#000000). Sur écran OLED, les pixels noirs sont éteints — économie de batterie et contraste maximal la nuit.
+                      {t('settings.appearance.ultraDarkDesc')}
                     </p>
                   </div>
                 </div>
@@ -173,8 +174,8 @@ export default function ParametresPage() {
               <Bell size={18} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">Notifications</h2>
-              <p className="text-xs text-slate-500">Alertes push par appareil et par catégorie</p>
+              <h2 className="text-base font-semibold text-white">{t('notifications.pageTitle')}</h2>
+              <p className="text-xs text-slate-500">{t('settings.notifications.subtitle')}</p>
             </div>
           </div>
 
@@ -186,14 +187,14 @@ export default function ParametresPage() {
                     <Settings size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-white">Cet appareil</p>
-                    <p className="mt-0.5 text-xs text-slate-500">L'activation reste propre à chaque navigateur ou PWA installée.</p>
+                    <p className="text-sm font-semibold text-white">{t('notifications.thisDevice')}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t('notifications.deviceNotice')}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-white">Notifications push</p>
-                    <p className="mt-0.5 text-xs text-slate-500">Active ou désactive cet appareil.</p>
+                    <p className="text-sm font-medium text-white">{t('notifications.pushNotifications')}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t('notifications.pushDescription')}</p>
                   </div>
                   <PushToggle />
                 </div>
@@ -201,15 +202,15 @@ export default function ParametresPage() {
 
               <div className="card p-5">
                 <div className="mb-5">
-                  <p className="text-sm font-semibold text-white">Catégories</p>
-                  <p className="mt-0.5 text-xs text-slate-500">Choisis les alertes que tu veux recevoir.</p>
+                  <p className="text-sm font-semibold text-white">{t('notifications.categories')}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{t('notifications.categoriesDescription')}</p>
                 </div>
                 <div className="divide-y divide-white/5">
                   {NOTIFICATION_CATEGORIES.map((category) => (
                     <div key={category.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-white">{category.label}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{category.description}</p>
+                        <p className="text-sm font-medium text-white">{t(category.labelKey)}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{t(category.descKey)}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {saving === category.id && <Loader2 size={13} className="animate-spin text-slate-500" />}
@@ -226,8 +227,8 @@ export default function ParametresPage() {
 
             <div className="card h-fit p-5">
               <div className="mb-5">
-                <p className="text-sm font-semibold text-white">Test</p>
-                <p className="mt-0.5 text-xs text-slate-500">Envoie une notification de test dans 5 secondes.</p>
+                <p className="text-sm font-semibold text-white">{t('notifications.test')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('notifications.testDescription')}</p>
               </div>
               <button
                 onClick={startTest}
@@ -235,16 +236,16 @@ export default function ParametresPage() {
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {countdown !== null || testState === "sending" ? (
-                  <><Loader2 size={15} className="animate-spin" />{countdown !== null ? `Envoi dans ${countdown}s` : "Envoi…"}</>
+                  <><Loader2 size={15} className="animate-spin" />{countdown !== null ? t('notifications.sendingIn', { n: countdown }) : t('notifications.sending')}</>
                 ) : (
-                  <><Send size={15} />Tester</>
+                  <><Send size={15} />{t('notifications.testButton')}</>
                 )}
               </button>
               {testState === "sent" && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> Notification envoyée</p>
+                <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> {t('notifications.sent')}</p>
               )}
               {testState === "error" && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><XCircle size={13} /> Envoi impossible</p>
+                <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><XCircle size={13} /> {t('notifications.sendError')}</p>
               )}
             </div>
           </div>
@@ -257,8 +258,8 @@ export default function ParametresPage() {
               <Shield size={18} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">Sécurité</h2>
-              <p className="text-xs text-slate-500">Sessions actives sur d'autres appareils</p>
+              <h2 className="text-base font-semibold text-white">{t('settings.security.title')}</h2>
+              <p className="text-xs text-slate-500">{t('settings.security.subtitle')}</p>
             </div>
           </div>
           <SessionsCard />
@@ -271,8 +272,8 @@ export default function ParametresPage() {
               <Smartphone size={18} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">Application</h2>
-              <p className="text-xs text-slate-500">Mise à jour de la PWA installée</p>
+              <h2 className="text-base font-semibold text-white">{t('settings.app.title')}</h2>
+              <p className="text-xs text-slate-500">{t('settings.app.subtitle')}</p>
             </div>
           </div>
           <PwaUpdateCard />
@@ -285,17 +286,17 @@ export default function ParametresPage() {
                 <Settings size={18} />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-white">Diagnostic admin</h2>
-                <p className="text-xs text-slate-500">Outils temporaires pour comprendre les résultats de recherche</p>
+                <h2 className="text-base font-semibold text-white">{t('settings.debug.title')}</h2>
+                <p className="text-xs text-slate-500">{t('settings.debug.subtitle')}</p>
               </div>
             </div>
 
             <div className="card p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-white">Debug recherche</p>
+                  <p className="text-sm font-medium text-white">{t('settings.debug.debugSearch')}</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Affiche dans la modale pourquoi chaque résultat apparaît : fuzzy local, recherche TMDb classique ou requête naturelle.
+                    {t('settings.debug.debugSearchDesc')}
                   </p>
                 </div>
                 <Toggle checked={searchDebug} onChange={toggleSearchDebug} />
@@ -311,6 +312,7 @@ export default function ParametresPage() {
 
 function LanguageSection() {
   const { locale, setLocale } = useLocale();
+  const t = useT();
   const [pending, setPending] = useState<Locale | null>(null);
 
   function select(l: Locale) {
@@ -321,7 +323,6 @@ function LanguageSection() {
   function apply() {
     if (!pending) return;
     setLocale(pending);
-    // Small delay so the cookie is written before reload
     setTimeout(() => window.location.reload(), 80);
   }
 
@@ -334,8 +335,8 @@ function LanguageSection() {
           <Globe size={18} />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">Langue</h2>
-          <p className="text-xs text-slate-500">Interface, synopsis et moteur de recherche</p>
+          <h2 className="text-base font-semibold text-white">{t('settings.language.title')}</h2>
+          <p className="text-xs text-slate-500">{t('settings.language.subtitle')}</p>
         </div>
       </div>
 
@@ -360,13 +361,13 @@ function LanguageSection() {
         {pending && pending !== locale && (
           <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3">
             <p className="text-xs text-amber-300">
-              Rechargement nécessaire pour appliquer <span className="font-semibold">{LOCALE_LABELS[pending]}</span>
+              {t('settings.language.reloadNotice', { lang: LOCALE_LABELS[pending] })}
             </p>
             <button
               onClick={apply}
               className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90"
             >
-              Appliquer
+              {t('settings.language.apply')}
             </button>
           </div>
         )}
@@ -379,6 +380,7 @@ function SessionsCard() {
   const [count, setCount] = useState<number | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revoked, setRevoked] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     fetch("/api/auth/sessions")
@@ -400,13 +402,13 @@ function SessionsCard() {
     <div className="card p-5">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-white">Autres appareils connectés</p>
+          <p className="text-sm font-medium text-white">{t('settings.security.sessionsTitle')}</p>
           <p className="mt-0.5 text-xs text-slate-500">
             {count === null
-              ? "Chargement…"
+              ? t('settings.security.loading')
               : count === 0
-              ? "Aucune autre session active"
-              : `${count} autre${count > 1 ? "s" : ""} session${count > 1 ? "s" : ""} active${count > 1 ? "s" : ""}`}
+              ? t('settings.security.noOtherSessions')
+              : t('settings.security.otherSessions', { n: count })}
           </p>
         </div>
         <button
@@ -415,12 +417,12 @@ function SessionsCard() {
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {revoking ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />}
-          {revoked ? "Déconnecté" : "Déconnecter tous les autres"}
+          {revoked ? t('settings.security.revoked') : t('settings.security.revokeAll')}
         </button>
       </div>
       {revoked && (
         <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400">
-          <CheckCircle size={13} /> Toutes les autres sessions ont été révoquées.
+          <CheckCircle size={13} /> {t('settings.security.revokeSuccess')}
         </p>
       )}
     </div>
@@ -429,6 +431,7 @@ function SessionsCard() {
 
 function PwaUpdateCard() {
   const [status, setStatus] = useState<"idle" | "checking" | "updated" | "latest">("idle");
+  const t = useT();
 
   const update = useCallback(async () => {
     if (!("serviceWorker" in navigator)) return;
@@ -451,19 +454,19 @@ function PwaUpdateCard() {
   return (
     <div className="card p-5 flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-medium text-white">Mettre à jour la PWA</p>
-        <p className="text-xs text-slate-500 mt-0.5">Vérifie et installe la dernière version du Service Worker</p>
+        <p className="text-sm font-medium text-white">{t('settings.app.updateTitle')}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{t('settings.app.updateDesc')}</p>
       </div>
       <div className="flex items-center gap-3">
-        {status === "latest" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle size={13} /> Déjà à jour</span>}
-        {status === "updated" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle size={13} /> Mise à jour appliquée</span>}
+        {status === "latest" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle size={13} /> {t('settings.app.alreadyUpToDate')}</span>}
+        {status === "updated" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle size={13} /> {t('settings.app.updateApplied')}</span>}
         <button
           onClick={update}
           disabled={status === "checking"}
           className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
         >
           <RefreshCw size={13} className={status === "checking" ? "animate-spin" : ""} />
-          {status === "checking" ? "Vérification…" : "Mettre à jour"}
+          {status === "checking" ? t('settings.app.checking') : t('settings.app.updateButton')}
         </button>
       </div>
     </div>

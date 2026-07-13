@@ -35,7 +35,20 @@
     "jackett": "Indexadores · Jackett",
     "jellyfin": "Reproducción · Jellyfin",
     "jellyseerr": "Solicitudes · Jellyseerr",
-    "health": "Estado del sistema"
+    "health": "Estado del sistema",
+    "logout": "Cerrar sesión",
+    "guest": "Invitado",
+    "searchPlaceholder": "Buscar…",
+    "mobile": {
+      "home": "Inicio",
+      "movies": "Películas",
+      "series": "Series",
+      "more": "Más",
+      "search": "Buscar",
+      "searchHint": "Película, serie, actor…",
+      "sectionContent": "Contenido",
+      "sectionManage": "Gestión"
+    }
   },
   "common": {
     "loading": "Cargando...",
@@ -602,6 +615,15 @@
       "subtitle": "Herramientas temporales para entender los resultados de búsqueda",
       "debugSearch": "Depurar búsqueda",
       "debugSearchDesc": "Muestra en el modal por qué aparece cada resultado: búsqueda local difusa, búsqueda clásica de TMDb o consulta en lenguaje natural."
+    },
+    "notifications": {
+      "subtitle": "Alertas push por dispositivo y categoría"
+    },
+    "language": {
+      "title": "Idioma",
+      "subtitle": "Interfaz, sinopsis y motor de búsqueda",
+      "reloadNotice": "Se necesita recargar para aplicar {lang}",
+      "apply": "Aplicar"
     }
   },
   "watchlist": {
