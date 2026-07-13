@@ -312,8 +312,8 @@ export default function SonarrSeriesDetailPage() {
       </div>
 
       {/* ── Poster + Metadata ── */}
-      <div className="relative -mt-16 px-4 pb-6 sm:-mt-20 sm:px-6 md:px-8">
-        <div className="flex max-w-4xl items-end gap-4 sm:gap-6">
+      <div className="relative -mt-16 px-4 pb-6 sm:-mt-20 sm:px-6 md:px-8 xl:px-12 2xl:px-16">
+        <div className="flex max-w-4xl xl:max-w-6xl 2xl:max-w-7xl items-end gap-4 sm:gap-6">
           <div className="hidden shrink-0 sm:block">
             <div className="h-[132px] w-[88px] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 md:h-[168px] md:w-28">
               {poster(series) ? (
@@ -351,8 +351,8 @@ export default function SonarrSeriesDetailPage() {
       </div>
 
       {/* ── Content below — backdrop fully faded behind the file card ── */}
-      <div className="relative px-4 sm:px-6 md:px-8">
-      <div className="max-w-4xl">
+      <div className="relative px-4 sm:px-6 md:px-8 xl:px-12 2xl:px-16">
+      <div className="max-w-4xl xl:max-w-6xl 2xl:max-w-7xl">
 
       {/* ── Action buttons ─────────────────────────────────────── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
