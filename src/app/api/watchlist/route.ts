@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { watchlistDb, type WatchlistStatus } from "@/lib/db";
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifySessionFull(token);
   return session?.jfId ?? session?.u ?? null;
 }
 

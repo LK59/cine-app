@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { withErrorHandling } from "@/lib/api-helpers";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { withCache } from "@/lib/server-cache";
 
 const USERS_TTL = 5 * 60_000; // 5 min — user list rarely changes
@@ -25,7 +26,7 @@ async function resolveJellyseerrUserId(jfUser: string): Promise<number | undefin
 export async function GET(req: NextRequest) {
   const filter = (req.nextUrl.searchParams.get("filter") as "pending" | "approved" | "all") || "pending";
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifySessionFull(token);
 
   if (session?.role === "guest" && session.jfUser) {
     return withErrorHandling(async () => {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifySessionFull(token);
 
   const jellyseerrUserId = session?.jfUser
     ? await resolveJellyseerrUserId(session.jfUser)

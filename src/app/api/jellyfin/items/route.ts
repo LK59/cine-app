@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withErrorHandling } from "@/lib/api-helpers";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import {
   cachedJellyfinMovies,
   cachedJellyfinMoviesAdmin,
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   const year   = req.nextUrl.searchParams.get("year") ? Number(req.nextUrl.searchParams.get("year")) : undefined;
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifySessionFull(token);
   const userId = session?.jfId;
 
   return withErrorHandling(async () => {

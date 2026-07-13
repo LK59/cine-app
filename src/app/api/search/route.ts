@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -345,7 +346,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const type = req.nextUrl.searchParams.get("type") as "movie" | "series" | "all" | null ?? "all";
   const wantsDebug = req.nextUrl.searchParams.get("debug") === "1";
-  const session = wantsDebug ? await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value) : null;
+  const session = wantsDebug ? await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value) : null;
   const includeDebug = session?.role === "admin";
 
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);

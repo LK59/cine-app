@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { pushDb } from "@/lib/db";
 import { isWebPushConfigured, sendWebPush, shouldRemovePushSubscription } from "@/lib/webPush";
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  const session = await verifySessionToken(token).catch(() => null);
+  const session = await verifySessionFull(token).catch(() => null);
   if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
   if (!isWebPushConfigured()) {

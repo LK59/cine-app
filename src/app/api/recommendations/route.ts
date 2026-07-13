@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { cachedJellyfinMovies, cachedJellyfinMoviesAdmin, withCache, TTL } from "@/lib/server-cache";
 import { cachedMovies } from "@/lib/server-cache";
 import { config } from "@/lib/config";
@@ -40,7 +41,7 @@ async function fetchTmdbRecs(tmdbId: number): Promise<any[]> {
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifySessionFull(token);
   const userId = session?.jfId ?? null;
 
   const cacheKey = `recommendations:${userId ?? "anon"}`;

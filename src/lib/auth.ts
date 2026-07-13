@@ -1,5 +1,4 @@
 import { config } from "@/lib/config";
-import { sessionDb } from "@/lib/db";
 
 const COOKIE_NAME = "cine_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -107,8 +106,6 @@ export async function verifySessionToken(
     const payload = JSON.parse(new TextDecoder().decode(fromBase64url(encodedPayload))) as SessionPayload;
     if (typeof payload.exp !== "number" || payload.exp <= Date.now()) return null;
     if (payload.role !== "admin" && payload.role !== "guest") return null;
-    // Check server-side revocation — sessions without jti (issued before this feature) are still accepted
-    if (payload.jti && !sessionDb.exists(payload.jti)) return null;
     return payload;
   } catch {
     return null;

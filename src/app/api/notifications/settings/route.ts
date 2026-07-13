@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { notificationPrefsDb } from "@/lib/db";
 import { isNotificationCategory, type NotificationCategory } from "@/lib/notifications";
 
 async function getUser(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token).catch(() => null);
+  return verifySessionFull(token).catch(() => null);
 }
 
 export async function GET(req: NextRequest) {

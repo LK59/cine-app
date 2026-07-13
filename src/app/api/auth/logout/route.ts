@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { sessionDb } from "@/lib/db";
 
 export async function POST(req: NextRequest) {

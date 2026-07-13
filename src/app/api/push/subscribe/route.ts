@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth"
+import { verifySessionFull } from "@/lib/session";
 import { pushDb } from "@/lib/db";
 
 async function getUser(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token).catch(() => null);
+  return verifySessionFull(token).catch(() => null);
 }
 
 export async function POST(req: NextRequest) {
