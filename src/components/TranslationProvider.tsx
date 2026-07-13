@@ -40,10 +40,7 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   const [t, setT] = useState<TFn>(() => defaultT);
 
   useEffect(() => {
-    const instanceDefault = (process.env.NEXT_PUBLIC_APP_LANGUAGE as Locale | undefined);
-    const fallback: Locale = (instanceDefault && LOCALES.includes(instanceDefault)) ? instanceDefault : DEFAULT_LOCALE;
     const cookieLang = getLocaleFromCookie(document.cookie);
-    const detected = cookieLang ?? fallback;
 
     function applyLocale(l: Locale) {
       setLocaleState(l);
@@ -54,19 +51,36 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
       }
     }
 
-    applyLocale(detected);
+    // Render immediately with what we have (cookie or fr placeholder)
+    applyLocale(cookieLang ?? DEFAULT_LOCALE);
 
-    // Sync with DB preference — catches cross-device changes without requiring re-login
-    fetch("/api/user/preferences")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const serverLang = data?.lang as string | undefined;
-        if (serverLang && LOCALES.includes(serverLang as Locale) && serverLang !== detected) {
-          document.cookie = `${LOCALE_COOKIE}=${serverLang};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
-          window.location.reload();
-        }
-      })
-      .catch(() => null);
+    // Fetch runtime config + user prefs in parallel — both work without baked-in env vars
+    Promise.all([
+      fetch("/api/config/public").then((r) => r.ok ? r.json() : null).catch(() => null),
+      fetch("/api/user/preferences").then((r) => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([pub, prefs]) => {
+      const instanceDefault: Locale =
+        pub?.defaultLang && LOCALES.includes(pub.defaultLang as Locale)
+          ? pub.defaultLang as Locale
+          : DEFAULT_LOCALE;
+
+      const serverLang: Locale | null =
+        prefs?.lang && LOCALES.includes(prefs.lang as Locale)
+          ? prefs.lang as Locale
+          : null;
+
+      const target = serverLang ?? instanceDefault;
+
+      if (cookieLang !== null && target !== cookieLang) {
+        // Cookie exists but out of sync (cross-device change) → update + reload
+        document.cookie = `${LOCALE_COOKIE}=${target};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
+        window.location.reload();
+      } else if (cookieLang === null) {
+        // No cookie yet (pre-login) → apply instance default to UI without setting cookie
+        // The cookie will be set correctly at login
+        applyLocale(target);
+      }
+    });
   }, []);
 
   const setLocale = useCallback(async (l: Locale) => {

@@ -130,8 +130,7 @@ Edit `.env` and configure:
 | `TMDB_API_KEY` | Required for Discover, Recommendations and person/media metadata |
 | `OMDB_API_KEY` | Optional - IMDb ratings on Watchlist cards |
 | `MDBLIST_API_KEY` | Optional - multi-source ratings on detail pages |
-| `APP_LANGUAGE` | Default instance language (`fr` \| `en` \| `es` \| `de`) — used server-side at login for accounts with no saved preference (default: `en`) |
-| `NEXT_PUBLIC_APP_LANGUAGE` | Same value as `APP_LANGUAGE` — injected into the client bundle so the login page shows the right language before any cookie is set |
+| `APP_LANGUAGE` | Default instance language (`fr` \| `en` \| `es` \| `de`) — used for accounts with no saved preference and on the login page (default: `en`) |
 | `VAPID_*` | Optional - Web Push notifications |
 
 ### Docker Compose Setup
