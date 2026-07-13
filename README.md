@@ -4,9 +4,8 @@ Self-hosted PWA dashboard for managing a cinema/media stack from one mobile-frie
 
 Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr into a single dashboard designed for daily use, on desktop and mobile.
 
-![Dashboard](docs/screenshots/dashboard-1.png)
-![Dashboard 2](docs/screenshots/dashboard-2.png)
-![Dashboard mobile](docs/screenshots/dashboard-mobile.PNG)
+<img src="docs/screenshots/dashboard-1.png" width="49%"> <img src="docs/screenshots/dashboard-2.png" width="49%">
+<img src="docs/screenshots/dashboard-mobile.PNG" width="32%">
 
 ---
 
@@ -17,19 +16,15 @@ Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin 
 - **Radarr and Sonarr library views** - grid and list modes, filtering, quick search, keyboard navigation
 - **Movie and series detail pages** - poster, metadata, cast carousel, active downloads, file info, IMDb/RT/Metacritic ratings
 
-![Fiche film](docs/screenshots/fiche-film-1.png)
-![Fiche film 2](docs/screenshots/fiche-film-2.png)
-![Fiche film mobile](docs/screenshots/fiche-film-mobile.PNG)
+<img src="docs/screenshots/fiche-film-1.png" width="49%"> <img src="docs/screenshots/fiche-film-2.png" width="49%">
+<img src="docs/screenshots/fiche-film-mobile.PNG" width="32%">
 - **Watchlist** - add any title from TMDB, classify with 5 statuses (A voir, Favoris, Vus, A demander, Abandonnes), personal notes, search and sort, IMDb rating badge on every card
 
-![Watchlist](docs/screenshots/watchlist-1.png)
-![Watchlist mobile](docs/screenshots/watchlist-mobile.PNG)
+<img src="docs/screenshots/watchlist-1.png" width="65%"> <img src="docs/screenshots/watchlist-mobile.PNG" width="32%">
 - **Natural language search** - find titles with queries like `film de guerre de Christopher Nolan`, `serie avec Clara Galle` or `film comedie avec Ryan Gosling`
 
-![Recherche naturelle](docs/screenshots/recherche-naturelle-1.png)
-![Recherche naturelle 2](docs/screenshots/recherche-naturelle-2.png)
-![Recherche naturelle 3](docs/screenshots/recherche-naturelle-3.png)
-![Recherche mobile](docs/screenshots/recherche-mobile.PNG)
+<img src="docs/screenshots/recherche-naturelle-1.png" width="32%"> <img src="docs/screenshots/recherche-naturelle-2.png" width="32%"> <img src="docs/screenshots/recherche-naturelle-3.png" width="32%">
+<img src="docs/screenshots/recherche-mobile.PNG" width="32%">
 - **Discover** - trending movies and series with genre filters, TMDB search, "Pour vous" tab based on Jellyfin play history
 - **Recommendations** - personalised rows based on recently watched Jellyfin history
 - **Release search modal** - browse and grab releases directly from Radarr/Sonarr inside the app
@@ -76,22 +71,20 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Top actors and directors ranked by number of titles in the library
 - Accurate library/person statistics across movies and series
 
-![Stats mobile](docs/screenshots/menu-stats-mobile.PNG)
+<img src="docs/screenshots/menu-stats-mobile.PNG" width="32%">
 
 ### Other
 
 - Service health dashboard
 
-![Santé système](docs/screenshots/sante-systeme-1.png)
+<img src="docs/screenshots/sante-systeme-1.png" width="100%">
 
 - Bazarr subtitle management per episode
 - NFO viewer
 - Actor / person modal with filmography
 
-![Fiche acteur](docs/screenshots/fiche-acteur-1.png)
-![Fiche acteur mobile](docs/screenshots/fiche-acteur-mobile.png)
-![Fiche acteur recherche](docs/screenshots/fiche-acteur-recherche-1.png)
-![Fiche acteur recherche 2](docs/screenshots/fiche-acteur.recherche-2.png)
+<img src="docs/screenshots/fiche-acteur-1.png" width="65%"> <img src="docs/screenshots/fiche-acteur-mobile.png" width="32%">
+<img src="docs/screenshots/fiche-acteur-recherche-1.png" width="49%"> <img src="docs/screenshots/fiche-acteur.recherche-2.png" width="49%">
 
 - Collection modal (saga grouping)
 - Trailer modal
@@ -99,7 +92,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Web Push notifications including iOS Safari / Apple Web Push
 - Mobile-first navigation with haptic feedback
 
-![Menu mobile](docs/screenshots/menu-mobile.PNG)
+<img src="docs/screenshots/menu-mobile.PNG" width="32%">
 
 - Guest mode (read-only, watchlist allowed)
 - Admin mode (full access including interactive search and deletion)
@@ -359,10 +352,8 @@ docker compose up -d --build
 
 Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and rebuild.
 
-![Clara 1](docs/screenshots/clara-1.png)
-![Clara 2](docs/screenshots/clara-2.png)
-![Clara 3](docs/screenshots/clara-3.png)
-![Clara 4](docs/screenshots/clara-4.png)
+<img src="docs/screenshots/clara-1.png" width="49%"> <img src="docs/screenshots/clara-2.png" width="49%">
+<img src="docs/screenshots/clara-3.png" width="49%"> <img src="docs/screenshots/clara-4.png" width="49%">
 
 ---
 
