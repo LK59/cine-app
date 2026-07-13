@@ -7,6 +7,7 @@ import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { Pause, Play, Trash2, ArrowDown, ArrowUp } from "lucide-react";
 import type { QbTorrent } from "@/lib/clients/qbittorrent";
 import { useRole } from "@/lib/useRole";
+import { useT } from "@/components/TranslationProvider";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useEffect, useMemo, useState } from "react";
 
@@ -36,6 +37,7 @@ function sortTorrents(torrents: QbTorrent[]): QbTorrent[] {
 export default function QbittorrentPage() {
   const { mutate } = useSWRConfig();
   const { isGuest } = useRole();
+  const t = useT();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const { data: torrents, error, isLoading } = useSWR<QbTorrent[]>(
     "/api/qbittorrent/torrents",
@@ -66,7 +68,7 @@ export default function QbittorrentPage() {
   }
 
   async function remove(hash: string) {
-    if (!confirm("Supprimer ce torrent (fichiers conservés) ?")) return;
+    if (!confirm(t('qbittorrent.confirmDelete'))) return;
     await fetch(`/api/qbittorrent/torrents/${hash}?deleteFiles=false`, { method: "DELETE" });
     mutate("/api/qbittorrent/torrents");
   }
@@ -74,7 +76,7 @@ export default function QbittorrentPage() {
   return (
     <div>
       <PageHeader
-        title="Téléchargements"
+        title={t('qbittorrent.pageTitle')}
         subtitle={
           transfer
             ? `↓ ${formatBytes(transfer.dl_info_speed)}/s · ↑ ${formatBytes(transfer.up_info_speed)}/s`
@@ -83,31 +85,31 @@ export default function QbittorrentPage() {
       />
 
       {isLoading && <LoadingState />}
-      {error && <ErrorState message={error.message || "Impossible de contacter qBittorrent."} />}
-      {torrents && torrents.length === 0 && <EmptyState label="Aucun torrent actif." />}
+      {error && <ErrorState message={error.message || t('qbittorrent.serviceDown')} />}
+      {torrents && torrents.length === 0 && <EmptyState label={t('qbittorrent.noActiveTorrents')} />}
 
       {torrents && torrents.length > 0 && (
         <div>
           <div className="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
             <span>
-              {visibleTorrents.length} affichés sur {sortedTorrents.length}
+              {t('qbittorrent.showing', { n: String(visibleTorrents.length), total: String(sortedTorrents.length) })}
             </span>
-            {hasMore && <span>Chargement par lots de {PAGE_SIZE}</span>}
+            {hasMore && <span>{t('qbittorrent.batchLoad', { n: String(PAGE_SIZE) })}</span>}
           </div>
 
           <div className="card divide-y divide-slate-800">
-          {visibleTorrents.map((t, i) => {
+          {visibleTorrents.map((torrent, i) => {
             const prev = visibleTorrents[i - 1];
-            const curPriority = statePriority(t.state);
+            const curPriority = statePriority(torrent.state);
             const prevPriority = prev ? statePriority(prev.state) : -1;
             const sectionLabel =
               curPriority !== prevPriority
-                ? curPriority === 0 ? "En cours"
-                  : curPriority === 1 ? "Seed / Upload"
-                  : "Pausés"
+                ? curPriority === 0 ? t('qbittorrent.sectionActive')
+                  : curPriority === 1 ? t('qbittorrent.sectionSeed')
+                  : t('qbittorrent.sectionPaused')
                 : null;
             return (
-            <div key={t.hash}>
+            <div key={torrent.hash}>
               {sectionLabel && (
                 <div className={`flex items-center gap-2 px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider ${
                   curPriority === 0 ? "text-accent-400" : curPriority === 1 ? "text-emerald-400" : "text-slate-600"
@@ -118,36 +120,36 @@ export default function QbittorrentPage() {
               )}
             <div className="flex items-center gap-4 p-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-white">{t.name}</p>
+                <p className="truncate text-sm font-medium text-white">{torrent.name}</p>
                 <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-                  <span>{formatBytes(t.size)}</span>
+                  <span>{formatBytes(torrent.size)}</span>
                   <span className="flex items-center gap-1 text-emerald-400">
-                    <ArrowDown size={12} /> {formatBytes(t.dlspeed)}/s
+                    <ArrowDown size={12} /> {formatBytes(torrent.dlspeed)}/s
                   </span>
                   <span className="flex items-center gap-1 text-accent-400">
-                    <ArrowUp size={12} /> {formatBytes(t.upspeed)}/s
+                    <ArrowUp size={12} /> {formatBytes(torrent.upspeed)}/s
                   </span>
-                  <span className="capitalize">{t.state}</span>
+                  <span className="capitalize">{torrent.state}</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800">
                   <div
                     className="h-1.5 rounded-full bg-accent-500"
-                    style={{ width: `${Math.round(t.progress * 100)}%` }}
+                    style={{ width: `${Math.round(torrent.progress * 100)}%` }}
                   />
                 </div>
               </div>
               {!isGuest && (
                 <div className="flex items-center gap-1">
-                  {isPaused(t.state) ? (
-                    <button onClick={() => action(t.hash, "resume")} className="btn-ghost px-2">
+                  {isPaused(torrent.state) ? (
+                    <button onClick={() => action(torrent.hash, "resume")} className="btn-ghost px-2">
                       <Play size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => action(t.hash, "pause")} className="btn-ghost px-2">
+                    <button onClick={() => action(torrent.hash, "pause")} className="btn-ghost px-2">
                       <Pause size={14} />
                     </button>
                   )}
-                  <button onClick={() => remove(t.hash)} className="btn-danger px-2">
+                  <button onClick={() => remove(torrent.hash)} className="btn-danger px-2">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -164,7 +166,7 @@ export default function QbittorrentPage() {
                 onClick={() => setVisibleCount((count) => Math.min(count + PAGE_SIZE, sortedTorrents.length))}
                 className="btn-ghost w-full justify-center sm:w-auto"
               >
-                Charger 20 de plus
+                {t('qbittorrent.loadMore')}
               </button>
             </div>
           )}

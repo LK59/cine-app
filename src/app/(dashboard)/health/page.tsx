@@ -8,6 +8,7 @@ import type { ServiceHealth } from "@/app/api/health/route";
 import { CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2 } from "lucide-react";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useState, useCallback } from "react";
+import { useT } from "@/components/TranslationProvider";
 
 interface HealthResponse {
   overall: "ok" | "degraded" | "down";
@@ -39,11 +40,6 @@ const OVERALL_STYLE = {
   ok:       "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
   degraded: "text-amber-400 bg-amber-500/10 border-amber-500/20",
   down:     "text-red-400 bg-red-500/10 border-red-500/20",
-};
-const OVERALL_LABEL = {
-  ok:       "Tous les services sont opérationnels",
-  degraded: "Dégradé — certains services ont des problèmes",
-  down:     "Critique — des services sont hors ligne",
 };
 
 // ─── API endpoint health checks ───────────────────────────────────────────────
@@ -100,7 +96,7 @@ async function runApiCheck(ep: ApiEndpointDef): Promise<ApiEndpointResult> {
       status: valid ? "ok" : "error",
       latencyMs,
       statusCode: res.status,
-      error: valid ? undefined : "Réponse inattendue",
+      error: valid ? undefined : "unexpectedResponse",
     };
   } catch (e) {
     return {
@@ -120,6 +116,7 @@ function ApiStatusBadge({ status }: { status: ApiEndpointResult["status"] }) {
 }
 
 function ApiChecksSection() {
+  const t = useT();
   const [results, setResults] = useState<ApiEndpointResult[]>([]);
   const [running, setRunning] = useState(false);
   const [ranAt, setRanAt] = useState<string | null>(null);
@@ -129,8 +126,8 @@ function ApiChecksSection() {
     // Show pending state immediately
     setResults(API_ENDPOINTS.map((ep) => ({ ...ep, status: "pending", latencyMs: null, statusCode: null })));
     const settled = await Promise.allSettled(API_ENDPOINTS.map(runApiCheck));
-    setResults(settled.map((r) => r.status === "fulfilled" ? r.value : { ...API_ENDPOINTS[0], status: "error", latencyMs: null, statusCode: null, error: "Erreur interne" }));
-    setRanAt(new Date().toLocaleTimeString("fr-FR"));
+    setResults(settled.map((r) => r.status === "fulfilled" ? r.value : { ...API_ENDPOINTS[0], status: "error", latencyMs: null, statusCode: null, error: "internalError" }));
+    setRanAt(new Date().toLocaleTimeString());
     setRunning(false);
   }, []);
 
@@ -144,14 +141,14 @@ function ApiChecksSection() {
     <div className="mt-8">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white">Tests des routes API</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Vérifie chaque endpoint interne — authentification, latence et forme de réponse</p>
+          <h2 className="text-base font-semibold text-white">{t('health.apiTests.sectionTitle')}</h2>
+          <p className="text-xs text-slate-500 mt-0.5">{t('health.apiTests.sectionSubtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           {ranAt && results.length > 0 && !running && (
             <div className="flex items-center gap-2 text-[11px] text-slate-500">
-              <span className="text-emerald-400">{okCount} ok</span>
-              {errCount > 0 && <span className="text-red-400">{errCount} erreur{errCount > 1 ? "s" : ""}</span>}
+              <span className="text-emerald-400">{t('health.apiTests.ok', { n: String(okCount) })}</span>
+              {errCount > 0 && <span className="text-red-400">{t('health.apiTests.errors', { n: String(errCount) })}</span>}
               <span>· {ranAt}</span>
             </div>
           )}
@@ -161,14 +158,14 @@ function ApiChecksSection() {
             className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40"
           >
             <RefreshCw size={12} className={running ? "animate-spin" : ""} />
-            {running ? "Test en cours…" : results.length === 0 ? "Lancer les tests" : "Relancer"}
+            {running ? t('health.apiTests.running') : results.length === 0 ? t('health.apiTests.run') : t('health.apiTests.rerun')}
           </button>
         </div>
       </div>
 
       {results.length === 0 && (
         <div className="rounded-xl border border-dashed border-white/10 py-10 text-center text-sm text-slate-500">
-          Cliquez sur « Lancer les tests » pour vérifier toutes les routes API
+          {t('health.apiTests.empty')}
         </div>
       )}
 
@@ -199,7 +196,11 @@ function ApiChecksSection() {
                       </div>
                       <div className="shrink-0 text-right">
                         {r.status === "error" && r.error && (
-                          <span className="mr-3 text-[11px] text-red-400">{r.error}</span>
+                          <span className="mr-3 text-[11px] text-red-400">
+                            {r.error === "unexpectedResponse" ? t('health.apiTests.unexpectedResponse')
+                              : r.error === "internalError" ? t('health.apiTests.internalError')
+                              : r.error}
+                          </span>
                         )}
                         {r.latencyMs !== null && (
                           <LatencyBar ms={r.latencyMs} />
@@ -220,6 +221,7 @@ function ApiChecksSection() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function HealthPage() {
+  const t = useT();
   const { data, isLoading, mutate, isValidating } = useSWR<HealthResponse>(
     "/api/health",
     fetcher,
@@ -228,16 +230,22 @@ export default function HealthPage() {
 
   const overall = data?.overall ?? "ok";
   const services = data?.services ?? [];
-  const checkedAt = data?.checkedAt ? new Date(data.checkedAt).toLocaleTimeString("fr-FR") : null;
+  const checkedAt = data?.checkedAt ? new Date(data.checkedAt).toLocaleTimeString() : null;
+
+  const OVERALL_LABEL = {
+    ok:       t('health.overall.ok'),
+    degraded: t('health.overall.degraded'),
+    down:     t('health.overall.down'),
+  };
 
   return (
     <div>
       <PageHeader
-        title="Santé système"
-        subtitle="État en temps réel de tous les services"
+        title={t('health.pageTitle')}
+        subtitle={t('health.subtitle')}
       />
 
-      {isLoading && <LoadingState label="Vérification des services…" />}
+      {isLoading && <LoadingState label={t('health.checking')} />}
 
       {!isLoading && (
         <>
@@ -248,14 +256,14 @@ export default function HealthPage() {
               <span className="text-sm font-medium">{OVERALL_LABEL[overall]}</span>
             </div>
             <div className="flex items-center gap-3">
-              {checkedAt && <span className="text-[11px] opacity-60">Mis à jour à {checkedAt}</span>}
+              {checkedAt && <span className="text-[11px] opacity-60">{t('health.updatedAt', { time: checkedAt })}</span>}
               <button
                 onClick={() => mutate()}
                 disabled={isValidating}
                 className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs border border-current/20 opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
               >
                 <RefreshCw size={11} className={isValidating ? "animate-spin" : ""} />
-                Actualiser
+                {t('common.refresh')}
               </button>
             </div>
           </div>
@@ -274,12 +282,12 @@ export default function HealthPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Latence</span>
+                    <span className="text-xs text-slate-500">{t('health.latency')}</span>
                     <LatencyBar ms={svc.latencyMs} />
                   </div>
                   {svc.version && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Version</span>
+                      <span className="text-xs text-slate-500">{t('health.version')}</span>
                       <span className="text-xs text-slate-300 font-mono">{svc.version}</span>
                     </div>
                   )}
@@ -289,13 +297,13 @@ export default function HealthPage() {
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Statut</span>
+                    <span className="text-xs text-slate-500">{t('health.status')}</span>
                     <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
                       svc.status === "ok"       ? "bg-emerald-500/15 text-emerald-400"
                       : svc.status === "degraded" ? "bg-amber-500/15 text-amber-400"
                       : "bg-red-500/15 text-red-400"
                     }`}>
-                      {svc.status === "ok" ? "En ligne" : svc.status === "degraded" ? "Dégradé" : "Hors ligne"}
+                      {svc.status === "ok" ? t('health.statusOnline') : svc.status === "degraded" ? t('health.statusDegraded') : t('health.statusOffline')}
                     </span>
                   </div>
                 </div>
