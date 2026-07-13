@@ -1,13 +1,14 @@
-export type Locale = "fr" | "en" | "es";
+export type Locale = "fr" | "en" | "es" | "de";
 
 export const LOCALE_COOKIE = "cine-lang";
 export const DEFAULT_LOCALE: Locale = "fr";
-export const LOCALES: Locale[] = ["fr", "en", "es"];
+export const LOCALES: Locale[] = ["fr", "en", "es", "de"];
 
 export const LOCALE_LABELS: Record<Locale, string> = {
   fr: "Français",
   en: "English",
   es: "Español",
+  de: "Deutsch",
 };
 
 function get(obj: Record<string, unknown>, path: string): string | undefined {
@@ -38,13 +39,14 @@ export function createT(
 export async function loadLocaleDict(locale: Locale): Promise<Record<string, unknown>> {
   if (locale === "en") return (await import("@/locales/en.json")).default as Record<string, unknown>;
   if (locale === "es") return (await import("@/locales/es.json")).default as Record<string, unknown>;
+  if (locale === "de") return (await import("@/locales/de.json")).default as Record<string, unknown>;
   return (await import("@/locales/fr.json")).default as Record<string, unknown>;
 }
 
 export function getLocaleFromCookie(cookieStr: string): Locale {
   const match = cookieStr.match(/(?:^|;\s*)cine-lang=([^;]+)/);
   const val = match?.[1];
-  if (val === "fr" || val === "en" || val === "es") return val;
+  if (val === "fr" || val === "en" || val === "es" || val === "de") return val;
   return DEFAULT_LOCALE;
 }
 
@@ -52,6 +54,7 @@ export function getTmdbLocale(locale: string | undefined | null): string {
   switch (locale) {
     case "en": return "en-US";
     case "es": return "es-ES";
+    case "de": return "de-DE";
     default:   return "fr-FR";
   }
 }
@@ -60,6 +63,7 @@ export function getVideoLangs(locale: string | undefined | null): string {
   switch (locale) {
     case "en": return "en,null";
     case "es": return "es,en,null";
+    case "de": return "de,en,null";
     default:   return "fr,en,null";
   }
 }

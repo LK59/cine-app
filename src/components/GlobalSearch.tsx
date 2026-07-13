@@ -35,8 +35,8 @@ function looksLikeNaturalOnlyQuery(s: string): boolean {
 
 function requestedMediaType(s: string): "movie" | "series" | "all" {
   const q = norm(s);
-  if (/\b(film|films|movie|movies|pelicula|peliculas)\b/.test(q)) return "movie";
-  if (/\b(serie|series|série|séries|tv|show|shows)\b/.test(q)) return "series";
+  if (/\b(film|filme|films|movie|movies|pelicula|peliculas)\b/.test(q)) return "movie";
+  if (/\b(serie|series|série|séries|serie|serien|tv|show|shows)\b/.test(q)) return "series";
   return "all";
 }
 

@@ -14,6 +14,7 @@ export interface EnrichedPersonData {
 function wikiLangOrder(locale: string): string[] {
   if (locale.startsWith("es")) return ["es", "en", "fr"];
   if (locale.startsWith("en")) return ["en", "fr"];
+  if (locale.startsWith("de")) return ["de", "en", "fr"];
   return ["fr", "en"];
 }
 

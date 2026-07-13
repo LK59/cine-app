@@ -117,6 +117,7 @@ const PERSON_NAME_HINTS = [
 const STOPWORDS_FR = new Set(["de", "du", "des", "le", "la", "les", "un", "une", "et", "avec", "par"]);
 const STOPWORDS_EN = new Set(["the", "a", "an", "of", "with", "by", "and", "in", "on"]);
 const STOPWORDS_ES = new Set(["el", "la", "los", "las", "un", "una", "de", "del", "con", "por", "y", "en"]);
+const STOPWORDS_DE = new Set(["der", "die", "das", "ein", "eine", "mit", "von", "und", "im", "in", "am"]);
 const STOPWORDS = STOPWORDS_FR;
 
 function editDistance(a: string, b: string): number {
@@ -164,17 +165,21 @@ function titleMatchScore(title: string, query: string): number {
 }
 
 function splitPeople(value: string, locale: Locale = "fr"): string[] {
-  const stopwords = locale === "en" ? STOPWORDS_EN : locale === "es" ? STOPWORDS_ES : STOPWORDS_FR;
+  const stopwords = locale === "en" ? STOPWORDS_EN : locale === "es" ? STOPWORDS_ES : locale === "de" ? STOPWORDS_DE : STOPWORDS_FR;
   const splitPattern = locale === "en"
     ? /\s+(?:and|with)\s+|[,/&+]/i
     : locale === "es"
       ? /\s+(?:y|con)\s+|[,/&+]/i
-      : /\s+(?:et|avec)\s+|[,/&+]/i;
+      : locale === "de"
+        ? /\s+(?:und|mit)\s+|[,/&+]/i
+        : /\s+(?:et|avec)\s+|[,/&+]/i;
   const noiseWords = locale === "en"
     ? /\b(movie|movies|series|show|shows|of|with|by)\b/gi
     : locale === "es"
       ? /\b(pelicula|peliculas|serie|series|con|por|de)\b/gi
-      : /\b(film|films|serie|series|série|séries|de|du|des|avec|par)\b/gi;
+      : locale === "de"
+        ? /\b(film|filme|serie|serien|mit|von|und)\b/gi
+        : /\b(film|films|serie|series|série|séries|de|du|des|avec|par)\b/gi;
 
   return value
     .split(splitPattern)
@@ -318,6 +323,46 @@ function parseNaturalQueryES(raw: string, forcedType: "movie" | "series" | "all"
   };
 }
 
+function parseNaturalQueryDE(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
+  let q = normalize(raw);
+  const detectedType =
+    /\b(film|filme|kinofilm|kinofilme)\b/.test(q) ? "movie"
+    : /\b(serie|serien|show|sendung)\b/.test(q) ? "series"
+    : forcedType;
+
+  q = q.replace(/\b(film|filme|kinofilm|kinofilme|serie|serien|show|sendung)\b/g, " ");
+
+  let genreName: string | null = null;
+  for (const [canonical, aliases] of Object.entries(GENRE_ALIASES)) {
+    const hit = aliases.find((alias) => new RegExp(`\\b${normalize(alias).replace(/\s+/g, "\\s+")}\\b`).test(q));
+    if (hit) {
+      genreName = canonical;
+      q = q.replace(new RegExp(`\\b${normalize(hit).replace(/\s+/g, "\\s+")}\\b`, "g"), " ");
+      break;
+    }
+  }
+
+  const cast = extractPeople(q, [
+    /\b(?:mit|starring|besetzung|schauspieler|schauspielerin)\s+(.+?)(?=\s+\b(?:regie|regisseur|von|gedreht von)\b|$)/gi,
+  ], "de");
+  q = cast.rest;
+
+  const director = extractPeople(q, [
+    /\b(?:regie von|regie:|gedreht von|regisseur|regisseurin)\s+(.+)$/gi,
+    /\bvon\s+([a-z][a-z ]{2,})$/gi,
+  ], "de");
+  q = director.rest;
+
+  const enabled = Boolean(genreName || cast.names.length || director.names.length);
+  return {
+    enabled,
+    mediaType: detectedType,
+    genreName,
+    castNames: [...new Set(cast.names.map(normalize))],
+    directorNames: [...new Set(director.names.map(normalize))],
+  };
+}
+
 async function resolvePersonIds(names: string[]): Promise<number[]> {
   const found = await Promise.all(
     names.map(async (name) => {
@@ -445,7 +490,7 @@ export async function GET(req: NextRequest) {
   const session = wantsDebug ? await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value) : null;
   const includeDebug = session?.role === "admin";
   const rawLang = req.cookies.get(LOCALE_COOKIE)?.value ?? "";
-  const locale: Locale = (rawLang === "en" || rawLang === "es") ? rawLang : "fr";
+  const locale: Locale = (rawLang === "en" || rawLang === "es" || rawLang === "de") ? rawLang : "fr";
 
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
   if (!tmdb.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
@@ -457,6 +502,7 @@ export async function GET(req: NextRequest) {
     const searchSeries = type === "all" || type === "series";
     const natural = locale === "en" ? parseNaturalQueryEN(q, type)
                  : locale === "es" ? parseNaturalQueryES(q, type)
+                 : locale === "de" ? parseNaturalQueryDE(q, type)
                  : parseNaturalQuery(q, type);
     const allowMovieResults = searchMovie && natural.mediaType !== "series";
     const allowSeriesResults = searchSeries && natural.mediaType !== "movie";
