@@ -175,13 +175,27 @@
     "inCinemas": "in cinemas",
     "notReleased": "not released",
     "releaseNotice": "Movie added and monitored, but still {status}. It will be downloaded automatically when available on video.",
+    "releaseNoticePrefix": "Movie added and monitored, but still",
+    "releaseNoticeSuffix": ". It will be downloaded automatically when available on video.",
+    "searchModalTitle": "Search · {title}",
+    "trailerModalTitle": "{title} — Trailer",
+    "jsStatusPending": "Pending",
+    "jsStatusProcessing": "Processing",
+    "jsStatusPartial": "Partial",
+    "jsStatusAvailable": "Available",
     "forced": "forced",
     "remainingMovies": "{n} more movies…",
     "addedToRadarr": "« {title} » added to Radarr",
     "alreadyAdded": "Already added",
     "alreadyInRadarr": "This movie is already in Radarr",
     "addFailed": "Failed to add",
-    "addMoviePlaceholder": "Movie title..."
+    "addMoviePlaceholder": "Movie title...",
+    "markAsWatched": "Mark as watched",
+    "awaitingRelease": "Awaiting release",
+    "confirmDeleteFileBody": "The file will be deleted from disk. The movie will remain in Radarr and can be re-downloaded.",
+    "confirmDeleteRadarrBody": "« {title} » will be removed from Radarr. The file on disk will not be deleted.",
+    "saga": "Saga",
+    "deleteSuccess": "« {title} » removed from Radarr"
   },
   "sonarr": {
     "pageTitle": "Series",
@@ -226,7 +240,12 @@
     "markWatched": "Mark as watched",
     "remainingSeries": "{n} series remaining…",
     "statusAvailable": "Available",
-    "episodeCount": "{n} episodes"
+    "episodeCount": "{n} episodes",
+    "alreadyInSonarr": "This series is already in Sonarr",
+    "addFailed": "Failed to add",
+    "addSeriesPlaceholder": "Series title...",
+    "alreadyAdded": "Already added",
+    "addedToSonarr": "« {title} » added to Sonarr"
   },
   "qbittorrent": {
     "pageTitle": "Downloads",

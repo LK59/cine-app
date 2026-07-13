@@ -175,13 +175,27 @@
     "inCinemas": "en cines",
     "notReleased": "no estrenada",
     "releaseNotice": "Película añadida y supervisada, pero todavía {status}. Se descargará automáticamente cuando esté disponible en vídeo.",
+    "releaseNoticePrefix": "Película añadida y supervisada, pero todavía",
+    "releaseNoticeSuffix": ". Se descargará automáticamente cuando esté disponible en vídeo.",
+    "searchModalTitle": "Búsqueda · {title}",
+    "trailerModalTitle": "{title} — Tráiler",
+    "jsStatusPending": "En espera",
+    "jsStatusProcessing": "Procesando",
+    "jsStatusPartial": "Parcial",
+    "jsStatusAvailable": "Disponible",
     "forced": "forzado",
     "remainingMovies": "{n} películas más…",
     "addedToRadarr": "« {title} » añadida a Radarr",
     "alreadyAdded": "Ya añadida",
     "alreadyInRadarr": "Esta película ya está en Radarr",
     "addFailed": "Error al añadir",
-    "addMoviePlaceholder": "Título de la película..."
+    "addMoviePlaceholder": "Título de la película...",
+    "markAsWatched": "Marcar como visto",
+    "awaitingRelease": "En espera de estreno",
+    "confirmDeleteFileBody": "El archivo se eliminará del disco. La película permanecerá en Radarr y podrá volver a descargarse.",
+    "confirmDeleteRadarrBody": "« {title} » se eliminará de Radarr. El archivo en disco no se eliminará.",
+    "saga": "Saga",
+    "deleteSuccess": "« {title} » eliminado de Radarr"
   },
   "sonarr": {
     "pageTitle": "Series",
@@ -226,7 +240,12 @@
     "markWatched": "Marcar como vista",
     "remainingSeries": "{n} series restantes…",
     "statusAvailable": "Disponible",
-    "episodeCount": "{n} episodios"
+    "episodeCount": "{n} episodios",
+    "alreadyInSonarr": "Esta serie ya está en Sonarr",
+    "addFailed": "Error al añadir",
+    "addSeriesPlaceholder": "Título de la serie...",
+    "alreadyAdded": "Ya añadido",
+    "addedToSonarr": "« {title} » añadido a Sonarr"
   },
   "qbittorrent": {
     "pageTitle": "Descargas",

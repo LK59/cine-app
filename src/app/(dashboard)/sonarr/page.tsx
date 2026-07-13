@@ -16,6 +16,7 @@ import { prefetchSeriesDetail } from "@/lib/prefetch";
 import { useListKeyNav } from "@/lib/useListKeyNav";
 import { useToast } from "@/components/Toast";
 import { PosterImage } from "@/components/PosterImage";
+import { useT } from "@/components/TranslationProvider";
 
 function poster(series: SonarrSeries) {
   return posterUrl(series.images);
@@ -40,6 +41,7 @@ export default function SonarrPage() {
   const { mutate } = useSWRConfig();
   const { isGuest } = useRole();
   const toast = useToast();
+  const t = useT();
   const { data: series, error, isLoading } = useSWR<SonarrSeries[]>("/api/sonarr/series", fetcher);
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState("");
@@ -114,18 +116,18 @@ export default function SonarrPage() {
   return (
     <div>
       <PageHeader
-        title="Séries"
-        subtitle={series ? `${series.length} séries dans la bibliothèque Sonarr` : undefined}
+        title={t('sonarr.pageTitle')}
+        subtitle={series ? t('sonarr.subtitle', { n: series.length }) : undefined}
         action={
           <button className="btn-primary" onClick={() => setShowAdd(true)}>
-            <Plus size={16} /> Ajouter une série
+            <Plus size={16} /> {t('sonarr.addSeries')}
           </button>
         }
       />
 
       {isLoading && <LoadingState />}
-      {error && <ErrorState message="Impossible de contacter Sonarr." />}
-      {series && series.length === 0 && <EmptyState label="Aucune série pour le moment." />}
+      {error && <ErrorState message={t('sonarr.serviceDown')} />}
+      {series && series.length === 0 && <EmptyState label={t('sonarr.noSeries')} />}
 
       {series && series.length > 0 && (
         <>
@@ -136,7 +138,7 @@ export default function SonarrPage() {
                 <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
                   className="input w-full pl-8"
-                  placeholder="Rechercher une série…"
+                  placeholder={t('sonarr.searchPlaceholder')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -145,14 +147,14 @@ export default function SonarrPage() {
                 <button
                   onClick={() => setView("grid")}
                   className={`rounded p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  title="Vue grille"
+                  title={t('common.viewGrid')}
                 >
                   <LayoutGrid size={15} />
                 </button>
                 <button
                   onClick={() => setView("list")}
                   className={`rounded p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  title="Vue liste"
+                  title={t('common.viewList')}
                 >
                   <List size={15} />
                 </button>
@@ -163,27 +165,27 @@ export default function SonarrPage() {
             <div className="scrollbar-none flex gap-2 overflow-x-auto pb-0.5 [touch-action:pan-x] sm:flex-wrap sm:overflow-visible">
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-                  <option value="added">Récemment ajouté</option>
-                  <option value="title">Titre A–Z</option>
-                  <option value="year">Année</option>
-                  <option value="episodes">Épisodes</option>
+                  <option value="added">{t('common.sortRecentlyAdded')}</option>
+                  <option value="title">{t('common.sortTitleAZ')}</option>
+                  <option value="year">{t('common.sortYear')}</option>
+                  <option value="episodes">{t('common.sortEpisodes')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
-                  <option value="all">Tous les statuts</option>
-                  <option value="complete">Complet</option>
-                  <option value="missing">Épisodes manquants</option>
-                  <option value="continuing">En cours</option>
-                  <option value="ended">Terminée</option>
+                  <option value="all">{t('sonarr.statusAll')}</option>
+                  <option value="complete">{t('sonarr.statusComplete')}</option>
+                  <option value="missing">{t('sonarr.statusMissing')}</option>
+                  <option value="continuing">{t('sonarr.statusContinuing')}</option>
+                  <option value="ended">{t('sonarr.statusEnded')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
               {genres.length > 0 && (
                 <div className="relative shrink-0">
                   <select className="input appearance-none pr-7 text-sm" value={genreFilter} onChange={(e) => setGenreFilter(e.target.value)}>
-                    <option value="">Tous les genres</option>
+                    <option value="">{t('common.allGenres')}</option>
                     {genres.map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
                   <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -191,12 +193,12 @@ export default function SonarrPage() {
               )}
               <div className="relative shrink-0">
                 <select className="input appearance-none pr-7 text-sm" value={decadeFilter} onChange={(e) => setDecadeFilter(e.target.value as DecadeFilter)}>
-                  <option value="all">Toutes les époques</option>
+                  <option value="all">{t('common.allDecades')}</option>
                   <option value="2020s">2020s</option>
                   <option value="2010s">2010s</option>
                   <option value="2000s">2000s</option>
                   <option value="1990s">1990s</option>
-                  <option value="older">Avant 1990</option>
+                  <option value="older">{t('common.decadeBefore1990')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
@@ -204,7 +206,7 @@ export default function SonarrPage() {
           </div>
 
           {filtered.length === 0 && (
-            <EmptyState label="Aucune série correspondant aux filtres." />
+            <EmptyState label={t('sonarr.noResults')} />
           )}
 
           {view === "grid" ? (
@@ -223,7 +225,7 @@ export default function SonarrPage() {
                       <div className="p-2">
                         <p className="truncate text-xs font-medium text-white">{show.title}</p>
                         <p className="text-xs text-slate-500">
-                          {show.statistics?.episodeFileCount ?? 0}/{show.statistics?.episodeCount ?? 0} épisodes
+                          {t('sonarr.episodesCount', { file: show.statistics?.episodeFileCount ?? 0, total: show.statistics?.episodeCount ?? 0 })}
                         </p>
                       </div>
                     </Link>
@@ -250,7 +252,7 @@ export default function SonarrPage() {
               </div>
               <div ref={sentinelRef} className="h-1" />
               {visibleCount < filtered.length && (
-                <p className="py-4 text-center text-xs text-slate-600">{filtered.length - visibleCount} séries restantes…</p>
+                <p className="py-4 text-center text-xs text-slate-600">{t('sonarr.remainingSeries', { n: filtered.length - visibleCount })}</p>
               )}
             </>
           ) : (
@@ -284,7 +286,7 @@ export default function SonarrPage() {
               </div>
               <div ref={sentinelRef} className="h-1" />
               {visibleCount < filtered.length && (
-                <p className="py-4 text-center text-xs text-slate-600">{filtered.length - visibleCount} séries restantes…</p>
+                <p className="py-4 text-center text-xs text-slate-600">{t('sonarr.remainingSeries', { n: filtered.length - visibleCount })}</p>
               )}
             </>
           )}
@@ -304,6 +306,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
   const [adding, setAdding] = useState<number | null>(null);
   const [added, setAdded] = useState<Set<number>>(new Set());
   const toast = useToast();
+  const t = useT();
 
   const { data: meta } = useSWR<{ qualityProfiles: { id: number; name: string }[]; rootFolders: { id: number; path: string }[] }>(
     "/api/sonarr/meta",
@@ -325,7 +328,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
   async function add(show: SonarrSeries) {
     if (!meta?.qualityProfiles?.length || !meta?.rootFolders?.length) return;
     if (show.id) {
-      toast.error("Cette série est déjà dans Sonarr");
+      toast.error(t('sonarr.alreadyInSonarr'));
       return;
     }
     setAdding(show.tvdbId);
@@ -343,20 +346,20 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
       });
       mutate("/api/sonarr/series");
       setAdded((prev) => new Set(prev).add(show.tvdbId));
-      toast.success(`« ${show.title} » ajoutée à Sonarr`);
+      toast.success(t('sonarr.addedToSonarr', { title: show.title }));
     } catch {
-      toast.error("Échec de l'ajout");
+      toast.error(t('sonarr.addFailed'));
     } finally {
       setAdding(null);
     }
   }
 
   return (
-    <Modal title="Ajouter une série" onClose={onClose}>
+    <Modal title={t('sonarr.addSeries')} onClose={onClose}>
       <form onSubmit={handleSearch} className="mb-4 flex gap-2">
         <input
           className="input"
-          placeholder="Titre de la série..."
+          placeholder={t('sonarr.addSeriesPlaceholder')}
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           autoFocus
@@ -391,7 +394,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
                   )}
                   {inLibrary && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <span className="text-xs font-semibold text-emerald-400">Déjà ajouté</span>
+                      <span className="text-xs font-semibold text-emerald-400">{t('sonarr.alreadyAdded')}</span>
                     </div>
                   )}
                 </div>
@@ -404,10 +407,10 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
                     onClick={() => add(show)}
                   >
                     {adding === show.tvdbId
-                      ? "Ajout…"
+                      ? t('common.adding')
                       : inLibrary || isAdded
-                        ? "Déjà ajouté"
-                        : "Ajouter"}
+                        ? t('sonarr.alreadyAdded')
+                        : t('common.add')}
                   </button>
                 </div>
               </div>

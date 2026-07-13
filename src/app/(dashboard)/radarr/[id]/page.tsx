@@ -38,6 +38,7 @@ import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
+import { useT } from "@/components/TranslationProvider";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
@@ -81,6 +82,7 @@ export default function RadarrMovieDetailPage() {
   const { mutate } = useSWRConfig();
   const { isGuest, jfId } = useRole();
   const toast = useToast();
+  const t = useT();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
   const [showCollection, setShowCollection] = useState(false);
 
@@ -145,9 +147,9 @@ export default function RadarrMovieDetailPage() {
         body: JSON.stringify({ ...movie, ...payload }),
       });
       mutate(movieKey);
-      toast.success("Modifications enregistrées");
+      toast.success(t('radarr.saveSuccess'));
     } catch {
-      toast.error("Échec de la sauvegarde");
+      toast.error(t('radarr.saveError'));
     } finally {
       setSaving(false);
     }
@@ -159,9 +161,9 @@ export default function RadarrMovieDetailPage() {
       const res = await fetch(`/api/radarr/movies/${id}/file`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       mutate(movieKey);
-      toast.success("Fichier supprimé");
+      toast.success(t('radarr.deleteFileSuccess'));
     } catch {
-      toast.error("Échec de la suppression");
+      toast.error(t('radarr.deleteFileError'));
     } finally {
       setDeletingFile(false);
     }
@@ -173,10 +175,10 @@ export default function RadarrMovieDetailPage() {
       const res = await fetch(`/api/radarr/movies/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       await fetch("/api/cache/invalidate", { method: "POST" });
-      toast.success(`« ${movie?.title} » supprimé de Radarr`);
+      toast.success(t('radarr.deleteSuccess', { title: movie?.title ?? '' }));
       router.back();
     } catch {
-      toast.error("Échec de la suppression");
+      toast.error(t('radarr.deleteFileError'));
       setDeletingFromRadarr(false);
     }
   }
@@ -196,10 +198,10 @@ export default function RadarrMovieDetailPage() {
       });
       if (!res.ok) throw new Error();
       mutateJf();
-      toast.success(newPlayed ? "Marqué comme vu" : "Marqué comme non vu");
+      toast.success(newPlayed ? t('radarr.watchedSuccess') : t('radarr.unwatchedSuccess'));
     } catch {
       mutateJf(); // rollback
-      toast.error("Échec — vérifiez votre connexion Jellyfin");
+      toast.error(t('radarr.watchedError'));
     } finally {
       setTogglingWatched(false);
     }
@@ -224,16 +226,16 @@ export default function RadarrMovieDetailPage() {
       // Bust server-side library cache so lists reflect the new state
       await fetch("/api/cache/invalidate", { method: "POST" });
       haptic();
-      toast.success(`Demande envoyée pour « ${movie.title} »`);
+      toast.success(t('radarr.requestSuccess', { title: movie.title }));
     } catch {
-      toast.error("Échec de la demande");
+      toast.error(t('radarr.requestError'));
     } finally {
       setRequesting(false);
     }
   }
 
   if (isLoading) return <LoadingState />;
-  if (error || !movie) return <ErrorState message={error?.message || "Film introuvable."} />;
+  if (error || !movie) return <ErrorState message={error?.message || t('radarr.movieNotFound')} />;
 
   const overview = info?.tmdb?.overview || movie.overview;
   const backdrop = info?.tmdb?.backdropUrl;
@@ -277,7 +279,7 @@ export default function RadarrMovieDetailPage() {
           onClick={() => router.back()}
           className="absolute left-4 top-4 sm:left-6 md:left-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm hover:bg-black/60"
         >
-          <ArrowLeft size={14} /> Retour
+          <ArrowLeft size={14} /> {t('common.back')}
         </button>
         {jfItem && (
           <a
@@ -286,7 +288,7 @@ export default function RadarrMovieDetailPage() {
             rel="noopener noreferrer"
             className="absolute right-4 top-4 sm:right-6 md:right-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm hover:bg-black/60"
           >
-            <ExternalLink size={14} /> Voir sur Jellyfin
+            <ExternalLink size={14} /> {t('radarr.viewOnJellyfin')}
           </a>
         )}
       </div>
@@ -321,7 +323,7 @@ export default function RadarrMovieDetailPage() {
               ))}
               {jfItem && (
                 <span className={`badge ${isWatched ? "bg-emerald-500/25 text-emerald-300" : "bg-white/10 text-white/60"}`}>
-                  {isWatched ? "Vu" : "Non vu"}
+                  {isWatched ? t('common.watched') : t('common.notWatched')}
                   {jfItem.UserData?.PlayCount && jfItem.UserData.PlayCount > 1
                     ? ` (${jfItem.UserData.PlayCount}×)`
                     : ""}
@@ -346,7 +348,7 @@ export default function RadarrMovieDetailPage() {
             disabled={togglingWatched}
           >
             {isWatched ? <Eye size={16} /> : <EyeOff size={16} />}
-            {isWatched ? "Vu" : "Marquer vu"}
+            {isWatched ? t('common.watched') : t('radarr.markAsWatched')}
           </button>
         )}
         {movie.tmdbId > 0 && (
@@ -366,12 +368,12 @@ export default function RadarrMovieDetailPage() {
             disabled={requesting}
           >
             <Send size={14} />
-            {requesting ? "En cours…" : "Demander"}
+            {requesting ? t('common.requesting') : t('common.request')}
           </button>
         )}
         {info?.trailerKey && (
           <button className="btn-ghost px-3" onClick={() => setShowTrailer(true)}>
-            <PlayCircle size={16} /> Bande-annonce
+            <PlayCircle size={16} /> {t('common.trailer')}
           </button>
         )}
         {!isGuest && (
@@ -380,7 +382,7 @@ export default function RadarrMovieDetailPage() {
               <Info size={16} /> NFO
             </button>
             <button className="btn-primary" onClick={() => setShowSearch(true)}>
-              <Search size={16} /> Recherche interactive
+              <Search size={16} /> {t('common.interactiveSearch')}
             </button>
           </>
         )}
@@ -391,11 +393,11 @@ export default function RadarrMovieDetailPage() {
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           <Info size={15} className="mt-0.5 shrink-0 text-amber-400" />
           <span>
-            Film ajouté et surveillé, mais encore{" "}
+            {t('radarr.releaseNoticePrefix')}{" "}
             <span className="font-medium">
-              {movie.status === "inCinemas" ? "au cinéma" : "non sorti"}
+              {movie.status === "inCinemas" ? t('radarr.inCinemas') : t('radarr.notReleased')}
             </span>
-            . Il sera téléchargé automatiquement dès sa sortie vidéo.
+            {t('radarr.releaseNoticeSuffix')}
           </span>
         </div>
       )}
@@ -410,7 +412,7 @@ export default function RadarrMovieDetailPage() {
               activeTab === tab ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"
             }`}
           >
-            {tab === "infos" ? "Infos" : tab === "casting" ? "Casting" : "Fichier"}
+            {tab === "infos" ? t('radarr.tabInfos') : tab === "casting" ? t('radarr.tabCasting') : t('radarr.tabFile')}
           </button>
         ))}
       </div>
@@ -426,7 +428,7 @@ export default function RadarrMovieDetailPage() {
       {/* ── Settings card ──────────────────────────────────────── */}
       {isGuest ? (
         <div className="card mb-4 flex flex-wrap items-center gap-4 p-4 text-sm text-slate-300">
-          <span className="badge bg-white/5">{movie.monitored ? "Surveillé" : "Non surveillé"}</span>
+          <span className="badge bg-white/5">{movie.monitored ? t('common.monitored') : t('common.notMonitored')}</span>
           {meta?.qualityProfiles?.find((p) => p.id === movie.qualityProfileId) && (
             <span className="badge bg-white/5">
               {meta.qualityProfiles.find((p) => p.id === movie.qualityProfileId)?.name}
@@ -438,10 +440,10 @@ export default function RadarrMovieDetailPage() {
           <Toggle
             checked={movie.monitored}
             onChange={(value) => save({ monitored: value })}
-            label="Surveillé"
+            label={t('common.monitored')}
           />
           <label className="flex items-center gap-2 text-sm text-slate-300">
-            Profil qualité
+            {t('common.qualityProfile')}
             <select
               className="select"
               value={qualityProfileId ?? ""}
@@ -462,7 +464,7 @@ export default function RadarrMovieDetailPage() {
             disabled={deletingFromRadarr}
             className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red-400/70 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
           >
-            <Trash2 size={12} /> Supprimer de Radarr
+            <Trash2 size={12} /> {t('radarr.deleteFromRadarr')}
           </button>
         </div>
       )}
@@ -487,7 +489,7 @@ export default function RadarrMovieDetailPage() {
 
       {/* ── File + Subtitles ────────────────────────────────────── */}
       <div className={activeTab !== "fichier" ? "hidden md:block" : ""}>
-      <Collapsible title="Fichier" icon={<HardDrive size={15} className="text-accent-400" />} className="mb-4">
+      <Collapsible title={t('radarr.tabFile')} icon={<HardDrive size={15} className="text-accent-400" />} className="mb-4">
         {movie.hasFile && movie.movieFile ? (
           <div className="card p-4">
             <div className="flex items-center justify-between gap-3">
@@ -514,7 +516,7 @@ export default function RadarrMovieDetailPage() {
                   onClick={() => setConfirmModal("file")}
                   disabled={deletingFile}
                   className="btn-danger px-2 py-1.5"
-                  title="Supprimer le fichier"
+                  title={t('radarr.deleteFileButton')}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -535,7 +537,7 @@ export default function RadarrMovieDetailPage() {
                     <Captions size={14} className="text-accent-400" />
                     {info.subtitles.map((s, i) => (
                       <span key={i} className="badge bg-white/5 text-slate-300">
-                        {s.name}{s.forced ? " (forcé)" : ""}{s.hi ? " HI" : ""}
+                        {s.name}{s.forced ? ` (${t('radarr.forced')})` : ""}{s.hi ? " HI" : ""}
                       </span>
                     ))}
                   </div>
@@ -544,7 +546,7 @@ export default function RadarrMovieDetailPage() {
             ) : null}
           </div>
         ) : (
-          <div className="card p-4 text-sm text-amber-400">Fichier non téléchargé.</div>
+          <div className="card p-4 text-sm text-amber-400">{t('radarr.fileNotDownloaded')}</div>
         )}
       </Collapsible>
 
@@ -558,7 +560,7 @@ export default function RadarrMovieDetailPage() {
             className="flex items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-600/10 px-4 py-2 text-sm text-accent-400 transition-colors hover:bg-accent-600/20"
           >
             <span className="text-base">🎬</span>
-            Saga · {info.tmdb.collection.name}
+            {t('radarr.saga')} · {info.tmdb.collection.name}
           </button>
         </div>
       )}
@@ -566,7 +568,7 @@ export default function RadarrMovieDetailPage() {
       {/* ── Cast ────────────────────────────────────────────────── */}
       <div className={activeTab !== "casting" ? "hidden md:block" : ""}>
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-        <Collapsible title="Casting" badge={info.tmdb.cast.length} icon={<Film size={15} className="text-accent-400" />}>
+        <Collapsible title={t('radarr.tabCasting')} badge={info.tmdb.cast.length} icon={<Film size={15} className="text-accent-400" />}>
           <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
             {info.tmdb.cast.map((actor) => {
               const isVip = actor.tmdbId === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
@@ -616,7 +618,7 @@ export default function RadarrMovieDetailPage() {
 
       {showSearch && (
         <ReleaseSearchModal
-          title={`Recherche · ${movie.title}`}
+          title={t('radarr.searchModalTitle', { title: movie.title })}
           searchEndpoint={`/api/radarr/movies/${id}/releases`}
           grabEndpoint="/api/radarr/releases"
           onClose={() => setShowSearch(false)}
@@ -624,7 +626,7 @@ export default function RadarrMovieDetailPage() {
       )}
 
       {showTrailer && info?.trailerKey && (
-        <TrailerModal youtubeKey={info.trailerKey} title={`${movie.title} — Bande-annonce`} onClose={() => setShowTrailer(false)} />
+        <TrailerModal youtubeKey={info.trailerKey} title={t('radarr.trailerModalTitle', { title: movie.title })} onClose={() => setShowTrailer(false)} />
       )}
       {showNfo && movie && <MediaInfoModal movie={movie} onClose={() => setShowNfo(false)} />}
 
@@ -632,22 +634,22 @@ export default function RadarrMovieDetailPage() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setConfirmModal(null)}>
           <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-semibold text-white">
-              {confirmModal === "file" ? "Supprimer le fichier ?" : "Supprimer de Radarr ?"}
+              {confirmModal === "file" ? t('radarr.confirmDeleteFile') : t('radarr.confirmDeleteRadarr')}
             </p>
             <p className="mt-1.5 text-xs text-slate-400">
               {confirmModal === "file"
-                ? "Le fichier sera supprimé du disque. Le film restera dans Radarr et pourra être retéléchargé."
-                : `« ${movie?.title} » sera retiré de Radarr. Le fichier sur disque ne sera pas supprimé.`}
+                ? t('radarr.confirmDeleteFileBody')
+                : t('radarr.confirmDeleteRadarrBody', { title: movie?.title ?? "" })}
             </p>
             <div className="mt-4 flex gap-2">
               <button onClick={() => setConfirmModal(null)} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => { setConfirmModal(null); if (confirmModal === "file") deleteFile(); else deleteFromRadarr(); }}
                 className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
               >
-                Supprimer
+                {t('common.delete')}
               </button>
             </div>
           </div>
@@ -660,22 +662,30 @@ export default function RadarrMovieDetailPage() {
   );
 }
 
-const JS_STATUS: Record<number, { label: string; cls: string }> = {
-  2: { label: "En attente", cls: "bg-amber-500/20 text-amber-400" },
-  3: { label: "En traitement", cls: "bg-blue-500/20 text-blue-400" },
-  4: { label: "Partiel", cls: "bg-sky-500/20 text-sky-400" },
-  5: { label: "Disponible", cls: "bg-emerald-500/20 text-emerald-400" },
+const JS_STATUS_CLS: Record<number, string> = {
+  2: "bg-amber-500/20 text-amber-400",
+  3: "bg-blue-500/20 text-blue-400",
+  4: "bg-sky-500/20 text-sky-400",
+  5: "bg-emerald-500/20 text-emerald-400",
 };
 
 function JellyseerrBadge({ status, isNotReleased }: { status: number; isNotReleased?: boolean }) {
+  const t = useT();
+  const JS_STATUS_LABEL: Record<number, string> = {
+    2: t('radarr.jsStatusPending'),
+    3: t('radarr.jsStatusProcessing'),
+    4: t('radarr.jsStatusPartial'),
+    5: t('radarr.jsStatusAvailable'),
+  };
   if (isNotReleased && (status === 2 || status === 3)) {
     return (
       <span className="badge bg-amber-500/20 text-amber-400 backdrop-blur-sm">
-        Attente de sortie
+        {t('radarr.awaitingRelease')}
       </span>
     );
   }
-  const s = JS_STATUS[status];
-  if (!s) return null;
-  return <span className={`badge backdrop-blur-sm ${s.cls}`}>{s.label}</span>;
+  const cls = JS_STATUS_CLS[status];
+  const label = JS_STATUS_LABEL[status];
+  if (!cls) return null;
+  return <span className={`badge backdrop-blur-sm ${cls}`}>{label}</span>;
 }
