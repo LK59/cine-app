@@ -314,14 +314,21 @@ function LanguageSection() {
   const { locale, setLocale } = useLocale();
   const t = useT();
   const [pending, setPending] = useState<Locale | null>(null);
+  const [saving, setSavingLang] = useState(false);
 
   function select(l: Locale) {
     if (l === locale) return;
     setPending(l);
   }
 
-  function apply() {
+  async function apply() {
     if (!pending) return;
+    setSavingLang(true);
+    await fetch("/api/user/preferences", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang: pending }),
+    }).catch(() => null);
     setLocale(pending);
     setTimeout(() => window.location.reload(), 80);
   }

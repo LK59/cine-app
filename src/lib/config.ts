@@ -16,6 +16,7 @@ export const config = {
     adminPassword: optional("APP_ADMIN_PASSWORD", ""),
     sessionSecret: optional("SESSION_SECRET", "change-me-in-production"),
     cookieSecure: optional("COOKIE_SECURE", "false") === "true",
+    language: optional("APP_LANGUAGE", "en"),
   },
   radarr: {
     url: optional("RADARR_URL", "http://radarr:7878"),

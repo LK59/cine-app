@@ -108,7 +108,33 @@ function migrate(db: Database.Database): void {
 
   // Additive migrations — safe to run multiple times
   try { db.exec("ALTER TABLE watchlist ADD COLUMN vote_average REAL"); } catch { /* already exists */ }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id    TEXT    PRIMARY KEY,
+      lang       TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `);
 }
+
+// ─── User preferences ─────────────────────────────────────────────────────────
+
+export const userPrefsDb = {
+  getLang(userId: string, instanceDefault: string): string {
+    const row = getDb()
+      .prepare("SELECT lang FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { lang: string | null } | undefined;
+    return row?.lang ?? instanceDefault;
+  },
+
+  setLang(userId: string, lang: string): void {
+    getDb().prepare(`
+      INSERT INTO user_preferences (user_id, lang, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET lang = excluded.lang, updated_at = excluded.updated_at
+    `).run(userId, lang, Date.now());
+  },
+};
 
 // ─── Watchlist helpers ────────────────────────────────────────────────────────
 
