@@ -42,16 +42,31 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     const instanceDefault = (process.env.NEXT_PUBLIC_APP_LANGUAGE as Locale | undefined);
     const fallback: Locale = (instanceDefault && LOCALES.includes(instanceDefault)) ? instanceDefault : DEFAULT_LOCALE;
-    const detected = getLocaleFromCookie(document.cookie) ?? fallback;
-    if (detected === "fr") {
-      setLocaleState("fr");
-      setT(() => defaultT);
-    } else {
-      setLocaleState(detected);
-      loadLocaleDict(detected).then((dict) => {
-        setT(() => createT(dict, fr));
-      });
+    const cookieLang = getLocaleFromCookie(document.cookie);
+    const detected = cookieLang ?? fallback;
+
+    function applyLocale(l: Locale) {
+      setLocaleState(l);
+      if (l === "fr") {
+        setT(() => defaultT);
+      } else {
+        loadLocaleDict(l).then((dict) => setT(() => createT(dict, fr)));
+      }
     }
+
+    applyLocale(detected);
+
+    // Sync with DB preference — catches cross-device changes without requiring re-login
+    fetch("/api/user/preferences")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const serverLang = data?.lang as string | undefined;
+        if (serverLang && LOCALES.includes(serverLang as Locale) && serverLang !== detected) {
+          document.cookie = `${LOCALE_COOKIE}=${serverLang};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
+          window.location.reload();
+        }
+      })
+      .catch(() => null);
   }, []);
 
   const setLocale = useCallback((l: Locale) => {
