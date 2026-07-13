@@ -324,12 +324,7 @@ function LanguageSection() {
   async function apply() {
     if (!pending) return;
     setSavingLang(true);
-    await fetch("/api/user/preferences", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lang: pending }),
-    }).catch(() => null);
-    setLocale(pending);
+    await setLocale(pending);
     setTimeout(() => window.location.reload(), 80);
   }
 

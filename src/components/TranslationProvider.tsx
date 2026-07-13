@@ -23,7 +23,7 @@ type TFn = (key: string, vars?: Record<string, string | number>) => string;
 interface TranslationContextValue {
   t: TFn;
   locale: Locale;
-  setLocale: (l: Locale) => void;
+  setLocale: (l: Locale) => Promise<void>;
 }
 
 const fr = frDict as Record<string, unknown>;
@@ -32,7 +32,7 @@ const defaultT = createT(fr, fr);
 const TranslationContext = createContext<TranslationContextValue>({
   t: defaultT,
   locale: DEFAULT_LOCALE,
-  setLocale: () => {},
+  setLocale: () => Promise.resolve(),
 });
 
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
@@ -69,15 +69,19 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
       .catch(() => null);
   }, []);
 
-  const setLocale = useCallback((l: Locale) => {
+  const setLocale = useCallback(async (l: Locale) => {
     document.cookie = `${LOCALE_COOKIE}=${l};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
+    await fetch("/api/user/preferences", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang: l }),
+    }).catch(() => null);
     setLocaleState(l);
     if (l === "fr") {
       setT(() => createT(fr, fr));
     } else {
-      loadLocaleDict(l).then((dict) => {
-        setT(() => createT(dict, fr));
-      });
+      const dict = await loadLocaleDict(l);
+      setT(() => createT(dict, fr));
     }
   }, []);
 
