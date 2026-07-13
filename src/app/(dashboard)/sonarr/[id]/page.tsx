@@ -38,6 +38,7 @@ import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
+import { useT } from "@/components/TranslationProvider";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
@@ -83,6 +84,7 @@ export default function SonarrSeriesDetailPage() {
   const { mutate } = useSWRConfig();
   const { isGuest, jfId } = useRole();
   const toast = useToast();
+  const t = useT();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
   const seriesKey = `/api/sonarr/series/${id}`;
   const episodesKey = `/api/sonarr/series/${id}/episodes`;
@@ -167,9 +169,9 @@ export default function SonarrSeriesDetailPage() {
         body: JSON.stringify({ ...series, ...payload }),
       });
       mutate(seriesKey);
-      toast.success("Modifications enregistrées");
+      toast.success(t('sonarr.saveSuccess'));
     } catch {
-      toast.error("Échec de la sauvegarde");
+      toast.error(t('sonarr.saveError'));
     } finally {
       setSaving(false);
     }
@@ -190,10 +192,10 @@ export default function SonarrSeriesDetailPage() {
       });
       if (!res.ok) throw new Error();
       mutateJf();
-      toast.success(newPlayed ? "Série marquée comme vue" : "Série marquée comme non vue");
+      toast.success(newPlayed ? t('sonarr.watchedSuccess') : t('sonarr.unwatchedSuccess'));
     } catch {
       mutateJf(); // rollback
-      toast.error("Échec — vérifiez votre connexion Jellyfin");
+      toast.error(t('sonarr.watchedError'));
     } finally {
       setTogglingWatched(false);
     }
@@ -240,9 +242,9 @@ export default function SonarrSeriesDetailPage() {
       mutateJs();
       await fetch("/api/cache/invalidate", { method: "POST" });
       haptic();
-      toast.success(`Demande envoyée pour « ${series.title} »`);
+      toast.success(t('sonarr.requestSuccess', { title: series.title }));
     } catch {
-      toast.error("Échec de la demande");
+      toast.error(t('sonarr.requestError'));
     } finally {
       setRequesting(false);
     }
@@ -254,16 +256,16 @@ export default function SonarrSeriesDetailPage() {
       const res = await fetch(`/api/sonarr/series/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       await fetch("/api/cache/invalidate", { method: "POST" });
-      toast.success(`« ${series?.title} » supprimé de Sonarr`);
+      toast.success(t('sonarr.deleteSuccess', { title: series?.title ?? "" }));
       router.back();
     } catch {
-      toast.error("Échec de la suppression");
+      toast.error(t('sonarr.deleteError'));
       setDeletingFromSonarr(false);
     }
   }
 
   if (isLoading) return <LoadingState />;
-  if (error || !series) return <ErrorState message={error?.message || "Série introuvable."} />;
+  if (error || !series) return <ErrorState message={error?.message || t('sonarr.seriesNotFound')} />;
 
   const seasonNumbers = [...episodesBySeason.keys()].sort((a, b) => a - b);
   const overview = info?.tmdb?.overview || series.overview;
@@ -297,7 +299,7 @@ export default function SonarrSeriesDetailPage() {
           onClick={() => router.back()}
           className="absolute left-4 top-4 sm:left-6 md:left-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm hover:bg-black/60"
         >
-          <ArrowLeft size={14} /> Retour
+          <ArrowLeft size={14} /> {t('common.back')}
         </button>
         {jfItem && (
           <a
@@ -306,7 +308,7 @@ export default function SonarrSeriesDetailPage() {
             rel="noopener noreferrer"
             className="absolute right-4 top-4 sm:right-6 md:right-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm hover:bg-black/60"
           >
-            <ExternalLink size={14} /> Voir sur Jellyfin
+            <ExternalLink size={14} /> {t('sonarr.viewOnJellyfin')}
           </a>
         )}
       </div>
@@ -334,14 +336,14 @@ export default function SonarrSeriesDetailPage() {
                 </span>
               )}
               {info?.tmdb?.runtime && (
-                <span className="text-xs text-white/60">{info.tmdb.runtime} min/ép.</span>
+                <span className="text-xs text-white/60">{t('sonarr.minPerEp', { n: info.tmdb.runtime })}</span>
               )}
               {info?.tmdb?.genres.slice(0, 3).map((g) => (
                 <span key={g} className="badge bg-white/10 text-white/70 backdrop-blur-sm">{g}</span>
               ))}
               {jfItem && (
                 <span className={`badge ${isWatched ? "bg-emerald-500/25 text-emerald-300" : "bg-white/10 text-white/60"}`}>
-                  {isWatched ? "Vue" : "Non vue"}
+                  {isWatched ? t('sonarr.seriesWatched') : t('sonarr.seriesNotWatched')}
                 </span>
               )}
               {jsData && <JellyseerrBadge status={jsData.status} />}
@@ -363,7 +365,7 @@ export default function SonarrSeriesDetailPage() {
             disabled={togglingWatched}
           >
             {isWatched ? <Eye size={16} /> : <EyeOff size={16} />}
-            {isWatched ? "Vue" : "Marquer vue"}
+            {isWatched ? t('sonarr.seriesWatched') : t('sonarr.markWatched')}
           </button>
         )}
         {series.tmdbId && (
@@ -382,20 +384,20 @@ export default function SonarrSeriesDetailPage() {
             disabled={requesting}
           >
             <Send size={14} />
-            {requesting ? "En cours…" : "Demander"}
+            {requesting ? t('common.requesting') : t('common.request')}
           </button>
         )}
         {info?.trailerKey && (
           <button className="btn-ghost px-3" onClick={() => setShowTrailer(true)}>
-            <PlayCircle size={16} /> Bande-annonce
+            <PlayCircle size={16} /> {t('common.trailer')}
           </button>
         )}
         {!isGuest && (
           <button
             className="btn-primary"
-            onClick={() => setActiveSearch({ title: `Recherche · ${series.title}`, endpoint: `/api/sonarr/series/${id}/releases` })}
+            onClick={() => setActiveSearch({ title: t('sonarr.seriesSearch', { title: series.title }), endpoint: `/api/sonarr/series/${id}/releases` })}
           >
-            <Search size={16} /> Recherche interactive
+            <Search size={16} /> {t('common.interactiveSearch')}
           </button>
         )}
       </div>
@@ -410,7 +412,7 @@ export default function SonarrSeriesDetailPage() {
               activeTab === tab ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"
             }`}
           >
-            {tab === "infos" ? "Infos" : tab === "casting" ? "Casting" : "Saisons"}
+            {tab === "infos" ? t('sonarr.tabInfos') : tab === "casting" ? t('sonarr.tabCasting') : t('sonarr.tabSeasons')}
           </button>
         ))}
       </div>
@@ -426,7 +428,7 @@ export default function SonarrSeriesDetailPage() {
       {/* ── Settings card ──────────────────────────────────────── */}
       {isGuest ? (
         <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 text-sm text-slate-300">
-          <span className="badge bg-white/5">{series.monitored ? "Surveillé" : "Non surveillé"}</span>
+          <span className="badge bg-white/5">{series.monitored ? t('common.monitored') : t('common.notMonitored')}</span>
           {meta?.qualityProfiles?.find((p) => p.id === series.qualityProfileId) && (
             <span className="badge bg-white/5">
               {meta.qualityProfiles.find((p) => p.id === series.qualityProfileId)?.name}
@@ -438,10 +440,10 @@ export default function SonarrSeriesDetailPage() {
           <Toggle
             checked={series.monitored}
             onChange={(value) => saveSeries({ monitored: value })}
-            label="Surveillé"
+            label={t('common.monitored')}
           />
           <label className="flex items-center gap-2 text-sm text-slate-300">
-            Profil qualité
+            {t('common.qualityProfile')}
             <select
               className="select"
               value={qualityProfileId ?? ""}
@@ -462,7 +464,7 @@ export default function SonarrSeriesDetailPage() {
             disabled={deletingFromSonarr}
             className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red-400/70 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
           >
-            <Trash2 size={12} /> Supprimer de Sonarr
+            <Trash2 size={12} /> {t('sonarr.deleteFromSonarr')}
           </button>
         </div>
       )}
@@ -473,7 +475,7 @@ export default function SonarrSeriesDetailPage() {
       {/* ── Cast ────────────────────────────────────────────────── */}
       <div className={activeTab !== "casting" ? "hidden md:block" : ""}>
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-        <Collapsible title="Casting" badge={info.tmdb.cast.length} icon={<Tv size={15} className="text-accent-400" />} className="mb-6">
+        <Collapsible title={t('sonarr.tabCasting')} badge={info.tmdb.cast.length} icon={<Tv size={15} className="text-accent-400" />} className="mb-6">
           <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
             {info.tmdb.cast.map((actor) => {
               const isVip = actor.tmdbId === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
@@ -514,8 +516,8 @@ export default function SonarrSeriesDetailPage() {
 
       {/* ── Saisons ─────────────────────────────────────────────── */}
       <div className={activeTab !== "saisons" ? "hidden md:block" : ""}>
-      <h2 className="mb-3 text-sm font-semibold text-white">Saisons</h2>
-      {episodesError && <ErrorState message="Impossible de charger les épisodes." />}
+      <h2 className="mb-3 text-sm font-semibold text-white">{t('sonarr.seasons')}</h2>
+      {episodesError && <ErrorState message={t('sonarr.episodesLoadError')} />}
 
       <div className="space-y-2">
             {seasonNumbers.map((seasonNumber) => {
@@ -532,15 +534,15 @@ export default function SonarrSeriesDetailPage() {
                   >
                     <div className="flex items-center gap-2 text-sm text-white">
                       {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      Saison {seasonNumber === 0 ? "spéciale" : seasonNumber}
+                      {seasonNumber === 0 ? t('sonarr.seasonSpecial') : t('sonarr.seasonLabel', { n: String(seasonNumber) })}
                       <span className="text-xs text-slate-500">
-                        {fileCount}/{seasonEpisodes.length} épisodes
+                        {t('sonarr.episodesCount', { file: String(fileCount), total: String(seasonEpisodes.length) })}
                       </span>
                     </div>
                     <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                       {isGuest ? (
                         <span className="badge bg-white/5 text-xs">
-                          {seasonMeta?.monitored ? "Surveillé" : "Non surveillé"}
+                          {seasonMeta?.monitored ? t('common.monitored') : t('common.notMonitored')}
                         </span>
                       ) : (
                         <>
@@ -548,12 +550,12 @@ export default function SonarrSeriesDetailPage() {
                             className="btn-ghost px-2 py-1 text-xs"
                             onClick={() =>
                               setActiveSearch({
-                                title: `Recherche · Saison ${seasonNumber}`,
+                                title: t('sonarr.searchSeason', { n: String(seasonNumber) }),
                                 endpoint: `/api/sonarr/series/${id}/releases?seasonNumber=${seasonNumber}`,
                               })
                             }
                           >
-                            <Search size={12} /> Rechercher
+                            <Search size={12} /> {t('common.search')}
                           </button>
                           <Toggle
                             checked={seasonMeta?.monitored ?? false}
@@ -601,7 +603,7 @@ export default function SonarrSeriesDetailPage() {
                                   className="btn-ghost px-2 py-1"
                                   onClick={() =>
                                     setActiveSearch({
-                                      title: `Recherche · ${ep.title}`,
+                                      title: t('sonarr.episodeSearch', { title: ep.title }),
                                       endpoint: `/api/sonarr/series/${id}/releases?episodeId=${ep.id}`,
                                     })
                                   }
@@ -638,7 +640,7 @@ export default function SonarrSeriesDetailPage() {
       </div>{/* end saisons tab */}
 
       {showTrailer && info?.trailerKey && (
-        <TrailerModal youtubeKey={info.trailerKey} title={`${series.title} — Bande-annonce`} onClose={() => setShowTrailer(false)} />
+        <TrailerModal youtubeKey={info.trailerKey} title={t('sonarr.trailerModalTitle', { title: series.title })} onClose={() => setShowTrailer(false)} />
       )}
       {activeSearch && (
         <ReleaseSearchModal
@@ -652,19 +654,19 @@ export default function SonarrSeriesDetailPage() {
       {showDeleteConfirm && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}>
           <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-semibold text-white">Supprimer de Sonarr ?</p>
+            <p className="text-sm font-semibold text-white">{t('sonarr.confirmDeleteSonarr')}</p>
             <p className="mt-1.5 text-xs text-slate-400">
-              {`« ${series.title} » sera retiré de Sonarr. Les fichiers sur disque ne seront pas supprimés.`}
+              {t('sonarr.confirmDeleteBody', { title: series.title })}
             </p>
             <div className="mt-4 flex gap-2">
               <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => { setShowDeleteConfirm(false); deleteFromSonarr(); }}
                 className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
               >
-                Supprimer
+                {t('common.delete')}
               </button>
             </div>
           </div>
@@ -677,15 +679,23 @@ export default function SonarrSeriesDetailPage() {
   );
 }
 
-const JS_STATUS: Record<number, { label: string; cls: string }> = {
-  2: { label: "En attente", cls: "bg-amber-500/20 text-amber-400" },
-  3: { label: "En traitement", cls: "bg-blue-500/20 text-blue-400" },
-  4: { label: "Partiel", cls: "bg-sky-500/20 text-sky-400" },
-  5: { label: "Disponible", cls: "bg-emerald-500/20 text-emerald-400" },
+const JS_STATUS_CLS: Record<number, string> = {
+  2: "bg-amber-500/20 text-amber-400",
+  3: "bg-blue-500/20 text-blue-400",
+  4: "bg-sky-500/20 text-sky-400",
+  5: "bg-emerald-500/20 text-emerald-400",
 };
 
 function JellyseerrBadge({ status }: { status: number }) {
-  const s = JS_STATUS[status];
-  if (!s) return null;
-  return <span className={`badge backdrop-blur-sm ${s.cls}`}>{s.label}</span>;
+  const t = useT();
+  const JS_STATUS_LABEL: Record<number, string> = {
+    2: t('sonarr.jsStatusPending'),
+    3: t('sonarr.jsStatusProcessing'),
+    4: t('sonarr.jsStatusPartial'),
+    5: t('sonarr.jsStatusAvailable'),
+  };
+  const cls = JS_STATUS_CLS[status];
+  const label = JS_STATUS_LABEL[status];
+  if (!cls) return null;
+  return <span className={`badge backdrop-blur-sm ${cls}`}>{label}</span>;
 }

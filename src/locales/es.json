@@ -245,7 +245,13 @@
     "addFailed": "Error al añadir",
     "addSeriesPlaceholder": "Título de la serie...",
     "alreadyAdded": "Ya añadido",
-    "addedToSonarr": "« {title} » añadido a Sonarr"
+    "addedToSonarr": "« {title} » añadido a Sonarr",
+    "trailerModalTitle": "{title} — Tráiler",
+    "jsStatusPending": "En espera",
+    "jsStatusProcessing": "Procesando",
+    "jsStatusPartial": "Parcial",
+    "jsStatusAvailable": "Disponible",
+    "minPerEp": "{n} min/ep."
   },
   "qbittorrent": {
     "pageTitle": "Descargas",
