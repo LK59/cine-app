@@ -601,6 +601,9 @@
       "abandoned": "Abandoned"
     }
   },
+  "similar": {
+    "title": "More like this"
+  },
   "discover": {
     "pageTitle": "Discover",
     "subtitle": "TMDB trends this week — request or search directly",

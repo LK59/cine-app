@@ -601,6 +601,9 @@
       "abandoned": "Abgebrochen"
     }
   },
+  "similar": {
+    "title": "Im gleichen Genre"
+  },
   "discover": {
     "pageTitle": "Entdecken",
     "subtitle": "TMDB-Trends dieser Woche — direkt anfragen oder suchen",
