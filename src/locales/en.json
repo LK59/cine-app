@@ -881,5 +881,18 @@
     "tracks": "Tracks",
     "languages": "Languages",
     "additionalFormats": "Additional formats"
+  },
+  "errors": {
+    "unexpected": "Unexpected error",
+    "appCrashed": "The application encountered a problem.",
+    "pageCrashed": "An error occurred",
+    "pageError": "Something went wrong on this page.",
+    "retry": "Try again"
+  },
+  "sse": {
+    "downloadStartedTitle": "Download started",
+    "downloadStartedToast": "Download started: {title}",
+    "downloadCompleteTitle": "Download complete",
+    "downloadCompleteToast": "Download complete: {title}"
   }
 }

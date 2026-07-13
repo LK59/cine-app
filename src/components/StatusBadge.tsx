@@ -1,4 +1,9 @@
+"use client";
+
+import { useT } from "@/components/TranslationProvider";
+
 export function StatusBadge({ up, label }: { up: boolean; label?: string }) {
+  const t = useT();
   return (
     <span
       className={`badge ${
@@ -6,7 +11,7 @@ export function StatusBadge({ up, label }: { up: boolean; label?: string }) {
       }`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${up ? "bg-emerald-400" : "bg-red-400"}`} />
-      {label ?? (up ? "En ligne" : "Hors ligne")}
+      {label ?? (up ? t('health.statusOnline') : t('health.statusOffline'))}
     </span>
   );
 }

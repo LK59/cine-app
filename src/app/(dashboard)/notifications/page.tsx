@@ -6,10 +6,12 @@ import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
 import { NOTIFICATION_CATEGORIES, getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
+import { useT } from "@/components/TranslationProvider";
 
 type TestState = "idle" | "sending" | "sent" | "error";
 
 export default function NotificationsPage() {
+  const t = useT();
   const [preferences, setPreferences] = useState<Record<NotificationCategory, boolean>>(getDefaultNotificationPreferences);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [saving, setSaving] = useState<NotificationCategory | null>(null);
@@ -66,13 +68,15 @@ export default function NotificationsPage() {
     }, 1000);
   }, [countdown]);
 
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
 
   return (
     <div>
       <PageHeader
-        title="Notifications"
-        subtitle="Gère les alertes push de la PWA par appareil et par catégorie"
+        title={t('notifications.pageTitle')}
+        subtitle={t('notifications.subtitle')}
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -83,14 +87,14 @@ export default function NotificationsPage() {
                 <Bell size={18} />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-white">Cet appareil</h2>
-                <p className="mt-0.5 text-xs text-slate-500">L’activation reste propre à chaque navigateur ou PWA installée.</p>
+                <h2 className="text-base font-semibold text-white">{t('notifications.thisDevice')}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">{t('notifications.deviceNotice')}</p>
               </div>
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-white">Notifications push</p>
-                <p className="mt-0.5 text-xs text-slate-500">Active ou désactive cet appareil.</p>
+                <p className="text-sm font-medium text-white">{t('notifications.pushNotifications')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('notifications.pushDescription')}</p>
               </div>
               <PushToggle />
             </div>
@@ -98,15 +102,15 @@ export default function NotificationsPage() {
 
           <section className="card p-5">
             <div className="mb-5">
-              <h2 className="text-base font-semibold text-white">Catégories</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Choisis les alertes que tu veux recevoir.</p>
+              <h2 className="text-base font-semibold text-white">{t('notifications.categories')}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{t('notifications.categoriesDescription')}</p>
             </div>
             <div className="divide-y divide-white/5">
               {NOTIFICATION_CATEGORIES.map((category) => (
                 <div key={category.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-white">{category.label}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{category.description}</p>
+                    <p className="text-sm font-medium text-white">{t(category.labelKey)}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t(category.descKey)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {saving === category.id && <Loader2 size={13} className="animate-spin text-slate-500" />}
@@ -123,8 +127,8 @@ export default function NotificationsPage() {
 
         <aside className="card h-fit p-5">
           <div className="mb-5">
-            <h2 className="text-base font-semibold text-white">Test</h2>
-            <p className="mt-0.5 text-xs text-slate-500">Envoie une notification de test dans 5 secondes.</p>
+            <h2 className="text-base font-semibold text-white">{t('notifications.test')}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{t('notifications.testDescription')}</p>
           </div>
           <button
             onClick={startTest}
@@ -134,20 +138,20 @@ export default function NotificationsPage() {
             {countdown !== null || testState === "sending" ? (
               <>
                 <Loader2 size={15} className="animate-spin" />
-                {countdown !== null ? `Envoi dans ${countdown}s` : "Envoi…"}
+                {countdown !== null ? t('notifications.sendingIn', { n: countdown }) : t('notifications.sending')}
               </>
             ) : (
               <>
                 <Send size={15} />
-                Tester
+                {t('notifications.testButton')}
               </>
             )}
           </button>
           {testState === "sent" && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> Notification envoyée</p>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> {t('notifications.sent')}</p>
           )}
           {testState === "error" && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><XCircle size={13} /> Envoi impossible</p>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><XCircle size={13} /> {t('notifications.sendError')}</p>
           )}
         </aside>
       </div>

@@ -881,5 +881,18 @@
     "tracks": "Pistas",
     "languages": "Idiomas",
     "additionalFormats": "Formatos adicionales"
+  },
+  "errors": {
+    "unexpected": "Error inesperado",
+    "appCrashed": "La aplicación encontró un problema.",
+    "pageCrashed": "Se produjo un error",
+    "pageError": "Algo salió mal en esta página.",
+    "retry": "Intentar de nuevo"
+  },
+  "sse": {
+    "downloadStartedTitle": "Descarga iniciada",
+    "downloadStartedToast": "Descarga iniciada: {title}",
+    "downloadCompleteTitle": "Descarga completada",
+    "downloadCompleteToast": "Descarga completada: {title}"
   }
 }

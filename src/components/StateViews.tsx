@@ -1,10 +1,14 @@
-import { Loader2, AlertTriangle, Inbox, WifiOff } from "lucide-react";
+"use client";
 
-export function LoadingState({ label = "Chargement..." }: { label?: string }) {
+import { Loader2, AlertTriangle, Inbox, WifiOff } from "lucide-react";
+import { useT } from "@/components/TranslationProvider";
+
+export function LoadingState({ label }: { label?: string }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-2 py-12 text-sm text-slate-400">
       <Loader2 size={18} className="animate-spin" />
-      {label}
+      {label ?? t('common.loading')}
     </div>
   );
 }
@@ -32,11 +36,12 @@ export function EmptyState({ label }: { label: string }) {
  * Does not prevent the rest of the page from rendering.
  */
 export function ServiceDownBanner({ service, error }: { service: string; error?: string | null }) {
+  const t = useT();
   return (
     <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-400">
       <WifiOff size={14} className="shrink-0" />
       <span>
-        <strong>{service}</strong> est temporairement indisponible
+        {t('common.serviceDown', { service })}
         {error ? ` — ${error}` : ""}
       </span>
     </div>

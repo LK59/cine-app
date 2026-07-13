@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useToast } from "@/components/Toast";
+import { useT } from "@/components/TranslationProvider";
 
 interface PendingTitle {
   title: string;
@@ -38,6 +39,7 @@ function showNotif(title: string, body: string) {
 
 export function SSENotifier() {
   const toast = useToast();
+  const t = useT();
   // Titles of the current user's pending Jellyseerr requests, updated periodically
   const pendingTitles = useRef<PendingTitle[]>([]);
 
@@ -87,8 +89,8 @@ export function SSENotifier() {
           const { name } = JSON.parse(e.data) as { name: string };
           const title = matchedTitle(name);
           if (title) {
-            showNotif("Téléchargement démarré", title);
-            toast.info(`Téléchargement démarré : ${title}`);
+            showNotif(t('sse.downloadStartedTitle'), title);
+            toast.info(t('sse.downloadStartedToast', { title }));
           }
         } catch {}
       });
@@ -97,8 +99,8 @@ export function SSENotifier() {
         try {
           const { name } = JSON.parse(e.data) as { name: string };
           const title = matchedTitle(name) ?? name;
-          showNotif("Téléchargement terminé", title);
-          toast.success(`Téléchargement terminé : ${title}`);
+          showNotif(t('sse.downloadCompleteTitle'), title);
+          toast.success(t('sse.downloadCompleteToast', { title }));
         } catch {}
       });
 
