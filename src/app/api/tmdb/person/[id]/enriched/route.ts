@@ -11,8 +11,15 @@ export interface EnrichedPersonData {
   wikiBio: string | null;    // Wikipedia extract in FR (or EN fallback)
 }
 
-async function fetchWikipediaBio(name: string, wikidataId: string | null): Promise<{ bio: string | null; url: string | null }> {
-  // Try French Wikipedia first using the person's name directly
+function wikiLangOrder(locale: string): string[] {
+  if (locale.startsWith("es")) return ["es", "en", "fr"];
+  if (locale.startsWith("en")) return ["en", "fr"];
+  return ["fr", "en"];
+}
+
+async function fetchWikipediaBio(name: string, wikidataId: string | null, locale: string): Promise<{ bio: string | null; url: string | null }> {
+  const langOrder = wikiLangOrder(locale);
+
   const tryLang = async (lang: string, title: string) => {
     try {
       const res = await fetch(
@@ -26,7 +33,7 @@ async function fetchWikipediaBio(name: string, wikidataId: string | null): Promi
     } catch { return null; }
   };
 
-  // If we have a Wikidata ID, resolve it to a Wikipedia page title (more precise)
+  // If we have a Wikidata ID, resolve titles for all target languages at once
   if (wikidataId) {
     try {
       const wdRes = await fetch(
@@ -35,35 +42,35 @@ async function fetchWikipediaBio(name: string, wikidataId: string | null): Promi
       );
       if (wdRes.ok) {
         const wdData = await wdRes.json() as { entities?: Record<string, { sitelinks?: Record<string, { title: string }> }> };
-        const entity = wdData.entities?.[wikidataId];
-        const frTitle = entity?.sitelinks?.frwiki?.title;
-        const enTitle = entity?.sitelinks?.enwiki?.title;
-        if (frTitle) {
-          const result = await tryLang("fr", frTitle);
-          if (result) return result;
-        }
-        if (enTitle) {
-          const result = await tryLang("en", enTitle);
-          if (result) return result;
+        const sitelinks = wdData.entities?.[wikidataId]?.sitelinks ?? {};
+        for (const lang of langOrder) {
+          const title = sitelinks[`${lang}wiki`]?.title;
+          if (title) {
+            const result = await tryLang(lang, title);
+            if (result) return result;
+          }
         }
       }
     } catch { /* fall through */ }
   }
 
-  // Fallback: search by name
-  const frResult = await tryLang("fr", name);
-  if (frResult) return frResult;
-  return await tryLang("en", name) ?? { bio: null, url: null };
+  // Fallback: search by name in locale order
+  for (const lang of langOrder) {
+    const result = await tryLang(lang, name);
+    if (result) return result;
+  }
+  return { bio: null, url: null };
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
+  const rawLang = req.cookies.get("cine-lang")?.value ?? "fr";
+  const tmdb = createTmdbClient(getTmdbLocale(rawLang));
   const personId = Number(params.id);
   if (!personId || !tmdb.isEnabled()) {
     return NextResponse.json<EnrichedPersonData>({ photos: [], instagram: null, imdb: null, wikipedia: null, wikiBio: null });
   }
 
-  const cacheKey = `enriched:person:${personId}`;
+  const cacheKey = `enriched:person:${personId}:${rawLang}`;
   const data = await withCache<EnrichedPersonData>(cacheKey, TTL.VERY_LONG, async () => {
     const [imagesData, externalIds, personDetails] = await Promise.all([
       tmdb.getPersonImages(personId).catch(() => null),
@@ -85,7 +92,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { bio: wikiBio, url: wikipedia } = await fetchWikipediaBio(
       personDetails?.name ?? "",
-      externalIds?.wikidata_id ?? null
+      externalIds?.wikidata_id ?? null,
+      rawLang
     );
 
     return { photos, instagram, imdb, wikipedia, wikiBio };
