@@ -5,6 +5,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
+import { useT } from "@/components/TranslationProvider";
 
 interface Props {
   mediaType: "movie" | "series";
@@ -21,6 +22,7 @@ export function WatchlistButton({
   mediaType, tmdbId, title, year, posterPath, defaultStatus = "to_watch", size = "md", className = ""
 }: Props) {
   const { mutate } = useSWRConfig();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   const itemKey = `/api/watchlist/item?mediaType=${mediaType}&tmdbId=${tmdbId}`;
@@ -59,7 +61,7 @@ export function WatchlistButton({
   }
 
   const Icon = inList ? BookmarkCheck : Bookmark;
-  const label = inList ? "Retirer de la liste" : "Ajouter à la liste";
+  const label = inList ? t('search.removeFromList') : t('search.addToList');
   const sizeClass = size === "sm" ? "p-1.5" : "px-3 py-1.5";
   const iconSize = size === "sm" ? 13 : 14;
 
@@ -75,7 +77,7 @@ export function WatchlistButton({
       } ${className}`}
     >
       <Icon size={iconSize} />
-      {size === "md" && <span className="text-xs">{inList ? "Dans la liste" : "Ajouter"}</span>}
+      {size === "md" && <span className="text-xs">{inList ? t('search.removeFromList') : t('common.add')}</span>}
     </button>
   );
 }

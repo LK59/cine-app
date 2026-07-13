@@ -7,6 +7,7 @@ import { Modal } from "@/components/Modal";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { ArrowDown, ArrowUp, Download, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import { useT } from "@/components/TranslationProvider";
 
 interface Release {
   guid: string;
@@ -37,6 +38,7 @@ export function ReleaseSearchModal({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const t = useT();
   const [grabbing, setGrabbing] = useState<string | null>(null);
   const [grabbed, setGrabbed] = useState<Set<string>>(new Set());
   const [grabError, setGrabError] = useState<string | null>(null);
@@ -55,13 +57,13 @@ export function ReleaseSearchModal({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Échec du téléchargement");
+        throw new Error(body.error || t('modals.releases.downloadError'));
       }
       setGrabbed((prev) => new Set(prev).add(release.guid));
-      toast.success(`Téléchargement lancé · ${release.quality?.quality?.name}`);
+      toast.success(t('modals.releases.downloadSuccess', { quality: release.quality?.quality?.name ?? '?' }));
     } catch (err) {
-      setGrabError(err instanceof Error ? err.message : "Erreur inconnue");
-      toast.error("Échec du téléchargement");
+      setGrabError(err instanceof Error ? err.message : t('modals.releases.unknown'));
+      toast.error(t('modals.releases.downloadError'));
     } finally {
       setGrabbing(null);
     }
@@ -73,10 +75,10 @@ export function ReleaseSearchModal({
 
   return (
     <Modal title={title} onClose={onClose} wide>
-      {isLoading && <LoadingState label="Recherche en cours sur les indexeurs..." />}
-      {error && <ErrorState message={error.message || "Recherche impossible."} />}
+      {isLoading && <LoadingState label={t('modals.releases.searching')} />}
+      {error && <ErrorState message={error.message || t('modals.releases.error')} />}
       {grabError && <ErrorState message={grabError} />}
-      {data && sorted.length === 0 && <EmptyState label="Aucun résultat trouvé." />}
+      {data && sorted.length === 0 && <EmptyState label={t('modals.releases.noResults')} />}
 
       {sorted.length > 0 && (
         <div className="scrollbar-thin max-h-[60vh] space-y-2 overflow-y-auto">
@@ -126,10 +128,10 @@ export function ReleaseSearchModal({
                 >
                   <Download size={14} />
                   {grabbed.has(release.guid)
-                    ? "Envoyé"
+                    ? t('modals.releases.sent')
                     : grabbing === release.guid
-                      ? "..."
-                      : "Télécharger"}
+                      ? t('modals.releases.sending')
+                      : t('modals.releases.download')}
                 </button>
               </div>
             </div>

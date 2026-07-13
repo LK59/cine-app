@@ -9,6 +9,7 @@ import { Modal } from "@/components/Modal";
 import { Film, BookCheck, Plus, Loader2, Star, Library } from "lucide-react";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { useToast } from "@/components/Toast";
+import { useT } from "@/components/TranslationProvider";
 
 interface CollectionPart {
   tmdbId: number;
@@ -22,6 +23,7 @@ interface CollectionPart {
 
 function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: number) => void }) {
   const toast = useToast();
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const isInLib = part.inLibrary || added;
@@ -39,9 +41,9 @@ function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: numbe
       if (!res.ok) throw new Error();
       setAdded(true);
       onAdded(part.tmdbId);
-      toast.success(`${part.title} ajouté`);
+      toast.success(t('modals.actor.addedToast', { title: part.title }));
     } catch {
-      toast.error("Erreur lors de l'ajout");
+      toast.error(t('modals.actor.addErrorToast'));
     } finally {
       setAdding(false);
     }
@@ -85,7 +87,7 @@ function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: numbe
             className="mt-auto flex items-center justify-center gap-1 rounded bg-accent-600/20 py-1 text-[11px] text-accent-400 transition-colors hover:bg-accent-600/30 disabled:opacity-50"
           >
             {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
-            {adding ? "Ajout…" : "Ajouter"}
+            {adding ? t('common.adding') : t('common.add')}
           </button>
         )}
       </div>
@@ -110,6 +112,7 @@ export function CollectionModal({
   collectionName: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useSWR<{ name: string; overview: string; parts: CollectionPart[] }>(
@@ -127,7 +130,7 @@ export function CollectionModal({
       {isLoading && (
         <div className="flex items-center gap-2 py-8 text-sm text-slate-400">
           <Loader2 size={16} className="animate-spin" />
-          Chargement de la saga…
+          {t('collection.loading')}
         </div>
       )}
 
@@ -139,7 +142,7 @@ export function CollectionModal({
         <div className="mb-5">
           <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
             <Library size={13} />
-            Dans la bibliothèque ({inLibrary.length}/{parts.length})
+            {t('collection.inLibrary', { n: inLibrary.length, total: parts.length })}
           </h3>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
             {inLibrary.map((p) => (
@@ -153,7 +156,7 @@ export function CollectionModal({
         <div>
           <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             <Film size={13} />
-            À ajouter ({missing.length})
+            {t('collection.toAdd', { n: missing.length })}
           </h3>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
             {missing.map((p) => (

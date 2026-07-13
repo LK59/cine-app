@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
-import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { withCache, cachedMovies } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export interface SimilarMovie {
   inLibrary: boolean;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const id = Number(params.id);
   if (!tmdb.isEnabled()) return NextResponse.json({ items: [] });
 

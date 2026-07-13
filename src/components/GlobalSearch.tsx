@@ -14,6 +14,7 @@ import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/ap
 import { posterUrl } from "@/lib/images";
 import { useSWRConfig } from "swr";
 import { useRole } from "@/lib/useRole";
+import { useT } from "@/components/TranslationProvider";
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
@@ -168,6 +169,7 @@ export function GlobalSearch() {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const { role } = useRole();
+  const t = useT();
   const [searchDebug, setSearchDebug] = useState(false);
 
   useEffect(() => {
@@ -183,8 +185,8 @@ export function GlobalSearch() {
 
   // Debounce query for API call
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
   }, [query]);
 
   // Preload library data
@@ -326,7 +328,7 @@ export function GlobalSearch() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
             onKeyDown={handleKeyDown}
-            placeholder="Titre, acteur, réalisateur… (ex: avec Brad Pitt)"
+            placeholder={t('search.placeholder')}
             className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none"
           />
           {remoteLoading && <Loader2 size={14} className="shrink-0 animate-spin text-slate-500" />}
@@ -339,7 +341,7 @@ export function GlobalSearch() {
           {/* ── Library results ── */}
           {libraryResults.length > 0 && (
             <div>
-              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Dans votre bibliothèque</p>
+              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('search.inLibrary')}</p>
               {libraryResults.map((r, i) => {
                 const isActive = i === cursor;
                 const wKey = `${r.type}:${r.tmdbId}`;
@@ -369,12 +371,12 @@ export function GlobalSearch() {
                       <button
                         onClick={() => navigate(r.href)}
                         className="rounded bg-white/5 p-1.5 text-slate-400 hover:bg-white/10"
-                        title="Voir la fiche"
+                        title={t('search.viewSheet')}
                       ><Film size={12} /></button>
                       <button
                         onClick={() => toggleWatchlist(r)}
                         className={`rounded p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
-                        title={inList ? "Retirer de la liste" : "Ajouter à la liste"}
+                        title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
                       </button>
@@ -388,7 +390,7 @@ export function GlobalSearch() {
           {/* ── Persons ── */}
           {persons.length > 0 && (
             <div>
-              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Personnes</p>
+              <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('search.people')}</p>
               {persons.map((p, i) => {
                 const idx = libraryResults.length + i;
                 const isVip = p.id === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
@@ -410,14 +412,14 @@ export function GlobalSearch() {
                       <p className="truncate text-xs text-slate-500">{p.department}{p.knownFor.length > 0 ? ` · ${p.knownFor.slice(0, 2).join(", ")}` : ""}</p>
                       {p.libraryTitles.length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-1">
-                          {p.libraryTitles.map((t) => (
-                            <span key={t} className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{t}</span>
+                          {p.libraryTitles.map((title) => (
+                            <span key={title} className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{title}</span>
                           ))}
                         </div>
                       )}
                     </div>
                     {p.libraryCount > 0
-                      ? <span className="shrink-0 text-xs font-medium text-accent-400">{p.libraryCount} dans ta biblio</span>
+                      ? <span className="shrink-0 text-xs font-medium text-accent-400">{t('search.libraryCount', { n: p.libraryCount })}</span>
                       : <User size={12} className={`shrink-0 ${isVip ? "text-yellow-400" : "text-slate-500"}`} />
                     }
                   </button>
@@ -430,7 +432,7 @@ export function GlobalSearch() {
           {tmdbResults.length > 0 && (
             <div>
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Pas dans la bibliothèque
+                {t('search.notInLibrary')}
               </p>
               {tmdbResults.slice(0, 6).map((r, i) => {
                 const idx = libraryResults.length + persons.length + i;
@@ -468,15 +470,15 @@ export function GlobalSearch() {
                         onClick={() => requestMedia(r)}
                         disabled={isRequesting}
                         className="flex items-center gap-1 rounded bg-accent-500/20 px-2 py-1 text-[11px] text-accent-400 hover:bg-accent-500/30 disabled:opacity-50"
-                        title="Demander via Jellyseerr"
+                        title={t('search.requestViaJellyseerr')}
                       >
                         <Send size={10} />
-                        {isRequesting ? "…" : "Demander"}
+                        {isRequesting ? "…" : t('search.request')}
                       </button>
                       <button
                         onClick={() => toggleWatchlist(r)}
                         className={`rounded p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
-                        title={inList ? "Retirer de la liste" : "Ajouter à la liste"}
+                        title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
                       </button>
@@ -488,28 +490,28 @@ export function GlobalSearch() {
           )}
 
           {showEmpty && (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">Aucun résultat pour « {query} »</p>
+            <p className="px-4 py-6 text-center text-sm text-slate-500">{t('search.noResults', { query })}</p>
           )}
 
           {!query && (
             <div className="hidden md:flex items-center justify-between px-4 py-3 text-xs text-slate-500">
-              <span>↑↓ naviguer · Entrée sélectionner</span>
-              <span><kbd className="rounded bg-white/10 px-1.5 py-0.5">⌘K</kbd> ouvrir/fermer</span>
+              <span>{t('search.keyboardHint')}</span>
+              <span>{t('search.shortcutHint')}</span>
             </div>
           )}
 
           {role === "admin" && searchDebug && remoteData?.debug && query && (
             <div className="border-t border-white/10 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <p className="font-semibold uppercase tracking-wider text-amber-400/80">Debug recherche</p>
-              <p>normalisé: {remoteData.debug.normalizedQuery}</p>
+              <p className="font-semibold uppercase tracking-wider text-amber-400/80">{t('search.debug.title')}</p>
+              <p>{t('search.debug.normalized')} {remoteData.debug.normalizedQuery}</p>
               <p>
-                naturel: {remoteData.debug.natural.enabled ? "oui" : "non"}
+                {t('search.debug.natural')} {remoteData.debug.natural.enabled ? t('search.debug.yes') : t('search.debug.no')}
                 {" · "}type: {remoteData.debug.natural.mediaType}
-                {" · "}genre: {remoteData.debug.natural.genreName ?? "aucun"}
+                {" · "}genre: {remoteData.debug.natural.genreName ?? t('search.debug.none')}
               </p>
               <p>
-                acteurs: {remoteData.debug.natural.castNames.join(", ") || "aucun"}
-                {" · "}réalisateurs: {remoteData.debug.natural.directorNames.join(", ") || "aucun"}
+                {t('search.debug.actors')} {remoteData.debug.natural.castNames.join(", ") || t('search.debug.none')}
+                {" · "}{t('search.debug.directors')} {remoteData.debug.natural.directorNames.join(", ") || t('search.debug.none')}
               </p>
             </div>
           )}

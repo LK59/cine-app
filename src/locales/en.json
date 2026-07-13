@@ -836,5 +836,50 @@
   },
   "api": {
     "unauthenticated": "Unauthenticated"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "globalSearch": "Global search",
+    "nextItem": "Next item (lists)",
+    "prevItem": "Previous item (lists)",
+    "openItem": "Open selected item",
+    "toggleList": "Add / remove from list (detail)",
+    "tabInfo": "Info tab (detail)",
+    "tabCast": "Cast tab (detail)",
+    "tabFile": "File / Seasons tab (detail)",
+    "showHelp": "Show this help",
+    "close": "Close window / deselect",
+    "hint": "Press {key} to open / close"
+  },
+  "collection": {
+    "loading": "Loading collection…",
+    "inLibrary": "In library ({n}/{total})",
+    "toAdd": "Missing ({n})"
+  },
+  "mediaInfo": {
+    "title": "Technical info",
+    "noFile": "No file available.",
+    "sectionFile": "File",
+    "sectionVideo": "Video",
+    "sectionAudio": "Audio",
+    "sectionSubtitles": "Embedded subtitles",
+    "path": "Path",
+    "size": "Size",
+    "quality": "Quality",
+    "container": "Container",
+    "codec": "Codec",
+    "profile": "Profile",
+    "resolution": "Resolution",
+    "fps": "FPS",
+    "bitDepth": "Bit depth",
+    "bitrate": "Bitrate",
+    "hdr": "HDR",
+    "colorimetry": "Color primaries",
+    "transfer": "Transfer",
+    "scan": "Scan",
+    "channels": "Channels",
+    "tracks": "Tracks",
+    "languages": "Languages",
+    "additionalFormats": "Additional formats"
   }
 }

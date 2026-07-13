@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmdb } from "@/lib/clients/tmdb";
+import { createTmdbClient } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const type = req.nextUrl.searchParams.get("type") ?? "movie";
 

@@ -14,24 +14,8 @@ import type { EnrichedRequest } from "@/lib/jellyseerr-enrich";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-
-const STATUS_LABELS: Record<number, { label: string; className: string }> = {
-  1: { label: "En attente", className: "bg-amber-500/15 text-amber-400" },
-  2: { label: "Approuvée", className: "bg-emerald-500/15 text-emerald-400" },
-  3: { label: "Refusée", className: "bg-red-500/15 text-red-400" },
-  4: { label: "Partielle", className: "bg-blue-500/15 text-blue-400" },
-  5: { label: "Disponible", className: "bg-accent-500/15 text-accent-400" },
-};
-
-// Status mapping for Jellyseerr mediaInfo.status (different from request.status)
-const MEDIA_STATUS: Record<number, { label: string; cls: string }> = {
-  2: { label: "En attente", cls: "bg-amber-500/15 text-amber-400" },
-  3: { label: "En traitement", cls: "bg-blue-500/15 text-blue-400" },
-  4: { label: "Partiel", cls: "bg-sky-500/15 text-sky-400" },
-  5: { label: "Disponible", cls: "bg-emerald-500/15 text-emerald-400" },
-};
-
 import { relDate } from "@/lib/format";
+import { useT } from "@/components/TranslationProvider";
 
 function RequestRow({ r, showActions, onApprove, onDecline }: {
   r: EnrichedRequest;
@@ -39,6 +23,16 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
   onApprove?: () => void;
   onDecline?: () => void;
 }) {
+  const t = useT();
+
+  const STATUS_LABELS: Record<number, { label: string; className: string }> = {
+    1: { label: t('jellyseerr.statusLabels.1'), className: "bg-amber-500/15 text-amber-400" },
+    2: { label: t('jellyseerr.statusLabels.2'), className: "bg-emerald-500/15 text-emerald-400" },
+    3: { label: t('jellyseerr.statusLabels.3'), className: "bg-red-500/15 text-red-400" },
+    4: { label: t('jellyseerr.statusLabels.4'), className: "bg-blue-500/15 text-blue-400" },
+    5: { label: t('jellyseerr.statusLabels.5'), className: "bg-accent-500/15 text-accent-400" },
+  };
+
   const statusInfo = STATUS_LABELS[r.status];
 
   const inner = (
@@ -56,11 +50,11 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-white">
-          {r.media.title || "Sans titre"}
+          {r.media.title || t('jellyseerr.untitled')}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase text-slate-500">
-            {r.media.mediaType === "movie" ? "Film" : "Série"}
+            {r.media.mediaType === "movie" ? t('jellyseerr.mediaTypeMovie') : t('jellyseerr.mediaTypeSeries')}
           </span>
           {statusInfo && (
             <span className={`badge text-[11px] ${statusInfo.className}`}>{statusInfo.label}</span>
@@ -69,16 +63,16 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
         </div>
         {!showActions && r.requestedBy.displayName && (
           <p className="mt-0.5 text-[11px] text-slate-500">
-            par {r.requestedBy.displayName}
+            {t('jellyseerr.requestedBy', { name: r.requestedBy.displayName })}
           </p>
         )}
       </div>
       {showActions && (
         <div className="flex shrink-0 items-center gap-1">
-          <button onClick={onApprove} className="btn-ghost px-2 text-emerald-400" title="Approuver">
+          <button onClick={onApprove} className="btn-ghost px-2 text-emerald-400" title={t('jellyseerr.approve')}>
             <Check size={14} />
           </button>
-          <button onClick={onDecline} className="btn-danger px-2" title="Refuser">
+          <button onClick={onDecline} className="btn-danger px-2" title={t('jellyseerr.deny')}>
             <X size={14} />
           </button>
         </div>
@@ -99,6 +93,7 @@ export default function JellyseerrPage() {
   const { mutate } = useSWRConfig();
   const { isGuest, jfUser } = useRole();
   const toast = useToast();
+  const t = useT();
   const [tab, setTab] = useState<"all" | "mine">(jfUser ? "mine" : "all");
 
   const allKey = isGuest
@@ -126,9 +121,9 @@ export default function JellyseerrPage() {
       });
       if (!res.ok) throw new Error();
       mutate(allKey);
-      toast.success(action === "approve" ? "Demande approuvée" : "Demande refusée");
+      toast.success(action === "approve" ? t('jellyseerr.approveSuccess') : t('jellyseerr.denySuccess'));
     } catch {
-      toast.error("Échec de l'action");
+      toast.error(t('jellyseerr.actionError'));
     }
   }
 
@@ -137,7 +132,7 @@ export default function JellyseerrPage() {
 
   return (
     <div>
-      <PageHeader title="Demandes" />
+      <PageHeader title={t('jellyseerr.pageTitle')} />
 
       {/* Tabs */}
       <div className="mb-6 flex gap-2 border-b border-white/10 pb-0">
@@ -151,7 +146,7 @@ export default function JellyseerrPage() {
             }`}
           >
             <User size={14} />
-            Mes demandes
+            {t('jellyseerr.tabMine')}
             {myRequests.length > 0 && (
               <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[10px] text-accent-400">
                 {myRequests.length}
@@ -168,7 +163,7 @@ export default function JellyseerrPage() {
           }`}
         >
           <ListChecks size={14} />
-          {isGuest ? "Toutes les demandes" : "En attente de validation"}
+          {isGuest ? t('jellyseerr.tabAll') : t('jellyseerr.tabPending')}
           {tab === "all" && allRequests.length > 0 && (
             <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[10px] text-accent-400">
               {allRequests.length}
@@ -182,7 +177,7 @@ export default function JellyseerrPage() {
         <>
           {myLoading && <LoadingState />}
           {!myLoading && myRequests.length === 0 && (
-            <EmptyState label="Aucune demande pour votre compte." />
+            <EmptyState label={t('jellyseerr.emptyMine')} />
           )}
           {myRequests.length > 0 && (
             <div className="card divide-y divide-white/5">
@@ -198,9 +193,9 @@ export default function JellyseerrPage() {
       {tab === "all" && (
         <>
           {allLoading && <LoadingState />}
-          {allError && <ErrorState message="Impossible de contacter Jellyseerr." />}
+          {allError && <ErrorState message={t('jellyseerr.serviceDown')} />}
           {allData && allRequests.length === 0 && (
-            <EmptyState label={isGuest ? "Aucune demande pour le moment." : "Aucune demande en attente."} />
+            <EmptyState label={isGuest ? t('jellyseerr.emptyAll') : t('jellyseerr.emptyPending')} />
           )}
           {allRequests.length > 0 && (
             <div className="card divide-y divide-white/5">

@@ -2,6 +2,7 @@
 
 import { Modal } from "@/components/Modal";
 import type { RadarrMovie } from "@/lib/clients/radarr";
+import { useT } from "@/components/TranslationProvider";
 
 function fmt(bps?: number): string {
   if (!bps) return "—";
@@ -27,6 +28,7 @@ export function MediaInfoModal({
   movie: RadarrMovie;
   onClose: () => void;
 }) {
+  const t = useT();
   const f = movie.movieFile;
   const mi = f?.mediaInfo;
 
@@ -38,62 +40,62 @@ export function MediaInfoModal({
   }
 
   return (
-    <Modal title="Informations techniques" onClose={onClose}>
+    <Modal title={t('mediaInfo.title')} onClose={onClose}>
       {!f ? (
-        <p className="text-sm text-slate-400">Aucun fichier disponible.</p>
+        <p className="text-sm text-slate-400">{t('mediaInfo.noFile')}</p>
       ) : (
         <div className="space-y-5">
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Fichier
+              {t('mediaInfo.sectionFile')}
             </p>
-            <Row label="Chemin" value={f.relativePath} />
-            <Row label="Taille" value={bytes(f.size)} />
-            <Row label="Qualité" value={f.quality?.quality?.name} />
-            <Row label="Container" value={mi?.containerFormat} />
+            <Row label={t('mediaInfo.path')} value={f.relativePath} />
+            <Row label={t('mediaInfo.size')} value={bytes(f.size)} />
+            <Row label={t('mediaInfo.quality')} value={f.quality?.quality?.name} />
+            <Row label={t('mediaInfo.container')} value={mi?.containerFormat} />
           </section>
 
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Vidéo
+              {t('mediaInfo.sectionVideo')}
             </p>
-            <Row label="Codec" value={mi?.videoCodec} />
-            <Row label="Profil" value={mi?.videoProfile} />
-            <Row label="Résolution" value={mi?.resolution} />
-            <Row label="FPS" value={mi?.videoFps ? `${mi.videoFps} fps` : undefined} />
-            <Row label="Bit depth" value={mi?.videoBitDepth ? `${mi.videoBitDepth} bits` : undefined} />
-            <Row label="Bitrate" value={mi?.videoBitrate ? fmt(mi.videoBitrate) : undefined} />
+            <Row label={t('mediaInfo.codec')} value={mi?.videoCodec} />
+            <Row label={t('mediaInfo.profile')} value={mi?.videoProfile} />
+            <Row label={t('mediaInfo.resolution')} value={mi?.resolution} />
+            <Row label={t('mediaInfo.fps')} value={mi?.videoFps ? `${mi.videoFps} fps` : undefined} />
+            <Row label={t('mediaInfo.bitDepth')} value={mi?.videoBitDepth ? `${mi.videoBitDepth} bits` : undefined} />
+            <Row label={t('mediaInfo.bitrate')} value={mi?.videoBitrate ? fmt(mi.videoBitrate) : undefined} />
             <Row
-              label="HDR"
+              label={t('mediaInfo.hdr')}
               value={
                 mi?.videoHdr || mi?.videoDynamicRangeType
                   ? mi?.videoDynamicRangeType || "HDR"
                   : undefined
               }
             />
-            <Row label="Colorimétrie" value={mi?.videoColourPrimaries} />
-            <Row label="Transfert" value={mi?.videoTransferCharacteristics} />
-            <Row label="Scan" value={mi?.scanType} />
+            <Row label={t('mediaInfo.colorimetry')} value={mi?.videoColourPrimaries} />
+            <Row label={t('mediaInfo.transfer')} value={mi?.videoTransferCharacteristics} />
+            <Row label={t('mediaInfo.scan')} value={mi?.scanType} />
           </section>
 
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Audio
+              {t('mediaInfo.sectionAudio')}
             </p>
-            <Row label="Codec" value={mi?.audioCodec} />
-            <Row label="Canaux" value={mi?.audioChannels ? `${mi.audioChannels} ch` : undefined} />
-            <Row label="Pistes" value={mi?.audioStreamCount ? `${mi.audioStreamCount}` : undefined} />
-            <Row label="Bitrate" value={mi?.audioBitrate ? fmt(mi.audioBitrate) : undefined} />
-            <Row label="Langues" value={mi?.audioLanguages} />
-            <Row label="Formats additionnels" value={mi?.audioAdditionalFeatures} />
+            <Row label={t('mediaInfo.codec')} value={mi?.audioCodec} />
+            <Row label={t('mediaInfo.channels')} value={mi?.audioChannels ? `${mi.audioChannels} ch` : undefined} />
+            <Row label={t('mediaInfo.tracks')} value={mi?.audioStreamCount ? `${mi.audioStreamCount}` : undefined} />
+            <Row label={t('mediaInfo.bitrate')} value={mi?.audioBitrate ? fmt(mi.audioBitrate) : undefined} />
+            <Row label={t('mediaInfo.languages')} value={mi?.audioLanguages} />
+            <Row label={t('mediaInfo.additionalFormats')} value={mi?.audioAdditionalFeatures} />
           </section>
 
           {mi?.subtitles && (
             <section>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Sous-titres embarqués
+                {t('mediaInfo.sectionSubtitles')}
               </p>
-              <Row label="Pistes" value={mi.subtitles} />
+              <Row label={t('mediaInfo.tracks')} value={mi.subtitles} />
             </section>
           )}
         </div>

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmdb } from "@/lib/clients/tmdb";
+import { createTmdbClient } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies } from "@/lib/server-cache";
 import { withErrorHandling } from "@/lib/api-helpers";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const collectionId = Number(params.id);
   if (!collectionId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   if (!tmdb.isEnabled()) return NextResponse.json({ parts: [] });

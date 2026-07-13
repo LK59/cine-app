@@ -8,11 +8,13 @@ import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import type { JackettIndexer } from "@/lib/clients/jackett";
 import { useRole } from "@/lib/useRole";
+import { useT } from "@/components/TranslationProvider";
 
 type TestState = "idle" | "testing" | "ok" | "fail";
 
 export default function JackettPage() {
   const { isGuest } = useRole();
+  const t = useT();
   const { data, error, isLoading } = useSWR<JackettIndexer[]>("/api/jackett/indexers", fetcher);
   const [testResults, setTestResults] = useState<Record<string, TestState>>({});
 
@@ -30,13 +32,13 @@ export default function JackettPage() {
   return (
     <div>
       <PageHeader
-        title="Indexeurs"
-        subtitle={data ? `${data.length} indexeurs configurés` : undefined}
+        title={t('jackett.pageTitle')}
+        subtitle={data ? t('jackett.subtitle', { n: data.length }) : undefined}
       />
 
       {isLoading && <LoadingState />}
-      {error && <ErrorState message={error.message || "Impossible de contacter Jackett."} />}
-      {data && data.length === 0 && <EmptyState label="Aucun indexeur configuré." />}
+      {error && <ErrorState message={error.message || t('jackett.serviceDown')} />}
+      {data && data.length === 0 && <EmptyState label={t('jackett.noIndexers')} />}
 
       {data && data.length > 0 && (
         <div className="card divide-y divide-white/5">
@@ -56,7 +58,7 @@ export default function JackettPage() {
                   )}
                   {state === "fail" && (
                     <span className="badge bg-red-500/15 text-red-400">
-                      <XCircle size={12} /> Échec
+                      <XCircle size={12} /> {t('jackett.testFailed')}
                     </span>
                   )}
                   {!isGuest && (
@@ -68,7 +70,7 @@ export default function JackettPage() {
                       {state === "testing" ? (
                         <Loader2 size={12} className="animate-spin" />
                       ) : (
-                        "Tester"
+                        t('jackett.testButton')
                       )}
                     </button>
                   )}

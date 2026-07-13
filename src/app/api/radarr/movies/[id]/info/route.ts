@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
 import { bazarr } from "@/lib/clients/bazarr";
-import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const id = Number(params.id);
   const movie = await radarr.getMovie(id).catch(() => null);
   if (!movie) return NextResponse.json({ error: "Film introuvable" }, { status: 404 });

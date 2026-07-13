@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv } from "@/lib/clients/tmdb";
+import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";

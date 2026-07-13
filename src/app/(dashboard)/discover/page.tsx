@@ -14,6 +14,7 @@ import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { Film, Tv, Star, BookCheck, Telescope, Sparkles, SearchIcon, X, Eye, Heart, Clock, CheckCircle2, PlusCircle, ExternalLink } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import type { WatchlistStatus } from "@/lib/db";
+import { useT } from "@/components/TranslationProvider";
 
 interface DiscoverItem {
   tmdbId: number;
@@ -40,21 +41,6 @@ interface ReleaseModal {
   grabEndpoint: string;
 }
 
-// ─── Status meta ──────────────────────────────────────────────────────────────
-
-const STATUS_META: Record<WatchlistStatus, {
-  label: string;
-  icon: React.ElementType;
-  textColor: string;
-  bgSolid: string;
-}> = {
-  to_watch:   { label: "À voir",     icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
-  to_request: { label: "À demander", icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
-  favorite:   { label: "Favoris",    icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
-  watched:    { label: "Vus",        icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
-  abandoned:  { label: "Abandonnés", icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
-};
-
 const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
 
 // ─── PosterCard ───────────────────────────────────────────────────────────────
@@ -77,8 +63,22 @@ function PosterCard({
   requested: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(null);
+
+  const STATUS_META: Record<WatchlistStatus, {
+    label: string;
+    icon: React.ElementType;
+    textColor: string;
+    bgSolid: string;
+  }> = {
+    to_watch:   { label: t('watchlist.statuses.toWatch'),   icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
+    to_request: { label: t('watchlist.statuses.toRequest'), icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
+    favorite:   { label: t('watchlist.statuses.favorites'), icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
+    watched:    { label: t('watchlist.statuses.watched'),   icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
+    abandoned:  { label: t('watchlist.statuses.abandoned'), icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
+  };
 
   const libraryHref =
     type === "movie" && item.radarrId
@@ -127,9 +127,9 @@ function PosterCard({
       };
     }),
     ...(libraryHref
-      ? [{ label: "Voir la fiche", icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
+      ? [{ label: t('discover.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
       : [{
-          label: requested ? "Demande envoyée ✓" : requesting ? "Envoi…" : "Demander",
+          label: requested ? t('discover.requested') : requesting ? t('common.send') : t('discover.request'),
           icon: <PlusCircle size={16} />,
           onClick: () => onRequest(item),
           disabled: requested || requesting,
@@ -137,7 +137,7 @@ function PosterCard({
         }]
     ),
     ...(isAdmin && !item.inLibrary ? [{
-      label: "Recherche interactive",
+      label: t('discover.interactiveSearch'),
       icon: <Telescope size={16} />,
       onClick: () => onInteractiveSearch(item),
       disabled: requesting,
@@ -169,12 +169,12 @@ function PosterCard({
           {/* In library badge */}
           {item.inLibrary && (
             <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
-              <BookCheck size={8} /> Dispo
+              <BookCheck size={8} /> {t('discover.available')}
             </div>
           )}
           {!item.inLibrary && (item.radarrId || item.sonarrId) && (
             <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
-              <Clock size={8} /> Attente
+              <Clock size={8} /> {t('discover.pending')}
             </div>
           )}
 
@@ -225,7 +225,7 @@ function PosterCard({
                   onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/25 transition-colors"
                 >
-                  <ExternalLink size={9} /> Voir la fiche
+                  <ExternalLink size={9} /> {t('discover.viewSheet')}
                 </Link>
               ) : (
                 <button
@@ -236,14 +236,14 @@ function PosterCard({
                   }`}
                 >
                   <PlusCircle size={9} />
-                  {requested ? "Demandé ✓" : requesting ? "…" : "Demander"}
+                  {requested ? t('discover.requested') : requesting ? "…" : t('discover.request')}
                 </button>
               )}
               {isAdmin && !item.inLibrary && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onInteractiveSearch(item); }}
                   disabled={requesting}
-                  title="Recherche interactive"
+                  title={t('discover.interactiveSearch')}
                   className="flex h-[22px] w-[22px] items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
                 >
                   <Telescope size={9} />
@@ -265,7 +265,7 @@ function PosterCard({
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         title={item.title}
-        subtitle={[item.year, type === "movie" ? "Film" : "Série", item.rating > 0 ? `★ ${item.rating.toFixed(1)}` : null].filter(Boolean).join(" · ")}
+        subtitle={[item.year, type === "movie" ? t('common.film') : t('common.series'), item.rating > 0 ? `★ ${item.rating.toFixed(1)}` : null].filter(Boolean).join(" · ")}
         poster={item.posterPath ? `${TMDB_IMAGE_BASE}/w342${item.posterPath}` : null}
         actions={sheetActions}
       />
@@ -283,6 +283,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
   const { role } = useRole();
   const isAdmin = role === "admin";
   const toast = useToast();
+  const t = useT();
 
   const [genreFilter, setGenreFilter] = useState("");
   const [requesting, setRequesting] = useState<Set<number>>(new Set());
@@ -307,13 +308,13 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Erreur");
+        throw new Error(err.error || t('common.unknown'));
       }
       setRequested((prev) => new Set(prev).add(item.tmdbId));
       fetch("/api/cache/invalidate", { method: "POST" }).catch(() => {});
-      toast.success(`Demande envoyée pour « ${item.title} »`);
+      toast.success(t('discover.requestSuccess', { title: item.title }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Échec de la demande");
+      toast.error(err instanceof Error ? err.message : t('discover.requestError'));
     } finally {
       setRequesting((prev) => {
         const s = new Set(prev);
@@ -332,7 +333,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
         body: JSON.stringify({ type: type === "movie" ? "movie" : "series", tmdbId: item.tmdbId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Erreur");
+      if (!res.ok) throw new Error(data.error || t('common.unknown'));
 
       if (type === "movie" && data.radarrId) {
         setReleaseModal({
@@ -348,7 +349,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
         });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Impossible d'ajouter");
+      toast.error(err instanceof Error ? err.message : t('discover.requestFailure'));
     } finally {
       setAddingSearch(null);
     }
@@ -360,7 +361,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
       <ErrorState
         message={
           error?.status === 503
-            ? "TMDB_API_KEY non configurée — ajoutez-la dans les variables d'environnement."
+            ? t('discover.apiKeyMissing')
             : error.message
         }
       />
@@ -378,7 +379,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
                 : "bg-white/5 text-slate-400 hover:text-slate-200"
             }`}
           >
-            Tous
+            {t('discover.genreAll')}
           </button>
           {data.genres.map((g) => (
             <button
@@ -397,7 +398,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
       )}
 
       {filtered.length === 0 && (
-        <p className="text-sm text-slate-500">Aucun résultat pour ce genre.</p>
+        <p className="text-sm text-slate-500">{t('discover.noResultsGenre')}</p>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -440,6 +441,7 @@ function RecommendationsGrid() {
   const { role } = useRole();
   const isAdmin = role === "admin";
   const toast = useToast();
+  const t = useT();
 
   const [requesting, setRequesting] = useState<Set<number>>(new Set());
   const [requested, setRequested] = useState<Set<number>>(new Set());
@@ -454,12 +456,12 @@ function RecommendationsGrid() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mediaType: item.type ?? "movie", mediaId: item.tmdbId }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Erreur");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('common.unknown'));
       setRequested((prev) => new Set(prev).add(item.tmdbId));
       fetch("/api/cache/invalidate", { method: "POST" }).catch(() => {});
-      toast.success(`Demande envoyée pour « ${item.title} »`);
+      toast.success(t('discover.requestSuccess', { title: item.title }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Échec de la demande");
+      toast.error(err instanceof Error ? err.message : t('discover.requestError'));
     } finally {
       setRequesting((prev) => { const s = new Set(prev); s.delete(item.tmdbId); return s; });
     }
@@ -474,33 +476,33 @@ function RecommendationsGrid() {
         body: JSON.stringify({ type: item.type === "tv" ? "series" : "movie", tmdbId: item.tmdbId }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || "Erreur");
+      if (!res.ok) throw new Error(d.error || t('common.unknown'));
       if (item.type === "movie" && d.radarrId) {
         setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${d.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${d.radarrId}/releases/grab` });
       } else if (item.type === "tv" && d.sonarrId) {
         setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${d.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Impossible d'ajouter");
+      toast.error(err instanceof Error ? err.message : t('discover.requestFailure'));
     } finally {
       setAddingSearch(null);
     }
   }
 
   if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message="Impossible de charger les recommandations." />;
+  if (error) return <ErrorState message={t('common.serviceDown', { service: 'TMDB' })} />;
   if (!data?.hasHistory) {
     return (
       <div className="mt-12 flex flex-col items-center gap-3 text-center">
         <Sparkles size={36} className="text-slate-600" />
         <p className="text-sm text-slate-400">
-          Regardez des films et séries sur Jellyfin pour obtenir des recommandations personnalisées.
+          {t('recommendations.empty')}
         </p>
       </div>
     );
   }
   if (data.items.length === 0) {
-    return <p className="text-sm text-slate-500">Tout ce que vous pourriez aimer est déjà dans votre bibliothèque !</p>;
+    return <p className="text-sm text-slate-500">{t('discover.libraryComplete')}</p>;
   }
 
   return (
@@ -540,6 +542,7 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
   const { role } = useRole();
   const isAdmin = role === "admin";
   const toast = useToast();
+  const t = useT();
 
   const [requesting, setRequesting] = useState<Set<number>>(new Set());
   const [requested, setRequested] = useState<Set<number>>(new Set());
@@ -554,12 +557,12 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mediaType: type === "movie" ? "movie" : "tv", mediaId: item.tmdbId }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Erreur");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('common.unknown'));
       setRequested((prev) => new Set(prev).add(item.tmdbId));
       fetch("/api/cache/invalidate", { method: "POST" }).catch(() => {});
-      toast.success(`Demande envoyée pour « ${item.title} »`);
+      toast.success(t('discover.requestSuccess', { title: item.title }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Échec de la demande");
+      toast.error(err instanceof Error ? err.message : t('discover.requestError'));
     } finally {
       setRequesting((prev) => { const s = new Set(prev); s.delete(item.tmdbId); return s; });
     }
@@ -574,14 +577,14 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
         body: JSON.stringify({ type: type === "tv" ? "series" : "movie", tmdbId: item.tmdbId }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || "Erreur");
+      if (!res.ok) throw new Error(d.error || t('common.unknown'));
       if (type === "movie" && d.radarrId) {
         setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${d.radarrId}/releases`, grabEndpoint: `/api/radarr/movies/${d.radarrId}/releases/grab` });
       } else if (type === "tv" && d.sonarrId) {
         setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${d.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Impossible d'ajouter");
+      toast.error(err instanceof Error ? err.message : t('discover.requestFailure'));
     } finally {
       setAddingSearch(null);
     }
@@ -591,13 +594,13 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
     return (
       <div className="mt-16 flex flex-col items-center gap-2 text-center text-slate-500">
         <SearchIcon size={32} className="text-slate-700" />
-        <p className="text-sm">Tapez au moins 2 caractères pour rechercher</p>
+        <p className="text-sm">{t('discover.searchMinChars')}</p>
       </div>
     );
   }
 
   if (isLoading) return <LoadingState />;
-  if (!data?.items.length) return <p className="mt-8 text-center text-sm text-slate-500">Aucun résultat pour « {query} ».</p>;
+  if (!data?.items.length) return <p className="mt-8 text-center text-sm text-slate-500">{t('discover.noSearchResults', { query })}</p>;
 
   return (
     <div>
@@ -632,12 +635,13 @@ export default function DiscoverPage() {
   const [rawQuery, setRawQuery] = useState("");
   const [query, setQuery] = useState("");
   const { jfId } = useRole();
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Debounce: update query 400ms after user stops typing
   useEffect(() => {
-    const t = setTimeout(() => setQuery(rawQuery.trim()), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setQuery(rawQuery.trim()), 400);
+    return () => clearTimeout(timer);
   }, [rawQuery]);
 
   const isSearching = rawQuery.length > 0;
@@ -646,8 +650,8 @@ export default function DiscoverPage() {
   return (
     <div>
       <PageHeader
-        title="Découverte"
-        subtitle="Tendances TMDB cette semaine — demandez ou recherchez directement"
+        title={t('discover.pageTitle')}
+        subtitle={t('discover.subtitle')}
       />
 
       {/* Search bar */}
@@ -658,7 +662,7 @@ export default function DiscoverPage() {
           type="text"
           value={rawQuery}
           onChange={(e) => setRawQuery(e.target.value)}
-          placeholder="Rechercher dans la base TMDB…"
+          placeholder={t('discover.searchPlaceholder')}
           className="w-full rounded-lg border border-white/10 bg-slate-800/60 py-2.5 pl-9 pr-9 text-sm text-white placeholder:text-slate-500 focus:border-accent-500/50 focus:outline-none focus:ring-1 focus:ring-accent-500/30"
         />
         {rawQuery && (
@@ -683,7 +687,7 @@ export default function DiscoverPage() {
             }`}
           >
             <Sparkles size={16} />
-            Pour vous
+            {t('discover.tabForYou')}
           </button>
         )}
         <button
@@ -695,7 +699,7 @@ export default function DiscoverPage() {
           }`}
         >
           <Film size={16} />
-          Films
+          {t('discover.tabMovies')}
         </button>
         <button
           onClick={() => setTab("tv")}
@@ -706,7 +710,7 @@ export default function DiscoverPage() {
           }`}
         >
           <Tv size={16} />
-          Séries
+          {t('discover.tabSeries')}
         </button>
       </div>
 

@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmdb } from "@/lib/clients/tmdb";
+import { createTmdbClient } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { withErrorHandling } from "@/lib/api-helpers";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const personId = Number(params.id);
   if (!personId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   if (!tmdb.isEnabled()) return NextResponse.json({ credits: [] });
 
   return withErrorHandling(async () => {
     const [personFr, { cast }, movies, series] = await Promise.all([
-      tmdb.getPersonDetails(personId, "fr-FR").catch(() => null),
+      tmdb.getPersonDetails(personId).catch(() => null),
       tmdb.getPersonCredits(personId),
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
@@ -20,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const person =
       personFr?.biography
         ? personFr
-        : await tmdb.getPersonDetails(personId, "en-US").catch(() => personFr);
+        : await tmdb.getPersonDetails(personId).catch(() => personFr);
 
     const movieByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
     const seriesByTmdb = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));

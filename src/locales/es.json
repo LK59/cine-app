@@ -836,5 +836,50 @@
   },
   "api": {
     "unauthenticated": "No autenticado"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "globalSearch": "Búsqueda global",
+    "nextItem": "Elemento siguiente (listas)",
+    "prevItem": "Elemento anterior (listas)",
+    "openItem": "Abrir elemento seleccionado",
+    "toggleList": "Añadir / quitar de la lista (ficha)",
+    "tabInfo": "Pestaña Info (ficha)",
+    "tabCast": "Pestaña Reparto (ficha)",
+    "tabFile": "Pestaña Archivo / Temporadas (ficha)",
+    "showHelp": "Mostrar esta ayuda",
+    "close": "Cerrar ventana / deseleccionar",
+    "hint": "Pulsa {key} para abrir / cerrar"
+  },
+  "collection": {
+    "loading": "Cargando la saga…",
+    "inLibrary": "En biblioteca ({n}/{total})",
+    "toAdd": "Por añadir ({n})"
+  },
+  "mediaInfo": {
+    "title": "Información técnica",
+    "noFile": "Ningún archivo disponible.",
+    "sectionFile": "Archivo",
+    "sectionVideo": "Vídeo",
+    "sectionAudio": "Audio",
+    "sectionSubtitles": "Subtítulos incrustados",
+    "path": "Ruta",
+    "size": "Tamaño",
+    "quality": "Calidad",
+    "container": "Contenedor",
+    "codec": "Codec",
+    "profile": "Perfil",
+    "resolution": "Resolución",
+    "fps": "FPS",
+    "bitDepth": "Profundidad",
+    "bitrate": "Bitrate",
+    "hdr": "HDR",
+    "colorimetry": "Cromaticidad",
+    "transfer": "Transferencia",
+    "scan": "Escaneo",
+    "channels": "Canales",
+    "tracks": "Pistas",
+    "languages": "Idiomas",
+    "additionalFormats": "Formatos adicionales"
   }
 }

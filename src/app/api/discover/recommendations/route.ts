@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
-import { tmdb } from "@/lib/clients/tmdb";
+import { createTmdbClient } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   if (!tmdb.isEnabled()) {
     return NextResponse.json({ error: "TMDB not configured" }, { status: 503 });
   }

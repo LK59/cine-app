@@ -9,6 +9,7 @@ import { SubtitleSearchModal } from "@/components/SubtitleSearchModal";
 import { Captions, Search } from "lucide-react";
 import type { BazarrWantedMovie, BazarrWantedEpisode } from "@/lib/clients/bazarr";
 import { useRole } from "@/lib/useRole";
+import { useT } from "@/components/TranslationProvider";
 
 interface WantedResponse {
   movies: { data: BazarrWantedMovie[]; total: number };
@@ -24,24 +25,25 @@ interface ActiveSearch {
 
 export default function BazarrPage() {
   const { isGuest } = useRole();
+  const t = useT();
   const { data, error, isLoading } = useSWR<WantedResponse>("/api/bazarr/wanted", fetcher);
   const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
 
   return (
     <div>
-      <PageHeader title="Sous-titres" subtitle="Éléments en attente de sous-titres (Bazarr)" />
+      <PageHeader title={t('bazarr.pageTitle')} subtitle={t('bazarr.subtitle')} />
 
       {isLoading && <LoadingState />}
-      {error && <ErrorState message={error.message || "Impossible de contacter Bazarr."} />}
+      {error && <ErrorState message={error.message || t('bazarr.serviceDown')} />}
 
       {data && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="card p-4">
             <h2 className="mb-3 text-sm font-semibold text-white">
-              Films en attente ({data.movies.total})
+              {t('bazarr.moviesWanted', { n: data.movies.total })}
             </h2>
             {data.movies.data.length === 0 ? (
-              <EmptyState label="Rien en attente." />
+              <EmptyState label={t('bazarr.nothingPending')} />
             ) : (
               <ul className="space-y-2">
                 {data.movies.data.map((movie) => (
@@ -54,7 +56,7 @@ export default function BazarrPage() {
                       <div className="min-w-0">
                         <p className="truncate text-slate-200">{movie.title}</p>
                         <p className="truncate text-xs text-slate-500">
-                          Manque : {movie.missing_subtitles.map((s) => s.name).join(", ")}
+                          {t('bazarr.missingLangs', { langs: movie.missing_subtitles.map((s) => s.name).join(", ") })}
                         </p>
                       </div>
                     </div>
@@ -63,13 +65,13 @@ export default function BazarrPage() {
                         className="btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() =>
                           setActiveSearch({
-                            title: `Sous-titres · ${movie.title}`,
+                            title: t('bazarr.modalTitle', { title: movie.title }),
                             searchEndpoint: `/api/bazarr/movies/${movie.radarrId}/subtitles`,
                             downloadEndpoint: `/api/bazarr/movies/${movie.radarrId}/subtitles`,
                           })
                         }
                       >
-                        <Search size={12} /> Rechercher
+                        <Search size={12} /> {t('bazarr.searchButton')}
                       </button>
                     )}
                   </li>
@@ -80,10 +82,10 @@ export default function BazarrPage() {
 
           <div className="card p-4">
             <h2 className="mb-3 text-sm font-semibold text-white">
-              Épisodes en attente ({data.episodes.total})
+              {t('bazarr.episodesWanted', { n: data.episodes.total })}
             </h2>
             {data.episodes.data.length === 0 ? (
-              <EmptyState label="Rien en attente." />
+              <EmptyState label={t('bazarr.nothingPending')} />
             ) : (
               <ul className="space-y-2">
                 {data.episodes.data.map((ep) => (
@@ -98,7 +100,7 @@ export default function BazarrPage() {
                           {ep.seriesTitle} · {ep.episode_number}
                         </p>
                         <p className="truncate text-xs text-slate-500">
-                          Manque : {ep.missing_subtitles.map((s) => s.name).join(", ")}
+                          {t('bazarr.missingLangs', { langs: ep.missing_subtitles.map((s) => s.name).join(", ") })}
                         </p>
                       </div>
                     </div>
@@ -107,14 +109,14 @@ export default function BazarrPage() {
                         className="btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() =>
                           setActiveSearch({
-                            title: `Sous-titres · ${ep.seriesTitle} ${ep.episode_number}`,
+                            title: t('bazarr.modalTitle', { title: `${ep.seriesTitle} ${ep.episode_number}` }),
                             searchEndpoint: `/api/bazarr/episodes/${ep.sonarrEpisodeId}/subtitles`,
                             downloadEndpoint: `/api/bazarr/episodes/${ep.sonarrEpisodeId}/subtitles`,
                             downloadExtra: { seriesId: ep.sonarrSeriesId },
                           })
                         }
                       >
-                        <Search size={12} /> Rechercher
+                        <Search size={12} /> {t('bazarr.searchButton')}
                       </button>
                     )}
                   </li>

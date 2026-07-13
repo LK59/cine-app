@@ -12,6 +12,7 @@ import { INTERVALS } from "@/lib/refresh-intervals";
 import { useToast } from "@/components/Toast";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
+import { useT } from "@/components/TranslationProvider";
 
 function formatBitrate(bps?: number): string {
   if (!bps) return "?";
@@ -54,6 +55,7 @@ interface PlaybackData {
 export default function JellyfinPage() {
   const { isGuest, jfId, jfUser } = useRole();
   const toast = useToast();
+  const t = useT();
   const { mutate } = useSWRConfig();
   const [tab, setTab] = useState<"live" | "stats">("live");
   const [refreshing, setRefreshing] = useState(false);
@@ -82,9 +84,9 @@ export default function JellyfinPage() {
     try {
       await fetch("/api/jellyfin/library/refresh", { method: "POST" });
       mutate("/api/jellyfin/library");
-      toast.success("Actualisation de la bibliothèque lancée");
+      toast.success(t('jellyfin.refreshSuccess'));
     } catch {
-      toast.error("Échec de l'actualisation");
+      toast.error(t('jellyfin.refreshError'));
     } finally {
       setRefreshing(false);
     }
@@ -99,7 +101,7 @@ export default function JellyfinPage() {
           !isGuest && (
             <button onClick={refreshLibrary} disabled={refreshing} className="btn-ghost px-3 py-1.5 text-xs">
               <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-              {refreshing ? "Actualisation..." : "Actualiser la bibliothèque"}
+              {refreshing ? t('jellyfin.refreshing') : t('jellyfin.refreshButton')}
             </button>
           )
         }
@@ -107,9 +109,9 @@ export default function JellyfinPage() {
 
       {library && (
         <div className="mb-6 grid grid-cols-3 gap-4">
-          <StatCard icon={Film} label="Films" value={library.counts.MovieCount} />
-          <StatCard icon={Tv} label="Séries" value={library.counts.SeriesCount} />
-          <StatCard icon={Clapperboard} label="Épisodes" value={library.counts.EpisodeCount} />
+          <StatCard icon={Film} label={t('jellyfin.movies')} value={library.counts.MovieCount} />
+          <StatCard icon={Tv} label={t('jellyfin.series')} value={library.counts.SeriesCount} />
+          <StatCard icon={Clapperboard} label={t('jellyfin.episodes')} value={library.counts.EpisodeCount} />
         </div>
       )}
 
@@ -124,7 +126,7 @@ export default function JellyfinPage() {
           }`}
         >
           <Play size={14} />
-          En direct
+          {t('jellyfin.live')}
           {playing.length > 0 && (
             <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[10px] text-accent-400">
               {playing.length}
@@ -141,7 +143,7 @@ export default function JellyfinPage() {
             }`}
           >
             <BarChart2 size={14} />
-            Mes statistiques
+            {t('jellyfin.myStats')}
           </button>
         )}
       </div>
@@ -150,8 +152,8 @@ export default function JellyfinPage() {
       {tab === "live" && (
         <>
           {isLoading && <LoadingState />}
-          {error && <ErrorState message="Impossible de contacter Jellyfin." />}
-          {sessions && playing.length === 0 && <EmptyState label="Aucune lecture en cours." />}
+          {error && <ErrorState message={t('jellyfin.serviceDown')} />}
+          {sessions && playing.length === 0 && <EmptyState label={t('jellyfin.noActivePlays')} />}
           {playing.length > 0 && (
             <div className="card divide-y divide-slate-800">
               {playing.map((s) => {
@@ -169,7 +171,7 @@ export default function JellyfinPage() {
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
                       <span className={`badge ${isTranscoding ? "bg-amber-500/15 text-amber-400" : "bg-emerald-500/15 text-emerald-400"}`}>
                         {isTranscoding ? <Cpu size={12} /> : <Zap size={12} />}
-                        {isTranscoding ? "Transcodage" : s.PlayState?.PlayMethod ?? "Lecture directe"}
+                        {isTranscoding ? t('jellyfin.transcoding') : s.PlayState?.PlayMethod ?? t('jellyfin.directPlay')}
                       </span>
                       {isTranscoding && s.TranscodingInfo && (
                         <>
@@ -229,7 +231,7 @@ export default function JellyfinPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-white">{playback.counts.moviesPlayed}</p>
-                    <p className="text-xs text-slate-500">films vus</p>
+                    <p className="text-xs text-slate-500">{t('jellyfin.moviesWatched')}</p>
                   </div>
                 </div>
                 <div className="card flex items-center gap-4 p-4">
@@ -238,7 +240,7 @@ export default function JellyfinPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-white">{playback.counts.episodesPlayed}</p>
-                    <p className="text-xs text-slate-500">épisodes vus</p>
+                    <p className="text-xs text-slate-500">{t('jellyfin.episodesWatched')}</p>
                   </div>
                 </div>
               </div>
@@ -248,7 +250,7 @@ export default function JellyfinPage() {
                 <div>
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
                     <Film size={14} className="text-accent-400" />
-                    Films récemment vus
+                    {t('jellyfin.recentMovies')}
                   </h3>
                   <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
                     {playback.recentMovies.map((m) => (
@@ -299,7 +301,7 @@ export default function JellyfinPage() {
                 <div>
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
                     <Tv size={14} className="text-sky-400" />
-                    Épisodes récemment vus
+                    {t('jellyfin.recentEpisodes')}
                   </h3>
                   <div className="card divide-y divide-white/5">
                     {playback.recentEpisodes.map((e) => (
@@ -348,7 +350,7 @@ export default function JellyfinPage() {
               )}
 
               {playback.recentMovies.length === 0 && playback.recentEpisodes.length === 0 && (
-                <EmptyState label="Aucun historique de lecture disponible." />
+                <EmptyState label={t('jellyfin.noPlayHistory')} />
               )}
             </div>
           )}

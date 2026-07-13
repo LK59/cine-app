@@ -15,6 +15,7 @@ import { useToast } from "@/components/Toast";
 import { createPortal } from "react-dom";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import { selectBio } from "@/lib/format";
+import { useT } from "@/components/TranslationProvider";
 
 interface Credit {
   tmdbId: number;
@@ -79,6 +80,7 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: string[]; star
 
 function Biography({ text, source }: { text: string; source: "wikipedia" | "tmdb" }) {
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
   const limit = 400;
   const truncated = text.length > limit && !expanded;
   return (
@@ -89,11 +91,11 @@ function Biography({ text, source }: { text: string; source: "wikipedia" | "tmdb
       <div className="mt-1.5 flex items-center justify-between">
         {text.length > limit && (
           <button onClick={() => setExpanded((v) => !v)} className="text-xs text-accent-400 hover:text-accent-300">
-            {expanded ? "Réduire" : "Lire la suite"}
+            {expanded ? t('modals.actor.collapse') : t('modals.actor.readMore')}
           </button>
         )}
         <span className="ml-auto text-[10px] text-slate-600">
-          Source : {source === "wikipedia" ? "Wikipédia" : "TMDb"}
+          {source === "wikipedia" ? t('modals.actor.sourceWikipedia') : t('modals.actor.sourceTmdb')}
         </span>
       </div>
     </div>
@@ -104,6 +106,7 @@ function Biography({ text, source }: { text: string; source: "wikipedia" | "tmdb
 
 function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: number) => void }) {
   const toast = useToast();
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const isInLib = credit.inLibrary || added;
@@ -121,9 +124,9 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
       if (!res.ok) throw new Error();
       setAdded(true);
       onAdded(credit.tmdbId);
-      toast.success(`${credit.title} ajouté`);
+      toast.success(t('modals.actor.addedToast', { title: credit.title }));
     } catch {
-      toast.error("Erreur lors de l'ajout");
+      toast.error(t('modals.actor.addErrorToast'));
     } finally {
       setAdding(false);
     }
@@ -141,7 +144,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
         )}
         {isInLib && (
           <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-            <BookCheck size={9} /> Bibliothèque
+            <BookCheck size={9} /> {t('modals.actor.libraryBadge')}
           </div>
         )}
         {credit.voteAverage > 0 && (
@@ -158,7 +161,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
           <button onClick={handleAdd} disabled={adding}
             className="mt-auto flex items-center justify-center gap-1 rounded bg-accent-600/20 py-1 text-[11px] text-accent-400 transition-colors hover:bg-accent-600/30 disabled:opacity-50">
             {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
-            {adding ? "Ajout…" : "Ajouter"}
+            {adding ? t('modals.actor.adding') : t('modals.actor.add')}
           </button>
         )}
       </div>
@@ -184,6 +187,7 @@ export function ActorModal({
   photoUrl: string | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -233,7 +237,7 @@ export function ActorModal({
                   {formatDate(data.birthday)}
                   {age !== null && (
                     <span className="text-slate-500">
-                      {data.deathday ? `— † ${formatDate(data.deathday)} (${age} ans)` : `(${age} ans)`}
+                      {data.deathday ? `— ${t('modals.actor.died', { date: formatDate(data.deathday), n: age })}` : `(${t('modals.actor.age', { n: age })})`}
                     </span>
                   )}
                 </span>
@@ -245,7 +249,7 @@ export function ActorModal({
                 </span>
               )}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{credits.length > 0 ? `${credits.length} œuvres` : ""}</p>
+            <p className="mt-1 text-xs text-slate-500">{credits.length > 0 ? t('modals.actor.works', { n: credits.length }) : ""}</p>
           </div>
         </div>
 
@@ -276,7 +280,7 @@ export function ActorModal({
         {/* ── Photo strip ── */}
         {photos.length > 0 && (
           <div className="mb-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Photos</p>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('modals.actor.photos')}</p>
             <div className="flex gap-2 overflow-x-auto pb-1 [touch-action:pan-x] snap-x snap-mandatory">
               {photos.map((src, i) => (
                 <button key={src} onClick={() => setLightboxIndex(i)}
@@ -298,18 +302,18 @@ export function ActorModal({
 
         {isLoading && (
           <div className="flex items-center gap-2 py-8 text-sm text-slate-400">
-            <Loader2 size={16} className="animate-spin" /> Chargement de la filmographie…
+            <Loader2 size={16} className="animate-spin" /> {t('modals.actor.loadingFilmography')}
           </div>
         )}
 
         {!isLoading && credits.length === 0 && (
-          <p className="py-6 text-center text-sm text-slate-500">Aucun crédit disponible.</p>
+          <p className="py-6 text-center text-sm text-slate-500">{t('modals.actor.noCredits')}</p>
         )}
 
         {library.length > 0 && (
           <div className="mb-5">
             <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              <BookCheck size={13} /> Dans la bibliothèque
+              <BookCheck size={13} /> {t('modals.actor.inLibrary')}
             </h3>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
               {library.map((c) => (
@@ -322,7 +326,7 @@ export function ActorModal({
         {discover.length > 0 && (
           <div>
             <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <Film size={13} /> Sur TMDb
+              <Film size={13} /> {t('modals.actor.onTmdb')}
             </h3>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
               {discover.map((c) => (

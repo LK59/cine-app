@@ -47,3 +47,19 @@ export function getLocaleFromCookie(cookieStr: string): Locale {
   if (val === "fr" || val === "en" || val === "es") return val;
   return DEFAULT_LOCALE;
 }
+
+export function getTmdbLocale(locale: string | undefined | null): string {
+  switch (locale) {
+    case "en": return "en-US";
+    case "es": return "es-ES";
+    default:   return "fr-FR";
+  }
+}
+
+export function getVideoLangs(locale: string | undefined | null): string {
+  switch (locale) {
+    case "en": return "en,null";
+    case "es": return "es,en,null";
+    default:   return "fr,en,null";
+  }
+}

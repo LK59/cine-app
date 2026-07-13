@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { getTmdbLocale } from "@/lib/i18n";
 import { withCache, TTL } from "@/lib/server-cache";
 
 export interface EnrichedPersonData {
@@ -55,7 +56,8 @@ async function fetchWikipediaBio(name: string, wikidataId: string | null): Promi
   return await tryLang("en", name) ?? { bio: null, url: null };
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const personId = Number(params.id);
   if (!personId || !tmdb.isEnabled()) {
     return NextResponse.json<EnrichedPersonData>({ photos: [], instagram: null, imdb: null, wikipedia: null, wikiBio: null });
@@ -66,7 +68,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const [imagesData, externalIds, personDetails] = await Promise.all([
       tmdb.getPersonImages(personId).catch(() => null),
       tmdb.getPersonExternalIds(personId).catch(() => null),
-      tmdb.getPersonDetails(personId, "fr-FR").catch(() => null),
+      tmdb.getPersonDetails(personId).catch(() => null),
     ]);
 
     const photos = (imagesData?.profiles ?? [])

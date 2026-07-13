@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { cachedJellyfinMovies, cachedJellyfinMoviesAdmin, withCache, TTL } from "@/lib/server-cache";
 import { cachedMovies } from "@/lib/server-cache";
 import { config } from "@/lib/config";
+import { getTmdbLocale } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +29,11 @@ export interface RecommendationGroup {
   movies: RecommendedMovie[];
 }
 
-async function fetchTmdbRecs(tmdbId: number): Promise<any[]> {
+async function fetchTmdbRecs(tmdbId: number, lang: string): Promise<any[]> {
   const key = config.tmdb.apiKey;
   if (!key) return [];
   const res = await fetch(
-    `${TMDB_BASE}/movie/${tmdbId}/recommendations?language=fr-FR&page=1&api_key=${key}`
+    `${TMDB_BASE}/movie/${tmdbId}/recommendations?language=${lang}&page=1&api_key=${key}`
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -40,6 +41,7 @@ async function fetchTmdbRecs(tmdbId: number): Promise<any[]> {
 }
 
 export async function GET(req: NextRequest) {
+  const tmdbLang = getTmdbLocale(req.cookies.get("cine-lang")?.value);
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   const userId = session?.jfId ?? null;
@@ -76,7 +78,7 @@ export async function GET(req: NextRequest) {
     // Fetch recommendations for each seed movie in parallel
     const results = await Promise.allSettled(
       watched.map(async (seed) => {
-        const recs = await fetchTmdbRecs(seed.tmdbId);
+        const recs = await fetchTmdbRecs(seed.tmdbId, tmdbLang);
         const movies: RecommendedMovie[] = recs
           .filter((r) => r.poster_path && r.vote_average > 6)
           .slice(0, 8)

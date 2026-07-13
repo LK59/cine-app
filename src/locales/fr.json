@@ -836,5 +836,50 @@
   },
   "api": {
     "unauthenticated": "Non authentifié"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "globalSearch": "Recherche globale",
+    "nextItem": "Item suivant (listes)",
+    "prevItem": "Item précédent (listes)",
+    "openItem": "Ouvrir l'item sélectionné",
+    "toggleList": "Ajouter / retirer de la liste (fiche)",
+    "tabInfo": "Onglet Infos (fiche)",
+    "tabCast": "Onglet Casting (fiche)",
+    "tabFile": "Onglet Fichier / Saisons (fiche)",
+    "showHelp": "Afficher cette aide",
+    "close": "Fermer la fenêtre / désélectionner",
+    "hint": "Appuie sur {key} pour ouvrir / fermer"
+  },
+  "collection": {
+    "loading": "Chargement de la saga…",
+    "inLibrary": "Dans la bibliothèque ({n}/{total})",
+    "toAdd": "À ajouter ({n})"
+  },
+  "mediaInfo": {
+    "title": "Informations techniques",
+    "noFile": "Aucun fichier disponible.",
+    "sectionFile": "Fichier",
+    "sectionVideo": "Vidéo",
+    "sectionAudio": "Audio",
+    "sectionSubtitles": "Sous-titres embarqués",
+    "path": "Chemin",
+    "size": "Taille",
+    "quality": "Qualité",
+    "container": "Container",
+    "codec": "Codec",
+    "profile": "Profil",
+    "resolution": "Résolution",
+    "fps": "FPS",
+    "bitDepth": "Bit depth",
+    "bitrate": "Bitrate",
+    "hdr": "HDR",
+    "colorimetry": "Colorimétrie",
+    "transfer": "Transfert",
+    "scan": "Scan",
+    "channels": "Canaux",
+    "tracks": "Pistes",
+    "languages": "Langues",
+    "additionalFormats": "Formats additionnels"
   }
 }

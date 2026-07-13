@@ -8,6 +8,7 @@ import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { Download, Captions } from "lucide-react";
 import type { BazarrSubtitleCandidate } from "@/lib/clients/bazarr";
 import { useToast } from "@/components/Toast";
+import { useT } from "@/components/TranslationProvider";
 
 export function SubtitleSearchModal({
   title,
@@ -28,6 +29,7 @@ export function SubtitleSearchModal({
     { revalidateOnFocus: false }
   );
   const toast = useToast();
+  const t = useT();
   const [downloading, setDownloading] = useState<number | null>(null);
   const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -43,13 +45,13 @@ export function SubtitleSearchModal({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Échec du téléchargement");
+        throw new Error(body.error || t('modals.subtitles.downloadError'));
       }
       setDownloaded((prev) => new Set(prev).add(index));
-      toast.success(`Sous-titre téléchargé · ${candidate.language}`);
+      toast.success(t('modals.subtitles.downloadSuccess', { lang: candidate.language }));
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "Erreur inconnue");
-      toast.error("Échec du téléchargement");
+      setDownloadError(err instanceof Error ? err.message : t('modals.subtitles.unknown'));
+      toast.error(t('modals.subtitles.downloadError'));
     } finally {
       setDownloading(null);
     }
@@ -60,10 +62,10 @@ export function SubtitleSearchModal({
 
   return (
     <Modal title={title} onClose={onClose} wide>
-      {isLoading && <LoadingState label="Recherche sur les fournisseurs de sous-titres..." />}
-      {error && <ErrorState message={error.message || "Recherche impossible."} />}
+      {isLoading && <LoadingState label={t('modals.subtitles.searching')} />}
+      {error && <ErrorState message={error.message || t('modals.releases.error')} />}
       {downloadError && <ErrorState message={downloadError} />}
-      {data && sorted.length === 0 && <EmptyState label="Aucun sous-titre trouvé." />}
+      {data && sorted.length === 0 && <EmptyState label={t('modals.subtitles.noResults')} />}
 
       {sorted.length > 0 && (
         <div className="scrollbar-thin max-h-[60vh] space-y-2 overflow-y-auto">
@@ -74,7 +76,7 @@ export function SubtitleSearchModal({
                   <div className="flex items-center gap-2 text-sm text-white">
                     <Captions size={14} className="text-accent-400" />
                     {c.language}
-                    {c.forced === "True" && <span className="badge bg-amber-500/15 text-amber-400">Forcé</span>}
+                    {c.forced === "True" && <span className="badge bg-amber-500/15 text-amber-400">{t('modals.subtitles.forced')}</span>}
                     {c.hearing_impaired === "True" && (
                       <span className="badge bg-sky-500/15 text-sky-400">HI</span>
                     )}
@@ -90,7 +92,7 @@ export function SubtitleSearchModal({
                   onClick={() => download(c, index)}
                 >
                   <Download size={14} />
-                  {downloaded.has(index) ? "Téléchargé" : downloading === index ? "..." : "Télécharger"}
+                  {downloaded.has(index) ? t('modals.subtitles.downloaded') : downloading === index ? t('modals.subtitles.sending') : t('modals.subtitles.download')}
                 </button>
               </div>
             </div>
