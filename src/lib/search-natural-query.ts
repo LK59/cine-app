@@ -21,23 +21,23 @@ export interface NaturalQuery {
 
 export const GENRE_ALIASES: Record<string, string[]> = {
   action: ["action"],
-  adventure: ["aventure", "aventures", "adventure", "aventura", "aventuras"],
+  adventure: ["aventure", "aventures", "adventure", "aventura", "aventuras", "abenteuer"],
   animation: ["animation", "anime", "animacion", "animación"],
-  comedy: ["comedie", "comédie", "humour", "drole", "drôle", "comedy", "comedia"],
-  crime: ["crime", "policier", "policiers", "gangster", "mafia", "crimen"],
-  documentary: ["documentaire", "docu", "documentary", "documental"],
+  comedy: ["comedie", "comédie", "humour", "drole", "drôle", "comedy", "comedia", "komodie", "komödie"],
+  crime: ["crime", "policier", "policiers", "gangster", "mafia", "crimen", "krimi"],
+  documentary: ["documentaire", "docu", "documentary", "documental", "dokumentation", "doku"],
   drama: ["drame", "drama"],
-  family: ["famille", "familial", "family", "familia"],
+  family: ["famille", "familial", "family", "familia", "familie"],
   fantasy: ["fantastique", "fantasy", "fantasia", "fantasía"],
-  history: ["histoire", "historique", "history", "historical", "historia", "historico", "histórico"],
+  history: ["histoire", "historique", "history", "historical", "historia", "historico", "histórico", "geschichte", "historisch"],
   horror: ["horreur", "epouvante", "épouvante", "horror", "terror"],
-  music: ["musique", "musical", "music", "musica", "música"],
-  mystery: ["mystere", "mystère", "enquete", "enquête", "mystery", "misterio"],
-  romance: ["romance", "romantique", "amour", "romantic", "romantico", "romántico"],
+  music: ["musique", "musical", "music", "musica", "música", "musik"],
+  mystery: ["mystere", "mystère", "enquete", "enquête", "mystery", "misterio", "mysterium"],
+  romance: ["romance", "romantique", "amour", "romantic", "romantico", "romántico", "romantik"],
   sciencefiction: ["science fiction", "sci fi", "sf", "anticipation", "science-fiction", "ciencia ficcion", "ciencia ficción"],
   thriller: ["thriller", "suspense", "suspenso"],
-  tvmovie: ["telefilm", "téléfilm", "tv movie"],
-  war: ["guerre", "militaire", "war", "guerra"],
+  tvmovie: ["telefilm", "téléfilm", "tv movie", "fernsehfilm"],
+  war: ["guerre", "militaire", "war", "guerra", "krieg", "militar"],
   western: ["western"],
 };
 
@@ -275,11 +275,13 @@ export function parseNaturalQueryES(raw: string, forcedType: "movie" | "series" 
 export function parseNaturalQueryDE(raw: string, forcedType: "movie" | "series" | "all"): NaturalQuery {
   let q = normalize(raw);
   const detectedType =
-    /\b(film|filme|kinofilm|kinofilme)\b/.test(q) ? "movie"
-    : /\b(serie|serien|show|sendung)\b/.test(q) ? "series"
+    /film(e)?\b/.test(q) ? "movie"
+    : /serien?\b|\b(show|sendung)\b/.test(q) ? "series"
     : forcedType;
 
-  q = q.replace(/\b(film|filme|kinofilm|kinofilme|serie|serien|show|sendung)\b/g, " ");
+  // Suffix match (not \b-prefixed) so German compounds like "kriegsfilm" or
+  // "krimiserie" are recognized — German freely joins nouns without a space.
+  q = q.replace(/film(e)?\b|serien?\b|\b(show|sendung)\b/g, " ");
 
   let genreName: string | null = null;
   for (const [canonical, aliases] of Object.entries(GENRE_ALIASES)) {

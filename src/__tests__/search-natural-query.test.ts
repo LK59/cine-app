@@ -161,9 +161,24 @@ describe("parseNaturalQueryDE", () => {
     expect(result.mediaType).toBe("movie");
   });
 
+  it("detects movie type from a compound word (German joins nouns without a space)", () => {
+    const result = parseNaturalQueryDE("kriegsfilm von Christopher Nolan", "all");
+    expect(result.mediaType).toBe("movie");
+  });
+
   it("detects series type", () => {
     const result = parseNaturalQueryDE("serie mit Clara Galle", "all");
     expect(result.mediaType).toBe("series");
+  });
+
+  it("detects series type from a compound word", () => {
+    const result = parseNaturalQueryDE("krimiserie mit Clara Galle", "all");
+    expect(result.mediaType).toBe("series");
+  });
+
+  it("extracts the war genre via 'krieg'", () => {
+    const result = parseNaturalQueryDE("krieg film von Christopher Nolan", "all");
+    expect(result.genreName).toBe("war");
   });
 
   it("extracts cast via 'mit'", () => {
