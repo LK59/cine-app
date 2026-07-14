@@ -28,9 +28,12 @@ function statePriority(state: string): number {
 
 function sortTorrents(torrents: QbTorrent[]): QbTorrent[] {
   return [...torrents].sort((a, b) => {
-    const diff = statePriority(a.state) - statePriority(b.state);
-    if (diff !== 0) return diff;
-    return b.dlspeed - a.dlspeed;
+    const pa = statePriority(a.state);
+    const pb = statePriority(b.state);
+    if (pa !== pb) return pa - pb;
+    // Downloading: fastest download first. Everything else (seeding/paused):
+    // most active upload first, to spot the busiest seeds at a glance.
+    return pa === 0 ? b.dlspeed - a.dlspeed : b.upspeed - a.upspeed;
   });
 }
 
