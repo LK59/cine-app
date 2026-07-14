@@ -1,6 +1,7 @@
 import { pushDb, availabilityNotifDb, getDb } from "@/lib/db";
 import { sendWebPush, shouldRemovePushSubscription } from "@/lib/webPush";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { logError } from "@/lib/logger";
 
 async function sendToAll(payload: unknown): Promise<void> {
   const subs = pushDb.getAll();
@@ -55,7 +56,7 @@ export async function checkWatchlistAvailability(): Promise<void> {
 
     availabilityNotifDb.cleanup(30 * 24 * 3600_000);
   } catch (err) {
-    console.error("[notif] checkWatchlistAvailability error:", err);
+    logError("notifications.watchlist-availability", err);
   }
 }
 
@@ -80,7 +81,7 @@ export async function checkNewEpisodes(): Promise<void> {
       availabilityNotifDb.markNotified("episode", ev.tmdb_id);
     }
   } catch (err) {
-    console.error("[notif] checkNewEpisodes error:", err);
+    logError("notifications.new-episodes", err);
   }
 }
 

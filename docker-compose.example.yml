@@ -5,6 +5,10 @@
 #
 # Cine App must be able to reach your media services from inside the container.
 # Recommended: attach it to the same external Docker network as Radarr/Sonarr/etc.
+#
+# This uses the pre-built image published on GitHub Container Registry — no
+# build step, no source checkout needed. To update later:
+#   docker compose pull && docker compose up -d
 
 networks:
   media_net:
@@ -14,10 +18,7 @@ networks:
 
 services:
   cine-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: cine-app:latest
+    image: ghcr.io/lk59/cine-app:latest
     container_name: cine-app
     env_file:
       - .env

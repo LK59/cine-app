@@ -144,13 +144,12 @@ nano docker-compose.yml
 
 `docker-compose.yml` is intentionally ignored by git. Keep your production compose local to your server, and commit changes to `docker-compose.example.yml` when you want to update the public template.
 
-Use `docker-compose.example.yml` as the reference for a complete setup. A minimal service looks like this:
+`docker-compose.example.yml` uses the pre-built image published on GitHub Container Registry — no build tools, no source checkout required:
 
 ```yaml
 services:
   cine-app:
-    image: cine-app:latest
-    build: .
+    image: ghcr.io/lk59/cine-app:latest
     container_name: cine-app
     env_file:
       - .env
@@ -176,6 +175,21 @@ In your local `docker-compose.yml`, adapt:
 - optional gallery/photo mounts;
 - the `ports` section if you want direct access without a reverse proxy.
 
+<details>
+<summary>Building from source instead (only if you're modifying the code)</summary>
+
+Replace the `image:` line with:
+
+```yaml
+build:
+  context: .
+  dockerfile: Dockerfile
+```
+
+Then use `docker compose up -d --build` instead of `docker compose pull` everywhere below. The build runs the test suite first — it fails loudly instead of shipping a broken image.
+
+</details>
+
 ### Network / Service URLs
 
 Cine App must be able to reach Radarr, Sonarr, Jellyfin, Jellyseerr, qBittorrent and the other services from inside the container.
@@ -193,7 +207,8 @@ Alternative setup:
 Start the app:
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 The app listens on port `3000` inside Docker. Use a reverse proxy (Nginx Proxy Manager, Traefik, Caddy) or expose the port directly for testing.
@@ -206,15 +221,22 @@ For normal users, log in with an existing Jellyfin username and password.
 
 For setup or maintenance, use the local admin account configured with `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
 
+### Updating
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
 ### After Changing `.env`
 
 Most configuration is read by the server process. After changing `.env`, restart the container so the new values are loaded:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-This rebuild/restart command is safe to use after any configuration change.
+This restart command is safe to use after any configuration change.
 
 ---
 
@@ -284,10 +306,10 @@ VAPID_SUBJECT=mailto:admin@example.com
 
 `VAPID_SUBJECT` can be any contact URI controlled by the administrator, usually an email address.
 
-Then rebuild/restart the Cine App container so the new environment variables are loaded:
+Then restart the Cine App container so the new environment variables are loaded:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 After deployment, open Cine App as a user, go to **Settings -> Notifications**, enable push notifications for the current browser/PWA, then use the test button to confirm delivery.
@@ -343,15 +365,15 @@ Set the env var:
 CLARA_GALLERY_ENABLED=true
 ```
 
-Rebuild:
+Restart:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 #### Disable It
 
-Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and rebuild.
+Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and restart.
 
 <img src="docs/screenshots/clara-1.png" width="49%"> <img src="docs/screenshots/clara-2.png" width="49%">
 <img src="docs/screenshots/clara-3.png" width="49%"> <img src="docs/screenshots/clara-4.png" width="49%">

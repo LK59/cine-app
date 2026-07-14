@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { sendPushToAll } from "@/lib/push";
+import { logError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -60,7 +61,9 @@ function startSharedPolling() {
         broadcast("torrent-complete", { name });
         sendPushToAll({ title: "Téléchargement terminé ✓", body: name, tag: "torrent-complete", url: "/qbittorrent", category: "torrent-complete" }).catch(() => {});
       }
-    } catch {}
+    } catch (err) {
+      logError("sse-polling", err);
+    }
   }, 6000);
 }
 

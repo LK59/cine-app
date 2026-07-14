@@ -35,3 +35,6 @@ Thumbs.db
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
+
+# Personal deploy runbook — not for the public repo
+RUNBOOK.private.md
