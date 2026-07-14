@@ -97,6 +97,15 @@ export const jellyfin = {
       { headers }
     ),
 
+  // Jellyfin only puts ProviderIds (Tvdb/Tmdb) on the Series item itself, never
+  // on its Episode children — even when Fields=ProviderIds is requested on the
+  // episode. Needed to resolve a "series sheet" link from a resume/recent episode.
+  getItemProviderIds: (userId: string, itemId: string) =>
+    fetchJson<{ ProviderIds?: JellyfinItem["ProviderIds"] }>(
+      `${url}/Users/${userId}/Items/${itemId}?Fields=ProviderIds`,
+      { headers }
+    ),
+
   getRecentlyPlayed: (userId: string, type: "Movie" | "Episode", limit = 10) =>
     fetchJson<{ Items: JellyfinItem[]; TotalRecordCount: number }>(
       `${url}/Users/${userId}/Items?Filters=IsPlayed&IncludeItemTypes=${type}&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Recursive=true&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,SeriesName,IndexNumber,ParentIndexNumber`,

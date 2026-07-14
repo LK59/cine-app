@@ -222,6 +222,20 @@ async function fetchResume(jfId: string): Promise<{ items: ResumeItem[] }> {
   ]);
   const moviesByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
   const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s.id]));
+
+  // Jellyfin never puts ProviderIds on Episode items, only on their parent
+  // Series — fetch the series' TVDB id separately (deduped) so episodes in
+  // the resume list can still link to their series' sheet.
+  const episodeSeriesIds = [...new Set(
+    resumeData.Items.filter((i) => i.Type === "Episode" && i.SeriesId).map((i) => i.SeriesId!)
+  )];
+  const seriesTvdbById = new Map<string, number | undefined>();
+  await Promise.all(episodeSeriesIds.map(async (seriesId) => {
+    const providerIds = await jellyfin.getItemProviderIds(jfId, seriesId).catch(() => null);
+    const tvdb = providerIds?.ProviderIds?.Tvdb;
+    if (tvdb) seriesTvdbById.set(seriesId, parseInt(tvdb, 10));
+  }));
+
   const items: ResumeItem[] = resumeData.Items.map((item) => {
     const pos = item.UserData?.PlaybackPositionTicks ?? 0;
     const rt = item.RunTimeTicks ?? 0;
@@ -230,8 +244,12 @@ async function fetchResume(jfId: string): Promise<{ items: ResumeItem[] }> {
     if (item.Type === "Movie" && item.ProviderIds?.Tmdb) {
       const id = moviesByTmdb.get(parseInt(item.ProviderIds.Tmdb, 10));
       if (id) cinemaHref = `/radarr/${id}`;
-    } else if ((item.Type === "Episode" || item.Type === "Series") && item.ProviderIds?.Tvdb) {
+    } else if (item.Type === "Series" && item.ProviderIds?.Tvdb) {
       const id = seriesByTvdb.get(parseInt(item.ProviderIds.Tvdb, 10));
+      if (id) cinemaHref = `/sonarr/${id}`;
+    } else if (item.Type === "Episode" && item.SeriesId) {
+      const tvdb = seriesTvdbById.get(item.SeriesId);
+      const id = tvdb ? seriesByTvdb.get(tvdb) : undefined;
       if (id) cinemaHref = `/sonarr/${id}`;
     }
     return { id: item.Id, name: item.Type === "Episode" && item.SeriesName ? item.SeriesName : item.Name, subtitle: item.Type === "Episode" ? `S${String(item.ParentIndexNumber ?? 1).padStart(2,"0")}E${String(item.IndexNumber ?? 1).padStart(2,"0")} · ${item.Name}` : null, type: item.Type ?? "Unknown", progress: Math.round(progress), imageTag: item.ImageTags?.Primary ?? null, cinemaHref };
