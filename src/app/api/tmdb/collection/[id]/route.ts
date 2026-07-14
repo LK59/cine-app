@@ -4,7 +4,8 @@ import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies } from "@/lib/server-cache";
 import { withErrorHandling } from "@/lib/api-helpers";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const collectionId = Number(params.id);
   if (!collectionId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });

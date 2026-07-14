@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { withErrorHandling } from "@/lib/api-helpers";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { action } = await req.json();
   const id = Number(params.id);
   if (action === "approve") return withErrorHandling(() => jellyseerr.approveRequest(id));

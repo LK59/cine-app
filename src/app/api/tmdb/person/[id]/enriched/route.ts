@@ -63,7 +63,8 @@ async function fetchWikipediaBio(name: string, wikidataId: string | null, locale
   return { bio: null, url: null };
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const rawLang = req.cookies.get("cine-lang")?.value ?? "fr";
   const tmdb = createTmdbClient(getTmdbLocale(rawLang));
   const personId = Number(params.id);

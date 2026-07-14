@@ -31,10 +31,8 @@ async function getOrBuildThumb(filepath: string, thumbPath: string): Promise<boo
   }
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { filename: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ filename: string }> }) {
+  const params = await props.params;
   const filename = path.basename(params.filename);
   if (!filename || filename !== params.filename) {
     return new NextResponse("Forbidden", { status: 403 });

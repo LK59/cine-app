@@ -43,7 +43,8 @@ async function fetchRatings(imdbId: string): Promise<MdbRatings> {
   };
 }
 
-export async function GET(req: NextRequest, { params }: { params: { imdbId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ imdbId: string }> }) {
+  const params = await props.params;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
   if (!mdblistRateLimit(ip)) {
     return NextResponse.json({ ratings: null }, { status: 429 });

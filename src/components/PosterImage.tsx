@@ -8,9 +8,13 @@ interface PosterImageProps {
   alt: string;
   className?: string;
   aspectRatio?: string;
+  // Next's image optimizer proxies local images through an internal request that
+  // doesn't forward cookies, so auth-gated routes (e.g. /api/jellyfin/image) 404/400
+  // there. Skip optimization for those and let the browser fetch it directly.
+  unoptimized?: boolean;
 }
 
-export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-[2/3]" }: PosterImageProps) {
+export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-[2/3]", unoptimized = false }: PosterImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
 
@@ -29,6 +33,7 @@ export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-[2
         src={src}
         alt={alt}
         fill
+        unoptimized={unoptimized}
         sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
         className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         onLoad={() => setLoaded(true)}

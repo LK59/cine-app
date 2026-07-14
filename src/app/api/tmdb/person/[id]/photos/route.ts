@@ -11,7 +11,8 @@ export interface PersonPhoto {
   voteAverage: number;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const personId = Number(params.id);
   if (!tmdb.isEnabled()) return NextResponse.json({ photos: [] });
 

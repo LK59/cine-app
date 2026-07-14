@@ -34,8 +34,8 @@ export const viewport: Viewport = {
   themeColor: "#020617",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const rawLang = cookies().get(LOCALE_COOKIE)?.value ?? "";
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const rawLang = (await cookies()).get(LOCALE_COOKIE)?.value ?? "";
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
   return (
     <html lang={lang} className="dark">

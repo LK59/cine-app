@@ -146,7 +146,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
   today: string;
   selectedEvent: CalendarEvent | null;
   onSelectEvent: (ev: CalendarEvent | null) => void;
-  detailRef: React.RefObject<HTMLDivElement>;
+  detailRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const t = useT();
   const firstDay    = new Date(year, month, 1);

@@ -2,8 +2,13 @@
 const nextConfig = {
   output: "standalone",
   reactStrictMode: true,
+  // sharp is externalized by Next.js by default; web-push needs to be added explicitly.
+  serverExternalPackages: ["web-push"],
   images: {
     remotePatterns: [{ hostname: "**" }],
+    // Next.js 16 defaults local image patterns to an empty query string;
+    // our Jellyfin image proxy passes itemId/tag as query params.
+    localPatterns: [{ pathname: "/api/jellyfin/image" }],
   },
   env: {
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? "",
@@ -23,14 +28,6 @@ const nextConfig = {
         ],
       },
     ];
-  },
-  // sharp and web-push are handled outside webpack (runtime install / externals)
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals.push("sharp");
-      config.externals.push("web-push");
-    }
-    return config;
   },
 };
 

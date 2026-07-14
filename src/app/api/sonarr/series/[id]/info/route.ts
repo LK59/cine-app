@@ -5,7 +5,8 @@ import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
   const id = Number(params.id);
   const series = await sonarr.getSeriesById(id).catch(() => null);

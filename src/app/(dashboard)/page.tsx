@@ -81,6 +81,7 @@ function ResumeCard({ item }: { item: ResumeItem }) {
           <PosterImage
             src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
             alt={item.name}
+            unoptimized
           />
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50">
             <div className="h-full bg-accent-500" style={{ width: `${item.progress}%` }} />
