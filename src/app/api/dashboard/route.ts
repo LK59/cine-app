@@ -14,6 +14,14 @@ import { withCacheSafe, cachedMovies, cachedSeries, TTL } from "@/lib/server-cac
 import { getDiskStats, type DiskStats } from "@/lib/disk-stats";
 import { classifyError } from "@/lib/api-error";
 import { posterUrl } from "@/lib/images";
+import { config } from "@/lib/config";
+
+// Checked before any network call so "not configured" never gets confused
+// with "configured but unreachable" — both would otherwise surface as the
+// same generic connection error. See README > Deployment for the .env vars.
+function notConfigured(envVar: string): Error {
+  return new Error(`Non configuré — définis ${envVar} dans .env (voir README > Deployment)`);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +100,7 @@ export interface DashboardPayload {
 async function probeServices(): Promise<ServiceStatus[]> {
   return Promise.all([
     probe("radarr", async () => {
+      if (!config.radarr.apiKey) throw notConfigured("RADARR_API_KEY");
       const [status, movies, missing, queue] = await Promise.all([
         radarr.getSystemStatus(),
         radarr.getMovies(),
@@ -101,6 +110,7 @@ async function probeServices(): Promise<ServiceStatus[]> {
       return { detail: `v${status.version}`, stats: { Films: movies.length, Manquants: missing, "En téléchargement": queue } };
     }),
     probe("sonarr", async () => {
+      if (!config.sonarr.apiKey) throw notConfigured("SONARR_API_KEY");
       const [status, series, missing, queue] = await Promise.all([
         sonarr.getSystemStatus(),
         sonarr.getSeries(),
@@ -110,14 +120,17 @@ async function probeServices(): Promise<ServiceStatus[]> {
       return { detail: `v${status.version}`, stats: { Séries: series.length, "Épisodes manquants": missing, "En téléchargement": queue } };
     }),
     probe("bazarr", async () => {
+      if (!config.bazarr.apiKey) throw notConfigured("BAZARR_API_KEY");
       const [movies, episodes] = await Promise.all([bazarr.getWantedMovies(), bazarr.getWantedEpisodes()]);
       return { stats: { "Films sans sous-titres": movies.total, "Épisodes sans sous-titres": episodes.total } };
     }),
     probe("jackett", async () => {
+      if (!config.jackett.apiKey) throw notConfigured("JACKETT_API_KEY");
       const indexers = await jackett.getIndexers();
       return { detail: `${indexers.length} indexeurs`, stats: { Indexeurs: indexers.length } };
     }),
     probe("jellyfin", async () => {
+      if (!config.jellyfin.apiKey) throw notConfigured("JELLYFIN_API_KEY");
       const [info, counts, sessions] = await Promise.all([
         jellyfin.getSystemInfo(),
         jellyfin.getLibraryCounts(),
@@ -127,23 +140,25 @@ async function probeServices(): Promise<ServiceStatus[]> {
       return { detail: `v${info.Version}`, stats: { Films: counts.MovieCount, Séries: counts.SeriesCount, "Lectures actives": active } };
     }),
     probe("jellyseerr", async () => {
+      if (!config.jellyseerr.apiKey) throw notConfigured("JELLYSEERR_API_KEY");
       const [status, pending] = await Promise.all([jellyseerr.getStatus(), jellyseerr.getRequests("pending")]);
       return { detail: `v${status.version}`, stats: { "Demandes en attente": pending.pageInfo?.results ?? pending.results.length } };
     }),
     probe("qbittorrent", async () => {
+      if (!config.qbittorrent.password) throw notConfigured("QBITTORRENT_PASSWORD");
       const [transfer, torrents] = await Promise.all([qbittorrent.getTransferInfo(), qbittorrent.getTorrents()]);
       const downloading = torrents.filter((t) => /downloading|dl$/i.test(t.state)).length;
       const fmt = (b: number) => `${(b / 1024 / 1024).toFixed(1)} MB/s`;
       return { stats: { Torrents: torrents.length, "En téléchargement": downloading, "↓": fmt(transfer.dl_info_speed), "↑": fmt(transfer.up_info_speed) } };
     }),
     probe("tmdb", async () => {
-      if (!tmdb.isEnabled()) throw new Error("Clé API non configurée (TMDB_API_KEY)");
+      if (!tmdb.isEnabled()) throw notConfigured("TMDB_API_KEY");
       const auth = await tmdb.checkAuth();
       if (!auth.success) throw new Error("Clé API invalide");
       return { detail: "Clé API valide" };
     }),
     probe("omdb", async () => {
-      if (!omdb.isEnabled()) throw new Error("Clé API non configurée (OMDB_API_KEY)");
+      if (!omdb.isEnabled()) throw notConfigured("OMDB_API_KEY");
       const res = await omdb.checkKey();
       if (res.Response !== "True") throw new Error("Clé API invalide");
       return { detail: "Clé API valide" };
@@ -160,7 +175,9 @@ async function probe(
     return { name, up: true, detail, stats };
   } catch (err) {
     const e = classifyError(err);
-    return { name, up: false, detail: e.message };
+    // Prefer the specific technical detail (e.g. "définis RADARR_API_KEY...")
+    // over the generic classified label so the user knows exactly what to fix.
+    return { name, up: false, detail: e.detail ?? e.message };
   }
 }
 

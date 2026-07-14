@@ -37,7 +37,7 @@ export function classifyError(err: unknown): AppError {
       return { kind: "unexpected_response", message: `Réponse inattendue (${err.status})`, detail: err.message };
     }
 
-    if (msg.includes("clé api non configurée") || msg.includes("missing") || msg.includes("not configured")) {
+    if (msg.includes("non configuré") || msg.includes("missing") || msg.includes("not configured")) {
       return { kind: "missing_api_key", message: "Variable d'environnement manquante", detail: err.message };
     }
     if (msg.includes("clé api invalide") || msg.includes("invalid") || msg.includes("unauthorized")) {
