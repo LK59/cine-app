@@ -21,11 +21,11 @@ export function TrailerModal({ youtubeKey, title, onClose }: {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-70 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/80 backdrop-blur-xs animate-fade-in p-4"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-4xl"
+        className="relative w-full max-w-4xl animate-fade-in-scale"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">

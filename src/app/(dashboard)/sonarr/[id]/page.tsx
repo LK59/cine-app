@@ -277,19 +277,26 @@ export default function SonarrSeriesDetailPage() {
   return (
     <div className="relative -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 md:-mx-8 md:-mt-6">
 
-      {/* ── Backdrop — natural 16:9 ratio, absolute so it never clips, gradient fades to bg ── */}
+      {/* ── Backdrop — natural 16:9 ratio, absolute so it never clips ── */}
       {backdrop && (
         <div className="pointer-events-none absolute inset-x-0 top-0 aspect-video">
+          {/* The image fades out via its own alpha mask (not a solid-color overlay) so
+              what shows through underneath is the page's real background — including its
+              radial accent glows — instead of an approximated flat color that never quite
+              matches and leaves a visible seam. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={backdrop} alt="" className="h-full w-full object-cover object-top animate-fade-in" />
-          <div className="absolute inset-0 bg-linear-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
-          <div
-            className="absolute inset-0"
+          <img
+            src={backdrop}
+            alt=""
+            className="h-full w-full object-cover object-top animate-fade-in"
             style={{
-              background:
-                "linear-gradient(to bottom, rgba(15,23,42,0.03) 0%, rgba(15,23,42,0.18) 18%, rgba(15,23,42,0.50) 35%, rgba(15,23,42,0.82) 52%, rgba(15,23,42,0.96) 65%, rgb(15,23,42) 72%)",
+              maskImage:
+                "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)",
             }}
           />
+          <div className="absolute inset-0 bg-linear-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
         </div>
       )}
 

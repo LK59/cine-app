@@ -33,7 +33,12 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
   useEffect(() => {
     if (open) {
       setMounted(true);
-      const id = requestAnimationFrame(() => setShow(true));
+      // A single rAF often fires before the browser has painted the initial
+      // (hidden) state, so the transition has nothing to animate from and the
+      // sheet just snaps open. Two nested rAFs guarantee that paint happened.
+      const id = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setShow(true));
+      });
       return () => cancelAnimationFrame(id);
     } else {
       setShow(false);
@@ -100,7 +105,7 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className={`relative w-full max-w-lg mx-auto rounded-t-2xl bg-slate-900 border-t border-white/10 shadow-2xl transition-transform duration-300 ease-out ${show ? "translate-y-0" : "translate-y-full"}`}
+        className={`glass-panel relative w-full max-w-lg mx-auto rounded-t-2xl border-x-0 border-b-0 shadow-glow transition-transform duration-300 ease-out ${show ? "translate-y-0" : "translate-y-full"}`}
       >
         {/* Drag handle — main swipe target */}
         <div

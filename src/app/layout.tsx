@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
@@ -39,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
   const dict = await loadLocaleDict(lang);
   return (
-    <html lang={lang} className="dark">
+    <html lang={lang} className={`dark ${inter.variable}`}>
       <head>
         {/* Apply saved theme before first paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;if(localStorage.getItem("cine-amoled")==="1")document.documentElement.dataset.amoled="";}catch(e){}` }} />
