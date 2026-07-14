@@ -569,7 +569,7 @@ export default function RadarrMovieDetailPage() {
       <div className={activeTab !== "casting" ? "hidden md:block" : ""}>
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
         <Collapsible title={t('radarr.tabCasting')} badge={info.tmdb.cast.length} icon={<Film size={15} className="text-accent-400" />}>
-          <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+          <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto p-3 scroll-px-3 snap-x snap-mandatory">
             {info.tmdb.cast.map((actor) => {
               const isVip = actor.tmdbId === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
               return (
