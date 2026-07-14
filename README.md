@@ -110,6 +110,18 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 
 ## Deployment
 
+**You do not need to clone this repository.** The published image already
+contains the full built app — all you need on your server are two config
+files. Create a folder and download them directly:
+
+```bash
+mkdir cine-app && cd cine-app
+curl -O https://raw.githubusercontent.com/LK59/cine-app/main/.env.example
+curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
+```
+
+(Cloning the repo works too if you'd rather browse the code or docs locally — it just isn't required.)
+
 Create your environment file:
 
 ```bash
