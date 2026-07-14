@@ -4,8 +4,7 @@ Self-hosted PWA dashboard for managing a cinema/media stack from one mobile-frie
 
 Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr into a single dashboard designed for daily use, on desktop and mobile.
 
-<img src="docs/screenshots/dashboard-1.png" width="49%"> <img src="docs/screenshots/dashboard-2.png" width="49%">
-<img src="docs/screenshots/dashboard-mobile.PNG" width="32%">
+<img src="docs/screenshots/dashboard-1.png" height="210"> <img src="docs/screenshots/dashboard-2.png" height="210"> <img src="docs/screenshots/dashboard-mobile.PNG" height="210">
 
 ---
 
@@ -16,15 +15,13 @@ Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin 
 - **Radarr and Sonarr library views** - grid and list modes, filtering, quick search, keyboard navigation
 - **Movie and series detail pages** - poster, metadata, cast carousel, active downloads, file info, IMDb/RT/Metacritic ratings
 
-<img src="docs/screenshots/fiche-film-1.png" width="49%"> <img src="docs/screenshots/fiche-film-2.png" width="49%">
-<img src="docs/screenshots/fiche-film-mobile.PNG" width="32%">
+<img src="docs/screenshots/fiche-film-1.png" height="210"> <img src="docs/screenshots/fiche-film-2.png" height="210"> <img src="docs/screenshots/fiche-film-mobile.PNG" height="210">
 - **Watchlist** - add any title from TMDB, classify with 5 statuses (A voir, Favoris, Vus, A demander, Abandonnes), personal notes, search and sort, IMDb rating badge on every card
 
-<img src="docs/screenshots/watchlist-1.png" width="65%"> <img src="docs/screenshots/watchlist-mobile.PNG" width="32%">
+<img src="docs/screenshots/watchlist-1.png" height="260"> <img src="docs/screenshots/watchlist-mobile.PNG" height="260">
 - **Natural language search** - find titles with queries like `film de guerre de Christopher Nolan`, `serie avec Clara Galle` or `film comedie avec Ryan Gosling`
 
-<img src="docs/screenshots/recherche-naturelle-1.png" width="32%"> <img src="docs/screenshots/recherche-naturelle-2.png" width="32%"> <img src="docs/screenshots/recherche-naturelle-3.png" width="32%">
-<img src="docs/screenshots/recherche-mobile.PNG" width="32%">
+<img src="docs/screenshots/recherche-naturelle-1.png" height="160"> <img src="docs/screenshots/recherche-naturelle-2.png" height="160"> <img src="docs/screenshots/recherche-naturelle-3.png" height="160"> <img src="docs/screenshots/recherche-mobile.PNG" height="160">
 - **Discover** - trending movies and series with genre filters, TMDB search, "Pour vous" tab based on Jellyfin play history
 - **Recommendations** - personalised rows based on recently watched Jellyfin history
 - **Release search modal** - browse and grab releases directly from Radarr/Sonarr inside the app
@@ -71,7 +68,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Top actors and directors ranked by number of titles in the library
 - Accurate library/person statistics across movies and series
 
-<img src="docs/screenshots/menu-stats-mobile.PNG" width="32%">
+<img src="docs/screenshots/menu-stats-mobile.PNG" height="320">
 
 ### Other
 
@@ -83,7 +80,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - NFO viewer
 - Actor / person modal with filmography
 
-<img src="docs/screenshots/fiche-acteur-1.png" width="65%"> <img src="docs/screenshots/fiche-acteur-mobile.png" width="32%">
+<img src="docs/screenshots/fiche-acteur-1.png" height="260"> <img src="docs/screenshots/fiche-acteur-mobile.png" height="260">
 <img src="docs/screenshots/fiche-acteur-recherche-1.png" width="49%"> <img src="docs/screenshots/fiche-acteur.recherche-2.png" width="49%">
 
 - Collection modal (saga grouping)
@@ -92,7 +89,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Web Push notifications including iOS Safari / Apple Web Push
 - Mobile-first navigation with haptic feedback
 
-<img src="docs/screenshots/menu-mobile.PNG" width="32%">
+<img src="docs/screenshots/menu-mobile.PNG" height="320">
 
 - Guest mode (read-only, watchlist allowed)
 - Admin mode (full access including interactive search and deletion)
