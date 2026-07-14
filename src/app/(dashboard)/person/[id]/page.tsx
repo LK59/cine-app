@@ -9,7 +9,7 @@ import { WatchlistButton } from "@/components/WatchlistButton";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import {
   ArrowLeft, Star, Film, Tv, BookCheck, User, Calendar, MapPin, Briefcase,
-  Instagram, ExternalLink, X, ChevronLeft, ChevronRight, Globe, PlusCircle,
+  ExternalLink, X, ChevronLeft, ChevronRight, Globe, CirclePlus,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -20,6 +20,7 @@ import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/rou
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { selectBio } from "@/lib/format";
+import { InstagramIcon } from "@/components/BrandIcons";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ function CreditCard({ c }: { c: PersonCredit }) {
                 requested ? "bg-emerald-500/20 text-emerald-400" : "bg-sky-500/20 text-sky-300 hover:bg-sky-500/30"
               }`}
             >
-              <PlusCircle size={9} />
+              <CirclePlus size={9} />
               {requested ? "Demandé" : requesting ? "…" : "Demander"}
             </button>
           </div>
@@ -533,7 +534,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
             <div className="mt-6 grid gap-2">
               {vip?.links.instagram && (
                 <a href={vip.links.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-2xl border border-pink-300/20 bg-pink-300/10 px-4 py-3 text-sm font-semibold text-pink-100 transition hover:bg-pink-300/20">
-                  <span className="flex items-center gap-3"><Instagram size={16} /> Instagram</span><ExternalLink size={14} />
+                  <span className="flex items-center gap-3"><InstagramIcon size={16} /> Instagram</span><ExternalLink size={14} />
                 </a>
               )}
               {vip?.links.tiktok && (
@@ -827,7 +828,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
               {enriched.instagram && (
                 <a href={enriched.instagram} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-pink-500/10 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition hover:bg-pink-500/20">
-                  <Instagram size={12} /> Instagram
+                  <InstagramIcon size={12} /> Instagram
                 </a>
               )}
               {enriched.imdb && (

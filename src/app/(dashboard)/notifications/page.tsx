@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCircle, Loader2, Send, XCircle } from "lucide-react";
+import { Bell, CircleCheckBig, Loader2, Send, CircleX } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
@@ -148,10 +148,10 @@ export default function NotificationsPage() {
             )}
           </button>
           {testState === "sent" && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> {t('notifications.sent')}</p>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CircleCheckBig size={13} /> {t('notifications.sent')}</p>
           )}
           {testState === "error" && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><XCircle size={13} /> {t('notifications.sendError')}</p>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><CircleX size={13} /> {t('notifications.sendError')}</p>
           )}
         </aside>
       </div>

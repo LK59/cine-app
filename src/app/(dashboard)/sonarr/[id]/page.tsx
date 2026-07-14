@@ -20,7 +20,7 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
-  CheckCircle2,
+  CircleCheck,
   Circle,
   Star,
   Download,
@@ -577,14 +577,14 @@ export default function SonarrSeriesDetailPage() {
                               <div className="flex min-w-0 items-center gap-2">
                                 {isGuest ? (
                                   ep.monitored ? (
-                                    <CheckCircle2 size={16} className="text-accent-400" />
+                                    <CircleCheck size={16} className="text-accent-400" />
                                   ) : (
                                     <Circle size={16} className="text-slate-600" />
                                   )
                                 ) : (
                                   <button onClick={() => toggleEpisodeMonitored(ep, !ep.monitored)}>
                                     {ep.monitored ? (
-                                      <CheckCircle2 size={16} className="text-accent-400" />
+                                      <CircleCheck size={16} className="text-accent-400" />
                                     ) : (
                                       <Circle size={16} className="text-slate-600" />
                                     )}

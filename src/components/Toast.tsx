@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState } from "react";
-import { CheckCircle2, XCircle, Info, X } from "lucide-react";
+import { CircleCheck, CircleX, Info, X } from "lucide-react";
 
 type ToastType = "success" | "error" | "info";
 interface Toast { id: string; message: string; type: ToastType }
@@ -45,11 +45,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             }`}
           >
             {t.type === "success" ? (
-              <CheckCircle2 size={16} className="shrink-0" />
+              <CircleCheck size={16} className="shrink-0" />
             ) : t.type === "info" ? (
               <Info size={16} className="shrink-0" />
             ) : (
-              <XCircle size={16} className="shrink-0" />
+              <CircleX size={16} className="shrink-0" />
             )}
             <span>{t.message}</span>
             <button

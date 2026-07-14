@@ -8,8 +8,9 @@ import { fetcher } from "@/lib/swr";
 import { Modal } from "@/components/Modal";
 import {
   Film, Tv, BookCheck, Plus, Loader2, Star, MapPin, Calendar,
-  Instagram, ExternalLink, Globe, ChevronLeft, ChevronRight, X,
+  ExternalLink, Globe, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
+import { InstagramIcon } from "@/components/BrandIcons";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { useToast } from "@/components/Toast";
 import { createPortal } from "react-dom";
@@ -259,7 +260,7 @@ export function ActorModal({
             {enriched.instagram && (
               <a href={enriched.instagram} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-pink-500/10 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition hover:bg-pink-500/20">
-                <Instagram size={12} /> Instagram
+                <InstagramIcon size={12} /> Instagram
               </a>
             )}
             {enriched.imdb && (

@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { CircleCheck, CircleX, Loader2 } from "lucide-react";
 import type { JackettIndexer } from "@/lib/clients/jackett";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
@@ -53,12 +53,12 @@ export default function JackettPage() {
                 <div className="flex items-center gap-3">
                   {state === "ok" && (
                     <span className="badge bg-emerald-500/15 text-emerald-400">
-                      <CheckCircle2 size={12} /> OK
+                      <CircleCheck size={12} /> OK
                     </span>
                   )}
                   {state === "fail" && (
                     <span className="badge bg-red-500/15 text-red-400">
-                      <XCircle size={12} /> {t('jackett.testFailed')}
+                      <CircleX size={12} /> {t('jackett.testFailed')}
                     </span>
                   )}
                   {!isGuest && (

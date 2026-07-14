@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/StateViews";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import type { CalendarEvent } from "@/app/api/calendar/route";
-import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, PlusCircle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, CirclePlus, X } from "lucide-react";
 import { useT, useLocale } from "@/components/TranslationProvider";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
             requested ? "bg-emerald-500/20 text-emerald-400" : "bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
           }`}
         >
-          <PlusCircle size={9} />
+          <CirclePlus size={9} />
           {requested ? t('calendar.actionRequested') : requesting ? "…" : t('calendar.actionRequest')}
         </button>
       </div>
@@ -77,7 +77,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
           requested ? "bg-emerald-500/15 text-emerald-400" : "bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
         }`}
       >
-        <PlusCircle size={12} />
+        <CirclePlus size={12} />
         {requested ? t('calendar.actionRequested') : requesting ? t('calendar.actionRequesting') : t('calendar.actionRequest')}
       </button>
     </div>

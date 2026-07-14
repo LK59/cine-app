@@ -5,7 +5,7 @@ import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/StateViews";
 import type { ServiceHealth } from "@/app/api/health/route";
-import { CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2 } from "lucide-react";
+import { CircleCheckBig, AlertTriangle, CircleX, RefreshCw, Loader2 } from "lucide-react";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useState, useCallback } from "react";
 import { useT } from "@/components/TranslationProvider";
@@ -17,9 +17,9 @@ interface HealthResponse {
 }
 
 function StatusIcon({ status }: { status: ServiceHealth["status"] }) {
-  if (status === "ok")       return <CheckCircle   size={16} className="text-emerald-400" />;
+  if (status === "ok")       return <CircleCheckBig   size={16} className="text-emerald-400" />;
   if (status === "degraded") return <AlertTriangle size={16} className="text-amber-400" />;
-  return                            <XCircle       size={16} className="text-red-400" />;
+  return                            <CircleX       size={16} className="text-red-400" />;
 }
 
 function LatencyBar({ ms }: { ms: number | null }) {
@@ -111,8 +111,8 @@ async function runApiCheck(ep: ApiEndpointDef): Promise<ApiEndpointResult> {
 
 function ApiStatusBadge({ status }: { status: ApiEndpointResult["status"] }) {
   if (status === "pending") return <Loader2 size={14} className="animate-spin text-slate-500" />;
-  if (status === "ok")      return <CheckCircle size={14} className="text-emerald-400" />;
-  return                           <XCircle size={14} className="text-red-400" />;
+  if (status === "ok")      return <CircleCheckBig size={14} className="text-emerald-400" />;
+  return                           <CircleX size={14} className="text-red-400" />;
 }
 
 function ApiChecksSection() {
@@ -182,8 +182,8 @@ function ApiChecksSection() {
                   groupStatus === "ok" ? "bg-emerald-500/5" : groupStatus === "error" ? "bg-red-500/5" : "bg-slate-800/30"
                 }`}>
                   {groupStatus === "pending" && <Loader2 size={13} className="animate-spin text-slate-500" />}
-                  {groupStatus === "ok"      && <CheckCircle size={13} className="text-emerald-400" />}
-                  {groupStatus === "error"   && <XCircle size={13} className="text-red-400" />}
+                  {groupStatus === "ok"      && <CircleCheckBig size={13} className="text-emerald-400" />}
+                  {groupStatus === "error"   && <CircleX size={13} className="text-red-400" />}
                   <span className="text-sm font-semibold text-white">{t(group)}</span>
                 </div>
                 <div className="divide-y divide-white/5">

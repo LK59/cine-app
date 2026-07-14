@@ -12,8 +12,8 @@ import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
 import {
-  Star, BookCheck, PlusCircle, ExternalLink,
-  Eye, Heart, X, Clock, CheckCircle2, Telescope,
+  Star, BookCheck, CirclePlus, ExternalLink,
+  Eye, Heart, X, Clock, CircleCheck, Telescope,
 } from "lucide-react";
 import type { SimilarMovie } from "@/app/api/radarr/movies/[id]/similar/route";
 import type { SimilarSeries } from "@/app/api/sonarr/series/[id]/similar/route";
@@ -41,7 +41,7 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
     to_watch:   { label: t("watchlist.statuses.toWatch"),   icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
     to_request: { label: t("watchlist.statuses.toRequest"), icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
     favorite:   { label: t("watchlist.statuses.favorites"), icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
-    watched:    { label: t("watchlist.statuses.watched"),   icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
+    watched:    { label: t("watchlist.statuses.watched"),   icon: CircleCheck, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
     abandoned:  { label: t("watchlist.statuses.abandoned"), icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
   };
 
@@ -128,7 +128,7 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
       ? [{ label: t("recommendations.viewSheet"), icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
       : [{
           label: requested ? t("recommendations.requestSent") : requesting ? t("recommendations.requesting") : t("recommendations.request"),
-          icon: <PlusCircle size={16} />,
+          icon: <CirclePlus size={16} />,
           onClick: () => doRequest(),
           disabled: requested || requesting,
           variant: requested ? "accent" as const : "default" as const,
@@ -222,7 +222,7 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
                     requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
                   }`}
                 >
-                  <PlusCircle size={8} />
+                  <CirclePlus size={8} />
                   {requested ? t("recommendations.requested") : requesting ? "…" : t("recommendations.request")}
                 </button>
               )}

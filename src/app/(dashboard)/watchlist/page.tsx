@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/StateViews";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import {
-  Eye, Heart, X, Clock, CheckCircle2, Film, Tv, Trash2,
-  PlusCircle, ExternalLink, Search, BookCheck, MessageSquare,
+  Eye, Heart, X, Clock, CircleCheck, Film, Tv, Trash2,
+  CirclePlus, ExternalLink, Search, BookCheck, MessageSquare,
   Plus, Star, Telescope,
 } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
@@ -31,7 +31,7 @@ const STATUS_META: Record<WatchlistStatus, {
   to_watch:   { labelKey: "watchlist.statuses.toWatch",    icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500",     borderAccent: "border-l-sky-400" },
   to_request: { labelKey: "watchlist.statuses.toRequest",  icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500",   borderAccent: "border-l-amber-400" },
   favorite:   { labelKey: "watchlist.statuses.favorites",  icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500",    borderAccent: "border-l-rose-400" },
-  watched:    { labelKey: "watchlist.statuses.watched",    icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500", borderAccent: "border-l-emerald-400" },
+  watched:    { labelKey: "watchlist.statuses.watched",    icon: CircleCheck, textColor: "text-emerald-400", bgSolid: "bg-emerald-500", borderAccent: "border-l-emerald-400" },
   abandoned:  { labelKey: "watchlist.statuses.abandoned",  icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500",   borderAccent: "border-l-slate-400" },
 };
 
@@ -317,7 +317,7 @@ function RequestButton({ item }: { item: WatchlistItem }) {
         "bg-white/10 text-white hover:bg-white/20"
       }`}
     >
-      <PlusCircle size={9} />
+      <CirclePlus size={9} />
       {state === "done" ? t('common.requested') : state === "loading" ? "…" : t('common.request')}
     </button>
   );
@@ -383,7 +383,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
     // Library or request
     ...(libraryHref
       ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => { window.location.href = libraryHref; } }]
-      : [{ label: t('common.request'), icon: <PlusCircle size={16} />, onClick: async () => {
+      : [{ label: t('common.request'), icon: <CirclePlus size={16} />, onClick: async () => {
           await fetch("/api/jellyseerr/requests", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

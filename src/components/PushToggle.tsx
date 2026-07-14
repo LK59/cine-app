@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Bell, BellOff, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Bell, BellOff, Loader2, CircleCheckBig, CircleX } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
 type State = "unsupported" | "denied" | "unsubscribed" | "subscribed" | "loading";
@@ -90,7 +90,7 @@ export function PushToggle() {
 
   if (state === "unsupported") return (
     <div className="flex items-center gap-2 text-sm text-slate-500">
-      <XCircle size={15} />
+      <CircleX size={15} />
       {t('notifications.pushToggle.unsupported')}
     </div>
   );
@@ -112,7 +112,7 @@ export function PushToggle() {
   if (state === "subscribed") return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2 text-sm text-emerald-400">
-        <CheckCircle size={15} />
+        <CircleCheckBig size={15} />
         {t('notifications.pushToggle.enabled')}
       </div>
       <button

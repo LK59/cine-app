@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/StateViews";
 import type { RecommendationGroup, RecommendedMovie } from "@/app/api/recommendations/route";
 import {
-  Star, PlusCircle, ExternalLink, Eye, Heart, X, Clock, CheckCircle2, BookCheck, Telescope,
+  Star, CirclePlus, ExternalLink, Eye, Heart, X, Clock, CircleCheck, BookCheck, Telescope,
 } from "lucide-react";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
@@ -46,7 +46,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
     to_watch:   { label: t('watchlist.statuses.toWatch'),   icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
     to_request: { label: t('watchlist.statuses.toRequest'), icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
     favorite:   { label: t('watchlist.statuses.favorites'), icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
-    watched:    { label: t('watchlist.statuses.watched'),   icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
+    watched:    { label: t('watchlist.statuses.watched'),   icon: CircleCheck, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
     abandoned:  { label: t('watchlist.statuses.abandoned'), icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
   };
 
@@ -121,7 +121,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
       ? [{ label: t('recommendations.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
       : [{
           label: requested ? t('recommendations.requestSent') : requesting ? t('recommendations.requesting') : t('recommendations.request'),
-          icon: <PlusCircle size={16} />,
+          icon: <CirclePlus size={16} />,
           onClick: () => doRequest(),
           disabled: requested || requesting,
           variant: requested ? "accent" as const : "default" as const,
@@ -221,7 +221,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
                     requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
                   }`}
                 >
-                  <PlusCircle size={9} />
+                  <CirclePlus size={9} />
                   {requested ? t('recommendations.requested') : requesting ? "…" : t('recommendations.request')}
                 </button>
               )}

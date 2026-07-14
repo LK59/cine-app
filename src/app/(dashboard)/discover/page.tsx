@@ -11,7 +11,7 @@ import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { Film, Tv, Star, BookCheck, Telescope, Sparkles, SearchIcon, X, Eye, Heart, Clock, CheckCircle2, PlusCircle, ExternalLink } from "lucide-react";
+import { Film, Tv, Star, BookCheck, Telescope, Sparkles, SearchIcon, X, Eye, Heart, Clock, CircleCheck, CirclePlus, ExternalLink } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import type { WatchlistStatus } from "@/lib/db";
 import { useT } from "@/components/TranslationProvider";
@@ -76,7 +76,7 @@ function PosterCard({
     to_watch:   { label: t('watchlist.statuses.toWatch'),   icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
     to_request: { label: t('watchlist.statuses.toRequest'), icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
     favorite:   { label: t('watchlist.statuses.favorites'), icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
-    watched:    { label: t('watchlist.statuses.watched'),   icon: CheckCircle2, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
+    watched:    { label: t('watchlist.statuses.watched'),   icon: CircleCheck, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
     abandoned:  { label: t('watchlist.statuses.abandoned'), icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
   };
 
@@ -130,7 +130,7 @@ function PosterCard({
       ? [{ label: t('discover.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
       : [{
           label: requested ? t('discover.requested') : requesting ? t('common.send') : t('discover.request'),
-          icon: <PlusCircle size={16} />,
+          icon: <CirclePlus size={16} />,
           onClick: () => onRequest(item),
           disabled: requested || requesting,
           variant: requested ? "accent" as const : "default" as const,
@@ -235,7 +235,7 @@ function PosterCard({
                     requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
                   }`}
                 >
-                  <PlusCircle size={9} />
+                  <CirclePlus size={9} />
                   {requested ? t('discover.requested') : requesting ? "…" : t('discover.request')}
                 </button>
               )}
