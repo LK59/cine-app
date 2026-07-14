@@ -6,7 +6,7 @@ import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { TranslationProvider } from "@/components/TranslationProvider";
-import { LOCALES, LOCALE_COOKIE, type Locale } from "@/lib/i18n";
+import { LOCALES, LOCALE_COOKIE, loadLocaleDict, type Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Cine App",
@@ -37,6 +37,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const rawLang = (await cookies()).get(LOCALE_COOKIE)?.value ?? "";
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
+  const dict = await loadLocaleDict(lang);
   return (
     <html lang={lang} className="dark">
       <head>
@@ -44,7 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;if(localStorage.getItem("cine-amoled")==="1")document.documentElement.dataset.amoled="";}catch(e){}` }} />
       </head>
       <body>
-        <TranslationProvider>
+        <TranslationProvider initialLocale={lang} initialDict={dict}>
           <ThemeProvider>
             <SWRProvider>
               <ToastProvider>{children}</ToastProvider>

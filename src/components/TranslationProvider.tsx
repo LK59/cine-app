@@ -35,9 +35,22 @@ const TranslationContext = createContext<TranslationContextValue>({
   setLocale: () => Promise.resolve(),
 });
 
-export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-  const [t, setT] = useState<TFn>(() => defaultT);
+export function TranslationProvider({
+  children,
+  initialLocale,
+  initialDict,
+}: {
+  children: React.ReactNode;
+  // Resolved server-side (from the lang cookie) so the very first paint —
+  // SSR and hydration alike — is already in the right language instead of
+  // flashing the instance default (fr) for a moment.
+  initialLocale?: Locale;
+  initialDict?: Record<string, unknown>;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale ?? DEFAULT_LOCALE);
+  const [t, setT] = useState<TFn>(() =>
+    initialDict ? createT(initialDict, fr) : defaultT
+  );
 
   useEffect(() => {
     const cookieLang = getLocaleFromCookie(document.cookie);
@@ -51,8 +64,12 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
       }
     }
 
-    // Render immediately with what we have (cookie or fr placeholder)
-    applyLocale(cookieLang ?? DEFAULT_LOCALE);
+    // The server already resolved the correct locale from the cookie (see
+    // layout.tsx) — only fall back to re-deriving it here if that prop is
+    // somehow missing.
+    if (!initialLocale) {
+      applyLocale(cookieLang ?? DEFAULT_LOCALE);
+    }
 
     // Fetch runtime config + user prefs in parallel — both work without baked-in env vars
     Promise.all([
