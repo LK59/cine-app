@@ -32,3 +32,6 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
