@@ -214,7 +214,7 @@ export default function JellyfinPage() {
                 {[0, 1].map(i => <div key={i} className="card h-24 animate-pulse bg-slate-800/50" />)}
               </div>
               <div>
-                <div className="mb-3 h-4 w-40 rounded bg-slate-800 animate-pulse" />
+                <div className="mb-3 h-4 w-40 rounded-sm bg-slate-800 animate-pulse" />
                 <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
                   <CarouselSkeleton count={5} width="w-32" />
                 </HorizontalCarousel>
@@ -259,9 +259,9 @@ export default function JellyfinPage() {
                         href={`/api/jellyfin/redirect?itemId=${m.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="card w-32 shrink-0 overflow-hidden hover:ring-1 hover:ring-accent-500/40 [touch-action:manipulation]"
+                        className="card w-32 shrink-0 overflow-hidden hover:ring-1 hover:ring-accent-500/40 touch-manipulation"
                       >
-                        <div className="aspect-[2/3] bg-slate-800">
+                        <div className="aspect-2/3 bg-slate-800">
                           {m.imageTag ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -285,7 +285,7 @@ export default function JellyfinPage() {
                             <p className="text-[11px] text-slate-600">{formatDuration(m.runtimeTicks)}</p>
                           )}
                           {m.playCount > 1 && (
-                            <span className="mt-1 inline-block rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">
+                            <span className="mt-1 inline-block rounded-sm bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">
                               {m.playCount}×
                             </span>
                           )}
@@ -312,7 +312,7 @@ export default function JellyfinPage() {
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-3 hover:bg-white/5"
                       >
-                        <div className="h-10 w-16 shrink-0 overflow-hidden rounded bg-slate-800">
+                        <div className="h-10 w-16 shrink-0 overflow-hidden rounded-sm bg-slate-800">
                           {e.imageTag ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img

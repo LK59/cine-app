@@ -282,7 +282,7 @@ export default function SonarrSeriesDetailPage() {
         <div className="pointer-events-none absolute inset-x-0 top-0 aspect-video">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={backdrop} alt="" className="h-full w-full object-cover object-top animate-fade-in" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
           <div
             className="absolute inset-0"
             style={{
@@ -297,7 +297,7 @@ export default function SonarrSeriesDetailPage() {
       <div className="relative h-[32vw] min-h-[180px] max-h-[380px] xl:max-h-[520px]">
         <button
           onClick={() => router.back()}
-          className="absolute left-4 top-4 sm:left-6 md:left-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm hover:bg-black/60"
+          className="absolute left-4 top-4 sm:left-6 md:left-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-black/60"
         >
           <ArrowLeft size={14} /> {t('common.back')}
         </button>
@@ -306,7 +306,7 @@ export default function SonarrSeriesDetailPage() {
             href={`/api/jellyfin/redirect?itemId=${jfItem.Id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute right-4 top-4 sm:right-6 md:right-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm hover:bg-black/60"
+            className="absolute right-4 top-4 sm:right-6 md:right-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-black/60"
           >
             <ExternalLink size={14} /> {t('sonarr.viewOnJellyfin')}
           </a>
@@ -325,13 +325,13 @@ export default function SonarrSeriesDetailPage() {
             </div>
           </div>
           <div className="min-w-0 flex-1 pb-1">
-            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow sm:text-2xl md:text-3xl">
+            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl">
               {series.title}
               <span className="ml-2 text-base font-normal text-white/60 md:text-lg">({series.year})</span>
             </h1>
             <div className="flex flex-wrap items-center gap-2">
               {info?.imdbRating && (
-                <span className="flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">
+                <span className="flex items-center gap-1 rounded-sm bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">
                   <Star size={11} className="fill-current" /> {info.imdbRating}
                 </span>
               )}
@@ -339,7 +339,7 @@ export default function SonarrSeriesDetailPage() {
                 <span className="text-xs text-white/60">{t('sonarr.minPerEp', { n: info.tmdb.runtime })}</span>
               )}
               {info?.tmdb?.genres.slice(0, 3).map((g) => (
-                <span key={g} className="badge bg-white/10 text-white/70 backdrop-blur-sm">{g}</span>
+                <span key={g} className="badge bg-white/10 text-white/70 backdrop-blur-xs">{g}</span>
               ))}
               {jfItem && (
                 <span className={`badge ${isWatched ? "bg-emerald-500/25 text-emerald-300" : "bg-white/10 text-white/60"}`}>
@@ -482,7 +482,7 @@ export default function SonarrSeriesDetailPage() {
               return (
                 <button
                   key={actor.tmdbId}
-                  className="w-20 shrink-0 snap-start text-center [touch-action:manipulation]"
+                  className="w-20 shrink-0 snap-start text-center touch-manipulation"
                   onClick={() => isVip ? router.push("/person/3247402") : setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
                 >
                   <div className={`mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-all ${
@@ -652,7 +652,7 @@ export default function SonarrSeriesDetailPage() {
       )}
 
       {showDeleteConfirm && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}>
+        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" onClick={() => setShowDeleteConfirm(false)}>
           <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-semibold text-white">{t('sonarr.confirmDeleteSonarr')}</p>
             <p className="mt-1.5 text-xs text-slate-400">
@@ -697,5 +697,5 @@ function JellyseerrBadge({ status }: { status: number }) {
   const cls = JS_STATUS_CLS[status];
   const label = JS_STATUS_LABEL[status];
   if (!cls) return null;
-  return <span className={`badge backdrop-blur-sm ${cls}`}>{label}</span>;
+  return <span className={`badge backdrop-blur-xs ${cls}`}>{label}</span>;
 }

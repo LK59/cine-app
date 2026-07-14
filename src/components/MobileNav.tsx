@@ -240,7 +240,7 @@ export function MobileNav() {
       {open && (
         <div
           ref={overlayRef}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs md:hidden"
           onClick={() => setOpen(false)}
           style={{ touchAction: "none" }}
         />
@@ -254,7 +254,7 @@ export function MobileNav() {
         }`}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div data-sheet-content className="glass-panel rounded-t-2xl border-x-0 border-b-0 overflow-y-auto [overscroll-behavior:contain]" style={{ maxHeight: "85dvh" }}>
+        <div data-sheet-content className="glass-panel rounded-t-2xl border-x-0 border-b-0 overflow-y-auto overscroll-contain" style={{ maxHeight: "85dvh" }}>
           {/* Visual drag indicator */}
           <div className="flex cursor-grab justify-center px-4 pt-4 pb-3">
             <div className="h-1 w-12 rounded-full bg-white/30" />
@@ -268,7 +268,7 @@ export function MobileNav() {
           >
             <Search size={15} />
             <span className="flex-1 text-left">{t('nav.mobile.searchHint')}</span>
-            <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
+            <kbd className="rounded-sm bg-white/10 px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
           </button>
 
           <SheetSection title={t('nav.mobile.sectionContent')} items={SECTION_CONTENT} isActive={isActive} onClose={() => setOpen(false)} />

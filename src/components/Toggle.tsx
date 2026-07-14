@@ -16,7 +16,7 @@ export function Toggle({
       className="inline-flex items-center gap-2 text-sm text-slate-300"
     >
       <span
-        className={`relative inline-block h-5 w-9 shrink-0 rounded-full border border-white/10 backdrop-blur-sm transition-colors ${
+        className={`relative inline-block h-5 w-9 shrink-0 rounded-full border border-white/10 backdrop-blur-xs transition-colors ${
           checked ? "bg-accent-600/80" : "bg-slate-700/60"
         }`}
       >

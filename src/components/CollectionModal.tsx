@@ -51,7 +51,7 @@ function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: numbe
 
   const inner = (
     <div className="card flex flex-col overflow-hidden transition-all hover:ring-1 hover:ring-accent-500/40">
-      <div className="relative aspect-[2/3] bg-slate-800">
+      <div className="relative aspect-2/3 bg-slate-800">
         {part.posterPath ? (
           <Image
             src={`${TMDB_IMAGE_BASE}/w185${part.posterPath}`}
@@ -66,12 +66,12 @@ function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: numbe
           </div>
         )}
         {isInLib && (
-          <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+          <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-sm bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-xs">
             <BookCheck size={9} />
           </div>
         )}
         {part.voteAverage > 0 && (
-          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 backdrop-blur-sm">
+          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 backdrop-blur-xs">
             <Star size={9} className="fill-amber-400" />
             {part.voteAverage.toFixed(1)}
           </div>
@@ -84,7 +84,7 @@ function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: numbe
           <button
             onClick={handleAdd}
             disabled={adding}
-            className="mt-auto flex items-center justify-center gap-1 rounded bg-accent-600/20 py-1 text-[11px] text-accent-400 transition-colors hover:bg-accent-600/30 disabled:opacity-50"
+            className="mt-auto flex items-center justify-center gap-1 rounded-sm bg-accent-600/20 py-1 text-[11px] text-accent-400 transition-colors hover:bg-accent-600/30 disabled:opacity-50"
           >
             {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
             {adding ? t('common.adding') : t('common.add')}

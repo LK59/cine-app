@@ -139,10 +139,10 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
 
   return (
     <>
-      <div className="group relative flex-shrink-0 w-32 select-none">
+      <div className="group relative shrink-0 w-32 select-none">
         {/* Poster */}
         <div
-          className="relative overflow-hidden rounded-lg aspect-[2/3] bg-slate-800 cursor-pointer"
+          className="relative overflow-hidden rounded-lg aspect-2/3 bg-slate-800 cursor-pointer"
           onClick={handlePosterClick}
         >
           {m.posterPath ? (
@@ -166,7 +166,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
 
           {/* TMDB rating — always visible */}
           {m.voteAverage > 0 && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-sm">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-xs">
               <Star size={7} className="fill-current" /> {m.voteAverage.toFixed(1)}
             </div>
           )}
@@ -179,7 +179,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             {/* 5 status buttons — fitted for w-32 cards */}
             <div className="flex gap-0.5">
               {ALL_STATUSES.map((s) => {
@@ -307,8 +307,8 @@ export default function RecommendationsPage() {
           {[0, 1, 2].map((i) => (
             <div key={i}>
               <div className="mb-3 flex items-center gap-2">
-                <div className="h-3 w-32 animate-pulse rounded bg-slate-800" />
-                <div className="h-4 w-40 animate-pulse rounded bg-slate-700" />
+                <div className="h-3 w-32 animate-pulse rounded-sm bg-slate-800" />
+                <div className="h-4 w-40 animate-pulse rounded-sm bg-slate-700" />
               </div>
               <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
                 <CarouselSkeleton count={5} width="w-32" />

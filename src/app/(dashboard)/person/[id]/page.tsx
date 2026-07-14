@@ -69,7 +69,7 @@ function CreditCard({ c }: { c: PersonCredit }) {
 
   const content = (
     <div className="card group flex flex-col overflow-hidden">
-      <div className="relative aspect-[2/3] shrink-0 bg-slate-800">
+      <div className="relative aspect-2/3 shrink-0 bg-slate-800">
         {poster ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={poster} alt={c.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
@@ -79,18 +79,18 @@ function CreditCard({ c }: { c: PersonCredit }) {
           </div>
         )}
         {c.inLibrary && (
-          <div className="absolute right-1.5 top-1.5 rounded bg-emerald-600/90 p-1">
+          <div className="absolute right-1.5 top-1.5 rounded-sm bg-emerald-600/90 p-1">
             <BookCheck size={9} className="text-white" />
           </div>
         )}
         {c.voteAverage > 0 && (
-          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
             <Star size={8} className="fill-amber-400" />
             {c.voteAverage.toFixed(1)}
           </div>
         )}
         {!c.inLibrary && (
-          <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-slate-900/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 gap-1.5">
+          <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-slate-900/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 gap-1.5">
             <WatchlistButton
               mediaType={c.mediaType === "movie" ? "movie" : "series"}
               tmdbId={c.tmdbId}
@@ -158,8 +158,8 @@ function GalleryLightbox({
   if (files.length === 0 || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-[#05040a]/95 p-4 backdrop-blur-xl sm:p-6 lg:p-8" onClick={onClose}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-amber-400/10 to-transparent" />
+    <div className="fixed inset-0 z-9999 grid place-items-center overflow-hidden bg-[#05040a]/95 p-4 backdrop-blur-xl sm:p-6 lg:p-8" onClick={onClose}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-linear-to-b from-amber-400/10 to-transparent" />
       <button
         onClick={(e) => { e.stopPropagation(); prev(); }}
         aria-label="Photo precedente"
@@ -220,8 +220,8 @@ function TimelineSection({ items }: { items: NonNullable<import("@/lib/vip-perso
       <div className="relative ml-4 border-l border-white/10 pl-8 sm:ml-8 sm:pl-10">
         {items.map((item, i) => (
           <div key={i} className="group relative mb-8 last:mb-0">
-            <div className="absolute -left-[2.6rem] top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-amber-300/60 bg-[#050712] transition group-hover:border-amber-300 group-hover:bg-amber-300/20 sm:-left-[2.8rem]" />
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-white/20 hover:bg-white/[0.07] sm:p-5">
+            <div className="absolute left-[-2.6rem] top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-amber-300/60 bg-[#050712] transition group-hover:border-amber-300 group-hover:bg-amber-300/20 sm:left-[-2.8rem]" />
+            <div className="rounded-2xl border border-white/10 bg-white/4 p-4 transition hover:border-white/20 hover:bg-white/[0.07] sm:p-5">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold text-amber-200/80">{item.date}</span>
                 {item.tag && (
@@ -249,7 +249,7 @@ function QuotesSection({ quotes }: { quotes: NonNullable<import("@/lib/vip-perso
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         {quotes.map((q, i) => (
-          <blockquote key={i} className="relative rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <blockquote key={i} className="relative rounded-2xl border border-white/10 bg-white/4 p-6">
             <span className="absolute -top-3 left-5 font-serif text-5xl leading-none text-amber-300/40 select-none">&ldquo;</span>
             <p className="relative text-sm italic leading-8 text-slate-200/85 sm:text-base">{q.text}</p>
             {q.context && <footer className="mt-4 text-xs text-white/35">— {q.context}</footer>}
@@ -323,7 +323,7 @@ function NewsSection() {
               href={a.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex flex-col justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-4 transition hover:border-amber-200/30 hover:bg-white/[0.09]"
+              className="group flex flex-col justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-amber-200/30 hover:bg-white/9"
             >
               <p className="line-clamp-3 text-sm font-medium leading-6 text-white/90 group-hover:text-white">{a.title}</p>
               <div className="flex items-center justify-between text-xs text-white/40">
@@ -399,7 +399,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={bannerUrl} alt="Clara Galle" className="absolute inset-0 -z-30 h-full w-full object-cover object-[50%_16%]" />
         <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_75%_18%,rgba(250,204,21,0.18),transparent_30%),linear-gradient(90deg,rgba(5,7,18,0.95)_0%,rgba(5,7,18,0.68)_40%,rgba(5,7,18,0.38)_100%)]" />
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-72 bg-gradient-to-t from-[#050712] via-[#050712]/90 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-72 bg-linear-to-t from-[#050712] via-[#050712]/90 to-transparent" />
 
         <button
           onClick={() => router.back()}
@@ -459,7 +459,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
 
           <div className="relative hidden min-h-[500px] lg:block 2xl:min-h-[560px]">
             {primaryPhoto && (
-              <div className="absolute bottom-0 right-16 h-[390px] w-[270px] overflow-hidden rounded-[2rem] border border-white/20 bg-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.55)] backdrop-blur-md 2xl:right-24 2xl:h-[430px] 2xl:w-[300px]">
+              <div className="absolute bottom-0 right-16 h-[390px] w-[270px] overflow-hidden rounded-4xl border border-white/20 bg-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.55)] backdrop-blur-md 2xl:right-24 2xl:h-[430px] 2xl:w-[300px]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={primaryPhoto} alt="Clara Galle" className="h-full w-full object-cover" decoding="async" />
               </div>
@@ -516,11 +516,11 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
 
           <aside className="rounded-[1.75rem] border border-white/10 bg-[#0b1020]/80 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
             <div className="flex items-center gap-4">
-              <div className="rounded-full bg-gradient-to-br from-amber-200 via-yellow-400 to-rose-300 p-[3px] shadow-[0_0_34px_rgba(250,204,21,0.35)]">
+              <div className="rounded-full bg-linear-to-br from-amber-200 via-yellow-400 to-rose-300 p-[3px] shadow-[0_0_34px_rgba(250,204,21,0.35)]">
                 <div className="h-24 w-24 overflow-hidden rounded-full bg-slate-900 ring-4 ring-[#0b1020]">
                   {profileUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={profileUrl} alt="Clara Galle" className="h-full w-full object-cover [object-position:50%_20%]" decoding="async" />
+                    <img src={profileUrl} alt="Clara Galle" className="h-full w-full object-cover object-[50%_20%]" decoding="async" />
                   ) : (
                     <div className="flex h-full items-center justify-center"><User size={34} className="text-slate-600" /></div>
                   )}
@@ -719,7 +719,7 @@ function TmdbPhotoLightbox({ photos, startIndex, onClose }: { photos: PersonPhot
     return () => document.removeEventListener("keydown", h);
   }, [onClose, prev, next]);
   return (
-    <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-[#05040a]/95 p-4 backdrop-blur-xl sm:p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-9999 grid place-items-center overflow-hidden bg-[#05040a]/95 p-4 backdrop-blur-xl sm:p-6" onClick={onClose}>
       <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:left-6"><ChevronLeft size={24} /></button>
       <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:right-6"><ChevronRight size={24} /></button>
       <button onClick={onClose} className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:right-6 sm:top-6"><X size={20} /></button>
@@ -891,7 +891,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
       )}
 
       {lightboxIndex !== null && photos.length > 0 && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={() => setLightboxIndex(null)}>
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/90 backdrop-blur-xs" onClick={() => setLightboxIndex(null)}>
           <button onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => ((i ?? 0) - 1 + photos.length) % photos.length); }}
             className="absolute left-4 top-1/2 z-10 -translate-y-1/2 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
             <ChevronLeft size={20} />

@@ -1,62 +1,221 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-/* ── Accent themes ─────────────────────────────────────────────────────────── */
-:root {
-  /* violet (default) */
-  --accent-50:  240 237 255;
-  --accent-100: 225 218 255;
-  --accent-400: 155 140 255;
-  --accent-500: 124 92 255;
-  --accent-600: 100 56 245;
-  --accent-700: 81 40 207;
-}
-:root[data-accent="blue"] {
-  --accent-50:  239 246 255;
-  --accent-100: 219 234 254;
-  --accent-400: 96 165 250;
-  --accent-500: 59 130 246;
-  --accent-600: 37 99 235;
-  --accent-700: 29 78 216;
-}
-:root[data-accent="cyan"] {
-  --accent-50:  236 254 255;
-  --accent-100: 207 250 254;
-  --accent-400: 34 211 238;
-  --accent-500: 6 182 212;
-  --accent-600: 8 145 178;
-  --accent-700: 14 116 144;
-}
-:root[data-accent="emerald"] {
-  --accent-50:  236 253 245;
-  --accent-100: 209 250 229;
-  --accent-400: 52 211 153;
-  --accent-500: 16 185 129;
-  --accent-600: 5 150 105;
-  --accent-700: 4 120 87;
-}
-:root[data-accent="rose"] {
-  --accent-50:  255 241 242;
-  --accent-100: 255 228 230;
-  --accent-400: 251 113 133;
-  --accent-500: 244 63 94;
-  --accent-600: 225 29 72;
-  --accent-700: 190 18 60;
-}
-:root[data-accent="amber"] {
-  --accent-50:  255 251 235;
-  --accent-100: 254 243 199;
-  --accent-400: 251 191 36;
-  --accent-500: 245 158 11;
-  --accent-600: 217 119 6;
-  --accent-700: 180 83 9;
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-accent-50: rgb(var(--accent-50));
+  --color-accent-100: rgb(var(--accent-100));
+  --color-accent-400: rgb(var(--accent-400));
+  --color-accent-500: rgb(var(--accent-500));
+  --color-accent-600: rgb(var(--accent-600));
+  --color-accent-700: rgb(var(--accent-700));
+
+  --shadow-glow:
+    0 0 0 1px rgb(var(--accent-500) / 0.15),
+    0 8px 24px -8px rgb(var(--accent-500) / 0.25);
+
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-fade-in-up: fade-in-up 0.35s ease-out both;
+  --animate-fade-in-scale: fade-in-scale 0.3s ease-out both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-slide-up: slide-up 0.4s ease-out both;
+
+  @keyframes fade-in {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes fade-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in-scale {
+    0% {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes slide-up {
+    0% {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
-/* ── AMOLED ultra-dark mode ─────────────────────────────────────────────────── */
-:root[data-amoled] body {
-  background-color: #000000;
-  background-image: none;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility card {
+  @apply rounded-xl border border-white/10 bg-slate-900/40 backdrop-blur-xl shadow-glow;
+}
+
+@utility glass-panel {
+  @apply border border-white/10 bg-slate-950/60 backdrop-blur-2xl;
+}
+
+@utility btn {
+  @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur-xs transition-colors;
+}
+
+@utility btn-primary {
+  @apply btn bg-accent-600/90 text-white hover:bg-accent-600;
+}
+
+@utility btn-ghost {
+  @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10;
+}
+
+@utility btn-danger {
+  @apply btn bg-red-600/80 text-white hover:bg-red-600;
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs placeholder:text-slate-500 focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium backdrop-blur-xs;
+}
+
+@utility select {
+  @apply rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(30 41 59) 0%,
+    rgb(51 65 85) 50%,
+    rgb(30 41 59) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@utility stagger-1 {
+  /* Stagger animation helpers */
+  animation-delay: 0.05s;
+}
+
+@utility stagger-2 {
+  animation-delay: 0.1s;
+}
+
+@utility stagger-3 {
+  animation-delay: 0.15s;
+}
+
+@utility stagger-4 {
+  animation-delay: 0.2s;
+}
+
+@utility stagger-5 {
+  animation-delay: 0.25s;
+}
+
+@layer utilities {
+  /* ── Accent themes ─────────────────────────────────────────────────────────── */
+  :root {
+    /* violet (default) */
+    --accent-50: 240 237 255;
+    --accent-100: 225 218 255;
+    --accent-400: 155 140 255;
+    --accent-500: 124 92 255;
+    --accent-600: 100 56 245;
+    --accent-700: 81 40 207;
+  }
+  :root[data-accent='blue'] {
+    --accent-50: 239 246 255;
+    --accent-100: 219 234 254;
+    --accent-400: 96 165 250;
+    --accent-500: 59 130 246;
+    --accent-600: 37 99 235;
+    --accent-700: 29 78 216;
+  }
+  :root[data-accent='cyan'] {
+    --accent-50: 236 254 255;
+    --accent-100: 207 250 254;
+    --accent-400: 34 211 238;
+    --accent-500: 6 182 212;
+    --accent-600: 8 145 178;
+    --accent-700: 14 116 144;
+  }
+  :root[data-accent='emerald'] {
+    --accent-50: 236 253 245;
+    --accent-100: 209 250 229;
+    --accent-400: 52 211 153;
+    --accent-500: 16 185 129;
+    --accent-600: 5 150 105;
+    --accent-700: 4 120 87;
+  }
+  :root[data-accent='rose'] {
+    --accent-50: 255 241 242;
+    --accent-100: 255 228 230;
+    --accent-400: 251 113 133;
+    --accent-500: 244 63 94;
+    --accent-600: 225 29 72;
+    --accent-700: 190 18 60;
+  }
+  :root[data-accent='amber'] {
+    --accent-50: 255 251 235;
+    --accent-100: 254 243 199;
+    --accent-400: 251 191 36;
+    --accent-500: 245 158 11;
+    --accent-600: 217 119 6;
+    --accent-700: 180 83 9;
+  }
+
+  /* ── AMOLED ultra-dark mode ─────────────────────────────────────────────────── */
+  :root[data-amoled] body {
+    background-color: #000000;
+    background-image: none;
+  }
 }
 
 @layer base {
@@ -69,59 +228,4 @@
       radial-gradient(circle at 50% 100%, rgba(124, 92, 255, 0.08), transparent 50%);
     background-attachment: fixed;
   }
-}
-
-@layer components {
-  .card {
-    @apply rounded-xl border border-white/10 bg-slate-900/40 backdrop-blur-xl shadow-glow;
-  }
-  .glass-panel {
-    @apply border border-white/10 bg-slate-950/60 backdrop-blur-2xl;
-  }
-  .btn {
-    @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur-sm transition-colors;
-  }
-  .btn-primary {
-    @apply btn bg-accent-600/90 text-white hover:bg-accent-600;
-  }
-  .btn-ghost {
-    @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10;
-  }
-  .btn-danger {
-    @apply btn bg-red-600/80 text-white hover:bg-red-600;
-  }
-  .input {
-    @apply w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-sm placeholder:text-slate-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500;
-  }
-  .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium backdrop-blur-sm;
-  }
-  .select {
-    @apply rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500;
-  }
-}
-
-@layer utilities {
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
-  }
-
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      rgb(30 41 59) 0%,
-      rgb(51 65 85) 50%,
-      rgb(30 41 59) 100%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.6s linear infinite;
-  }
-
-  /* Stagger animation helpers */
-  .stagger-1 { animation-delay: 0.05s; }
-  .stagger-2 { animation-delay: 0.10s; }
-  .stagger-3 { animation-delay: 0.15s; }
-  .stagger-4 { animation-delay: 0.20s; }
-  .stagger-5 { animation-delay: 0.25s; }
 }

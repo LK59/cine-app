@@ -91,7 +91,7 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
   const style = SOURCE_STYLE[ev.source];
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/90 backdrop-blur-sm p-4 flex gap-4 items-start">
+    <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/90 backdrop-blur-xs p-4 flex gap-4 items-start">
       <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
         {ev.posterPath
           // eslint-disable-next-line @next/next/no-img-element
@@ -101,7 +101,7 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-2">
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
+          <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
           <span className="text-xs text-slate-500">{new Date(ev.date + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long" })}</span>
         </div>
         <p className="font-semibold text-white">{ev.title}</p>
@@ -127,7 +127,7 @@ function EventPill({ ev, onSelect }: { ev: CalendarEvent; onSelect: (ev: Calenda
   const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
 
   const inner = (
-    <div className={`flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium truncate cursor-pointer ${style.badge} hover:opacity-80`}>
+    <div className={`flex items-center gap-1 rounded-sm px-1 py-0.5 text-[10px] font-medium truncate cursor-pointer ${style.badge} hover:opacity-80`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
       <span className="truncate">{ev.title}</span>
     </div>
@@ -169,7 +169,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
 
   return (
     <>
-      <div className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
+      <div className="rounded-xl border border-white/5 bg-white/2 overflow-hidden">
         <div className="grid grid-cols-7 border-b border-white/5">
           {HEADERS.map((h) => (
             <div key={h} className="py-2 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</div>
@@ -183,7 +183,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
             return (
               <div
                 key={`${day.date}-${i}`}
-                className={`min-h-[80px] p-1 border-b border-r border-white/[0.04] ${!day.inMonth ? "opacity-30" : ""}`}
+                className={`min-h-[80px] p-1 border-b border-r border-white/4 ${!day.inMonth ? "opacity-30" : ""}`}
               >
                 <div className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium ${
                   isToday ? "bg-accent-500 text-white" : "text-slate-400"
@@ -248,8 +248,8 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
                 const style = SOURCE_STYLE[ev.source];
                 const isLibrary = ev.source === "library-movie" || ev.source === "library-series";
                 const row = (
-                  <div className="flex items-center gap-3 p-3 hover:bg-white/[0.03] transition-colors">
-                    <div className="h-14 w-10 shrink-0 overflow-hidden rounded bg-slate-800">
+                  <div className="flex items-center gap-3 p-3 hover:bg-white/3 transition-colors">
+                    <div className="h-14 w-10 shrink-0 overflow-hidden rounded-sm bg-slate-800">
                       {ev.posterPath
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={ev.posterPath} alt={ev.title} className="h-full w-full object-cover" />
@@ -264,7 +264,7 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {!isLibrary && <EventActions ev={ev} compact />}
-                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
+                      <span className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold ${style.badge}`}>{t(style.labelKey)}</span>
                     </div>
                   </div>
                 );

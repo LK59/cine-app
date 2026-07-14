@@ -58,7 +58,7 @@ function NoteModal({ item, onSave, onClose }: {
   useEffect(() => { ref.current?.focus(); }, []);
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <p className="mb-0.5 text-sm font-semibold text-white truncate">{item.title}</p>
         <p className="mb-3 text-xs text-slate-500">{t('watchlist.noteModal.title')}</p>
@@ -72,7 +72,7 @@ function NoteModal({ item, onSave, onClose }: {
           }}
           placeholder={t('watchlist.noteModal.placeholder')}
           rows={4}
-          className="w-full resize-none rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
+          className="w-full resize-none rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-hidden focus:border-accent-500/50"
         />
         <div className="mt-3 flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">{t('watchlist.noteModal.cancel')}</button>
@@ -100,7 +100,7 @@ function ConfirmDeleteModal({ title, onConfirm, onClose }: {
 }) {
   const t = useT();
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" onClick={onClose}>
       <div className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-semibold text-white">{t('watchlist.confirmDelete.title')}</p>
         <p className="mt-1 truncate text-xs text-slate-400">{title}</p>
@@ -179,7 +179,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
   const typeKey = (id: number) => `${type === "movie" ? "movie" : "series"}:${id}`;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" onClick={onClose}>
       <div className="flex w-full max-w-lg flex-col rounded-2xl border border-white/10 bg-slate-900 shadow-2xl" style={{ maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="shrink-0 border-b border-white/10 p-4">
@@ -191,7 +191,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder={t('watchlist.addModal.searchPlaceholder')}
-                className="w-full rounded-xl border border-white/10 bg-slate-800 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none focus:border-accent-500/50"
+                className="w-full rounded-xl border border-white/10 bg-slate-800 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-hidden focus:border-accent-500/50"
               />
             </div>
             <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:text-white transition-colors">
@@ -217,8 +217,8 @@ function AddModal({ existingKeys, onClose, onAdded }: {
             <div key={i} className="flex animate-pulse gap-3 rounded-xl p-2">
               <div className="w-10 shrink-0 rounded-lg bg-slate-800" style={{ aspectRatio: "2/3" }} />
               <div className="flex-1 space-y-2 pt-1">
-                <div className="h-3 w-2/3 rounded bg-slate-800" />
-                <div className="h-2.5 w-1/4 rounded bg-slate-800" />
+                <div className="h-3 w-2/3 rounded-sm bg-slate-800" />
+                <div className="h-2.5 w-1/4 rounded-sm bg-slate-800" />
               </div>
             </div>
           ))}
@@ -401,7 +401,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
       <div className="group flex flex-col overflow-hidden rounded-xl border border-white/5 bg-slate-900 shadow-lg transition-all duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
         {/* Poster */}
         <div
-          className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-slate-800 cursor-pointer select-none"
+          className="relative aspect-2/3 overflow-hidden rounded-t-xl bg-slate-800 cursor-pointer select-none"
           onClick={() => {
             // Mobile (touch): open ActionSheet; desktop: hover overlay handles it
             if (window.matchMedia("(pointer: coarse)").matches) setSheetOpen(true);
@@ -413,7 +413,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
           }
 
           {/* Type badge */}
-          <div className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/60 p-1 backdrop-blur-sm">
+          <div className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/60 p-1 backdrop-blur-xs">
             {item.mediaType === "movie" ? <Film size={9} className="text-slate-300" /> : <Tv size={9} className="text-slate-300" />}
           </div>
 
@@ -431,7 +431,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
 
           {/* IMDb rating badge — always visible */}
           {imdbRating && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-sm">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-xs">
               <Star size={7} className="fill-current" /> {imdbRating}
             </div>
           )}
@@ -444,7 +444,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden flex-col items-center justify-center gap-2 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
+          <div className="absolute inset-0 hidden flex-col items-center justify-center gap-2 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
             <div className="flex gap-1">
               {ALL_STATUSES.map((s) => {
                 const meta = STATUS_META[s];
@@ -549,10 +549,10 @@ function SkeletonGrid() {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-white/5 bg-slate-900">
-          <div className="aspect-[2/3] bg-slate-800" />
+          <div className="aspect-2/3 bg-slate-800" />
           <div className="space-y-1.5 p-2">
-            <div className="h-2 w-3/4 rounded bg-slate-800" />
-            <div className="h-2 w-1/3 rounded bg-slate-800" />
+            <div className="h-2 w-3/4 rounded-sm bg-slate-800" />
+            <div className="h-2 w-1/3 rounded-sm bg-slate-800" />
           </div>
         </div>
       ))}
@@ -691,13 +691,13 @@ export default function WatchlistPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('watchlist.searchPlaceholder')}
-            className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-none transition-colors focus:border-accent-500/50"
+            className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-hidden transition-colors focus:border-accent-500/50"
           />
         </div>
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-none"
+          className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-hidden"
           style={{ colorScheme: "dark" }}
         >
           <option value="date">{t('watchlist.sortDate')}</option>

@@ -75,7 +75,7 @@ function ResumeCard({ item }: { item: ResumeItem }) {
     <>
       <div
         {...lp}
-        className="card w-36 shrink-0 overflow-hidden sm:w-40 [touch-action:manipulation] select-none"
+        className="card w-36 shrink-0 overflow-hidden sm:w-40 touch-manipulation select-none"
       >
         <div className="relative">
           <PosterImage
@@ -92,11 +92,11 @@ function ResumeCard({ item }: { item: ResumeItem }) {
           {item.subtitle && <p className="truncate text-[11px] text-slate-500">{item.subtitle}</p>}
           <div className="mt-1.5 flex gap-1">
             <a href={`/api/jellyfin/redirect?itemId=${item.id}`} target="_blank" rel="noopener noreferrer"
-              className="flex-1 rounded bg-accent-600/20 px-2 py-1 text-center text-[11px] text-accent-400 hover:bg-accent-600/30">
+              className="flex-1 rounded-sm bg-accent-600/20 px-2 py-1 text-center text-[11px] text-accent-400 hover:bg-accent-600/30">
               Jellyfin
             </a>
             {item.cinemaHref && (
-              <Link href={item.cinemaHref} className="rounded bg-white/5 px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10">
+              <Link href={item.cinemaHref} className="rounded-sm bg-white/5 px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10">
                 {t('dashboard.sheetLink')}
               </Link>
             )}
@@ -124,7 +124,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-accent-500/40 [touch-action:manipulation] select-none">
+      <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
         <div className="relative">
           <PosterImage src={m.posterUrl} alt={m.title} />
           {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
@@ -154,7 +154,7 @@ function RecentSeriesCard({ s }: { s: RecentItem }) {
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link {...lp} href={`/sonarr/${s.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-sky-500/40 [touch-action:manipulation] select-none">
+      <Link {...lp} href={`/sonarr/${s.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none">
         <PosterImage src={s.posterUrl} alt={s.title} />
         <div className="p-2">
           <p className="truncate text-xs font-medium text-white">{s.title}</p>
@@ -182,11 +182,11 @@ function SkeletonSection() {
         <CarouselSkeleton count={4} width="w-36" />
       </HorizontalCarousel>
       <div className="mb-3 h-4 w-52 rounded-md bg-slate-800 animate-pulse" />
-      <div className="mb-2 h-3 w-10 rounded bg-slate-800 animate-pulse" />
+      <div className="mb-2 h-3 w-10 rounded-sm bg-slate-800 animate-pulse" />
       <HorizontalCarousel className="mb-5 flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
         <CarouselSkeleton count={6} width="w-28" />
       </HorizontalCarousel>
-      <div className="mb-2 h-3 w-10 rounded bg-slate-800 animate-pulse" />
+      <div className="mb-2 h-3 w-10 rounded-sm bg-slate-800 animate-pulse" />
       <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
         <CarouselSkeleton count={6} width="w-28" />
       </HorizontalCarousel>

@@ -231,7 +231,7 @@ export default function StatsPage() {
                   return (
                     <div key={m} className="group relative flex flex-1 flex-col items-center gap-1">
                       {total > 0 && (
-                        <div className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <div className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           {mv > 0 && <span className="text-accent-400">{mv}F </span>}
                           {sv > 0 && <span className="text-sky-400">{sv}S</span>}
                         </div>

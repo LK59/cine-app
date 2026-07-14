@@ -149,7 +149,7 @@ function PosterCard({
       <div className="group relative flex flex-col select-none">
         {/* Poster */}
         <div
-          className="relative overflow-hidden rounded-xl aspect-[2/3] bg-slate-800 cursor-pointer"
+          className="relative overflow-hidden rounded-xl aspect-2/3 bg-slate-800 cursor-pointer"
           onClick={handlePosterClick}
         >
           {item.posterPath ? (
@@ -180,7 +180,7 @@ function PosterCard({
 
           {/* Rating badge */}
           {item.rating > 0 && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-sm">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-xs">
               <Star size={7} className="fill-current" /> {item.rating.toFixed(1)}
             </div>
           )}
@@ -193,7 +193,7 @@ function PosterCard({
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-2 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             {/* Status buttons */}
             <div className="flex gap-0.5">
               {ALL_STATUSES.map((s) => {
@@ -663,7 +663,7 @@ export default function DiscoverPage() {
           value={rawQuery}
           onChange={(e) => setRawQuery(e.target.value)}
           placeholder={t('discover.searchPlaceholder')}
-          className="w-full rounded-lg border border-white/10 bg-slate-800/60 py-2.5 pl-9 pr-9 text-sm text-white placeholder:text-slate-500 focus:border-accent-500/50 focus:outline-none focus:ring-1 focus:ring-accent-500/30"
+          className="w-full rounded-lg border border-white/10 bg-slate-800/60 py-2.5 pl-9 pr-9 text-sm text-white placeholder:text-slate-500 focus:border-accent-500/50 focus:outline-hidden focus:ring-1 focus:ring-accent-500/30"
         />
         {rawQuery && (
           <button

@@ -93,13 +93,13 @@ export function Modal({
   return createPortal(
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-xs sm:items-center sm:p-4"
       onClick={onClose}
       style={{ touchAction: "none" }}
     >
       <div
         ref={cardRef}
-        className={`card scrollbar-thin w-full overflow-y-auto p-5 [overscroll-behavior:contain] rounded-t-2xl sm:rounded-2xl
+        className={`card scrollbar-thin w-full overflow-y-auto p-5 overscroll-contain rounded-t-2xl sm:rounded-2xl
           max-h-[80dvh] sm:max-h-[85vh] ${wide ? "sm:max-w-3xl" : "sm:max-w-lg"}`}
         onClick={(e) => e.stopPropagation()}
         style={{ touchAction: "auto" }}

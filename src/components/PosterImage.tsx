@@ -14,7 +14,7 @@ interface PosterImageProps {
   unoptimized?: boolean;
 }
 
-export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-[2/3]", unoptimized = false }: PosterImageProps) {
+export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-2/3", unoptimized = false }: PosterImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
 

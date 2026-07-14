@@ -135,7 +135,7 @@ function SourceBadge({ source }: { source: string }) {
     jellyfin: "Jellyfin", jellyseerr: "Jellyseerr",
   };
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${colors[source] ?? "bg-white/10 text-slate-400"}`}>
+    <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${colors[source] ?? "bg-white/10 text-slate-400"}`}>
       {labels[source] ?? source}
     </span>
   );
@@ -143,7 +143,7 @@ function SourceBadge({ source }: { source: string }) {
 
 function ResultPoster({ src, type }: { src: string | null; type: "movie" | "series" }) {
   return (
-    <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-slate-800">
+    <div className="h-10 w-7 shrink-0 overflow-hidden rounded-sm bg-slate-800">
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt="" className="h-full w-full object-cover" />
@@ -314,7 +314,7 @@ export function GlobalSearch() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]" onClick={() => setOpen(false)}>
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs" />
 
       <div
         className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl"
@@ -329,7 +329,7 @@ export function GlobalSearch() {
             onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
             onKeyDown={handleKeyDown}
             placeholder={t('search.placeholder')}
-            className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none"
+            className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-hidden"
           />
           {remoteLoading && <Loader2 size={14} className="shrink-0 animate-spin text-slate-500" />}
           <button onClick={() => setOpen(false)} className="shrink-0 text-slate-500 hover:text-white">
@@ -370,12 +370,12 @@ export function GlobalSearch() {
                       <SourceBadge source={r.type === "movie" ? "radarr" : "sonarr"} />
                       <button
                         onClick={() => navigate(r.href)}
-                        className="rounded bg-white/5 p-1.5 text-slate-400 hover:bg-white/10"
+                        className="rounded-sm bg-white/5 p-1.5 text-slate-400 hover:bg-white/10"
                         title={t('search.viewSheet')}
                       ><Film size={12} /></button>
                       <button
                         onClick={() => toggleWatchlist(r)}
-                        className={`rounded p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
+                        className={`rounded-sm p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
                         title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
@@ -413,7 +413,7 @@ export function GlobalSearch() {
                       {p.libraryTitles.length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {p.libraryTitles.map((title) => (
-                            <span key={title} className="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{title}</span>
+                            <span key={title} className="rounded-sm bg-accent-500/15 px-1.5 py-0.5 text-[10px] text-accent-400">{title}</span>
                           ))}
                         </div>
                       )}
@@ -469,7 +469,7 @@ export function GlobalSearch() {
                       <button
                         onClick={() => requestMedia(r)}
                         disabled={isRequesting}
-                        className="flex items-center gap-1 rounded bg-accent-500/20 px-2 py-1 text-[11px] text-accent-400 hover:bg-accent-500/30 disabled:opacity-50"
+                        className="flex items-center gap-1 rounded-sm bg-accent-500/20 px-2 py-1 text-[11px] text-accent-400 hover:bg-accent-500/30 disabled:opacity-50"
                         title={t('search.requestViaJellyseerr')}
                       >
                         <Send size={10} />
@@ -477,7 +477,7 @@ export function GlobalSearch() {
                       </button>
                       <button
                         onClick={() => toggleWatchlist(r)}
-                        className={`rounded p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
+                        className={`rounded-sm p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
                         title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}

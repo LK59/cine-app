@@ -56,7 +56,7 @@ export function Sidebar() {
                 href={href}
                 onMouseEnter={() => prefetchRoute(href)}
                 onFocus={() => prefetchRoute(href)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium backdrop-blur-sm transition-colors ${
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium backdrop-blur-xs transition-colors ${
                   active
                     ? "bg-accent-600/15 text-accent-400 ring-1 ring-inset ring-accent-500/20"
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-100"

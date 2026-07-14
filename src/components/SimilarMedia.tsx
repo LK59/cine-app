@@ -146,9 +146,9 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
 
   return (
     <>
-      <div className="group relative flex-shrink-0 w-24 select-none [touch-action:manipulation]">
+      <div className="group relative shrink-0 w-24 select-none touch-manipulation">
         <div
-          className="relative aspect-[2/3] overflow-hidden rounded-lg bg-slate-800 cursor-pointer"
+          className="relative aspect-2/3 overflow-hidden rounded-lg bg-slate-800 cursor-pointer"
           onClick={handlePosterClick}
         >
           {item.posterPath ? (
@@ -170,7 +170,7 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
           )}
 
           {item.voteAverage > 0 && (
-            <div className="pointer-events-none absolute bottom-1 left-1 flex items-center gap-0.5 rounded-full bg-black/70 px-1 py-0.5 text-[8px] font-bold text-amber-400 backdrop-blur-sm">
+            <div className="pointer-events-none absolute bottom-1 left-1 flex items-center gap-0.5 rounded-full bg-black/70 px-1 py-0.5 text-[8px] font-bold text-amber-400 backdrop-blur-xs">
               <Star size={6} className="fill-current" /> {item.voteAverage.toFixed(1)}
             </div>
           )}
@@ -182,7 +182,7 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/88 backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             <div className="flex gap-0.5">
               {ALL_STATUSES.map((s) => {
                 const meta = STATUS_META[s];

@@ -90,7 +90,7 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-end" style={{ touchAction: "none" }}>
+    <div className="fixed inset-0 z-60 flex items-end" style={{ touchAction: "none" }}>
       {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${show ? "opacity-100" : "opacity-0"}`}

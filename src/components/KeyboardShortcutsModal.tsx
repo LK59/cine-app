@@ -7,7 +7,7 @@ import { useT } from "@/components/TranslationProvider";
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex items-center rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-mono text-slate-300">
+    <kbd className="inline-flex items-center rounded-sm bg-white/10 px-1.5 py-0.5 text-[11px] font-mono text-slate-300">
       {children}
     </kbd>
   );

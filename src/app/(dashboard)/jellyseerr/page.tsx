@@ -43,10 +43,10 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
           alt={r.media.title ?? ""}
           width={40}
           height={56}
-          className="shrink-0 rounded object-cover"
+          className="shrink-0 rounded-sm object-cover"
         />
       ) : (
-        <div className="h-14 w-10 shrink-0 rounded bg-slate-800" />
+        <div className="h-14 w-10 shrink-0 rounded-sm bg-slate-800" />
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-white">

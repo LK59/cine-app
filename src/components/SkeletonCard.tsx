@@ -1,6 +1,6 @@
 export function SkeletonCard({
   width = "w-28",
-  aspectRatio = "aspect-[2/3]",
+  aspectRatio = "aspect-2/3",
   rounded = "rounded-xl",
   lines = 2,
 }: {

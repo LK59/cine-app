@@ -146,14 +146,14 @@ export default function SonarrPage() {
               <div className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
                 <button
                   onClick={() => setView("grid")}
-                  className={`rounded p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  className={`rounded-sm p-1 transition-colors ${view === "grid" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
                   title={t('common.viewGrid')}
                 >
                   <LayoutGrid size={15} />
                 </button>
                 <button
                   onClick={() => setView("list")}
-                  className={`rounded p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  className={`rounded-sm p-1 transition-colors ${view === "list" ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"}`}
                   title={t('common.viewList')}
                 >
                   <List size={15} />
@@ -230,7 +230,7 @@ export default function SonarrPage() {
                       </div>
                     </Link>
                     {(show.overview || (show.genres?.length ?? 0) > 0) && (
-                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-900/95 p-3 opacity-0 shadow-xl backdrop-blur-sm transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-900/95 p-3 opacity-0 shadow-xl backdrop-blur-xs transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
                         <p className="mb-0.5 text-xs font-semibold leading-tight text-white">{show.title}</p>
                         <p className="mb-2 text-[10px] text-slate-500">
                           {show.year} · {show.statistics?.episodeCount ?? 0} épisodes
@@ -269,7 +269,7 @@ export default function SonarrPage() {
                       onFocus={() => prefetchSeriesDetail(show.id)}
                       className={`group flex items-center gap-3 p-3 hover:bg-white/5 ${navCursor === i ? "bg-white/10" : ""}`}
                     >
-                      <PosterImage src={poster(show)} alt={show.title} aspectRatio="" className="h-14 w-10 shrink-0 rounded" />
+                      <PosterImage src={poster(show)} alt={show.title} aspectRatio="" className="h-14 w-10 shrink-0 rounded-sm" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-white">{show.title}</p>
                         <p className="text-xs text-slate-500">{show.year}</p>
@@ -378,7 +378,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
             const isAdded = added.has(show.tvdbId);
             return (
               <div key={show.tvdbId} className="card overflow-hidden">
-                <div className="relative aspect-[2/3] bg-slate-800">
+                <div className="relative aspect-2/3 bg-slate-800">
                   {show.remotePoster ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img

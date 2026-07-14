@@ -31,9 +31,9 @@ function EventRow({ ev, t }: { ev: ImportEvent; t: TFn }) {
   const isImport = ev.eventKind === "import";
 
   return (
-    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.03]">
+    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/3">
       {/* Poster */}
-      <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-slate-800">
+      <div className="h-12 w-8 shrink-0 overflow-hidden rounded-sm bg-slate-800">
         {ev.posterPath ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={ev.posterPath} alt={ev.title} className="h-full w-full object-cover" />
@@ -63,10 +63,10 @@ function EventRow({ ev, t }: { ev: ImportEvent; t: TFn }) {
 
       {/* Badges + time */}
       <div className="flex shrink-0 items-center gap-2">
-        <span className={`hidden rounded px-1.5 py-0.5 text-[10px] font-medium sm:inline ${ev.source === "radarr" ? "bg-accent-600/15 text-accent-400" : "bg-sky-600/15 text-sky-400"}`}>
+        <span className={`hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium sm:inline ${ev.source === "radarr" ? "bg-accent-600/15 text-accent-400" : "bg-sky-600/15 text-sky-400"}`}>
           {ev.type === "movie" ? t('timeline.badges.movie') : t('timeline.badges.series')}
         </span>
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isImport ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700/60 text-slate-400"}`}>
+        <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${isImport ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700/60 text-slate-400"}`}>
           {isImport ? t('timeline.badges.imported') : t('timeline.badges.grabbed')}
         </span>
         <span className="w-10 text-right text-[11px] text-slate-600">{timeAgo(ev.date, t)}</span>
