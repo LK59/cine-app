@@ -13,7 +13,10 @@ export function useListKeyNav(count: number, getHref: (i: number) => string) {
   const cursorRef = useRef(-1);
   const router = useRouter();
   const getHrefRef = useRef(getHref);
-  getHrefRef.current = getHref;
+
+  useEffect(() => {
+    getHrefRef.current = getHref;
+  }, [getHref]);
 
   useEffect(() => {
     setCursor(-1);

@@ -15,7 +15,6 @@ async function getOrBuildThumb(filepath: string, thumbPath: string): Promise<boo
   generating.add(thumbPath);
   try {
     fs.mkdirSync(THUMB_DIR, { recursive: true });
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const sharp = require("sharp");
     const tmpPath = thumbPath + ".tmp";
     await sharp(filepath)

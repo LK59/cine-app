@@ -40,6 +40,12 @@ function showNotif(title: string, body: string) {
 export function SSENotifier() {
   const toast = useToast();
   const t = useT();
+  // Kept in sync below so the long-lived SSE effect always reads the current
+  // translation function instead of closing over the one from mount time.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   // Titles of the current user's pending Jellyseerr requests, updated periodically
   const pendingTitles = useRef<PendingTitle[]>([]);
 
@@ -89,8 +95,8 @@ export function SSENotifier() {
           const { name } = JSON.parse(e.data) as { name: string };
           const title = matchedTitle(name);
           if (title) {
-            showNotif(t('sse.downloadStartedTitle'), title);
-            toast.info(t('sse.downloadStartedToast', { title }));
+            showNotif(tRef.current('sse.downloadStartedTitle'), title);
+            toast.info(tRef.current('sse.downloadStartedToast', { title }));
           }
         } catch {}
       });
@@ -99,8 +105,8 @@ export function SSENotifier() {
         try {
           const { name } = JSON.parse(e.data) as { name: string };
           const title = matchedTitle(name) ?? name;
-          showNotif(t('sse.downloadCompleteTitle'), title);
-          toast.success(t('sse.downloadCompleteToast', { title }));
+          showNotif(tRef.current('sse.downloadCompleteTitle'), title);
+          toast.success(tRef.current('sse.downloadCompleteToast', { title }));
         } catch {}
       });
 
@@ -117,7 +123,8 @@ export function SSENotifier() {
       es?.close();
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, []); // toast ref is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toast.* callbacks are useCallback-stable; t is read via tRef, never stale
+  }, []);
 
   return null;
 }
