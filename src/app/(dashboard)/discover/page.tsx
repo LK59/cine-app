@@ -205,7 +205,7 @@ function PosterCard({
                     key={s}
                     onClick={(e) => { e.stopPropagation(); addToWatchlist(s); }}
                     title={meta.label}
-                    className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border transition-all duration-150 ${
+                    className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border transition duration-150 ${
                       active
                         ? `${meta.bgSolid} border-white/30 text-white scale-110 shadow-md`
                         : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"

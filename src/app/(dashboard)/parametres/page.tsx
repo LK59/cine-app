@@ -127,7 +127,7 @@ export default function ParametresPage() {
                     >
                       <span
                         className={[
-                          "flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200",
+                          "flex h-10 w-10 items-center justify-center rounded-full transition duration-200",
                           active ? "scale-110 ring-2 ring-white/60 ring-offset-2 ring-offset-slate-950" : "hover:scale-105 ring-2 ring-white/10",
                         ].join(" ")}
                         style={{ backgroundColor: preset.hex }}

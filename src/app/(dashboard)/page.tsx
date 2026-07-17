@@ -124,7 +124,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
+      <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
         <div className="relative">
           <PosterImage src={m.posterUrl} alt={m.title} />
           {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
@@ -154,7 +154,7 @@ function RecentSeriesCard({ s }: { s: RecentItem }) {
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link {...lp} href={`/sonarr/${s.id}`} className="card w-28 shrink-0 overflow-hidden transition-all hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none">
+      <Link {...lp} href={`/sonarr/${s.id}`} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none">
         <PosterImage src={s.posterUrl} alt={s.title} />
         <div className="p-2">
           <p className="truncate text-xs font-medium text-white">{s.title}</p>
@@ -255,7 +255,7 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
                 <span className="shrink-0 text-[11px] text-slate-500">{pct}%</span>
               </div>
               <div className="mb-1 h-1 w-full rounded-full bg-slate-800">
-                <div className="h-1 rounded-full bg-accent-500 transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-1 rounded-full bg-accent-500 transition-[width]" style={{ width: `${pct}%` }} />
               </div>
               <div className="flex items-center gap-2 text-[11px] text-slate-500">
                 {speed && <span className="flex items-center gap-0.5"><Zap size={9} />{speed}</span>}

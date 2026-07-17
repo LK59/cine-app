@@ -78,7 +78,7 @@ function HBar({ label, value, max, color, fmt }: {
         <span className="text-slate-500">{fmt ? fmt(value) : value}</span>
       </div>
       <div className="h-2 w-full rounded-full bg-slate-800">
-        <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${(value / max) * 100}%` }} />
+        <div className={`h-2 rounded-full transition-[width] ${color}`} style={{ width: `${(value / max) * 100}%` }} />
       </div>
     </div>
   );

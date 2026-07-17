@@ -219,7 +219,7 @@ export default function SonarrPage() {
                       data-nav-idx={i}
                       onMouseEnter={() => prefetchSeriesDetail(show.id)}
                       onFocus={() => prefetchSeriesDetail(show.id)}
-                      className={`card group relative block overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
+                      className={`card group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
                     >
                       <PosterImage src={poster(show)} alt={show.title} />
                       <div className="p-2">

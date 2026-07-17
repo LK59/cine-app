@@ -398,7 +398,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
 
   return (
     <>
-      <div className="group flex flex-col overflow-hidden rounded-xl border border-white/5 bg-slate-900 shadow-lg transition-all duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
+      <div className="group flex flex-col overflow-hidden rounded-xl border border-white/5 bg-slate-900 shadow-lg transition duration-200 hover:border-white/15 hover:shadow-2xl hover:-translate-y-0.5">
         {/* Poster */}
         <div
           className="relative aspect-2/3 overflow-hidden rounded-t-xl bg-slate-800 cursor-pointer select-none"
@@ -455,7 +455,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                     key={s}
                     onClick={(e) => { e.stopPropagation(); onStatusChange(s); }}
                     title={t(meta.labelKey)}
-                    className={`flex h-6 w-6 items-center justify-center rounded-full border transition-all duration-150 ${
+                    className={`flex h-6 w-6 items-center justify-center rounded-full border transition duration-150 ${
                       active
                         ? `${meta.bgSolid} border-white/30 text-white shadow-md scale-110`
                         : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"

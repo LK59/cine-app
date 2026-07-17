@@ -584,7 +584,7 @@ export default function RadarrMovieDetailPage() {
                   className="w-20 shrink-0 snap-start text-center touch-manipulation"
                   onClick={() => isVip ? router.push("/person/3247402") : setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
                 >
-                  <div className={`mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-all ${
+                  <div className={`mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-shadow ${
                     isVip
                       ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_12px_rgba(250,204,21,0.5)]"
                       : "ring-0 hover:ring-2 hover:ring-accent-500"

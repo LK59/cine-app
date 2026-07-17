@@ -240,7 +240,7 @@ export default function RadarrPage() {
                       data-nav-idx={i}
                       onMouseEnter={() => prefetchMovieDetail(movie.id)}
                       onFocus={() => prefetchMovieDetail(movie.id)}
-                      className={`card group relative block overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
+                      className={`card group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
                     >
                       <PosterImage src={poster(movie)} alt={movie.title} />
                       <div className="p-2">

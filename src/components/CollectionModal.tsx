@@ -50,7 +50,7 @@ function PartCard({ part, onAdded }: { part: CollectionPart; onAdded: (id: numbe
   }
 
   const inner = (
-    <div className="card flex flex-col overflow-hidden transition-all hover:ring-1 hover:ring-accent-500/40">
+    <div className="card flex flex-col overflow-hidden transition hover:ring-1 hover:ring-accent-500/40">
       <div className="relative aspect-2/3 bg-slate-800">
         {part.posterPath ? (
           <Image

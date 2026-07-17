@@ -135,28 +135,7 @@
     rgb(30 41 59) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-}
-
-@utility stagger-1 {
-  /* Stagger animation helpers */
-  animation-delay: 0.05s;
-}
-
-@utility stagger-2 {
-  animation-delay: 0.1s;
-}
-
-@utility stagger-3 {
-  animation-delay: 0.15s;
-}
-
-@utility stagger-4 {
-  animation-delay: 0.2s;
-}
-
-@utility stagger-5 {
-  animation-delay: 0.25s;
+  animation: var(--animate-shimmer);
 }
 
 @layer utilities {
@@ -227,5 +206,16 @@
       radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.1), transparent 40%),
       radial-gradient(circle at 50% 100%, rgba(124, 92, 255, 0.08), transparent 50%);
     background-attachment: fixed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
