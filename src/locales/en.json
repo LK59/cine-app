@@ -59,6 +59,7 @@
     "close": "Close",
     "back": "Back",
     "refresh": "Refresh",
+    "retry": "Retry",
     "search": "Search",
     "request": "Request",
     "requesting": "In progress…",
@@ -677,6 +678,7 @@
   "watchlist": {
     "pageTitle": "My List",
     "subtitle": "Movies and series to follow, watch or request",
+    "addFailed": "Couldn't add to the list, try again.",
     "stats": {
       "total": "titles in list",
       "available": "available",

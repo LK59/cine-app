@@ -4,6 +4,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/StateViews";
+import { PosterSkeletonGrid } from "@/components/SkeletonCard";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import {
   Eye, Heart, X, Clock, CircleCheck, Film, Tv, Trash2,
@@ -542,24 +543,6 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
   );
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-function SkeletonGrid() {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-white/5 bg-slate-900">
-          <div className="aspect-2/3 bg-slate-800" />
-          <div className="space-y-1.5 p-2">
-            <div className="h-2 w-3/4 rounded-sm bg-slate-800" />
-            <div className="h-2 w-1/3 rounded-sm bg-slate-800" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WatchlistPage() {
@@ -741,7 +724,7 @@ export default function WatchlistPage() {
       </div>
 
       {/* Content */}
-      {isLoading && <SkeletonGrid />}
+      {isLoading && <PosterSkeletonGrid />}
 
       {!isLoading && allItems.length === 0 && (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
@@ -757,7 +740,7 @@ export default function WatchlistPage() {
       )}
 
       {filtered.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="poster-grid">
           {filtered.map((item) => (
             <WatchlistCard
               key={item.id}

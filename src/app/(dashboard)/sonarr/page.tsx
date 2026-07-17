@@ -7,6 +7,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
+import { PosterSkeletonGrid } from "@/components/SkeletonCard";
 import { Modal } from "@/components/Modal";
 import { Plus, Search, Tv, ChevronDown, LayoutGrid, List } from "lucide-react";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
@@ -125,8 +126,8 @@ export default function SonarrPage() {
         }
       />
 
-      {isLoading && <LoadingState />}
-      {error && <ErrorState message={t('sonarr.serviceDown')} />}
+      {isLoading && <PosterSkeletonGrid />}
+      {error && <ErrorState message={t('sonarr.serviceDown')} onRetry={() => mutate("/api/sonarr/series")} />}
       {series && series.length === 0 && <EmptyState label={t('sonarr.noSeries')} />}
 
       {series && series.length > 0 && (
@@ -211,7 +212,7 @@ export default function SonarrPage() {
 
           {view === "grid" ? (
             <>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              <div className="poster-grid">
                 {visible.map((show, i) => (
                   <div key={show.id} className="group/card relative [content-visibility:auto] [contain-intrinsic-size:0_320px]">
                     <Link

@@ -122,6 +122,10 @@
   @apply rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
 }
 
+@utility poster-grid {
+  @apply grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6;
+}
+
 @utility scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.3) transparent;

@@ -59,6 +59,7 @@
     "close": "Cerrar",
     "back": "Volver",
     "refresh": "Actualizar",
+    "retry": "Reintentar",
     "search": "Buscar",
     "request": "Solicitar",
     "requesting": "En curso…",
@@ -677,6 +678,7 @@
   "watchlist": {
     "pageTitle": "Mi lista",
     "subtitle": "Películas y series para seguir, ver o solicitar",
+    "addFailed": "No se pudo añadir a la lista, inténtalo de nuevo.",
     "stats": {
       "total": "títulos en lista",
       "available": "disponibles",

@@ -13,11 +13,17 @@ export function LoadingState({ label }: { label?: string }) {
   );
 }
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const t = useT();
   return (
-    <div className="card flex items-center gap-3 p-4 text-sm text-red-400">
-      <AlertTriangle size={18} />
-      {message}
+    <div className="card flex flex-col items-start gap-3 p-4 text-sm text-red-400 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <AlertTriangle size={18} className="shrink-0" />
+        {message}
+      </div>
+      <button onClick={onRetry ?? (() => window.location.reload())} className="btn-ghost shrink-0">
+        {t('common.retry')}
+      </button>
     </div>
   );
 }

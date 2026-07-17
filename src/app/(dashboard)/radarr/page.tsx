@@ -7,6 +7,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
+import { PosterSkeletonGrid } from "@/components/SkeletonCard";
 import { Modal } from "@/components/Modal";
 import { Plus, Search, Film, ChevronDown, LayoutGrid, List } from "lucide-react";
 import type { RadarrMovie } from "@/lib/clients/radarr";
@@ -138,8 +139,8 @@ export default function RadarrPage() {
         }
       />
 
-      {isLoading && <LoadingState />}
-      {error && <ErrorState message={t('radarr.serviceDown')} />}
+      {isLoading && <PosterSkeletonGrid />}
+      {error && <ErrorState message={t('radarr.serviceDown')} onRetry={() => mutate("/api/radarr/movies")} />}
       {movies && movies.length === 0 && <EmptyState label={t('radarr.noMovies')} />}
 
       {movies && movies.length > 0 && (
@@ -227,12 +228,12 @@ export default function RadarrPage() {
           </div>
 
           {filtered.length === 0 && (
-            <EmptyState label="Aucun film correspondant aux filtres." />
+            <EmptyState label={t('radarr.noResults')} />
           )}
 
           {view === "grid" ? (
             <>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              <div className="poster-grid">
                 {visible.map((movie, i) => (
                   <div key={movie.id} className="group/card relative [content-visibility:auto] [contain-intrinsic-size:0_320px]">
                     <Link

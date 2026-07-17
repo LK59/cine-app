@@ -19,6 +19,7 @@ import { useRole } from "@/lib/useRole";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 
 const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
 
@@ -33,7 +34,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
-  const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(null);
+  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist();
   const [addingSearch, setAddingSearch] = useState(false);
   const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string } | null>(null);
 
@@ -71,16 +72,14 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
     }
   }
 
-  async function addToWatchlist(status: WatchlistStatus) {
-    setAddedStatus(status);
-    await fetch("/api/watchlist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  function addToWatchlist(status: WatchlistStatus) {
+    addToWatchlistBase(
+      {
         tmdbId: m.tmdbId, mediaType: "movie", title: m.title,
-        year: m.year, posterPath: m.posterPath, voteAverage: m.voteAverage, status,
-      }),
-    });
+        year: m.year, posterPath: m.posterPath, voteAverage: m.voteAverage,
+      },
+      status
+    );
   }
 
   async function doRequest(e?: React.MouseEvent) {

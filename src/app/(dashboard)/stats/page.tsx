@@ -125,7 +125,7 @@ const CHART_H = 120;
 
 export default function StatsPage() {
   const t = useT();
-  const { data: lib, error: libError, isLoading } = useSWR<LibraryStats>(
+  const { data: lib, error: libError, isLoading, mutate: retryLib } = useSWR<LibraryStats>(
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
   const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
@@ -169,7 +169,7 @@ export default function StatsPage() {
       <PageHeader title={t('stats.pageTitle')} subtitle={t('stats.subtitle')} />
 
       {isLoading && <LoadingState label={t('stats.loading')} />}
-      {libError && <ErrorState message={t('stats.error')} />}
+      {libError && <ErrorState message={t('stats.error')} onRetry={() => retryLib()} />}
 
       {lib && (
         <>

@@ -36,3 +36,21 @@ export function CarouselSkeleton({
     </>
   );
 }
+
+/** Skeleton matching the shape of a `poster-grid` — use in place of a spinner
+ * for any page whose loaded content is a poster grid. */
+export function PosterSkeletonGrid({ count = 12 }: { count?: number }) {
+  return (
+    <div className="poster-grid">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-white/5 bg-slate-900">
+          <div className="aspect-2/3 bg-slate-800" />
+          <div className="space-y-1.5 p-2">
+            <div className="h-2 w-3/4 rounded-sm bg-slate-800" />
+            <div className="h-2 w-1/3 rounded-sm bg-slate-800" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -11,6 +11,7 @@ import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
+import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import {
   Star, BookCheck, CirclePlus, ExternalLink,
   Eye, Heart, X, Clock, CircleCheck, Telescope,
@@ -33,7 +34,7 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
-  const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(null);
+  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist();
   const [addingSearch, setAddingSearch] = useState(false);
   const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string } | null>(null);
 
@@ -49,21 +50,18 @@ function SimilarCard({ item, type }: { item: Item; type: "movie" | "series" }) {
     ? (item.radarrId ? `/radarr/${item.radarrId}` : null)
     : (item.sonarrId ? `/sonarr/${item.sonarrId}` : null);
 
-  async function addToWatchlist(status: WatchlistStatus) {
-    setAddedStatus(status);
-    await fetch("/api/watchlist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  function addToWatchlist(status: WatchlistStatus) {
+    addToWatchlistBase(
+      {
         tmdbId: item.tmdbId,
         mediaType: type,
         title: item.title,
         year: item.year,
         posterPath: item.posterPath,
         voteAverage: item.voteAverage,
-        status,
-      }),
-    });
+      },
+      status
+    );
   }
 
   async function doRequest(e?: React.MouseEvent) {

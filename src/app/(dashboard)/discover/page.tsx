@@ -7,9 +7,11 @@ import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
+import { PosterSkeletonGrid } from "@/components/SkeletonCard";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
+import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { Film, Tv, Star, BookCheck, Telescope, Sparkles, SearchIcon, X, Eye, Heart, Clock, CircleCheck, CirclePlus, ExternalLink } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
@@ -65,7 +67,7 @@ function PosterCard({
   const router = useRouter();
   const t = useT();
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(null);
+  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist();
 
   const STATUS_META: Record<WatchlistStatus, {
     label: string;
@@ -87,21 +89,18 @@ function PosterCard({
         ? `/sonarr/${item.sonarrId}`
         : null;
 
-  async function addToWatchlist(status: WatchlistStatus) {
-    setAddedStatus(status);
-    await fetch("/api/watchlist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  function addToWatchlist(status: WatchlistStatus) {
+    addToWatchlistBase(
+      {
         tmdbId: item.tmdbId,
         mediaType: type === "movie" ? "movie" : "series",
         title: item.title,
         year: item.year,
         posterPath: item.posterPath,
         voteAverage: item.rating ?? null,
-        status,
-      }),
-    });
+      },
+      status
+    );
   }
 
   function handlePosterClick() {
@@ -275,7 +274,7 @@ function PosterCard({
 
 function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
   const endpoint = type === "movie" ? "/api/discover/movies" : "/api/discover/series";
-  const { data, error, isLoading } = useSWR<DiscoverData>(endpoint, fetcher, {
+  const { data, error, isLoading, mutate: retry } = useSWR<DiscoverData>(endpoint, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 300000,
   });
@@ -355,7 +354,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
     }
   }
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <PosterSkeletonGrid />;
   if (error)
     return (
       <ErrorState
@@ -364,6 +363,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
             ? t('discover.apiKeyMissing')
             : error.message
         }
+        onRetry={() => retry()}
       />
     );
 
@@ -401,7 +401,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
         <p className="text-sm text-slate-500">{t('discover.noResultsGenre')}</p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      <div className="poster-grid">
         {filtered.map((item) => (
           <PosterCard
             key={item.tmdbId}
@@ -434,7 +434,7 @@ interface RecoData {
 }
 
 function RecommendationsGrid() {
-  const { data, error, isLoading } = useSWR<RecoData>("/api/discover/recommendations", fetcher, {
+  const { data, error, isLoading, mutate: retry } = useSWR<RecoData>("/api/discover/recommendations", fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 300000,
   });
@@ -489,8 +489,8 @@ function RecommendationsGrid() {
     }
   }
 
-  if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={t('common.serviceDown', { service: 'TMDB' })} />;
+  if (isLoading) return <PosterSkeletonGrid />;
+  if (error) return <ErrorState message={t('common.serviceDown', { service: 'TMDB' })} onRetry={() => retry()} />;
   if (!data?.hasHistory) {
     return (
       <div className="mt-12 flex flex-col items-center gap-3 text-center">
@@ -507,7 +507,7 @@ function RecommendationsGrid() {
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      <div className="poster-grid">
         {data.items.map((item) => (
           <PosterCard
             key={`${item.type}-${item.tmdbId}`}
@@ -599,12 +599,12 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
     );
   }
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <PosterSkeletonGrid />;
   if (!data?.items.length) return <p className="mt-8 text-center text-sm text-slate-500">{t('discover.noSearchResults', { query })}</p>;
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      <div className="poster-grid">
         {data.items.map((item) => (
           <PosterCard
             key={item.tmdbId}
