@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
@@ -17,22 +17,56 @@ export function Modal({
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  const closingRef = useRef(false);
+
+  const closeAnimated = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    const card = cardRef.current;
+    const backdrop = backdropRef.current;
+    if (card) {
+      card.style.transition = "transform 0.24s cubic-bezier(0.4, 0, 1, 1)";
+      card.style.transform = "translateY(120%)";
+    }
+    if (backdrop) {
+      backdrop.style.transition = "opacity 0.24s ease-out";
+      backdrop.style.opacity = "0";
+    }
+    setTimeout(onClose, 240);
+  }, [onClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeAnimated();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [closeAnimated]);
 
   // Native drag-to-close: card follows finger from the handle area
   useEffect(() => {
     const card = cardRef.current;
     const backdrop = backdropRef.current;
     if (!card) return;
+
+    // The entrance animation (animate-fade-in-scale / animate-fade-in) uses
+    // fill-mode "both", so its final transform/opacity value keeps overriding
+    // any inline style we set afterwards (drag, programmatic close) until the
+    // animation itself is dropped. Clear it once it finishes so the drag and
+    // close logic below can actually move these elements.
+    const dropAnimation = (e: AnimationEvent) => {
+      (e.currentTarget as HTMLElement).style.animation = "none";
+    };
+    card.addEventListener("animationend", dropAnimation);
+    backdrop?.addEventListener("animationend", dropAnimation);
+
     const handle = card.querySelector<HTMLElement>("[data-drag-handle]");
-    if (!handle) return;
+    if (!handle) {
+      return () => {
+        card.removeEventListener("animationend", dropAnimation);
+        backdrop?.removeEventListener("animationend", dropAnimation);
+      };
+    }
 
     let startY = 0;
     let startTime = 0;
@@ -62,6 +96,7 @@ export function Modal({
 
       // Close on quick flick OR large drag
       if (velocity > 0.45 || dy > 130) {
+        closingRef.current = true;
         card.style.transition = "transform 0.24s cubic-bezier(0.4, 0, 1, 1)";
         card.style.transform = "translateY(120%)";
         if (backdrop) {
@@ -94,7 +129,7 @@ export function Modal({
     <div
       ref={backdropRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-xs animate-fade-in sm:items-center sm:p-4"
-      onClick={onClose}
+      onClick={closeAnimated}
       style={{ touchAction: "none" }}
     >
       <div
@@ -114,7 +149,7 @@ export function Modal({
 
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-white">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-white/10">
+          <button onClick={closeAnimated} className="rounded-md p-1 text-slate-400 hover:bg-white/10">
             <X size={18} />
           </button>
         </div>
