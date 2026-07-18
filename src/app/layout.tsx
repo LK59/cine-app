@@ -5,6 +5,7 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -54,6 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <ToastProvider>{children}</ToastProvider>
             </SWRProvider>
           </ThemeProvider>
+          <UpdateBanner />
         </TranslationProvider>
         <ServiceWorkerRegistration />
       </body>

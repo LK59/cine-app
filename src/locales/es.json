@@ -59,6 +59,7 @@
     "close": "Cerrar",
     "back": "Volver",
     "refresh": "Actualizar",
+    "updateAvailable": "Nueva versión disponible",
     "retry": "Reintentar",
     "search": "Buscar",
     "request": "Solicitar",
@@ -859,7 +860,9 @@
   "collection": {
     "loading": "Cargando la saga…",
     "inLibrary": "En biblioteca ({n}/{total})",
-    "toAdd": "Por añadir ({n})"
+    "toAdd": "Por añadir ({n})",
+    "addAllToWatchlist": "Añadir todo a la watchlist",
+    "bulkAddedToast": "{n} películas añadidas a la watchlist"
   },
   "mediaInfo": {
     "title": "Información técnica",

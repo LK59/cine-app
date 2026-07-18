@@ -1,3 +1,5 @@
+const { version } = require("./package.json");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
@@ -13,6 +15,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? "",
     NEXT_PUBLIC_CLARA_GALLERY_ENABLED: process.env.CLARA_GALLERY_ENABLED ?? "true",
+    NEXT_PUBLIC_APP_VERSION: version,
   },
   async headers() {
     return [

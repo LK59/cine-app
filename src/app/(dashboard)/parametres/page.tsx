@@ -447,6 +447,9 @@ function PwaUpdateCard() {
       <div>
         <p className="text-sm font-medium text-white">{t('settings.app.updateTitle')}</p>
         <p className="text-xs text-slate-500 mt-0.5">{t('settings.app.updateDesc')}</p>
+        {process.env.NEXT_PUBLIC_APP_VERSION && (
+          <p className="text-[11px] text-slate-600 mt-1">v{process.env.NEXT_PUBLIC_APP_VERSION}</p>
+        )}
       </div>
       <button
         onClick={refresh}

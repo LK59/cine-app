@@ -59,6 +59,7 @@
     "close": "Schließen",
     "back": "Zurück",
     "refresh": "Aktualisieren",
+    "updateAvailable": "Neue Version verfügbar",
     "retry": "Erneut versuchen",
     "search": "Suchen",
     "request": "Anfragen",
@@ -859,7 +860,9 @@
   "collection": {
     "loading": "Filmreihe wird geladen…",
     "inLibrary": "In der Bibliothek ({n}/{total})",
-    "toAdd": "Hinzuzufügen ({n})"
+    "toAdd": "Hinzuzufügen ({n})",
+    "addAllToWatchlist": "Alle zur Watchlist hinzufügen",
+    "bulkAddedToast": "{n} Filme zur Watchlist hinzugefügt"
   },
   "mediaInfo": {
     "title": "Technische Informationen",

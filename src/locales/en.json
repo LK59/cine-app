@@ -59,6 +59,7 @@
     "close": "Close",
     "back": "Back",
     "refresh": "Refresh",
+    "updateAvailable": "New version available",
     "retry": "Retry",
     "search": "Search",
     "request": "Request",
@@ -859,7 +860,9 @@
   "collection": {
     "loading": "Loading collection…",
     "inLibrary": "In library ({n}/{total})",
-    "toAdd": "Missing ({n})"
+    "toAdd": "Missing ({n})",
+    "addAllToWatchlist": "Add all to watchlist",
+    "bulkAddedToast": "{n} movies added to watchlist"
   },
   "mediaInfo": {
     "title": "Technical info",
