@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Settings } from "lucide-react";
+import { LogOut, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Settings, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
+import { hardRefreshApp } from "@/lib/pwaRefresh";
 
 function SheetSection({
   title,
@@ -51,6 +52,7 @@ export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const t = useT();
@@ -176,6 +178,12 @@ export function MobileNav() {
     router.replace("/login");
   }
 
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    await hardRefreshApp();
+  }
+
   function openSearch() {
     window.dispatchEvent(new CustomEvent("open-search"));
   }
@@ -274,13 +282,22 @@ export function MobileNav() {
           <SheetSection title={t('nav.mobile.sectionContent')} items={SECTION_CONTENT} isActive={isActive} onClose={() => setOpen(false)} />
           <SheetSection title={t('nav.mobile.sectionManage')} items={SECTION_GESTION} isActive={isActive} onClose={() => setOpen(false)} />
 
-          {/* Logout */}
-          <button
-            onClick={logout}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors"
-          >
-            <LogOut size={16} /> {t('nav.logout')}
-          </button>
+          {/* Refresh + Logout */}
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={refresh}
+              disabled={refreshing}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} /> {t('common.refresh')}
+            </button>
+            <button
+              onClick={logout}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors"
+            >
+              <LogOut size={16} /> {t('nav.logout')}
+            </button>
+          </div>
           </div>{/* end px-4 pb-4 */}
         </div>
       </div>

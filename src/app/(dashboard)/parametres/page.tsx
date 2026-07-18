@@ -11,6 +11,7 @@ import { ACCENT_PRESETS } from "@/lib/theme";
 import { useRole } from "@/lib/useRole";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { hardRefreshApp } from "@/lib/pwaRefresh";
 
 type TestState = "idle" | "sending" | "sent" | "error";
 
@@ -432,26 +433,14 @@ function SessionsCard() {
 }
 
 function PwaUpdateCard() {
-  const [status, setStatus] = useState<"idle" | "checking" | "updated" | "latest">("idle");
+  const [refreshing, setRefreshing] = useState(false);
   const t = useT();
 
-  const update = useCallback(async () => {
-    if (!("serviceWorker" in navigator)) return;
-    setStatus("checking");
-    try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) { setStatus("idle"); return; }
-      await reg.update();
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        setTimeout(() => window.location.reload(), 300);
-        setStatus("updated");
-      } else {
-        setStatus("latest");
-        setTimeout(() => setStatus("idle"), 3000);
-      }
-    } catch { setStatus("idle"); }
-  }, []);
+  const refresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    await hardRefreshApp();
+  }, [refreshing]);
 
   return (
     <div className="card p-5 flex items-center justify-between gap-4">
@@ -459,18 +448,14 @@ function PwaUpdateCard() {
         <p className="text-sm font-medium text-white">{t('settings.app.updateTitle')}</p>
         <p className="text-xs text-slate-500 mt-0.5">{t('settings.app.updateDesc')}</p>
       </div>
-      <div className="flex items-center gap-3">
-        {status === "latest" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CircleCheckBig size={13} /> {t('settings.app.alreadyUpToDate')}</span>}
-        {status === "updated" && <span className="text-xs text-emerald-400 flex items-center gap-1"><CircleCheckBig size={13} /> {t('settings.app.updateApplied')}</span>}
-        <button
-          onClick={update}
-          disabled={status === "checking"}
-          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
-        >
-          <RefreshCw size={13} className={status === "checking" ? "animate-spin" : ""} />
-          {status === "checking" ? t('settings.app.checking') : t('settings.app.updateButton')}
-        </button>
-      </div>
+      <button
+        onClick={refresh}
+        disabled={refreshing}
+        className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
+      >
+        <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+        {refreshing ? t('settings.app.checking') : t('settings.app.updateButton')}
+      </button>
     </div>
   );
 }
