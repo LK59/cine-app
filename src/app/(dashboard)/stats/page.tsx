@@ -7,10 +7,11 @@ import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
-import { Film, Tv, HardDrive, Layers, Zap, type LucideIcon } from "lucide-react";
+import { Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, RefreshCw, type LucideIcon } from "lucide-react";
 import type { LibraryStats } from "@/app/api/stats/library/route";
 import type { PeopleStats } from "@/app/api/stats/people/route";
-import { fmtSize } from "@/lib/format";
+import type { StorageStats } from "@/app/api/stats/storage/route";
+import { fmtSize, relativeTimeAbs } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
 
 interface DiskStats {
@@ -121,6 +122,109 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
   );
 }
 
+function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
+  const t = useT();
+  const movieMax = Math.max(storage.movieFiles.total, 1);
+  const seriesMax = Math.max(storage.seriesFiles.total, 1);
+
+  return (
+    <section className="mb-8">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white">{t('stats.storage.title')}</h2>
+        <div className="flex items-center gap-3">
+          {storage.computedAt > 0 && (
+            <span className="text-xs text-slate-600">{t('stats.storage.lastScan', { time: relativeTimeAbs(storage.computedAt) })}</span>
+          )}
+          <button
+            onClick={onRefresh}
+            disabled={storage.computing}
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={storage.computing ? "animate-spin" : ""} />
+            {storage.computing ? t('stats.storage.refreshing') : t('stats.storage.refresh')}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="card p-4 space-y-3">
+          <HBar label={t('stats.storage.hardlinkMovies')} value={storage.movieFiles.hardlinked} max={movieMax}
+            color="bg-accent-500" fmt={() => t('stats.storage.hardlinkCount', { linked: storage.movieFiles.hardlinked, total: storage.movieFiles.total })} />
+          <HBar label={t('stats.storage.hardlinkSeries')} value={storage.seriesFiles.hardlinked} max={seriesMax}
+            color="bg-sky-500" fmt={() => t('stats.storage.hardlinkCount', { linked: storage.seriesFiles.hardlinked, total: storage.seriesFiles.total })} />
+        </div>
+        <StatCard icon={HardDrive} label={t('stats.storage.seedOnly')} value={fmtSize(storage.seedOnlyBytes)}
+          sub={t('stats.storage.seedOnlyCount', { n: storage.seedOnlyCount })} color="text-amber-400" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="card p-4">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+            <Link2 size={14} className="text-rose-400" /> {t('stats.storage.notHardlinkedTitle')}
+          </h3>
+          {storage.notHardlinked.length === 0 ? (
+            <p className="text-xs text-slate-600">{t('stats.storage.notHardlinkedEmpty')}</p>
+          ) : (
+            <div className="space-y-2">
+              {storage.notHardlinked.slice(0, 8).map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-slate-300" title={item.fileName}>{item.title}</span>
+                  <span className="shrink-0 text-slate-500">{fmtSize(item.sizeBytes)}</span>
+                </div>
+              ))}
+              {storage.notHardlinked.length > 8 && (
+                <p className="pt-1 text-[11px] text-slate-600">{t('stats.storage.showMore', { n: storage.notHardlinked.length - 8 })}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="card p-4">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+            <Copy size={14} className="text-amber-400" /> {t('stats.storage.duplicatesTitle')}
+          </h3>
+          {storage.duplicates.length === 0 ? (
+            <p className="text-xs text-slate-600">{t('stats.storage.duplicatesEmpty')}</p>
+          ) : (
+            <div className="space-y-2">
+              {storage.duplicates.slice(0, 8).map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
+                  <span className="shrink-0 text-amber-400">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
+                </div>
+              ))}
+              {storage.duplicates.length > 8 && (
+                <p className="pt-1 text-[11px] text-slate-600">{t('stats.storage.showMore', { n: storage.duplicates.length - 8 })}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="card p-4">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+            <Share2 size={14} className="text-sky-400" /> {t('stats.storage.crossSeedTitle')}
+          </h3>
+          {storage.crossSeeded.length === 0 ? (
+            <p className="text-xs text-slate-600">{t('stats.storage.crossSeedEmpty')}</p>
+          ) : (
+            <div className="space-y-2">
+              {storage.crossSeeded.slice(0, 8).map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
+                  <span className="shrink-0 text-sky-400">{t('stats.storage.crossSeedTrackers', { n: item.trackers.length })}</span>
+                </div>
+              ))}
+              {storage.crossSeeded.length > 8 && (
+                <p className="pt-1 text-[11px] text-slate-600">{t('stats.storage.showMore', { n: storage.crossSeeded.length - 8 })}</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const CHART_H = 120;
 
 export default function StatsPage() {
@@ -130,6 +234,12 @@ export default function StatsPage() {
   );
   const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
   const { data: people } = useSWRImmutable<PeopleStats>("/api/stats/people", fetcher);
+  const { data: storage, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: INTERVALS.SLOW });
+
+  async function handleStorageRefresh() {
+    await fetch("/api/stats/storage?refresh=1");
+    refreshStorage();
+  }
 
   const months = lastMonths(12);
 
@@ -217,6 +327,9 @@ export default function StatsPage() {
               </div>
             </section>
           )}
+
+          {/* Storage cleanup */}
+          {storage && storage.computedAt > 0 && <StorageSection storage={storage} onRefresh={handleStorageRefresh} />}
 
           {/* Monthly additions */}
           <section className="mb-8">

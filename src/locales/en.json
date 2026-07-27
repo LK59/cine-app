@@ -401,7 +401,27 @@
     "topPeople": "Most featured people",
     "topActors": "Most featured actors",
     "topDirectors": "Most featured directors / creators",
-    "topPeopleCount": "{n} movies & series"
+    "topPeopleCount": "{n} movies & series",
+    "storage": {
+      "title": "Cleanup & storage",
+      "refresh": "Refresh",
+      "refreshing": "Scanning…",
+      "lastScan": "Last scan: {time}",
+      "hardlinkMovies": "Hardlinked movies",
+      "hardlinkSeries": "Hardlinked episodes",
+      "hardlinkCount": "{linked} / {total}",
+      "seedOnly": "Unused seed space",
+      "seedOnlyCount": "{n} files with no link to the library",
+      "notHardlinkedTitle": "Not hardlinked",
+      "notHardlinkedEmpty": "Everything is hardlinked.",
+      "duplicatesTitle": "Duplicates / multiple versions",
+      "duplicatesEmpty": "No duplicates detected.",
+      "duplicatesWasted": "{n} wasted",
+      "crossSeedTitle": "Cross-seeded",
+      "crossSeedEmpty": "No cross-seed detected.",
+      "crossSeedTrackers": "{n} trackers",
+      "showMore": "+{n} more"
+    }
   },
   "calendar": {
     "pageTitle": "Calendar",

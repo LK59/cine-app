@@ -401,7 +401,27 @@
     "topPeople": "Personnes les plus présentes",
     "topActors": "Acteurs les plus présents",
     "topDirectors": "Réalisateurs / créateurs les plus présents",
-    "topPeopleCount": "{n} films & séries"
+    "topPeopleCount": "{n} films & séries",
+    "storage": {
+      "title": "Nettoyage & stockage",
+      "refresh": "Actualiser",
+      "refreshing": "Analyse en cours…",
+      "lastScan": "Dernière analyse : {time}",
+      "hardlinkMovies": "Films hardlinkés",
+      "hardlinkSeries": "Épisodes hardlinkés",
+      "hardlinkCount": "{linked} / {total}",
+      "seedOnly": "Espace seeds inutilisé",
+      "seedOnlyCount": "{n} fichiers sans lien vers la bibliothèque",
+      "notHardlinkedTitle": "Non hardlinkés",
+      "notHardlinkedEmpty": "Tout est hardlinké.",
+      "duplicatesTitle": "Doublons / versions multiples",
+      "duplicatesEmpty": "Aucun doublon détecté.",
+      "duplicatesWasted": "{n} en trop",
+      "crossSeedTitle": "Cross-seedés",
+      "crossSeedEmpty": "Aucun cross-seed détecté.",
+      "crossSeedTrackers": "{n} trackers",
+      "showMore": "+{n} de plus"
+    }
   },
   "calendar": {
     "pageTitle": "Calendrier",
