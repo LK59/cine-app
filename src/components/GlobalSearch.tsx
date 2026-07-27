@@ -337,7 +337,7 @@ export function GlobalSearch() {
           </button>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[60dvh] overflow-y-auto">
           {/* ── Library results ── */}
           {libraryResults.length > 0 && (
             <div>

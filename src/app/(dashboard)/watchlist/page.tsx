@@ -180,8 +180,12 @@ function AddModal({ existingKeys, onClose, onAdded }: {
   const typeKey = (id: number) => `${type === "movie" ? "movie" : "series"}:${id}`;
 
   return createPortal(
-    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" onClick={onClose}>
-      <div className="flex w-full max-w-lg flex-col rounded-2xl border border-white/10 bg-slate-900 shadow-2xl" style={{ maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-9999 flex items-end justify-center bg-black/70 backdrop-blur-xs sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        className="flex w-full max-w-lg flex-col rounded-t-2xl border border-white/10 bg-slate-900 shadow-2xl sm:rounded-2xl"
+        style={{ maxHeight: "85dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="shrink-0 border-b border-white/10 p-4">
           <div className="mb-3 flex items-center gap-2">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { titleMatchScore } from "@/lib/search-natural-query";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,11 @@ export async function GET(req: NextRequest) {
     const radarrByTmdb = new Map(movies.map((m) => [m.tmdbId, { id: m.id, hasFile: m.hasFile }]));
     const genreMap = new Map(movieGenres.genres.map((g) => [g.id, g.name]));
 
-    const items = results.results.slice(0, 20).map((m) => {
+    const ranked = [...results.results].sort(
+      (a, b) => titleMatchScore(b.title, q) - titleMatchScore(a.title, q)
+    );
+
+    const items = ranked.slice(0, 20).map((m) => {
       const radarr = radarrByTmdb.get(m.id) ?? null;
       return {
         tmdbId: m.id,
@@ -55,7 +60,11 @@ export async function GET(req: NextRequest) {
     );
     const genreMap = new Map(tvGenres.genres.map((g) => [g.id, g.name]));
 
-    const items = results.results.slice(0, 20).map((s) => {
+    const ranked = [...results.results].sort(
+      (a, b) => titleMatchScore(b.name, q) - titleMatchScore(a.name, q)
+    );
+
+    const items = ranked.slice(0, 20).map((s) => {
       const sonarr = sonarrByTmdb.get(s.id) ?? null;
       return {
         tmdbId: s.id,
