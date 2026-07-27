@@ -194,7 +194,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
 
   // dev:ino -> release candidate, for duplicate detection across library + seed pool
   const releaseSeen = new Set<string>();
-  const releaseGroups = new Map<string, { kind: "movie" | "series"; releases: { name: string; sizeBytes: number; inLibrary: boolean }[] }>();
+  const releaseGroups = new Map<string, { kind: "movie" | "series"; releases: { name: string; sizeBytes: number; inLibrary: boolean; invKey: string }[] }>();
 
   function addReleaseCandidate(name: string, dev: number, ino: number, size: number, inLibrary: boolean, fallbackKey?: string) {
     const invKey = `${dev}:${ino}`;
@@ -207,7 +207,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
       group = { kind: parsed.kind, releases: [] };
       releaseGroups.set(parsed.key, group);
     }
-    group.releases.push({ name, sizeBytes: size, inLibrary });
+    group.releases.push({ name, sizeBytes: size, inLibrary, invKey });
   }
 
   const heaviestH264: StorageStats["heaviestH264"] = [];
@@ -246,11 +246,21 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     addReleaseCandidate(f.name, f.dev, f.ino, f.size, false);
   }
 
-  // Seed orphans: distinct seed-side files (by inode) with no library match at all
+  // A file that matches another release of the same title/episode (whether that other
+  // release is in the library or just another seed) is a duplicate, not an orphan —
+  // "seed orphan" is reserved for a torrent that truly matches nothing anywhere.
+  const duplicateInodes = new Set<string>();
+  for (const group of releaseGroups.values()) {
+    if (group.releases.length < 2) continue;
+    for (const r of group.releases) duplicateInodes.add(r.invKey);
+  }
+
+  // Seed orphans: distinct seed-side files (by inode) with no library match and no
+  // sibling release (same title/episode) anywhere else in the library or seed pool.
   const seedOrphanMap = new Map<string, { title: string; fileName: string; sizeBytes: number; trackers: Set<string> }>();
   for (const f of seedFiles) {
     const key = `${f.dev}:${f.ino}`;
-    if (libraryInodes.has(key)) continue;
+    if (libraryInodes.has(key) || duplicateInodes.has(key)) continue;
     let entry = seedOrphanMap.get(key);
     if (!entry) {
       entry = { title: displayTitle(f.name), fileName: f.name, sizeBytes: f.size, trackers: new Set() };
@@ -286,7 +296,12 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     const sorted = [...group.releases].sort((a, b) => b.sizeBytes - a.sizeBytes);
     const wastedBytes = sorted.slice(1).reduce((s, r) => s + r.sizeBytes, 0);
     const title = displayTitle(sorted[0].name) || key;
-    duplicates.push({ type: group.kind, title, wastedBytes, releases: sorted });
+    duplicates.push({
+      type: group.kind,
+      title,
+      wastedBytes,
+      releases: sorted.map(({ name, sizeBytes, inLibrary }) => ({ name, sizeBytes, inLibrary })),
+    });
   }
   duplicates.sort((a, b) => b.wastedBytes - a.wastedBytes);
 
