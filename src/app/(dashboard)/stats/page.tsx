@@ -7,7 +7,7 @@ import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
-import { Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, RefreshCw, type LucideIcon } from "lucide-react";
+import { Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, RefreshCw, AlertTriangle, type LucideIcon } from "lucide-react";
 import type { LibraryStats } from "@/app/api/stats/library/route";
 import type { PeopleStats } from "@/app/api/stats/people/route";
 import type { StorageStats } from "@/app/api/stats/storage/route";
@@ -122,6 +122,24 @@ function TopPeopleSection({ people }: { people: PeopleStats }) {
   );
 }
 
+function ListCard({ icon: Icon, iconColor, title, count, emptyLabel, children }: {
+  icon: LucideIcon; iconColor: string; title: string; count: number; emptyLabel: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="card p-4">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+        <Icon size={14} className={iconColor} /> {title}
+        {count > 0 && <span className="ml-auto text-xs font-normal text-slate-600">{count}</span>}
+      </h3>
+      {count === 0 ? (
+        <p className="text-xs text-slate-600">{emptyLabel}</p>
+      ) : (
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">{children}</div>
+      )}
+    </div>
+  );
+}
+
 function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
   const t = useT();
   const movieMax = Math.max(storage.movieFiles.total, 1);
@@ -153,74 +171,92 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
           <HBar label={t('stats.storage.hardlinkSeries')} value={storage.seriesFiles.hardlinked} max={seriesMax}
             color="bg-sky-500" fmt={() => t('stats.storage.hardlinkCount', { linked: storage.seriesFiles.hardlinked, total: storage.seriesFiles.total })} />
         </div>
-        <StatCard icon={HardDrive} label={t('stats.storage.seedOnly')} value={fmtSize(storage.seedOnlyBytes)}
-          sub={t('stats.storage.seedOnlyCount', { n: storage.seedOnlyCount })} color="text-amber-400" />
+        <StatCard icon={HardDrive} label={t('stats.storage.seedOrphans')} value={fmtSize(storage.seedOrphanBytes)}
+          sub={t('stats.storage.seedOrphanCount', { n: storage.seedOrphans.length })} color="text-rose-400" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="card p-4">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
-            <Link2 size={14} className="text-rose-400" /> {t('stats.storage.notHardlinkedTitle')}
-          </h3>
-          {storage.notHardlinked.length === 0 ? (
-            <p className="text-xs text-slate-600">{t('stats.storage.notHardlinkedEmpty')}</p>
-          ) : (
-            <div className="space-y-2">
-              {storage.notHardlinked.slice(0, 8).map((item, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-slate-300" title={item.fileName}>{item.title}</span>
-                  <span className="shrink-0 text-slate-500">{fmtSize(item.sizeBytes)}</span>
-                </div>
-              ))}
-              {storage.notHardlinked.length > 8 && (
-                <p className="pt-1 text-[11px] text-slate-600">{t('stats.storage.showMore', { n: storage.notHardlinked.length - 8 })}</p>
-              )}
+      <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ListCard icon={AlertTriangle} iconColor="text-rose-400" title={t('stats.storage.seedOrphansTitle')}
+          count={storage.seedOrphans.length} emptyLabel={t('stats.storage.seedOrphansEmpty')}>
+          {storage.seedOrphans.map((item, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate text-slate-300" title={item.fileName}>
+                {item.title}
+                {item.trackers.length > 0 && <span className="ml-1.5 text-[10px] text-sky-500">({item.trackers.join(", ")})</span>}
+              </span>
+              <span className="shrink-0 text-slate-500">{fmtSize(item.sizeBytes)}</span>
             </div>
-          )}
-        </div>
+          ))}
+        </ListCard>
 
-        <div className="card p-4">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
-            <Copy size={14} className="text-amber-400" /> {t('stats.storage.duplicatesTitle')}
-          </h3>
-          {storage.duplicates.length === 0 ? (
-            <p className="text-xs text-slate-600">{t('stats.storage.duplicatesEmpty')}</p>
-          ) : (
-            <div className="space-y-2">
-              {storage.duplicates.slice(0, 8).map((item, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
-                  <span className="shrink-0 text-amber-400">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
-                </div>
-              ))}
-              {storage.duplicates.length > 8 && (
-                <p className="pt-1 text-[11px] text-slate-600">{t('stats.storage.showMore', { n: storage.duplicates.length - 8 })}</p>
-              )}
+        <ListCard icon={Copy} iconColor="text-amber-400" title={t('stats.storage.duplicatesTitle')}
+          count={storage.duplicates.length} emptyLabel={t('stats.storage.duplicatesEmpty')}>
+          {storage.duplicates.map((item, i) => (
+            <div key={i} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
+                <span className="shrink-0 text-amber-400">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
+              </div>
+              <div className="mt-0.5 pl-2 text-[10px] text-slate-600">
+                {item.releases.map((r) => `${r.name} (${fmtSize(r.sizeBytes)})`).join(" · ")}
+              </div>
             </div>
-          )}
-        </div>
+          ))}
+        </ListCard>
+      </div>
 
+      <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-4">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
             <Share2 size={14} className="text-sky-400" /> {t('stats.storage.crossSeedTitle')}
           </h3>
-          {storage.crossSeeded.length === 0 ? (
+          {storage.crossSeedByTracker.length === 0 ? (
             <p className="text-xs text-slate-600">{t('stats.storage.crossSeedEmpty')}</p>
           ) : (
-            <div className="space-y-2">
-              {storage.crossSeeded.slice(0, 8).map((item, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
-                  <span className="shrink-0 text-sky-400">{t('stats.storage.crossSeedTrackers', { n: item.trackers.length })}</span>
-                </div>
+            <div className="space-y-3">
+              {storage.crossSeedByTracker.map((group) => (
+                <details key={group.tracker} className="group">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs text-slate-300 marker:content-none">
+                    <span className="font-medium">{group.tracker}</span>
+                    <span className="text-slate-500">{group.files.length} · {fmtSize(group.totalBytes)}</span>
+                  </summary>
+                  <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pl-2 pr-1">
+                    {group.files.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="truncate text-slate-400" title={f.fileName}>{f.title}</span>
+                        <span className="shrink-0 flex items-center gap-1.5">
+                          {!f.linkedToLibrary && <span className="text-rose-400">{t('stats.storage.notLinked')}</span>}
+                          <span className="text-slate-600">{fmtSize(f.sizeBytes)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               ))}
-              {storage.crossSeeded.length > 8 && (
-                <p className="pt-1 text-[11px] text-slate-600">{t('stats.storage.showMore', { n: storage.crossSeeded.length - 8 })}</p>
-              )}
             </div>
           )}
         </div>
+
+        <ListCard icon={Film} iconColor="text-orange-400" title={t('stats.storage.heavyH264Title')}
+          count={storage.heaviestH264.length} emptyLabel={t('stats.storage.heavyH264Empty')}>
+          {storage.heaviestH264.map((item, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate text-slate-300" title={item.title}>{item.title}</span>
+              <span className="shrink-0 text-orange-400">{fmtSize(item.sizeBytes)}</span>
+            </div>
+          ))}
+        </ListCard>
       </div>
+
+      <ListCard icon={Link2} iconColor="text-slate-500" title={t('stats.storage.notHardlinkedTitle')}
+        count={storage.notHardlinked.length} emptyLabel={t('stats.storage.notHardlinkedEmpty')}>
+        {storage.notHardlinked.map((item, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 text-xs">
+            <span className="truncate text-slate-400" title={item.fileName}>{item.title}</span>
+            <span className="shrink-0 text-slate-600">{fmtSize(item.sizeBytes)}</span>
+          </div>
+        ))}
+      </ListCard>
     </section>
   );
 }

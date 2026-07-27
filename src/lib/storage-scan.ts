@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { cachedMovies } from "@/lib/server-cache";
 
 const MEDIA_ROOT = "/mnt/media/video";
 const MOVIES_PATH = `${MEDIA_ROOT}/movies`;
@@ -9,7 +10,11 @@ const SEED_TV_PATH = `${MEDIA_ROOT}/downloads/seeds/tv`;
 const CROSS_SEED_PATH = `${MEDIA_ROOT}/downloads/seeds/cross-seed-links`;
 
 const VIDEO_EXT = new Set([".mkv", ".mp4", ".avi", ".m4v", ".ts", ".wmv", ".mov"]);
-const EPISODE_TAG_RE = /S(\d{1,2})E(\d{1,3})/i;
+const EPISODE_TAG_RE = /^(.*?)[.\s_-]*S(\d{1,2})E(\d{1,3})\b/i;
+const YEAR_RE = /^(.*?)[[(.\s](\d{4})[\])]?/;
+// Codec is read from the release filename, not mediainfo/ffprobe — probing every
+// file would mean spawning a process per video and made the scan too slow to be usable.
+const H264_RE = /\b(x264|h\.?264|avc1?)\b/i;
 
 interface FileStat {
   name: string;
@@ -36,16 +41,50 @@ export interface StorageStats {
   error: string | null;
   movieFiles: { total: number; hardlinked: number; totalBytes: number };
   seriesFiles: { total: number; hardlinked: number; totalBytes: number };
+  /** Library files with no seed copy — informational, NOT anomalous (a movie can legitimately have no active seed). */
   notHardlinked: { type: "movie" | "series"; title: string; fileName: string; sizeBytes: number }[];
-  duplicates: { type: "movie" | "series"; title: string; wastedBytes: number; files: { name: string; sizeBytes: number }[] }[];
-  seedOnlyBytes: number;
-  seedOnlyCount: number;
-  crossSeeded: { type: "movie" | "series"; title: string; sizeBytes: number; trackers: string[] }[];
+  /** Seed-side files with no matching library file — genuinely wasted space, worth reviewing. */
+  seedOrphans: { title: string; fileName: string; sizeBytes: number; trackers: string[] }[];
+  seedOrphanBytes: number;
+  crossSeedByTracker: {
+    tracker: string;
+    totalBytes: number;
+    files: { title: string; fileName: string; sizeBytes: number; linkedToLibrary: boolean }[];
+  }[];
+  /** Same title/episode found as more than one distinct file (different release/codec/resolution). */
+  duplicates: {
+    type: "movie" | "series";
+    title: string;
+    wastedBytes: number;
+    releases: { name: string; sizeBytes: number; inLibrary: boolean }[];
+  }[];
+  heaviestH264: { type: "movie" | "series"; title: string; sizeBytes: number }[];
 }
 
-function episodeKey(filename: string): string | null {
-  const m = filename.match(EPISODE_TAG_RE);
-  return m ? `S${m[1].padStart(2, "0")}E${m[2].padStart(3, "0")}` : null;
+function normalizeReleaseTitle(raw: string): string {
+  return raw.toLowerCase().replace(/[._]/g, " ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Parses a stable grouping key out of an arbitrary release/library filename, so the
+ *  same movie or episode can be recognized across differently-named releases
+ *  (e.g. "Film.2019.HEVC.mkv" vs "Film (2019) 1080p x264.mkv"). */
+function parseReleaseKey(name: string): { key: string; kind: "movie" | "series" } | null {
+  const epMatch = name.match(EPISODE_TAG_RE);
+  if (epMatch) {
+    const show = normalizeReleaseTitle(epMatch[1]);
+    if (!show) return null;
+    const tag = `S${epMatch[2].padStart(2, "0")}E${epMatch[3].padStart(3, "0")}`;
+    return { key: `ep:${show}:${tag}`, kind: "series" };
+  }
+  const movieMatch = name.match(YEAR_RE);
+  if (movieMatch) {
+    const year = parseInt(movieMatch[2]);
+    if (year < 1900 || year > 2099) return null;
+    const title = normalizeReleaseTitle(movieMatch[1]);
+    if (!title) return null;
+    return { key: `mv:${title}:${year}`, kind: "movie" };
+  }
+  return null;
 }
 
 async function walk(root: string, depth = 0, maxDepth = 8): Promise<FileStat[]> {
@@ -116,11 +155,28 @@ async function walkSeeds(): Promise<SeedFile[]> {
   return [...base, ...crossSeed];
 }
 
+function displayTitle(name: string): string {
+  const parsed = parseReleaseKey(name);
+  if (!parsed) return name;
+  if (parsed.kind === "movie") {
+    const m = name.match(YEAR_RE);
+    return m ? `${m[1].replace(/[._]/g, " ").trim()} (${m[2]})` : name;
+  }
+  const m = name.match(EPISODE_TAG_RE);
+  return m ? `${m[1].replace(/[._]/g, " ").trim()} · S${m[2].padStart(2, "0")}E${m[3].padStart(3, "0")}` : name;
+}
+
 async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
-  const [movieItems, seriesItems, seedFiles] = await Promise.all([
+  // Movie codec comes from Radarr's own mediaInfo (already fetched/cached elsewhere in
+  // the app, one bulk call) — more reliable than filename sniffing, since Radarr often
+  // renames files to "Title (Year).mkv" with no codec tag left in the name at all.
+  // Series use the filename heuristic below: probing every episode's mediainfo, or
+  // calling Sonarr per-series, made the scan too slow to be usable.
+  const [movieItems, seriesItems, seedFiles, radarrMovies] = await Promise.all([
     walkLibraryGrouped(MOVIES_PATH, "movie"),
     walkLibraryGrouped(TV_PATH, "series"),
     walkSeeds(),
+    cachedMovies().catch(() => []),
   ]);
 
   const seedIndex = new Map<string, SeedFile[]>();
@@ -135,85 +191,118 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   let moviesTotal = 0, moviesHardlinked = 0, moviesBytes = 0;
   let seriesTotal = 0, seriesHardlinked = 0, seriesBytes = 0;
   const notHardlinked: StorageStats["notHardlinked"] = [];
-  const duplicates: StorageStats["duplicates"] = [];
-  const crossSeededMap = new Map<string, { type: "movie" | "series"; title: string; sizeBytes: number; trackers: Set<string> }>();
 
-  function processItem(item: LibraryItem) {
+  // dev:ino -> release candidate, for duplicate detection across library + seed pool
+  const releaseSeen = new Set<string>();
+  const releaseGroups = new Map<string, { kind: "movie" | "series"; releases: { name: string; sizeBytes: number; inLibrary: boolean }[] }>();
+
+  function addReleaseCandidate(name: string, dev: number, ino: number, size: number, inLibrary: boolean, fallbackKey?: string) {
+    const invKey = `${dev}:${ino}`;
+    if (releaseSeen.has(invKey)) return;
+    releaseSeen.add(invKey);
+    const parsed = parseReleaseKey(name) ?? (fallbackKey ? parseReleaseKey(fallbackKey) : null);
+    if (!parsed) return;
+    let group = releaseGroups.get(parsed.key);
+    if (!group) {
+      group = { kind: parsed.kind, releases: [] };
+      releaseGroups.set(parsed.key, group);
+    }
+    group.releases.push({ name, sizeBytes: size, inLibrary });
+  }
+
+  const heaviestH264: StorageStats["heaviestH264"] = [];
+  for (const m of radarrMovies) {
+    const mf = m.movieFile;
+    const codec = (mf?.mediaInfo?.videoCodec ?? "").toLowerCase();
+    if (codec.includes("264") && mf?.size) {
+      heaviestH264.push({ type: "movie", title: `${m.title} (${m.year})`, sizeBytes: mf.size });
+    }
+  }
+
+  for (const item of movieItems) {
     for (const f of item.files) {
       libraryInodes.add(`${f.dev}:${f.ino}`);
-      if (item.type === "movie") {
-        moviesTotal++; moviesBytes += f.size;
-        if (f.nlink > 1) moviesHardlinked++;
-      } else {
-        seriesTotal++; seriesBytes += f.size;
-        if (f.nlink > 1) seriesHardlinked++;
-      }
-
-      if (f.nlink <= 1) {
-        notHardlinked.push({ type: item.type, title: item.title, fileName: f.name, sizeBytes: f.size });
-      } else {
-        const matches = seedIndex.get(`${f.dev}:${f.ino}`) ?? [];
-        const trackers = new Set(matches.filter((m) => m.origin === "cross-seed").map((m) => m.tracker!));
-        if (trackers.size > 0) {
-          crossSeededMap.set(`${item.type}:${item.title}:${f.name}`, { type: item.type, title: item.title, sizeBytes: f.size, trackers });
-        }
-      }
-    }
-
-    if (item.type === "movie") {
-      if (item.files.length > 1) {
-        const sorted = [...item.files].sort((a, b) => b.size - a.size);
-        const wasted = sorted.slice(1).reduce((s, f) => s + f.size, 0);
-        duplicates.push({ type: "movie", title: item.title, wastedBytes: wasted, files: sorted.map((f) => ({ name: f.name, sizeBytes: f.size })) });
-      }
-    } else {
-      const bySlot = new Map<string, FileStat[]>();
-      for (const f of item.files) {
-        const key = episodeKey(f.name);
-        if (!key) continue;
-        const arr = bySlot.get(key);
-        if (arr) arr.push(f);
-        else bySlot.set(key, [f]);
-      }
-      for (const [key, group] of bySlot) {
-        if (group.length > 1) {
-          const sorted = [...group].sort((a, b) => b.size - a.size);
-          const wasted = sorted.slice(1).reduce((s, f) => s + f.size, 0);
-          duplicates.push({ type: "series", title: `${item.title} · ${key}`, wastedBytes: wasted, files: sorted.map((f) => ({ name: f.name, sizeBytes: f.size })) });
-        }
-      }
+      moviesTotal++; moviesBytes += f.size;
+      if (f.nlink > 1) moviesHardlinked++;
+      else notHardlinked.push({ type: "movie", title: item.title, fileName: f.name, sizeBytes: f.size });
+      addReleaseCandidate(f.name, f.dev, f.ino, f.size, true, item.title);
     }
   }
+  for (const item of seriesItems) {
+    let h264Bytes = 0;
+    for (const f of item.files) {
+      libraryInodes.add(`${f.dev}:${f.ino}`);
+      seriesTotal++; seriesBytes += f.size;
+      if (f.nlink > 1) seriesHardlinked++;
+      else notHardlinked.push({ type: "series", title: item.title, fileName: f.name, sizeBytes: f.size });
+      addReleaseCandidate(f.name, f.dev, f.ino, f.size, true);
+      if (H264_RE.test(f.name)) h264Bytes += f.size;
+    }
+    if (h264Bytes > 0) heaviestH264.push({ type: "series", title: item.title, sizeBytes: h264Bytes });
+  }
+  heaviestH264.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  const heaviestH264Top = heaviestH264.slice(0, 50);
+  for (const f of seedFiles) {
+    addReleaseCandidate(f.name, f.dev, f.ino, f.size, false);
+  }
 
-  for (const it of movieItems) processItem(it);
-  for (const it of seriesItems) processItem(it);
-
-  let seedOnlyBytes = 0, seedOnlyCount = 0;
-  const seenSeedInode = new Set<string>();
+  // Seed orphans: distinct seed-side files (by inode) with no library match at all
+  const seedOrphanMap = new Map<string, { title: string; fileName: string; sizeBytes: number; trackers: Set<string> }>();
   for (const f of seedFiles) {
     const key = `${f.dev}:${f.ino}`;
-    if (libraryInodes.has(key) || seenSeedInode.has(key)) continue;
-    seenSeedInode.add(key);
-    seedOnlyBytes += f.size;
-    seedOnlyCount++;
+    if (libraryInodes.has(key)) continue;
+    let entry = seedOrphanMap.get(key);
+    if (!entry) {
+      entry = { title: displayTitle(f.name), fileName: f.name, sizeBytes: f.size, trackers: new Set() };
+      seedOrphanMap.set(key, entry);
+    }
+    if (f.origin === "cross-seed" && f.tracker) entry.trackers.add(f.tracker);
   }
+  const seedOrphans = [...seedOrphanMap.values()]
+    .map((o) => ({ title: o.title, fileName: o.fileName, sizeBytes: o.sizeBytes, trackers: [...o.trackers] }))
+    .sort((a, b) => b.sizeBytes - a.sizeBytes);
+  const seedOrphanBytes = seedOrphans.reduce((s, o) => s + o.sizeBytes, 0);
+
+  // Cross-seed grouped by tracker
+  const trackerMap = new Map<string, { totalBytes: number; files: { title: string; fileName: string; sizeBytes: number; linkedToLibrary: boolean }[] }>();
+  for (const f of seedFiles) {
+    if (f.origin !== "cross-seed" || !f.tracker) continue;
+    let group = trackerMap.get(f.tracker);
+    if (!group) {
+      group = { totalBytes: 0, files: [] };
+      trackerMap.set(f.tracker, group);
+    }
+    group.totalBytes += f.size;
+    group.files.push({ title: displayTitle(f.name), fileName: f.name, sizeBytes: f.size, linkedToLibrary: libraryInodes.has(`${f.dev}:${f.ino}`) });
+  }
+  const crossSeedByTracker = [...trackerMap.entries()]
+    .map(([tracker, g]) => ({ tracker, totalBytes: g.totalBytes, files: g.files.sort((a, b) => b.sizeBytes - a.sizeBytes) }))
+    .sort((a, b) => b.totalBytes - a.totalBytes);
+
+  // Duplicates: groups with more than one distinct physical file for the same title/episode
+  const duplicates: StorageStats["duplicates"] = [];
+  for (const [key, group] of releaseGroups) {
+    if (group.releases.length < 2) continue;
+    const sorted = [...group.releases].sort((a, b) => b.sizeBytes - a.sizeBytes);
+    const wastedBytes = sorted.slice(1).reduce((s, r) => s + r.sizeBytes, 0);
+    const title = displayTitle(sorted[0].name) || key;
+    duplicates.push({ type: group.kind, title, wastedBytes, releases: sorted });
+  }
+  duplicates.sort((a, b) => b.wastedBytes - a.wastedBytes);
 
   notHardlinked.sort((a, b) => b.sizeBytes - a.sizeBytes);
-  duplicates.sort((a, b) => b.wastedBytes - a.wastedBytes);
-  const crossSeeded = [...crossSeededMap.values()]
-    .map((c) => ({ type: c.type, title: c.title, sizeBytes: c.sizeBytes, trackers: [...c.trackers] }))
-    .sort((a, b) => b.sizeBytes - a.sizeBytes);
 
   return {
     computedAt: Date.now(),
     error: null,
     movieFiles: { total: moviesTotal, hardlinked: moviesHardlinked, totalBytes: moviesBytes },
     seriesFiles: { total: seriesTotal, hardlinked: seriesHardlinked, totalBytes: seriesBytes },
-    notHardlinked: notHardlinked.slice(0, 30),
-    duplicates: duplicates.slice(0, 30),
-    seedOnlyBytes,
-    seedOnlyCount,
-    crossSeeded: crossSeeded.slice(0, 30),
+    notHardlinked,
+    seedOrphans,
+    seedOrphanBytes,
+    crossSeedByTracker,
+    duplicates,
+    heaviestH264: heaviestH264Top,
   };
 }
 
@@ -223,10 +312,11 @@ const EMPTY: Omit<StorageStats, "computing" | "computedAt" | "error"> = {
   movieFiles: { total: 0, hardlinked: 0, totalBytes: 0 },
   seriesFiles: { total: 0, hardlinked: 0, totalBytes: 0 },
   notHardlinked: [],
+  seedOrphans: [],
+  seedOrphanBytes: 0,
+  crossSeedByTracker: [],
   duplicates: [],
-  seedOnlyBytes: 0,
-  seedOnlyCount: 0,
-  crossSeeded: [],
+  heaviestH264: [],
 };
 
 let cached: Omit<StorageStats, "computing"> | null = null;

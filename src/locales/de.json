@@ -410,17 +410,20 @@
       "hardlinkMovies": "Hardgelinkte Filme",
       "hardlinkSeries": "Hardgelinkte Episoden",
       "hardlinkCount": "{linked} / {total}",
-      "seedOnly": "Ungenutzter Seed-Speicher",
-      "seedOnlyCount": "{n} Dateien ohne Verknüpfung zur Mediathek",
-      "notHardlinkedTitle": "Nicht hardgelinkt",
-      "notHardlinkedEmpty": "Alles ist hardgelinkt.",
+      "seedOrphans": "Verwaiste Seeds",
+      "seedOrphanCount": "{n} Dateien ohne passenden Film/Serie in der Mediathek",
+      "seedOrphansTitle": "Seeds ohne Kopie in der Mediathek",
+      "seedOrphansEmpty": "Keine verwaisten Seeds gefunden.",
+      "notHardlinkedTitle": "Ohne Seed-Kopie (normal)",
+      "notHardlinkedEmpty": "Alles hat eine Seed-Kopie.",
       "duplicatesTitle": "Duplikate / mehrere Versionen",
       "duplicatesEmpty": "Keine Duplikate gefunden.",
       "duplicatesWasted": "{n} zu viel",
-      "crossSeedTitle": "Cross-Seed",
+      "crossSeedTitle": "Cross-Seed nach Tracker",
       "crossSeedEmpty": "Kein Cross-Seed gefunden.",
-      "crossSeedTrackers": "{n} Tracker",
-      "showMore": "+{n} mehr"
+      "notLinked": "nicht verknüpft",
+      "heavyH264Title": "Größte H264-Dateien",
+      "heavyH264Empty": "Keine H264-Datei gefunden."
     }
   },
   "calendar": {
