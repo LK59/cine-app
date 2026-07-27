@@ -104,6 +104,7 @@ export interface TmdbTrendingMovie {
   backdrop_path: string | null;
   release_date: string;
   vote_average: number;
+  popularity?: number;
   genre_ids: number[];
 }
 
@@ -116,6 +117,7 @@ export interface TmdbTrendingTv {
   backdrop_path: string | null;
   first_air_date: string;
   vote_average: number;
+  popularity?: number;
   genre_ids: number[];
 }
 

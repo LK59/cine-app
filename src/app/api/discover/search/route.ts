@@ -48,11 +48,12 @@ export async function GET(req: NextRequest) {
       if (!merged.has(m.id)) merged.set(m.id, m);
     }
 
-    const ranked = [...merged.values()].sort(
-      (a, b) =>
+    const ranked = [...merged.values()].sort((a, b) => {
+      const diff =
         bestScore([b.title, b.original_title, enTitleById.get(b.id)], q) -
-        bestScore([a.title, a.original_title, enTitleById.get(a.id)], q)
-    );
+        bestScore([a.title, a.original_title, enTitleById.get(a.id)], q);
+      return diff !== 0 ? diff : (b.popularity ?? 0) - (a.popularity ?? 0);
+    });
 
     const items = ranked.slice(0, 20).map((m) => {
       const radarr = radarrByTmdb.get(m.id) ?? null;
@@ -89,11 +90,12 @@ export async function GET(req: NextRequest) {
       if (!merged.has(s.id)) merged.set(s.id, s);
     }
 
-    const ranked = [...merged.values()].sort(
-      (a, b) =>
+    const ranked = [...merged.values()].sort((a, b) => {
+      const diff =
         bestScore([b.name, b.original_name, enNameById.get(b.id)], q) -
-        bestScore([a.name, a.original_name, enNameById.get(a.id)], q)
-    );
+        bestScore([a.name, a.original_name, enNameById.get(a.id)], q);
+      return diff !== 0 ? diff : (b.popularity ?? 0) - (a.popularity ?? 0);
+    });
 
     const items = ranked.slice(0, 20).map((s) => {
       const sonarr = sonarrByTmdb.get(s.id) ?? null;
