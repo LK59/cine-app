@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { cachedMovies } from "@/lib/server-cache";
+import { bestTitleMatchScore } from "@/lib/search-natural-query";
 
 const MEDIA_ROOT = "/mnt/media/video";
 const MOVIES_PATH = `${MEDIA_ROOT}/movies`;
@@ -67,8 +68,12 @@ function normalizeReleaseTitle(raw: string): string {
 
 /** Parses a stable grouping key out of an arbitrary release/library filename, so the
  *  same movie or episode can be recognized across differently-named releases
- *  (e.g. "Film.2019.HEVC.mkv" vs "Film (2019) 1080p x264.mkv"). */
-function parseReleaseKey(name: string): { key: string; kind: "movie" | "series" } | null {
+ *  (e.g. "Film.2019.HEVC.mkv" vs "Film (2019) 1080p x264.mkv"). For movies, also
+ *  returns the raw (unnormalized) title + year so callers can additionally try
+ *  matching them against Radarr's own title/original title — release names are
+ *  sometimes in a different language than the library's (French vs English), which
+ *  the plain normalized-string key alone would treat as two unrelated movies. */
+function parseReleaseKey(name: string): { key: string; kind: "movie" | "series"; rawTitle?: string; year?: number } | null {
   const epMatch = name.match(EPISODE_TAG_RE);
   if (epMatch) {
     const show = normalizeReleaseTitle(epMatch[1]);
@@ -82,7 +87,7 @@ function parseReleaseKey(name: string): { key: string; kind: "movie" | "series" 
     if (year < 1900 || year > 2099) return null;
     const title = normalizeReleaseTitle(movieMatch[1]);
     if (!title) return null;
-    return { key: `mv:${title}:${year}`, kind: "movie" };
+    return { key: `mv:${title}:${year}`, kind: "movie", rawTitle: movieMatch[1].replace(/[._]/g, " ").trim(), year };
   }
   return null;
 }
@@ -179,6 +184,35 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     cachedMovies().catch(() => []),
   ]);
 
+  // Release names aren't always in the same language as Radarr's own title (e.g. an
+  // English-titled seed release vs. the library's French title) — the plain filename
+  // key alone would treat them as two unrelated movies. Reuse the same fuzzy
+  // localized/original-title matching used by search, keyed by year to keep it cheap.
+  const hintsByYear = new Map<number, { id: number; title: string; originalTitle?: string }[]>();
+  for (const m of radarrMovies) {
+    const arr = hintsByYear.get(m.year);
+    const hint = { id: m.id, title: m.title, originalTitle: m.originalTitle };
+    if (arr) arr.push(hint);
+    else hintsByYear.set(m.year, [hint]);
+  }
+  function resolveMovieHint(rawTitle: string, year: number) {
+    let best: { id: number; title: string; originalTitle?: string } | null = null;
+    let bestScore = 0;
+    for (const c of hintsByYear.get(year) ?? []) {
+      const score = bestTitleMatchScore([c.title, c.originalTitle], rawTitle);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return bestScore >= 75 ? best : null;
+  }
+  function resolveDisplayName(name: string): string {
+    const parsed = parseReleaseKey(name);
+    if (parsed?.kind === "movie" && parsed.rawTitle && parsed.year) {
+      const hint = resolveMovieHint(parsed.rawTitle, parsed.year);
+      if (hint) return `${hint.title} (${parsed.year})`;
+    }
+    return displayTitle(name);
+  }
+
   const seedIndex = new Map<string, SeedFile[]>();
   for (const f of seedFiles) {
     const key = `${f.dev}:${f.ino}`;
@@ -202,10 +236,15 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     releaseSeen.add(invKey);
     const parsed = parseReleaseKey(name) ?? (fallbackKey ? parseReleaseKey(fallbackKey) : null);
     if (!parsed) return;
-    let group = releaseGroups.get(parsed.key);
+    let key = parsed.key;
+    if (parsed.kind === "movie" && parsed.rawTitle && parsed.year) {
+      const hint = resolveMovieHint(parsed.rawTitle, parsed.year);
+      if (hint) key = `mv:radarr:${hint.id}`;
+    }
+    let group = releaseGroups.get(key);
     if (!group) {
       group = { kind: parsed.kind, releases: [] };
-      releaseGroups.set(parsed.key, group);
+      releaseGroups.set(key, group);
     }
     group.releases.push({ name, sizeBytes: size, inLibrary, invKey });
   }
@@ -263,7 +302,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     if (libraryInodes.has(key) || duplicateInodes.has(key)) continue;
     let entry = seedOrphanMap.get(key);
     if (!entry) {
-      entry = { title: displayTitle(f.name), fileName: f.name, sizeBytes: f.size, trackers: new Set() };
+      entry = { title: resolveDisplayName(f.name), fileName: f.name, sizeBytes: f.size, trackers: new Set() };
       seedOrphanMap.set(key, entry);
     }
     if (f.origin === "cross-seed" && f.tracker) entry.trackers.add(f.tracker);
@@ -283,7 +322,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
       trackerMap.set(f.tracker, group);
     }
     group.totalBytes += f.size;
-    group.files.push({ title: displayTitle(f.name), fileName: f.name, sizeBytes: f.size, linkedToLibrary: libraryInodes.has(`${f.dev}:${f.ino}`) });
+    group.files.push({ title: resolveDisplayName(f.name), fileName: f.name, sizeBytes: f.size, linkedToLibrary: libraryInodes.has(`${f.dev}:${f.ino}`) });
   }
   const crossSeedByTracker = [...trackerMap.entries()]
     .map(([tracker, g]) => ({ tracker, totalBytes: g.totalBytes, files: g.files.sort((a, b) => b.sizeBytes - a.sizeBytes) }))
@@ -295,7 +334,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     if (group.releases.length < 2) continue;
     const sorted = [...group.releases].sort((a, b) => b.sizeBytes - a.sizeBytes);
     const wastedBytes = sorted.slice(1).reduce((s, r) => s + r.sizeBytes, 0);
-    const title = displayTitle(sorted[0].name) || key;
+    const title = resolveDisplayName(sorted[0].name) || key;
     duplicates.push({
       type: group.kind,
       title,

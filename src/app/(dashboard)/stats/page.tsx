@@ -148,7 +148,12 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
   return (
     <section className="mb-8">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-white">{t('stats.storage.title')}</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+          {t('stats.storage.title')}
+          <span className="rounded-full bg-accent-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-400 ring-1 ring-inset ring-accent-500/30">
+            {t('stats.storage.beta')}
+          </span>
+        </h2>
         <div className="flex items-center gap-3">
           {storage.computedAt > 0 && (
             <span className="text-xs text-slate-600">{t('stats.storage.lastScan', { time: relativeTimeAbs(storage.computedAt) })}</span>

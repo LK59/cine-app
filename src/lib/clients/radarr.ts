@@ -7,6 +7,7 @@ const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
 export interface RadarrMovie {
   id: number;
   title: string;
+  originalTitle?: string;
   year: number;
   overview?: string;
   monitored: boolean;

@@ -423,7 +423,8 @@
       "crossSeedEmpty": "Kein Cross-Seed gefunden.",
       "notLinked": "nicht verknüpft",
       "heavyH264Title": "Größte H264-Dateien",
-      "heavyH264Empty": "Keine H264-Datei gefunden."
+      "heavyH264Empty": "Keine H264-Datei gefunden.",
+      "beta": "Beta"
     }
   },
   "calendar": {

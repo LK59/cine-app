@@ -423,7 +423,8 @@
       "crossSeedEmpty": "No cross-seed detected.",
       "notLinked": "not linked",
       "heavyH264Title": "Heaviest H264 files",
-      "heavyH264Empty": "No H264 file detected."
+      "heavyH264Empty": "No H264 file detected.",
+      "beta": "Beta"
     }
   },
   "calendar": {
