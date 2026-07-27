@@ -101,6 +101,13 @@ export function correctPersonName(name: string): string {
   return best;
 }
 
+function wordsNear(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length < 4 || b.length < 4) return false;
+  const limit = Math.max(a.length, b.length) >= 7 ? 2 : 1;
+  return editDistance(a, b) <= limit;
+}
+
 export function titleMatchScore(title: string, query: string): number {
   const titleNorm = normalize(title);
   const queryNorm = normalize(query);
@@ -110,7 +117,21 @@ export function titleMatchScore(title: string, query: string): number {
   if (titleNorm.includes(queryNorm)) return 75;
   const words = queryNorm.split(/\s+/).filter((w) => w.length >= 4 && !STOPWORDS.has(w));
   if (words.length > 1 && words.every((w) => titleNorm.includes(w))) return 60;
+  // Typo tolerance: every meaningful query word is a near-match (small edit
+  // distance) of some word in the title, e.g. "the hunnt" ~ "the hunt".
+  const titleWords = titleNorm.split(/\s+/);
+  if (words.length > 0 && words.every((w) => titleWords.some((tw) => wordsNear(tw, w)))) return 55;
   return 0;
+}
+
+/** Best titleMatchScore across several title variants (e.g. localized, original, English). */
+export function bestTitleMatchScore(titles: (string | undefined)[], query: string): number {
+  let best = 0;
+  for (const title of titles) {
+    if (!title) continue;
+    best = Math.max(best, titleMatchScore(title, query));
+  }
+  return best;
 }
 
 function splitPeople(value: string, locale: Locale = "fr"): string[] {

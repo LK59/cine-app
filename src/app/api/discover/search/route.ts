@@ -2,18 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, type TmdbTrendingMovie, type TmdbTrendingTv } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
-import { titleMatchScore } from "@/lib/search-natural-query";
+import { bestTitleMatchScore } from "@/lib/search-natural-query";
 
 export const dynamic = "force-dynamic";
-
-function bestScore(titles: (string | undefined)[], q: string): number {
-  let best = 0;
-  for (const title of titles) {
-    if (!title) continue;
-    best = Math.max(best, titleMatchScore(title, q));
-  }
-  return best;
-}
 
 export async function GET(req: NextRequest) {
   const siteLocale = getTmdbLocale(req.cookies.get("cine-lang")?.value);
@@ -50,8 +41,8 @@ export async function GET(req: NextRequest) {
 
     const ranked = [...merged.values()].sort((a, b) => {
       const diff =
-        bestScore([b.title, b.original_title, enTitleById.get(b.id)], q) -
-        bestScore([a.title, a.original_title, enTitleById.get(a.id)], q);
+        bestTitleMatchScore([b.title, b.original_title, enTitleById.get(b.id)], q) -
+        bestTitleMatchScore([a.title, a.original_title, enTitleById.get(a.id)], q);
       return diff !== 0 ? diff : (b.popularity ?? 0) - (a.popularity ?? 0);
     });
 
@@ -92,8 +83,8 @@ export async function GET(req: NextRequest) {
 
     const ranked = [...merged.values()].sort((a, b) => {
       const diff =
-        bestScore([b.name, b.original_name, enNameById.get(b.id)], q) -
-        bestScore([a.name, a.original_name, enNameById.get(a.id)], q);
+        bestTitleMatchScore([b.name, b.original_name, enNameById.get(b.id)], q) -
+        bestTitleMatchScore([a.name, a.original_name, enNameById.get(a.id)], q);
       return diff !== 0 ? diff : (b.popularity ?? 0) - (a.popularity ?? 0);
     });
 

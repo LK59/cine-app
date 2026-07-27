@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv } from "@/lib/clients/tmdb";
+import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv, type TmdbMultiResult } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
-import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
+import { LOCALE_COOKIE, getTmdbLocale, type Locale } from "@/lib/i18n";
 import {
   normalize,
   correctPersonName,
-  titleMatchScore,
+  bestTitleMatchScore,
   GENRE_ALIASES,
   parseNaturalQuery,
   parseNaturalQueryEN,
@@ -188,11 +188,17 @@ export async function GET(req: NextRequest) {
   const includeDebug = session?.role === "admin";
   const rawLang = req.cookies.get(LOCALE_COOKIE)?.value ?? "";
   const locale: Locale = (rawLang === "en" || rawLang === "es" || rawLang === "de") ? rawLang : "fr";
+  // The module-level `tmdb` singleton is fixed to fr-FR; build a client that
+  // actually matches the site's locale, plus an English one for title fallback
+  // ("the hunt" typed in English should still find "La Chasse").
+  const tmdbLocale = getTmdbLocale(locale);
+  const tmdbPrimary = tmdbLocale === "fr-FR" ? tmdb : createTmdbClient(tmdbLocale);
+  const tmdbEn = tmdbLocale === "en-US" ? tmdbPrimary : createTmdbClient("en-US");
 
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
-  if (!tmdb.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
+  if (!tmdbPrimary.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
-  const cacheKey = `search:v8:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
+  const cacheKey = `search:v9:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
 
   const result = await withCache<SearchResponse>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
@@ -206,11 +212,12 @@ export async function GET(req: NextRequest) {
 
     const personQuery = correctPersonName(q);
 
-    const [movies, series, multiResults, personResults] = await Promise.all([
+    const [movies, series, multiResults, multiResultsEn, personResults] = await Promise.all([
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
-      tmdb.searchMulti(q).catch(() => ({ results: [] })),
-      tmdb.searchPerson(personQuery).catch(() => ({ results: [] })),
+      tmdbPrimary.searchMulti(q).catch(() => ({ results: [] })),
+      tmdbEn === tmdbPrimary ? Promise.resolve({ results: [] }) : tmdbEn.searchMulti(q).catch(() => ({ results: [] })),
+      tmdbPrimary.searchPerson(personQuery).catch(() => ({ results: [] })),
     ]);
 
     // Build lookup maps
@@ -248,8 +255,8 @@ export async function GET(req: NextRequest) {
       const [resolvedCastIds, resolvedDirectorIds, movieGenres, tvGenres] = await Promise.all([
         resolvePersonIds(natural.castNames),
         resolvePersonIds(natural.directorNames),
-        tmdb.movieGenres().catch(() => ({ genres: [] })),
-        tmdb.tvGenres().catch(() => ({ genres: [] })),
+        tmdbPrimary.movieGenres().catch(() => ({ genres: [] })),
+        tmdbPrimary.tvGenres().catch(() => ({ genres: [] })),
       ]);
       castIds = resolvedCastIds;
       directorIds = resolvedDirectorIds;
@@ -259,7 +266,7 @@ export async function GET(req: NextRequest) {
       const missingDirector = natural.directorNames.length > 0 && directorIds.length === 0;
 
       if (!missingCast && !missingDirector && allowMovieResults) {
-        discoverCalls.push(tmdb.discover({
+        discoverCalls.push(tmdbPrimary.discover({
           mediaType: "movie",
           genreId: genreIds?.movie ?? undefined,
           castIds,
@@ -267,7 +274,7 @@ export async function GET(req: NextRequest) {
         }));
       }
       if (!missingCast && !missingDirector && allowSeriesResults) {
-        discoverCalls.push(tmdb.discover({
+        discoverCalls.push(tmdbPrimary.discover({
           mediaType: "tv",
           genreId: genreIds?.tv ?? undefined,
           castIds,
@@ -314,16 +321,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    for (const item of multiResults.results.slice(0, 30)) {
+    // Merge the site-locale and English searchMulti results so a query typed
+    // in either language can match (e.g. "the hunt" ~ "La Chasse"), then rank
+    // by best title match across locales/original title, TMDb popularity as tiebreak.
+    const enResultKey = (item: TmdbMultiResult) => `${item.media_type}:${item.id}`;
+    const enTitleByKey = new Map(
+      multiResultsEn.results.map((item) => [enResultKey(item), item.title ?? item.name])
+    );
+    const mergedMulti = new Map<string, TmdbMultiResult>();
+    for (const item of [...multiResults.results, ...multiResultsEn.results]) {
       if (item.media_type === "person") continue;
+      const key = enResultKey(item);
+      if (!mergedMulti.has(key)) mergedMulti.set(key, item);
+    }
 
+    const rankedMulti = [...mergedMulti.values()].sort((a, b) => {
+      const diff =
+        bestTitleMatchScore([b.title ?? b.name, b.original_title ?? b.original_name, enTitleByKey.get(enResultKey(b))], q) -
+        bestTitleMatchScore([a.title ?? a.name, a.original_title ?? a.original_name, enTitleByKey.get(enResultKey(a))], q);
+      return diff !== 0 ? diff : (b.popularity ?? 0) - (a.popularity ?? 0);
+    });
+
+    for (const item of rankedMulti.slice(0, 30)) {
       const isMovie = item.media_type === "movie";
       if (isMovie && !allowMovieResults) continue;
       if (!isMovie && !allowSeriesResults) continue;
 
       const entry = makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb);
-      const score = titleMatchScore(entry.title, q);
-      if (score < 75) {
+      const score = bestTitleMatchScore(
+        [item.title ?? item.name, item.original_title ?? item.original_name, enTitleByKey.get(enResultKey(item))],
+        q
+      );
+      if (score < 55) {
         addDebug(entry, `tmdb: rejected searchMulti title score ${score}`);
         continue;
       }
