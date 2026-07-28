@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { bestTitleMatchScore } from "@/lib/search-natural-query";
+import { qbittorrent } from "@/lib/clients/qbittorrent";
 
 const MEDIA_ROOT = "/mnt/media/video";
 const MOVIES_PATH = `${MEDIA_ROOT}/movies`;
@@ -54,7 +55,10 @@ export interface StorageStats {
    *  `inCatalog` tells apart a file whose title/episode is at least recognized in Radarr/Sonarr
    *  (e.g. an extra episode from a season pack that was never imported) from a true orphan that
    *  matches nothing in Radarr, Sonarr or the library at all. */
-  seedOrphans: { title: string; fileName: string; paths: string[]; sizeBytes: number; trackers: string[]; inCatalog: boolean }[];
+  /** `activeInQbittorrent` tells whether a matching torrent is still live in qBittorrent — if so
+   *  the torrent should be removed there first (it'll re-appear otherwise); if false, qBittorrent
+   *  has no record of it at all and the file is safe to delete directly from disk. */
+  seedOrphans: { title: string; fileName: string; paths: string[]; sizeBytes: number; trackers: string[]; inCatalog: boolean; activeInQbittorrent: boolean }[];
   seedOrphanBytes: number;
   crossSeedByTracker: {
     tracker: string;
@@ -192,13 +196,33 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // renames files to "Title (Year).mkv" with no codec tag left in the name at all.
   // Series use the filename heuristic below: probing every episode's mediainfo, or
   // calling Sonarr per-series, made the scan too slow to be usable.
-  const [movieItems, seriesItems, seedFiles, radarrMovies, sonarrSeries] = await Promise.all([
+  const [movieItems, seriesItems, seedFiles, radarrMovies, sonarrSeries, qbTorrents] = await Promise.all([
     walkLibraryGrouped(MOVIES_PATH, "movie"),
     walkLibraryGrouped(TV_PATH, "series"),
     walkSeeds(),
     cachedMovies().catch(() => []),
     cachedSeries().catch(() => []),
+    qbittorrent.getTorrents().catch(() => []),
   ]);
+
+  // A seed-side file with no qBittorrent record at all is safe to delete outright; one that
+  // still matches a live torrent should be removed there first (qBittorrent will otherwise
+  // just re-seed the leftover, or the file will reappear if it re-checks the torrent). qBittorrent
+  // names a torrent's save folder (or the file itself, for single-file torrents) after the
+  // torrent's own name — matching against any path segment works regardless of nesting depth.
+  const activeTorrentNames = new Set(qbTorrents.map((t) => t.name.trim().toLowerCase()));
+  function isActiveInQbittorrent(relPaths: string[]): boolean {
+    if (activeTorrentNames.size === 0) return false;
+    for (const relPath of relPaths) {
+      const segments = relPath.split("/");
+      const fileNameNoExt = path.basename(relPath, path.extname(relPath)).toLowerCase();
+      if (activeTorrentNames.has(fileNameNoExt)) return true;
+      for (const seg of segments) {
+        if (activeTorrentNames.has(seg.toLowerCase())) return true;
+      }
+    }
+    return false;
+  }
 
   // Release names aren't always in the same language as Radarr's own title (e.g. an
   // English-titled seed release vs. the library's French title) — the plain filename
@@ -375,7 +399,14 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     if (f.origin === "cross-seed" && f.tracker) entry.trackers.add(f.tracker);
   }
   const seedOrphans = [...seedOrphanMap.values()]
-    .map((o) => ({ title: o.title, fileName: o.fileName, paths: [...o.paths], sizeBytes: o.sizeBytes, trackers: [...o.trackers], inCatalog: o.inCatalog }))
+    .map((o) => {
+      const paths = [...o.paths];
+      return {
+        title: o.title, fileName: o.fileName, paths, sizeBytes: o.sizeBytes,
+        trackers: [...o.trackers], inCatalog: o.inCatalog,
+        activeInQbittorrent: isActiveInQbittorrent(paths),
+      };
+    })
     .sort((a, b) => b.sizeBytes - a.sizeBytes);
   const seedOrphanBytes = seedOrphans.reduce((s, o) => s + o.sizeBytes, 0);
 

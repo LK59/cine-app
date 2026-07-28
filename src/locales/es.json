@@ -429,6 +429,8 @@
       "trueOrphan": "huérfano",
       "trueOrphanHint": "No coincide con nada conocido en Radarr/Sonarr: probablemente un archivo huérfano real que conviene revisar.",
       "seedCopy": "copia seed",
+      "activeSeed": "seed activo",
+      "activeSeedHint": "Un torrent correspondiente sigue activo en qBittorrent: elimínalo ahí primero, o el archivo reaparecerá o una recomprobación fallará.",
       "beta": "Beta"
     }
   },

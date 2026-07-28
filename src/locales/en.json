@@ -429,6 +429,8 @@
       "trueOrphan": "orphan",
       "trueOrphanHint": "Matches nothing known in Radarr/Sonarr: likely a genuine orphan file worth checking.",
       "seedCopy": "seed copy",
+      "activeSeed": "active seed",
+      "activeSeedHint": "A matching torrent is still active in qBittorrent: remove it there first, otherwise the file will reappear or a recheck will fail.",
       "beta": "Beta"
     }
   },

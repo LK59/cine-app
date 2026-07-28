@@ -429,6 +429,8 @@
       "trueOrphan": "verwaist",
       "trueOrphanHint": "Passt zu nichts Bekanntem in Radarr/Sonarr: vermutlich eine echte verwaiste Datei, die überprüft werden sollte.",
       "seedCopy": "Seed-Kopie",
+      "activeSeed": "aktiver Seed",
+      "activeSeedHint": "Ein passender Torrent ist in qBittorrent noch aktiv: dort zuerst entfernen, sonst taucht die Datei wieder auf oder eine erneute Prüfung schlägt fehl.",
       "beta": "Beta"
     }
   },

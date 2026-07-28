@@ -191,6 +191,11 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
                   {item.trackers.length > 0 && <span className="ml-1.5 text-[10px] text-sky-500">({item.trackers.join(", ")})</span>}
                 </span>
                 <span className="shrink-0 flex items-center gap-1.5">
+                  {item.activeInQbittorrent && (
+                    <span className="rounded bg-sky-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-sky-400" title={t('stats.storage.activeSeedHint')}>
+                      {t('stats.storage.activeSeed')}
+                    </span>
+                  )}
                   {item.inCatalog ? (
                     <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-amber-400" title={t('stats.storage.knownHint')}>
                       {t('stats.storage.known')}
