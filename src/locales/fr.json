@@ -424,6 +424,11 @@
       "notLinked": "non lié",
       "heavyH264Title": "H264 les plus volumineux",
       "heavyH264Empty": "Aucun fichier H264 détecté.",
+      "known": "connu",
+      "knownHint": "Ce titre correspond à un film/série connu dans Radarr/Sonarr, mais ce fichier précis n'est pas dans la bibliothèque (ex: épisode d'une intégrale jamais importé).",
+      "trueOrphan": "orphelin",
+      "trueOrphanHint": "Ne correspond à rien de connu dans Radarr/Sonarr : probablement un vrai fichier orphelin à vérifier.",
+      "seedCopy": "copie seed",
       "beta": "Bêta"
     }
   },

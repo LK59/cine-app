@@ -424,6 +424,11 @@
       "notLinked": "nicht verknüpft",
       "heavyH264Title": "Größte H264-Dateien",
       "heavyH264Empty": "Keine H264-Datei gefunden.",
+      "known": "bekannt",
+      "knownHint": "Dieser Titel entspricht einem in Radarr/Sonarr bekannten Film/einer Serie, aber diese konkrete Datei ist nicht in der Bibliothek (z. B. eine Episode aus einem nie importierten Staffelpaket).",
+      "trueOrphan": "verwaist",
+      "trueOrphanHint": "Passt zu nichts Bekanntem in Radarr/Sonarr: vermutlich eine echte verwaiste Datei, die überprüft werden sollte.",
+      "seedCopy": "Seed-Kopie",
       "beta": "Beta"
     }
   },

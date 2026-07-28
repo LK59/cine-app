@@ -184,12 +184,30 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
         <ListCard icon={AlertTriangle} iconColor="text-rose-400" title={t('stats.storage.seedOrphansTitle')}
           count={storage.seedOrphans.length} emptyLabel={t('stats.storage.seedOrphansEmpty')}>
           {storage.seedOrphans.map((item, i) => (
-            <div key={i} className="flex items-center justify-between gap-2 text-xs">
-              <span className="truncate text-slate-300" title={item.fileName}>
-                {item.title}
-                {item.trackers.length > 0 && <span className="ml-1.5 text-[10px] text-sky-500">({item.trackers.join(", ")})</span>}
-              </span>
-              <span className="shrink-0 text-slate-500">{fmtSize(item.sizeBytes)}</span>
+            <div key={i} className="text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-slate-300" title={item.fileName}>
+                  {item.title}
+                  {item.trackers.length > 0 && <span className="ml-1.5 text-[10px] text-sky-500">({item.trackers.join(", ")})</span>}
+                </span>
+                <span className="shrink-0 flex items-center gap-1.5">
+                  {item.inCatalog ? (
+                    <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-amber-400" title={t('stats.storage.knownHint')}>
+                      {t('stats.storage.known')}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-rose-500/10 px-1 py-0.5 text-[9px] uppercase tracking-wide text-rose-400" title={t('stats.storage.trueOrphanHint')}>
+                      {t('stats.storage.trueOrphan')}
+                    </span>
+                  )}
+                  <span className="text-slate-500">{fmtSize(item.sizeBytes)}</span>
+                </span>
+              </div>
+              <div className="mt-0.5 pl-2 text-[10px] text-slate-600">
+                {item.paths.map((p) => (
+                  <div key={p} className="truncate" title={p}>{p}</div>
+                ))}
+              </div>
             </div>
           ))}
         </ListCard>
@@ -203,7 +221,11 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
                 <span className="shrink-0 text-amber-400">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
               </div>
               <div className="mt-0.5 pl-2 text-[10px] text-slate-600">
-                {item.releases.map((r) => `${r.name} (${fmtSize(r.sizeBytes)})`).join(" · ")}
+                {item.releases.map((r) => (
+                  <div key={r.relativePath} className="truncate" title={r.relativePath}>
+                    {r.name} ({fmtSize(r.sizeBytes)}){r.inLibrary ? "" : ` · ${t('stats.storage.seedCopy')}`}
+                  </div>
+                ))}
               </div>
             </div>
           ))}
@@ -228,7 +250,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
                   <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pl-2 pr-1">
                     {group.files.map((f, i) => (
                       <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="truncate text-slate-400" title={f.fileName}>{f.title}</span>
+                        <span className="truncate text-slate-400" title={f.relativePath}>{f.title}</span>
                         <span className="shrink-0 flex items-center gap-1.5">
                           {!f.linkedToLibrary && <span className="text-rose-400">{t('stats.storage.notLinked')}</span>}
                           <span className="text-slate-600">{fmtSize(f.sizeBytes)}</span>

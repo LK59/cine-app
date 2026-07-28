@@ -13,6 +13,7 @@ export interface SonarrSeason {
 export interface SonarrSeries {
   id: number;
   title: string;
+  alternateTitles?: { title: string; sceneSeasonNumber?: number; seasonNumber?: number }[];
   year: number;
   overview?: string;
   monitored: boolean;
