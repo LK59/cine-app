@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tmdb } from "@/lib/clients/tmdb";
 import { omdb } from "@/lib/clients/omdb";
-import { withCache } from "@/lib/server-cache";
+import { withPersistentCache } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ async function getImdbRating(tmdbId: number, mediaType: "movie" | "series"): Pro
   // The fallback lives outside withCache: a transient TMDB/OMDb failure must not get cached as
   // "no rating" for 24h — better to just retry next time. A genuine "no IMDb id"/"no rating"
   // result is a real `null` returned normally below, so it still caches correctly.
-  return withCache(`imdb:rating:${mediaType}:${tmdbId}`, 24 * 3600_000, async () => {
+  return withPersistentCache(`imdb:rating:${mediaType}:${tmdbId}`, 24 * 3600_000, async () => {
     let imdbId: string | null = null;
 
     if (mediaType === "movie") {

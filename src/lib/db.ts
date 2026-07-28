@@ -104,6 +104,12 @@ function migrate(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+
+    CREATE TABLE IF NOT EXISTS kv_cache (
+      key        TEXT    PRIMARY KEY,
+      value      TEXT    NOT NULL,
+      fetched_at INTEGER NOT NULL
+    );
   `);
 
   // Additive migrations — safe to run multiple times
@@ -383,6 +389,37 @@ export const notificationPrefsDb = {
 
   isEnabled(userId: string, category: NotificationCategory): boolean {
     return this.getForUser(userId)[category];
+  },
+};
+
+// ─── Persistent KV cache ──────────────────────────────────────────────────────
+// Backs the long-lived in-memory caches (TMDB credits, ratings, ...) with disk storage so a
+// container restart (a frequent event around here — every redeploy) doesn't force a full
+// cold-start refetch storm of hundreds of TMDB requests. See withPersistentCache in server-cache.ts.
+
+export const kvCacheDb = {
+  get(key: string): { value: unknown; fetchedAt: number } | null {
+    const row = getDb().prepare("SELECT value, fetched_at FROM kv_cache WHERE key = ?").get(key) as
+      | { value: string; fetched_at: number }
+      | undefined;
+    if (!row) return null;
+    try {
+      return { value: JSON.parse(row.value), fetchedAt: row.fetched_at };
+    } catch {
+      return null;
+    }
+  },
+
+  set(key: string, value: unknown, fetchedAt: number): void {
+    getDb().prepare(`
+      INSERT INTO kv_cache (key, value, fetched_at) VALUES (?, ?, ?)
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, fetched_at = excluded.fetched_at
+    `).run(key, JSON.stringify(value), fetchedAt);
+  },
+
+  // Opportunistic cleanup — avoids unbounded growth from stale entries (removed movies, etc.)
+  cleanup(maxAgeMs: number): void {
+    getDb().prepare("DELETE FROM kv_cache WHERE fetched_at < ?").run(Date.now() - maxAgeMs);
   },
 };
 

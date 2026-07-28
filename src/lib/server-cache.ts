@@ -2,6 +2,7 @@ import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { jellyfin, JellyfinItem } from "@/lib/clients/jellyfin";
+import { kvCacheDb } from "@/lib/db";
 
 // ─── TTL constants ───────────────────────────────────────────────────────────
 
@@ -114,6 +115,37 @@ export async function withCacheSafe<T>(
       stale: false,
     };
   }
+}
+
+/**
+ * withPersistentCache — same anti-stampede/in-memory behavior as withCache, but backed by the
+ * SQLite kv_cache table so a value survives process restarts. Only worth it for long-TTL,
+ * per-item caches fetched in bulk (TMDB credits/ratings for hundreds of movies/series) — that's
+ * exactly the case where a restart used to mean refetching everything from scratch at once.
+ */
+export async function withPersistentCache<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const memHit = store.get(key) as Entry<T> | undefined;
+  if (memHit && Date.now() < memHit.exp) return memHit.v;
+
+  const existing = inFlight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const p: Promise<T> = (async () => {
+    const disk = kvCacheDb.get(key);
+    if (disk && Date.now() - disk.fetchedAt < ttlMs) {
+      const v = disk.value as T;
+      store.set(key, { v, exp: disk.fetchedAt + ttlMs });
+      return v;
+    }
+    const v = await fn();
+    store.set(key, { v, exp: Date.now() + ttlMs });
+    staleStore.set(key, { v, fetchedAt: Date.now() });
+    kvCacheDb.set(key, v, Date.now());
+    return v;
+  })().finally(() => { inFlight.delete(key); });
+
+  inFlight.set(key, p as Promise<unknown>);
+  return p;
 }
 
 // ─── Invalidation ─────────────────────────────────────────────────────────────

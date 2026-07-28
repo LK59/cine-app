@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv, type TmdbMultiResult } from "@/lib/clients/tmdb";
-import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
+import { cachedMovies, cachedSeries, withCache, withPersistentCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { LOCALE_COOKIE, getTmdbLocale, type Locale } from "@/lib/i18n";
@@ -155,11 +155,12 @@ async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: numbe
 async function findSharedSeriesByCast(castIds: number[]) {
   if (castIds.length === 0) return [];
 
-  // The fallback lives outside withCache: a transient TMDB failure must not get cached as
-  // "this person has no credits" for 7 days — better to just retry next time.
+  // The fallback lives outside the cache call: a transient TMDB failure must not get cached as
+  // "this person has no credits" for 7 days — better to just retry next time. Persisted to disk
+  // too, so it survives a redeploy instead of refetching every actor again from scratch.
   const creditLists = await Promise.all(
     castIds.map((id) =>
-      withCache(`search:person-credits:${id}`, 7 * 24 * 3600_000, () => tmdb.getPersonCredits(id)).catch(
+      withPersistentCache(`search:person-credits:${id}`, 7 * 24 * 3600_000, () => tmdb.getPersonCredits(id)).catch(
         () => ({ cast: [] })
       )
     )

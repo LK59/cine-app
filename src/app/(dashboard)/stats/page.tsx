@@ -1,7 +1,6 @@
 "use client";
 
 import useSWR from "swr";
-import useSWRImmutable from "swr/immutable";
 import Link from "next/link";
 import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
@@ -301,7 +300,10 @@ export default function StatsPage() {
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
   const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
-  const { data: people } = useSWRImmutable<PeopleStats>("/api/stats/people", fetcher);
+  // Regular (polling) SWR, not immutable: the route now returns instantly with a possibly-stale
+  // or empty result while it recomputes in the background (fire-and-forget, like storage stats),
+  // so the client needs to keep checking back until the first computation lands.
+  const { data: people } = useSWR<PeopleStats>("/api/stats/people", fetcher, { refreshInterval: INTERVALS.SLOW });
   const { data: storage, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: INTERVALS.SLOW });
 
   async function handleStorageRefresh() {
