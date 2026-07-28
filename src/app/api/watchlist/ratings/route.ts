@@ -7,23 +7,26 @@ export const dynamic = "force-dynamic";
 
 // Resolves TMDB id → IMDb rating string (e.g. "7.4"), cached 24h
 async function getImdbRating(tmdbId: number, mediaType: "movie" | "series"): Promise<string | null> {
+  // The fallback lives outside withCache: a transient TMDB/OMDb failure must not get cached as
+  // "no rating" for 24h — better to just retry next time. A genuine "no IMDb id"/"no rating"
+  // result is a real `null` returned normally below, so it still caches correctly.
   return withCache(`imdb:rating:${mediaType}:${tmdbId}`, 24 * 3600_000, async () => {
     let imdbId: string | null = null;
 
     if (mediaType === "movie") {
-      const movie = await tmdb.getMovie(tmdbId).catch(() => null);
-      imdbId = movie?.imdb_id ?? null;
+      const movie = await tmdb.getMovie(tmdbId);
+      imdbId = movie.imdb_id ?? null;
     } else {
-      const tv = await tmdb.getTv(tmdbId).catch(() => null);
-      imdbId = tv?.external_ids?.imdb_id ?? null;
+      const tv = await tmdb.getTv(tmdbId);
+      imdbId = tv.external_ids?.imdb_id ?? null;
     }
 
     if (!imdbId) return null;
 
-    const rating = await omdb.getRating(imdbId).catch(() => null);
-    if (rating?.Response !== "True" || !rating.imdbRating || rating.imdbRating === "N/A") return null;
+    const rating = await omdb.getRating(imdbId);
+    if (rating.Response !== "True" || !rating.imdbRating || rating.imdbRating === "N/A") return null;
     return rating.imdbRating;
-  });
+  }).catch(() => null);
 }
 
 // GET /api/watchlist/ratings?items=movie:123,series:456,...

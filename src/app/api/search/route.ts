@@ -155,10 +155,12 @@ async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: numbe
 async function findSharedSeriesByCast(castIds: number[]) {
   if (castIds.length === 0) return [];
 
+  // The fallback lives outside withCache: a transient TMDB failure must not get cached as
+  // "this person has no credits" for 7 days — better to just retry next time.
   const creditLists = await Promise.all(
     castIds.map((id) =>
-      withCache(`search:person-credits:${id}`, 7 * 24 * 3600_000, () =>
-        tmdb.getPersonCredits(id).catch(() => ({ cast: [] }))
+      withCache(`search:person-credits:${id}`, 7 * 24 * 3600_000, () => tmdb.getPersonCredits(id)).catch(
+        () => ({ cast: [] })
       )
     )
   );
