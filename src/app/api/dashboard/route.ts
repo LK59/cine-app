@@ -303,10 +303,13 @@ function getDiskSection(): DashboardSection<DiskStats> {
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
-export async function GET(req: NextRequest) {
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionFull(token);
-
+// Shared by the API route and the dashboard page's server-side initial render
+// (see (dashboard)/page.tsx) — both read through the exact same in-memory
+// caches in server-cache.ts, so calling this a second time from the page is
+// normally a cache hit, not a duplicate fetch.
+export async function buildDashboardPayload(
+  session: { jfId?: string } | null
+): Promise<DashboardPayload> {
   const [services, activity, recentMovies, recentSeries, torrents] = await Promise.all([
     withCacheSafe("dashboard:services",      TTL.SHORT,      probeServices),
     withCacheSafe("dashboard:activity",      TTL.MEDIUM,     fetchActivity),
@@ -320,6 +323,12 @@ export async function GET(req: NextRequest) {
     ? await withCacheSafe(`dashboard:resume:${session.jfId}`, TTL.SHORT, () => fetchResume(session.jfId!))
     : { data: { items: [] }, available: true, error: null, updatedAt: null, stale: false };
 
-  const payload: DashboardPayload = { services, activity, resume, recentMovies, recentSeries, torrents, disk };
+  return { services, activity, resume, recentMovies, recentSeries, torrents, disk };
+}
+
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  const session = await verifySessionFull(token);
+  const payload = await buildDashboardPayload(session);
   return NextResponse.json(payload);
 }

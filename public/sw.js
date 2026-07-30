@@ -1,4 +1,4 @@
-const CACHE_NAME = "cine-app-v3";
+const CACHE_NAME = "cine-app-v4";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -16,13 +16,32 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Network-first: this is a live dashboard, data must stay fresh. We only fall
-// back to cache (static assets) when the network is unreachable (offline).
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/api/")) return;
 
+  // Cache-first: Next.js fingerprints these filenames by content hash (the
+  // hash changes if the content does), so a cached copy is never stale —
+  // serving it straight away avoids a redundant network round-trip on every
+  // navigation for JS/CSS chunks that never change between deploys.
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Network-first for everything else: this is a live dashboard, HTML/data
+  // must stay fresh. We only fall back to cache when the network is
+  // unreachable (offline).
   event.respondWith(
     fetch(event.request)
       .then((response) => {

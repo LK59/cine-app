@@ -17,7 +17,8 @@ import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useRole } from "@/lib/useRole";
-import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
+import dynamic from "next/dynamic";
+const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
 import { useT } from "@/components/TranslationProvider";
 
 // ─── Constants ────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
-import { GlobalSearch } from "@/components/GlobalSearch";
+import { GlobalSearchLazy } from "@/components/GlobalSearchLazy";
 import { SSENotifier } from "@/components/SSENotifier";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import { ScrollRestorer } from "@/components/ScrollRestorer";
@@ -18,7 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </MainScroll>
       <MobileNav />
-      <GlobalSearch />
+      <GlobalSearchLazy />
       <SSENotifier />
       <KeyboardShortcutsModal />
     </div>
