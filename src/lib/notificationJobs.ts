@@ -1,4 +1,4 @@
-import { pushDb, availabilityNotifDb, getDb } from "@/lib/db";
+import { pushDb, availabilityNotifDb, kvCacheDb, getDb } from "@/lib/db";
 import { sendWebPush, shouldRemovePushSubscription } from "@/lib/webPush";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
@@ -89,16 +89,30 @@ export async function checkNewEpisodes(): Promise<void> {
   }
 }
 
+// The disk-backed cache (TMDB credits/ratings, natural-search credit checks, ...) has no TTL-based
+// eviction of its own — withPersistentCache only re-fetches past an entry's TTL, it never deletes
+// the stale row. Without this, kv_cache grows forever (one row per movie/series/person ever looked
+// up). 30 days comfortably outlives every TTL currently used against it (longest is 7 days).
+function cleanupDiskCache(): void {
+  try {
+    kvCacheDb.cleanup(30 * 24 * 3600_000);
+  } catch (err) {
+    logError("notifications.kv-cache-cleanup", err);
+  }
+}
+
 export function startNotificationCron(): void {
   const startupDelay = setTimeout(async () => {
     await checkWatchlistAvailability();
     await checkNewEpisodes();
+    cleanupDiskCache();
   }, 60_000);
   startupDelay.unref?.();
 
   const interval = setInterval(async () => {
     await checkWatchlistAvailability();
     await checkNewEpisodes();
+    cleanupDiskCache();
   }, 3600_000);
   interval.unref?.();
 }
