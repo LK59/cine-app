@@ -9,12 +9,13 @@ import { INTERVALS } from "@/lib/refresh-intervals";
 import { Film, Tv, Download, PackageCheck, Clock } from "lucide-react";
 import { useLocalState } from "@/hooks/useLocalState";
 import { type ImportEvent, groupByDay } from "@/lib/timeline";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import { getDateLocale } from "@/lib/i18n";
 
 type Filter = "all" | "movie" | "series";
 type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-function timeAgo(dateStr: string, t: TFn): string {
+function timeAgo(dateStr: string, t: TFn, dateLocale: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return t('timeline.timeAgo.now');
@@ -23,10 +24,10 @@ function timeAgo(dateStr: string, t: TFn): string {
   if (h < 24) return t('timeline.timeAgo.hours', { h });
   const d = Math.floor(h / 24);
   if (d < 7) return t('timeline.timeAgo.days', { d });
-  return new Date(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return new Date(dateStr).toLocaleDateString(dateLocale, { day: "numeric", month: "short" });
 }
 
-function EventRow({ ev, t }: { ev: ImportEvent; t: TFn }) {
+function EventRow({ ev, t, dateLocale }: { ev: ImportEvent; t: TFn; dateLocale: string }) {
   const Icon = ev.type === "movie" ? Film : Tv;
   const isImport = ev.eventKind === "import";
 
@@ -69,7 +70,7 @@ function EventRow({ ev, t }: { ev: ImportEvent; t: TFn }) {
         <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${isImport ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700/60 text-slate-400"}`}>
           {isImport ? t('timeline.badges.imported') : t('timeline.badges.grabbed')}
         </span>
-        <span className="w-10 text-right text-[11px] text-slate-600">{timeAgo(ev.date, t)}</span>
+        <span className="w-10 text-right text-[11px] text-slate-600">{timeAgo(ev.date, t, dateLocale)}</span>
       </div>
     </div>
   );
@@ -80,6 +81,8 @@ interface ImportsResponse { events: ImportEvent[] }
 export default function TimelinePage() {
   const [filter, setFilter] = useLocalState<Filter>("timeline-filter", "all");
   const t = useT();
+  const { locale } = useLocale();
+  const dateLocale = getDateLocale(locale);
 
   const { data, isLoading } = useSWR<ImportsResponse>(
     "/api/timeline/imports",
@@ -89,7 +92,7 @@ export default function TimelinePage() {
 
   const allEvents = data?.events ?? [];
   const filtered = allEvents.filter((e) => filter === "all" || e.type === filter);
-  const groups = groupByDay(filtered);
+  const groups = groupByDay(filtered, t, dateLocale);
 
   const movieCount = allEvents.filter((e) => e.type === "movie").length;
   const seriesCount = allEvents.filter((e) => e.type === "series").length;
@@ -137,7 +140,7 @@ export default function TimelinePage() {
             <div key={label}>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
               <div className="card divide-y divide-white/5 overflow-hidden">
-                {items.map((ev) => <EventRow key={ev.id} ev={ev} t={t} />)}
+                {items.map((ev) => <EventRow key={ev.id} ev={ev} t={t} dateLocale={dateLocale} />)}
               </div>
             </div>
           ))}

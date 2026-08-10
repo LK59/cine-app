@@ -10,6 +10,7 @@ import { WatchlistButton } from "@/components/WatchlistButton";
 import type { CalendarEvent } from "@/app/api/calendar/route";
 import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, CirclePlus, X } from "lucide-react";
 import { useT, useLocale } from "@/components/TranslationProvider";
+import { getDateLocale } from "@/lib/i18n";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -285,7 +286,7 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
 export default function CalendarPage() {
   const t = useT();
   const { locale } = useLocale();
-  const dateLocale = locale === "en" ? "en-US" : locale === "es" ? "es-ES" : "fr-FR";
+  const dateLocale = getDateLocale(locale);
   const today = useMemo(() => isoDate(new Date()), []);
   const [view, setView]       = useState<ViewMode>("month");
   const [filter, setFilter]   = useState<FilterMode>("all");

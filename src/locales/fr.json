@@ -499,6 +499,11 @@
       "minutes": "{m} min",
       "hours": "{h} h",
       "days": "{d} j"
+    },
+    "dateLabel": {
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "daysAgo": "Il y a {n} jours"
     }
   },
   "notifications": {

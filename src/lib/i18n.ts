@@ -59,6 +59,17 @@ export function getTmdbLocale(locale: string | undefined | null): string {
   }
 }
 
+// Same mapping, for Intl/toLocaleDateString calls — kept separate from getTmdbLocale so the two
+// can diverge if TMDb's regional variant ever needs to differ from the date-formatting one.
+export function getDateLocale(locale: string | undefined | null): string {
+  switch (locale) {
+    case "en": return "en-US";
+    case "es": return "es-ES";
+    case "de": return "de-DE";
+    default:   return "fr-FR";
+  }
+}
+
 export function getVideoLangs(locale: string | undefined | null): string {
   switch (locale) {
     case "en": return "en,null";

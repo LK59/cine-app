@@ -16,7 +16,8 @@ import { useToast } from "@/components/Toast";
 import { createPortal } from "react-dom";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import { selectBio } from "@/lib/format";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import { getDateLocale } from "@/lib/i18n";
 
 interface Credit {
   tmdbId: number;
@@ -39,8 +40,8 @@ interface PersonData {
   knownFor: string | null;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+function formatDate(iso: string, dateLocale: string): string {
+  return new Date(iso).toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" });
 }
 
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
@@ -189,6 +190,8 @@ export function ActorModal({
   onClose: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
+  const dateLocale = getDateLocale(locale);
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -236,10 +239,10 @@ export function ActorModal({
               {data?.birthday && (
                 <span className="flex items-center gap-1.5 text-xs text-slate-400">
                   <Calendar size={11} className="shrink-0 text-slate-500" />
-                  {formatDate(data.birthday)}
+                  {formatDate(data.birthday, dateLocale)}
                   {age !== null && (
                     <span className="text-slate-500">
-                      {data.deathday ? `— ${t('modals.actor.died', { date: formatDate(data.deathday), n: age })}` : `(${t('modals.actor.age', { n: age })})`}
+                      {data.deathday ? `— ${t('modals.actor.died', { date: formatDate(data.deathday, dateLocale), n: age })}` : `(${t('modals.actor.age', { n: age })})`}
                     </span>
                   )}
                 </span>
