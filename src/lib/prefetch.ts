@@ -5,7 +5,10 @@ import { fetcher } from "@/lib/swr";
 // happens (hover/focus on its nav link), so the page renders with data
 // already in cache instead of waiting for a fresh round-trip on mount.
 const PREFETCH_MAP: Record<string, string[]> = {
-  "/": ["/api/status", "/api/activity"],
+  // The dashboard fetches a single consolidated payload (see DashboardClient.tsx) — this used
+  // to point at /api/status + /api/activity from before that consolidation, which the dashboard
+  // hasn't called since. Hovering "Accueil" was warming a cache entry the page never reads.
+  "/": ["/api/dashboard"],
   "/radarr": ["/api/radarr/movies"],
   "/sonarr": ["/api/sonarr/series"],
   "/qbittorrent": ["/api/qbittorrent/torrents", "/api/qbittorrent/transfer"],
