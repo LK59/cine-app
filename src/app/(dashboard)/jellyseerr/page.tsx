@@ -59,7 +59,7 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
           {statusInfo && (
             <span className={`badge text-[11px] ${statusInfo.className}`}>{statusInfo.label}</span>
           )}
-          <span className="text-[11px] text-slate-600">{relDate(r.createdAt)}</span>
+          <span className="text-[11px] text-slate-600">{relDate(r.createdAt, t)}</span>
         </div>
         {!showActions && r.requestedBy.displayName && (
           <p className="mt-0.5 text-[11px] text-slate-500">

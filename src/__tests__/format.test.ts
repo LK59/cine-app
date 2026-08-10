@@ -1,5 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fmtSize, relativeTime, relDate, selectBio } from "@/lib/format";
+import { createT } from "@/lib/i18n";
+import fr from "@/locales/fr.json";
+
+const t = createT(fr as Record<string, unknown>, fr as Record<string, unknown>);
 
 describe("fmtSize", () => {
   it("returns — for 0 bytes", () => {
@@ -51,58 +55,58 @@ describe("relativeTime", () => {
 
   it("returns 'à l'instant' for < 1 minute ago", () => {
     const date = new Date(Date.now() - 30_000).toISOString();
-    expect(relativeTime(date)).toBe("à l'instant");
+    expect(relativeTime(date, t)).toBe("à l'instant");
   });
 
   it("returns minutes for < 60 minutes", () => {
     const date = new Date(Date.now() - 5 * 60_000).toISOString();
-    expect(relativeTime(date)).toBe("il y a 5 min");
+    expect(relativeTime(date, t)).toBe("il y a 5 min");
   });
 
   it("returns hours for < 24 hours", () => {
     const date = new Date(Date.now() - 3 * 3600_000).toISOString();
-    expect(relativeTime(date)).toBe("il y a 3 h");
+    expect(relativeTime(date, t)).toBe("il y a 3 h");
   });
 
   it("returns days for < 30 days", () => {
     const date = new Date(Date.now() - 10 * 86_400_000).toISOString();
-    expect(relativeTime(date)).toBe("il y a 10 j");
+    expect(relativeTime(date, t)).toBe("il y a 10 j");
   });
 
   it("returns months for < 365 days", () => {
     const date = new Date(Date.now() - 60 * 86_400_000).toISOString();
-    expect(relativeTime(date)).toBe("il y a 2 mois");
+    expect(relativeTime(date, t)).toBe("il y a 2 mois");
   });
 
   it("returns years for >= 365 days", () => {
     const date = new Date(Date.now() - 2 * 365 * 86_400_000).toISOString();
-    expect(relativeTime(date)).toBe("il y a 2 ans");
+    expect(relativeTime(date, t)).toBe("il y a 2 ans");
   });
 
   it("returns singular year", () => {
     const date = new Date(Date.now() - 400 * 86_400_000).toISOString();
-    expect(relativeTime(date)).toBe("il y a 1 an");
+    expect(relativeTime(date, t)).toBe("il y a 1 an");
   });
 });
 
 describe("relDate", () => {
   it("returns — for null", () => {
-    expect(relDate(null)).toBe("—");
+    expect(relDate(null, t)).toBe("—");
   });
 
   it("returns — for undefined", () => {
-    expect(relDate(undefined)).toBe("—");
+    expect(relDate(undefined, t)).toBe("—");
   });
 
   it("returns — for empty string", () => {
-    expect(relDate("")).toBe("—");
+    expect(relDate("", t)).toBe("—");
   });
 
   it("returns a relative time string for valid date", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-08T12:00:00Z"));
     const date = new Date(Date.now() - 5 * 60_000).toISOString();
-    expect(relDate(date)).toBe("il y a 5 min");
+    expect(relDate(date, t)).toBe("il y a 5 min");
     vi.useRealTimers();
   });
 });

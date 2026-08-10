@@ -6,30 +6,32 @@ export function fmtSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-/** Relative time from an ISO date string (e.g. "il y a 3 j") */
-export function relativeTime(dateStr: string): string {
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+/** Relative time from an ISO date string (e.g. "il y a 3 j") — pass the current useT() translator. */
+export function relativeTime(dateStr: string, t: TFn): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 1) return t("common.time.justNow");
+  if (minutes < 60) return t("common.time.minutesAgo", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours} h`;
+  if (hours < 24) return t("common.time.hoursAgo", { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 30) return `il y a ${days} j`;
-  if (days < 365) return `il y a ${Math.floor(days / 30)} mois`;
+  if (days < 30) return t("common.time.daysAgo", { n: days });
+  if (days < 365) return t("common.time.monthsAgo", { n: Math.floor(days / 30) });
   const years = Math.floor(days / 365);
-  return `il y a ${years} an${years > 1 ? "s" : ""}`;
+  return years > 1 ? t("common.time.yearsAgo", { n: years }) : t("common.time.yearAgo", { n: years });
 }
 
 /** Relative time from a Unix timestamp (ms) */
-export function relativeTimeAbs(ts: number): string {
-  return relativeTime(new Date(ts).toISOString());
+export function relativeTimeAbs(ts: number, t: TFn): string {
+  return relativeTime(new Date(ts).toISOString(), t);
 }
 
 /** Relative time from an optional ISO date string, returns "—" if undefined */
-export function relDate(iso?: string | null): string {
+export function relDate(iso: string | null | undefined, t: TFn): string {
   if (!iso) return "—";
-  return relativeTime(iso);
+  return relativeTime(iso, t);
 }
 
 // ─── Bio selection ────────────────────────────────────────────────────────────

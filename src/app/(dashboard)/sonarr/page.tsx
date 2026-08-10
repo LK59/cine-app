@@ -279,7 +279,7 @@ export default function SonarrPage() {
                         <span className={`badge ${complete ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>
                           {show.statistics?.episodeFileCount ?? 0}/{show.statistics?.episodeCount ?? 0} ép.
                         </span>
-                        <span className="text-xs text-slate-600">{relDate(show.added)}</span>
+                        <span className="text-xs text-slate-600">{relDate(show.added, t)}</span>
                       </div>
                     </Link>
                   );

@@ -279,7 +279,7 @@ export default function JellyfinPage() {
                           <p className="truncate text-xs font-medium text-white">{m.name}</p>
                           <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
                             <Clock size={9} />
-                            {relDate(m.lastPlayed)}
+                            {relDate(m.lastPlayed, t)}
                           </div>
                           {m.runtimeTicks > 0 && (
                             <p className="text-[11px] text-slate-600">{formatDuration(m.runtimeTicks)}</p>
@@ -338,7 +338,7 @@ export default function JellyfinPage() {
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-xs text-slate-500">{relDate(e.lastPlayed)}</p>
+                          <p className="text-xs text-slate-500">{relDate(e.lastPlayed, t)}</p>
                           {e.runtimeTicks > 0 && (
                             <p className="text-[11px] text-slate-600">{formatDuration(e.runtimeTicks)}</p>
                           )}

@@ -301,7 +301,7 @@ export default function RadarrPage() {
                       {movie.sizeOnDisk > 0 && (
                         <span className="text-xs text-slate-500">{fmtSize(movie.sizeOnDisk)}</span>
                       )}
-                      <span className="text-xs text-slate-600">{relDate(movie.added)}</span>
+                      <span className="text-xs text-slate-600">{relDate(movie.added, t)}</span>
                     </div>
                   </Link>
                 ))}

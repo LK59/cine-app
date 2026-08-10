@@ -80,6 +80,15 @@
     "unavailable": "{label} nicht verfügbar",
     "cachedData": "Gecachte Daten",
     "updatedAt": "Aktualisiert",
+    "time": {
+      "justNow": "gerade eben",
+      "minutesAgo": "vor {n} Min",
+      "hoursAgo": "vor {n} Std",
+      "daysAgo": "vor {n} T",
+      "monthsAgo": "vor {n} Mon",
+      "yearAgo": "vor {n} Jahr",
+      "yearsAgo": "vor {n} Jahren"
+    },
     "film": "Film",
     "series": "Serie",
     "movies": "Filme",

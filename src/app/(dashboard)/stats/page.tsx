@@ -155,7 +155,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
         </h2>
         <div className="flex items-center gap-3">
           {storage.computedAt > 0 && (
-            <span className="text-xs text-slate-600">{t('stats.storage.lastScan', { time: relativeTimeAbs(storage.computedAt) })}</span>
+            <span className="text-xs text-slate-600">{t('stats.storage.lastScan', { time: relativeTimeAbs(storage.computedAt, t) })}</span>
           )}
           <button
             onClick={onRefresh}

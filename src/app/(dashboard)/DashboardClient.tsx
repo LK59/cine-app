@@ -61,7 +61,7 @@ function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
   if (!updatedAt) return null;
   return (
     <span className="ml-2 text-[11px] text-slate-600" title={t('common.cachedData')}>
-      · {t('common.updatedAt')} {relativeTimeAbs(updatedAt)}
+      · {t('common.updatedAt')} {relativeTimeAbs(updatedAt, t)}
     </span>
   );
 }
@@ -131,7 +131,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
         </div>
         <div className="p-2">
           <p className="truncate text-xs font-medium text-white">{m.title}</p>
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(m.added!)}</div>
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(m.added!, t)}</div>
         </div>
       </Link>
       <ActionSheet
@@ -158,7 +158,7 @@ function RecentSeriesCard({ s }: { s: RecentItem }) {
         <PosterImage src={s.posterUrl} alt={s.title} />
         <div className="p-2">
           <p className="truncate text-xs font-medium text-white">{s.title}</p>
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(s.added!)}</div>
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(s.added!, t)}</div>
         </div>
       </Link>
       <ActionSheet
@@ -374,7 +374,7 @@ function ActivitySection({ items }: { items: ActivityItem[] }) {
                   <p className="truncate text-sm text-white">
                     {item.title}{item.detail && <span className="text-slate-500"> · {item.detail}</span>}
                   </p>
-                  <p className="text-xs text-slate-500">{relativeTime(item.date)}</p>
+                  <p className="text-xs text-slate-500">{relativeTime(item.date, t)}</p>
                 </div>
                 <span className={`badge ${SOURCE_COLOR[item.source]}`}>{item.type}</span>
               </div>
