@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
-import { cachedJellyfinMovies, cachedJellyfinMoviesAdmin, withCache, TTL } from "@/lib/server-cache";
+import { withCache, TTL } from "@/lib/server-cache";
 import { cachedMovies } from "@/lib/server-cache";
+import { jellyfin } from "@/lib/clients/jellyfin";
 import { config } from "@/lib/config";
 import { getTmdbLocale } from "@/lib/i18n";
 
@@ -49,29 +50,33 @@ export async function GET(req: NextRequest) {
   const cacheKey = `recommendations:${userId ?? "anon"}`;
 
   const groups = await withCache<RecommendationGroup[]>(cacheKey, TTL.RECOMMENDATIONS, async () => {
-    // Get recently watched movies from Jellyfin (with UserData.Played)
-    const jfMovies = userId
-      ? await cachedJellyfinMovies(userId).catch(() => null)
-      : await cachedJellyfinMoviesAdmin().catch(() => null);
+    // Without a Jellyfin SSO session there's no per-user watch history to seed
+    // recommendations from — the admin-scoped Items endpoint doesn't carry UserData at all
+    // (no /Users/{id} context), so it can never report anything as "played".
+    if (!userId) return [];
+
+    // getRecentlyPlayed is explicitly sorted by DatePlayed desc — unlike the plain movie-list
+    // endpoints (no SortBy, Jellyfin defaults to alphabetical), which used to be fetched here and
+    // sliced assuming the *last* items were the most recently watched. They weren't: that seeded
+    // recommendations off whichever played movies happened to sort last alphabetically.
+    const recentlyPlayed = await jellyfin.getRecentlyPlayed(userId, "Movie", 8).catch(() => null);
 
     const radarrMovies = await cachedMovies().catch(() => []);
     const libraryTmdbIds = new Set(radarrMovies.filter((m) => m.hasFile).map((m) => m.tmdbId).filter(Boolean));
     const radarrByTmdb = new Map(radarrMovies.map((m) => [m.tmdbId, m.id]));
 
-    if (!jfMovies) return [];
+    if (!recentlyPlayed) return [];
 
-    // Pick recently played movies that have a TMDb ID — up to 8 seed movies
-    const watched = jfMovies
-      .filter((m) => m.UserData?.Played && m.ProviderIds)
+    // Pick recently played movies that have a TMDb ID — up to 8 seed movies, most recent first
+    const watched = recentlyPlayed.Items
+      .filter((m) => m.ProviderIds)
       .map((m) => {
         const tmdbId = Number(
           Object.entries(m.ProviderIds ?? {}).find(([k]) => k.toLowerCase() === "tmdb")?.[1] ?? 0
         );
         return { tmdbId, name: m.Name, posterPath: null as string | null };
       })
-      .filter((m) => m.tmdbId > 0)
-      .slice(-8) // last 8 (most recently watched are at the end in Jellyfin ordering)
-      .reverse(); // most recent first
+      .filter((m) => m.tmdbId > 0);
 
     if (watched.length === 0) return [];
 
