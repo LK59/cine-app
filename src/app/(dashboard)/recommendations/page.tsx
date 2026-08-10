@@ -21,12 +21,13 @@ const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 
 const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
 
 // ─── MovieCard ────────────────────────────────────────────────────────────────
 
-function MovieCard({ m }: { m: RecommendedMovie }) {
+function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatus?: WatchlistStatus | null }) {
   const router = useRouter();
   const { role } = useRole();
   const isAdmin = role === "admin";
@@ -35,7 +36,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
-  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist();
+  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist(watchlistStatus ?? null);
   const [addingSearch, setAddingSearch] = useState(false);
   const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string } | null>(null);
 
@@ -271,7 +272,7 @@ function MovieCard({ m }: { m: RecommendedMovie }) {
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function RecommendationRow({ group }: { group: RecommendationGroup }) {
+function RecommendationRow({ group, statusMap }: { group: RecommendationGroup; statusMap: Record<string, WatchlistStatus | null> }) {
   const t = useT();
   return (
     <div>
@@ -280,7 +281,7 @@ function RecommendationRow({ group }: { group: RecommendationGroup }) {
         <span className="text-sm font-semibold text-white">{group.seedTitle}</span>
       </div>
       <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: "none" }}>
-        {group.movies.map((m) => <MovieCard key={m.tmdbId} m={m} />)}
+        {group.movies.map((m) => <MovieCard key={m.tmdbId} m={m} watchlistStatus={statusMap[`movie:${m.tmdbId}`]} />)}
       </HorizontalCarousel>
     </div>
   );
@@ -297,6 +298,8 @@ export default function RecommendationsPage() {
   const t = useT();
 
   const groups = data?.groups ?? [];
+  const allMovies = groups.flatMap((g) => g.movies);
+  const statusMap = useWatchlistStatusMap(allMovies.map((m) => ({ mediaType: "movie", tmdbId: m.tmdbId })));
 
   return (
     <div>
@@ -324,7 +327,7 @@ export default function RecommendationsPage() {
 
       {groups.length > 0 && (
         <div className="space-y-8">
-          {groups.map((g) => <RecommendationRow key={g.seedTmdbId} group={g} />)}
+          {groups.map((g) => <RecommendationRow key={g.seedTmdbId} group={g} statusMap={statusMap} />)}
         </div>
       )}
     </div>

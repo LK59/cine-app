@@ -25,6 +25,8 @@ export interface PosterCardItem {
   libraryHref: string | null;
   /** Already requested/added but not yet available in the library. */
   pending?: boolean;
+  /** Current watchlist status, if already on the list — from a bulk-status lookup. */
+  watchlistStatus?: WatchlistStatus | null;
 }
 
 const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
@@ -47,7 +49,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
-  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist();
+  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist(item.watchlistStatus ?? null);
   const [addingSearch, setAddingSearch] = useState(false);
   const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string } | null>(null);
 

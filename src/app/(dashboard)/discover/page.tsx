@@ -11,6 +11,8 @@ import { Film, Tv, Sparkles, SearchIcon, X } from "lucide-react";
 import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
 import { useT } from "@/components/TranslationProvider";
 import { useRole } from "@/lib/useRole";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import type { WatchlistStatus } from "@/lib/db";
 
 interface DiscoverItem {
   tmdbId: number;
@@ -31,7 +33,7 @@ interface DiscoverData {
   genres: string[];
 }
 
-function toPosterCardItem(item: DiscoverItem, type: "movie" | "tv"): PosterCardItem {
+function toPosterCardItem(item: DiscoverItem, type: "movie" | "tv", watchlistStatus?: WatchlistStatus | null): PosterCardItem {
   const libraryHref =
     type === "movie" && item.radarrId
       ? `/radarr/${item.radarrId}`
@@ -47,6 +49,7 @@ function toPosterCardItem(item: DiscoverItem, type: "movie" | "tv"): PosterCardI
     inLibrary: item.inLibrary,
     libraryHref,
     pending: !item.inLibrary && !!(item.radarrId || item.sonarrId),
+    watchlistStatus,
   };
 }
 
@@ -62,6 +65,9 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
 
   const filtered = (data?.items ?? []).filter(
     (item) => !genreFilter || item.genres.includes(genreFilter)
+  );
+  const statusMap = useWatchlistStatusMap(
+    filtered.map((item) => ({ mediaType: type === "tv" ? "series" : "movie", tmdbId: item.tmdbId }))
   );
 
   if (isLoading) return <PosterSkeletonGrid />;
@@ -115,7 +121,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
         {filtered.map((item) => (
           <PosterCard
             key={item.tmdbId}
-            item={toPosterCardItem(item, type)}
+            item={toPosterCardItem(item, type, statusMap[`${type === "tv" ? "series" : "movie"}:${item.tmdbId}`])}
             mediaType={type === "tv" ? "series" : "movie"}
           />
         ))}
@@ -135,6 +141,9 @@ function RecommendationsGrid() {
     dedupingInterval: 300000,
   });
   const t = useT();
+  const statusMap = useWatchlistStatusMap(
+    (data?.items ?? []).map((item) => ({ mediaType: item.type === "tv" ? "series" : "movie", tmdbId: item.tmdbId }))
+  );
 
   if (isLoading) return <PosterSkeletonGrid />;
   if (error) return <ErrorState message={t('common.serviceDown', { service: 'TMDB' })} onRetry={() => retry()} />;
@@ -158,7 +167,7 @@ function RecommendationsGrid() {
         {data.items.map((item) => (
           <PosterCard
             key={`${item.type}-${item.tmdbId}`}
-            item={toPosterCardItem(item, item.type)}
+            item={toPosterCardItem(item, item.type, statusMap[`${item.type === "tv" ? "series" : "movie"}:${item.tmdbId}`])}
             mediaType={item.type === "tv" ? "series" : "movie"}
           />
         ))}
@@ -174,6 +183,9 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
     keepPreviousData: true,
   });
   const t = useT();
+  const statusMap = useWatchlistStatusMap(
+    (data?.items ?? []).map((item) => ({ mediaType: type === "tv" ? "series" : "movie", tmdbId: item.tmdbId }))
+  );
 
   if (query.length < 2) {
     return (
@@ -193,7 +205,7 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
         {data.items.map((item) => (
           <PosterCard
             key={item.tmdbId}
-            item={toPosterCardItem(item, type)}
+            item={toPosterCardItem(item, type, statusMap[`${type === "tv" ? "series" : "movie"}:${item.tmdbId}`])}
             mediaType={type === "tv" ? "series" : "movie"}
           />
         ))}

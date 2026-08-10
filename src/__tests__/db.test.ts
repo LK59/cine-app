@@ -137,17 +137,18 @@ describe("watchlistDb", () => {
     expect(db.watchlistDb.isInWatchlist("u1", "movie", 999)).toBe(false);
   });
 
-  it("getBulkStatus returns only matching keys", () => {
+  it("getBulkStatus returns only matching keys, with their status", () => {
     const result = db.watchlistDb.getBulkStatus("u1", [
       { mediaType: "movie", tmdbId: 100 },
       { mediaType: "movie", tmdbId: 999 },
     ]);
     expect(result.has("movie:100")).toBe(true);
+    expect(result.get("movie:100")).toBe("to_watch");
     expect(result.has("movie:999")).toBe(false);
   });
 
-  it("getBulkStatus returns empty set for empty input", () => {
-    expect(db.watchlistDb.getBulkStatus("u1", [])).toEqual(new Set());
+  it("getBulkStatus returns empty map for empty input", () => {
+    expect(db.watchlistDb.getBulkStatus("u1", [])).toEqual(new Map());
   });
 
   it("updateStatus scopes by userId — no cross-user writes", () => {

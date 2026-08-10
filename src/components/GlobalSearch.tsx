@@ -15,6 +15,7 @@ import { posterUrl } from "@/lib/images";
 import { useSWRConfig } from "swr";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
@@ -261,6 +262,21 @@ export function GlobalSearch() {
   // ── TMDb results not in library ──
   const tmdbResults: UnifiedSearchResult[] = remoteData?.tmdb ?? [];
   const persons: PersonResult[] = remoteData?.persons ?? [];
+
+  // Bulk-resolve which of the currently visible results are already on the watchlist —
+  // union'd into `watchlisted` below rather than assigned directly, so it can't clobber a
+  // toggle the user just made in this session while this fetch was in flight.
+  const statusMap = useWatchlistStatusMap(
+    [...libraryResults, ...tmdbResults].map((r) => ({ mediaType: r.type, tmdbId: r.tmdbId }))
+  );
+  useEffect(() => {
+    const inList = Object.entries(statusMap).filter(([, s]) => s).map(([k]) => k);
+    if (inList.length === 0) return;
+    setWatchlisted((prev) => {
+      if (inList.every((k) => prev.has(k))) return prev;
+      return new Set([...prev, ...inList]);
+    });
+  }, [statusMap]);
 
   // Total navigable results
   const allResults = [...libraryResults, ...tmdbResults, ...persons];

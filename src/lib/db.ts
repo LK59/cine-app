@@ -236,18 +236,20 @@ export const watchlistDb = {
     return !!(db.prepare("SELECT 1 FROM watchlist WHERE user_id = ? AND media_type = ? AND tmdb_id = ?").get(userId, mediaType, tmdbId));
   },
 
-  // Bulk check — returns a Set of `${mediaType}:${tmdbId}` for quick lookup
-  getBulkStatus(userId: string, ids: { mediaType: string; tmdbId: number }[]): Set<string> {
-    if (!ids.length) return new Set();
+  // Bulk check — returns a Map of `${mediaType}:${tmdbId}` -> status for quick lookup,
+  // for the subset of `ids` actually on the user's list.
+  getBulkStatus(userId: string, ids: { mediaType: string; tmdbId: number }[]): Map<string, WatchlistStatus> {
+    if (!ids.length) return new Map();
     const db = getDb();
     const rows = db.prepare(
-      "SELECT media_type, tmdb_id FROM watchlist WHERE user_id = ?"
-    ).all(userId) as { media_type: string; tmdb_id: number }[];
-    const all = new Set(rows.map((r) => `${r.media_type}:${r.tmdb_id}`));
-    const result = new Set<string>();
+      "SELECT media_type, tmdb_id, status FROM watchlist WHERE user_id = ?"
+    ).all(userId) as { media_type: string; tmdb_id: number; status: WatchlistStatus }[];
+    const all = new Map(rows.map((r) => [`${r.media_type}:${r.tmdb_id}`, r.status]));
+    const result = new Map<string, WatchlistStatus>();
     for (const { mediaType, tmdbId } of ids) {
       const key = `${mediaType}:${tmdbId}`;
-      if (all.has(key)) result.add(key);
+      const status = all.get(key);
+      if (status) result.set(key, status);
     }
     return result;
   },

@@ -7,10 +7,12 @@ import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
 import { useT } from "@/components/TranslationProvider";
 import type { SimilarMovie } from "@/app/api/radarr/movies/[id]/similar/route";
 import type { SimilarSeries } from "@/app/api/sonarr/series/[id]/similar/route";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import type { WatchlistStatus } from "@/lib/db";
 
 type Item = (SimilarMovie & { sonarrId?: never }) | (SimilarSeries & { radarrId?: never });
 
-function toPosterCardItem(item: Item, type: "movie" | "series"): PosterCardItem {
+function toPosterCardItem(item: Item, type: "movie" | "series", watchlistStatus?: WatchlistStatus | null): PosterCardItem {
   const libraryHref = type === "movie"
     ? (item.radarrId ? `/radarr/${item.radarrId}` : null)
     : (item.sonarrId ? `/sonarr/${item.sonarrId}` : null);
@@ -22,6 +24,7 @@ function toPosterCardItem(item: Item, type: "movie" | "series"): PosterCardItem 
     rating: item.voteAverage,
     inLibrary: item.inLibrary,
     libraryHref,
+    watchlistStatus,
   };
 }
 
@@ -39,6 +42,7 @@ export function SimilarMedia({ apiUrl, type }: Props) {
   const t = useT();
 
   const items = data?.items ?? [];
+  const statusMap = useWatchlistStatusMap(items.map((item) => ({ mediaType: type, tmdbId: item.tmdbId })));
   if (items.length === 0) return null;
 
   return (
@@ -47,7 +51,7 @@ export function SimilarMedia({ apiUrl, type }: Props) {
       <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
         {items.map((item) => (
           <div key={item.tmdbId} className="snap-start">
-            <PosterCard item={toPosterCardItem(item, type)} mediaType={type} size="carousel" />
+            <PosterCard item={toPosterCardItem(item, type, statusMap[`${type}:${item.tmdbId}`])} mediaType={type} size="carousel" />
           </div>
         ))}
       </HorizontalCarousel>

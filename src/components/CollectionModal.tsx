@@ -9,6 +9,8 @@ import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import type { WatchlistStatus } from "@/lib/db";
 
 interface CollectionPart {
   tmdbId: number;
@@ -20,7 +22,7 @@ interface CollectionPart {
   libraryHref: string | null;
 }
 
-function toPosterCardItem(part: CollectionPart): PosterCardItem {
+function toPosterCardItem(part: CollectionPart, watchlistStatus?: WatchlistStatus | null): PosterCardItem {
   return {
     tmdbId: part.tmdbId,
     title: part.title,
@@ -29,6 +31,7 @@ function toPosterCardItem(part: CollectionPart): PosterCardItem {
     rating: part.voteAverage,
     inLibrary: part.inLibrary,
     libraryHref: part.libraryHref,
+    watchlistStatus,
   };
 }
 
@@ -55,6 +58,7 @@ export function CollectionModal({
   const parts = data?.parts ?? [];
   const inLibrary = parts.filter((p) => p.inLibrary || addedIds.has(p.tmdbId));
   const missing = parts.filter((p) => !p.inLibrary && !addedIds.has(p.tmdbId));
+  const statusMap = useWatchlistStatusMap(parts.map((p) => ({ mediaType: "movie", tmdbId: p.tmdbId })));
 
   async function addAllToWatchlist() {
     if (bulkAdding || missing.length === 0) return;
@@ -108,7 +112,7 @@ export function CollectionModal({
             {inLibrary.map((p) => (
               <PosterCard
                 key={p.tmdbId}
-                item={toPosterCardItem(p)}
+                item={toPosterCardItem(p, statusMap[`movie:${p.tmdbId}`])}
                 mediaType="movie"
               />
             ))}
@@ -136,7 +140,7 @@ export function CollectionModal({
             {missing.map((p) => (
               <PosterCard
                 key={p.tmdbId}
-                item={toPosterCardItem(p)}
+                item={toPosterCardItem(p, statusMap[`movie:${p.tmdbId}`])}
                 mediaType="movie"
                 onAdded={(id) => setAddedIds((s) => new Set(s).add(id))}
               />
