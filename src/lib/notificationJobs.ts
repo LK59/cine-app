@@ -1,22 +1,7 @@
-import { pushDb, availabilityNotifDb, kvCacheDb, getDb } from "@/lib/db";
-import { sendWebPush, shouldRemovePushSubscription } from "@/lib/webPush";
+import { availabilityNotifDb, kvCacheDb, getDb } from "@/lib/db";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
-
-async function sendToAll(payload: unknown): Promise<void> {
-  const subs = pushDb.getAll();
-  await Promise.allSettled(
-    subs.map(async (sub) => {
-      try {
-        await sendWebPush({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
-      } catch (err) {
-        if (shouldRemovePushSubscription(err)) {
-          pushDb.remove(sub.endpoint);
-        }
-      }
-    })
-  );
-}
+import { sendPushToAll } from "@/lib/push";
 
 export async function checkWatchlistAvailability(): Promise<void> {
   try {
@@ -45,10 +30,12 @@ export async function checkWatchlistAvailability(): Promise<void> {
       if (!isAvailable) continue;
       if (availabilityNotifDb.hasBeenNotified(item.media_type, item.tmdb_id)) continue;
 
-      await sendToAll({
+      await sendPushToAll({
         title: "🎬 Disponible maintenant",
         body: `${item.title} est disponible dans ta bibliothèque`,
         url: item.media_type === "movie" ? "/radarr" : "/sonarr",
+        tag: "watchlist-available",
+        category: "watchlist-available",
       });
 
       availabilityNotifDb.markNotified(item.media_type, item.tmdb_id);
@@ -76,10 +63,12 @@ export async function checkNewEpisodes(): Promise<void> {
       // same series until the 30-day cleanup ran.
       if (availabilityNotifDb.hasBeenNotified("episode", ev.id)) continue;
 
-      await sendToAll({
+      await sendPushToAll({
         title: "📺 Nouvel épisode",
         body: `${ev.title}${ev.detail ? ` — ${ev.detail}` : ""} est disponible`,
         url: "/sonarr",
+        tag: "new-episode",
+        category: "new-episode",
       });
 
       availabilityNotifDb.markNotified("episode", ev.id);
