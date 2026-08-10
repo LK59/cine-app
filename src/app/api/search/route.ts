@@ -135,11 +135,14 @@ function hasAll(ids: Set<number>, required: number[]) {
 async function matchesNaturalPeople(mediaType: "movie" | "series", tmdbId: number, castIds: number[], directorIds: number[]) {
   if (castIds.length === 0 && directorIds.length === 0) return true;
 
-  const details = await withCache<TmdbMovie | TmdbTv | null>(`search:credits-check:${mediaType}:${tmdbId}`, 7 * 24 * 3600_000, () =>
-    mediaType === "movie"
-      ? tmdb.getMovie(tmdbId).catch(() => null)
-      : tmdb.getTv(tmdbId).catch(() => null)
-  );
+  // The fallback lives outside the cache call: a transient TMDB failure must not get cached as
+  // "this title doesn't match the cast/director filter" for 7 days — better to just retry next
+  // time. Persisted to disk too, so it survives a redeploy (see findSharedSeriesByCast above).
+  const details = await withPersistentCache<TmdbMovie | TmdbTv>(
+    `search:credits-check:${mediaType}:${tmdbId}`,
+    7 * 24 * 3600_000,
+    () => (mediaType === "movie" ? tmdb.getMovie(tmdbId) : tmdb.getTv(tmdbId))
+  ).catch(() => null);
   if (!details) return false;
 
   const credits = details.credits;
@@ -310,9 +313,13 @@ export async function GET(req: NextRequest) {
         const sharedSeries = await findSharedSeriesByCast(castIds);
         for (const item of sharedSeries.slice(0, 30)) {
           if (genreIds?.tv) {
-            const details = await withCache<TmdbTv | null>(`search:genre-check:series:${item.id}`, 7 * 24 * 3600_000, () =>
-              tmdb.getTv(item.id).catch(() => null)
-            );
+            // Same rule as matchesNaturalPeople above: don't let a transient TMDB failure get
+            // cached as "wrong genre" for 7 days.
+            const details = await withPersistentCache<TmdbTv>(
+              `search:genre-check:series:${item.id}`,
+              7 * 24 * 3600_000,
+              () => tmdb.getTv(item.id)
+            ).catch(() => null);
             if (!details?.genres?.some((g) => g.id === genreIds?.tv)) continue;
           }
           const entry = makePersonCreditEntry(item, "series", radarrByTmdb, sonarrByTmdb);
