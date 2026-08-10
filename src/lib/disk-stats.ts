@@ -32,9 +32,15 @@ async function duBytesAsync(path: string): Promise<number> {
 
 async function dfStatsAsync(path: string): Promise<{ total: number; used: number; free: number }> {
   try {
-    const { stdout } = await execAsync(`df -B1 "${path}" 2>/dev/null | tail -1`, { timeout: 5_000 });
+    // -P (POSIX format) forces single-line output regardless of filesystem name length.
+    // Without it, `df` wraps onto a second line once the filesystem name is long enough
+    // (e.g. a ZFS dataset or LVM name) — `tail -1` would then grab a line that happens to
+    // start with the numeric columns instead of the filesystem name, shifting every field
+    // by one. That only "worked" here by accident, for however long the mount's name stayed
+    // long enough to trigger the wrap.
+    const { stdout } = await execAsync(`df -B1 -P "${path}" 2>/dev/null | tail -1`, { timeout: 5_000 });
     const parts = stdout.trim().split(/\s+/);
-    return { total: parseInt(parts[0]), used: parseInt(parts[1]), free: parseInt(parts[2]) };
+    return { total: parseInt(parts[1]), used: parseInt(parts[2]), free: parseInt(parts[3]) };
   } catch { return { total: -1, used: -1, free: -1 }; }
 }
 
