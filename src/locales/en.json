@@ -112,7 +112,13 @@
     "notMonitored": "Not monitored",
     "qualityProfile": "Quality profile",
     "allQualities": "All qualities",
-    "notDownloaded": "Not downloaded"
+    "notDownloaded": "Not downloaded",
+    "installPrompt": {
+      "title": "Install Cine App",
+      "body": "Add the app to your Home Screen to enable notifications and faster launches.",
+      "steps": "Tap Share, then \"Add to Home Screen\".",
+      "dismiss": "Later"
+    }
   },
   "dashboard": {
     "resumeWatching": "Continue watching",

@@ -202,6 +202,13 @@
 }
 
 @layer base {
+  html {
+    /* Standalone iOS: without this, an overscroll at the top of the page
+       triggers Safari's native pull-to-refresh, which reloads the whole app
+       and wipes in-memory state (filters, scroll position, etc). */
+    overscroll-behavior-y: contain;
+  }
+
   body {
     @apply text-slate-100 antialiased;
     background-color: #020617;
@@ -210,6 +217,7 @@
       radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.1), transparent 40%),
       radial-gradient(circle at 50% 100%, rgba(124, 92, 255, 0.08), transparent 50%);
     background-attachment: fixed;
+    overscroll-behavior-y: contain;
   }
 }
 

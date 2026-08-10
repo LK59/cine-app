@@ -112,7 +112,13 @@
     "notMonitored": "Non surveillé",
     "qualityProfile": "Profil qualité",
     "allQualities": "Toutes les qualités",
-    "notDownloaded": "Non téléchargé"
+    "notDownloaded": "Non téléchargé",
+    "installPrompt": {
+      "title": "Installer Cine App",
+      "body": "Ajoutez l'app à votre écran d'accueil pour activer les notifications et un lancement plus rapide.",
+      "steps": "Appuyez sur Partager, puis \"Sur l'écran d'accueil\".",
+      "dismiss": "Plus tard"
+    }
   },
   "dashboard": {
     "resumeWatching": "Continuer à regarder",

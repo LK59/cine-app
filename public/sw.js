@@ -1,5 +1,5 @@
-const CACHE_NAME = "cine-app-v4";
-const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png"];
+const CACHE_NAME = "cine-app-v5";
+const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -41,7 +41,8 @@ self.addEventListener("fetch", (event) => {
 
   // Network-first for everything else: this is a live dashboard, HTML/data
   // must stay fresh. We only fall back to cache when the network is
-  // unreachable (offline).
+  // unreachable (offline) — and for a navigation that was never cached
+  // either, fall back further to a static offline page instead of failing.
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -49,7 +50,13 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() =>
+        caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.mode === "navigate") return caches.match("/offline.html");
+          return undefined;
+        })
+      )
   );
 });
 
@@ -70,17 +77,42 @@ self.addEventListener("push", (event) => {
     requireInteraction: false,
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Badging API: not supported on iOS Safari today, but feature-detected
+      // so this stays inert there and picks up support automatically if/when
+      // Apple ships it, plus it already works on Android/desktop Chrome.
+      self.navigator.setAppBadge
+        ? self.registration.getNotifications().then((n) => self.navigator.setAppBadge(n.length))
+        : Promise.resolve(),
+    ])
+  );
+});
+
+self.addEventListener("notificationclose", () => {
+  if (!self.navigator.setAppBadge) return;
+  self.registration.getNotifications().then((n) => {
+    if (n.length > 0) self.navigator.setAppBadge(n.length);
+    else if (self.navigator.clearAppBadge) self.navigator.clearAppBadge();
+  });
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url ?? "/";
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      const existing = windowClients.find((c) => c.url.includes(self.location.origin));
-      if (existing) return existing.focus().then((c) => c.navigate(url));
-      return clients.openWindow(url);
-    })
+    Promise.all([
+      clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+        const existing = windowClients.find((c) => c.url.includes(self.location.origin));
+        if (existing) return existing.focus().then((c) => c.navigate(url));
+        return clients.openWindow(url);
+      }),
+      self.registration.getNotifications().then((n) => {
+        if (!self.navigator.setAppBadge) return;
+        if (n.length > 0) return self.navigator.setAppBadge(n.length);
+        if (self.navigator.clearAppBadge) return self.navigator.clearAppBadge();
+      }),
+    ])
   );
 });

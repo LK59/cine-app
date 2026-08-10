@@ -112,7 +112,13 @@
     "notMonitored": "Nicht überwacht",
     "qualityProfile": "Qualitätsprofil",
     "allQualities": "Alle Qualitäten",
-    "notDownloaded": "Nicht heruntergeladen"
+    "notDownloaded": "Nicht heruntergeladen",
+    "installPrompt": {
+      "title": "Cine App installieren",
+      "body": "Füge die App zum Home-Bildschirm hinzu, um Benachrichtigungen und einen schnelleren Start zu aktivieren.",
+      "steps": "Tippe auf Teilen, dann auf \"Zum Home-Bildschirm\".",
+      "dismiss": "Später"
+    }
   },
   "dashboard": {
     "resumeWatching": "Weiterschauen",

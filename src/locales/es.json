@@ -112,7 +112,13 @@
     "notMonitored": "No supervisado",
     "qualityProfile": "Perfil de calidad",
     "allQualities": "Todas las calidades",
-    "notDownloaded": "No descargado"
+    "notDownloaded": "No descargado",
+    "installPrompt": {
+      "title": "Instalar Cine App",
+      "body": "Añade la app a tu pantalla de inicio para activar las notificaciones y un inicio más rápido.",
+      "steps": "Toca Compartir y luego \"Añadir a pantalla de inicio\".",
+      "dismiss": "Más tarde"
+    }
   },
   "dashboard": {
     "resumeWatching": "Continuar viendo",
