@@ -11,6 +11,7 @@ import type { CalendarEvent } from "@/app/api/calendar/route";
 import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, CirclePlus, X } from "lucide-react";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { getDateLocale } from "@/lib/i18n";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -288,8 +289,8 @@ export default function CalendarPage() {
   const { locale } = useLocale();
   const dateLocale = getDateLocale(locale);
   const today = useMemo(() => isoDate(new Date()), []);
-  const [view, setView]       = useState<ViewMode>("month");
-  const [filter, setFilter]   = useState<FilterMode>("all");
+  const [view, setView]       = usePersistentState<ViewMode>("calendar.view", "month");
+  const [filter, setFilter]   = usePersistentState<FilterMode>("calendar.filter", "all");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 

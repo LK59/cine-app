@@ -12,6 +12,7 @@ import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
 import { useT } from "@/components/TranslationProvider";
 import { useRole } from "@/lib/useRole";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { usePersistentState } from "@/lib/usePersistentState";
 import type { WatchlistStatus } from "@/lib/db";
 
 interface DiscoverItem {
@@ -61,7 +62,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
   });
 
   const t = useT();
-  const [genreFilter, setGenreFilter] = useState("");
+  const [genreFilter, setGenreFilter] = usePersistentState(`discover.genreFilter.${type}`, "");
 
   const filtered = (data?.items ?? []).filter(
     (item) => !genreFilter || item.genres.includes(genreFilter)
@@ -215,7 +216,7 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
 }
 
 export default function DiscoverPage() {
-  const [tab, setTab] = useState<"movie" | "tv" | "pour-vous">("movie");
+  const [tab, setTab] = usePersistentState<"movie" | "tv" | "pour-vous">("discover.tab", "movie");
   const [rawQuery, setRawQuery] = useState("");
   const [query, setQuery] = useState("");
   const { jfId } = useRole();
