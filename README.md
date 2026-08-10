@@ -129,7 +129,7 @@ Edit `.env` and configure:
 
 | Variable | Description |
 |---|---|
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Local Cine App admin fallback account |
+| `APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` | Local Cine App admin fallback account |
 | `SESSION_SECRET` | Secret used to sign sessions |
 | `RADARR_URL` / `RADARR_API_KEY` | Radarr connection |
 | `SONARR_URL` / `SONARR_API_KEY` | Sonarr connection |
@@ -228,7 +228,7 @@ Open Cine App through your configured URL.
 
 For normal users, log in with an existing Jellyfin username and password.
 
-For setup or maintenance, use the local admin account configured with `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
+For setup or maintenance, use the local admin account configured with `APP_ADMIN_USER` and `APP_ADMIN_PASSWORD`.
 
 ### Updating
 
@@ -263,7 +263,7 @@ Jellyfin administrator accounts are granted admin access in Cine App. Non-admin 
 
 ### Local Admin Fallback
 
-`ADMIN_USERNAME` and `ADMIN_PASSWORD` define a local Cine App admin account, independent from Jellyfin.
+`APP_ADMIN_USER` and `APP_ADMIN_PASSWORD` define a local Cine App admin account, independent from Jellyfin.
 
 Use it as a fallback/admin account for setup and maintenance.
 
@@ -426,7 +426,7 @@ Check that:
 - the Jellyfin username/password works directly in Jellyfin;
 - the Jellyfin server is reachable from the Cine App container.
 
-The local admin login (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) is independent from Jellyfin and can be used as a fallback.
+The local admin login (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) is independent from Jellyfin and can be used as a fallback.
 
 ### Push Notifications Do Not Appear
 
