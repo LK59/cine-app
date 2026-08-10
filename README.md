@@ -156,23 +156,48 @@ nano docker-compose.yml
 `docker-compose.example.yml` uses the pre-built image published on GitHub Container Registry — no build tools, no source checkout required:
 
 ```yaml
+networks:
+  media_net:
+    external: true
+    # If your existing Docker network has another name, change both this key
+    # and the service network reference below.
+
 services:
   cine-app:
     image: ghcr.io/lk59/cine-app:latest
     container_name: cine-app
     env_file:
       - .env
-    ports:
-      - "3000:3000"
+    environment:
+      # Adapt to your timezone.
+      - TZ=Europe/Paris
     volumes:
+      # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
       - ./data:/app/data
-    networks:
-      - media
 
-networks:
-  media:
-    external: true
+      # Optional media root, read-only.
+      # Keep this enabled if you want disk/media-size stats based on your host path.
+      # Replace the left side with your own media folder.
+      - /path/to/your/media:/mnt/media/video:ro
+
+      # Optional Clara Galle gallery.
+      # Enable only if CLARA_GALLERY_ENABLED=true in .env.
+      # The folder must contain:
+      #   - JPG / PNG / WebP photos
+      #   - clarabanner.jpg, used as the page banner
+      # - /path/to/your/clara/photos:/app/gallery/clara:ro
+
+    # Optional direct access without a reverse proxy.
+    # If you use Nginx Proxy Manager, Traefik or Caddy, you can leave this commented.
+    # ports:
+    #   - "3000:3000"
+
+    networks:
+      - media_net
+    restart: unless-stopped
 ```
+
+This is the exact content of `docker-compose.example.yml` — the two are kept in sync so there's only one template to adapt, not two diverging ones.
 
 The `data` volume stores local app data such as the SQLite database. Do not commit it to git.
 
