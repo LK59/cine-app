@@ -65,12 +65,16 @@ export async function checkNewEpisodes(): Promise<void> {
     const db = getDb();
     const cutoff = Date.now() - 2 * 3600_000;
     const recentImports = db.prepare(
-      "SELECT DISTINCT tmdb_id, title, detail FROM timeline_events WHERE source = 'sonarr' AND event_type = 'import' AND event_date > ? AND tmdb_id IS NOT NULL"
-    ).all(cutoff) as { tmdb_id: number; title: string; detail: string | null }[];
+      "SELECT id, tmdb_id, title, detail FROM timeline_events WHERE source = 'sonarr' AND event_type = 'import' AND event_date > ? AND tmdb_id IS NOT NULL"
+    ).all(cutoff) as { id: number; tmdb_id: number; title: string; detail: string | null }[];
 
     for (const ev of recentImports) {
       if (!ev.tmdb_id) continue;
-      if (availabilityNotifDb.hasBeenNotified("episode", ev.tmdb_id)) continue;
+      // Dedup key is the timeline event's own row id, not the series' tmdb_id: several
+      // episodes of the same show share one tmdb_id, and keying on that meant the first
+      // "new episode" push for a series permanently suppressed every later episode of that
+      // same series until the 30-day cleanup ran.
+      if (availabilityNotifDb.hasBeenNotified("episode", ev.id)) continue;
 
       await sendToAll({
         title: "📺 Nouvel épisode",
@@ -78,7 +82,7 @@ export async function checkNewEpisodes(): Promise<void> {
         url: "/sonarr",
       });
 
-      availabilityNotifDb.markNotified("episode", ev.tmdb_id);
+      availabilityNotifDb.markNotified("episode", ev.id);
     }
   } catch (err) {
     logError("notifications.new-episodes", err);
