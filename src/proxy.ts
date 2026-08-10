@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/jellyfin", "/api/gallery/clara"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/jellyfin",
+  "/api/health",
+  "/api/config/public",
+  "/api/push/vapid-key",
+];
+
+// The slideshow page (/random, og:image preview + <img> tags) and the individual photo files it
+// hotlinks (/[filename]) both need to work for an anonymous visitor of clara.kakol.fr. The list
+// endpoint (/api/gallery/clara, no trailing segment) is deliberately excluded: it's what lets
+// someone enumerate the whole gallery in one call, and is only used by the in-app authenticated
+// person page.
+function isPublicClaraPhoto(pathname: string): boolean {
+  return pathname !== "/api/gallery/clara" && pathname.startsWith("/api/gallery/clara/");
+}
 
 // The guest role is read-only everywhere except requesting a new movie/series
 // (the Radarr/Sonarr "add" endpoints) and logging out. Every other mutation
@@ -23,7 +39,11 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) || pathname.startsWith("/_next")) {
+  if (
+    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
+    pathname.startsWith("/_next") ||
+    isPublicClaraPhoto(pathname)
+  ) {
     return NextResponse.next();
   }
 
