@@ -44,8 +44,12 @@ export async function GET(
       });
     }
 
+    // Each segment URL is tied to a specific PlaySessionId and never changes
+    // content once generated — immutable, and long-lived enough to cover a
+    // full movie, so a rewind past hls.js's in-memory buffer replays from the
+    // browser's HTTP cache instead of re-hitting Jellyfin.
     return new NextResponse(res.body, {
-      headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=3600" },
+      headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=21600, immutable" },
     });
   } catch {
     return new NextResponse(null, { status: 502 });

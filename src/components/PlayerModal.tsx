@@ -177,7 +177,14 @@ export function PlayerModal({
         setLoading(false);
         return;
       }
-      const hls = new Hls();
+      const hls = new Hls({
+        // hls.js's own default back-buffer behavior varies by version and isn't
+        // worth trusting blindly — pin it explicitly so a -30s rewind replays
+        // from the already-decoded buffer instead of stalling on a re-fetch.
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 90,
+      });
       hlsRef.current = hls;
       hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
         setSubtitleTracks(
