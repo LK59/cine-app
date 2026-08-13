@@ -275,11 +275,13 @@ export function PlayerControls({
         }`}
       >
         {/* Top bar — padded past the safe area so the close button isn't
-            hidden under the notch / rounded corners in landscape PWA mode. */}
+            hidden under the notch / rounded corners in landscape PWA mode,
+            plus extra clearance for the Dynamic Island / translucent status
+            bar in portrait, which sits below the strict safe-area edge. */}
         <div
           className="pointer-events-auto flex items-center justify-between p-4"
           style={{
-            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 0.75rem))",
             paddingLeft: "max(1rem, env(safe-area-inset-left))",
             paddingRight: "max(1rem, env(safe-area-inset-right))",
           }}
@@ -335,7 +337,7 @@ export function PlayerControls({
           <div
             className="pointer-events-auto absolute w-56 overflow-hidden rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
             style={{
-              top: "max(4rem, calc(env(safe-area-inset-top) + 3.5rem))",
+              top: "max(4rem, calc(env(safe-area-inset-top) + 4.25rem))",
               right: "max(1rem, env(safe-area-inset-right))",
             }}
             onClick={(e) => e.stopPropagation()}
