@@ -9,6 +9,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
+  if (!config.player.enabled) return new NextResponse(null, { status: 404 });
+
   const { itemId } = await params;
   if (!JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
 

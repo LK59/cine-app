@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { config } from "@/lib/config";
 
 export async function POST(req: NextRequest) {
+  if (!config.player.enabled) {
+    return NextResponse.json({ error: "Lecteur intégré désactivé" }, { status: 404 });
+  }
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
 

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { PlayCircle } from "lucide-react";
 import { formatResumeTicks } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
+import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 
 const PlayerModal = dynamic(() => import("@/components/PlayerModal").then((m) => m.PlayerModal), { ssr: false });
 
@@ -46,6 +47,9 @@ export function PlayButton({
   // swapped to a different item in place when the player auto-advances.
   const [playing, setPlaying] = useState<{ itemId: string; title: string; resumeAt?: number } | null>(null);
   const t = useT();
+  const playerEnabled = usePlayerEnabled();
+
+  if (!playerEnabled) return null;
 
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const label = labelOverride ?? (hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play'));

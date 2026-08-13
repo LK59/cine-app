@@ -46,6 +46,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Recently added and recently played
 - Mark watched / unwatched from any detail page
 - Per-user recommendations based on play history
+- **In-app playback** (optional, disabled by default - see [In-App Playback](#in-app-playback)) - play movies and episodes directly in Cine App instead of redirecting to Jellyfin web, with resume, audio/subtitle track selection, skip-intro and automatic next-episode advance
 
 ### Requests & Downloads
 
@@ -141,6 +142,7 @@ Edit `.env` and configure:
 | `MDBLIST_API_KEY` | Optional - multi-source ratings on detail pages |
 | `APP_LANGUAGE` | Default instance language (`fr` \| `en` \| `es` \| `de`) — used for accounts with no saved preference and on the login page (default: `en`) |
 | `VAPID_*` | Optional - Web Push notifications |
+| `PLAYER_ENABLED` | Optional, default `false` - in-app video playback (requires server-side transcoding, see [In-App Playback](#in-app-playback)) |
 
 ### Docker Compose Setup
 
@@ -413,6 +415,28 @@ Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and restart.
 
 <img src="docs/screenshots/clara-1.png" width="49%"> <img src="docs/screenshots/clara-2.png" width="49%">
 <img src="docs/screenshots/clara-3.png" width="49%"> <img src="docs/screenshots/clara-4.png" width="49%">
+
+### In-App Playback
+
+Play movies and episodes directly inside Cine App - custom player with seek, audio track and subtitle selection, resume, fullscreen, AirPlay, skip-intro and automatic next-episode advance (via the [Intro Skipper](https://github.com/intro-skipper/intro-skipper) Jellyfin plugin, if installed) - instead of redirecting to Jellyfin's own web client.
+
+**This requires real server-side transcoding on every playback**, disabled by default for that reason. To keep the player reliably compatible with every browser, Cine App always asks Jellyfin to transcode to H.264/AAC over HLS rather than negotiating per-browser direct-play - the same tradeoff Jellyfin's official clients make, but applied unconditionally here. That's real CPU/GPU load on your Jellyfin server for every single play, not just for exotic files. Only enable this if your Jellyfin server has hardware transcoding (Quick Sync, NVENC, VAAPI, ...) or enough spare CPU to transcode in software.
+
+Without it, the existing "Open in Jellyfin" link still works exactly as before - this feature is purely additive.
+
+Set the env var:
+
+```env
+PLAYER_ENABLED=true
+```
+
+Restart:
+
+```bash
+docker compose up -d
+```
+
+Disable again with `PLAYER_ENABLED=false` (or removing the variable) and restarting.
 
 ---
 

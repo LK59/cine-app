@@ -39,6 +39,12 @@ export const config = {
     publicUrl: optional("JELLYFIN_PUBLIC_URL"),
     apiKey: optional("JELLYFIN_API_KEY"),
   },
+  player: {
+    // In-app playback always forces Jellyfin to transcode (see jellyfin.ts) —
+    // real CPU/GPU cost on the server for every play, unlike the plain
+    // redirect-to-Jellyfin-web fallback. Opt-in, off by default.
+    enabled: optional("PLAYER_ENABLED", "false") === "true",
+  },
   jellyseerr: {
     url: optional("JELLYSEERR_URL", "http://jellyseerr:5055"),
     apiKey: optional("JELLYSEERR_API_KEY"),

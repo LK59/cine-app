@@ -3,6 +3,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { HttpError } from "@/lib/http";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { config } from "@/lib/config";
 
 const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
@@ -18,6 +19,10 @@ function reauthRequired() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!config.player.enabled) {
+    return NextResponse.json({ error: "Lecteur intégré désactivé" }, { status: 404 });
+  }
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
 
