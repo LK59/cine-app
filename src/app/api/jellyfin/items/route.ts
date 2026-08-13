@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
+import { jellyfin } from "@/lib/clients/jellyfin";
 import {
   cachedJellyfinMovies,
   cachedJellyfinMoviesAdmin,
@@ -37,7 +38,12 @@ export async function GET(req: NextRequest) {
         const userItem = userMovies
           ? findJellyfinMovieByTmdb(userMovies, Number(tmdbId ?? 0), title, year, imdbId)
           : null;
-        if (userItem) item = userItem; // prefer user item for UserData
+        if (userItem) {
+          item = userItem; // prefer user item for UserData
+        } else {
+          const direct = await jellyfin.getItemUserData(userId, item.Id).catch(() => null);
+          if (direct?.UserData) item = { ...item, UserData: direct.UserData };
+        }
       }
     } else if (type === "Series") {
       const adminSeries = await cachedJellyfinSeriesAdmin();
@@ -48,7 +54,12 @@ export async function GET(req: NextRequest) {
         const userItem = userSeries
           ? findJellyfinSeriesByTvdb(userSeries, Number(tvdbId ?? 0), title, year)
           : null;
-        if (userItem) item = userItem;
+        if (userItem) {
+          item = userItem;
+        } else {
+          const direct = await jellyfin.getItemUserData(userId, item.Id).catch(() => null);
+          if (direct?.UserData) item = { ...item, UserData: direct.UserData };
+        }
       }
     }
 

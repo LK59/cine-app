@@ -280,6 +280,19 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items[0] ?? null),
 
+  // Jellyfin 10.11's per-user recursive `/Users/{id}/Items` query silently
+  // drops a large, seemingly arbitrary chunk of the library (confirmed:
+  // ~27% of movies on this server) with no correlating permission/rating
+  // restriction — but a direct per-item lookup for one of those "missing"
+  // items still returns its UserData correctly. Used as a fallback when an
+  // item can't be found in the bulk per-user list, so watched/resume state
+  // doesn't just disappear for whichever titles are affected.
+  getItemUserData: (userId: string, itemId: string) =>
+    fetchJson<{ UserData?: JellyfinItem["UserData"] }>(
+      `${url}/Users/${userId}/Items/${itemId}?Fields=UserData`,
+      { headers }
+    ),
+
   // From the "Intro Skipper" plugin — not core Jellyfin API, so this 404s
   // (or has Valid:false segments) for movies and for episodes it hasn't
   // analyzed yet. Callers must treat failures as "no data", not an error.

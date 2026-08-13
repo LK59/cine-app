@@ -677,20 +677,25 @@ export default function SonarrSeriesDetailPage() {
                                 <span
                                   className={`h-1.5 w-1.5 rounded-full ${ep.hasFile ? "bg-emerald-400" : "bg-amber-400"}`}
                                 />
+                              </div>
+                            </div>
+                            {(jfEp || !isGuest) && (
+                              <div className="flex items-center gap-2">
                                 {jfEp && (
                                   <PlayButton
                                     itemId={jfEp.Id}
                                     title={`${series.title} · EP${ep.episodeNumber} S${seasonNumber}`}
                                     resumeTicks={jfEp.UserData?.PlaybackPositionTicks}
                                     runtimeTicks={jfEp.RunTimeTicks}
-                                    variant="icon"
-                                    iconSize={16}
+                                    variant="pill"
+                                    iconSize={14}
+                                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent-600/80 py-2 text-xs font-medium text-white hover:bg-accent-600"
                                     getNextEpisode={getNextEpisode}
                                   />
                                 )}
                                 {!isGuest && (
                                 <button
-                                  className="btn-ghost px-2 py-1"
+                                  className="btn-ghost shrink-0 px-3 py-2"
                                   onClick={() =>
                                     setActiveSearch({
                                       title: t('sonarr.episodeSearch', { title: ep.title }),
@@ -698,11 +703,11 @@ export default function SonarrSeriesDetailPage() {
                                     })
                                   }
                                 >
-                                  <Search size={12} />
+                                  <Search size={14} />
                                 </button>
                                 )}
                               </div>
-                            </div>
+                            )}
                             {(subs?.subtitles?.length || download) && (
                               <div className="ml-6 flex flex-wrap items-center gap-1.5">
                                 {subs?.subtitles?.map((s, i) => (

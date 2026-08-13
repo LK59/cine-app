@@ -281,7 +281,7 @@ export function PlayerControls({
         <div
           className="pointer-events-auto flex items-center justify-between p-4"
           style={{
-            paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 0.75rem))",
+            paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 1.5rem))",
             paddingLeft: "max(1rem, env(safe-area-inset-left))",
             paddingRight: "max(1rem, env(safe-area-inset-right))",
           }}
@@ -337,7 +337,7 @@ export function PlayerControls({
           <div
             className="pointer-events-auto absolute w-56 overflow-hidden rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
             style={{
-              top: "max(4rem, calc(env(safe-area-inset-top) + 4.25rem))",
+              top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
               right: "max(1rem, env(safe-area-inset-right))",
             }}
             onClick={(e) => e.stopPropagation()}
