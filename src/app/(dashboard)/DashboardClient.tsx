@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import dynamic from "next/dynamic";
+const PlayerModal = dynamic(() => import("@/components/PlayerModal").then((m) => m.PlayerModal), { ssr: false });
+import { PlayButton } from "@/components/PlayButton";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
@@ -20,7 +23,7 @@ import { useLongPress } from "@/hooks/useLongPress";
 import type { DashboardPayload, ServiceStatus, ActivityItem, ResumeItem, RecentItem, TorrentItem } from "@/app/api/dashboard/route";
 import type { DiskStats } from "@/lib/disk-stats";
 
-import { fmtSize, relativeTime, relativeTimeAbs } from "@/lib/format";
+import { fmtSize, relativeTime, relativeTimeAbs, formatResumeTicks } from "@/lib/format";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +73,11 @@ function ResumeCard({ item }: { item: ResumeItem }) {
   const router = useRouter();
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
   const lp = useLongPress(() => setOpen(true));
+  const resumeAt = item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined;
+  const playLabel =
+    item.positionTicks > 0 ? `${t('common.resume')} - ${formatResumeTicks(item.positionTicks)}` : t('common.play');
   return (
     <>
       <div
@@ -91,6 +98,15 @@ function ResumeCard({ item }: { item: ResumeItem }) {
           <p className="truncate text-xs font-medium text-white">{item.name}</p>
           {item.subtitle && <p className="truncate text-[11px] text-slate-500">{item.subtitle}</p>}
           <div className="mt-1.5 flex gap-1">
+            <PlayButton
+              itemId={item.id}
+              title={item.name}
+              resumeTicks={item.positionTicks}
+              runtimeTicks={item.runtimeTicks}
+              variant="icon"
+              iconSize={13}
+              className="rounded-sm bg-accent-600/80 px-2 py-1 text-white hover:bg-accent-600"
+            />
             <a href={`/api/jellyfin/redirect?itemId=${item.id}`} target="_blank" rel="noopener noreferrer"
               className="flex-1 rounded-sm bg-accent-600/20 px-2 py-1 text-center text-[11px] text-accent-400 hover:bg-accent-600/30">
               Jellyfin
@@ -109,10 +125,14 @@ function ResumeCard({ item }: { item: ResumeItem }) {
         title={item.name}
         subtitle={item.subtitle ?? undefined}
         actions={[
+          { label: playLabel, icon: <PlayCircle size={16} />, onClick: () => setShowPlayer(true) },
           { label: t('common.openJellyfin'), icon: <Play size={16} />, onClick: () => window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank") },
           ...(item.cinemaHref ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(item.cinemaHref!) }] : []),
         ]}
       />
+      {showPlayer && (
+        <PlayerModal itemId={item.id} title={item.name} resumeAt={resumeAt} onClose={() => setShowPlayer(false)} />
+      )}
     </>
   );
 }

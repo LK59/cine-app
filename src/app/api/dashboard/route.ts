@@ -50,6 +50,8 @@ export interface ResumeItem {
   subtitle: string | null;
   type: string;
   progress: number;
+  positionTicks: number;
+  runtimeTicks: number;
   imageTag: string | null;
   cinemaHref: string | null;
 }
@@ -252,7 +254,7 @@ async function fetchResume(jfId: string): Promise<{ items: ResumeItem[] }> {
       const id = tvdb ? seriesByTvdb.get(tvdb) : undefined;
       if (id) cinemaHref = `/sonarr/${id}`;
     }
-    return { id: item.Id, name: item.Type === "Episode" && item.SeriesName ? item.SeriesName : item.Name, subtitle: item.Type === "Episode" ? `S${String(item.ParentIndexNumber ?? 1).padStart(2,"0")}E${String(item.IndexNumber ?? 1).padStart(2,"0")} · ${item.Name}` : null, type: item.Type ?? "Unknown", progress: Math.round(progress), imageTag: item.ImageTags?.Primary ?? null, cinemaHref };
+    return { id: item.Id, name: item.Type === "Episode" && item.SeriesName ? item.SeriesName : item.Name, subtitle: item.Type === "Episode" ? `S${String(item.ParentIndexNumber ?? 1).padStart(2,"0")}E${String(item.IndexNumber ?? 1).padStart(2,"0")} · ${item.Name}` : null, type: item.Type ?? "Unknown", progress: Math.round(progress), positionTicks: pos, runtimeTicks: rt, imageTag: item.ImageTags?.Primary ?? null, cinemaHref };
   });
   return { items };
 }

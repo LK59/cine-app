@@ -13,6 +13,7 @@ const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 const ActorModal = dynamic(() => import("@/components/ActorModal").then((m) => m.ActorModal), { ssr: false });
 import { Collapsible } from "@/components/Collapsible";
+import { PlayButton } from "@/components/PlayButton";
 import { haptic } from "@/lib/haptic";
 import {
   ArrowLeft,
@@ -36,6 +37,7 @@ import type { SonarrSeries, SonarrEpisode } from "@/lib/clients/sonarr";
 import type { BazarrEpisodeDetails } from "@/lib/clients/bazarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { posterUrl } from "@/lib/images";
+import { formatResumeTicks } from "@/lib/format";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
@@ -106,6 +108,11 @@ export default function SonarrSeriesDetailPage() {
     { revalidateOnFocus: false }
   );
 
+  const { data: jfEpisodesData } = useSWR<{ episodes: JellyfinItem[]; nextUp: JellyfinItem | null }>(
+    jfData?.item ? `/api/jellyfin/series/${jfData.item.Id}/episodes` : null,
+    fetcher
+  );
+
   const [qualityProfileId, setQualityProfileId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [openSeasons, setOpenSeasons] = useState<Set<number>>(new Set());
@@ -146,6 +153,39 @@ export default function SonarrSeriesDetailPage() {
     for (const list of map.values()) list.sort((a, b) => a.episodeNumber - b.episodeNumber);
     return map;
   }, [episodes]);
+
+  const jfEpisodeByKey = useMemo(() => {
+    const map = new Map<string, JellyfinItem>();
+    for (const e of jfEpisodesData?.episodes ?? []) {
+      if (e.ParentIndexNumber != null && e.IndexNumber != null) {
+        map.set(`${e.ParentIndexNumber}-${e.IndexNumber}`, e);
+      }
+    }
+    return map;
+  }, [jfEpisodesData]);
+
+  // Netflix-style series play button: resume the in-progress/next-unwatched
+  // episode Jellyfin already tracks (its own "Next Up" logic), or fall back
+  // to S1E1 when nothing has ever been played.
+  const seriesPlayTarget = useMemo(() => {
+    if (!series) return null;
+    const pick = (ep: JellyfinItem) => {
+      const resumeTicks = ep.UserData?.PlaybackPositionTicks;
+      const epLabel = `EP${ep.IndexNumber} S${ep.ParentIndexNumber}`;
+      const label =
+        resumeTicks && resumeTicks > 0
+          ? `${t('common.resume')} ${epLabel} - ${formatResumeTicks(resumeTicks)}`
+          : `${t('common.play')} ${epLabel}`;
+      return { itemId: ep.Id, title: `${series.title} · ${epLabel}`, resumeTicks, runtimeTicks: ep.RunTimeTicks, label };
+    };
+    if (jfEpisodesData?.nextUp) return pick(jfEpisodesData.nextUp);
+    const first =
+      jfEpisodeByKey.get("1-1") ??
+      [...jfEpisodeByKey.values()].sort(
+        (a, b) => (a.ParentIndexNumber! - b.ParentIndexNumber!) || (a.IndexNumber! - b.IndexNumber!)
+      )[0];
+    return first ? pick(first) : null;
+  }, [series, jfEpisodesData, jfEpisodeByKey, t]);
 
   const subtitlesByEpisode = useMemo(() => {
     const map = new Map<number, BazarrEpisodeDetails>();
@@ -365,6 +405,16 @@ export default function SonarrSeriesDetailPage() {
 
       {/* ── Action buttons ─────────────────────────────────────── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        {seriesPlayTarget && (
+          <PlayButton
+            itemId={seriesPlayTarget.itemId}
+            title={seriesPlayTarget.title}
+            resumeTicks={seriesPlayTarget.resumeTicks}
+            runtimeTicks={seriesPlayTarget.runtimeTicks}
+            label={seriesPlayTarget.label}
+            variant="primary"
+          />
+        )}
         {!isGuest && jfItem && (
           <button
             className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}
@@ -578,6 +628,7 @@ export default function SonarrSeriesDetailPage() {
                       {seasonEpisodes.map((ep) => {
                         const subs = subtitlesByEpisode.get(ep.id);
                         const download = downloadByEpisode.get(ep.id);
+                        const jfEp = jfEpisodeByKey.get(`${seasonNumber}-${ep.episodeNumber}`);
                         return (
                           <div key={ep.id} className="flex flex-col gap-1.5 p-3 text-sm">
                             <div className="flex items-center justify-between gap-3">
@@ -605,6 +656,16 @@ export default function SonarrSeriesDetailPage() {
                                 <span
                                   className={`h-1.5 w-1.5 rounded-full ${ep.hasFile ? "bg-emerald-400" : "bg-amber-400"}`}
                                 />
+                                {jfEp && (
+                                  <PlayButton
+                                    itemId={jfEp.Id}
+                                    title={`${series.title} · EP${ep.episodeNumber} S${seasonNumber}`}
+                                    resumeTicks={jfEp.UserData?.PlaybackPositionTicks}
+                                    runtimeTicks={jfEp.RunTimeTicks}
+                                    variant="icon"
+                                    iconSize={16}
+                                  />
+                                )}
                                 {!isGuest && (
                                 <button
                                   className="btn-ghost px-2 py-1"

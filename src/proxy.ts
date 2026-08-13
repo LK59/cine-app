@@ -29,6 +29,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/sonarr/series",
   "POST /api/auth/logout",
   "POST /api/jellyfin/played",
+  "POST /api/jellyfin/playback/start",
+  "POST /api/jellyfin/playback/progress",
+  "POST /api/jellyfin/playback/stop",
   "POST /api/jellyseerr/requests",
   // Watchlist is per-user: guests can manage their own list
   "POST /api/watchlist",

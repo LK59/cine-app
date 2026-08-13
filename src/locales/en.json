@@ -1,6 +1,7 @@
 {
   "auth": {
     "title": "Dashboard login",
+    "reasonPlayback": "Playback requires logging back in to Jellyfin.",
     "jellyfin": {
       "heading": "Jellyfin user",
       "username": "Jellyfin username",
@@ -98,6 +99,8 @@
     "viewGrid": "Grid view",
     "viewList": "List view",
     "trailer": "Trailer",
+    "play": "Play",
+    "resume": "Resume",
     "nfo": "NFO",
     "sortRecentlyAdded": "Recently added",
     "sortTitleAZ": "Title A–Z",

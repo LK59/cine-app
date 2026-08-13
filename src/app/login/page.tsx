@@ -22,6 +22,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showLocalForm, setShowLocalForm] = useState(false);
+  const reason = searchParams.get("reason");
 
   async function submit(endpoint: string) {
     setLoading(true);
@@ -56,6 +57,12 @@ function LoginForm() {
             <p className="text-xs text-slate-400">{t('auth.title')}</p>
           </div>
         </div>
+
+        {reason === "playback" && (
+          <p className="mb-4 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-300">
+            {t('auth.reasonPlayback')}
+          </p>
+        )}
 
         <form
           onSubmit={(e) => {

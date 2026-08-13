@@ -14,6 +14,7 @@ const MediaInfoModal = dynamic(() => import("@/components/MediaInfoModal").then(
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 const ActorModal = dynamic(() => import("@/components/ActorModal").then((m) => m.ActorModal), { ssr: false });
 const CollectionModal = dynamic(() => import("@/components/CollectionModal").then((m) => m.CollectionModal), { ssr: false });
+import { PlayButton } from "@/components/PlayButton";
 import { Collapsible } from "@/components/Collapsible";
 import { haptic } from "@/lib/haptic";
 import { useToast } from "@/components/Toast";
@@ -347,6 +348,15 @@ export default function RadarrMovieDetailPage() {
 
       {/* ── Action buttons ─────────────────────────────────────── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        {jfItem && (
+          <PlayButton
+            itemId={jfItem.Id}
+            title={movie.title}
+            resumeTicks={jfItem.UserData?.PlaybackPositionTicks}
+            runtimeTicks={jfItem.RunTimeTicks}
+            variant="primary"
+          />
+        )}
         {!isGuest && jfItem && (
           <button
             className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}

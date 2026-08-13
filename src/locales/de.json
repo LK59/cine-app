@@ -1,6 +1,7 @@
 {
   "auth": {
     "title": "Dashboard-Anmeldung",
+    "reasonPlayback": "Für die Wiedergabe musst du dich erneut bei Jellyfin anmelden.",
     "jellyfin": {
       "heading": "Jellyfin-Benutzer",
       "username": "Jellyfin-Benutzername",
@@ -98,6 +99,8 @@
     "viewGrid": "Rasteransicht",
     "viewList": "Listenansicht",
     "trailer": "Trailer",
+    "play": "Abspielen",
+    "resume": "Fortsetzen",
     "nfo": "NFO",
     "sortRecentlyAdded": "Zuletzt hinzugefügt",
     "sortTitleAZ": "Titel A–Z",

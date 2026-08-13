@@ -1,6 +1,7 @@
 {
   "auth": {
     "title": "Connexion au tableau de bord",
+    "reasonPlayback": "La lecture nécessite de se reconnecter à Jellyfin.",
     "jellyfin": {
       "heading": "Utilisateur Jellyfin",
       "username": "Utilisateur Jellyfin",
@@ -98,6 +99,8 @@
     "viewGrid": "Vue grille",
     "viewList": "Vue liste",
     "trailer": "Bande-annonce",
+    "play": "Lire",
+    "resume": "Reprendre",
     "nfo": "NFO",
     "sortRecentlyAdded": "Récemment ajouté",
     "sortTitleAZ": "Titre A–Z",

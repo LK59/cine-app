@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PlayButton } from "@/components/PlayButton";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
@@ -254,12 +255,21 @@ export default function JellyfinPage() {
                   </h3>
                   <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
                     {playback.recentMovies.map((m) => (
-                      <a
+                      <div
                         key={m.id}
+                        className="card relative w-32 shrink-0 overflow-hidden hover:ring-1 hover:ring-accent-500/40 touch-manipulation"
+                      >
+                        <PlayButton
+                          itemId={m.id}
+                          title={m.name}
+                          variant="icon"
+                          iconSize={14}
+                          className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                        />
+                      <a
                         href={`/api/jellyfin/redirect?itemId=${m.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="card w-32 shrink-0 overflow-hidden hover:ring-1 hover:ring-accent-500/40 touch-manipulation"
                       >
                         <div className="aspect-2/3 bg-slate-800">
                           {m.imageTag ? (
@@ -291,6 +301,7 @@ export default function JellyfinPage() {
                           )}
                         </div>
                       </a>
+                      </div>
                     ))}
                   </HorizontalCarousel>
                 </div>
@@ -305,12 +316,19 @@ export default function JellyfinPage() {
                   </h3>
                   <div className="card divide-y divide-white/5">
                     {playback.recentEpisodes.map((e) => (
+                      <div key={e.id} className="flex items-center gap-3 p-3 hover:bg-white/5">
+                        <PlayButton
+                          itemId={e.id}
+                          title={e.seriesName ?? e.name}
+                          variant="icon"
+                          iconSize={14}
+                          className="shrink-0 rounded-full bg-white/5 p-2 text-accent-400 hover:bg-white/10"
+                        />
                       <a
-                        key={e.id}
                         href={`/api/jellyfin/redirect?itemId=${e.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3 hover:bg-white/5"
+                        className="flex min-w-0 flex-1 items-center gap-3"
                       >
                         <div className="h-10 w-16 shrink-0 overflow-hidden rounded-sm bg-slate-800">
                           {e.imageTag ? (
@@ -344,6 +362,7 @@ export default function JellyfinPage() {
                           )}
                         </div>
                       </a>
+                      </div>
                     ))}
                   </div>
                 </div>

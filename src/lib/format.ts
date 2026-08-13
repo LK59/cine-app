@@ -1,3 +1,13 @@
+/** Formats Jellyfin ticks (100ns units) into a resume-point label (e.g. "23min05", "1h04min12") */
+export function formatResumeTicks(ticks: number): string {
+  const totalSeconds = Math.floor(ticks / 10_000_000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}min${ss}` : `${m}min${ss}`;
+}
+
 /** Formats a byte count into a human-readable string (e.g. 1.4 GB) */
 export function fmtSize(bytes: number): string {
   if (bytes <= 0) return "—";

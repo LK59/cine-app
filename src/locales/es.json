@@ -1,6 +1,7 @@
 {
   "auth": {
     "title": "Acceso al panel",
+    "reasonPlayback": "La reproducción requiere volver a iniciar sesión en Jellyfin.",
     "jellyfin": {
       "heading": "Usuario de Jellyfin",
       "username": "Usuario de Jellyfin",
@@ -98,6 +99,8 @@
     "viewGrid": "Vista cuadrícula",
     "viewList": "Vista lista",
     "trailer": "Tráiler",
+    "play": "Reproducir",
+    "resume": "Continuar",
     "nfo": "NFO",
     "sortRecentlyAdded": "Añadido recientemente",
     "sortTitleAZ": "Título A–Z",
