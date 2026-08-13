@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -22,22 +22,28 @@ function report(path: "progress" | "stop", info: PlaybackSessionInfo, positionTi
 
 // Keeps Jellyfin's "now playing" / resume state in sync with an active
 // PlayerModal session: a progress heartbeat every 10s, and a stop report
-// (with the final position) on close, unmount, or tab close.
+// (with the final position) on close, unmount, or tab close. Returns a
+// stopNow() the caller can invoke at the exact moment the user closes the
+// player — capturing currentTime right then, rather than whenever React
+// gets around to unmounting (which can lag behind a close-transition delay).
 export function usePlaybackSession(
   videoRef: RefObject<HTMLVideoElement | null>,
   session: PlaybackSessionInfo | null
-) {
+): () => void {
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  const stoppedRef = useRef(false);
 
   useEffect(() => {
     if (!session) return;
+    stoppedRef.current = false;
 
     const reportStop = () => {
-      const s = sessionRef.current;
+      if (stoppedRef.current) return;
+      stoppedRef.current = true;
       const video = videoRef.current;
-      if (!s || !video) return;
-      report("stop", s, Math.floor(video.currentTime * TICKS_PER_SECOND));
+      if (!video) return;
+      report("stop", session, Math.floor(video.currentTime * TICKS_PER_SECOND));
     };
 
     const interval = setInterval(() => {
@@ -55,4 +61,13 @@ export function usePlaybackSession(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.itemId, session?.playSessionId, session?.mediaSourceId]);
+
+  return useCallback(() => {
+    if (stoppedRef.current) return;
+    stoppedRef.current = true;
+    const s = sessionRef.current;
+    const video = videoRef.current;
+    if (!s || !video) return;
+    report("stop", s, Math.floor(video.currentTime * TICKS_PER_SECOND));
+  }, [videoRef]);
 }

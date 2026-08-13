@@ -21,7 +21,13 @@ interface PlayerControlsProps {
   onChangeSubtitle: (id: number | null) => void;
   hidden: boolean;
   loading: boolean;
+  introSkip: { start: number; end: number } | null;
+  creditsStart: number | null;
+  nextEpisode: { itemId: string; title: string } | null;
+  onAdvance: () => void;
 }
+
+const NEXT_UP_COUNTDOWN_S = 10;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -46,6 +52,10 @@ export function PlayerControls({
   onChangeSubtitle,
   hidden,
   loading,
+  introSkip,
+  creditsStart,
+  nextEpisode,
+  onAdvance,
 }: PlayerControlsProps) {
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
@@ -58,7 +68,30 @@ export function PlayerControls({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
+  const [nextUpDismissed, setNextUpDismissed] = useState(false);
+  const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset the dismiss/countdown state whenever a genuinely new "next episode"
+  // context arrives (i.e. we've actually advanced), not on every render.
+  useEffect(() => {
+    setNextUpDismissed(false);
+    setNextUpCountdown(NEXT_UP_COUNTDOWN_S);
+  }, [creditsStart, nextEpisode?.itemId]);
+
+  const showNextUp = creditsStart != null && currentTime >= creditsStart && !!nextEpisode && !nextUpDismissed;
+
+  useEffect(() => {
+    if (!showNextUp) return;
+    const id = setInterval(() => setNextUpCountdown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(id);
+  }, [showNextUp]);
+
+  useEffect(() => {
+    if (showNextUp && nextUpCountdown === 0) onAdvance();
+  }, [showNextUp, nextUpCountdown, onAdvance]);
+
+  const showSkipIntro = !!introSkip && currentTime >= introSkip.start && currentTime < introSkip.end;
 
   useEffect(() => {
     // iPhone Safari doesn't support the standard Fullscreen API on arbitrary
@@ -193,13 +226,64 @@ export function PlayerControls({
           <Loader2 size={40} className="animate-spin text-white/80" />
         </div>
       )}
+
+      {/* Skip-intro and next-up prompts stay visible even when the rest of the
+          controls have auto-hidden — they're time-sensitive, not navigation. */}
+      {showSkipIntro && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current) videoRef.current.currentTime = introSkip!.end;
+          }}
+          className="pointer-events-auto absolute rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-white/25"
+          style={{
+            bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
+            right: "max(1rem, env(safe-area-inset-right))",
+          }}
+        >
+          Passer l&rsquo;intro
+        </button>
+      )}
+
+      {showNextUp && nextEpisode && (
+        <div
+          className="pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] rounded-xl bg-slate-900/95 p-4 shadow-2xl ring-1 ring-white/10"
+          style={{
+            bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
+            right: "max(1rem, env(safe-area-inset-right))",
+          }}
+        >
+          <p className="mb-1 text-xs text-slate-400">Épisode suivant · {nextUpCountdown}s</p>
+          <p className="mb-3 truncate text-sm font-medium text-white">{nextEpisode.title}</p>
+          <div className="flex gap-2">
+            <button onClick={onAdvance} className="btn-primary flex-1 justify-center py-1.5 text-xs">
+              Lire maintenant
+            </button>
+            <button
+              onClick={() => setNextUpDismissed(true)}
+              className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className={`pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-b from-black/60 via-transparent to-black/70 transition-opacity duration-300 ${
           visible ? "opacity-100" : "opacity-0"
         }`}
       >
-        {/* Top bar */}
-        <div className="pointer-events-auto flex items-center justify-between p-4">
+        {/* Top bar — padded past the safe area so the close button isn't
+            hidden under the notch / rounded corners in landscape PWA mode. */}
+        <div
+          className="pointer-events-auto flex items-center justify-between p-4"
+          style={{
+            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingLeft: "max(1rem, env(safe-area-inset-left))",
+            paddingRight: "max(1rem, env(safe-area-inset-right))",
+          }}
+        >
           <p className="truncate pr-4 text-sm font-medium text-white">{title}</p>
           <div className="flex shrink-0 items-center gap-2">
             {subtitleTracks.length > 0 && (
@@ -249,7 +333,11 @@ export function PlayerControls({
 
         {menu && (
           <div
-            className="pointer-events-auto absolute right-4 top-16 w-56 overflow-hidden rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+            className="pointer-events-auto absolute w-56 overflow-hidden rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+            style={{
+              top: "max(4rem, calc(env(safe-area-inset-top) + 3.5rem))",
+              right: "max(1rem, env(safe-area-inset-right))",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {(menu === "audio" ? audioTracks : subtitleTracks).map((tr) => (
@@ -297,7 +385,15 @@ export function PlayerControls({
         )}
 
         {/* Bottom bar */}
-        <div className="pointer-events-auto flex flex-col gap-2 p-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="pointer-events-auto flex flex-col gap-2 p-4"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+            paddingLeft: "max(1rem, env(safe-area-inset-left))",
+            paddingRight: "max(1rem, env(safe-area-inset-right))",
+          }}
+        >
           <input
             type="range"
             min={0}

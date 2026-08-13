@@ -279,4 +279,13 @@ export const jellyfin = {
       `${url}/Shows/NextUp?SeriesId=${seriesId}&UserId=${userId}&Limit=1&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber`,
       { headers }
     ).then((res) => res.Items[0] ?? null),
+
+  // From the "Intro Skipper" plugin — not core Jellyfin API, so this 404s
+  // (or has Valid:false segments) for movies and for episodes it hasn't
+  // analyzed yet. Callers must treat failures as "no data", not an error.
+  getEpisodeTimestamps: (itemId: string) =>
+    fetchJson<{
+      Introduction?: { Start: number; End: number; Valid: boolean };
+      Credits?: { Start: number; End: number; Valid: boolean };
+    }>(`${url}/Episode/${itemId}/Timestamps`, { headers }),
 };

@@ -78,9 +78,16 @@ export async function POST(req: NextRequest) {
       }));
 
     // Best-effort: a failed "now playing" report shouldn't block playback itself.
-    await jellyfin
-      .reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id)
-      .catch(() => {});
+    // Same for intro/credits timestamps — 404s for movies and unanalyzed
+    // episodes, which just means no skip-intro / next-up prompt for this item.
+    const [, timestamps] = await Promise.all([
+      jellyfin.reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id).catch(() => {}),
+      jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
+    ]);
+
+    const introSkip =
+      timestamps?.Introduction?.Valid ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End } : null;
+    const creditsStart = timestamps?.Credits?.Valid ? timestamps.Credits.Start : null;
 
     return NextResponse.json({
       playSessionId: info.PlaySessionId,
@@ -88,6 +95,8 @@ export async function POST(req: NextRequest) {
       manifestUrl,
       subtitleTracks,
       audioTracks,
+      introSkip,
+      creditsStart,
     });
   } catch (err) {
     if (err instanceof HttpError && err.status === 401) {

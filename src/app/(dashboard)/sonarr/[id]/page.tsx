@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
@@ -163,6 +163,26 @@ export default function SonarrSeriesDetailPage() {
     }
     return map;
   }, [jfEpisodesData]);
+
+  const jfEpisodeById = useMemo(() => {
+    const map = new Map<string, JellyfinItem>();
+    for (const e of jfEpisodesData?.episodes ?? []) map.set(e.Id, e);
+    return map;
+  }, [jfEpisodesData]);
+
+  // Powers the credits-time "next up" prompt: same season, next episode
+  // number. Doesn't roll over into the next season — a reasonable first cut,
+  // the prompt just won't appear on a season finale.
+  const getNextEpisode = useCallback(
+    (currentItemId: string): { itemId: string; title: string } | null => {
+      const current = jfEpisodeById.get(currentItemId);
+      if (!current || current.IndexNumber == null || current.ParentIndexNumber == null || !series) return null;
+      const next = jfEpisodeByKey.get(`${current.ParentIndexNumber}-${current.IndexNumber + 1}`);
+      if (!next) return null;
+      return { itemId: next.Id, title: `${series.title} · EP${next.IndexNumber} S${next.ParentIndexNumber}` };
+    },
+    [jfEpisodeById, jfEpisodeByKey, series]
+  );
 
   // Netflix-style series play button: resume the in-progress/next-unwatched
   // episode Jellyfin already tracks (its own "Next Up" logic), or fall back
@@ -413,6 +433,7 @@ export default function SonarrSeriesDetailPage() {
             runtimeTicks={seriesPlayTarget.runtimeTicks}
             label={seriesPlayTarget.label}
             variant="primary"
+            getNextEpisode={getNextEpisode}
           />
         )}
         {!isGuest && jfItem && (
@@ -664,6 +685,7 @@ export default function SonarrSeriesDetailPage() {
                                     runtimeTicks={jfEp.RunTimeTicks}
                                     variant="icon"
                                     iconSize={16}
+                                    getNextEpisode={getNextEpisode}
                                   />
                                 )}
                                 {!isGuest && (

@@ -11,6 +11,10 @@ interface PlayerModalProps {
   onClose: () => void;
   /** Resume position in seconds, if reopening a partially-watched item. */
   resumeAt?: number;
+  /** Next episode in the series, if known — enables the credits-time "next up" prompt. */
+  nextEpisode?: { itemId: string; title: string } | null;
+  /** Swaps to the next episode in place (no close/reopen transition). */
+  onAdvance?: (next: { itemId: string; title: string }) => void;
 }
 
 // Rough client viewport → max transcode bitrate mapping, sent once at playback
@@ -23,7 +27,14 @@ function pickMaxBitrate(): number {
   return 15_000_000;
 }
 
-export function PlayerModal({ itemId, title, onClose, resumeAt: initialResumeAt }: PlayerModalProps) {
+export function PlayerModal({
+  itemId,
+  title,
+  onClose,
+  resumeAt: initialResumeAt,
+  nextEpisode,
+  onAdvance,
+}: PlayerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<import("hls.js").default | null>(null);
@@ -32,15 +43,6 @@ export function PlayerModal({ itemId, title, onClose, resumeAt: initialResumeAt 
   const [needsReauth, setNeedsReauth] = useState(false);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
-
-  // Fades out instead of vanishing instantly — an abrupt unmount back to the
-  // underlying page reads as a glitch, especially mid-transcode.
-  const CLOSE_MS = 200;
-  const handleClose = useCallback(() => {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    setClosing(true);
-    setTimeout(onClose, CLOSE_MS);
-  }, [onClose]);
   const [session, setSession] = useState<{
     itemId: string;
     playSessionId: string;
@@ -51,8 +53,32 @@ export function PlayerModal({ itemId, title, onClose, resumeAt: initialResumeAt 
   const [currentAudioId, setCurrentAudioId] = useState<number | null>(null);
   const [subtitleTracks, setSubtitleTracks] = useState<Track[]>([]);
   const [currentSubtitleId, setCurrentSubtitleId] = useState<number | null>(null);
+  const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
+  const [creditsStart, setCreditsStart] = useState<number | null>(null);
 
-  usePlaybackSession(videoRef, session);
+  const stopPlaybackNow = usePlaybackSession(videoRef, session);
+
+  // Swaps to the next episode in place — reports the current one's final
+  // position first, same as a manual close, but never triggers the
+  // close/unmount fade since the modal stays open for the new episode.
+  const handleAdvance = useCallback(() => {
+    if (!nextEpisode || !onAdvance) return;
+    stopPlaybackNow();
+    onAdvance(nextEpisode);
+  }, [nextEpisode, onAdvance, stopPlaybackNow]);
+
+  // Fades out instead of vanishing instantly — an abrupt unmount back to the
+  // underlying page reads as a glitch, especially mid-transcode. Reports the
+  // stop position right now (not whenever React gets around to unmounting)
+  // so Jellyfin's resume point reflects the exact moment the user closed,
+  // not wherever currentTime drifts to during the fade delay.
+  const CLOSE_MS = 200;
+  const handleClose = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    stopPlaybackNow();
+    setClosing(true);
+    setTimeout(onClose, CLOSE_MS);
+  }, [onClose, stopPlaybackNow]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -118,6 +144,8 @@ export function PlayerModal({ itemId, title, onClose, resumeAt: initialResumeAt 
       // once the manifest actually loads.
       setSubtitleTracks([]);
       setCurrentSubtitleId(null);
+      setIntroSkip(data.introSkip ?? null);
+      setCreditsStart(data.creditsStart ?? null);
 
       const resumeAt = opts?.resumeAt;
       video.addEventListener(
@@ -250,6 +278,10 @@ export function PlayerModal({ itemId, title, onClose, resumeAt: initialResumeAt 
         onChangeSubtitle={changeSubtitle}
         hidden={!!error || needsReauth}
         loading={loading}
+        introSkip={introSkip}
+        creditsStart={creditsStart}
+        nextEpisode={nextEpisode ?? null}
+        onAdvance={handleAdvance}
       />
     </div>,
     document.body

@@ -23,6 +23,9 @@ interface PlayButtonProps {
   /** Overrides the default Lire/Reprendre text — for the series-level button,
    *  which needs episode context, e.g. "Reprendre EP3 S2 - 23min05". */
   label?: string;
+  /** For series: resolves the episode after the given itemId, if any — powers
+   *  the credits-time "next up" prompt and its in-place auto-advance. */
+  getNextEpisode?: (currentItemId: string) => { itemId: string; title: string } | null;
 }
 
 // Single source of truth for the Lire/Reprendre label + resume behavior, used
@@ -37,13 +40,16 @@ export function PlayButton({
   iconSize = 14,
   variant = "pill",
   label: labelOverride,
+  getNextEpisode,
 }: PlayButtonProps) {
-  const [open, setOpen] = useState(false);
+  // The item currently open in the player — starts null (closed), and can be
+  // swapped to a different item in place when the player auto-advances.
+  const [playing, setPlaying] = useState<{ itemId: string; title: string; resumeAt?: number } | null>(null);
   const t = useT();
 
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const label = labelOverride ?? (hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play'));
-  const resumeAt = hasResume ? resumeTicks! / 10_000_000 : undefined;
+  const initialResumeAt = hasResume ? resumeTicks! / 10_000_000 : undefined;
   const progressPct =
     hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
 
@@ -60,7 +66,7 @@ export function PlayButton({
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
-          setOpen(true);
+          setPlaying({ itemId, title, resumeAt: initialResumeAt });
         }}
         className={className ?? defaultClass}
         title={label}
@@ -73,7 +79,16 @@ export function PlayButton({
           {variant !== "icon" && label}
         </span>
       </button>
-      {open && <PlayerModal itemId={itemId} title={title} resumeAt={resumeAt} onClose={() => setOpen(false)} />}
+      {playing && (
+        <PlayerModal
+          itemId={playing.itemId}
+          title={playing.title}
+          resumeAt={playing.resumeAt}
+          nextEpisode={getNextEpisode?.(playing.itemId) ?? null}
+          onAdvance={(next) => setPlaying({ itemId: next.itemId, title: next.title })}
+          onClose={() => setPlaying(null)}
+        />
+      )}
     </>
   );
 }
