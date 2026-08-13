@@ -162,6 +162,27 @@ export function PlayerControls({
     }
   }, [playing, menu]);
 
+  function hideControls() {
+    setVisible(false);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+  }
+
+  // Tap toggles explicitly (show <-> hide) again, without reintroducing the
+  // Android bug: that bug was touch firing a synthetic mousemove right before
+  // click, which forced visible=true a split second before the toggle read
+  // it — so every tap net-cancelled itself. Fix is to stop treating touch
+  // pointer movement as "show" at all (see onPointerMove below); once that
+  // synthetic move no longer touches `visible`, click can safely toggle from
+  // whatever the real current state is, for both mouse and touch.
+  function toggleControls() {
+    if (menu !== null) {
+      setMenu(null);
+      return;
+    }
+    if (visible) hideControls();
+    else showControls();
+  }
+
   useEffect(() => {
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -219,17 +240,13 @@ export function PlayerControls({
   return (
     <div
       className="absolute inset-0 z-10"
-      onClick={() => {
-        // Always show rather than toggle: touch browsers (confirmed on
-        // Android Chrome) fire a synthetic mousemove right before the click
-        // on tap — mousemove sets visible=true, then a toggling click would
-        // immediately flip it back to false, so every tap net-cancels itself
-        // and the controls never come back. A menu open still just absorbs
-        // the outside tap to close it.
-        if (menu !== null) setMenu(null);
-        showControls();
+      onClick={toggleControls}
+      onPointerMove={(e) => {
+        // Only real mouse hover implies "show" — a touch pointer fires a
+        // synthetic move right before its click, which would otherwise force
+        // visible=true a split second before the click's toggle reads it.
+        if (e.pointerType === "mouse") showControls();
       }}
-      onMouseMove={showControls}
     >
       {/* Always visible regardless of the auto-hide controls fade below —
           otherwise a rebuffer that happens while controls are hidden looks
