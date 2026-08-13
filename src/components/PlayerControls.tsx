@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2 } from "lucide-react";
 
 export interface Track {
@@ -148,20 +148,29 @@ export function PlayerControls({
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, [containerRef]);
 
-  // Controls auto-hide 3s after appearing, but only while actually playing and
-  // no track menu is open — paused/menu-open states always keep them visible.
-  useEffect(() => {
+  // Shows the controls and (re)starts the 3s auto-hide — called directly from
+  // interaction handlers rather than left to a visible-state-diffing effect,
+  // since repeated taps while already visible wouldn't otherwise change
+  // `visible` and so wouldn't reset the hide timer (only playing/menu changes
+  // would). Only auto-hides while actually playing with no menu open —
+  // paused/menu-open states stay visible indefinitely.
+  const showControls = useCallback(() => {
+    setVisible(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (visible && playing && menu === null) {
+    if (playing && menu === null) {
       hideTimer.current = setTimeout(() => setVisible(false), 3000);
     }
+  }, [playing, menu]);
+
+  useEffect(() => {
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [visible, playing, menu]);
+  }, []);
 
   useEffect(() => {
-    if (!playing) setVisible(true);
+    if (!playing) showControls();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
   function togglePlay() {
@@ -211,12 +220,16 @@ export function PlayerControls({
     <div
       className="absolute inset-0 z-10"
       onClick={() => {
-        // A menu open absorbs the first outside tap (just closes it) instead
-        // of also toggling the whole controls overlay in the same click.
+        // Always show rather than toggle: touch browsers (confirmed on
+        // Android Chrome) fire a synthetic mousemove right before the click
+        // on tap — mousemove sets visible=true, then a toggling click would
+        // immediately flip it back to false, so every tap net-cancels itself
+        // and the controls never come back. A menu open still just absorbs
+        // the outside tap to close it.
         if (menu !== null) setMenu(null);
-        else setVisible((v) => !v);
+        showControls();
       }}
-      onMouseMove={() => setVisible(true)}
+      onMouseMove={showControls}
     >
       {/* Always visible regardless of the auto-hide controls fade below —
           otherwise a rebuffer that happens while controls are hidden looks
