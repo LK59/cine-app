@@ -41,14 +41,23 @@ interface ExternalSubtitleTrack {
   isDefault: boolean;
 }
 
-// Rough client viewport → max transcode bitrate mapping, sent once at playback
-// start so Jellyfin doesn't burn GPU time encoding 4K for a 1080p viewport.
+// This is sent as Jellyfin's MaxStreamingBitrate, which gates BOTH the "is this source's own
+// bitrate low enough to DirectPlay/DirectStream" check AND the fallback transcode's output
+// target. The previous tiers (4/8/15 Mbps by viewport) were sized for the old always-transcode
+// model, where a lower cap kept re-encode load down — but a real remux Blu-ray FHD HEVC file
+// routinely runs 15-25+ Mbps, well above the old 8 Mbps FHD tier. With that cap in place,
+// Jellyfin rejected DirectStream (container/audio-only remux, no video re-encode) purely on
+// bitrate and fell back to a bitrate-constrained HEVC re-encode instead — much heavier, and the
+// likely cause of a "La lecture a été interrompue" hls.js failure observed on a real FHD file.
+// Raised well above any realistic home-media bitrate so codec/container compatibility (not an
+// arbitrary bandwidth guess) is what actually decides DirectPlay/DirectStream vs Transcode; a
+// genuine Transcode still targets a bounded output via Jellyfin's own encoding defaults.
 // No mid-playback renegotiation for resolution (accepted tradeoff — see plan).
 function pickMaxBitrate(): number {
   const w = window.innerWidth * (window.devicePixelRatio || 1);
-  if (w <= 1280) return 4_000_000;
-  if (w <= 1920) return 8_000_000;
-  return 15_000_000;
+  if (w <= 1280) return 20_000_000;
+  if (w <= 1920) return 40_000_000;
+  return 100_000_000;
 }
 
 // The single, always-mounted playback engine for the whole app (mounted once in the

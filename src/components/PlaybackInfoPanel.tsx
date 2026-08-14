@@ -59,7 +59,10 @@ export function PlaybackInfoPanel({ info, open, onClose }: Props) {
 
   return (
     <div
-      className="pointer-events-auto absolute w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+      // z-20: above PlayerControls' full-screen click-catching overlay (z-10, transparent,
+      // captures pointer events to auto-hide/show controls) — without this the panel paints
+      // visually on top but pointer events (close button, scroll) never actually reach it.
+      className="pointer-events-auto absolute z-20 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
       style={{
         top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
         left: "max(1rem, env(safe-area-inset-left))",
