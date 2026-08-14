@@ -60,6 +60,7 @@ export async function GET(
     // send the browser the full rewritten text back with a plain 200, which is a perfectly valid
     // response to a Range request under HTTP (the client falls back to using the whole body).
     const range = isManifest ? null : req.headers.get("range");
+    const incomingRange = req.headers.get("range");
     const res = await fetchWithRetry(
       target,
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
@@ -68,7 +69,10 @@ export async function GET(
       { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
       AbortSignal.any([req.signal, AbortSignal.timeout(30_000)])
     );
-    if (!res.ok || !res.body) return new NextResponse(null, { status: res.status || 502 });
+    if (!res.ok || !res.body) {
+      console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "NOT OK", restPath, JSON.stringify({ incomingRange, upstreamStatus: res.status }));
+      return new NextResponse(null, { status: res.status || 502 });
+    }
 
     const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
 
@@ -82,10 +86,14 @@ export async function GET(
         new RegExp(`(?:https?:\\/\\/[^/\\s"]+)?\\/videos\\/${itemId}\\/`, "gi"),
         `/api/jellyfin/stream/${itemId}/`
       );
+      console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "manifest", restPath, JSON.stringify({
+        incomingRange, upstreamStatus: res.status, upstreamLen: text.length, sentLen: rewritten.length,
+      }));
       return new NextResponse(rewritten, {
         headers: { "Content-Type": contentType, "Cache-Control": "no-store" },
       });
     }
+    console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "ok", restPath, JSON.stringify({ incomingRange, upstreamStatus: res.status, isStatic }));
 
     if (isStatic) {
       // DirectPlay/DirectStream: a single big Range-seekable file, not an immutable HLS
