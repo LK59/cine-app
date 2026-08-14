@@ -98,6 +98,18 @@ function ActivePlayer({
   // element itself is ever swapped.
   const lastKnownTime = useRef(0);
   const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Belt-and-braces for the native (non-hls.js) path: iOS's media daemon releases HLS sessions
+  // asynchronously, so even with the reload-based track switch a fresh load can race the old
+  // session's teardown and get refused (SRC_NOT_SUPPORTED). One automatic, delayed re-attempt
+  // absorbs that race invisibly; only a second consecutive failure surfaces the error UI.
+  // Reset on every successful load ('loadeddata'), NOT at the top of startPlayback — the retry
+  // itself goes through startPlayback, which would otherwise clear its own budget.
+  const nativeErrorRetryCount = useRef(0);
+  const nativeErrorRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The opts of the most recent startPlayback call, so an automatic retry replays the SAME
+  // request (audio track included) — state like currentAudioId would be stale inside the
+  // error listener's closure.
+  const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number } | undefined>(undefined);
   // Temporary on-screen diagnostic (no Mac/Safari Web Inspector available for live debugging) —
   // mirrors every native <video> lifecycle event with a timestamp directly into the page, so it
   // can be read/screenshotted straight off the phone instead of inferred from server-side logs,
@@ -200,6 +212,7 @@ function ActivePlayer({
       if (!video) return;
 
       logDebug(`startPlayback audioStreamIndex=${opts?.audioStreamIndex ?? "default"} resumeAt=${opts?.resumeAt ?? 0} prevSrc=${video.src ? "yes" : "none"}`);
+      lastPlaybackOpts.current = opts;
 
       // Re-tested in isolation (see videoKey's own comment above) — WebKit only, since hls.js
       // (Firefox, Chrome/Edge desktop & Android) already handles reusing the element correctly
@@ -315,6 +328,7 @@ function ActivePlayer({
         () => {
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
+          nativeErrorRetryCount.current = 0;
           if (resumeAt) video.currentTime = resumeAt;
           // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
           // heartbeat firing in the gap right after a resume would still report the pre-seek 0.
@@ -471,6 +485,14 @@ function ActivePlayer({
           // Storage unavailable (private browsing, quota) — falls through to the in-place
           // switch below, which will still surface the usual error+retry UI if it fails.
         }
+        // Tear the current media session down BEFORE reloading, not merely as a side effect of
+        // the page dying: iOS's media daemon (mediaserverd) releases HLS sessions asynchronously
+        // and independently of the page lifecycle, so a reload issued while the old stream is
+        // still actively playing can bring the new page up before the old session is gone.
+        // Starting teardown explicitly here buys that release as much head start as possible.
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
         window.location.reload();
         return;
       }
@@ -512,6 +534,8 @@ function ActivePlayer({
       networkRetryTimer.current = null;
       if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
       loadWatchdog.current = null;
+      if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
+      nativeErrorRetryTimer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPlayback]);
@@ -589,6 +613,21 @@ function ActivePlayer({
       const code = video!.error?.code;
       logDebug(`event error code=${code ?? "?"} message=${video!.error?.message ?? ""} readyState=${video!.readyState} networkState=${video!.networkState}`);
       if (code === MediaError.MEDIA_ERR_ABORTED) return;
+      // One silent, delayed re-attempt before surfacing the error UI (see nativeErrorRetryCount's
+      // comment): a load that races the media daemon's asynchronous release of the previous HLS
+      // session gets refused instantly, but the same request replayed a moment later succeeds.
+      // Replays the exact same opts (audio track, resume position) via lastPlaybackOpts.
+      if (nativeErrorRetryCount.current < 2) {
+        nativeErrorRetryCount.current += 1;
+        const delay = 1500 * nativeErrorRetryCount.current;
+        logDebug(`auto-retry ${nativeErrorRetryCount.current}/2 in ${delay}ms`);
+        setReconnecting(true);
+        if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
+        nativeErrorRetryTimer.current = setTimeout(() => {
+          startPlayback({ ...lastPlaybackOpts.current, resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt });
+        }, delay);
+        return;
+      }
       setReconnecting(false);
       setLoading(false);
       // Temporary diagnostic detail appended to the message (kept user-readable) — this failure
@@ -608,6 +647,7 @@ function ActivePlayer({
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logDebug, videoKey]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
