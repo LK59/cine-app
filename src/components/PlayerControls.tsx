@@ -141,6 +141,11 @@ export function PlayerControls({
     };
     const onWaiting = () => setBuffering(true);
     const onPlaying = () => setBuffering(false);
+    // 'canplay' also clears buffering: when autoplay is blocked (iOS after the reload-based
+    // track switch — no user activation on the fresh page), 'playing' never fires without a
+    // tap, and a spinner that only 'playing' can dismiss would sit over a ready, paused video
+    // forever. canplay is the "enough data to play" signal, which is exactly what buffering
+    // is meant to track.
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("timeupdate", onTime);
@@ -149,6 +154,7 @@ export function PlayerControls({
     video.addEventListener("volumechange", onVolume);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("canplay", onPlaying);
     // Safari-only API — feature-detected, not part of the standard HTMLVideoElement type.
     setAirPlaySupported(
       typeof (video as unknown as { webkitShowPlaybackTargetPicker?: unknown })
@@ -159,6 +165,7 @@ export function PlayerControls({
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("canplay", onPlaying);
       video.removeEventListener("timeupdate", onTime);
       video.removeEventListener("loadedmetadata", onDuration);
       video.removeEventListener("durationchange", onDuration);

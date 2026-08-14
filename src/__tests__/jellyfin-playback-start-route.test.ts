@@ -173,6 +173,28 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode");
   });
 
+  it("excludes disableAudioCodecs from the negotiated DeviceProfile even when the browser claims support", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=hevc", MediaStreams: [] }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    await POST(
+      fakeReq({
+        itemId: validId,
+        // The browser claims eac3 support (canPlayType overreports — the real-world case being
+        // an iPhone whose native HLS pipeline rejects ec-3 despite a truthy canPlayType), and
+        // the client's fallback ladder asks for it to be excluded after a failed attempt.
+        codecSupport: { video: { "mp4/hevc": true }, audio: { aac: true, eac3: true } },
+        disableAudioCodecs: ["eac3"],
+      })
+    );
+    const profile = mockJellyfin.getPlaybackInfo.mock.calls[0][3].deviceProfile;
+    expect(profile.TranscodingProfiles[0].AudioCodec).toBe("aac");
+    expect(profile.DirectPlayProfiles[0].AudioCodec).toBe("aac");
+  });
+
   it("labels playMethod DirectStream when the source's own video codec IS in the accepted VideoCodec list — a real copy, no re-encode", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({

@@ -69,13 +69,28 @@ export async function POST(req: NextRequest) {
   const subtitleStreamIndex = body?.subtitleStreamIndex as number | undefined;
   const startTicks = body?.startTicks as number | undefined;
   const codecSupport = (body?.codecSupport as CodecSupport | undefined) ?? { video: {}, audio: {} };
+  // Client-driven audio-codec exclusions, on top of the browser's own claimed support: real
+  // playback attempts are the only trustworthy probe of what a device actually decodes (its
+  // canPlayType can overreport — verified live with an iPhone claiming E-AC-3 support whose
+  // native HLS pipeline then rejects any ec-3 stream). The client's fallback ladder retries a
+  // failed load with codecs disabled here, which makes Jellyfin negotiate a genuine server-side
+  // audio transcode to a codec the device has actually proven it can play.
+  const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
+    ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
+    : [];
 
   if (!itemId || !JELLYFIN_ID_RE.test(itemId)) {
     return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   }
 
   try {
-    const deviceProfile = buildDeviceProfile(codecSupport, maxBitrate);
+    const effectiveSupport: CodecSupport = {
+      video: codecSupport.video,
+      audio: Object.fromEntries(
+        Object.entries(codecSupport.audio ?? {}).map(([codec, ok]) => [codec, disableAudioCodecs.includes(codec) ? false : ok])
+      ),
+    };
+    const deviceProfile = buildDeviceProfile(effectiveSupport, maxBitrate);
     const info = await jellyfin.getPlaybackInfo(session.jfId, itemId, session.jfToken, {
       maxBitrate,
       mediaSourceId: itemId,

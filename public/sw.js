@@ -1,4 +1,6 @@
-const CACHE_NAME = "cine-app-v5";
+// v6: flushes every already-installed client's cached assets after the player's
+// codec-negotiation overhaul, so no session keeps running the pre-fallback-ladder player code.
+const CACHE_NAME = "cine-app-v6";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {

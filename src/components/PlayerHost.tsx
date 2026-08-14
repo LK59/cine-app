@@ -54,6 +54,44 @@ interface ExternalSubtitleTrack {
 // genuine Transcode still targets a bounded output via Jellyfin's own encoding defaults.
 // No mid-playback renegotiation for resolution (accepted tradeoff — see plan).
 const MAX_NETWORK_RETRIES = 6;
+
+// ── Audio-codec fallback ladder (native HLS path) ────────────────────────────────────────────
+// Ground truth from live testing: a device's own canPlayType() can overreport what its native
+// HLS pipeline really accepts — the concrete case being an iPhone whose canPlayType claims
+// E-AC-3 support while its HLS master-playlist variant filter rejects any CODECS="…,ec-3"
+// stream outright (MediaError 4, instantly, with byte-identical playlists to a working AC-3
+// negotiation — every other explanation was tested and eliminated one by one). Since claimed
+// support can't be trusted, actual playback is the only reliable probe: on a fatal native
+// error, retry the same request with a progressively reduced audio codec set, which makes
+// Jellyfin fall back to a genuine server-side audio transcode. The final rung (AAC only) is
+// always transcodable and universally decodable, so the ladder can't strand the user.
+// A codec disabled on the rung that finally SUCCEEDS is persisted per-browser (localStorage)
+// so every future load on this device excludes it up front — one failed attempt total, ever,
+// instead of a failure dance on every playback.
+const AUDIO_FALLBACK_RUNGS: string[][] = [
+  [], // replay the identical request first — absorbs transient teardown races, learns nothing
+  ["eac3", "flac", "opus"], // keep aac+ac3, the two most reliably decoded codecs on Apple hw
+  ["eac3", "flac", "opus", "ac3"], // AAC only — forces a clean server transcode, always works
+];
+
+const AUDIO_BLOCKLIST_KEY = "cine:audio-codec-blocklist:v1";
+
+function readAudioBlocklist(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(AUDIO_BLOCKLIST_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistAudioBlocklist(codecs: string[]): void {
+  try {
+    localStorage.setItem(AUDIO_BLOCKLIST_KEY, JSON.stringify([...new Set(codecs)]));
+  } catch {
+    // Storage unavailable — the ladder just re-learns next session.
+  }
+}
 const MAX_MEDIA_RETRIES = 3;
 
 function pickMaxBitrate(): number {
@@ -109,7 +147,7 @@ function ActivePlayer({
   // The opts of the most recent startPlayback call, so an automatic retry replays the SAME
   // request (audio track included) — state like currentAudioId would be stale inside the
   // error listener's closure.
-  const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number } | undefined>(undefined);
+  const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[] } | undefined>(undefined);
   // Temporary on-screen diagnostic (no Mac/Safari Web Inspector available for live debugging) —
   // mirrors every native <video> lifecycle event with a timestamp directly into the page, so it
   // can be read/screenshotted straight off the phone instead of inferred from server-side logs,
@@ -207,11 +245,19 @@ function ActivePlayer({
   // Jellyfin to start the new stream at the right offset, we seek the video
   // to resumeAt ourselves once the new manifest's metadata is ready.
   const startPlayback = useCallback(
-    async (opts?: { audioStreamIndex?: number; resumeAt?: number }) => {
+    async (opts?: { audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[] }) => {
       let video = videoRef.current;
       if (!video) return;
 
-      logDebug(`startPlayback audioStreamIndex=${opts?.audioStreamIndex ?? "default"} resumeAt=${opts?.resumeAt ?? 0} prevSrc=${video.src ? "yes" : "none"}`);
+      // Per-browser learned exclusions (see AUDIO_FALLBACK_RUNGS) merged with this call's own —
+      // so a codec this device already proved it can't play is excluded from the very first
+      // negotiation, not rediscovered through a failure on every playback.
+      const disableAudioCodecs = [...new Set([...readAudioBlocklist(), ...(opts?.disableAudioCodecs ?? [])])];
+
+      logDebug(
+        `startPlayback audioStreamIndex=${opts?.audioStreamIndex ?? "default"} resumeAt=${opts?.resumeAt ?? 0} prevSrc=${video.src ? "yes" : "none"}` +
+          (disableAudioCodecs.length ? ` disableAudio=${disableAudioCodecs.join(",")}` : "")
+      );
       lastPlaybackOpts.current = opts;
 
       // Re-tested in isolation (see videoKey's own comment above) — WebKit only, since hls.js
@@ -236,39 +282,10 @@ function ActivePlayer({
       setReconnecting(false);
       setLoading(true);
 
-      // Root cause found live: on Safari (desktop + iOS PWA), reassigning `video.src` straight
-      // to a brand new manifest while the element still has an old native-HLS source attached
-      // (e.g. switching audio track mid-playback) throws an immediate native "error" event —
-      // verified against real Jellyfin logs during a live test: the server-side ffmpeg remux job
-      // for the new audio track launched and ran cleanly every time (no server error at all),
-      // it was only ever torn down a few seconds later by our own client after Safari had
-      // already failed. Firefox/hls.js never hit this because hls.js already tears its own
-      // MediaSource down internally before attaching a new one.
-      //
-      // A first attempt (synchronous pause + removeAttribute + load) wasn't enough — verified
-      // the *manifest itself* is fine (fetched it directly for both audio tracks via Jellyfin's
-      // API: well-formed, identical shape to an initial load that already works), so the
-      // remaining flakiness is really about timing: WebKit's AVPlayer-backed pipeline doesn't
-      // finish tearing down synchronously within the same tick. Now actually waits for the
-      // "emptied" event (with a bounded fallback delay, since "emptied" isn't guaranteed to fire
-      // in every engine/version) before the new source is assigned, giving WebKit a real turn of
-      // the event loop to finish flushing the old session first.
-      if (video.src) {
-        video.pause();
-        await new Promise<void>((resolve) => {
-          let settled = false;
-          const finish = () => {
-            if (settled) return;
-            settled = true;
-            video.removeEventListener("emptied", finish);
-            resolve();
-          };
-          video.addEventListener("emptied", finish, { once: true });
-          video.removeAttribute("src");
-          video.load();
-          setTimeout(finish, 300);
-        });
-      }
+      // (An earlier revision also waited for the "emptied" event here before reassigning src —
+      // removed: it was built on a disproven teardown-timing theory and only added up to 300ms
+      // of dead latency to every hls.js track switch. WebKit gets a fresh element via the
+      // remount above; hls.js manages its own MediaSource and needs nothing.)
 
       const codecSupport = await detectCodecSupport();
 
@@ -281,6 +298,7 @@ function ActivePlayer({
           audioStreamIndex: opts?.audioStreamIndex,
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
           codecSupport,
+          disableAudioCodecs,
         }),
       });
       if (res.status === 401) {
@@ -329,6 +347,13 @@ function ActivePlayer({
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
           nativeErrorRetryCount.current = 0;
+          // A successful load with codecs disabled beyond what the blocklist already held means
+          // the fallback ladder just identified the culprit(s) — persist so every future load on
+          // this browser excludes them from the first negotiation (see AUDIO_FALLBACK_RUNGS).
+          if (opts?.disableAudioCodecs?.length) {
+            persistAudioBlocklist([...readAudioBlocklist(), ...opts.disableAudioCodecs]);
+            logDebug(`audio blocklist learned: ${opts.disableAudioCodecs.join(",")}`);
+          }
           if (resumeAt) video.currentTime = resumeAt;
           // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
           // heartbeat firing in the gap right after a resume would still report the pre-seek 0.
@@ -364,13 +389,31 @@ function ActivePlayer({
       setSubtitleTracks(tracks.map((t) => ({ id: t.index, label: t.label })));
       setCurrentSubtitleId(null);
 
+      // A play() rejected with NotAllowedError is iOS's autoplay policy, not a media failure:
+      // the reload-based WebKit track switch lands on a fresh page that has no user activation
+      // (the tap that picked the language happened on the PREVIOUS page), so programmatic
+      // playback is denied even though the stream itself loaded fine. Leave the player in a
+      // clean paused state — one tap on the play button resumes with the new track — instead of
+      // letting the load/buffering spinner sit forever waiting for a 'playing' event that can't
+      // come without a gesture.
+      const playAllowingGesture = () => {
+        video.play().catch((e: unknown) => {
+          if (e instanceof DOMException && e.name === "NotAllowedError") {
+            logDebug("play() blocked by autoplay policy — paused UI shown, one tap resumes");
+            setLoading(false);
+            return;
+          }
+          logDebug(`play() rejected: ${e}`);
+        });
+      };
+
       // DirectPlay/DirectStream: a plain Range-seekable file, not an HLS manifest — no hls.js,
       // no native-HLS branch below, just a regular <video src>.
       if (data.isDirectPlay) {
         logDebug(`branch=DirectPlay src=${data.manifestUrl}`);
         video.src = data.manifestUrl;
         video.load();
-        video.play().catch((e) => logDebug(`play() rejected: ${e}`));
+        playAllowingGesture();
         return;
       }
 
@@ -384,7 +427,7 @@ function ActivePlayer({
         // audio track) — force a clean reload so it actually picks up the
         // new manifest instead of silently continuing the old one.
         video.load();
-        video.play().catch((e) => logDebug(`play() rejected: ${e}`));
+        playAllowingGesture();
         return;
       }
 
@@ -461,6 +504,14 @@ function ActivePlayer({
     },
     [itemId, logDebug]
   );
+
+  // Always-fresh reference for the error listener's retry timer — that effect's deps are
+  // deliberately frozen (it re-binds only on element remount), so calling startPlayback through
+  // its closure directly would replay a stale itemId after an episode advance.
+  const startPlaybackRef = useRef(startPlayback);
+  useEffect(() => {
+    startPlaybackRef.current = startPlayback;
+  }, [startPlayback]);
 
   const changeAudio = useCallback(
     (id: number) => {
@@ -613,18 +664,27 @@ function ActivePlayer({
       const code = video!.error?.code;
       logDebug(`event error code=${code ?? "?"} message=${video!.error?.message ?? ""} readyState=${video!.readyState} networkState=${video!.networkState}`);
       if (code === MediaError.MEDIA_ERR_ABORTED) return;
-      // One silent, delayed re-attempt before surfacing the error UI (see nativeErrorRetryCount's
-      // comment): a load that races the media daemon's asynchronous release of the previous HLS
-      // session gets refused instantly, but the same request replayed a moment later succeeds.
-      // Replays the exact same opts (audio track, resume position) via lastPlaybackOpts.
-      if (nativeErrorRetryCount.current < 2) {
+      // Walks AUDIO_FALLBACK_RUNGS (see its comment for the why): rung 0 replays the identical
+      // request (absorbs transient teardown races and learns nothing), each further rung
+      // disables more audio codecs until the AAC-only rung guarantees a clean server-side audio
+      // transcode. The rung whose exclusions finally make the load succeed gets persisted by the
+      // 'loadeddata' handler, so future loads on this browser skip the failure dance entirely.
+      if (nativeErrorRetryCount.current < AUDIO_FALLBACK_RUNGS.length) {
+        const rung = AUDIO_FALLBACK_RUNGS[nativeErrorRetryCount.current];
         nativeErrorRetryCount.current += 1;
-        const delay = 1500 * nativeErrorRetryCount.current;
-        logDebug(`auto-retry ${nativeErrorRetryCount.current}/2 in ${delay}ms`);
+        const delay = 1200 * nativeErrorRetryCount.current;
+        logDebug(
+          `auto-retry ${nativeErrorRetryCount.current}/${AUDIO_FALLBACK_RUNGS.length} in ${delay}ms` +
+            (rung.length ? ` disabling=${rung.join(",")}` : " (identical replay)")
+        );
         setReconnecting(true);
         if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
         nativeErrorRetryTimer.current = setTimeout(() => {
-          startPlayback({ ...lastPlaybackOpts.current, resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt });
+          startPlaybackRef.current({
+            ...lastPlaybackOpts.current,
+            resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+            disableAudioCodecs: [...new Set([...(lastPlaybackOpts.current?.disableAudioCodecs ?? []), ...rung])],
+          });
         }, delay);
         return;
       }
@@ -647,7 +707,6 @@ function ActivePlayer({
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logDebug, videoKey]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
