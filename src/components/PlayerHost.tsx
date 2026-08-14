@@ -6,7 +6,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
-import { usePlayback } from "@/components/PlaybackProvider";
+import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { detectCodecSupport } from "@/lib/codecSupport";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
@@ -84,7 +84,7 @@ function ActivePlayer({
   mode: "full" | "mini";
 }) {
   const playback = usePlayback();
-  const { itemId, title, resumeAt: initialResumeAt } = session;
+  const { itemId, title, resumeAt: initialResumeAt, initialAudioStreamIndex } = session;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -450,10 +450,33 @@ function ActivePlayer({
 
   const changeAudio = useCallback(
     (id: number) => {
-      const resumeAt = videoRef.current?.currentTime ?? 0;
+      const video = videoRef.current;
+      const resumeAt = video?.currentTime ?? 0;
+      // WebKit only: switching audio in-place reliably fails there with MediaError
+      // SRC_NOT_SUPPORTED — a genuine, reproducible WebKit limitation on loading a second HLS
+      // session within the same page. Verified this isn't about DOM element reuse (fails
+      // identically with a freshly created <video> element), our own HTTP/manifest handling
+      // (verified byte-correct both directly against Jellyfin and through our own proxy), or
+      // ffmpeg startup timing (fails just as fast for a plain remux as a real transcode) — every
+      // other angle has been tested and ruled out. A full page reload sidesteps it entirely: the
+      // new track then loads as the page's first-ever HLS session, which has never once failed
+      // across every test. Persists just enough to resume exactly where playback left off.
+      if (video?.canPlayType("application/vnd.apple.mpegurl")) {
+        try {
+          sessionStorage.setItem(
+            PLAYER_RELOAD_INTENT_KEY,
+            JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt })
+          );
+        } catch {
+          // Storage unavailable (private browsing, quota) — falls through to the in-place
+          // switch below, which will still surface the usual error+retry UI if it fails.
+        }
+        window.location.reload();
+        return;
+      }
       startPlayback({ audioStreamIndex: id, resumeAt });
     },
-    [startPlayback]
+    [startPlayback, itemId, title]
   );
 
   // Manual "Réessayer" after retries are exhausted and `error` is showing — a full re-fetch
@@ -481,7 +504,7 @@ function ActivePlayer({
   // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
   // simple state derivation, so it can't move to render.
   useEffect(() => {
-    startPlayback({ resumeAt: initialResumeAt });
+    startPlayback({ resumeAt: initialResumeAt, audioStreamIndex: initialAudioStreamIndex });
     return () => {
       hlsRef.current?.destroy();
       hlsRef.current = null;
