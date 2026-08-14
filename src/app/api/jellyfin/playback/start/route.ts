@@ -118,6 +118,26 @@ export async function POST(req: NextRequest) {
       const restPath = parsed.pathname.replace(/^\/videos\/[0-9a-f-]{32,36}\//i, "");
       manifestUrl = `/api/jellyfin/stream/${itemId}/${restPath}${parsed.search}`;
       ({ videoCodecs, reasons: transcodeReasons } = parseTranscodingUrlInfo(source.TranscodingUrl));
+
+      // Found live: a track switch that needs a genuine transcode (not just a remux copy — e.g.
+      // Dolby TrueHD/Atmos audio, which nothing in our codec-support detection claims, forcing a
+      // real re-encode down to AAC/AC3 alongside the video) took long enough for Jellyfin to spin
+      // up a fresh ffmpeg job that the client's own request for the manifest timed out client-side
+      // before ever getting a response — Safari's native HLS bootstrap appears far less patient
+      // for this than hls.js, which is why Firefox never surfaced it. Pre-fetching the manifest
+      // ourselves, server-side, before responding to the client absorbs that startup cost here —
+      // by the time the client makes its own request through the proxy, ffmpeg is already running
+      // and Jellyfin can answer near-instantly. Best-effort and bounded: if this itself times out,
+      // fall through anyway and let the client's own request (plus the proxy's existing retry) be
+      // the fallback, rather than hanging the whole "start playback" action indefinitely.
+      try {
+        await fetch(`${config.jellyfin.url}${source.TranscodingUrl}`, {
+          headers: { "X-Emby-Token": session.jfToken },
+          signal: AbortSignal.timeout(15_000),
+        });
+      } catch {
+        // Fall through — see comment above.
+      }
     }
 
     const videoStream = (source.MediaStreams ?? []).find((s) => s.Type === "Video") ?? null;
