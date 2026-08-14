@@ -92,10 +92,20 @@ function ActivePlayer({
   const networkRetryCount = useRef(0);
   const mediaRetryCount = useRef(0);
   const networkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kept up to date on every 'timeupdate' so a fatal error (which freezes the <video> in
+  // place, no longer receiving new data) still has a recent position to resume from — reading
+  // video.currentTime directly at that point would work too, but this is more robust if the
+  // element itself is ever swapped.
+  const lastKnownTime = useRef(0);
 
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [loading, setLoading] = useState(true);
+  // True only while hls.js is mid-retry after a fatal network/media error — distinct from
+  // `loading` (the initial "fetching a fresh manifest" spinner) and from `error` (retries
+  // exhausted, playback truly stopped). Drives the small non-blocking "Reconnexion..." banner.
+  const [reconnecting, setReconnecting] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
   const [closing, setClosing] = useState(false);
   const [playSession, setPlaySession] = useState<{
     itemId: string;
@@ -169,6 +179,8 @@ function ActivePlayer({
       networkRetryTimer.current = null;
       networkRetryCount.current = 0;
       mediaRetryCount.current = 0;
+      setError(null);
+      setReconnecting(false);
       setLoading(true);
 
       const codecSupport = await detectCodecSupport();
@@ -282,6 +294,7 @@ function ActivePlayer({
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         networkRetryCount.current = 0;
         mediaRetryCount.current = 0;
+        setReconnecting(false);
       });
 
       // hls.js's own per-request retry/backoff (fragLoadingMaxRetry etc.) already absorbs a
@@ -294,10 +307,13 @@ function ActivePlayer({
         switch (data2.type) {
           case Hls.ErrorTypes.NETWORK_ERROR: {
             if (networkRetryCount.current >= MAX_NETWORK_RETRIES) {
-              setError("La lecture a été interrompue.");
+              setReconnecting(false);
+              setLoading(false);
+              setError("La lecture a été interrompue. Vérifie ta connexion et réessaie.");
               return;
             }
             networkRetryCount.current += 1;
+            setReconnecting(true);
             // Exponential backoff (1s, 2s, 4s... capped at 15s) — covers a brief network
             // handoff (e.g. mobile switching between 5G and Wi-Fi, which drops connectivity
             // for roughly 1-3s) without hammering the server if it's actually down.
@@ -308,15 +324,20 @@ function ActivePlayer({
           }
           case Hls.ErrorTypes.MEDIA_ERROR: {
             if (mediaRetryCount.current >= MAX_MEDIA_RETRIES) {
-              setError("La lecture a été interrompue.");
+              setReconnecting(false);
+              setLoading(false);
+              setError("La lecture a été interrompue. Réessaie.");
               return;
             }
             mediaRetryCount.current += 1;
+            setReconnecting(true);
             hls.recoverMediaError();
             return;
           }
           default:
-            setError("La lecture a été interrompue.");
+            setReconnecting(false);
+            setLoading(false);
+            setError("La lecture a été interrompue. Réessaie.");
         }
       });
       hls.loadSource(data.manifestUrl);
@@ -332,6 +353,13 @@ function ActivePlayer({
     },
     [startPlayback]
   );
+
+  // Manual "Réessayer" after retries are exhausted and `error` is showing — a full re-fetch
+  // of PlaybackInfo (not just hls.startLoad()) since the old PlaySessionId/manifest may itself
+  // be stale by then, picking up from the last position we saw before the stream died.
+  const handleRetry = useCallback(() => {
+    startPlayback({ resumeAt: lastKnownTime.current });
+  }, [startPlayback]);
 
   // Always toggles the native <track> elements rendered from externalSubtitleTracks below —
   // regardless of PlayMethod, since subtitles are now uniformly external VTT (see startPlayback).
@@ -385,6 +413,30 @@ function ActivePlayer({
     return () => {
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
+    };
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onTimeUpdate = () => {
+      lastKnownTime.current = video.currentTime;
+    };
+    video.addEventListener("timeupdate", onTimeUpdate);
+    return () => video.removeEventListener("timeupdate", onTimeUpdate);
+  }, []);
+
+  // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
+  // hors ligne" banner immediately on disconnect (like YouTube), rather than waiting for a
+  // fragment request to actually time out and surface as a network error first.
+  useEffect(() => {
+    const onOnline = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
     };
   }, []);
 
@@ -444,20 +496,40 @@ function ActivePlayer({
             </a>
           </div>
         </div>
-      ) : error ? (
-        <p className="flex h-full items-center justify-center px-6 text-center text-sm text-red-400">{error}</p>
       ) : (
-        <video
-          ref={videoRef}
-          playsInline
-          autoPlay
-          className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
-          {...{ "x-webkit-airplay": "allow" }}
-        >
-          {externalSubtitleTracks.map((t) => (
-            <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
-          ))}
-        </video>
+        <>
+          {/* Kept mounted even while `error` is showing, so `lastKnownTime`/hls state aren't
+              lost and "Réessayer" can resume from where playback actually stopped, instead of
+              from the beginning. */}
+          <video
+            ref={videoRef}
+            playsInline
+            autoPlay
+            className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
+            {...{ "x-webkit-airplay": "allow" }}
+          >
+            {externalSubtitleTracks.map((t) => (
+              <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
+            ))}
+          </video>
+          {error && !isMini && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-6 text-center">
+              <div>
+                <p className="mb-4 text-sm text-red-400">{error}</p>
+                <button type="button" onClick={handleRetry} className="btn-primary inline-flex justify-center">
+                  Réessayer
+                </button>
+              </div>
+            </div>
+          )}
+          {!error && !isMini && (isOffline || reconnecting) && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="rounded-full bg-black/80 px-4 py-1.5 text-xs text-white shadow-lg ring-1 ring-white/10">
+                {isOffline ? "Vous êtes hors ligne" : "Reconnexion…"}
+              </div>
+            </div>
+          )}
+        </>
       )}
       {!isMini && (
         <PlayerControls
