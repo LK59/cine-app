@@ -189,6 +189,22 @@ function ActivePlayer({
       setReconnecting(false);
       setLoading(true);
 
+      // Root cause found live: on Safari (desktop + iOS PWA), reassigning `video.src` straight
+      // to a brand new manifest while the element still has an old native-HLS source attached
+      // (e.g. switching audio track mid-playback) throws an immediate native "error" event —
+      // verified against real Jellyfin logs during a live test: the server-side ffmpeg remux job
+      // for the new audio track launched and ran cleanly every time (no server error at all),
+      // it was only ever torn down a few seconds later by our own client after Safari had
+      // already failed. Firefox/hls.js never hit this because hls.js already tears its own
+      // MediaSource down internally before attaching a new one. Explicitly clearing the old
+      // source first (pause, drop the src attribute, load()) flushes WebKit's internal HLS state
+      // before the new one is assigned, which is the documented workaround for this.
+      if (video.src) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }
+
       const codecSupport = await detectCodecSupport();
 
       const res = await fetch("/api/jellyfin/playback/start", {
