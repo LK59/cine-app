@@ -11,6 +11,15 @@ export interface PlaybackSession {
    *  other than the default, used to resume into the right track after a WebKit reload-based
    *  track switch (see PLAYER_RELOAD_INTENT_KEY below). */
   initialAudioStreamIndex?: number;
+  /** True when this session resumes a reload-based track switch. PlayerHost then delays the
+   *  first load by a grace period: iOS's media daemon releases the previous page's HLS session
+   *  asynchronously and roughly proportionally to how much it had buffered — verified live with
+   *  byte-identical server responses producing success after a ~3s-old session but failure
+   *  after an 8-minute one. Loading immediately on the fresh page races that release and gets
+   *  refused (SRC_NOT_SUPPORTED); a short deliberate wait lets it finish first. */
+  fromReload?: boolean;
+  /** How many reload attempts this switch has already consumed — see PLAYER_RELOAD_ATTEMPTS_KEY. */
+  reloadAttempt?: number;
   /** Resolves the episode after `currentItemId`, if any — recomputed on every advance so the
    *  "next up" prompt keeps working after auto-advancing more than once in a row. Lost across a
    *  reload-based track switch (the page context it closed over doesn't survive) — an accepted,
@@ -86,9 +95,16 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     }
     if (!raw) return;
     try {
-      const intent = JSON.parse(raw) as { itemId: string; title: string; audioStreamIndex: number; resumeAt: number };
+      const intent = JSON.parse(raw) as { itemId: string; title: string; audioStreamIndex: number; resumeAt: number; attempt?: number };
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      play({ itemId: intent.itemId, title: intent.title, resumeAt: intent.resumeAt, initialAudioStreamIndex: intent.audioStreamIndex });
+      play({
+        itemId: intent.itemId,
+        title: intent.title,
+        resumeAt: intent.resumeAt,
+        initialAudioStreamIndex: intent.audioStreamIndex,
+        fromReload: true,
+        reloadAttempt: intent.attempt ?? 0,
+      });
     } catch {
       // Malformed — ignore, nothing to resume.
     }

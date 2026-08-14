@@ -122,7 +122,7 @@ function ActivePlayer({
   mode: "full" | "mini";
 }) {
   const playback = usePlayback();
-  const { itemId, title, resumeAt: initialResumeAt, initialAudioStreamIndex } = session;
+  const { itemId, title, resumeAt: initialResumeAt, initialAudioStreamIndex, fromReload, reloadAttempt } = session;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -577,8 +577,19 @@ function ActivePlayer({
   // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
   // simple state derivation, so it can't move to render.
   useEffect(() => {
-    startPlayback({ resumeAt: initialResumeAt, audioStreamIndex: initialAudioStreamIndex });
+    // Grace period after a reload-based track switch (see PlaybackSession.fromReload): iOS's
+    // media daemon releases the previous page's HLS session asynchronously, roughly
+    // proportionally to how much it had buffered. Proven live with byte-identical server
+    // responses: resuming after a ~3s-old session loaded fine, after an 8-minute session it was
+    // refused instantly (SRC_NOT_SUPPORTED) — the only remaining variable was the old session's
+    // weight. Waiting here lets that release finish before the new session asks for its slot.
+    const graceMs = fromReload ? 3000 : 0;
+    const graceTimer = setTimeout(() => {
+      if (graceMs) logDebug(`post-reload grace delay elapsed (${graceMs}ms) — starting first load`);
+      startPlayback({ resumeAt: initialResumeAt, audioStreamIndex: initialAudioStreamIndex });
+    }, graceMs);
     return () => {
+      clearTimeout(graceTimer);
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
@@ -688,6 +699,35 @@ function ActivePlayer({
         }, delay);
         return;
       }
+      // Ladder exhausted. On WebKit, one final escalation before giving up: a fresh full page
+      // reload — the only teardown that reliably releases every media-daemon session this page
+      // has accumulated, including the zombie attempts each failed retry above just created —
+      // whose grace-delayed restart (see fromReload) then loads into a genuinely clean slate.
+      // Strictly bounded by the attempt counter carried in the intent so two exhausted ladders
+      // can never reload-loop forever.
+      if ((reloadAttempt ?? 0) < 1 && video!.canPlayType("application/vnd.apple.mpegurl")) {
+        logDebug("ladder exhausted — escalating to a clean reload (attempt 2/2)");
+        try {
+          const audioIdx = lastPlaybackOpts.current?.audioStreamIndex;
+          sessionStorage.setItem(
+            PLAYER_RELOAD_INTENT_KEY,
+            JSON.stringify({
+              itemId,
+              title,
+              resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt || 0,
+              attempt: (reloadAttempt ?? 0) + 1,
+              ...(audioIdx !== undefined ? { audioStreamIndex: audioIdx } : {}),
+            })
+          );
+          video!.pause();
+          video!.removeAttribute("src");
+          video!.load();
+          window.location.reload();
+          return;
+        } catch {
+          // Storage unavailable — fall through to the error UI below.
+        }
+      }
       setReconnecting(false);
       setLoading(false);
       // Temporary diagnostic detail appended to the message (kept user-readable) — this failure
@@ -707,7 +747,7 @@ function ActivePlayer({
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
-  }, [logDebug, videoKey]);
+  }, [logDebug, videoKey, itemId, title, reloadAttempt]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
   // hors ligne" banner immediately on disconnect (like YouTube), rather than waiting for a
