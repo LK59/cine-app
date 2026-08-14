@@ -58,7 +58,7 @@ describe("buildDeviceProfile", () => {
       {
         Type: "Video",
         Codec: "hevc",
-        Conditions: [{ Condition: "EqualsAny", Property: "VideoRangeType", Value: "SDR,HDR10,HDR10Plus,HLG,DOVIWithHDR10,DOVIWithHDR10Plus,DOVIWithSDR", IsRequired: false }],
+        Conditions: [{ Condition: "EqualsAny", Property: "VideoRangeType", Value: "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithSDR", IsRequired: false }],
       },
     ]);
   });
@@ -66,7 +66,7 @@ describe("buildDeviceProfile", () => {
   it("never declares bare DOVI (profile 5, no HDR10 fallback layer) as supported — that's genuinely Dolby-Vision-hardware-only", () => {
     const profile = buildDeviceProfile(NO_SUPPORT, 8_000_000);
     const values = profile.CodecProfiles.flatMap((p) => p.Conditions.map((c) => c.Value));
-    for (const v of values) expect(v.split(",")).not.toContain("DOVI");
+    for (const v of values) expect(v.split("|")).not.toContain("DOVI");
   });
 
   it("declares external VTT subtitle delivery, needed for embedded subtitles on a direct-played file", () => {

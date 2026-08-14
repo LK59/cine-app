@@ -42,7 +42,10 @@ const VIDEO_CODEC_KEYS: { key: string; codec: string }[] = [
 // handles this the same way it handles plain HDR10, no special support needed. Deliberately
 // excludes bare "DOVI" (profile 5, no fallback layer) — genuinely Dolby-Vision-hardware-only,
 // essentially Apple only, and declaring it "supported" everywhere would be actively wrong.
-const SAFE_VIDEO_RANGES = "SDR,HDR10,HDR10Plus,HLG,DOVIWithHDR10,DOVIWithHDR10Plus,DOVIWithSDR";
+// Jellyfin's EqualsAny condition expects its multi-value Value string pipe-separated, not
+// comma-separated — verified against the real server after a comma-separated value shipped
+// silently matched nothing, making every file (SDR included) fail with VideoRangeTypeNotSupported.
+const SAFE_VIDEO_RANGES = "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithSDR";
 
 // Builds the DeviceProfile POSTed to /Items/{id}/PlaybackInfo, letting Jellyfin's own
 // StreamBuilder pick DirectPlay / DirectStream (remux) / Transcode — same model as
