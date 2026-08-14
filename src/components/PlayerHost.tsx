@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -107,15 +107,6 @@ function ActivePlayer({
   // exhausted, playback truly stopped). Drives the small non-blocking "Reconnexion..." banner.
   const [reconnecting, setReconnecting] = useState(false);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
-  // Bumped to force React to fully unmount/remount the <video> element (via the `key` prop
-  // below) whenever a new manifest is loaded on top of an already-used element — see the long
-  // comment in startPlayback for why: WebKit's native HLS pipeline (Safari + any iOS browser,
-  // all mandated to run on WebKit) doesn't reliably support reusing the same <video> for a new
-  // HLS source, confirmed live via the browser's own MediaError code (4, SRC_NOT_SUPPORTED,
-  // fired instantly — not a network/decode issue). A genuinely fresh element is the documented
-  // workaround; waiting/clearing the old src first (two earlier attempts) wasn't enough because
-  // this isn't a timing issue, it's WebKit refusing to reuse the element at all.
-  const [videoKey, setVideoKey] = useState(0);
   const [closing, setClosing] = useState(false);
   const [playSession, setPlaySession] = useState<{
     itemId: string;
@@ -183,7 +174,7 @@ function ActivePlayer({
   // to resumeAt ourselves once the new manifest's metadata is ready.
   const startPlayback = useCallback(
     async (opts?: { audioStreamIndex?: number; resumeAt?: number }) => {
-      let video = videoRef.current;
+      const video = videoRef.current;
       if (!video) return;
 
       hlsRef.current?.destroy();
@@ -198,33 +189,38 @@ function ActivePlayer({
       setReconnecting(false);
       setLoading(true);
 
-      // Root cause found live: on Safari (desktop + iOS PWA — every iOS browser is mandated to
-      // run on WebKit, confirmed the same failure on Chrome iOS), loading a new manifest onto an
-      // already-used <video> element (e.g. switching audio track mid-playback) fails instantly
-      // with the browser's own MediaError code 4 (SRC_NOT_SUPPORTED) — not a network or decode
-      // failure, WebKit outright refusing the resource. Verified server-side is never at fault:
-      // Jellyfin's ffmpeg remux job for the new track launches and runs cleanly every time.
-      // Firefox/hls.js never hits this because hls.js manages its own MediaSource internally
-      // rather than reusing the <video>'s native src.
+      // Root cause found live: on Safari (desktop + iOS PWA), reassigning `video.src` straight
+      // to a brand new manifest while the element still has an old native-HLS source attached
+      // (e.g. switching audio track mid-playback) throws an immediate native "error" event —
+      // verified against real Jellyfin logs during a live test: the server-side ffmpeg remux job
+      // for the new audio track launched and ran cleanly every time (no server error at all),
+      // it was only ever torn down a few seconds later by our own client after Safari had
+      // already failed. Firefox/hls.js never hit this because hls.js already tears its own
+      // MediaSource down internally before attaching a new one.
       //
-      // Two earlier attempts (synchronous src clear, then waiting for the "emptied" event before
-      // reassigning) both failed to fix it — because this was never a timing issue. It's a
-      // documented WebKit limitation: the native (non-MSE) HLS pipeline doesn't reliably support
-      // loading a second HLS source onto the same element at all. The only real fix is a fresh
-      // element: bumping `videoKey` (used as the <video>'s React `key`, see JSX below) makes
-      // React tear down the old node and mount a brand new one, then this reads the fresh
-      // `videoRef.current` before continuing — every listener effect below also depends on
-      // `videoKey` so it re-attaches to the new node instead of the one that just got unmounted.
-      //
-      // Scoped to WebKit only (same check used below to pick the native-HLS branch) — hls.js
-      // (Firefox, Chrome/Edge desktop & Android) already handles reusing the element correctly
-      // via its own MediaSource, and always did; forcing a fresh element there too would just be
-      // unnecessary teardown/reinit work (and a flushSync render) with zero benefit.
-      const isWebKit = !!video.canPlayType("application/vnd.apple.mpegurl");
-      if (video.src && isWebKit) {
-        flushSync(() => setVideoKey((k) => k + 1));
-        video = videoRef.current;
-        if (!video) return;
+      // A first attempt (synchronous pause + removeAttribute + load) wasn't enough — verified
+      // the *manifest itself* is fine (fetched it directly for both audio tracks via Jellyfin's
+      // API: well-formed, identical shape to an initial load that already works), so the
+      // remaining flakiness is really about timing: WebKit's AVPlayer-backed pipeline doesn't
+      // finish tearing down synchronously within the same tick. Now actually waits for the
+      // "emptied" event (with a bounded fallback delay, since "emptied" isn't guaranteed to fire
+      // in every engine/version) before the new source is assigned, giving WebKit a real turn of
+      // the event loop to finish flushing the old session first.
+      if (video.src) {
+        video.pause();
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            video.removeEventListener("emptied", finish);
+            resolve();
+          };
+          video.addEventListener("emptied", finish, { once: true });
+          video.removeAttribute("src");
+          video.load();
+          setTimeout(finish, 300);
+        });
       }
 
       const codecSupport = await detectCodecSupport();
@@ -320,8 +316,12 @@ function ActivePlayer({
 
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
-      if (isWebKit) {
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = data.manifestUrl;
+        // Reassigning .src alone doesn't reliably tear down Safari's existing
+        // HLS session when only the query string changes (e.g. switching
+        // audio track) — force a clean reload so it actually picks up the
+        // new manifest instead of silently continuing the old one.
         video.load();
         video.play().catch(() => {});
         return;
@@ -456,7 +456,7 @@ function ActivePlayer({
     }
     video.addEventListener("ended", onEnded);
     return () => video.removeEventListener("ended", onEnded);
-  }, [handleClose, videoKey]);
+  }, [handleClose]);
 
   // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
   // so the mini player's play/pause icon stays correct without threading state through props.
@@ -471,7 +471,7 @@ function ActivePlayer({
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
     };
-  }, [videoKey]);
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -481,7 +481,7 @@ function ActivePlayer({
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  }, [videoKey]);
+  }, []);
 
   // The native <video> "error" event is the ONLY failure signal for the DirectPlay and native
   // Safari-HLS paths (both are a plain `video.src = manifestUrl`, no hls.js involved, so none of
@@ -511,7 +511,7 @@ function ActivePlayer({
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
-  }, [videoKey]);
+  }, []);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
   // hors ligne" banner immediately on disconnect (like YouTube), rather than waiting for a
@@ -587,10 +587,8 @@ function ActivePlayer({
         <>
           {/* Kept mounted even while `error` is showing, so `lastKnownTime`/hls state aren't
               lost and "Réessayer" can resume from where playback actually stopped, instead of
-              from the beginning. `key` changes (WebKit only, see startPlayback) intentionally
-              force a full remount for a track switch — see videoKey's own comment above. */}
+              from the beginning. */}
           <video
-            key={videoKey}
             ref={videoRef}
             playsInline
             autoPlay
@@ -631,7 +629,6 @@ function ActivePlayer({
       )}
       {!isMini && (
         <PlayerControls
-          key={videoKey}
           videoRef={videoRef}
           containerRef={containerRef}
           title={title}
