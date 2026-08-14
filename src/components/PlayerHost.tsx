@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -114,6 +114,12 @@ function ActivePlayer({
   // Collapsed by default — a full-width panel pinned to the top was covering the audio/subtitle
   // buttons the whole point of this panel was to help debug, making the switch itself untestable.
   const [debugExpanded, setDebugExpanded] = useState(false);
+  // Re-tested in isolation now that the Range/206 and manifest-prewarm bugs are both confirmed
+  // fixed — a previous attempt at this (ebc2d2d) was reverted after appearing not to help, but
+  // that test ran while the Range-truncation bug was still live, which may have masked whether
+  // this was actually necessary. Bumped to force a genuinely fresh <video> element (via the
+  // `key` prop below) for a track switch on WebKit, instead of reusing the same node.
+  const [videoKey, setVideoKey] = useState(0);
 
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
@@ -190,10 +196,20 @@ function ActivePlayer({
   // to resumeAt ourselves once the new manifest's metadata is ready.
   const startPlayback = useCallback(
     async (opts?: { audioStreamIndex?: number; resumeAt?: number }) => {
-      const video = videoRef.current;
+      let video = videoRef.current;
       if (!video) return;
 
       logDebug(`startPlayback audioStreamIndex=${opts?.audioStreamIndex ?? "default"} resumeAt=${opts?.resumeAt ?? 0} prevSrc=${video.src ? "yes" : "none"}`);
+
+      // Re-tested in isolation (see videoKey's own comment above) — WebKit only, since hls.js
+      // (Firefox, Chrome/Edge desktop & Android) already handles reusing the element correctly
+      // via its own MediaSource and was never affected by this.
+      if (video.src && video.canPlayType("application/vnd.apple.mpegurl")) {
+        logDebug("remounting <video> element (WebKit track switch)");
+        flushSync(() => setVideoKey((k) => k + 1));
+        video = videoRef.current;
+        if (!video) return;
+      }
 
       hlsRef.current?.destroy();
       hlsRef.current = null;
@@ -486,7 +502,7 @@ function ActivePlayer({
     }
     video.addEventListener("ended", onEnded);
     return () => video.removeEventListener("ended", onEnded);
-  }, [handleClose]);
+  }, [handleClose, videoKey]);
 
   // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
   // so the mini player's play/pause icon stays correct without threading state through props.
@@ -501,7 +517,7 @@ function ActivePlayer({
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
     };
-  }, []);
+  }, [videoKey]);
 
   useEffect(() => {
     const el = debugLogRef.current;
@@ -522,7 +538,7 @@ function ActivePlayer({
       return { name, fn };
     });
     return () => handlers.forEach(({ name, fn }) => video.removeEventListener(name, fn));
-  }, [logDebug]);
+  }, [logDebug, videoKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -532,7 +548,7 @@ function ActivePlayer({
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  }, []);
+  }, [videoKey]);
 
   // The native <video> "error" event is the ONLY failure signal for the DirectPlay and native
   // Safari-HLS paths (both are a plain `video.src = manifestUrl`, no hls.js involved, so none of
@@ -569,7 +585,7 @@ function ActivePlayer({
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
-  }, [logDebug]);
+  }, [logDebug, videoKey]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
   // hors ligne" banner immediately on disconnect (like YouTube), rather than waiting for a
@@ -645,8 +661,10 @@ function ActivePlayer({
         <>
           {/* Kept mounted even while `error` is showing, so `lastKnownTime`/hls state aren't
               lost and "Réessayer" can resume from where playback actually stopped, instead of
-              from the beginning. */}
+              from the beginning. `key` changes (WebKit track switches only) intentionally force
+              a full remount — see videoKey's own comment above. */}
           <video
+            key={videoKey}
             ref={videoRef}
             playsInline
             autoPlay
@@ -687,6 +705,7 @@ function ActivePlayer({
       )}
       {!isMini && (
         <PlayerControls
+          key={videoKey}
           videoRef={videoRef}
           containerRef={containerRef}
           title={title}
