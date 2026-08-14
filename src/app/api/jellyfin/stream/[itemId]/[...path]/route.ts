@@ -32,10 +32,17 @@ export async function GET(
       // for the HLS/manifest case too, since Jellyfin just ignores it there.
       headers: { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
     });
-    if (!res.ok || !res.body) return new NextResponse(null, { status: res.status || 502 });
+    if (!res.ok || !res.body) {
+      // Temporary diagnostic: this proxy has never once logged, so a real upstream failure on a
+      // live device (as opposed to a manual test through this same route) has never actually
+      // been observed — needed to pin down a live "SRC_NOT_SUPPORTED" instantly on Safari/iOS.
+      console.log("[stream proxy] upstream not ok", JSON.stringify({ restPath, status: res.status, isStatic }));
+      return new NextResponse(null, { status: res.status || 502 });
+    }
 
     const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
     const isManifest = restPath.endsWith(".m3u8");
+    console.log("[stream proxy] ok", JSON.stringify({ restPath, status: res.status, contentType, isStatic }));
 
     if (isManifest) {
       // HLS playlists can reference sibling segments/variant playlists with an
@@ -73,7 +80,8 @@ export async function GET(
     return new NextResponse(res.body, {
       headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=21600, immutable" },
     });
-  } catch {
+  } catch (err) {
+    console.log("[stream proxy] threw", JSON.stringify({ restPath, error: err instanceof Error ? err.message : String(err) }));
     return new NextResponse(null, { status: 502 });
   }
 }

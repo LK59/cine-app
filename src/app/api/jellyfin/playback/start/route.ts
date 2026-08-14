@@ -166,6 +166,16 @@ export async function POST(req: NextRequest) {
       timestamps?.Introduction?.Valid ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End } : null;
     const creditsStart = timestamps?.Credits?.Valid ? timestamps.Credits.Start : null;
 
+    // Temporary diagnostic: pinning down a live Safari/iOS-only "SRC_NOT_SUPPORTED" instantly on
+    // an audio track switch — a genuinely fresh <video> element still hit it, ruling out element
+    // reuse, so the actual negotiated response for the real device's own DeviceProfile (not a
+    // hand-built test one) needs to be seen directly rather than guessed at again.
+    console.log("[playback/start]", JSON.stringify({
+      itemId, audioStreamIndex, isDirectPlay, container: source.Container ?? null,
+      manifestUrl, playMethod, mediaSourceId: source.Id, directPlayProfilesCount: deviceProfile.DirectPlayProfiles.length,
+      codecSupport,
+    }));
+
     return NextResponse.json({
       playSessionId: info.PlaySessionId,
       mediaSourceId: source.Id,
