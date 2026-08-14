@@ -5,6 +5,30 @@ import { verifySessionFull } from "@/lib/session";
 
 const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
+// Root cause found live via temporary request logging: right after a fresh remux job starts
+// (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
+// the very first fetch for the HLS init segment (fmp4's EXT-X-MAP, hls1/main/-1.mp4) can race
+// ffmpeg's own disk writes and come back as a transient 500 — Jellyfin returns the playlist text
+// instantly (cheap to generate), but the actual segment files depend on real ffmpeg I/O that
+// takes a brief moment to catch up. hls.js already retries a failed fragment load internally
+// with backoff, silently absorbing this — which is exactly why Firefox never showed a problem.
+// Safari's native (non-MSE) HLS pipeline does not retry a failed segment fetch anywhere near as
+// forgivingly, especially for the foundational init segment: one transient 500 there was enough
+// to make it give up on the whole source instantly (MediaError code 4, SRC_NOT_SUPPORTED) — not
+// a WebKit element-reuse limitation after all (a genuinely fresh <video> element hit it just the
+// same), a real server-timing race that Firefox was silently protecting us from all along.
+const UPSTREAM_RETRY_DELAYS_MS = [200, 500, 1000];
+
+async function fetchWithRetry(target: string, headers: Record<string, string>, signal: AbortSignal) {
+  let res = await fetch(target, { signal, headers });
+  for (const delay of UPSTREAM_RETRY_DELAYS_MS) {
+    if (res.ok) return res;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    res = await fetch(target, { signal, headers });
+  }
+  return res;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ itemId: string; path: string[] }> }
@@ -24,25 +48,19 @@ export async function GET(
 
   try {
     const range = req.headers.get("range");
-    const res = await fetch(target, {
-      signal: AbortSignal.any([req.signal, AbortSignal.timeout(30_000)]),
+    const res = await fetchWithRetry(
+      target,
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
       // here is what lets the browser's native <video> seeking issue real HTTP range requests
       // instead of always re-fetching from byte 0. Harmless to pass through unconditionally
       // for the HLS/manifest case too, since Jellyfin just ignores it there.
-      headers: { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
-    });
-    if (!res.ok || !res.body) {
-      // Temporary diagnostic: this proxy has never once logged, so a real upstream failure on a
-      // live device (as opposed to a manual test through this same route) has never actually
-      // been observed — needed to pin down a live "SRC_NOT_SUPPORTED" instantly on Safari/iOS.
-      console.log("[stream proxy] upstream not ok", JSON.stringify({ restPath, status: res.status, isStatic }));
-      return new NextResponse(null, { status: res.status || 502 });
-    }
+      { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
+      AbortSignal.any([req.signal, AbortSignal.timeout(30_000)])
+    );
+    if (!res.ok || !res.body) return new NextResponse(null, { status: res.status || 502 });
 
     const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
     const isManifest = restPath.endsWith(".m3u8");
-    console.log("[stream proxy] ok", JSON.stringify({ restPath, status: res.status, contentType, isStatic }));
 
     if (isManifest) {
       // HLS playlists can reference sibling segments/variant playlists with an
@@ -80,8 +98,7 @@ export async function GET(
     return new NextResponse(res.body, {
       headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=21600, immutable" },
     });
-  } catch (err) {
-    console.log("[stream proxy] threw", JSON.stringify({ restPath, error: err instanceof Error ? err.message : String(err) }));
+  } catch {
     return new NextResponse(null, { status: 502 });
   }
 }
