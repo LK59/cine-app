@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import useSWR from "swr";
@@ -214,7 +214,7 @@ export function ActorModal({
   const bioText = bio?.text ?? null;
   const bioSource = bio?.source ?? "tmdb";
 
-  const now = useMemo(() => Date.now(), []);
+  const [now] = useState(() => Date.now());
   const age = data?.birthday
     ? Math.floor(
         (new Date(data.deathday ?? now).getTime() - new Date(data.birthday).getTime()) /

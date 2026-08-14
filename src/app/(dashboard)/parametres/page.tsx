@@ -36,7 +36,10 @@ export default function ParametresPage() {
       .finally(() => setLoadingPrefs(false));
   }, []);
 
+  // localStorage is unavailable during SSR — must be read post-mount. State starts at the
+  // fixed `false`, matching SSR output, so this doesn't cause a hydration mismatch.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchDebug(localStorage.getItem("cine:search-debug") === "1");
   }, []);
 

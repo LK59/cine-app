@@ -72,12 +72,16 @@ export function PlayerControls({
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset the dismiss/countdown state whenever a genuinely new "next episode"
-  // context arrives (i.e. we've actually advanced), not on every render.
-  useEffect(() => {
+  // Reset the dismiss/countdown state whenever a genuinely new "next episode" context arrives
+  // (i.e. we've actually advanced), not on every render. Applied during render (not in an
+  // effect) per React's guidance for adjusting state from a prop change.
+  const nextUpKey = `${creditsStart ?? ""}:${nextEpisode?.itemId ?? ""}`;
+  const [resetForNextUpKey, setResetForNextUpKey] = useState(nextUpKey);
+  if (nextUpKey !== resetForNextUpKey) {
+    setResetForNextUpKey(nextUpKey);
     setNextUpDismissed(false);
     setNextUpCountdown(NEXT_UP_COUNTDOWN_S);
-  }, [creditsStart, nextEpisode?.itemId]);
+  }
 
   const showNextUp = creditsStart != null && currentTime >= creditsStart && !!nextEpisode && !nextUpDismissed;
 
@@ -93,12 +97,15 @@ export function PlayerControls({
 
   const showSkipIntro = !!introSkip && currentTime >= introSkip.start && currentTime < introSkip.end;
 
+  // `document` is unavailable during SSR — feature detection must run post-mount. State starts
+  // at the fixed `false`, matching SSR output, so this doesn't cause a hydration mismatch.
   useEffect(() => {
     // iPhone Safari doesn't support the standard Fullscreen API on arbitrary
     // elements (only iPad/desktop do) — feature-detect rather than show a
     // button that silently does nothing there. The player already fills the
     // whole viewport as a fixed overlay, and in an installed PWA (no browser
     // chrome to hide) that's effectively fullscreen already.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFullscreenSupported(typeof document !== "undefined" && document.fullscreenEnabled);
   }, []);
 
@@ -189,7 +196,10 @@ export function PlayerControls({
     };
   }, []);
 
+  // showControls() does real effect work beyond setState (manages the auto-hide timeout ref),
+  // so it can't move to a render-time adjustment.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!playing) showControls();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);

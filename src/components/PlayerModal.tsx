@@ -96,6 +96,21 @@ export function PlayerModal({
   // (seeking already works by jumping within it) — so instead of trusting
   // Jellyfin to start the new stream at the right offset, we seek the video
   // to resumeAt ourselves once the new manifest's metadata is ready.
+  function readNativeSubtitles(video: HTMLVideoElement) {
+    const tracks: Track[] = [];
+    let activeId: number | null = null;
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const t = video.textTracks[i];
+      if (t.kind !== "subtitles" && t.kind !== "captions") continue;
+      tracks.push({ id: i, label: t.label || t.language || `Piste ${i + 1}` });
+      if (t.mode === "showing") activeId = i;
+    }
+    if (tracks.length) {
+      setSubtitleTracks(tracks);
+      setCurrentSubtitleId(activeId);
+    }
+  }
+
   const startPlayback = useCallback(
     async (opts?: { audioStreamIndex?: number; resumeAt?: number }) => {
       const video = videoRef.current;
@@ -202,21 +217,6 @@ export function PlayerModal({
     [itemId]
   );
 
-  function readNativeSubtitles(video: HTMLVideoElement) {
-    const tracks: Track[] = [];
-    let activeId: number | null = null;
-    for (let i = 0; i < video.textTracks.length; i++) {
-      const t = video.textTracks[i];
-      if (t.kind !== "subtitles" && t.kind !== "captions") continue;
-      tracks.push({ id: i, label: t.label || t.language || `Piste ${i + 1}` });
-      if (t.mode === "showing") activeId = i;
-    }
-    if (tracks.length) {
-      setSubtitleTracks(tracks);
-      setCurrentSubtitleId(activeId);
-    }
-  }
-
   const changeAudio = useCallback(
     (id: number) => {
       const resumeAt = videoRef.current?.currentTime ?? 0;
@@ -238,7 +238,10 @@ export function PlayerModal({
     setCurrentSubtitleId(id);
   }, []);
 
+  // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
+  // simple state derivation, so it can't move to render.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     startPlayback({ resumeAt: initialResumeAt });
     return () => {
       hlsRef.current?.destroy();

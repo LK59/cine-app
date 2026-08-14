@@ -31,8 +31,11 @@ export function usePlaybackSession(
   session: PlaybackSessionInfo | null
 ): () => void {
   const sessionRef = useRef(session);
-  sessionRef.current = session;
   const stoppedRef = useRef(false);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   useEffect(() => {
     if (!session) return;

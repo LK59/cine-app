@@ -139,8 +139,17 @@ function GalleryLightbox({
   const [idx, setIdx] = useState(startIndex);
   const [mounted, setMounted] = useState(false);
 
+  // Starts false so the entrance transition has an initial (hidden) state to animate from —
+  // flipping it true must happen post-paint, in an effect, not during render.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
-  useEffect(() => setIdx(startIndex), [startIndex]);
+  // Adjusts state from the startIndex prop during render (not in an effect) per React's
+  // guidance for this pattern, to avoid an extra render pass.
+  const [resetForStartIndex, setResetForStartIndex] = useState(startIndex);
+  if (startIndex !== resetForStartIndex) {
+    setResetForStartIndex(startIndex);
+    setIdx(startIndex);
+  }
 
   const prev = useCallback(() => setIdx((i) => (i - 1 + files.length) % files.length), [files.length]);
   const next = useCallback(() => setIdx((i) => (i + 1) % files.length), [files.length]);
@@ -356,13 +365,17 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
   const router = useRouter();
   const { data: vip } = useSWR<VipPerson>(`/api/vip/${id}`, fetcher, { revalidateOnFocus: false });
   const { data: galleryData } = useSWR<{ files: string[] }>("/api/gallery/clara", fetcher, { revalidateOnFocus: false });
-  const files = useMemo(() => {
+  // Shuffling uses Math.random(), which isn't pure — it belongs in an effect, not a render-time
+  // useMemo (which React may invoke more than once per commit).
+  const [files, setFiles] = useState<string[]>([]);
+  useEffect(() => {
     const arr = (galleryData?.files ?? []).filter((file) => file !== "clarabanner.jpg");
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    return arr;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFiles(arr);
   }, [galleryData]);
 
   const { data: tmdbPhotosData } = useSWR<{ photos: PersonPhoto[] }>(
@@ -425,7 +438,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
               </span>
             </div>
             <p className="mt-6 max-w-2xl text-base leading-8 text-white/70 sm:text-lg">
-              Actrice et mannequin espagnole, révélée par la trilogie Netflix <em>À travers ma fenêtre</em> et à l'affiche de la série <em>Olympo</em> en 2025.
+              Actrice et mannequin espagnole, révélée par la trilogie Netflix <em>À travers ma fenêtre</em> et à l&apos;affiche de la série <em>Olympo</em> en 2025.
             </p>
             <div className="mt-8 grid grid-cols-3 gap-2 sm:max-w-xl sm:gap-3">
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">

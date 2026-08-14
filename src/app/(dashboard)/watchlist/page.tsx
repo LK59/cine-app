@@ -149,8 +149,17 @@ function AddModal({ existingKeys, onClose, onAdded }: {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Clears stale results as soon as the query drops below 2 chars — applied during render
+  // (not in the debounce effect below) per React's guidance for adjusting state from a prop
+  // change, so the empty state shows immediately rather than after the next commit.
+  const [resultsResetForQ, setResultsResetForQ] = useState(q);
+  if (q !== resultsResetForQ) {
+    setResultsResetForQ(q);
+    if (q.trim().length < 2) setResults([]);
+  }
+
   useEffect(() => {
-    if (q.trim().length < 2) { setResults([]); return; }
+    if (q.trim().length < 2) return;
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
@@ -558,6 +567,9 @@ export default function WatchlistPage() {
   const [noteItem, setNoteItem] = useState<WatchlistItem | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // Starts false so client-only content (e.g. entrance transitions) only renders post-mount,
+  // matching SSR output on first paint — flipping it must happen in an effect, not render.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   const { mutate } = useSWRConfig();

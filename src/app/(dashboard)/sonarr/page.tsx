@@ -101,7 +101,13 @@ export default function SonarrPage() {
   const PAGE = 60;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { setVisibleCount(PAGE); }, [filtered]);
+  // Reset pagination when filters change — applied during render (not in an effect) per
+  // React's guidance for adjusting state from a computed value change.
+  const [resetForFiltered, setResetForFiltered] = useState(filtered);
+  if (filtered !== resetForFiltered) {
+    setResetForFiltered(filtered);
+    setVisibleCount(PAGE);
+  }
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;

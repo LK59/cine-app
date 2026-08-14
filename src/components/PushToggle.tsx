@@ -43,6 +43,10 @@ export function PushToggle() {
     } catch { setState("unsubscribed"); }
   }, []);
 
+  // Browser push-capability/permission detection needs `navigator`/`Notification`, unavailable
+  // during SSR — must run post-mount. State starts at the neutral "loading" placeholder, so the
+  // synchronous branches here (unsupported/denied) can't cause an SSR/hydration mismatch.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { detect(); }, [detect]);
 
   const subscribe = useCallback(async () => {

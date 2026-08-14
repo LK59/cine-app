@@ -173,7 +173,10 @@ export function GlobalSearch() {
   const t = useT();
   const [searchDebug, setSearchDebug] = useState(false);
 
+  // localStorage is unavailable during SSR — must be read post-mount. State starts at the
+  // fixed `false`, matching SSR output, so this doesn't cause a hydration mismatch.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchDebug(localStorage.getItem("cine:search-debug") === "1");
     const sync = () => setSearchDebug(localStorage.getItem("cine:search-debug") === "1");
     window.addEventListener("storage", sync);
@@ -217,7 +220,11 @@ export function GlobalSearch() {
     };
   }, []);
 
+  // Resetting the search state is tightly coupled here with scheduling the input focus
+  // (real effect work, can't move to render) — kept together rather than split across a
+  // render-time adjustment and an effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) { setQuery(""); setCursor(0); setDebouncedQuery(""); setTimeout(() => inputRef.current?.focus(), 50); }
   }, [open]);
 
@@ -269,9 +276,14 @@ export function GlobalSearch() {
   const statusMap = useWatchlistStatusMap(
     [...libraryResults, ...tmdbResults].map((r) => ({ mediaType: r.type, tmdbId: r.tmdbId }))
   );
+  // Merges by content (which keys are newly in-list), not by reference — statusMap is a new
+  // object every render, so this can't be keyed on a simple "did the dependency change"
+  // render-time check; the functional updater already bails out (returns `prev`) when nothing
+  // is new, so this doesn't cause extra renders in the common case.
   useEffect(() => {
     const inList = Object.entries(statusMap).filter(([, s]) => s).map(([k]) => k);
     if (inList.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWatchlisted((prev) => {
       if (inList.every((k) => prev.has(k))) return prev;
       return new Set([...prev, ...inList]);

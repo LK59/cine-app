@@ -30,8 +30,12 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
   const currentY = useRef(0);
   const dragging = useRef(false);
 
+  // Deliberately imperative (double-rAF entrance animation + exit-delay unmount) — do not
+  // convert to a render-time state adjustment, see the rAF comment below for why the timing
+  // must be effect-driven.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted(true);
       // A single rAF often fires before the browser has painted the initial
       // (hidden) state, so the transition has nothing to animate from and the

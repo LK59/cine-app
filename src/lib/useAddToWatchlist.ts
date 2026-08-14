@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import type { WatchlistStatus } from "@/lib/db";
@@ -24,14 +24,20 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
   const toast = useToast();
   const t = useT();
   const [addedStatus, setAddedStatus] = useState<WatchlistStatus | null>(initialStatus);
+  // Tracks the initialStatus value already reconciled into addedStatus below, so the
+  // adjustment only runs once per actual change instead of on every render.
+  const [reconciledStatus, setReconciledStatus] = useState(initialStatus);
 
   // initialStatus usually arrives after mount (it comes from a bulk-status fetch keyed on
   // whatever's currently rendered) — useState's initializer only runs once, so without this
-  // effect a status resolved after first paint would never reach addedStatus. Only adopts it
-  // when nothing has been set locally yet, so it can't clobber an in-progress optimistic update.
-  useEffect(() => {
+  // adjustment a status resolved after first paint would never reach addedStatus. Only adopts
+  // it when nothing has been set locally yet, so it can't clobber an in-progress optimistic
+  // update. Applied during render (rather than in an effect) per React's guidance for
+  // adjusting state from a prop change, to avoid an extra render pass.
+  if (initialStatus !== reconciledStatus) {
+    setReconciledStatus(initialStatus);
     if (initialStatus !== null) setAddedStatus((prev) => prev ?? initialStatus);
-  }, [initialStatus]);
+  }
 
   async function addToWatchlist(payload: WatchlistPayload, status: WatchlistStatus) {
     const previous = addedStatus;

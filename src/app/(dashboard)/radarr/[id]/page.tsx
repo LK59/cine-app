@@ -119,9 +119,13 @@ export default function RadarrMovieDetailPage() {
   const [showTrailer, setShowTrailer] = useState(false);
   const [activeTab, setActiveTab] = useState<"infos" | "casting" | "fichier">("infos");
 
-  useEffect(() => {
+  // Adjusts state from the fetched `movie` data during render (not in an effect) per React's
+  // guidance for this pattern, to avoid an extra render pass.
+  const [profileSyncedFor, setProfileSyncedFor] = useState(movie);
+  if (movie !== profileSyncedFor) {
+    setProfileSyncedFor(movie);
     if (movie) setQualityProfileId(movie.qualityProfileId);
-  }, [movie]);
+  }
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {

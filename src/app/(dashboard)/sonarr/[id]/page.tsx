@@ -124,9 +124,13 @@ export default function SonarrSeriesDetailPage() {
   const [deletingFromSonarr, setDeletingFromSonarr] = useState(false);
   const [activeTab, setActiveTab] = useState<"infos" | "casting" | "saisons">("infos");
 
-  useEffect(() => {
+  // Adjusts state from the fetched `series` data during render (not in an effect) per React's
+  // guidance for this pattern, to avoid an extra render pass.
+  const [profileSyncedFor, setProfileSyncedFor] = useState(series);
+  if (series !== profileSyncedFor) {
+    setProfileSyncedFor(series);
     if (series) setQualityProfileId(series.qualityProfileId);
-  }, [series]);
+  }
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {

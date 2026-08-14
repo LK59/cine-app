@@ -13,15 +13,26 @@ export function useListKeyNav(count: number, getHref: (i: number) => string) {
   const cursorRef = useRef(-1);
   const router = useRouter();
   const getHrefRef = useRef(getHref);
+  // Tracks the count value the cursor was last reset against, so the reset below only
+  // fires once per actual change (applied during render, not in an effect, per React's
+  // guidance for adjusting state from a prop change).
+  const [resetForCount, setResetForCount] = useState(count);
 
   useEffect(() => {
     getHrefRef.current = getHref;
   }, [getHref]);
 
-  useEffect(() => {
+  if (count !== resetForCount) {
+    setResetForCount(count);
     setCursor(-1);
-    cursorRef.current = -1;
-  }, [count]);
+  }
+
+  // Refs can't be written during render — keep cursorRef mirroring cursor state via an effect
+  // instead (the keydown handler below also updates it eagerly on its own, synchronously with
+  // setCursor, so Enter never reads a stale value between a j/k press and this effect running).
+  useEffect(() => {
+    cursorRef.current = cursor;
+  }, [cursor]);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
