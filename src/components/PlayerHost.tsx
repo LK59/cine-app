@@ -103,9 +103,13 @@ function ActivePlayer({
   // can be read/screenshotted straight off the phone instead of inferred from server-side logs,
   // which already proved insufficient to pin down a live Safari-only failure on its own.
   const [debugLog, setDebugLog] = useState<string[]>([]);
+  const debugLogRef = useRef<HTMLDivElement>(null);
   const logDebug = useCallback((msg: string) => {
     const line = `${new Date().toLocaleTimeString("fr-FR")}.${new Date().getMilliseconds().toString().padStart(3, "0")} ${msg}`;
-    setDebugLog((prev) => [...prev.slice(-59), line]);
+    // Raised from 60 to 200 — routine "progress"/"durationchange" events during normal playback
+    // before a switch was ever attempted could fill a 60-line buffer well before the actual
+    // switch happened, evicting exactly the lines that mattered most.
+    setDebugLog((prev) => [...prev.slice(-199), line]);
   }, []);
 
   const [error, setError] = useState<string | null>(null);
@@ -497,6 +501,12 @@ function ActivePlayer({
   }, []);
 
   useEffect(() => {
+    const el = debugLogRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [debugLog]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const events = [
@@ -701,10 +711,14 @@ function ActivePlayer({
         <MiniPlayerChrome title={title} playing={playing} onTogglePlay={toggleMiniPlay} onClose={handleClose} />
       )}
       {/* Temporary on-screen diagnostic panel — no Mac available to use Safari's Web Inspector,
-          so this mirrors the same info directly onto the phone screen to read/screenshot. */}
+          so this mirrors the same info directly onto the phone screen to read/screenshot.
+          Scrollable and auto-pinned to the latest line — a first version was pointer-events-none
+          with no auto-scroll, so once the log outgrew the panel's height the actual failure (at
+          the bottom) was permanently hidden above the fold with no way to reach it. */}
       {!isMini && debugLog.length > 0 && (
         <div
-          className="pointer-events-none absolute inset-x-0 top-0 z-[200] max-h-[45vh] overflow-y-auto bg-black/85 p-2 font-mono text-[10px] leading-tight text-lime-300"
+          ref={debugLogRef}
+          className="pointer-events-auto absolute inset-x-0 top-0 z-[200] max-h-[55vh] overflow-y-auto overscroll-contain bg-black/85 p-2 font-mono text-[10px] leading-tight text-lime-300"
           style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
         >
           {debugLog.map((line, i) => (
