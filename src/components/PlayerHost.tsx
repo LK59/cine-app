@@ -496,10 +496,18 @@ function ActivePlayer({
     const video = videoRef.current;
     if (!video) return;
     function onError() {
-      if (video!.error?.code === MediaError.MEDIA_ERR_ABORTED) return;
+      const code = video!.error?.code;
+      if (code === MediaError.MEDIA_ERR_ABORTED) return;
       setReconnecting(false);
       setLoading(false);
-      setError("La lecture a été interrompue. Réessaie.");
+      // Temporary diagnostic detail appended to the message (kept user-readable) — this failure
+      // is currently only reproducible live on iOS WebKit (Safari + Chrome iOS, which also runs
+      // WebKit under Apple's engine mandate) and not on Firefox/hls.js, with no server-side error
+      // at all (verified: Jellyfin's ffmpeg job for the new track launches and runs cleanly every
+      // time). The native MediaError code (2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED) pins down
+      // which WebKit failure mode this actually is instead of guessing blind.
+      const codeLabel = { 1: "ABORTED", 2: "NETWORK", 3: "DECODE", 4: "SRC_NOT_SUPPORTED" }[code ?? 0] ?? "inconnu";
+      setError(`La lecture a été interrompue. Réessaie. (code ${code ?? "?"} ${codeLabel})`);
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
