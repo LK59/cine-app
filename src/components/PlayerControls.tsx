@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown } from "lucide-react";
 
 export interface Track {
@@ -110,6 +110,21 @@ export function PlayerControls({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFullscreenSupported(typeof document !== "undefined" && document.fullscreenEnabled);
   }, []);
+
+  // This component remounts every time the player switches between full and mini (only
+  // rendered while !isMini in PlayerHost), but the underlying <video> never does — so on
+  // remount it can already be mid-playback. Syncing from its actual state here, before paint,
+  // avoids a stale "paused" (or 0:00 / 1x volume) flash until the next play/timeupdate/etc.
+  // event happens to fire on its own.
+  useLayoutEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    setPlaying(!video.paused);
+    setCurrentTime(video.currentTime);
+    setDuration(video.duration || 0);
+    setVolume(video.volume);
+    setMuted(video.muted);
+  }, [videoRef]);
 
   useEffect(() => {
     const video = videoRef.current;

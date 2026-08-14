@@ -24,7 +24,7 @@ export interface Point {
 
 function getMiniSize(): Size {
   const mobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
-  return mobile ? { width: 152, height: 85 } : { width: 180, height: 101 };
+  return mobile ? { width: 304, height: 170 } : { width: 360, height: 202 };
 }
 
 function getBottomClearance(): number {
@@ -125,30 +125,30 @@ interface MiniPlayerChromeProps {
 export function MiniPlayerChrome({ title, playing, onTogglePlay, onClose }: MiniPlayerChromeProps) {
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/80 via-transparent to-black/40">
-      <div className="pointer-events-auto flex justify-end p-1">
+      <div className="pointer-events-auto flex justify-end p-2">
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
-          className="rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+          className="rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"
         >
-          <X size={12} />
+          <X size={16} />
         </button>
       </div>
-      <div className="pointer-events-auto flex items-center gap-1.5 p-1.5">
+      <div className="pointer-events-auto flex items-center gap-2 p-2.5">
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onTogglePlay();
           }}
-          className="shrink-0 rounded-full bg-white/15 p-1 text-white hover:bg-white/25"
+          className="shrink-0 rounded-full bg-white/15 p-2 text-white hover:bg-white/25"
         >
-          {playing ? <Pause size={11} /> : <Play size={11} />}
+          {playing ? <Pause size={18} /> : <Play size={18} />}
         </button>
-        <p className="truncate text-[10px] font-medium text-white/90">{title}</p>
+        <p className="truncate text-sm font-medium text-white/90">{title}</p>
       </div>
     </div>
   );
