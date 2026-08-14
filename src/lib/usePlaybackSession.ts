@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -27,16 +27,29 @@ function report(path: "progress" | "stop", info: PlaybackSessionInfo, positionTi
 // stopNow() the caller can invoke at the exact moment the user closes the
 // player — capturing currentTime right then, rather than whenever React
 // gets around to unmounting (which can lag behind a close-transition delay).
+//
+// Takes a getPositionSeconds() callback rather than reading video.currentTime directly:
+// switching audio/subtitle (or retrying after an error) calls video.load(), which resets
+// currentTime to 0 immediately, before the new manifest has actually loaded — a heartbeat
+// firing in that window (or while a track switch is stuck/failed, per the live PWA report)
+// would silently overwrite Jellyfin's resume point with 0. The caller is expected to pass a
+// value that only moves forward with real playback progress (e.g. a ref updated on
+// 'timeupdate'), never one that resets on an in-flight reload.
 export function usePlaybackSession(
-  videoRef: RefObject<HTMLVideoElement | null>,
+  getPositionSeconds: () => number,
   session: PlaybackSessionInfo | null
 ): () => void {
   const sessionRef = useRef(session);
   const stoppedRef = useRef(false);
+  const positionRef = useRef(getPositionSeconds);
 
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    positionRef.current = getPositionSeconds;
+  }, [getPositionSeconds]);
 
   useEffect(() => {
     if (!session) return;
@@ -45,15 +58,11 @@ export function usePlaybackSession(
     const reportStop = () => {
       if (stoppedRef.current) return;
       stoppedRef.current = true;
-      const video = videoRef.current;
-      if (!video) return;
-      report("stop", session, Math.floor(video.currentTime * TICKS_PER_SECOND));
+      report("stop", session, Math.floor(positionRef.current() * TICKS_PER_SECOND));
     };
 
     const interval = setInterval(() => {
-      const video = videoRef.current;
-      if (!video) return;
-      report("progress", session, Math.floor(video.currentTime * TICKS_PER_SECOND));
+      report("progress", session, Math.floor(positionRef.current() * TICKS_PER_SECOND));
     }, HEARTBEAT_MS);
 
     window.addEventListener("beforeunload", reportStop);
@@ -70,8 +79,7 @@ export function usePlaybackSession(
     if (stoppedRef.current) return;
     stoppedRef.current = true;
     const s = sessionRef.current;
-    const video = videoRef.current;
-    if (!s || !video) return;
-    report("stop", s, Math.floor(video.currentTime * TICKS_PER_SECOND));
-  }, [videoRef]);
+    if (!s) return;
+    report("stop", s, Math.floor(positionRef.current() * TICKS_PER_SECOND));
+  }, []);
 }

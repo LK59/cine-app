@@ -126,7 +126,10 @@ function ActivePlayer({
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
-  const stopPlaybackNow = usePlaybackSession(videoRef, playSession && { ...playSession, playMethod });
+  const stopPlaybackNow = usePlaybackSession(
+    useCallback(() => lastKnownTime.current, []),
+    playSession && { ...playSession, playMethod }
+  );
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
@@ -234,6 +237,9 @@ function ActivePlayer({
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
           if (resumeAt) video.currentTime = resumeAt;
+          // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
+          // heartbeat firing in the gap right after a resume would still report the pre-seek 0.
+          lastKnownTime.current = resumeAt ?? 0;
           setLoading(false);
         },
         { once: true }
@@ -555,9 +561,18 @@ function ActivePlayer({
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-6 text-center">
               <div>
                 <p className="mb-4 text-sm text-red-400">{error}</p>
-                <button type="button" onClick={handleRetry} className="btn-primary inline-flex justify-center">
-                  Réessayer
-                </button>
+                <div className="flex justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+                  >
+                    Quitter
+                  </button>
+                  <button type="button" onClick={handleRetry} className="btn-primary inline-flex justify-center">
+                    Réessayer
+                  </button>
+                </div>
               </div>
             </div>
           )}
