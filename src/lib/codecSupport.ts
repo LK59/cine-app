@@ -108,7 +108,11 @@ async function checkCodec(mime: string, nativeHls: boolean): Promise<boolean> {
   return testSourceBuffer(mime);
 }
 
-const CACHE_KEY = "cine:codec-support:v1";
+// Bumped to v2 to auto-invalidate any client's cache from before the Safari native-HLS
+// detection fix — a stale v1 entry could have cached an under-reported (e.g. hevc: false)
+// result, which no server-side deploy alone can correct since this cache lives in the client's
+// own localStorage.
+const CACHE_KEY = "cine:codec-support:v2";
 
 interface CachedSupport {
   userAgent: string;

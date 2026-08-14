@@ -421,9 +421,13 @@ export function PlayerControls({
           <div
             className="pointer-events-auto absolute w-56 max-h-[60vh] overflow-y-auto overscroll-contain rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
             style={{
+              // `bottom` deliberately not set here: an absolutely-positioned element with both
+              // `top` and `bottom` stretches to fill the space between them regardless of
+              // content — which made this menu always ~half the screen tall even with only 2-3
+              // items. `max-h-[60vh]` alone already caps growth for a long track list; the menu
+              // otherwise just sizes to its content.
               top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
               right: "max(1rem, env(safe-area-inset-right))",
-              bottom: "max(1rem, env(safe-area-inset-bottom))",
             }}
             onClick={(e) => e.stopPropagation()}
           >
