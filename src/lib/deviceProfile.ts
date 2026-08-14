@@ -12,7 +12,11 @@ export interface JellyfinDeviceProfile {
     Context: string;
     MaxAudioChannels: string;
   }[];
-  CodecProfiles: unknown[];
+  CodecProfiles: {
+    Type: "Video";
+    Codec: string;
+    Conditions: { Condition: string; Property: string; Value: string; IsRequired: boolean }[];
+  }[];
   SubtitleProfiles: { Format: string; Method: string }[];
 }
 
@@ -24,6 +28,21 @@ const VIDEO_CODEC_KEYS: { key: string; codec: string }[] = [
   { key: "mp4/vp9", codec: "vp9" },
   { key: "mp4/av1", codec: "av1" },
 ];
+
+// Without an explicit VideoRangeType condition, Jellyfin doesn't just risk a "might look
+// slightly flat" fallback for HDR content — verified against the real server that it instead
+// tone-maps AND fully re-encodes (GPU-transcodes) every single HDR file unconditionally, even
+// when video+audio would otherwise just need a plain container remux. That's a real, systematic
+// cost (defeats DirectStream for a large chunk of an HEVC-heavy library), not a rare edge case.
+//
+// This list is safe to declare universally, with no per-browser detection needed: Dolby
+// Vision's dual-layer profiles (7, 8.x — effectively all real-world DV files) embed a standard
+// HDR10 fallback layer specifically so a non-DV-aware decoder can play the file correctly using
+// just that layer, per the format's own design — any browser that already decodes HEVC Main10
+// handles this the same way it handles plain HDR10, no special support needed. Deliberately
+// excludes bare "DOVI" (profile 5, no fallback layer) — genuinely Dolby-Vision-hardware-only,
+// essentially Apple only, and declaring it "supported" everywhere would be actively wrong.
+const SAFE_VIDEO_RANGES = "SDR,HDR10,HDR10Plus,HLG,DOVIWithHDR10,DOVIWithHDR10Plus,DOVIWithSDR";
 
 // Builds the DeviceProfile POSTed to /Items/{id}/PlaybackInfo, letting Jellyfin's own
 // StreamBuilder pick DirectPlay / DirectStream (remux) / Transcode — same model as
@@ -75,7 +94,11 @@ export function buildDeviceProfile(support: CodecSupport, maxBitrate: number): J
         MaxAudioChannels: "6",
       },
     ],
-    CodecProfiles: [],
+    CodecProfiles: (videoCodecs.length ? videoCodecs : ["h264"]).map((codec) => ({
+      Type: "Video" as const,
+      Codec: codec,
+      Conditions: [{ Condition: "EqualsAny", Property: "VideoRangeType", Value: SAFE_VIDEO_RANGES, IsRequired: false }],
+    })),
     // "External" is what makes Jellyfin extract embedded subtitle tracks (e.g. from an mkv
     // being direct-played, where the browser has no way to read them itself) as sidecar VTT,
     // served through the app's existing /api/jellyfin/stream/subtitle proxy. "Hls" covers the
