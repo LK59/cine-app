@@ -86,12 +86,39 @@ export async function GET(
         new RegExp(`(?:https?:\\/\\/[^/\\s"]+)?\\/videos\\/${itemId}\\/`, "gi"),
         `/api/jellyfin/stream/${itemId}/`
       );
-      console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "manifest", restPath, JSON.stringify({
-        incomingRange, upstreamStatus: res.status, upstreamLen: text.length, sentLen: rewritten.length,
-      }));
-      return new NextResponse(rewritten, {
-        headers: { "Content-Type": contentType, "Cache-Control": "no-store" },
-      });
+      const buf = Buffer.from(rewritten, "utf-8");
+
+      // Root cause, finally confirmed live: even with the *full, untruncated* manifest sent back
+      // under a plain 200 (the previous fix — never forwarding Range upstream — already achieved
+      // that; server logs showed upstreamLen === sentLen every time), Safari still failed
+      // instantly. WebKit's native HLS resource loader apparently treats "I asked for a Range and
+      // got back a 200 that ignores it" as a hard failure in its own right, regardless of whether
+      // the body is actually complete and valid — not just a truncation problem, a protocol
+      // *compliance* problem. The real fix is to actually honor Range for the manifest properly:
+      // slice the final rewritten text ourselves (its byte length can differ from Jellyfin's
+      // original due to the URL rewrite above, so this can't be delegated to Jellyfin's own Range
+      // handling) and return a genuine 206 + Content-Range when one is requested.
+      const rangeMatch = incomingRange ? /^bytes=(\d*)-(\d*)$/.exec(incomingRange) : null;
+      const headers: Record<string, string> = {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store",
+        "Accept-Ranges": "bytes",
+      };
+
+      if (rangeMatch) {
+        const total = buf.length;
+        const start = rangeMatch[1] ? Math.min(parseInt(rangeMatch[1], 10), total - 1) : 0;
+        const end = rangeMatch[2] ? Math.min(parseInt(rangeMatch[2], 10), total - 1) : total - 1;
+        const slice = buf.subarray(start, end + 1);
+        headers["Content-Range"] = `bytes ${start}-${end}/${total}`;
+        headers["Content-Length"] = String(slice.length);
+        console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "manifest 206", restPath, JSON.stringify({ incomingRange, total, start, end }));
+        return new NextResponse(slice, { status: 206, headers });
+      }
+
+      headers["Content-Length"] = String(buf.length);
+      console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "manifest 200", restPath, JSON.stringify({ incomingRange, len: buf.length }));
+      return new NextResponse(buf, { headers });
     }
     console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "ok", restPath, JSON.stringify({ incomingRange, upstreamStatus: res.status, isStatic }));
 
