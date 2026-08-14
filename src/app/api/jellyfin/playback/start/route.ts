@@ -31,16 +31,23 @@ function parseTranscodingUrlInfo(transcodingUrl: string): { videoCodecs: string[
   return { videoCodecs, reasons };
 }
 
-// Jellyfin's PlayMethod isn't hand to us directly by PlaybackInfo (unlike /Sessions, which
+// Jellyfin's PlayMethod isn't handed to us directly by PlaybackInfo (unlike /Sessions, which
 // only exists once playback has actually started) — the client is expected to derive it, same
-// as jellyfin-web: DirectPlay when the source plays untouched, otherwise DirectStream when
-// only audio/container needed adjusting (the video stream itself is copied, not re-encoded —
-// recognizable by TranscodeReasons containing no Video* reason), otherwise a real Transcode.
+// as jellyfin-web: DirectPlay when the source plays untouched, otherwise DirectStream when the
+// video stream itself is copied (not re-encoded), otherwise a real Transcode.
+//
+// Deliberately NOT guessed from whether TranscodeReasons contains a "Video*"-prefixed reason —
+// verified against the real server that this mis-predicts: the exact same file, negotiated for
+// two different browsers, produced TranscodeReasons with no Video* entry in both cases, yet one
+// browser's actual ffmpeg job did `-codec:v:0 copy` (a real DirectStream) while the other's did
+// a full `-codec:v:0 h264_qsv` re-encode (a real Transcode) — the reason string alone doesn't
+// reliably capture that. Comparing the source's own video codec against the VideoCodec list
+// Jellyfin was asked to accept is what ffmpeg itself actually keys its copy-vs-encode decision
+// on, so it can't disagree with reality the way the reason-parsing heuristic did.
 type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
-function derivePlayMethod(isDirectPlay: boolean, reasons: string[]): PlayMethod {
+function derivePlayMethod(isDirectPlay: boolean, isVideoCopied: boolean): PlayMethod {
   if (isDirectPlay) return "DirectPlay";
-  if (reasons.some((r) => r.startsWith("Video"))) return "Transcode";
-  return "DirectStream";
+  return isVideoCopied ? "DirectStream" : "Transcode";
 }
 
 export async function POST(req: NextRequest) {
@@ -113,19 +120,19 @@ export async function POST(req: NextRequest) {
       ({ videoCodecs, reasons: transcodeReasons } = parseTranscodingUrlInfo(source.TranscodingUrl));
     }
 
-    const playMethod = derivePlayMethod(isDirectPlay, transcodeReasons);
-
     const videoStream = (source.MediaStreams ?? []).find((s) => s.Type === "Video") ?? null;
+    const isVideoCopied = isDirectPlay || (!!videoStream?.Codec && videoCodecs.includes(videoStream.Codec));
+    const playMethod = derivePlayMethod(isDirectPlay, isVideoCopied);
+
     const audioStreamForPlayback = (source.MediaStreams ?? []).find(
       (s) => s.Type === "Audio" && (audioStreamIndex === undefined || s.Index === audioStreamIndex)
     );
 
-    // External VTT delivery works the same regardless of PlayMethod (Jellyfin extracts
-    // embedded subtitles server-side on demand) — populated here unconditionally so the
-    // DirectPlay/DirectStream path (no HLS, no native <video> demuxing of embedded mkv subs)
-    // has a track list to use. The Transcode/HLS path still re-derives its own list from
-    // hls.js's SUBTITLE_TRACKS_UPDATED event (its rendition index differs from this one), but
-    // this is still returned for the Playback Info panel either way.
+    // External VTT delivery works the same regardless of PlayMethod (Jellyfin extracts embedded
+    // subtitles server-side on demand, via the SubtitleProfiles "External" method declared in
+    // deviceProfile.ts) — this is the client's primary subtitle source in every case, with
+    // real DisplayTitle/Language from the source file rather than hls.js's own less complete
+    // SUBTITLE_TRACKS_UPDATED-derived names.
     const subtitleTracks = (source.MediaStreams ?? [])
       .filter((s) => s.Type === "Subtitle")
       .map((s) => ({

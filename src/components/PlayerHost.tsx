@@ -104,7 +104,6 @@ function ActivePlayer({
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [isDirectPlay, setIsDirectPlay] = useState(false);
   const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
   const [playbackInfo, setPlaybackInfo] = useState<PlaybackInfoSummary | null>(null);
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
@@ -144,21 +143,6 @@ function ActivePlayer({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, handleClose]);
-
-  function readNativeSubtitles(video: HTMLVideoElement) {
-    const tracks: Track[] = [];
-    let activeId: number | null = null;
-    for (let i = 0; i < video.textTracks.length; i++) {
-      const t = video.textTracks[i];
-      if (t.kind !== "subtitles" && t.kind !== "captions") continue;
-      tracks.push({ id: i, label: t.label || t.language || `Piste ${i + 1}` });
-      if (t.mode === "showing") activeId = i;
-    }
-    if (tracks.length) {
-      setSubtitleTracks(tracks);
-      setCurrentSubtitleId(activeId);
-    }
-  }
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
@@ -217,7 +201,6 @@ function ActivePlayer({
       setIntroSkip(data.introSkip ?? null);
       setCreditsStart(data.creditsStart ?? null);
       setPlaybackInfo(data.playbackInfo ?? null);
-      setIsDirectPlay(!!data.isDirectPlay);
 
       const resumeAt = opts?.resumeAt;
       video.addEventListener(
@@ -229,29 +212,30 @@ function ActivePlayer({
         { once: true }
       );
 
+      // Subtitles always come from the PlaybackInfo response as external VTT tracks (rendered
+      // as <track> elements below), for every PlayMethod — not from hls.js's own
+      // SUBTITLE_TRACKS_UPDATED event or native textTrack discovery. Those turned out both
+      // *less* reliable (hls.js's own rendition names are often blank, falling back to generic
+      // "Piste N") AND actively harmful here: since they fire asynchronously after this rich
+      // list is already set, they'd silently overwrite it a moment later. Real-world catalog
+      // check: DirectStream (an mkv container remuxed to HLS, video copied untouched) is the
+      // dominant case for an HEVC-in-mkv library, not the exception — so this isn't a narrow
+      // DirectPlay-only fix, it's the primary path.
+      const tracks: ExternalSubtitleTrack[] = (data.subtitleTracks ?? []).map(
+        (t: { index: number; url: string; label: string; language?: string; isDefault: boolean }) => t
+      );
+      setExternalSubtitleTracks(tracks);
+      setSubtitleTracks(tracks.map((t) => ({ id: t.index, label: t.label })));
+      setCurrentSubtitleId(null);
+
       // DirectPlay/DirectStream: a plain Range-seekable file, not an HLS manifest — no hls.js,
-      // no native-HLS branch below, just a regular <video src>. Subtitles come from the
-      // PlaybackInfo response as external VTT tracks (see the <track> elements rendered below)
-      // rather than from hls.js/native textTrack discovery, since there's no HLS rendition and
-      // the browser can't demux an mkv's embedded subtitle tracks on its own.
+      // no native-HLS branch below, just a regular <video src>.
       if (data.isDirectPlay) {
-        const tracks: ExternalSubtitleTrack[] = (data.subtitleTracks ?? []).map(
-          (t: { index: number; url: string; label: string; language?: string; isDefault: boolean }) => t
-        );
-        setExternalSubtitleTracks(tracks);
-        setSubtitleTracks(tracks.map((t) => ({ id: t.index, label: t.label })));
-        setCurrentSubtitleId(null);
         video.src = data.manifestUrl;
         video.load();
         video.play().catch(() => {});
         return;
       }
-      setExternalSubtitleTracks([]);
-      // Subtitles aren't sourced from this response for the HLS path — Jellyfin embeds them as
-      // switchable HLS renditions, discovered below via hls.js / textTracks once the manifest
-      // actually loads (a different index scheme than the one above).
-      setSubtitleTracks([]);
-      setCurrentSubtitleId(null);
 
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
@@ -263,7 +247,6 @@ function ActivePlayer({
         // new manifest instead of silently continuing the old one.
         video.load();
         video.play().catch(() => {});
-        video.textTracks.addEventListener("addtrack", () => readNativeSubtitles(video));
         return;
       }
 
@@ -282,12 +265,6 @@ function ActivePlayer({
         maxMaxBufferLength: 90,
       });
       hlsRef.current = hls;
-      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
-        setSubtitleTracks(
-          hls.subtitleTracks.map((t, i) => ({ id: i, label: t.name || t.lang || `Piste ${i + 1}` }))
-        );
-        setCurrentSubtitleId(hls.subtitleTrack >= 0 ? hls.subtitleTrack : null);
-      });
       hls.on(Hls.Events.ERROR, (_evt, data2) => {
         if (data2.fatal) setError("La lecture a été interrompue.");
       });
@@ -305,18 +282,20 @@ function ActivePlayer({
     [startPlayback]
   );
 
+  // Always toggles the native <track> elements rendered from externalSubtitleTracks below —
+  // regardless of PlayMethod, since subtitles are now uniformly external VTT (see startPlayback).
+  // video.textTracks is indexed by DOM position, not by Jellyfin's own stream index (`id`
+  // here), so the position has to be looked up in externalSubtitleTracks (rendered in the same
+  // order) rather than assuming textTracks[id].
   const changeSubtitle = useCallback((id: number | null) => {
     const video = videoRef.current;
     if (!video) return;
-    if (hlsRef.current) {
-      hlsRef.current.subtitleTrack = id ?? -1;
-    } else {
-      for (let i = 0; i < video.textTracks.length; i++) {
-        video.textTracks[i].mode = i === id ? "showing" : "disabled";
-      }
+    const position = id === null ? -1 : externalSubtitleTracks.findIndex((t) => t.index === id);
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = i === position ? "showing" : "disabled";
     }
     setCurrentSubtitleId(id);
-  }, []);
+  }, [externalSubtitleTracks]);
 
   // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
   // simple state derivation, so it can't move to render.
@@ -422,10 +401,9 @@ function ActivePlayer({
           className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
           {...{ "x-webkit-airplay": "allow" }}
         >
-          {isDirectPlay &&
-            externalSubtitleTracks.map((t) => (
-              <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
-            ))}
+          {externalSubtitleTracks.map((t) => (
+            <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
+          ))}
         </video>
       )}
       {!isMini && (

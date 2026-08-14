@@ -152,31 +152,35 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "DirectPlay");
   });
 
-  it("labels a video-codec transcode reason as Transcode (real re-encode)", async () => {
+  it("labels playMethod Transcode when the source's own video codec isn't in the accepted VideoCodec list — a real re-encode, regardless of the reason text", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({
       PlaySessionId: "s",
       MediaSources: [{
         Id: "src-1",
-        TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264&TranscodeReasons=VideoCodecNotSupported",
-        MediaStreams: [],
+        TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264&TranscodeReasons=AudioCodecNotSupported",
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "hevc" }],
       }],
     });
     const { POST } = await import("@/app/api/jellyfin/playback/start/route");
     const res = await POST(fakeReq({ itemId: validId }));
     const body = await res.json();
+    // hevc (the source's real codec) isn't in the accepted "h264" list -> a genuine re-encode,
+    // even though the reason text alone (AudioCodecNotSupported) would suggest otherwise. This
+    // is exactly the real-world case found live: two browsers negotiating the same file, same
+    // kind of reason text, but one got a real video copy and the other a full re-encode.
     expect(body.playbackInfo.playMethod).toBe("Transcode");
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode");
   });
 
-  it("labels an audio-only transcode reason as DirectStream (video copied untouched)", async () => {
+  it("labels playMethod DirectStream when the source's own video codec IS in the accepted VideoCodec list — a real copy, no re-encode", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({
       PlaySessionId: "s",
       MediaSources: [{
         Id: "src-1",
         TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264,hevc&TranscodeReasons=AudioCodecNotSupported",
-        MediaStreams: [],
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "hevc" }],
       }],
     });
     const { POST } = await import("@/app/api/jellyfin/playback/start/route");
