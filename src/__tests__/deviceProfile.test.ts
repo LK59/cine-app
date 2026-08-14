@@ -46,6 +46,11 @@ describe("buildDeviceProfile", () => {
     expect(profile.TranscodingProfiles[0].AudioCodec).toBe("aac");
   });
 
+  it("uses fMP4 (not MPEG-TS) segments for the HLS transcoding profile — hls.js doesn't reliably support HEVC muxed into raw .ts segments", () => {
+    const profile = buildDeviceProfile(NO_SUPPORT, 8_000_000);
+    expect(profile.TranscodingProfiles[0].Container).toBe("mp4");
+  });
+
   it("declares external VTT subtitle delivery, needed for embedded subtitles on a direct-played file", () => {
     const profile = buildDeviceProfile(NO_SUPPORT, 8_000_000);
     expect(profile.SubtitleProfiles).toContainEqual({ Format: "vtt", Method: "External" });

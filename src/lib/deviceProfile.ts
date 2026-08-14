@@ -52,7 +52,15 @@ export function buildDeviceProfile(support: CodecSupport, maxBitrate: number): J
     DirectPlayProfiles: directPlayProfiles,
     TranscodingProfiles: [
       {
-        Container: "ts",
+        // fMP4 segments (Jellyfin's HLS + Container:"mp4" produces CMAF-style .mp4 segments
+        // with an EXT-X-MAP init segment), not raw MPEG-TS. Verified against a real server and
+        // a real playback failure: with Container:"ts", a copied (non-re-encoded) HEVC stream
+        // gets muxed into plain .ts segments, which hls.js's own JS TS demuxer/remuxer does not
+        // reliably support for HEVC — every DirectStream remux of an HEVC file failed with a
+        // fatal hls.js error a few seconds in, regardless of resolution/HDR. fMP4 is what
+        // hls.js and native HLS actually support for HEVC (MSE natively understands fMP4
+        // boxes, no JS-side remuxing needed), and jellyfin-web itself defaults to it.
+        Container: "mp4",
         Type: "Video",
         // Lists every codec this browser can decode — not just h264/aac — so Jellyfin can
         // copy the source video AND audio streams untouched (no re-encode of either) when the
