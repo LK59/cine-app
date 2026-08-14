@@ -196,13 +196,31 @@ function ActivePlayer({
       // for the new audio track launched and ran cleanly every time (no server error at all),
       // it was only ever torn down a few seconds later by our own client after Safari had
       // already failed. Firefox/hls.js never hit this because hls.js already tears its own
-      // MediaSource down internally before attaching a new one. Explicitly clearing the old
-      // source first (pause, drop the src attribute, load()) flushes WebKit's internal HLS state
-      // before the new one is assigned, which is the documented workaround for this.
+      // MediaSource down internally before attaching a new one.
+      //
+      // A first attempt (synchronous pause + removeAttribute + load) wasn't enough — verified
+      // the *manifest itself* is fine (fetched it directly for both audio tracks via Jellyfin's
+      // API: well-formed, identical shape to an initial load that already works), so the
+      // remaining flakiness is really about timing: WebKit's AVPlayer-backed pipeline doesn't
+      // finish tearing down synchronously within the same tick. Now actually waits for the
+      // "emptied" event (with a bounded fallback delay, since "emptied" isn't guaranteed to fire
+      // in every engine/version) before the new source is assigned, giving WebKit a real turn of
+      // the event loop to finish flushing the old session first.
       if (video.src) {
         video.pause();
-        video.removeAttribute("src");
-        video.load();
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            video.removeEventListener("emptied", finish);
+            resolve();
+          };
+          video.addEventListener("emptied", finish, { once: true });
+          video.removeAttribute("src");
+          video.load();
+          setTimeout(finish, 300);
+        });
       }
 
       const codecSupport = await detectCodecSupport();
