@@ -33,7 +33,7 @@ const REASON_LABELS: Record<string, string> = {
 
 const METHOD_LABELS: Record<PlaybackInfoSummary["playMethod"], { label: string; color: string }> = {
   DirectPlay: { label: "Lecture directe", color: "text-emerald-400" },
-  DirectStream: { label: "Remux", color: "text-sky-400" },
+  DirectStream: { label: "Remultiplexage", color: "text-sky-400" },
   Transcode: { label: "Transcodage", color: "text-amber-400" },
 };
 
