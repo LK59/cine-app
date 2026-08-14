@@ -111,6 +111,9 @@ function ActivePlayer({
     // switch happened, evicting exactly the lines that mattered most.
     setDebugLog((prev) => [...prev.slice(-199), line]);
   }, []);
+  // Collapsed by default — a full-width panel pinned to the top was covering the audio/subtitle
+  // buttons the whole point of this panel was to help debug, making the switch itself untestable.
+  const [debugExpanded, setDebugExpanded] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
@@ -712,19 +715,32 @@ function ActivePlayer({
       )}
       {/* Temporary on-screen diagnostic panel — no Mac available to use Safari's Web Inspector,
           so this mirrors the same info directly onto the phone screen to read/screenshot.
-          Scrollable and auto-pinned to the latest line — a first version was pointer-events-none
-          with no auto-scroll, so once the log outgrew the panel's height the actual failure (at
-          the bottom) was permanently hidden above the fold with no way to reach it. */}
+          Collapsed by default: a full-width panel pinned to the top previously covered the
+          audio/subtitle buttons — the exact controls this panel exists to help debug — making
+          the switch itself untestable. Toggle tab sits bottom-left, clear of every other control
+          (top bar, centered play/pause, bottom seek bar, reconnecting banner). */}
       {!isMini && debugLog.length > 0 && (
-        <div
-          ref={debugLogRef}
-          className="pointer-events-auto absolute inset-x-0 top-0 z-[200] max-h-[55vh] overflow-y-auto overscroll-contain bg-black/85 p-2 font-mono text-[10px] leading-tight text-lime-300"
-          style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
-        >
-          {debugLog.map((line, i) => (
-            <div key={i}>{line}</div>
-          ))}
-        </div>
+        <>
+          <button
+            type="button"
+            onClick={() => setDebugExpanded((v) => !v)}
+            className="pointer-events-auto absolute bottom-4 left-4 z-[200] rounded-full bg-black/70 px-3 py-1.5 font-mono text-[10px] text-lime-300 ring-1 ring-lime-300/30"
+            style={{ marginBottom: "env(safe-area-inset-bottom)" }}
+          >
+            {debugExpanded ? "Fermer debug" : `Debug (${debugLog.length})`}
+          </button>
+          {debugExpanded && (
+            <div
+              ref={debugLogRef}
+              className="pointer-events-auto absolute inset-x-0 top-0 z-[200] max-h-[55vh] overflow-y-auto overscroll-contain bg-black/85 p-2 font-mono text-[10px] leading-tight text-lime-300"
+              style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
+            >
+              {debugLog.map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>,
     document.body
