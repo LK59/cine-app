@@ -97,6 +97,7 @@ function ActivePlayer({
   // video.currentTime directly at that point would work too, but this is more robust if the
   // element itself is ever swapped.
   const lastKnownTime = useRef(0);
+  const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
@@ -177,6 +178,8 @@ function ActivePlayer({
       hlsRef.current = null;
       if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
       networkRetryTimer.current = null;
+      if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
+      loadWatchdog.current = null;
       networkRetryCount.current = 0;
       mediaRetryCount.current = 0;
       setError(null);
@@ -228,11 +231,23 @@ function ActivePlayer({
       video.addEventListener(
         "loadedmetadata",
         () => {
+          if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
+          loadWatchdog.current = null;
           if (resumeAt) video.currentTime = resumeAt;
           setLoading(false);
         },
         { once: true }
       );
+
+      // Last-resort safety net alongside the "error" event listener above: covers the case
+      // where the manifest/segment request itself hangs (through our own stream proxy) without
+      // ever firing a native error OR an hls.js fatal — nothing to recover from, so this just
+      // turns a silent infinite spinner into an actionable error with a retry button.
+      loadWatchdog.current = setTimeout(() => {
+        setReconnecting(false);
+        setLoading(false);
+        setError("Le chargement prend trop de temps. Réessaie.");
+      }, 20_000);
 
       // Subtitles always come from the PlaybackInfo response as external VTT tracks (rendered
       // as <track> elements below), for every PlayMethod — not from hls.js's own
@@ -386,6 +401,8 @@ function ActivePlayer({
       hlsRef.current = null;
       if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
       networkRetryTimer.current = null;
+      if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
+      loadWatchdog.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPlayback]);
@@ -424,6 +441,28 @@ function ActivePlayer({
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
+  }, []);
+
+  // The native <video> "error" event is the ONLY failure signal for the DirectPlay and native
+  // Safari-HLS paths (both are a plain `video.src = manifestUrl`, no hls.js involved, so none of
+  // the Hls.Events.ERROR retry/recovery logic above ever applies to them). Nothing was listening
+  // for it at all — a genuine failure there (e.g. Jellyfin failing to build a remux session for a
+  // newly requested audio track) left `loading` stuck at `true` forever, an infinite spinner with
+  // no way out. code 1 (MEDIA_ERR_ABORTED) is excluded: it fires as an expected side effect of
+  // every deliberate `video.src = ...; video.load()` reassignment in startPlayback itself
+  // (switching audio/subtitle, retrying) aborting whatever the previous src was doing — not a
+  // real failure, and treating it as one would surface a false error on every track switch.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    function onError() {
+      if (video!.error?.code === MediaError.MEDIA_ERR_ABORTED) return;
+      setReconnecting(false);
+      setLoading(false);
+      setError("La lecture a été interrompue. Réessaie.");
+    }
+    video.addEventListener("error", onError);
+    return () => video.removeEventListener("error", onError);
   }, []);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
