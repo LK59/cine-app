@@ -48,6 +48,10 @@ export async function GET(
 
   try {
     const range = req.headers.get("range");
+    // Temporary diagnostic — the on-screen error now shows the browser's exact currentSrc and a
+    // timestamp on failure, so this needs to be crossed-referenced against something less
+    // ambiguous than server logs mixed across several overlapping past test attempts.
+    console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), restPath, range ?? "");
     const res = await fetchWithRetry(
       target,
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it

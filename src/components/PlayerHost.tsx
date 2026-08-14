@@ -518,7 +518,13 @@ function ActivePlayer({
       // time). The native MediaError code (2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED) pins down
       // which WebKit failure mode this actually is instead of guessing blind.
       const codeLabel = { 1: "ABORTED", 2: "NETWORK", 3: "DECODE", 4: "SRC_NOT_SUPPORTED" }[code ?? 0] ?? "inconnu";
-      setError(`La lecture a été interrompue. Réessaie. (code ${code ?? "?"} ${codeLabel})`);
+      // Also surfaces the exact URL the browser was actually trying to load and a timestamp, to
+      // cross-reference against server-side logs unambiguously — prior rounds relied on
+      // inferring which request failed from noisy, overlapping server logs across several test
+      // attempts, which wasn't reliable enough to pin down conclusively.
+      setError(
+        `La lecture a été interrompue. Réessaie. (code ${code ?? "?"} ${codeLabel}, ${new Date().toLocaleTimeString("fr-FR")})\n${video!.currentSrc}`
+      );
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
@@ -613,7 +619,7 @@ function ActivePlayer({
           {error && !isMini && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-6 text-center">
               <div>
-                <p className="mb-4 text-sm text-red-400">{error}</p>
+                <p className="mb-4 whitespace-pre-line break-all text-sm text-red-400">{error}</p>
                 <div className="flex justify-center gap-3">
                   <button
                     type="button"
