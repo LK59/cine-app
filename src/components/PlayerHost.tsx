@@ -98,6 +98,15 @@ function ActivePlayer({
   // element itself is ever swapped.
   const lastKnownTime = useRef(0);
   const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Temporary on-screen diagnostic (no Mac/Safari Web Inspector available for live debugging) —
+  // mirrors every native <video> lifecycle event with a timestamp directly into the page, so it
+  // can be read/screenshotted straight off the phone instead of inferred from server-side logs,
+  // which already proved insufficient to pin down a live Safari-only failure on its own.
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const logDebug = useCallback((msg: string) => {
+    const line = `${new Date().toLocaleTimeString("fr-FR")}.${new Date().getMilliseconds().toString().padStart(3, "0")} ${msg}`;
+    setDebugLog((prev) => [...prev.slice(-59), line]);
+  }, []);
 
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
@@ -176,6 +185,8 @@ function ActivePlayer({
     async (opts?: { audioStreamIndex?: number; resumeAt?: number }) => {
       const video = videoRef.current;
       if (!video) return;
+
+      logDebug(`startPlayback audioStreamIndex=${opts?.audioStreamIndex ?? "default"} resumeAt=${opts?.resumeAt ?? 0} prevSrc=${video.src ? "yes" : "none"}`);
 
       hlsRef.current?.destroy();
       hlsRef.current = null;
@@ -319,22 +330,24 @@ function ActivePlayer({
       // DirectPlay/DirectStream: a plain Range-seekable file, not an HLS manifest — no hls.js,
       // no native-HLS branch below, just a regular <video src>.
       if (data.isDirectPlay) {
+        logDebug(`branch=DirectPlay src=${data.manifestUrl}`);
         video.src = data.manifestUrl;
         video.load();
-        video.play().catch(() => {});
+        video.play().catch((e) => logDebug(`play() rejected: ${e}`));
         return;
       }
 
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        logDebug(`branch=nativeHLS src=${data.manifestUrl}`);
         video.src = data.manifestUrl;
         // Reassigning .src alone doesn't reliably tear down Safari's existing
         // HLS session when only the query string changes (e.g. switching
         // audio track) — force a clean reload so it actually picks up the
         // new manifest instead of silently continuing the old one.
         video.load();
-        video.play().catch(() => {});
+        video.play().catch((e) => logDebug(`play() rejected: ${e}`));
         return;
       }
 
@@ -409,7 +422,7 @@ function ActivePlayer({
       hls.loadSource(data.manifestUrl);
       hls.attachMedia(video);
     },
-    [itemId]
+    [itemId, logDebug]
   );
 
   const changeAudio = useCallback(
@@ -445,7 +458,6 @@ function ActivePlayer({
   // Kicks off async playback setup (fetch + hls.js wiring) on mount — real effect work, not a
   // simple state derivation, so it can't move to render.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     startPlayback({ resumeAt: initialResumeAt });
     return () => {
       hlsRef.current?.destroy();
@@ -487,6 +499,21 @@ function ActivePlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    const events = [
+      "loadstart", "durationchange", "loadedmetadata", "loadeddata", "canplay", "canplaythrough",
+      "progress", "suspend", "abort", "emptied", "stalled", "waiting", "playing", "ended",
+    ];
+    const handlers = events.map((name) => {
+      const fn = () => logDebug(`event ${name} readyState=${video.readyState} networkState=${video.networkState}`);
+      video.addEventListener(name, fn);
+      return { name, fn };
+    });
+    return () => handlers.forEach(({ name, fn }) => video.removeEventListener(name, fn));
+  }, [logDebug]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
     const onTimeUpdate = () => {
       lastKnownTime.current = video.currentTime;
     };
@@ -508,6 +535,7 @@ function ActivePlayer({
     if (!video) return;
     function onError() {
       const code = video!.error?.code;
+      logDebug(`event error code=${code ?? "?"} message=${video!.error?.message ?? ""} readyState=${video!.readyState} networkState=${video!.networkState}`);
       if (code === MediaError.MEDIA_ERR_ABORTED) return;
       setReconnecting(false);
       setLoading(false);
@@ -528,7 +556,7 @@ function ActivePlayer({
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
-  }, []);
+  }, [logDebug]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
   // hors ligne" banner immediately on disconnect (like YouTube), rather than waiting for a
@@ -671,6 +699,18 @@ function ActivePlayer({
       )}
       {isMini && !error && !needsReauth && (
         <MiniPlayerChrome title={title} playing={playing} onTogglePlay={toggleMiniPlay} onClose={handleClose} />
+      )}
+      {/* Temporary on-screen diagnostic panel — no Mac available to use Safari's Web Inspector,
+          so this mirrors the same info directly onto the phone screen to read/screenshot. */}
+      {!isMini && debugLog.length > 0 && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-[200] max-h-[45vh] overflow-y-auto bg-black/85 p-2 font-mono text-[10px] leading-tight text-lime-300"
+          style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
+        >
+          {debugLog.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
       )}
     </div>,
     document.body
