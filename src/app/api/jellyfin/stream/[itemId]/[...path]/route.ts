@@ -45,26 +45,32 @@ export async function GET(
   const restPath = path.join("/");
   const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${req.nextUrl.search}`;
   const isStatic = req.nextUrl.searchParams.get("static") === "true";
+  const isManifest = restPath.endsWith(".m3u8");
 
   try {
-    const range = req.headers.get("range");
-    // Temporary diagnostic — the on-screen error now shows the browser's exact currentSrc and a
-    // timestamp on failure, so this needs to be crossed-referenced against something less
-    // ambiguous than server logs mixed across several overlapping past test attempts.
-    console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), restPath, range ?? "");
+    // Root cause found live: Safari issues a speculative byte-Range request for the manifest
+    // itself on a second load of the same path (e.g. an audio-track switch) — never seen on a
+    // first load. Forwarding that Range to Jellyfin got back a 206 Partial Content (only the
+    // first ~1.4KB), which we then handed to the browser under a plain 200 with no Content-Range
+    // — a manifest silently truncated mid-line, not the full playlist it claimed to be. Safari's
+    // native HLS parser can't make sense of that and rejects the whole source outright
+    // (MediaError code 4, SRC_NOT_SUPPORTED) — instantly, no network delay needed to explain it.
+    // We always need the complete manifest text anyway (for the URL-rewrite below), so Range is
+    // simply never forwarded for this case — Jellyfin always returns the full playlist, we always
+    // send the browser the full rewritten text back with a plain 200, which is a perfectly valid
+    // response to a Range request under HTTP (the client falls back to using the whole body).
+    const range = isManifest ? null : req.headers.get("range");
     const res = await fetchWithRetry(
       target,
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
       // here is what lets the browser's native <video> seeking issue real HTTP range requests
-      // instead of always re-fetching from byte 0. Harmless to pass through unconditionally
-      // for the HLS/manifest case too, since Jellyfin just ignores it there.
+      // instead of always re-fetching from byte 0.
       { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
       AbortSignal.any([req.signal, AbortSignal.timeout(30_000)])
     );
     if (!res.ok || !res.body) return new NextResponse(null, { status: res.status || 502 });
 
     const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
-    const isManifest = restPath.endsWith(".m3u8");
 
     if (isManifest) {
       // HLS playlists can reference sibling segments/variant playlists with an
