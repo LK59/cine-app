@@ -53,6 +53,9 @@ interface ExternalSubtitleTrack {
 // arbitrary bandwidth guess) is what actually decides DirectPlay/DirectStream vs Transcode; a
 // genuine Transcode still targets a bounded output via Jellyfin's own encoding defaults.
 // No mid-playback renegotiation for resolution (accepted tradeoff — see plan).
+const MAX_NETWORK_RETRIES = 6;
+const MAX_MEDIA_RETRIES = 3;
+
 function pickMaxBitrate(): number {
   const w = window.innerWidth * (window.devicePixelRatio || 1);
   if (w <= 1280) return 20_000_000;
@@ -86,6 +89,9 @@ function ActivePlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<import("hls.js").default | null>(null);
+  const networkRetryCount = useRef(0);
+  const mediaRetryCount = useRef(0);
+  const networkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
@@ -159,6 +165,10 @@ function ActivePlayer({
 
       hlsRef.current?.destroy();
       hlsRef.current = null;
+      if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
+      networkRetryTimer.current = null;
+      networkRetryCount.current = 0;
+      mediaRetryCount.current = 0;
       setLoading(true);
 
       const codecSupport = await detectCodecSupport();
@@ -265,8 +275,49 @@ function ActivePlayer({
         maxMaxBufferLength: 90,
       });
       hlsRef.current = hls;
+
+      // A successfully buffered fragment means the stream is healthy again — reset both
+      // counters so a later, unrelated blip gets its own full retry budget instead of
+      // inheriting an exhausted one from an earlier, already-recovered outage.
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        networkRetryCount.current = 0;
+        mediaRetryCount.current = 0;
+      });
+
+      // hls.js's own per-request retry/backoff (fragLoadingMaxRetry etc.) already absorbs a
+      // short stall before ever raising a *fatal* error — a fatal here means that budget is
+      // already exhausted. hls.js's documented recovery for that case is to call startLoad()
+      // (network) or recoverMediaError() (media) ourselves rather than tearing the player down;
+      // bounded so a genuinely dead stream still surfaces an error instead of retrying forever.
       hls.on(Hls.Events.ERROR, (_evt, data2) => {
-        if (data2.fatal) setError("La lecture a été interrompue.");
+        if (!data2.fatal) return;
+        switch (data2.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR: {
+            if (networkRetryCount.current >= MAX_NETWORK_RETRIES) {
+              setError("La lecture a été interrompue.");
+              return;
+            }
+            networkRetryCount.current += 1;
+            // Exponential backoff (1s, 2s, 4s... capped at 15s) — covers a brief network
+            // handoff (e.g. mobile switching between 5G and Wi-Fi, which drops connectivity
+            // for roughly 1-3s) without hammering the server if it's actually down.
+            const delay = Math.min(1000 * 2 ** (networkRetryCount.current - 1), 15_000);
+            if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
+            networkRetryTimer.current = setTimeout(() => hls.startLoad(), delay);
+            return;
+          }
+          case Hls.ErrorTypes.MEDIA_ERROR: {
+            if (mediaRetryCount.current >= MAX_MEDIA_RETRIES) {
+              setError("La lecture a été interrompue.");
+              return;
+            }
+            mediaRetryCount.current += 1;
+            hls.recoverMediaError();
+            return;
+          }
+          default:
+            setError("La lecture a été interrompue.");
+        }
       });
       hls.loadSource(data.manifestUrl);
       hls.attachMedia(video);
@@ -305,6 +356,8 @@ function ActivePlayer({
     return () => {
       hlsRef.current?.destroy();
       hlsRef.current = null;
+      if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
+      networkRetryTimer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPlayback]);
