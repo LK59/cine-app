@@ -4,18 +4,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
-
-interface PlayerModalProps {
-  itemId: string;
-  title: string;
-  onClose: () => void;
-  /** Resume position in seconds, if reopening a partially-watched item. */
-  resumeAt?: number;
-  /** Next episode in the series, if known — enables the credits-time "next up" prompt. */
-  nextEpisode?: { itemId: string; title: string } | null;
-  /** Swaps to the next episode in place (no close/reopen transition). */
-  onAdvance?: (next: { itemId: string; title: string }) => void;
-}
+import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
+import { usePlayback } from "@/components/PlaybackProvider";
 
 // Rough client viewport → max transcode bitrate mapping, sent once at playback
 // start so Jellyfin doesn't burn GPU time encoding 4K for a 1080p viewport.
@@ -27,14 +17,29 @@ function pickMaxBitrate(): number {
   return 15_000_000;
 }
 
-export function PlayerModal({
-  itemId,
-  title,
-  onClose,
-  resumeAt: initialResumeAt,
-  nextEpisode,
-  onAdvance,
-}: PlayerModalProps) {
+// The single, always-mounted playback engine for the whole app (mounted once in the
+// dashboard layout) — driven by PlaybackProvider's global state instead of props, so it
+// survives navigating to a different page. Renders nothing when there's no active session;
+// otherwise renders the SAME <video> element regardless of full/mini mode (only the
+// container's size/position/chrome differ), so minimizing never interrupts playback.
+export function PlayerHost() {
+  const playback = usePlayback();
+  const { session, mode } = playback;
+
+  if (!session) return null;
+  return <ActivePlayer session={session} mode={mode === "mini" ? "mini" : "full"} />;
+}
+
+function ActivePlayer({
+  session,
+  mode,
+}: {
+  session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
+  mode: "full" | "mini";
+}) {
+  const playback = usePlayback();
+  const { itemId, title, resumeAt: initialResumeAt } = session;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<import("hls.js").default | null>(null);
@@ -43,7 +48,7 @@ export function PlayerModal({
   const [needsReauth, setNeedsReauth] = useState(false);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
-  const [session, setSession] = useState<{
+  const [playSession, setPlaySession] = useState<{
     itemId: string;
     playSessionId: string;
     mediaSourceId: string;
@@ -55,17 +60,20 @@ export function PlayerModal({
   const [currentSubtitleId, setCurrentSubtitleId] = useState<number | null>(null);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
 
-  const stopPlaybackNow = usePlaybackSession(videoRef, session);
+  const stopPlaybackNow = usePlaybackSession(videoRef, playSession);
+
+  const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
   // Swaps to the next episode in place — reports the current one's final
   // position first, same as a manual close, but never triggers the
-  // close/unmount fade since the modal stays open for the new episode.
+  // close/unmount fade since the player stays open for the new episode.
   const handleAdvance = useCallback(() => {
-    if (!nextEpisode || !onAdvance) return;
+    if (!nextEpisode) return;
     stopPlaybackNow();
-    onAdvance(nextEpisode);
-  }, [nextEpisode, onAdvance, stopPlaybackNow]);
+    playback.advance(nextEpisode);
+  }, [nextEpisode, playback, stopPlaybackNow]);
 
   // Fades out instead of vanishing instantly — an abrupt unmount back to the
   // underlying page reads as a glitch, especially mid-transcode. Reports the
@@ -77,25 +85,18 @@ export function PlayerModal({
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     stopPlaybackNow();
     setClosing(true);
-    setTimeout(onClose, CLOSE_MS);
-  }, [onClose, stopPlaybackNow]);
+    setTimeout(() => playback.close(), CLOSE_MS);
+  }, [playback, stopPlaybackNow]);
 
   useEffect(() => {
+    if (mode !== "full") return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") handleClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleClose]);
+  }, [mode, handleClose]);
 
-  // (Re)starts playback, optionally at a specific audio track / resume point.
-  // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
-  // subtitles, which it exposes as switchable renditions), so changing audio
-  // means asking for a brand new transcode. Jellyfin's HLS output here is a
-  // full VOD playlist covering the whole runtime regardless of StartTimeTicks
-  // (seeking already works by jumping within it) — so instead of trusting
-  // Jellyfin to start the new stream at the right offset, we seek the video
-  // to resumeAt ourselves once the new manifest's metadata is ready.
   function readNativeSubtitles(video: HTMLVideoElement) {
     const tracks: Track[] = [];
     let activeId: number | null = null;
@@ -111,6 +112,14 @@ export function PlayerModal({
     }
   }
 
+  // (Re)starts playback, optionally at a specific audio track / resume point.
+  // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
+  // subtitles, which it exposes as switchable renditions), so changing audio
+  // means asking for a brand new transcode. Jellyfin's HLS output here is a
+  // full VOD playlist covering the whole runtime regardless of StartTimeTicks
+  // (seeking already works by jumping within it) — so instead of trusting
+  // Jellyfin to start the new stream at the right offset, we seek the video
+  // to resumeAt ourselves once the new manifest's metadata is ready.
   const startPlayback = useCallback(
     async (opts?: { audioStreamIndex?: number; resumeAt?: number }) => {
       const video = videoRef.current;
@@ -146,7 +155,7 @@ export function PlayerModal({
       }
       const data = await res.json();
 
-      setSession({ itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId });
+      setPlaySession({ itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId });
       setAudioTracks(
         (data.audioTracks ?? []).map((t: { index: number; label: string }) => ({
           id: t.index,
@@ -213,7 +222,6 @@ export function PlayerModal({
       hls.loadSource(data.manifestUrl);
       hls.attachMedia(video);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [itemId]
   );
 
@@ -250,49 +258,123 @@ export function PlayerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPlayback]);
 
+  // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    function onEnded() {
+      handleClose();
+    }
+    video.addEventListener("ended", onEnded);
+    return () => video.removeEventListener("ended", onEnded);
+  }, [handleClose]);
+
+  // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
+  // so the mini player's play/pause icon stays correct without threading state through props.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+    };
+  }, []);
+
+  const handleExpand = useCallback(() => playback.expand(), [playback]);
+  const { pos, size, isDragging, handlers } = useMiniPlayerDrag(mode === "mini", handleExpand);
+
+  function toggleMiniPlay() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) video.play();
+    else video.pause();
+  }
+
   if (typeof document === "undefined") return null;
 
+  const isMini = mode === "mini";
+  const TRANSITION = "top 300ms cubic-bezier(0.4,0,0.2,1), left 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)";
+
+  const style: React.CSSProperties = isMini
+    ? {
+        position: "fixed",
+        top: pos.y,
+        left: pos.x,
+        width: size.width,
+        height: size.height,
+        borderRadius: 16,
+        zIndex: 80,
+        overflow: "hidden",
+        boxShadow: "0 10px 30px rgba(0,0,0,.5)",
+        transition: isDragging ? "none" : TRANSITION,
+        touchAction: "none",
+      }
+    : {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100dvh",
+        borderRadius: 0,
+        zIndex: 80,
+        background: "black",
+        transition: `${TRANSITION}, opacity 200ms ease-out`,
+        opacity: closing ? 0 : 1,
+      };
+
   return createPortal(
-    <div
-      ref={containerRef}
-      className={`fixed inset-0 z-80 flex items-center justify-center bg-black transition-opacity duration-200 ${
-        closing ? "opacity-0" : "opacity-100 animate-fade-in"
-      }`}
-    >
+    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : ""} {...(isMini ? handlers : {})}>
       {needsReauth ? (
-        <div className="max-w-xs px-6 text-center">
-          <p className="mb-4 text-sm text-white">Ta session Jellyfin a expiré.</p>
-          <a
-            href={`/login?reason=playback&next=${encodeURIComponent(window.location.pathname)}`}
-            className="btn-primary inline-flex justify-center"
-          >
-            Se reconnecter
-          </a>
+        <div className="flex h-full items-center justify-center px-6 text-center">
+          <div>
+            <p className="mb-4 text-sm text-white">Ta session Jellyfin a expiré.</p>
+            <a
+              href={`/login?reason=playback&next=${encodeURIComponent(window.location.pathname)}`}
+              className="btn-primary inline-flex justify-center"
+            >
+              Se reconnecter
+            </a>
+          </div>
         </div>
       ) : error ? (
-        <p className="px-6 text-center text-sm text-red-400">{error}</p>
+        <p className="flex h-full items-center justify-center px-6 text-center text-sm text-red-400">{error}</p>
       ) : (
-        // eslint-disable-next-line jsx-a11y/media-has-caption
-        <video ref={videoRef} playsInline autoPlay className="h-full w-full" {...{ "x-webkit-airplay": "allow" }} />
+        <video
+          ref={videoRef}
+          playsInline
+          autoPlay
+          className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
+          {...{ "x-webkit-airplay": "allow" }}
+        />
       )}
-      <PlayerControls
-        videoRef={videoRef}
-        containerRef={containerRef}
-        title={title}
-        onClose={handleClose}
-        audioTracks={audioTracks}
-        currentAudioId={currentAudioId}
-        onChangeAudio={changeAudio}
-        subtitleTracks={subtitleTracks}
-        currentSubtitleId={currentSubtitleId}
-        onChangeSubtitle={changeSubtitle}
-        hidden={!!error || needsReauth}
-        loading={loading}
-        introSkip={introSkip}
-        creditsStart={creditsStart}
-        nextEpisode={nextEpisode ?? null}
-        onAdvance={handleAdvance}
-      />
+      {!isMini && (
+        <PlayerControls
+          videoRef={videoRef}
+          containerRef={containerRef}
+          title={title}
+          onClose={handleClose}
+          onMinimize={playback.minimize}
+          audioTracks={audioTracks}
+          currentAudioId={currentAudioId}
+          onChangeAudio={changeAudio}
+          subtitleTracks={subtitleTracks}
+          currentSubtitleId={currentSubtitleId}
+          onChangeSubtitle={changeSubtitle}
+          hidden={!!error || needsReauth}
+          loading={loading}
+          introSkip={introSkip}
+          creditsStart={creditsStart}
+          nextEpisode={nextEpisode}
+          onAdvance={handleAdvance}
+        />
+      )}
+      {isMini && !error && !needsReauth && (
+        <MiniPlayerChrome title={title} playing={playing} onTogglePlay={toggleMiniPlay} onClose={handleClose} />
+      )}
     </div>,
     document.body
   );

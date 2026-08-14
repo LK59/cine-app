@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import dynamic from "next/dynamic";
-const PlayerModal = dynamic(() => import("@/components/PlayerModal").then((m) => m.PlayerModal), { ssr: false });
 import { PlayButton } from "@/components/PlayButton";
+import { usePlayback } from "@/components/PlaybackProvider";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
@@ -72,8 +71,8 @@ function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
 function ResumeCard({ item }: { item: ResumeItem }) {
   const router = useRouter();
   const t = useT();
+  const playback = usePlayback();
   const [open, setOpen] = useState(false);
-  const [showPlayer, setShowPlayer] = useState(false);
   const lp = useLongPress(() => setOpen(true));
   const resumeAt = item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined;
   const playLabel =
@@ -125,14 +124,11 @@ function ResumeCard({ item }: { item: ResumeItem }) {
         title={item.name}
         subtitle={item.subtitle ?? undefined}
         actions={[
-          { label: playLabel, icon: <PlayCircle size={16} />, onClick: () => setShowPlayer(true) },
+          { label: playLabel, icon: <PlayCircle size={16} />, onClick: () => playback.play({ itemId: item.id, title: item.name, resumeAt }) },
           { label: t('common.openJellyfin'), icon: <Play size={16} />, onClick: () => window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank") },
           ...(item.cinemaHref ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(item.cinemaHref!) }] : []),
         ]}
       />
-      {showPlayer && (
-        <PlayerModal itemId={item.id} title={item.name} resumeAt={resumeAt} onClose={() => setShowPlayer(false)} />
-      )}
     </>
   );
 }

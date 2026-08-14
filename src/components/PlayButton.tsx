@@ -1,13 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import dynamic from "next/dynamic";
 import { PlayCircle } from "lucide-react";
 import { formatResumeTicks } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-
-const PlayerModal = dynamic(() => import("@/components/PlayerModal").then((m) => m.PlayerModal), { ssr: false });
+import { usePlayback } from "@/components/PlaybackProvider";
 
 interface PlayButtonProps {
   itemId: string;
@@ -43,9 +40,7 @@ export function PlayButton({
   label: labelOverride,
   getNextEpisode,
 }: PlayButtonProps) {
-  // The item currently open in the player — starts null (closed), and can be
-  // swapped to a different item in place when the player auto-advances.
-  const [playing, setPlaying] = useState<{ itemId: string; title: string; resumeAt?: number } | null>(null);
+  const playback = usePlayback();
   const t = useT();
   const playerEnabled = usePlayerEnabled();
 
@@ -65,34 +60,22 @@ export function PlayButton({
         : "flex items-center gap-1.5 rounded-lg bg-accent-600/80 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-accent-600";
 
   return (
-    <>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          setPlaying({ itemId, title, resumeAt: initialResumeAt });
-        }}
-        className={className ?? defaultClass}
-        title={label}
-      >
-        {variant === "primary" && progressPct !== null && (
-          <span className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${progressPct}%` }} />
-        )}
-        <span className="relative z-10 inline-flex items-center gap-1.5">
-          <PlayCircle size={iconSize} />
-          {variant !== "icon" && label}
-        </span>
-      </button>
-      {playing && (
-        <PlayerModal
-          itemId={playing.itemId}
-          title={playing.title}
-          resumeAt={playing.resumeAt}
-          nextEpisode={getNextEpisode?.(playing.itemId) ?? null}
-          onAdvance={(next) => setPlaying({ itemId: next.itemId, title: next.title })}
-          onClose={() => setPlaying(null)}
-        />
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        playback.play({ itemId, title, resumeAt: initialResumeAt, getNextEpisode });
+      }}
+      className={className ?? defaultClass}
+      title={label}
+    >
+      {variant === "primary" && progressPct !== null && (
+        <span className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${progressPct}%` }} />
       )}
-    </>
+      <span className="relative z-10 inline-flex items-center gap-1.5">
+        <PlayCircle size={iconSize} />
+        {variant !== "icon" && label}
+      </span>
+    </button>
   );
 }

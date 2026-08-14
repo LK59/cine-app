@@ -10,6 +10,7 @@ import { SWRProvider } from "@/components/SWRProvider";
 import { ToastProvider } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { TranslationProvider } from "@/components/TranslationProvider";
+import { PlaybackProvider } from "@/components/PlaybackProvider";
 import { LOCALES, LOCALE_COOKIE, loadLocaleDict, type Locale } from "@/lib/i18n";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
@@ -77,7 +78,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <TranslationProvider initialLocale={lang} initialDict={dict}>
           <ThemeProvider>
             <SWRProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <ToastProvider>
+                <PlaybackProvider>{children}</PlaybackProvider>
+              </ToastProvider>
             </SWRProvider>
           </ThemeProvider>
           <UpdateBanner />

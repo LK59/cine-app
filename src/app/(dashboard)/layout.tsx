@@ -6,6 +6,7 @@ import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import { ScrollRestorer } from "@/components/ScrollRestorer";
 import { PageTransition } from "@/components/PageTransition";
 import { MainScroll } from "@/components/MainScroll";
+import { PlayerHostLazy } from "@/components/PlayerHostLazy";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <GlobalSearchLazy />
       <SSENotifier />
       <KeyboardShortcutsModal />
+      <PlayerHostLazy />
     </div>
   );
 }

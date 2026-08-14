@@ -21,7 +21,7 @@ function report(path: "progress" | "stop", info: PlaybackSessionInfo, positionTi
 }
 
 // Keeps Jellyfin's "now playing" / resume state in sync with an active
-// PlayerModal session: a progress heartbeat every 10s, and a stop report
+// PlayerHost session: a progress heartbeat every 10s, and a stop report
 // (with the final position) on close, unmount, or tab close. Returns a
 // stopNow() the caller can invoke at the exact moment the user closes the
 // player — capturing currentTime right then, rather than whenever React

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2 } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown } from "lucide-react";
 
 export interface Track {
   id: number;
@@ -13,6 +13,7 @@ interface PlayerControlsProps {
   containerRef: RefObject<HTMLDivElement | null>;
   title: string;
   onClose: () => void;
+  onMinimize: () => void;
   audioTracks: Track[];
   currentAudioId: number | null;
   onChangeAudio: (id: number) => void;
@@ -44,6 +45,7 @@ export function PlayerControls({
   containerRef,
   title,
   onClose,
+  onMinimize,
   audioTracks,
   currentAudioId,
   onChangeAudio,
@@ -361,6 +363,16 @@ export function PlayerControls({
                 <Cast size={18} />
               </button>
             )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMinimize();
+              }}
+              title="Réduire"
+              className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
+            >
+              <ChevronDown size={20} />
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();

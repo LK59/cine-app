@@ -10,7 +10,7 @@ const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
 // credentials. A single status + code lets the client show one clear message
-// instead of a dead-end error (see PlayerModal + /login?reason=playback).
+// instead of a dead-end error (see PlayerHost + /login?reason=playback).
 function reauthRequired() {
   return NextResponse.json(
     { error: "Ta session Jellyfin a expiré", code: "jellyfin_reauth_required" },
