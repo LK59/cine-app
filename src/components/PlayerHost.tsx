@@ -266,7 +266,18 @@ function ActivePlayer({
 
       const resumeAt = opts?.resumeAt;
       video.addEventListener(
-        "loadedmetadata",
+        // Root cause found live via real Jellyfin logs during a reproduced test: setting
+        // currentTime this early (previously on 'loadedmetadata', which only guarantees
+        // duration/dimensions are known — no data buffered yet at any position) made Safari's
+        // native HLS engine jump straight to the resume target's segment before the very first
+        // manifest bootstrap (segment 0 + its init segment) had even settled. That collided with
+        // Jellyfin's own ffmpeg job for segment 0, which got killed mid-request right as our
+        // client's init-segment fetch landed on it — logged server-side as "task was canceled"
+        // then "doesn't exist and no transcode is running". hls.js already sequences this more
+        // carefully, which is why Firefox never hit it despite running the exact same code here.
+        // 'loadeddata' guarantees the browser actually has playable data at the CURRENT position
+        // first, so the resume seek only fires once the initial bootstrap has already succeeded.
+        "loadeddata",
         () => {
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
