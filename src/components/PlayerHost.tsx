@@ -5,7 +5,41 @@ import { createPortal } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
+import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { usePlayback } from "@/components/PlaybackProvider";
+import { detectCodecSupport } from "@/lib/codecSupport";
+
+export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
+
+export interface PlaybackInfoSummary {
+  playMethod: PlayMethod;
+  transcodeReasons: string[];
+  container: string | null;
+  requestedVideoCodecs: string[];
+  video: {
+    codec: string | null;
+    profile: string | null;
+    width: number | null;
+    height: number | null;
+    bitDepth: number | null;
+    frameRate: number | null;
+    bitRate: number | null;
+  } | null;
+  audio: {
+    codec: string | null;
+    channels: number | null;
+    bitRate: number | null;
+    language: string | null;
+  } | null;
+}
+
+interface ExternalSubtitleTrack {
+  index: number;
+  url: string;
+  label: string;
+  language?: string;
+  isDefault: boolean;
+}
 
 // Rough client viewport → max transcode bitrate mapping, sent once at playback
 // start so Jellyfin doesn't burn GPU time encoding 4K for a 1080p viewport.
@@ -61,8 +95,13 @@ function ActivePlayer({
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [isDirectPlay, setIsDirectPlay] = useState(false);
+  const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
+  const [playbackInfo, setPlaybackInfo] = useState<PlaybackInfoSummary | null>(null);
+  const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
+  const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
-  const stopPlaybackNow = usePlaybackSession(videoRef, playSession);
+  const stopPlaybackNow = usePlaybackSession(videoRef, playSession && { ...playSession, playMethod });
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
@@ -129,6 +168,8 @@ function ActivePlayer({
       hlsRef.current = null;
       setLoading(true);
 
+      const codecSupport = await detectCodecSupport();
+
       const res = await fetch("/api/jellyfin/playback/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,6 +178,7 @@ function ActivePlayer({
           maxBitrate: pickMaxBitrate(),
           audioStreamIndex: opts?.audioStreamIndex,
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
+          codecSupport,
         }),
       });
       if (res.status === 401) {
@@ -163,13 +205,10 @@ function ActivePlayer({
         }))
       );
       setCurrentAudioId(opts?.audioStreamIndex ?? data.audioTracks?.find((t: { isDefault: boolean }) => t.isDefault)?.index ?? null);
-      // Subtitles aren't sourced from this response — Jellyfin embeds them as
-      // switchable HLS renditions, discovered below via hls.js / textTracks
-      // once the manifest actually loads.
-      setSubtitleTracks([]);
-      setCurrentSubtitleId(null);
       setIntroSkip(data.introSkip ?? null);
       setCreditsStart(data.creditsStart ?? null);
+      setPlaybackInfo(data.playbackInfo ?? null);
+      setIsDirectPlay(!!data.isDirectPlay);
 
       const resumeAt = opts?.resumeAt;
       video.addEventListener(
@@ -180,6 +219,30 @@ function ActivePlayer({
         },
         { once: true }
       );
+
+      // DirectPlay/DirectStream: a plain Range-seekable file, not an HLS manifest — no hls.js,
+      // no native-HLS branch below, just a regular <video src>. Subtitles come from the
+      // PlaybackInfo response as external VTT tracks (see the <track> elements rendered below)
+      // rather than from hls.js/native textTrack discovery, since there's no HLS rendition and
+      // the browser can't demux an mkv's embedded subtitle tracks on its own.
+      if (data.isDirectPlay) {
+        const tracks: ExternalSubtitleTrack[] = (data.subtitleTracks ?? []).map(
+          (t: { index: number; url: string; label: string; language?: string; isDefault: boolean }) => t
+        );
+        setExternalSubtitleTracks(tracks);
+        setSubtitleTracks(tracks.map((t) => ({ id: t.index, label: t.label })));
+        setCurrentSubtitleId(null);
+        video.src = data.manifestUrl;
+        video.load();
+        video.play().catch(() => {});
+        return;
+      }
+      setExternalSubtitleTracks([]);
+      // Subtitles aren't sourced from this response for the HLS path — Jellyfin embeds them as
+      // switchable HLS renditions, discovered below via hls.js / textTracks once the manifest
+      // actually loads (a different index scheme than the one above).
+      setSubtitleTracks([]);
+      setCurrentSubtitleId(null);
 
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
@@ -349,7 +412,12 @@ function ActivePlayer({
           autoPlay
           className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
           {...{ "x-webkit-airplay": "allow" }}
-        />
+        >
+          {isDirectPlay &&
+            externalSubtitleTracks.map((t) => (
+              <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
+            ))}
+        </video>
       )}
       {!isMini && (
         <PlayerControls
@@ -358,6 +426,7 @@ function ActivePlayer({
           title={title}
           onClose={handleClose}
           onMinimize={playback.minimize}
+          onTogglePlaybackInfo={() => setShowPlaybackInfo((v) => !v)}
           audioTracks={audioTracks}
           currentAudioId={currentAudioId}
           onChangeAudio={changeAudio}
@@ -371,6 +440,9 @@ function ActivePlayer({
           nextEpisode={nextEpisode}
           onAdvance={handleAdvance}
         />
+      )}
+      {!isMini && (
+        <PlaybackInfoPanel info={playbackInfo} open={showPlaybackInfo} onClose={() => setShowPlaybackInfo(false)} />
       )}
       {isMini && !error && !needsReauth && (
         <MiniPlayerChrome title={title} playing={playing} onTogglePlay={toggleMiniPlay} onClose={handleClose} />

@@ -20,11 +20,17 @@ export async function GET(
 
   const restPath = path.join("/");
   const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${req.nextUrl.search}`;
+  const isStatic = req.nextUrl.searchParams.get("static") === "true";
 
   try {
+    const range = req.headers.get("range");
     const res = await fetch(target, {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(30_000)]),
-      headers: { "X-Emby-Token": config.jellyfin.apiKey },
+      // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
+      // here is what lets the browser's native <video> seeking issue real HTTP range requests
+      // instead of always re-fetching from byte 0. Harmless to pass through unconditionally
+      // for the HLS/manifest case too, since Jellyfin just ignores it there.
+      headers: { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
     });
     if (!res.ok || !res.body) return new NextResponse(null, { status: res.status || 502 });
 
@@ -46,7 +52,21 @@ export async function GET(
       });
     }
 
-    // Each segment URL is tied to a specific PlaySessionId and never changes
+    if (isStatic) {
+      // DirectPlay/DirectStream: a single big Range-seekable file, not an immutable HLS
+      // segment — pass through the real status (200 or 206) and range headers as-is instead
+      // of assuming 200, so native <video> seeking works.
+      const passthroughHeaders: Record<string, string> = { "Content-Type": contentType, "Cache-Control": "public, max-age=21600" };
+      const contentRange = res.headers.get("Content-Range");
+      const contentLength = res.headers.get("Content-Length");
+      const acceptRanges = res.headers.get("Accept-Ranges");
+      if (contentRange) passthroughHeaders["Content-Range"] = contentRange;
+      if (contentLength) passthroughHeaders["Content-Length"] = contentLength;
+      if (acceptRanges) passthroughHeaders["Accept-Ranges"] = acceptRanges;
+      return new NextResponse(res.body, { status: res.status, headers: passthroughHeaders });
+    }
+
+    // Each HLS segment URL is tied to a specific PlaySessionId and never changes
     // content once generated — immutable, and long-lived enough to cover a
     // full movie, so a rewind past hls.js's in-memory buffer replays from the
     // browser's HTTP cache instead of re-hitting Jellyfin.

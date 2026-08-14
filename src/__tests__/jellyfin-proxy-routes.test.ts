@@ -15,11 +15,12 @@ let playerEnabled = true;
 const originalFetch = global.fetch;
 const validId = "a".repeat(32);
 
-function fakeReq(opts: { search?: string; cookie?: string } = {}): NextRequest {
+function fakeReq(opts: { search?: string; cookie?: string; range?: string } = {}): NextRequest {
   return {
     signal: new AbortController().signal,
     nextUrl: { searchParams: new URLSearchParams(opts.search ?? ""), search: opts.search ? `?${opts.search}` : "" },
     cookies: { get: (name: string) => (name === "cine_session" && opts.cookie ? { value: opts.cookie } : undefined) },
+    headers: { get: (name: string) => (name.toLowerCase() === "range" ? opts.range ?? null : null) },
   } as unknown as NextRequest;
 }
 
@@ -103,6 +104,44 @@ describe("GET /api/jellyfin/stream/[itemId]/[...path]", () => {
     const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
     const res = await GET(fakeReq(), { params: Promise.resolve({ itemId: validId, path: ["segment1.ts"] }) });
     expect(res.headers.get("cache-control")).toContain("immutable");
+  });
+
+  it("forwards the client's Range header to Jellyfin (DirectPlay/DirectStream native seeking)", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 206,
+      body: {},
+      headers: new Headers({ "Content-Type": "video/x-matroska" }),
+    });
+    const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
+    await GET(fakeReq({ search: "static=true", range: "bytes=100-199" }), {
+      params: Promise.resolve({ itemId: validId, path: ["stream.mkv"] }),
+    });
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(init.headers.Range).toBe("bytes=100-199");
+  });
+
+  it("passes through the real status and Content-Range for a static (DirectPlay/DirectStream) request", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 206,
+      body: {},
+      headers: new Headers({
+        "Content-Type": "video/x-matroska",
+        "Content-Range": "bytes 100-199/5000",
+        "Content-Length": "100",
+        "Accept-Ranges": "bytes",
+      }),
+    });
+    const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
+    const res = await GET(fakeReq({ search: "static=true" }), {
+      params: Promise.resolve({ itemId: validId, path: ["stream.mkv"] }),
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe("bytes 100-199/5000");
+    expect(res.headers.get("accept-ranges")).toBe("bytes");
   });
 
   it("returns 400 for a malformed itemId", async () => {

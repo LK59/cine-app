@@ -130,4 +130,59 @@ describe("POST /api/jellyfin/playback/start", () => {
     const res = await POST(fakeReq({ itemId: validId }));
     expect(res.status).toBe(200);
   });
+
+  it("builds a static stream URL and reports DirectPlay when SupportsDirectPlay is true", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{
+        Id: "src-1",
+        Container: "mp4",
+        SupportsDirectPlay: true,
+        SupportsDirectStream: true,
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "h264" }],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId }));
+    const body = await res.json();
+    expect(body.isDirectPlay).toBe(true);
+    expect(body.manifestUrl).toBe(`/api/jellyfin/stream/${validId}/stream.mp4?static=true&mediaSourceId=src-1`);
+    expect(body.playbackInfo.playMethod).toBe("DirectPlay");
+    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "DirectPlay");
+  });
+
+  it("labels a video-codec transcode reason as Transcode (real re-encode)", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264&TranscodeReasons=VideoCodecNotSupported",
+        MediaStreams: [],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId }));
+    const body = await res.json();
+    expect(body.playbackInfo.playMethod).toBe("Transcode");
+    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode");
+  });
+
+  it("labels an audio-only transcode reason as DirectStream (video copied untouched)", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264,hevc&TranscodeReasons=AudioCodecNotSupported",
+        MediaStreams: [],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId }));
+    const body = await res.json();
+    expect(body.playbackInfo.playMethod).toBe("DirectStream");
+    expect(body.playbackInfo.transcodeReasons).toEqual(["AudioCodecNotSupported"]);
+  });
 });

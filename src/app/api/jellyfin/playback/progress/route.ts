@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
   const playSessionId = body?.playSessionId as string | undefined;
   const mediaSourceId = body?.mediaSourceId as string | undefined;
   const positionTicks = Number(body?.positionTicks);
+  const playMethod = (body?.playMethod as "DirectPlay" | "DirectStream" | "Transcode" | undefined) ?? "Transcode";
 
   if (!itemId || !playSessionId || !mediaSourceId || !Number.isFinite(positionTicks)) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
@@ -33,7 +34,8 @@ export async function POST(req: NextRequest) {
       session.jfToken,
       playSessionId,
       mediaSourceId,
-      positionTicks
+      positionTicks,
+      playMethod
     );
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -1,5 +1,6 @@
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
+import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
 
 const { url, apiKey } = config.jellyfin;
 const headers = { "X-Emby-Token": apiKey };
@@ -53,13 +54,26 @@ export interface JellyfinMediaStream {
   Language?: string;
   DisplayTitle?: string;
   IsDefault?: boolean;
+  IsExternal?: boolean;
   Codec?: string;
+  Profile?: string;
+  BitRate?: number;
+  BitDepth?: number;
+  Width?: number;
+  Height?: number;
+  Channels?: number;
+  AverageFrameRate?: number;
+  DeliveryUrl?: string;
 }
 
 export interface JellyfinMediaSource {
   Id: string;
+  ETag?: string;
   TranscodingUrl?: string;
   Container?: string;
+  Bitrate?: number;
+  SupportsDirectPlay?: boolean;
+  SupportsDirectStream?: boolean;
   MediaStreams?: JellyfinMediaStream[];
 }
 
@@ -74,16 +88,14 @@ export interface PlaybackInfoOptions {
   audioStreamIndex?: number;
   subtitleStreamIndex?: number;
   startTicks?: number;
+  deviceProfile: JellyfinDeviceProfile;
 }
 
 export const jellyfin = {
-  // Forces Jellyfin to always transcode to H.264/AAC over HLS — the one
-  // output every browser can play. DirectPlayProfiles is deliberately empty:
-  // matching jellyfin-web's per-browser/per-OS codec negotiation (HEVC, AC3,
-  // DTS support all vary by client) would mean re-deriving years of their
-  // compatibility fixes. A single always-transcoded target trades some
-  // server load (offset here by Quick Sync hardware transcoding) for a
-  // client that only ever has to handle one format.
+  // DeviceProfile is built by the caller (see deviceProfile.ts) from the browser's actually
+  // detected codec support, and handed to Jellyfin's own StreamBuilder to negotiate
+  // DirectPlay / DirectStream (remux) / Transcode — same model as jellyfin-web. Replaces the
+  // previous permanent "always transcode to H.264/AAC" DeviceProfile.
   //
   // Authenticated with the user's own jfToken (not the admin apiKey): Jellyfin
   // embeds this token in the returned TranscodingUrl/segment URIs (HLS clients
@@ -102,23 +114,7 @@ export const jellyfin = {
         AudioStreamIndex: opts.audioStreamIndex,
         SubtitleStreamIndex: opts.subtitleStreamIndex,
         StartTimeTicks: opts.startTicks,
-        DeviceProfile: {
-          MaxStreamingBitrate: opts.maxBitrate,
-          DirectPlayProfiles: [],
-          TranscodingProfiles: [
-            {
-              Container: "ts",
-              Type: "Video",
-              VideoCodec: "h264",
-              AudioCodec: "aac",
-              Protocol: "hls",
-              Context: "Streaming",
-              MaxAudioChannels: "6",
-            },
-          ],
-          CodecProfiles: [],
-          SubtitleProfiles: [{ Format: "vtt", Method: "Hls" }],
-        },
+        DeviceProfile: opts.deviceProfile,
       }),
     }),
 
@@ -127,7 +123,8 @@ export const jellyfin = {
     itemId: string,
     token: string,
     playSessionId: string,
-    mediaSourceId: string
+    mediaSourceId: string,
+    playMethod: "DirectPlay" | "DirectStream" | "Transcode"
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing`, {
       method: "POST",
@@ -137,7 +134,7 @@ export const jellyfin = {
         ItemId: itemId,
         PlaySessionId: playSessionId,
         MediaSourceId: mediaSourceId,
-        PlayMethod: "Transcode",
+        PlayMethod: playMethod,
         CanSeek: true,
       }),
     }),
@@ -148,7 +145,8 @@ export const jellyfin = {
     token: string,
     playSessionId: string,
     mediaSourceId: string,
-    positionTicks: number
+    positionTicks: number,
+    playMethod: "DirectPlay" | "DirectStream" | "Transcode"
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Progress`, {
       method: "POST",
@@ -159,7 +157,7 @@ export const jellyfin = {
         PlaySessionId: playSessionId,
         MediaSourceId: mediaSourceId,
         PositionTicks: positionTicks,
-        PlayMethod: "Transcode",
+        PlayMethod: playMethod,
         CanSeek: true,
         IsPaused: false,
       }),

@@ -51,12 +51,19 @@ describe("POST /api/jellyfin/playback/progress", () => {
     expect(res.status).toBe(400);
   });
 
-  it("reports progress to Jellyfin with the session's own jfId/jfToken", async () => {
+  it("reports progress to Jellyfin with the session's own jfId/jfToken, defaulting playMethod to Transcode", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
     const res = await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: 12345 }));
     expect(res.status).toBe(200);
-    expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith("jf-1", "abc", "tok", "s", "m", 12345);
+    expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith("jf-1", "abc", "tok", "s", "m", 12345, "Transcode");
+  });
+
+  it("forwards the client-reported playMethod to Jellyfin", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jfToken: "tok" });
+    const { POST } = await import("@/app/api/jellyfin/playback/progress/route");
+    await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m", positionTicks: 1, playMethod: "DirectPlay" }));
+    expect(mockJellyfin.reportPlaybackProgress).toHaveBeenCalledWith("jf-1", "abc", "tok", "s", "m", 1, "DirectPlay");
   });
 
   it("returns 502 when Jellyfin's progress report call fails", async () => {

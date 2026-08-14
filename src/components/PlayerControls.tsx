@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info } from "lucide-react";
 
 export interface Track {
   id: number;
@@ -14,6 +14,7 @@ interface PlayerControlsProps {
   title: string;
   onClose: () => void;
   onMinimize: () => void;
+  onTogglePlaybackInfo: () => void;
   audioTracks: Track[];
   currentAudioId: number | null;
   onChangeAudio: (id: number) => void;
@@ -46,6 +47,7 @@ export function PlayerControls({
   title,
   onClose,
   onMinimize,
+  onTogglePlaybackInfo,
   audioTracks,
   currentAudioId,
   onChangeAudio,
@@ -345,6 +347,16 @@ export function PlayerControls({
         >
           <p className="truncate pr-4 text-sm font-medium text-white">{title}</p>
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePlaybackInfo();
+              }}
+              title="Playback Info"
+              className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
+            >
+              <Info size={18} />
+            </button>
             {subtitleTracks.length > 0 && (
               <button
                 onClick={(e) => {

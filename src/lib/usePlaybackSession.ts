@@ -4,6 +4,7 @@ interface PlaybackSessionInfo {
   itemId: string;
   playSessionId: string;
   mediaSourceId: string;
+  playMethod?: "DirectPlay" | "DirectStream" | "Transcode";
 }
 
 const TICKS_PER_SECOND = 10_000_000;
