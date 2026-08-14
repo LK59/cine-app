@@ -1,11 +1,19 @@
 // Client-only: detects what the browser can actually decode, so the DeviceProfile sent to
 // Jellyfin (see PlaybackInfoOptions in clients/jellyfin.ts) reflects real capabilities instead
-// of the previous "always transcode everything" fallback. Mirrors jellyfin-web's approach:
-// MediaSource.isTypeSupported() as a fast pre-filter, then a real SourceBuffer instantiation to
-// catch the documented false-positive rate on some Firefox/Windows builds (isTypeSupported
-// there can claim support for a codec it then refuses to actually attach as a SourceBuffer).
-// isTypeSupported has no known false-negative problem, so a `false` there is trusted outright —
-// only a `true` gets the extra real-SourceBuffer confirmation.
+// of the previous "always transcode everything" fallback.
+//
+// Two different detection methods depending on how the browser actually plays HLS:
+// - Chrome/Firefox/Edge (MSE + hls.js): MediaSource.isTypeSupported() as a fast pre-filter,
+//   then a real SourceBuffer instantiation to catch the documented false-positive rate on some
+//   Firefox/Windows builds (isTypeSupported there can claim support for a codec it then
+//   refuses to actually attach as a SourceBuffer). isTypeSupported has no known false-negative
+//   problem, so a `false` there is trusted outright — only a `true` gets the extra
+//   real-SourceBuffer confirmation.
+// - Safari (native HLS): never touches MediaSource/SourceBuffer at all for HLS — it's a fully
+//   native, opaque pipeline. Probing it via MSE tests the wrong thing and can under-report
+//   support (verified live: Safari forced into a full HEVC->H264 transcode for a file it
+//   natively decodes fine). video.canPlayType() is used directly there instead — the API that
+//   actually reflects Safari's real decode capability.
 
 export interface CodecSupport {
   /** Keyed "container/codec", e.g. "mp4/h264", "mp4/hevc". */
@@ -77,9 +85,26 @@ function testSourceBuffer(mime: string): Promise<boolean> {
   });
 }
 
-async function checkCodec(mime: string): Promise<boolean> {
-  if (typeof window === "undefined" || !("MediaSource" in window)) return false;
-  if (!MediaSource.isTypeSupported(mime)) return false;
+// Safari's native HLS playback (canPlayType("application/vnd.apple.mpegurl")) never goes
+// through MediaSource/SourceBuffer at all — it's a fully native, opaque pipeline, separate from
+// the MSE path Chrome/Firefox/hls.js use. Probing it via MediaSource.isTypeSupported() + a real
+// SourceBuffer therefore tests the wrong pipeline on Safari and can under-report support (seen
+// live: Safari getting forced into a full HEVC->H264 transcode for a file it can natively
+// decode fine). video.canPlayType() is the API that actually reflects Safari's real decode
+// capability for both native HLS and plain <video src>, so it's used directly there instead.
+function isNativeHlsBrowser(): boolean {
+  return !!document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
+}
+
+function checkViaCanPlayType(mime: string): boolean {
+  const result = document.createElement("video").canPlayType(mime);
+  return result === "probably" || result === "maybe";
+}
+
+async function checkCodec(mime: string, nativeHls: boolean): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (nativeHls) return checkViaCanPlayType(mime);
+  if (!("MediaSource" in window) || !MediaSource.isTypeSupported(mime)) return false;
   return testSourceBuffer(mime);
 }
 
@@ -118,9 +143,10 @@ export async function detectCodecSupport(): Promise<CodecSupport> {
   const cached = readCache();
   if (cached) return cached;
 
+  const nativeHls = isNativeHlsBrowser();
   const [videoEntries, audioEntries] = await Promise.all([
-    Promise.all(VIDEO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c.mime)])),
-    Promise.all(AUDIO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c.mime)])),
+    Promise.all(VIDEO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c.mime, nativeHls)])),
+    Promise.all(AUDIO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c.mime, nativeHls)])),
   ]);
 
   const support: CodecSupport = {

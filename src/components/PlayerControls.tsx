@@ -216,10 +216,15 @@ export function PlayerControls({
   }, []);
 
   // showControls() does real effect work beyond setState (manages the auto-hide timeout ref),
-  // so it can't move to a render-time adjustment.
+  // so it can't move to a render-time adjustment. Called unconditionally on every playing
+  // change — showControls() itself already only starts the hide timer when playing===true, so
+  // this correctly both (a) kicks off the very first auto-hide once playback actually starts
+  // (previously gated behind `if (!playing)`, which never re-fires showControls() for the
+  // false->true transition — controls stayed visible forever until a manual tap) and
+  // (b) forces controls back on with no timer when paused.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!playing) showControls();
+    showControls();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
@@ -414,10 +419,11 @@ export function PlayerControls({
 
         {menu && (
           <div
-            className="pointer-events-auto absolute w-56 overflow-hidden rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+            className="pointer-events-auto absolute w-56 max-h-[60vh] overflow-y-auto overscroll-contain rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
             style={{
               top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
               right: "max(1rem, env(safe-area-inset-right))",
+              bottom: "max(1rem, env(safe-area-inset-bottom))",
             }}
             onClick={(e) => e.stopPropagation()}
           >
