@@ -148,22 +148,6 @@ function ActivePlayer({
   // request (audio track included) — state like currentAudioId would be stale inside the
   // error listener's closure.
   const lastPlaybackOpts = useRef<{ audioStreamIndex?: number; resumeAt?: number; disableAudioCodecs?: string[] } | undefined>(undefined);
-  // Temporary on-screen diagnostic (no Mac/Safari Web Inspector available for live debugging) —
-  // mirrors every native <video> lifecycle event with a timestamp directly into the page, so it
-  // can be read/screenshotted straight off the phone instead of inferred from server-side logs,
-  // which already proved insufficient to pin down a live Safari-only failure on its own.
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const debugLogRef = useRef<HTMLDivElement>(null);
-  const logDebug = useCallback((msg: string) => {
-    const line = `${new Date().toLocaleTimeString("fr-FR")}.${new Date().getMilliseconds().toString().padStart(3, "0")} ${msg}`;
-    // Raised from 60 to 200 — routine "progress"/"durationchange" events during normal playback
-    // before a switch was ever attempted could fill a 60-line buffer well before the actual
-    // switch happened, evicting exactly the lines that mattered most.
-    setDebugLog((prev) => [...prev.slice(-199), line]);
-  }, []);
-  // Collapsed by default — a full-width panel pinned to the top was covering the audio/subtitle
-  // buttons the whole point of this panel was to help debug, making the switch itself untestable.
-  const [debugExpanded, setDebugExpanded] = useState(false);
   // Re-tested in isolation now that the Range/206 and manifest-prewarm bugs are both confirmed
   // fixed — a previous attempt at this (ebc2d2d) was reverted after appearing not to help, but
   // that test ran while the Range-truncation bug was still live, which may have masked whether
@@ -179,6 +163,10 @@ function ActivePlayer({
   // exhausted, playback truly stopped). Drives the small non-blocking "Reconnexion..." banner.
   const [reconnecting, setReconnecting] = useState(false);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
+  // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
+  // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
+  // 15-20s across the grace delay, codec ladder and reload escalation).
+  const [loadingLong, setLoadingLong] = useState(false);
   const [closing, setClosing] = useState(false);
   const [playSession, setPlaySession] = useState<{
     itemId: string;
@@ -253,18 +241,11 @@ function ActivePlayer({
       // so a codec this device already proved it can't play is excluded from the very first
       // negotiation, not rediscovered through a failure on every playback.
       const disableAudioCodecs = [...new Set([...readAudioBlocklist(), ...(opts?.disableAudioCodecs ?? [])])];
-
-      logDebug(
-        `startPlayback audioStreamIndex=${opts?.audioStreamIndex ?? "default"} resumeAt=${opts?.resumeAt ?? 0} prevSrc=${video.src ? "yes" : "none"}` +
-          (disableAudioCodecs.length ? ` disableAudio=${disableAudioCodecs.join(",")}` : "")
-      );
       lastPlaybackOpts.current = opts;
 
-      // Re-tested in isolation (see videoKey's own comment above) — WebKit only, since hls.js
-      // (Firefox, Chrome/Edge desktop & Android) already handles reusing the element correctly
-      // via its own MediaSource and was never affected by this.
+      // WebKit only — hls.js (Firefox, Chrome/Edge desktop & Android) already handles reusing
+      // the element correctly via its own MediaSource and was never affected by this.
       if (video.src && video.canPlayType("application/vnd.apple.mpegurl")) {
-        logDebug("remounting <video> element (WebKit track switch)");
         flushSync(() => setVideoKey((k) => k + 1));
         video = videoRef.current;
         if (!video) return;
@@ -352,7 +333,6 @@ function ActivePlayer({
           // this browser excludes them from the first negotiation (see AUDIO_FALLBACK_RUNGS).
           if (opts?.disableAudioCodecs?.length) {
             persistAudioBlocklist([...readAudioBlocklist(), ...opts.disableAudioCodecs]);
-            logDebug(`audio blocklist learned: ${opts.disableAudioCodecs.join(",")}`);
           }
           if (resumeAt) video.currentTime = resumeAt;
           // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
@@ -392,25 +372,21 @@ function ActivePlayer({
       // A play() rejected with NotAllowedError is iOS's autoplay policy, not a media failure:
       // the reload-based WebKit track switch lands on a fresh page that has no user activation
       // (the tap that picked the language happened on the PREVIOUS page), so programmatic
-      // playback is denied even though the stream itself loaded fine. Leave the player in a
-      // clean paused state — one tap on the play button resumes with the new track — instead of
-      // letting the load/buffering spinner sit forever waiting for a 'playing' event that can't
-      // come without a gesture.
+      // playback with sound is denied even though the stream itself loaded fine. iOS only
+      // exempts MUTED autoplay, which was tried and rejected as UX (silently playing video
+      // after an audio-track switch defeats the point) — so the deliberate behavior is a clean
+      // paused state: spinner cleared, play button showing, one tap resumes with the new track.
       const playAllowingGesture = () => {
         video.play().catch((e: unknown) => {
           if (e instanceof DOMException && e.name === "NotAllowedError") {
-            logDebug("play() blocked by autoplay policy — paused UI shown, one tap resumes");
             setLoading(false);
-            return;
           }
-          logDebug(`play() rejected: ${e}`);
         });
       };
 
       // DirectPlay/DirectStream: a plain Range-seekable file, not an HLS manifest — no hls.js,
       // no native-HLS branch below, just a regular <video src>.
       if (data.isDirectPlay) {
-        logDebug(`branch=DirectPlay src=${data.manifestUrl}`);
         video.src = data.manifestUrl;
         video.load();
         playAllowingGesture();
@@ -420,7 +396,6 @@ function ActivePlayer({
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        logDebug(`branch=nativeHLS src=${data.manifestUrl}`);
         video.src = data.manifestUrl;
         // Reassigning .src alone doesn't reliably tear down Safari's existing
         // HLS session when only the query string changes (e.g. switching
@@ -502,7 +477,7 @@ function ActivePlayer({
       hls.loadSource(data.manifestUrl);
       hls.attachMedia(video);
     },
-    [itemId, logDebug]
+    [itemId]
   );
 
   // Always-fresh reference for the error listener's retry timer — that effect's deps are
@@ -585,7 +560,6 @@ function ActivePlayer({
     // weight. Waiting here lets that release finish before the new session asks for its slot.
     const graceMs = fromReload ? 3000 : 0;
     const graceTimer = setTimeout(() => {
-      if (graceMs) logDebug(`post-reload grace delay elapsed (${graceMs}ms) — starting first load`);
       startPlayback({ resumeAt: initialResumeAt, audioStreamIndex: initialAudioStreamIndex });
     }, graceMs);
     return () => {
@@ -628,26 +602,19 @@ function ActivePlayer({
     };
   }, [videoKey]);
 
+  // Drives the ">3s, still working on it" reassurance line — heavy 4K track switches can
+  // legitimately spend 15-20s across the post-reload grace delay, codec fallback ladder and
+  // reload escalation, and a bare spinner that long reads as a hang worth force-closing.
   useEffect(() => {
-    const el = debugLogRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [debugLog]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const events = [
-      "loadstart", "durationchange", "loadedmetadata", "loadeddata", "canplay", "canplaythrough",
-      "progress", "suspend", "abort", "emptied", "stalled", "waiting", "playing", "ended",
-    ];
-    const handlers = events.map((name) => {
-      const fn = () => logDebug(`event ${name} readyState=${video.readyState} networkState=${video.networkState}`);
-      video.addEventListener(name, fn);
-      return { name, fn };
-    });
-    return () => handlers.forEach(({ name, fn }) => video.removeEventListener(name, fn));
-  }, [logDebug, videoKey]);
+    if (!loading && !reconnecting) {
+      // Deferred (timeout 0) rather than set synchronously in the effect body — same outcome,
+      // without the render-cascade pattern the react-hooks/set-state-in-effect rule flags.
+      const clear = setTimeout(() => setLoadingLong(false), 0);
+      return () => clearTimeout(clear);
+    }
+    const t = setTimeout(() => setLoadingLong(true), 3000);
+    return () => clearTimeout(t);
+  }, [loading, reconnecting]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -673,7 +640,6 @@ function ActivePlayer({
     if (!video) return;
     function onError() {
       const code = video!.error?.code;
-      logDebug(`event error code=${code ?? "?"} message=${video!.error?.message ?? ""} readyState=${video!.readyState} networkState=${video!.networkState}`);
       if (code === MediaError.MEDIA_ERR_ABORTED) return;
       // Walks AUDIO_FALLBACK_RUNGS (see its comment for the why): rung 0 replays the identical
       // request (absorbs transient teardown races and learns nothing), each further rung
@@ -684,10 +650,6 @@ function ActivePlayer({
         const rung = AUDIO_FALLBACK_RUNGS[nativeErrorRetryCount.current];
         nativeErrorRetryCount.current += 1;
         const delay = 1200 * nativeErrorRetryCount.current;
-        logDebug(
-          `auto-retry ${nativeErrorRetryCount.current}/${AUDIO_FALLBACK_RUNGS.length} in ${delay}ms` +
-            (rung.length ? ` disabling=${rung.join(",")}` : " (identical replay)")
-        );
         setReconnecting(true);
         if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
         nativeErrorRetryTimer.current = setTimeout(() => {
@@ -706,7 +668,6 @@ function ActivePlayer({
       // Strictly bounded by the attempt counter carried in the intent so two exhausted ladders
       // can never reload-loop forever.
       if ((reloadAttempt ?? 0) < 1 && video!.canPlayType("application/vnd.apple.mpegurl")) {
-        logDebug("ladder exhausted — escalating to a clean reload (attempt 2/2)");
         try {
           const audioIdx = lastPlaybackOpts.current?.audioStreamIndex;
           sessionStorage.setItem(
@@ -730,24 +691,11 @@ function ActivePlayer({
       }
       setReconnecting(false);
       setLoading(false);
-      // Temporary diagnostic detail appended to the message (kept user-readable) — this failure
-      // is currently only reproducible live on iOS WebKit (Safari + Chrome iOS, which also runs
-      // WebKit under Apple's engine mandate) and not on Firefox/hls.js, with no server-side error
-      // at all (verified: Jellyfin's ffmpeg job for the new track launches and runs cleanly every
-      // time). The native MediaError code (2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED) pins down
-      // which WebKit failure mode this actually is instead of guessing blind.
-      const codeLabel = { 1: "ABORTED", 2: "NETWORK", 3: "DECODE", 4: "SRC_NOT_SUPPORTED" }[code ?? 0] ?? "inconnu";
-      // Also surfaces the exact URL the browser was actually trying to load and a timestamp, to
-      // cross-reference against server-side logs unambiguously — prior rounds relied on
-      // inferring which request failed from noisy, overlapping server logs across several test
-      // attempts, which wasn't reliable enough to pin down conclusively.
-      setError(
-        `La lecture a été interrompue. Réessaie. (code ${code ?? "?"} ${codeLabel}, ${new Date().toLocaleTimeString("fr-FR")})\n${video!.currentSrc}`
-      );
+      setError("La lecture a été interrompue. Réessaie.");
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
-  }, [logDebug, videoKey, itemId, title, reloadAttempt]);
+  }, [videoKey, itemId, title, reloadAttempt]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
   // hors ligne" banner immediately on disconnect (like YouTube), rather than waiting for a
@@ -840,7 +788,7 @@ function ActivePlayer({
           {error && !isMini && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-6 text-center">
               <div>
-                <p className="mb-4 whitespace-pre-line break-all text-sm text-red-400">{error}</p>
+                <p className="mb-4 text-sm text-red-400">{error}</p>
                 <div className="flex justify-center gap-3">
                   <button
                     type="button"
@@ -856,10 +804,14 @@ function ActivePlayer({
               </div>
             </div>
           )}
-          {!error && !isMini && (isOffline || reconnecting) && (
+          {!error && !isMini && (isOffline || reconnecting || (loading && loadingLong)) && (
             <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <div className="rounded-full bg-black/80 px-4 py-1.5 text-xs text-white shadow-lg ring-1 ring-white/10">
-                {isOffline ? "Vous êtes hors ligne" : "Reconnexion…"}
+              <div className="rounded-full bg-black/80 px-4 py-1.5 text-center text-xs text-white shadow-lg ring-1 ring-white/10">
+                {isOffline
+                  ? "Vous êtes hors ligne"
+                  : loadingLong
+                    ? "Le chargement est toujours en cours, ne fermez pas le lecteur…"
+                    : "Reconnexion…"}
               </div>
             </div>
           )}
@@ -893,35 +845,6 @@ function ActivePlayer({
       )}
       {isMini && !error && !needsReauth && (
         <MiniPlayerChrome title={title} playing={playing} onTogglePlay={toggleMiniPlay} onClose={handleClose} />
-      )}
-      {/* Temporary on-screen diagnostic panel — no Mac available to use Safari's Web Inspector,
-          so this mirrors the same info directly onto the phone screen to read/screenshot.
-          Collapsed by default: a full-width panel pinned to the top previously covered the
-          audio/subtitle buttons — the exact controls this panel exists to help debug — making
-          the switch itself untestable. Toggle tab sits bottom-left, clear of every other control
-          (top bar, centered play/pause, bottom seek bar, reconnecting banner). */}
-      {!isMini && debugLog.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setDebugExpanded((v) => !v)}
-            className="pointer-events-auto absolute bottom-4 left-4 z-[200] rounded-full bg-black/70 px-3 py-1.5 font-mono text-[10px] text-lime-300 ring-1 ring-lime-300/30"
-            style={{ marginBottom: "env(safe-area-inset-bottom)" }}
-          >
-            {debugExpanded ? "Fermer debug" : `Debug (${debugLog.length})`}
-          </button>
-          {debugExpanded && (
-            <div
-              ref={debugLogRef}
-              className="pointer-events-auto absolute inset-x-0 top-0 z-[200] max-h-[55vh] overflow-y-auto overscroll-contain bg-black/85 p-2 font-mono text-[10px] leading-tight text-lime-300"
-              style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
-            >
-              {debugLog.map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
-            </div>
-          )}
-        </>
       )}
     </div>,
     document.body

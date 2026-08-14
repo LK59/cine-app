@@ -60,7 +60,6 @@ export async function GET(
     // send the browser the full rewritten text back with a plain 200, which is a perfectly valid
     // response to a Range request under HTTP (the client falls back to using the whole body).
     const range = isManifest ? null : req.headers.get("range");
-    const incomingRange = req.headers.get("range");
     const res = await fetchWithRetry(
       target,
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
@@ -70,7 +69,9 @@ export async function GET(
       AbortSignal.any([req.signal, AbortSignal.timeout(30_000)])
     );
     if (!res.ok || !res.body) {
-      console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "NOT OK", restPath, JSON.stringify({ incomingRange, upstreamStatus: res.status }));
+      // The one log kept from the debugging era: an upstream failure that survived the retry
+      // budget is a genuine ops signal (Jellyfin down, dead session), and it's low-volume.
+      console.warn("[stream proxy] upstream failed after retries", restPath, res.status);
       return new NextResponse(null, { status: res.status || 502 });
     }
 
@@ -101,12 +102,10 @@ export async function GET(
       // that ~1.4KB probe window (e.g. a Dolby Vision file's multi-variant master, ~3.5KB) hit
       // this on every load; smaller masters slipped through because the "slice" happened to
       // contain the full text.
-      console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "manifest 200", restPath, JSON.stringify({ incomingRange, len: buf.length }));
       return new NextResponse(buf, {
         headers: { "Content-Type": contentType, "Cache-Control": "no-store", "Content-Length": String(buf.length) },
       });
     }
-    console.log("[stream proxy]", new Date().toLocaleTimeString("fr-FR"), "ok", restPath, JSON.stringify({ incomingRange, upstreamStatus: res.status, isStatic }));
 
     if (isStatic) {
       // DirectPlay/DirectStream: a single big Range-seekable file, not an immutable HLS
