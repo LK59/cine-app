@@ -8,6 +8,7 @@ import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { detectCodecSupport } from "@/lib/codecSupport";
+import { useT } from "@/components/TranslationProvider";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -122,6 +123,7 @@ function ActivePlayer({
   mode: "full" | "mini";
 }) {
   const playback = usePlayback();
+  const t = useT();
   const { itemId, title, resumeAt: initialResumeAt, initialAudioStreamIndex, fromReload, reloadAttempt } = session;
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -163,6 +165,13 @@ function ActivePlayer({
   // exhausted, playback truly stopped). Drives the small non-blocking "Reconnexion..." banner.
   const [reconnecting, setReconnecting] = useState(false);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
+  // Non-interactive — a measured signal, not a settings toggle. Two real, checkable metrics
+  // (not an invented "latency" a browser can't actually observe for HLS segments): how often
+  // playback has stalled to rebuffer in the last minute, and the decoder's own dropped-frame
+  // ratio via the standard getVideoPlaybackQuality() API. Reset per session in startPlayback.
+  const [badConnection, setBadConnection] = useState(false);
+  const rebufferTimestamps = useRef<number[]>([]);
+  const hasPlayedOnce = useRef(false);
   // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
   // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
   // 15-20s across the grace delay, codec ladder and reload escalation).
@@ -262,6 +271,9 @@ function ActivePlayer({
       setError(null);
       setReconnecting(false);
       setLoading(true);
+      rebufferTimestamps.current = [];
+      hasPlayedOnce.current = false;
+      setBadConnection(false);
 
       // (An earlier revision also waited for the "emptied" event here before reassigning src —
       // removed: it was built on a disproven teardown-timing theory and only added up to 300ms
@@ -640,6 +652,39 @@ function ActivePlayer({
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
   }, [videoKey]);
 
+  // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
+  // already played at least once — excludes ordinary startup buffering) is logged with a
+  // timestamp; a periodic check then looks at how many landed in the last 60s, combined with
+  // the decoder's own dropped-frame ratio, to decide whether to show the badge. Both are actual
+  // measured signals, not a guess — see badConnection's own comment for why not a fabricated
+  // "latency" number.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPlaying = () => {
+      hasPlayedOnce.current = true;
+    };
+    const onWaiting = () => {
+      if (hasPlayedOnce.current) rebufferTimestamps.current.push(Date.now());
+    };
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
+
+    const interval = setInterval(() => {
+      const cutoff = Date.now() - 60_000;
+      rebufferTimestamps.current = rebufferTimestamps.current.filter((t) => t > cutoff);
+      const quality = video.getVideoPlaybackQuality?.();
+      const droppedRatio = quality && quality.totalVideoFrames > 0 ? quality.droppedVideoFrames / quality.totalVideoFrames : 0;
+      setBadConnection(rebufferTimestamps.current.length >= 2 || droppedRatio > 0.02);
+    }, 5000);
+
+    return () => {
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaiting);
+      clearInterval(interval);
+    };
+  }, [videoKey]);
+
   // The native <video> "error" event is the ONLY failure signal for the DirectPlay and native
   // Safari-HLS paths (both are a plain `video.src = manifestUrl`, no hls.js involved, so none of
   // the Hls.Events.ERROR retry/recovery logic above ever applies to them). Nothing was listening
@@ -827,6 +872,18 @@ function ActivePlayer({
                     ? "Le chargement est toujours en cours, ne fermez pas le lecteur…"
                     : "Reconnexion…"}
               </div>
+            </div>
+          )}
+          {/* Non-interactive by design — a measured signal (recent rebuffers + decoder dropped-
+              frame ratio, see badConnection's own comment), not a settings toggle with a detail
+              view to open. Top-right so it never overlaps the bottom pill above, which the two
+              can legitimately show at the same time (e.g. offline AND already mid-rebuffer). */}
+          {!error && !isMini && badConnection && (
+            <div
+              className="pointer-events-none absolute z-20 rounded-full bg-black/80 px-3 py-1 text-xs text-amber-300 shadow-lg ring-1 ring-white/10"
+              style={{ top: "max(4.5rem, calc(env(safe-area-inset-top) + 6rem))", right: "max(1rem, env(safe-area-inset-right))" }}
+            >
+              {t("player.badConnection")}
             </div>
           )}
         </>

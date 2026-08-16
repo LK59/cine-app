@@ -956,5 +956,8 @@
     "downloadStartedToast": "Download started: {title}",
     "downloadCompleteTitle": "Download complete",
     "downloadCompleteToast": "Download complete: {title}"
+  },
+  "player": {
+    "badConnection": "Unstable connection"
   }
 }

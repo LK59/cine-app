@@ -956,5 +956,8 @@
     "downloadStartedToast": "Téléchargement démarré : {title}",
     "downloadCompleteTitle": "Téléchargement terminé",
     "downloadCompleteToast": "Téléchargement terminé : {title}"
+  },
+  "player": {
+    "badConnection": "Connexion instable"
   }
 }
