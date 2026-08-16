@@ -181,19 +181,31 @@ export function PlayerControls({
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, [containerRef]);
 
-  // Shows the controls and (re)starts the 3s auto-hide — called directly from
+  // Shows the controls and (re)starts the auto-hide — called directly from
   // interaction handlers rather than left to a visible-state-diffing effect,
   // since repeated taps while already visible wouldn't otherwise change
-  // `visible` and so wouldn't reset the hide timer (only playing/menu changes
-  // would). Only auto-hides while actually playing with no menu open —
-  // paused/menu-open states stay visible indefinitely.
-  const showControls = useCallback(() => {
-    setVisible(true);
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (playing && menu === null) {
-      hideTimer.current = setTimeout(() => setVisible(false), 3000);
-    }
-  }, [playing, menu]);
+  // `visible` and so wouldn't reset the hide timer. Two tiers of delay: a
+  // plain tap/hover on the video keeps the default 3s, while interacting with
+  // any actual control (top-bar buttons, the audio/subtitle menus, the bottom
+  // bar) passes 10s — reading through a track list takes longer than glancing
+  // at the seek bar, and the old single 3s timer kept vanishing mid-read
+  // (button handlers stopPropagation, so nothing was resetting it at all).
+  // Only auto-hides while actually playing; paused stays visible indefinitely.
+  // The hide also closes any open menu, so an expired timer can't leave an
+  // invisible-but-clickable menu floating over the video.
+  const showControls = useCallback(
+    (delayMs: number = 3000) => {
+      setVisible(true);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (playing) {
+        hideTimer.current = setTimeout(() => {
+          setVisible(false);
+          setMenu(null);
+        }, delayMs);
+      }
+    },
+    [playing]
+  );
 
   function hideControls() {
     setVisible(false);
@@ -210,6 +222,10 @@ export function PlayerControls({
   function toggleControls() {
     if (menu !== null) {
       setMenu(null);
+      // The menu just closed from a tap outside it — controls stay up on the
+      // normal short timer instead of the previous "no timer at all" (which
+      // left them visible forever until another tap).
+      showControls();
       return;
     }
     if (visible) hideControls();
@@ -351,6 +367,10 @@ export function PlayerControls({
             bar in portrait, which sits below the strict safe-area edge. */}
         <div
           className="pointer-events-auto flex items-center justify-between p-4"
+          // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
+          // the old timer never got reset by button use — capture fires on the way DOWN, before
+          // any child handler, so every top-bar interaction reliably re-arms the long timer.
+          onClickCapture={() => showControls(10000)}
           style={{
             paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 1.5rem))",
             paddingLeft: "max(1rem, env(safe-area-inset-left))",
@@ -437,6 +457,7 @@ export function PlayerControls({
               right: "max(1rem, env(safe-area-inset-right))",
             }}
             onClick={(e) => e.stopPropagation()}
+            onClickCapture={() => showControls(10000)}
           >
             {(menu === "audio" ? audioTracks : subtitleTracks).map((tr) => (
               <button
@@ -486,6 +507,7 @@ export function PlayerControls({
         <div
           className="pointer-events-auto flex flex-col gap-2 p-4"
           onClick={(e) => e.stopPropagation()}
+          onClickCapture={() => showControls(10000)}
           style={{
             paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
             paddingLeft: "max(1rem, env(safe-area-inset-left))",
