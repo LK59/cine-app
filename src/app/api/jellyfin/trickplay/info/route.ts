@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 
 const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
@@ -23,8 +25,15 @@ export async function GET(req: NextRequest) {
   const itemId = req.nextUrl.searchParams.get("itemId");
   if (!itemId || !JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
 
+  // Verified live: Jellyfin's /Items/{id} returns a bare 400 ("Error processing request.", not
+  // even JSON) when queried without a UserId — evidently required internally to resolve
+  // user-relative fields even for Trickplay, which isn't itself user-specific data. The image
+  // endpoint (image/route.ts) needs no UserId; this one does.
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  if (!session?.jfId) return new NextResponse(null, { status: 401 });
+
   try {
-    const res = await fetch(`${config.jellyfin.url}/Items/${itemId}?Fields=Trickplay`, {
+    const res = await fetch(`${config.jellyfin.url}/Items/${itemId}?Fields=Trickplay&UserId=${session.jfId}`, {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
       headers: { "X-Emby-Token": config.jellyfin.apiKey },
     });

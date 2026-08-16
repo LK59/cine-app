@@ -77,6 +77,10 @@ export function PlayerControls({
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while a pointer/touch is actively down on the seek bar. Read (not state — nothing
+  // needs to re-render off it directly) by the 'timeupdate' handler to stop the real playback
+  // position from fighting the dragged one, and by the two hide-suppression handlers below.
+  const seekingRef = useRef(false);
 
   // Reset the dismiss/countdown state whenever a genuinely new "next episode" context arrives
   // (i.e. we've actually advanced), not on every render. Applied during render (not in an
@@ -135,7 +139,12 @@ export function PlayerControls({
     if (!video) return;
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onTime = () => setCurrentTime(video.currentTime);
+    // Suppressed while dragging the seek bar — otherwise the real (not-yet-seeked) playback
+    // position keeps overwriting the dragged thumb position on every tick, fighting the user's
+    // own drag mid-gesture.
+    const onTime = () => {
+      if (!seekingRef.current) setCurrentTime(video.currentTime);
+    };
     const onDuration = () => setDuration(video.duration || 0);
     const onVolume = () => {
       setVolume(video.volume);
@@ -214,6 +223,15 @@ export function PlayerControls({
     if (hideTimer.current) clearTimeout(hideTimer.current);
   }
 
+  // For as long as a pointer is actually on the seek bar (hovering or dragging), controls must
+  // never auto-hide at all — not even on a longer timer. Cancels any pending hide with nothing
+  // to replace it; the hover/drag handlers below call showControls() again once the pointer
+  // actually leaves or is released, restarting the normal countdown from a clean slate.
+  function holdControls() {
+    setVisible(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+  }
+
   // Tap toggles explicitly (show <-> hide) again, without reintroducing the
   // Android bug: that bug was touch firing a synthetic mousemove right before
   // click, which forced visible=true a split second before the toggle read
@@ -268,7 +286,17 @@ export function PlayerControls({
     video.currentTime = Math.min(Math.max(0, video.currentTime + deltaSeconds), duration || video.currentTime);
   }
 
-  function seek(value: number) {
+  // Split in two: dragging the seek bar only moves the thumb/displayed time locally (no real
+  // seek, no buffering triggered) until the pointer is released, which is when the actual seek
+  // fires. Committing on every drag tick used to fire a real HTMLMediaElement seek on every
+  // pixel of movement, each one triggering its own buffering/rebuffer cycle — which both felt
+  // like the interface was fighting the drag and meant a quick "seek there, no wait, back" was
+  // never actually free (every intermediate position had already been committed and buffered).
+  function previewSeek(value: number) {
+    setCurrentTime(value);
+  }
+
+  function commitSeek(value: number) {
     const video = videoRef.current;
     if (!video) return;
     video.currentTime = value;
@@ -610,11 +638,28 @@ export function PlayerControls({
           <div
             ref={seekBarRef}
             className="relative"
-            onMouseMove={(e) => updatePreview(e.clientX)}
-            onMouseLeave={() => setPreviewTime(null)}
-            onTouchStart={(e) => updatePreview(e.touches[0].clientX)}
-            onTouchMove={(e) => updatePreview(e.touches[0].clientX)}
-            onTouchEnd={() => setPreviewTime(null)}
+            // Same treatment as the top-bar buttons (see showControls' comment) but stronger:
+            // holdControls() suspends auto-hide entirely for as long as the pointer is anywhere
+            // on the bar — hovering to preview a thumbnail, or dragging — rather than merely
+            // extending the timer, since a 10s cap could still expire mid-read on a long scrub.
+            // The normal countdown only resumes once the pointer actually leaves or is released.
+            onMouseEnter={holdControls}
+            onMouseMove={(e) => {
+              holdControls();
+              updatePreview(e.clientX);
+            }}
+            onMouseLeave={() => {
+              setPreviewTime(null);
+              if (!seekingRef.current) showControls(5000);
+            }}
+            onTouchStart={(e) => {
+              holdControls();
+              updatePreview(e.touches[0].clientX);
+            }}
+            onTouchMove={(e) => {
+              holdControls();
+              updatePreview(e.touches[0].clientX);
+            }}
           >
             {previewTime !== null && (
               <div
@@ -648,7 +693,38 @@ export function PlayerControls({
               min={0}
               max={duration || 0}
               value={currentTime}
-              onChange={(e) => seek(Number(e.target.value))}
+              // Every intermediate value while dragging is a preview only (see previewSeek) —
+              // native range inputs fire 'input'/onChange continuously during a drag, not just
+              // on release, so onChange alone can't distinguish "still dragging" from "done".
+              // mousedown/touchstart mark the start of a drag; mouseup/touchend (native pointer
+              // capture keeps these firing on the input even if the pointer wanders outside its
+              // bounds) commit the FINAL value as one real seek and let auto-hide resume after 5s.
+              onChange={(e) => previewSeek(Number(e.target.value))}
+              onMouseDown={() => {
+                seekingRef.current = true;
+                holdControls();
+              }}
+              onTouchStart={() => {
+                seekingRef.current = true;
+                holdControls();
+              }}
+              // The 5s call is deferred a tick: mouseup/touchend is immediately followed by a
+              // synchronous 'click' event, which the bottom bar's own onClickCapture (see its
+              // comment) answers with a flat 10s for every other control there — since capture
+              // fires on that ancestor before this handler's own effect could otherwise "stick",
+              // running after the click's synchronous dispatch has already finished is what
+              // makes 5s the one that actually wins, per what was asked for here specifically.
+              onMouseUp={(e) => {
+                seekingRef.current = false;
+                commitSeek(Number((e.target as HTMLInputElement).value));
+                setTimeout(() => showControls(5000), 0);
+              }}
+              onTouchEnd={(e) => {
+                seekingRef.current = false;
+                commitSeek(Number((e.target as HTMLInputElement).value));
+                setPreviewTime(null);
+                setTimeout(() => showControls(5000), 0);
+              }}
               className="h-1 w-full cursor-pointer accent-accent-500"
             />
           </div>
