@@ -1,23 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, PictureInPicture2, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 
 export interface Track {
   id: number;
   label: string;
-}
-
-// Safari's pre-standard Picture-in-Picture API — kept alongside the standard
-// requestPictureInPicture()/document.pictureInPictureEnabled rather than instead of it: verified
-// live that a real iOS device has document.pictureInPictureEnabled === true (so the button
-// rendered) yet requestPictureInPicture() silently did nothing — the standard entry point exists
-// there but doesn't reliably drive an actual native-HLS <video>, while the WebKit-specific one
-// (used by Safari itself for its own native player controls) does.
-interface WebkitVideoElement extends HTMLVideoElement {
-  webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
-  webkitSetPresentationMode?: (mode: "picture-in-picture" | "inline") => void;
-  webkitPresentationMode?: "inline" | "fullscreen" | "picture-in-picture";
 }
 
 interface PlayerControlsProps {
@@ -45,6 +33,13 @@ interface PlayerControlsProps {
 const NEXT_UP_COUNTDOWN_S = 10;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const VOLUME_STORAGE_KEY = "cine:player-volume";
+const SUBTITLE_SIZES = [
+  { label: "Petite", value: 0.75 },
+  { label: "Normale", value: 1 },
+  { label: "Grande", value: 1.3 },
+  { label: "Très grande", value: 1.6 },
+];
+const SUBTITLE_SIZE_KEY = "cine:subtitle-size";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -88,13 +83,26 @@ export function PlayerControls({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
-  const [pipSupported, setPipSupported] = useState(false);
-  // Independent of `menu`/`mode` (full vs. our own mini) — the browser's native
-  // Picture-in-Picture is an OS-level window, not something our React state controls; this only
-  // mirrors the browser's own 'enter'/'leavepictureinpicture' events for the button's icon/state.
-  const [pipActive, setPipActive] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [chapters, setChapters] = useState<{ start: number; name: string }[]>([]);
+  // General preference, persisted across sessions like volume — a subtitle size someone needs
+  // isn't specific to one file.
+  const [subtitleSize, setSubtitleSize] = useState(() => {
+    try {
+      return Number(localStorage.getItem(SUBTITLE_SIZE_KEY)) || 1;
+    } catch {
+      return 1;
+    }
+  });
+  // Deliberately NOT persisted, and reset per item (below) rather than per session: a
+  // desync is a property of one specific file's subtitle track, meaningless carried over to a
+  // different file that likely isn't desynced at all.
+  const [subtitleOffset, setSubtitleOffset] = useState(0);
+  const [resetOffsetForItemId, setResetOffsetForItemId] = useState(itemId);
+  if (itemId !== resetOffsetForItemId) {
+    setResetOffsetForItemId(itemId);
+    setSubtitleOffset(0);
+  }
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,7 +162,6 @@ export function PlayerControls({
     setVolume(video.volume);
     setMuted(video.muted);
     setSpeed(video.playbackRate || 1);
-    setPipActive(document.pictureInPictureElement === video);
   }, [videoRef]);
 
   // Chapters — fetched once per item, same shape/lifecycle as the trickplay metadata below.
@@ -199,14 +206,6 @@ export function PlayerControls({
     const onWaiting = () => setBuffering(true);
     const onPlaying = () => setBuffering(false);
     const onRateChange = () => setSpeed(video.playbackRate || 1);
-    const onEnterPip = () => setPipActive(true);
-    const onLeavePip = () => setPipActive(false);
-    // Safari's presentation-mode changes fire this instead of enter/leavepictureinpicture in
-    // versions that predate (or don't fully wire up) the standard events for this element type —
-    // see togglePip's comment for why both APIs are used together.
-    const onPresentationModeChange = () => {
-      setPipActive((video as WebkitVideoElement).webkitPresentationMode === "picture-in-picture");
-    };
     // 'canplay' also clears buffering: when autoplay is blocked (iOS after the reload-based
     // track switch — no user activation on the fresh page), 'playing' never fires without a
     // tap, and a spinner that only 'playing' can dismiss would sit over a ready, paused video
@@ -222,23 +221,12 @@ export function PlayerControls({
     video.addEventListener("playing", onPlaying);
     video.addEventListener("canplay", onPlaying);
     video.addEventListener("ratechange", onRateChange);
-    video.addEventListener("enterpictureinpicture", onEnterPip);
-    video.addEventListener("leavepictureinpicture", onLeavePip);
-    video.addEventListener("webkitpresentationmodechanged", onPresentationModeChange);
     // Safari-only API — feature-detected, not part of the standard HTMLVideoElement type.
     setAirPlaySupported(
       typeof (video as unknown as { webkitShowPlaybackTargetPicker?: unknown })
         .webkitShowPlaybackTargetPicker === "function"
     );
-    // Either API counts as supported — see togglePip's comment for why both are tried.
-    const wkVideo = video as WebkitVideoElement;
-    setPipSupported(
-      (typeof document !== "undefined" && document.pictureInPictureEnabled === true) ||
-        (typeof wkVideo.webkitSupportsPresentationMode === "function" &&
-          wkVideo.webkitSupportsPresentationMode("picture-in-picture"))
-    );
     return () => {
-      video.removeEventListener("webkitpresentationmodechanged", onPresentationModeChange);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
@@ -249,8 +237,6 @@ export function PlayerControls({
       video.removeEventListener("durationchange", onDuration);
       video.removeEventListener("volumechange", onVolume);
       video.removeEventListener("ratechange", onRateChange);
-      video.removeEventListener("enterpictureinpicture", onEnterPip);
-      video.removeEventListener("leavepictureinpicture", onLeavePip);
     };
   }, [videoRef]);
 
@@ -459,53 +445,11 @@ export function PlayerControls({
     video?.webkitShowPlaybackTargetPicker?.();
   }
 
-  // Native browser Picture-in-Picture — a real OS-level floating window, entirely separate from
-  // our own custom mini-player (PlaybackProvider's "mini" mode). Deliberately never triggered
-  // together: minimizing to our own PiP while native PiP is active would try to render our mini
-  // player's chrome around a <video> the browser has already visually pulled out of the page,
-  // so both onMinimize and onClose (below) exit native PiP first and wait for it before doing
-  // anything else, rather than letting the two float independently.
-  //
-  // Tries the standard API first, then falls back to Safari's WebKit-specific one — verified
-  // live that this was the actual bug: on a real iPhone, document.pictureInPictureEnabled was
-  // true (the button rendered) but requestPictureInPicture() silently resolved/rejected without
-  // ever floating the video. webkitSetPresentationMode is what Safari's own native player chrome
-  // uses internally for this exact <video>, and reliably works where the standard entry point
-  // doesn't for a native-HLS source.
-  async function togglePip() {
-    const video = videoRef.current as WebkitVideoElement | null;
-    if (!video) return;
-    const active = isPipActive(video);
-    try {
-      if (typeof video.webkitSetPresentationMode === "function" && video.webkitSupportsPresentationMode?.("picture-in-picture")) {
-        video.webkitSetPresentationMode(active ? "inline" : "picture-in-picture");
-        return;
-      }
-      if (active) await document.exitPictureInPicture();
-      else await video.requestPictureInPicture();
-    } catch {
-      // Rejected (e.g. video not ready yet) — no error UI needed for an optional convenience.
-    }
-  }
-
-  function isPipActive(video: WebkitVideoElement): boolean {
-    return document.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture";
-  }
-
-  async function exitPipIfActive() {
-    const video = videoRef.current as WebkitVideoElement | null;
-    if (!video || !isPipActive(video)) return;
-    if (typeof video.webkitSetPresentationMode === "function") video.webkitSetPresentationMode("inline");
-    else await document.exitPictureInPicture().catch(() => {});
-  }
-
-  async function handleMinimizeClick() {
-    await exitPipIfActive();
+  function handleMinimizeClick() {
     onMinimize();
   }
 
-  async function handleCloseClick() {
-    await exitPipIfActive();
+  function handleCloseClick() {
     onClose();
   }
 
@@ -518,6 +462,44 @@ export function PlayerControls({
   function jumpToChapter(startSeconds: number) {
     commitSeek(startSeconds);
     setMenu(null);
+  }
+
+  function cycleSubtitleSize() {
+    const idx = SUBTITLE_SIZES.findIndex((s) => s.value === subtitleSize);
+    const next = SUBTITLE_SIZES[(idx + 1) % SUBTITLE_SIZES.length];
+    setSubtitleSize(next.value);
+    try {
+      localStorage.setItem(SUBTITLE_SIZE_KEY, String(next.value));
+    } catch {
+      // Storage unavailable — just doesn't persist this time.
+    }
+  }
+
+  // Shifts every cue of the CURRENTLY SHOWING subtitle track by `deltaSeconds` — applied
+  // directly to the live TextTrackCue objects (their startTime/endTime are writable), not
+  // re-derived from an "original" copy, so repeated small nudges (−0.5s, −0.5s, +0.5s…)
+  // accumulate correctly without needing to track original timings separately.
+  //
+  // `subtitleTracks` (this component's own prop) and PlayerHost's externalSubtitleTracks are
+  // built from the exact same source array in the same order — video.textTracks is indexed by
+  // that same DOM/source order — so position can be found here without PlayerHost needing to
+  // expose that mapping directly.
+  function shiftSubtitles(deltaSeconds: number) {
+    const video = videoRef.current;
+    if (!video || currentSubtitleId === null) return;
+    const position = subtitleTracks.findIndex((t) => t.id === currentSubtitleId);
+    const cues = video.textTracks[position]?.cues;
+    if (!cues) return;
+    for (let i = 0; i < cues.length; i++) {
+      const cue = cues[i];
+      // Intentional native DOM mutation (a browser TextTrackCue, not React state) — the React
+      // Compiler's static analysis traces this back through videoRef and flags it as an
+      // immutability violation, but there's no React-managed data here to keep immutable.
+      // eslint-disable-next-line react-hooks/immutability
+      cue.startTime += deltaSeconds;
+      cue.endTime += deltaSeconds;
+    }
+    setSubtitleOffset((o) => Math.round((o + deltaSeconds) * 10) / 10);
   }
 
   // Space/arrows/M/F, full-mode only (this component isn't rendered in mini mode at all) and
@@ -571,6 +553,11 @@ export function PlayerControls({
         if (e.pointerType === "mouse") showControls();
       }}
     >
+      {/* Native <track> cues render in the browser's own shadow DOM — the only way to reach
+          them is the ::cue pseudo-element, which can't be scoped by a React inline style since
+          it isn't a real element. Targets every <video> globally rather than this one
+          specifically: harmless since the whole app only ever has one active <video> at a time. */}
+      <style>{`video::cue { font-size: clamp(14px, ${subtitleSize * 4}vw, ${Math.round(subtitleSize * 48)}px); }`}</style>
       {/* Always visible regardless of the auto-hide controls fade below —
           otherwise a rebuffer that happens while controls are hidden looks
           like a silent freeze instead of a loading state. */}
@@ -754,16 +741,43 @@ export function PlayerControls({
                     <Cast size={16} /> AirPlay
                   </button>
                 )}
-                {pipSupported && (
-                  <button
-                    onClick={() => {
-                      togglePip();
-                      setMenu(null);
-                    }}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <PictureInPicture2 size={16} /> Picture-in-picture{pipActive ? " · actif" : ""}
-                  </button>
+                {subtitleTracks.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-2 text-sm text-white">
+                    <span className="flex items-center gap-3">
+                      <Captions size={16} /> Taille sous-titres
+                    </span>
+                    <button
+                      onClick={cycleSubtitleSize}
+                      className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                    >
+                      {SUBTITLE_SIZES.find((s) => s.value === subtitleSize)?.label}
+                    </button>
+                  </div>
+                )}
+                {subtitleTracks.length > 0 && currentSubtitleId !== null && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
+                    <span className="flex items-center gap-3">
+                      <Captions size={16} /> Décalage
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => shiftSubtitles(-0.5)}
+                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                      >
+                        −0.5s
+                      </button>
+                      <span className="w-12 text-center tabular-nums text-xs text-white/70">
+                        {subtitleOffset > 0 ? "+" : ""}
+                        {subtitleOffset}s
+                      </span>
+                      <button
+                        onClick={() => shiftSubtitles(0.5)}
+                        className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                      >
+                        +0.5s
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>
             )}
