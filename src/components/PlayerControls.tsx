@@ -1,11 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, PictureInPicture2, Gauge, ListVideo } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, PictureInPicture2, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 
 export interface Track {
   id: number;
   label: string;
+}
+
+// Safari's pre-standard Picture-in-Picture API — kept alongside the standard
+// requestPictureInPicture()/document.pictureInPictureEnabled rather than instead of it: verified
+// live that a real iOS device has document.pictureInPictureEnabled === true (so the button
+// rendered) yet requestPictureInPicture() silently did nothing — the standard entry point exists
+// there but doesn't reliably drive an actual native-HLS <video>, while the WebKit-specific one
+// (used by Safari itself for its own native player controls) does.
+interface WebkitVideoElement extends HTMLVideoElement {
+  webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
+  webkitSetPresentationMode?: (mode: "picture-in-picture" | "inline") => void;
+  webkitPresentationMode?: "inline" | "fullscreen" | "picture-in-picture";
 }
 
 interface PlayerControlsProps {
@@ -72,7 +84,7 @@ export function PlayerControls({
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
@@ -189,6 +201,12 @@ export function PlayerControls({
     const onRateChange = () => setSpeed(video.playbackRate || 1);
     const onEnterPip = () => setPipActive(true);
     const onLeavePip = () => setPipActive(false);
+    // Safari's presentation-mode changes fire this instead of enter/leavepictureinpicture in
+    // versions that predate (or don't fully wire up) the standard events for this element type —
+    // see togglePip's comment for why both APIs are used together.
+    const onPresentationModeChange = () => {
+      setPipActive((video as WebkitVideoElement).webkitPresentationMode === "picture-in-picture");
+    };
     // 'canplay' also clears buffering: when autoplay is blocked (iOS after the reload-based
     // track switch — no user activation on the fresh page), 'playing' never fires without a
     // tap, and a spinner that only 'playing' can dismiss would sit over a ready, paused video
@@ -206,16 +224,21 @@ export function PlayerControls({
     video.addEventListener("ratechange", onRateChange);
     video.addEventListener("enterpictureinpicture", onEnterPip);
     video.addEventListener("leavepictureinpicture", onLeavePip);
+    video.addEventListener("webkitpresentationmodechanged", onPresentationModeChange);
     // Safari-only API — feature-detected, not part of the standard HTMLVideoElement type.
     setAirPlaySupported(
       typeof (video as unknown as { webkitShowPlaybackTargetPicker?: unknown })
         .webkitShowPlaybackTargetPicker === "function"
     );
-    // Standard Picture-in-Picture API — supported by Safari (macOS + iOS, including installed
-    // PWAs) and Chromium since long before this was written; `disablePictureInPicture` is an
-    // opt-out attribute we never set, so its absence needs no separate check.
-    setPipSupported(typeof document !== "undefined" && document.pictureInPictureEnabled === true);
+    // Either API counts as supported — see togglePip's comment for why both are tried.
+    const wkVideo = video as WebkitVideoElement;
+    setPipSupported(
+      (typeof document !== "undefined" && document.pictureInPictureEnabled === true) ||
+        (typeof wkVideo.webkitSupportsPresentationMode === "function" &&
+          wkVideo.webkitSupportsPresentationMode("picture-in-picture"))
+    );
     return () => {
+      video.removeEventListener("webkitpresentationmodechanged", onPresentationModeChange);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
@@ -442,24 +465,47 @@ export function PlayerControls({
   // player's chrome around a <video> the browser has already visually pulled out of the page,
   // so both onMinimize and onClose (below) exit native PiP first and wait for it before doing
   // anything else, rather than letting the two float independently.
+  //
+  // Tries the standard API first, then falls back to Safari's WebKit-specific one — verified
+  // live that this was the actual bug: on a real iPhone, document.pictureInPictureEnabled was
+  // true (the button rendered) but requestPictureInPicture() silently resolved/rejected without
+  // ever floating the video. webkitSetPresentationMode is what Safari's own native player chrome
+  // uses internally for this exact <video>, and reliably works where the standard entry point
+  // doesn't for a native-HLS source.
   async function togglePip() {
-    const video = videoRef.current;
+    const video = videoRef.current as WebkitVideoElement | null;
     if (!video) return;
+    const active = isPipActive(video);
     try {
-      if (document.pictureInPictureElement === video) await document.exitPictureInPicture();
+      if (typeof video.webkitSetPresentationMode === "function" && video.webkitSupportsPresentationMode?.("picture-in-picture")) {
+        video.webkitSetPresentationMode(active ? "inline" : "picture-in-picture");
+        return;
+      }
+      if (active) await document.exitPictureInPicture();
       else await video.requestPictureInPicture();
     } catch {
       // Rejected (e.g. video not ready yet) — no error UI needed for an optional convenience.
     }
   }
 
+  function isPipActive(video: WebkitVideoElement): boolean {
+    return document.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture";
+  }
+
+  async function exitPipIfActive() {
+    const video = videoRef.current as WebkitVideoElement | null;
+    if (!video || !isPipActive(video)) return;
+    if (typeof video.webkitSetPresentationMode === "function") video.webkitSetPresentationMode("inline");
+    else await document.exitPictureInPicture().catch(() => {});
+  }
+
   async function handleMinimizeClick() {
-    if (document.pictureInPictureElement) await document.exitPictureInPicture().catch(() => {});
+    await exitPipIfActive();
     onMinimize();
   }
 
   async function handleCloseClick() {
-    if (document.pictureInPictureElement) await document.exitPictureInPicture().catch(() => {});
+    await exitPipIfActive();
     onClose();
   }
 
@@ -598,17 +644,11 @@ export function PlayerControls({
           }}
         >
           <p className="truncate pr-4 text-sm font-medium text-white">{title}</p>
+          {/* Only the controls used constantly (subtitles/audio) plus navigation (minimize/
+              close) stay directly on the bar — on a portrait phone, 9 icons in a row was too
+              much. Everything else (info, chapters, speed, AirPlay, PiP) lives one tap deeper
+              behind "···", grouped as a labeled list rather than more bare icons. */}
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onTogglePlaybackInfo();
-              }}
-              title="Playback Info"
-              className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
-            >
-              <Info size={18} />
-            </button>
             {subtitleTracks.length > 0 && (
               <button
                 onClick={(e) => {
@@ -631,51 +671,16 @@ export function PlayerControls({
                 <AudioLines size={18} />
               </button>
             )}
-            {chapters.length > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenu(menu === "chapters" ? null : "chapters");
-                }}
-                title="Chapitres"
-                className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "chapters" ? "bg-white/20" : "bg-white/10"}`}
-              >
-                <ListVideo size={18} />
-              </button>
-            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setMenu(menu === "speed" ? null : "speed");
+                setMenu(menu === "more" ? null : "more");
               }}
-              title="Vitesse de lecture"
-              className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "speed" ? "bg-white/20" : "bg-white/10"}`}
+              title="Plus d'options"
+              className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "more" ? "bg-white/20" : "bg-white/10"}`}
             >
-              <Gauge size={18} />
+              <EllipsisVertical size={18} />
             </button>
-            {airPlaySupported && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  showAirPlayPicker();
-                }}
-                className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
-              >
-                <Cast size={18} />
-              </button>
-            )}
-            {pipSupported && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePip();
-                }}
-                title="Picture-in-picture"
-                className={`rounded-lg p-2 text-white hover:bg-white/20 ${pipActive ? "bg-white/20" : "bg-white/10"}`}
-              >
-                <PictureInPicture2 size={18} />
-              </button>
-            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -713,6 +718,63 @@ export function PlayerControls({
             onClick={(e) => e.stopPropagation()}
             onClickCapture={() => showControls(10000)}
           >
+            {menu === "more" && (
+              <>
+                <button
+                  onClick={() => {
+                    onTogglePlaybackInfo();
+                    setMenu(null);
+                  }}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <Info size={16} /> Infos techniques
+                </button>
+                {chapters.length > 0 && (
+                  <button
+                    onClick={() => setMenu("chapters")}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <ListVideo size={16} /> Chapitres
+                  </button>
+                )}
+                <button
+                  onClick={() => setMenu("speed")}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <Gauge size={16} /> Vitesse{speed !== 1 ? ` · ${speed}x` : ""}
+                </button>
+                {airPlaySupported && (
+                  <button
+                    onClick={() => {
+                      showAirPlayPicker();
+                      setMenu(null);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <Cast size={16} /> AirPlay
+                  </button>
+                )}
+                {pipSupported && (
+                  <button
+                    onClick={() => {
+                      togglePip();
+                      setMenu(null);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <PictureInPicture2 size={16} /> Picture-in-picture{pipActive ? " · actif" : ""}
+                  </button>
+                )}
+              </>
+            )}
+            {(menu === "chapters" || menu === "speed") && (
+              <button
+                onClick={() => setMenu("more")}
+                className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
+              >
+                <ArrowLeft size={14} /> Retour
+              </button>
+            )}
             {(menu === "audio" || menu === "subtitles") &&
               (menu === "audio" ? audioTracks : subtitleTracks).map((tr) => (
                 <button
