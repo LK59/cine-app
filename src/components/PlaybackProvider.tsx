@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { detectCodecSupport } from "@/lib/codecSupport";
 
 export interface PlaybackSession {
   itemId: string;
@@ -62,6 +63,15 @@ export function usePlayback(): PlaybackContextValue {
 export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PlaybackSession | null>(null);
   const [mode, setMode] = useState<PlaybackMode>("closed");
+
+  // Speculative, fire-and-forget: detectCodecSupport() already caches its result in
+  // localStorage per browser/device (not per session, not per film) — this just moves that
+  // one-time cost (a few hundred ms, the very first time ever on a given device) off the
+  // critical path of actually pressing play, since it's mounted once for the whole app anyway.
+  // A no-op on every later visit once the cache is warm.
+  useEffect(() => {
+    detectCodecSupport().catch(() => {});
+  }, []);
 
   const play = useCallback((s: PlaybackSession) => {
     setSession(s);

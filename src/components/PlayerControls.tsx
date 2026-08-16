@@ -92,6 +92,7 @@ export function PlayerControls({
   const [castSupported, setCastSupported] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [chapters, setChapters] = useState<{ start: number; name: string }[]>([]);
+  const [bufferedEnd, setBufferedEnd] = useState(0);
   // General preference, persisted across sessions like volume — a subtitle size someone needs
   // isn't specific to one file.
   const [subtitleSize, setSubtitleSize] = useState(() => {
@@ -213,6 +214,19 @@ export function PlayerControls({
     const onWaiting = () => setBuffering(true);
     const onPlaying = () => setBuffering(false);
     const onRateChange = () => setSpeed(video.playbackRate || 1);
+    // The range containing currentTime (not just the last one) — a rewind past hls.js's
+    // in-memory buffer can leave an earlier, already-downloaded range that's no longer the
+    // last entry in video.buffered once new data has since loaded ahead of the original spot.
+    const onProgress = () => {
+      const ranges = video.buffered;
+      for (let i = 0; i < ranges.length; i++) {
+        if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) {
+          setBufferedEnd(ranges.end(i));
+          return;
+        }
+      }
+      setBufferedEnd(ranges.length > 0 ? ranges.end(ranges.length - 1) : 0);
+    };
     // 'canplay' also clears buffering: when autoplay is blocked (iOS after the reload-based
     // track switch — no user activation on the fresh page), 'playing' never fires without a
     // tap, and a spinner that only 'playing' can dismiss would sit over a ready, paused video
@@ -228,6 +242,8 @@ export function PlayerControls({
     video.addEventListener("playing", onPlaying);
     video.addEventListener("canplay", onPlaying);
     video.addEventListener("ratechange", onRateChange);
+    video.addEventListener("progress", onProgress);
+    onProgress(); // seed immediately — otherwise the bar stays empty until the next chunk lands
 
     // Cast — AirPlay (Safari, webkit-prefixed) where available, else the standard Remote
     // Playback API (Chrome/Edge's real Chromecast entry point for a <video>). Never both: a
@@ -260,6 +276,7 @@ export function PlayerControls({
       video.removeEventListener("durationchange", onDuration);
       video.removeEventListener("volumechange", onVolume);
       video.removeEventListener("ratechange", onRateChange);
+      video.removeEventListener("progress", onProgress);
     };
   }, [videoRef]);
 
@@ -955,6 +972,17 @@ export function PlayerControls({
               updatePreview(e.touches[0].clientX);
             }}
           >
+            {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
+                second color): its only job is "can I scrub ahead without waiting", not
+                competing for attention with the actual playback position. Sits under the
+                native range input's own track, which only leaves it visible in the *unplayed*
+                portion — exactly the part worth showing. */}
+            {duration > 0 && bufferedEnd > 0 && (
+              <div
+                className="pointer-events-none absolute top-0 h-1 rounded-full bg-white/25"
+                style={{ width: `${Math.min(100, (bufferedEnd / duration) * 100)}%` }}
+              />
+            )}
             {/* Chapter markers — visual only, not independently clickable: the seek bar's own
                 drag already covers the whole track, so a second, narrower hit target right on
                 top of it would only make small drag corrections more error-prone. Jumping to a
