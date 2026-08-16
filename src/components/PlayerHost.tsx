@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
-import { PlayerControls, type Track } from "@/components/PlayerControls";
+import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
@@ -558,6 +558,20 @@ function ActivePlayer({
     // responses: resuming after a ~3s-old session loaded fine, after an 8-minute session it was
     // refused instantly (SRC_NOT_SUPPORTED) — the only remaining variable was the old session's
     // weight. Waiting here lets that release finish before the new session asks for its slot.
+    // Remembered volume — applied once here, right when the session starts, rather than in
+    // PlayerControls (which remounts on every full<->mini toggle and would otherwise re-apply
+    // it on top of whatever the video's actual live volume already is).
+    try {
+      const stored = localStorage.getItem(VOLUME_STORAGE_KEY);
+      if (stored && videoRef.current) {
+        const { volume, muted } = JSON.parse(stored) as { volume: number; muted: boolean };
+        if (typeof volume === "number") videoRef.current.volume = volume;
+        if (typeof muted === "boolean") videoRef.current.muted = muted;
+      }
+    } catch {
+      // Malformed or unavailable — video just keeps its own default volume.
+    }
+
     const graceMs = fromReload ? 3000 : 0;
     const graceTimer = setTimeout(() => {
       startPlayback({ resumeAt: initialResumeAt, audioStreamIndex: initialAudioStreamIndex });

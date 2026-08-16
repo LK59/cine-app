@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, PictureInPicture2, Gauge, ListVideo } from "lucide-react";
 
 export interface Track {
   id: number;
@@ -31,6 +31,8 @@ interface PlayerControlsProps {
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
+const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+export const VOLUME_STORAGE_KEY = "cine:player-volume";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -70,10 +72,17 @@ export function PlayerControls({
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters">(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
+  const [pipSupported, setPipSupported] = useState(false);
+  // Independent of `menu`/`mode` (full vs. our own mini) — the browser's native
+  // Picture-in-Picture is an OS-level window, not something our React state controls; this only
+  // mirrors the browser's own 'enter'/'leavepictureinpicture' events for the button's icon/state.
+  const [pipActive, setPipActive] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [chapters, setChapters] = useState<{ start: number; name: string }[]>([]);
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,7 +141,25 @@ export function PlayerControls({
     setDuration(video.duration || 0);
     setVolume(video.volume);
     setMuted(video.muted);
+    setSpeed(video.playbackRate || 1);
+    setPipActive(document.pictureInPictureElement === video);
   }, [videoRef]);
+
+  // Chapters — fetched once per item, same shape/lifecycle as the trickplay metadata below.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/jellyfin/chapters?itemId=${itemId}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (!cancelled) setChapters(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setChapters([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -149,9 +176,19 @@ export function PlayerControls({
     const onVolume = () => {
       setVolume(video.volume);
       setMuted(video.muted);
+      // Remembered across sessions — applied back on a fresh session in PlayerHost's mount
+      // effect, so the user doesn't have to turn the volume back up every single time.
+      try {
+        localStorage.setItem(VOLUME_STORAGE_KEY, JSON.stringify({ volume: video.volume, muted: video.muted }));
+      } catch {
+        // Storage unavailable — just doesn't persist this time.
+      }
     };
     const onWaiting = () => setBuffering(true);
     const onPlaying = () => setBuffering(false);
+    const onRateChange = () => setSpeed(video.playbackRate || 1);
+    const onEnterPip = () => setPipActive(true);
+    const onLeavePip = () => setPipActive(false);
     // 'canplay' also clears buffering: when autoplay is blocked (iOS after the reload-based
     // track switch — no user activation on the fresh page), 'playing' never fires without a
     // tap, and a spinner that only 'playing' can dismiss would sit over a ready, paused video
@@ -166,11 +203,18 @@ export function PlayerControls({
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
     video.addEventListener("canplay", onPlaying);
+    video.addEventListener("ratechange", onRateChange);
+    video.addEventListener("enterpictureinpicture", onEnterPip);
+    video.addEventListener("leavepictureinpicture", onLeavePip);
     // Safari-only API — feature-detected, not part of the standard HTMLVideoElement type.
     setAirPlaySupported(
       typeof (video as unknown as { webkitShowPlaybackTargetPicker?: unknown })
         .webkitShowPlaybackTargetPicker === "function"
     );
+    // Standard Picture-in-Picture API — supported by Safari (macOS + iOS, including installed
+    // PWAs) and Chromium since long before this was written; `disablePictureInPicture` is an
+    // opt-out attribute we never set, so its absence needs no separate check.
+    setPipSupported(typeof document !== "undefined" && document.pictureInPictureEnabled === true);
     return () => {
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
@@ -181,6 +225,9 @@ export function PlayerControls({
       video.removeEventListener("loadedmetadata", onDuration);
       video.removeEventListener("durationchange", onDuration);
       video.removeEventListener("volumechange", onVolume);
+      video.removeEventListener("ratechange", onRateChange);
+      video.removeEventListener("enterpictureinpicture", onEnterPip);
+      video.removeEventListener("leavepictureinpicture", onLeavePip);
     };
   }, [videoRef]);
 
@@ -330,18 +377,19 @@ export function PlayerControls({
 
   // Shared by mouse hover (desktop) and touch drag (mobile — there's no true hover there, so
   // this only actually renders while a touch is down, via the range input's own touch handling
-  // reaching pointer move too) — both just need "where along the bar is the pointer".
-  const updatePreview = useCallback(
-    (clientX: number) => {
-      const bar = seekBarRef.current;
-      if (!bar || !duration) return;
-      const rect = bar.getBoundingClientRect();
-      const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-      setPreviewFraction(fraction);
-      setPreviewTime(fraction * duration);
-    },
-    [duration]
-  );
+  // reaching pointer move too) — both just need "where along the bar is the pointer". Plain
+  // function, not useCallback: nothing needs its referential identity to stay stable, and the
+  // extra state/hooks added alongside chapters/PiP/speed tripped the React Compiler's own
+  // memoization-preservation check on the manually memoized version for reasons unrelated to
+  // this function's own logic.
+  function updatePreview(clientX: number) {
+    const bar = seekBarRef.current;
+    if (!bar || !duration) return;
+    const rect = bar.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    setPreviewFraction(fraction);
+    setPreviewTime(fraction * duration);
+  }
 
   let previewTile: { url: string; bgX: number; bgY: number } | null = null;
   if (trickplay && previewTime !== null) {
@@ -387,6 +435,82 @@ export function PlayerControls({
     const video = videoRef.current as unknown as { webkitShowPlaybackTargetPicker?: () => void } | null;
     video?.webkitShowPlaybackTargetPicker?.();
   }
+
+  // Native browser Picture-in-Picture — a real OS-level floating window, entirely separate from
+  // our own custom mini-player (PlaybackProvider's "mini" mode). Deliberately never triggered
+  // together: minimizing to our own PiP while native PiP is active would try to render our mini
+  // player's chrome around a <video> the browser has already visually pulled out of the page,
+  // so both onMinimize and onClose (below) exit native PiP first and wait for it before doing
+  // anything else, rather than letting the two float independently.
+  async function togglePip() {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement === video) await document.exitPictureInPicture();
+      else await video.requestPictureInPicture();
+    } catch {
+      // Rejected (e.g. video not ready yet) — no error UI needed for an optional convenience.
+    }
+  }
+
+  async function handleMinimizeClick() {
+    if (document.pictureInPictureElement) await document.exitPictureInPicture().catch(() => {});
+    onMinimize();
+  }
+
+  async function handleCloseClick() {
+    if (document.pictureInPictureElement) await document.exitPictureInPicture().catch(() => {});
+    onClose();
+  }
+
+  function changeSpeed(rate: number) {
+    const video = videoRef.current;
+    if (video) video.playbackRate = rate;
+    setMenu(null);
+  }
+
+  function jumpToChapter(startSeconds: number) {
+    commitSeek(startSeconds);
+    setMenu(null);
+  }
+
+  // Space/arrows/M/F, full-mode only (this component isn't rendered in mini mode at all) and
+  // skipped whenever an <input> already has focus — most relevantly the volume/seek range
+  // sliders, which already have their own native arrow-key behavior that this would otherwise
+  // fight over the exact same keys.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (document.activeElement instanceof HTMLInputElement) return;
+      switch (e.code) {
+        case "Space":
+          e.preventDefault(); // default: page scroll
+          togglePlay();
+          showControls();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          skip(-10);
+          showControls();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          skip(10);
+          showControls();
+          break;
+        case "KeyM":
+          toggleMute();
+          break;
+        case "KeyF":
+          if (fullscreenSupported) toggleFullscreen();
+          break;
+        default:
+          return;
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreenSupported]);
 
   if (hidden) return null;
 
@@ -507,6 +631,28 @@ export function PlayerControls({
                 <AudioLines size={18} />
               </button>
             )}
+            {chapters.length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenu(menu === "chapters" ? null : "chapters");
+                }}
+                title="Chapitres"
+                className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "chapters" ? "bg-white/20" : "bg-white/10"}`}
+              >
+                <ListVideo size={18} />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenu(menu === "speed" ? null : "speed");
+              }}
+              title="Vitesse de lecture"
+              className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "speed" ? "bg-white/20" : "bg-white/10"}`}
+            >
+              <Gauge size={18} />
+            </button>
             {airPlaySupported && (
               <button
                 onClick={(e) => {
@@ -518,10 +664,22 @@ export function PlayerControls({
                 <Cast size={18} />
               </button>
             )}
+            {pipSupported && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePip();
+                }}
+                title="Picture-in-picture"
+                className={`rounded-lg p-2 text-white hover:bg-white/20 ${pipActive ? "bg-white/20" : "bg-white/10"}`}
+              >
+                <PictureInPicture2 size={18} />
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onMinimize();
+                handleMinimizeClick();
               }}
               title="Réduire"
               className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
@@ -531,7 +689,7 @@ export function PlayerControls({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onClose();
+                handleCloseClick();
               }}
               className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
             >
@@ -555,21 +713,22 @@ export function PlayerControls({
             onClick={(e) => e.stopPropagation()}
             onClickCapture={() => showControls(10000)}
           >
-            {(menu === "audio" ? audioTracks : subtitleTracks).map((tr) => (
-              <button
-                key={tr.id}
-                onClick={() => {
-                  if (menu === "audio") onChangeAudio(tr.id);
-                  else onChangeSubtitle(tr.id);
-                  setMenu(null);
-                }}
-                className={`block w-full truncate px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                  (menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id ? "text-accent-400" : "text-white"
-                }`}
-              >
-                {tr.label}
-              </button>
-            ))}
+            {(menu === "audio" || menu === "subtitles") &&
+              (menu === "audio" ? audioTracks : subtitleTracks).map((tr) => (
+                <button
+                  key={tr.id}
+                  onClick={() => {
+                    if (menu === "audio") onChangeAudio(tr.id);
+                    else onChangeSubtitle(tr.id);
+                    setMenu(null);
+                  }}
+                  className={`block w-full truncate px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                    (menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id ? "text-accent-400" : "text-white"
+                  }`}
+                >
+                  {tr.label}
+                </button>
+              ))}
             {menu === "subtitles" && (
               <button
                 onClick={() => {
@@ -583,6 +742,33 @@ export function PlayerControls({
                 Aucun
               </button>
             )}
+            {menu === "speed" &&
+              PLAYBACK_SPEEDS.map((rate) => (
+                <button
+                  key={rate}
+                  onClick={() => changeSpeed(rate)}
+                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                    speed === rate ? "text-accent-400" : "text-white"
+                  }`}
+                >
+                  {rate === 1 ? "Normale" : `${rate}x`}
+                </button>
+              ))}
+            {menu === "chapters" &&
+              chapters.map((ch, i) => (
+                <button
+                  key={i}
+                  onClick={() => jumpToChapter(ch.start)}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                    currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)
+                      ? "text-accent-400"
+                      : "text-white"
+                  }`}
+                >
+                  <span className="truncate">{ch.name}</span>
+                  <span className="shrink-0 tabular-nums text-white/50">{formatTime(ch.start)}</span>
+                </button>
+              ))}
           </div>
         )}
 
@@ -661,6 +847,18 @@ export function PlayerControls({
               updatePreview(e.touches[0].clientX);
             }}
           >
+            {/* Chapter markers — visual only, not independently clickable: the seek bar's own
+                drag already covers the whole track, so a second, narrower hit target right on
+                top of it would only make small drag corrections more error-prone. Jumping to a
+                specific chapter is what the chapters menu button is for. */}
+            {duration > 0 &&
+              chapters.map((ch, i) => (
+                <div
+                  key={i}
+                  className="pointer-events-none absolute top-0 h-1 w-px bg-black/50"
+                  style={{ left: `${(ch.start / duration) * 100}%` }}
+                />
+              ))}
             {previewTime !== null && (
               <div
                 className="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 overflow-hidden rounded-md bg-black shadow-xl ring-1 ring-white/20"
