@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw } from "lucide-react";
 
 export interface Track {
   id: number;
@@ -11,6 +11,7 @@ export interface Track {
 interface PlayerControlsProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
+  itemId: string;
   title: string;
   onClose: () => void;
   onMinimize: () => void;
@@ -44,6 +45,7 @@ function formatTime(seconds: number): string {
 export function PlayerControls({
   videoRef,
   containerRef,
+  itemId,
   title,
   onClose,
   onMinimize,
@@ -258,11 +260,77 @@ export function PlayerControls({
     else video.pause();
   }
 
+  // Plain buttons only — deliberately not a double-tap-the-edge-of-the-screen gesture (easy to
+  // trigger by accident, and conflicts with the tap-to-toggle-controls handler on the same area).
+  function skip(deltaSeconds: number) {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = Math.min(Math.max(0, video.currentTime + deltaSeconds), duration || video.currentTime);
+  }
+
   function seek(value: number) {
     const video = videoRef.current;
     if (!video) return;
     video.currentTime = value;
     setCurrentTime(value);
+  }
+
+  // Trickplay scrubbing preview — fetched once per item, not per hover: it's item-wide static
+  // metadata (grid layout + a handful of sprite-sheet tiles covering the whole runtime), so
+  // there's nothing to re-fetch as the seek bar is dragged, only tiles to look up locally.
+  const [trickplay, setTrickplay] = useState<{
+    width: number; height: number; tileWidth: number; tileHeight: number; thumbnailCount: number; intervalMs: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/jellyfin/trickplay/info?itemId=${itemId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) setTrickplay(data);
+      })
+      .catch(() => {
+        if (!cancelled) setTrickplay(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId]);
+
+  const seekBarRef = useRef<HTMLDivElement>(null);
+  const [previewTime, setPreviewTime] = useState<number | null>(null);
+  const [previewFraction, setPreviewFraction] = useState(0);
+
+  // Shared by mouse hover (desktop) and touch drag (mobile — there's no true hover there, so
+  // this only actually renders while a touch is down, via the range input's own touch handling
+  // reaching pointer move too) — both just need "where along the bar is the pointer".
+  const updatePreview = useCallback(
+    (clientX: number) => {
+      const bar = seekBarRef.current;
+      if (!bar || !duration) return;
+      const rect = bar.getBoundingClientRect();
+      const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      setPreviewFraction(fraction);
+      setPreviewTime(fraction * duration);
+    },
+    [duration]
+  );
+
+  let previewTile: { url: string; bgX: number; bgY: number } | null = null;
+  if (trickplay && previewTime !== null) {
+    const thumbIndex = Math.min(
+      trickplay.thumbnailCount - 1,
+      Math.max(0, Math.floor((previewTime * 1000) / trickplay.intervalMs))
+    );
+    const perTile = trickplay.tileWidth * trickplay.tileHeight;
+    const tileIndex = Math.floor(thumbIndex / perTile);
+    const posInTile = thumbIndex % perTile;
+    const row = Math.floor(posInTile / trickplay.tileWidth);
+    const col = posInTile % trickplay.tileWidth;
+    previewTile = {
+      url: `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${tileIndex}`,
+      bgX: -(col * trickplay.width),
+      bgY: -(row * trickplay.height),
+    };
   }
 
   function toggleMute() {
@@ -490,17 +558,42 @@ export function PlayerControls({
           </div>
         )}
 
-        {/* Center play/pause — hidden while a spinner is already showing */}
+        {/* Center play/pause, flanked by ±10s skip buttons — plain buttons only, not a
+            double-tap-the-screen-edge gesture (too easy to trigger by accident, and would
+            conflict with the tap-to-toggle-controls handler covering the same area). Hidden
+            while a spinner is already showing. */}
         {!loading && !buffering && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlay();
-            }}
-            className="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/40 p-4 text-white hover:bg-black/60"
-          >
-            {playing ? <Pause size={28} /> : <Play size={28} />}
-          </button>
+          <div className="pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                skip(-10);
+              }}
+              className="rounded-full bg-black/40 p-3 text-white hover:bg-black/60"
+              title="Reculer de 10s"
+            >
+              <RotateCcw size={22} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+              className="rounded-full bg-black/40 p-4 text-white hover:bg-black/60"
+            >
+              {playing ? <Pause size={28} /> : <Play size={28} />}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                skip(10);
+              }}
+              className="rounded-full bg-black/40 p-3 text-white hover:bg-black/60"
+              title="Avancer de 10s"
+            >
+              <RotateCw size={22} />
+            </button>
+          </div>
         )}
 
         {/* Bottom bar */}
@@ -514,14 +607,51 @@ export function PlayerControls({
             paddingRight: "max(1rem, env(safe-area-inset-right))",
           }}
         >
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            value={currentTime}
-            onChange={(e) => seek(Number(e.target.value))}
-            className="h-1 w-full cursor-pointer accent-accent-500"
-          />
+          <div
+            ref={seekBarRef}
+            className="relative"
+            onMouseMove={(e) => updatePreview(e.clientX)}
+            onMouseLeave={() => setPreviewTime(null)}
+            onTouchStart={(e) => updatePreview(e.touches[0].clientX)}
+            onTouchMove={(e) => updatePreview(e.touches[0].clientX)}
+            onTouchEnd={() => setPreviewTime(null)}
+          >
+            {previewTime !== null && (
+              <div
+                className="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 overflow-hidden rounded-md bg-black shadow-xl ring-1 ring-white/20"
+                style={{
+                  left: `${previewFraction * 100}%`,
+                  width: trickplay?.width ?? 160,
+                  height: trickplay?.height ?? 90,
+                }}
+              >
+                {previewTile && (
+                  <div
+                    className="h-full w-full"
+                    style={{
+                      backgroundImage: `url(${previewTile.url})`,
+                      backgroundPosition: `${previewTile.bgX}px ${previewTile.bgY}px`,
+                      // Sized to the FULL sprite sheet, not one tile slot — a plain background
+                      // shorthand size here would stretch the whole sheet into one thumbnail's
+                      // box instead of just positioning the correct slot within it.
+                      backgroundSize: `${(trickplay!.width * trickplay!.tileWidth)}px ${(trickplay!.height * trickplay!.tileHeight)}px`,
+                    }}
+                  />
+                )}
+                <p className="absolute inset-x-0 bottom-0 bg-black/70 py-0.5 text-center text-[11px] tabular-nums text-white">
+                  {formatTime(previewTime)}
+                </p>
+              </div>
+            )}
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              value={currentTime}
+              onChange={(e) => seek(Number(e.target.value))}
+              className="h-1 w-full cursor-pointer accent-accent-500"
+            />
+          </div>
           <div className="flex items-center gap-3 text-xs text-white/80">
             <span className="tabular-nums">{formatTime(currentTime)}</span>
             <span className="text-white/40">/</span>

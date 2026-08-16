@@ -822,6 +822,7 @@ function ActivePlayer({
           key={videoKey}
           videoRef={videoRef}
           containerRef={containerRef}
+          itemId={itemId}
           title={title}
           onClose={handleClose}
           onMinimize={playback.minimize}
