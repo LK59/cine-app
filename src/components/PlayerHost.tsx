@@ -167,11 +167,22 @@ function ActivePlayer({
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
   // Non-interactive — a measured signal, not a settings toggle. Two real, checkable metrics
   // (not an invented "latency" a browser can't actually observe for HLS segments): how often
-  // playback has stalled to rebuffer in the last minute, and the decoder's own dropped-frame
-  // ratio via the standard getVideoPlaybackQuality() API. Reset per session in startPlayback.
+  // playback has stalled to rebuffer in the last minute, and the decoder's own RECENT
+  // dropped-frame rate via the standard getVideoPlaybackQuality() API. Reset per session in
+  // startPlayback.
   const [badConnection, setBadConnection] = useState(false);
   const rebufferTimestamps = useRef<number[]>([]);
   const hasPlayedOnce = useRef(false);
+  // A deliberate seek always fires 'waiting' too (the video briefly reloads at the new
+  // position) — reported live as a false-positive trigger during normal scrubbing, nothing to
+  // do with connection quality. 'waiting' within this long after a 'seeking' event is ignored.
+  const lastSeekAt = useRef(0);
+  // getVideoPlaybackQuality()'s dropped/total counts are cumulative since playback started, so a
+  // ratio computed directly from them can only ever climb — once real congestion pushed it past
+  // the threshold once, the badge could never clear again even after the connection fully
+  // recovered. Comparing against the previous poll's reading turns it into a recent-window rate
+  // that can properly drop back down.
+  const lastQuality = useRef<{ total: number; dropped: number } | null>(null);
   // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
   // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
   // 15-20s across the grace delay, codec ladder and reload escalation).
@@ -273,6 +284,8 @@ function ActivePlayer({
       setLoading(true);
       rebufferTimestamps.current = [];
       hasPlayedOnce.current = false;
+      lastSeekAt.current = 0;
+      lastQuality.current = null;
       setBadConnection(false);
 
       // (An earlier revision also waited for the "emptied" event here before reassigning src —
@@ -664,22 +677,34 @@ function ActivePlayer({
     const onPlaying = () => {
       hasPlayedOnce.current = true;
     };
+    const onSeeking = () => {
+      lastSeekAt.current = Date.now();
+    };
     const onWaiting = () => {
-      if (hasPlayedOnce.current) rebufferTimestamps.current.push(Date.now());
+      if (hasPlayedOnce.current && Date.now() - lastSeekAt.current > 2000) rebufferTimestamps.current.push(Date.now());
     };
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("seeking", onSeeking);
     video.addEventListener("waiting", onWaiting);
 
     const interval = setInterval(() => {
       const cutoff = Date.now() - 60_000;
       rebufferTimestamps.current = rebufferTimestamps.current.filter((t) => t > cutoff);
       const quality = video.getVideoPlaybackQuality?.();
-      const droppedRatio = quality && quality.totalVideoFrames > 0 ? quality.droppedVideoFrames / quality.totalVideoFrames : 0;
+      let droppedRatio = 0;
+      if (quality) {
+        const prev = lastQuality.current;
+        const deltaTotal = prev ? quality.totalVideoFrames - prev.total : 0;
+        const deltaDropped = prev ? quality.droppedVideoFrames - prev.dropped : 0;
+        if (deltaTotal > 0) droppedRatio = deltaDropped / deltaTotal;
+        lastQuality.current = { total: quality.totalVideoFrames, dropped: quality.droppedVideoFrames };
+      }
       setBadConnection(rebufferTimestamps.current.length >= 2 || droppedRatio > 0.02);
     }, 5000);
 
     return () => {
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("seeking", onSeeking);
       video.removeEventListener("waiting", onWaiting);
       clearInterval(interval);
     };

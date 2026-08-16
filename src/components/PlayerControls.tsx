@@ -440,6 +440,15 @@ export function PlayerControls({
     setPreviewTime(fraction * duration);
   }
 
+  // Jellyfin's own trickplay resolution (already the smallest one it generates — see
+  // trickplay/info's own comment) is still a fixed size that doesn't know about the viewport —
+  // on a small phone (iPhone mini reported live) it could cover close to the whole screen width.
+  // Scaled down to fit a fraction of the actual screen instead, capped at 1x so it's never
+  // upscaled past its native resolution (would just look blurry).
+  const previewScale = trickplay && typeof window !== "undefined" ? Math.min(1, (window.innerWidth * 0.35) / trickplay.width) : 1;
+  const previewDisplayWidth = trickplay ? Math.round(trickplay.width * previewScale) : 160;
+  const previewDisplayHeight = trickplay ? Math.round(trickplay.height * previewScale) : 90;
+
   let previewTile: { url: string; bgX: number; bgY: number } | null = null;
   if (trickplay && previewTime !== null) {
     const thumbIndex = Math.min(
@@ -980,7 +989,16 @@ export function PlayerControls({
             {duration > 0 && bufferedEnd > 0 && (
               <div
                 className="pointer-events-none absolute top-0 h-1 rounded-full bg-white/25"
-                style={{ width: `${Math.min(100, (bufferedEnd / duration) * 100)}%` }}
+                // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
+                // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
+                // which iOS can still trigger on an element even with pointer-events: none —
+                // verified live, reported as an overlay that was somehow both unclickable and
+                // yet opening iOS's text-selection UI on a long press) are needed together.
+                style={{
+                  width: `${Math.min(100, (bufferedEnd / duration) * 100)}%`,
+                  WebkitTouchCallout: "none",
+                  WebkitUserSelect: "none",
+                }}
               />
             )}
             {/* Chapter markers — visual only, not independently clickable: the seek bar's own
@@ -992,7 +1010,7 @@ export function PlayerControls({
                 <div
                   key={i}
                   className="pointer-events-none absolute top-0 h-1 w-px bg-black/50"
-                  style={{ left: `${(ch.start / duration) * 100}%` }}
+                  style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}
             {previewTime !== null && (
@@ -1000,14 +1018,24 @@ export function PlayerControls({
                 className="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 overflow-hidden rounded-md bg-black shadow-xl ring-1 ring-white/20"
                 style={{
                   left: `${previewFraction * 100}%`,
-                  width: trickplay?.width ?? 160,
-                  height: trickplay?.height ?? 90,
+                  width: previewDisplayWidth,
+                  height: previewDisplayHeight,
+                  WebkitTouchCallout: "none",
+                  WebkitUserSelect: "none",
                 }}
               >
                 {previewTile && (
+                  // Positioned/sized at Jellyfin's native trickplay resolution (unscaled — the
+                  // background-position math above is in those native pixel units), then scaled
+                  // down as a whole via transform to fit previewDisplayWidth/Height. Simpler and
+                  // exactly as sharp as recomputing every offset in scaled units would be, since
+                  // CSS transform scaling of a background-image is lossless the same way.
                   <div
-                    className="h-full w-full"
                     style={{
+                      width: trickplay!.width,
+                      height: trickplay!.height,
+                      transform: `scale(${previewScale})`,
+                      transformOrigin: "top left",
                       backgroundImage: `url(${previewTile.url})`,
                       backgroundPosition: `${previewTile.bgX}px ${previewTile.bgY}px`,
                       // Sized to the FULL sprite sheet, not one tile slot — a plain background
@@ -1051,6 +1079,11 @@ export function PlayerControls({
               onMouseUp={(e) => {
                 seekingRef.current = false;
                 commitSeek(Number((e.target as HTMLInputElement).value));
+                // Was missing here (only onTouchEnd cleared it) — a plain click/drag-release
+                // with a mouse (or a mouse-like pointer, which iOS itself can synthesize in some
+                // interaction patterns) left the trickplay preview frozen on screen indefinitely,
+                // since nothing but leaving the bar entirely (onMouseLeave) would ever clear it.
+                setPreviewTime(null);
                 setTimeout(() => showControls(5000), 0);
               }}
               onTouchEnd={(e) => {
@@ -1059,7 +1092,12 @@ export function PlayerControls({
                 setPreviewTime(null);
                 setTimeout(() => showControls(5000), 0);
               }}
-              className="h-1 w-full cursor-pointer accent-accent-500"
+              // m-0: native range inputs carry a small default margin in some engines' UA
+              // stylesheets that isn't reset by Tailwind's own base styles — left in place, the
+              // buffered/chapter overlays (positioned at a bare top: 0 in the same container)
+              // rendered visibly offset from the native track itself instead of flush with it.
+              className="m-0 block h-1 w-full cursor-pointer accent-accent-500"
+              style={{ WebkitTouchCallout: "none" }}
             />
           </div>
           <div className="flex items-center gap-3 text-xs text-white/80">
