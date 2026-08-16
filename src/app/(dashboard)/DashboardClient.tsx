@@ -89,8 +89,13 @@ function ResumeCard({ item }: { item: ResumeItem }) {
             alt={item.name}
             unoptimized
           />
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50">
-            <div className="h-full bg-accent-500" style={{ width: `${item.progress}%` }} />
+          {/* A dark gradient behind the bar guarantees contrast against any poster art —
+              the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
+              Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
+              not just the filled one. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/80 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/25">
+            <div className="h-full bg-accent-500 shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ width: `${item.progress}%` }} />
           </div>
         </div>
         <div className="p-2">
