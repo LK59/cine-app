@@ -8,6 +8,13 @@ export interface Track {
   label: string;
 }
 
+// AirPlay (Safari, webkit-prefixed) isn't in lib.dom's HTMLVideoElement typings — unlike the
+// standard Remote Playback API (Chrome/Edge's actual Chromecast entry point for a plain
+// <video>), which `video.remote` already covers natively.
+interface CastVideoElement extends HTMLVideoElement {
+  webkitShowPlaybackTargetPicker?: () => void;
+}
+
 interface PlayerControlsProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
@@ -82,7 +89,7 @@ export function PlayerControls({
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
-  const [airPlaySupported, setAirPlaySupported] = useState(false);
+  const [castSupported, setCastSupported] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [chapters, setChapters] = useState<{ start: number; name: string }[]>([]);
   // General preference, persisted across sessions like volume — a subtitle size someone needs
@@ -221,12 +228,28 @@ export function PlayerControls({
     video.addEventListener("playing", onPlaying);
     video.addEventListener("canplay", onPlaying);
     video.addEventListener("ratechange", onRateChange);
-    // Safari-only API — feature-detected, not part of the standard HTMLVideoElement type.
-    setAirPlaySupported(
-      typeof (video as unknown as { webkitShowPlaybackTargetPicker?: unknown })
-        .webkitShowPlaybackTargetPicker === "function"
-    );
+
+    // Cast — AirPlay (Safari, webkit-prefixed) where available, else the standard Remote
+    // Playback API (Chrome/Edge's real Chromecast entry point for a <video>). Never both: a
+    // browser that has AirPlay is Safari, which doesn't meaningfully implement Remote Playback,
+    // so checking AirPlay first and only falling back avoids ever probing the one that doesn't
+    // apply.
+    const castVideo = video as CastVideoElement;
+    let remoteWatchId: number | undefined;
+    if (typeof castVideo.webkitShowPlaybackTargetPicker === "function") {
+      setCastSupported(true);
+    } else if (castVideo.remote) {
+      const remote = castVideo.remote;
+      remote
+        .watchAvailability((available) => setCastSupported(available))
+        .then((id) => {
+          remoteWatchId = id;
+        })
+        .catch(() => setCastSupported(false)); // NotSupportedError — no cast receivers reachable at all
+    }
+
     return () => {
+      if (remoteWatchId !== undefined) castVideo.remote?.cancelWatchAvailability(remoteWatchId).catch(() => {});
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
@@ -440,9 +463,18 @@ export function PlayerControls({
     }
   }
 
-  function showAirPlayPicker() {
-    const video = videoRef.current as unknown as { webkitShowPlaybackTargetPicker?: () => void } | null;
-    video?.webkitShowPlaybackTargetPicker?.();
+  async function showCastPicker() {
+    const video = videoRef.current as CastVideoElement | null;
+    if (!video) return;
+    if (typeof video.webkitShowPlaybackTargetPicker === "function") {
+      video.webkitShowPlaybackTargetPicker();
+      return;
+    }
+    try {
+      await video.remote?.prompt();
+    } catch {
+      // No devices found or the user dismissed the picker — same silent behavior as AirPlay.
+    }
   }
 
   function handleMinimizeClick() {
@@ -730,15 +762,15 @@ export function PlayerControls({
                 >
                   <Gauge size={16} /> Vitesse{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
-                {airPlaySupported && (
+                {castSupported && (
                   <button
                     onClick={() => {
-                      showAirPlayPicker();
+                      showCastPicker();
                       setMenu(null);
                     }}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
-                    <Cast size={16} /> AirPlay
+                    <Cast size={16} /> Diffuser (AirPlay/Chromecast)
                   </button>
                 )}
                 {subtitleTracks.length > 0 && (
