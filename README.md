@@ -103,7 +103,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Installable PWA
 - Web Push notifications including iOS Safari / Apple Web Push
 - Multi-language interface - French, English, Spanish, German, including the in-app video player
-- Mobile-first navigation with haptic feedback
+- Mobile-first navigation with haptic feedback (Android/Chromium only - iOS Safari has never implemented the Web Vibration API, even in an installed PWA)
 
 <img src="docs/screenshots/menu-mobile.PNG" height="320">
 
