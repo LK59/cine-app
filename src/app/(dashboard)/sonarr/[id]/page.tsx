@@ -685,62 +685,68 @@ export default function SonarrSeriesDetailPage() {
                         const jfEp = jfEpisodeByKey.get(`${seasonNumber}-${ep.episodeNumber}`);
                         return (
                           <div key={ep.id} className="flex flex-col gap-1.5 p-3 text-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                {isGuest ? (
-                                  ep.monitored ? (
-                                    <CircleCheck size={16} className="text-accent-400" />
-                                  ) : (
-                                    <Circle size={16} className="text-slate-600" />
-                                  )
-                                ) : (
-                                  <button onClick={() => toggleEpisodeMonitored(ep, !ep.monitored)}>
-                                    {ep.monitored ? (
+                            {/* Info + actions sit stacked on mobile (title/date row, then a full
+                                action row below) but join into a single row past md — title
+                                truncates and shrinks to make room instead of leaving dead space
+                                to the right of the (now width-capped) play button. */}
+                            <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-4">
+                              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {isGuest ? (
+                                    ep.monitored ? (
                                       <CircleCheck size={16} className="text-accent-400" />
                                     ) : (
                                       <Circle size={16} className="text-slate-600" />
-                                    )}
-                                  </button>
-                                )}
-                                <span className="text-slate-500">{ep.episodeNumber}.</span>
-                                <span className="truncate text-slate-200">{ep.title}</span>
-                              </div>
-                              <div className="flex shrink-0 items-center gap-3">
-                                {ep.airDate && <span className="text-xs text-slate-500">{ep.airDate}</span>}
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${ep.hasFile ? "bg-emerald-400" : "bg-amber-400"}`}
-                                />
-                              </div>
-                            </div>
-                            {(jfEp || !isGuest) && (
-                              <div className="flex items-center gap-2">
-                                {jfEp && (
-                                  <PlayButton
-                                    itemId={jfEp.Id}
-                                    title={`${series.title} · EP${ep.episodeNumber} S${seasonNumber}`}
-                                    resumeTicks={jfEp.UserData?.PlaybackPositionTicks}
-                                    runtimeTicks={jfEp.RunTimeTicks}
-                                    variant="pill"
-                                    iconSize={14}
-                                    className="flex w-full min-w-24 max-w-48 items-center justify-center gap-1.5 rounded-lg bg-accent-600/80 py-2 text-xs font-medium text-white hover:bg-accent-600"
-                                    getNextEpisode={getNextEpisode}
+                                    )
+                                  ) : (
+                                    <button onClick={() => toggleEpisodeMonitored(ep, !ep.monitored)}>
+                                      {ep.monitored ? (
+                                        <CircleCheck size={16} className="text-accent-400" />
+                                      ) : (
+                                        <Circle size={16} className="text-slate-600" />
+                                      )}
+                                    </button>
+                                  )}
+                                  <span className="shrink-0 text-slate-500">{ep.episodeNumber}.</span>
+                                  <span className="truncate text-slate-200">{ep.title}</span>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-3">
+                                  {ep.airDate && <span className="text-xs text-slate-500">{ep.airDate}</span>}
+                                  <span
+                                    className={`h-1.5 w-1.5 rounded-full ${ep.hasFile ? "bg-emerald-400" : "bg-amber-400"}`}
                                   />
-                                )}
-                                {!isGuest && (
-                                <button
-                                  className="btn-ghost shrink-0 px-3 py-2"
-                                  onClick={() =>
-                                    setActiveSearch({
-                                      title: t('sonarr.episodeSearch', { title: ep.title }),
-                                      endpoint: `/api/sonarr/series/${id}/releases?episodeId=${ep.id}`,
-                                    })
-                                  }
-                                >
-                                  <Search size={14} />
-                                </button>
-                                )}
+                                </div>
                               </div>
-                            )}
+                              {(jfEp || !isGuest) && (
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {jfEp && (
+                                    <PlayButton
+                                      itemId={jfEp.Id}
+                                      title={`${series.title} · EP${ep.episodeNumber} S${seasonNumber}`}
+                                      resumeTicks={jfEp.UserData?.PlaybackPositionTicks}
+                                      runtimeTicks={jfEp.RunTimeTicks}
+                                      variant="pill"
+                                      iconSize={14}
+                                      className="flex w-full min-w-24 max-w-48 items-center justify-center gap-1.5 rounded-lg bg-accent-600/80 py-2 text-xs font-medium text-white hover:bg-accent-600"
+                                      getNextEpisode={getNextEpisode}
+                                    />
+                                  )}
+                                  {!isGuest && (
+                                  <button
+                                    className="btn-ghost shrink-0 px-3 py-2"
+                                    onClick={() =>
+                                      setActiveSearch({
+                                        title: t('sonarr.episodeSearch', { title: ep.title }),
+                                        endpoint: `/api/sonarr/series/${id}/releases?episodeId=${ep.id}`,
+                                      })
+                                    }
+                                  >
+                                    <Search size={14} />
+                                  </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                             {(subs?.subtitles?.length || download) && (
                               <div className="ml-6 flex flex-wrap items-center gap-1.5">
                                 {subs?.subtitles?.map((s, i) => (
