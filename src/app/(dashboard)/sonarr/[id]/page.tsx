@@ -737,6 +737,7 @@ export default function SonarrSeriesDetailPage() {
                                   {!isGuest && (
                                   <button
                                     className="btn-ghost shrink-0 px-3 py-2"
+                                    title={t('sonarr.episodeSearch', { title: ep.title })}
                                     onClick={() =>
                                       setActiveSearch({
                                         title: t('sonarr.episodeSearch', { title: ep.title }),
