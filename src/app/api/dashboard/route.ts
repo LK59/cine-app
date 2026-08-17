@@ -13,9 +13,10 @@ import { omdb } from "@/lib/clients/omdb";
 import { withCacheSafe, cachedMovies, cachedSeries, TTL } from "@/lib/server-cache";
 import { getDiskStats, type DiskStats } from "@/lib/disk-stats";
 import { classifyError } from "@/lib/api-error";
-import { posterUrl } from "@/lib/images";
+import { posterUrl, backdropUrl } from "@/lib/images";
 import { config } from "@/lib/config";
 import { getImdbRating } from "@/lib/imdb-rating";
+import { getTitleLogo } from "@/lib/title-logo";
 
 // Checked before any network call so "not configured" never gets confused
 // with "configured but unreachable" — both would otherwise surface as the
@@ -91,10 +92,22 @@ export interface DashboardSection<T> {
   stale: boolean;
 }
 
+export interface HeroItem {
+  id: number;
+  mediaType: "movie" | "series";
+  title: string;
+  overview: string | null;
+  backdropUrl: string | null;
+  logoUrl: string | null;
+  imdbRating: string | null;
+  href: string;
+}
+
 export interface DashboardPayload {
   services:       DashboardSection<ServiceStatus[]>;
   activity:       DashboardSection<ActivityItem[]>;
   resume:         DashboardSection<{ items: ResumeItem[] }>;
+  hero:           DashboardSection<HeroItem[]>;
   recentMovies:   DashboardSection<RecentItem[]>;
   recentSeries:   DashboardSection<RecentItem[]>;
   torrents:       DashboardSection<TorrentItem[]>;
@@ -334,6 +347,50 @@ async function fetchRecentSeries(): Promise<RecentItem[]> {
   }));
 }
 
+// ─── Hero (home banner) ────────────────────────────────────────────────────────
+
+// The 10 newest additions across BOTH movies and series, combined and re-sorted by date —
+// cachedMovies()/cachedSeries() hit the exact same cache entries fetchRecentMovies/
+// fetchRecentSeries already populate, so this costs no extra Radarr/Sonarr call. The only new
+// external calls are the 10 TMDB logo lookups, each individually cached for a week.
+async function fetchHero(): Promise<HeroItem[]> {
+  const [movies, series] = await Promise.all([cachedMovies(), cachedSeries()]);
+
+  const movieCandidates = movies
+    .filter((m) => m.added && m.added !== "0001-01-01T00:00:00Z" && (m.overview || m.images?.length))
+    .map((m) => ({ kind: "movie" as const, item: m, added: m.added! }));
+  const seriesCandidates = series
+    .filter((s) => s.added && s.added !== "0001-01-01T00:00:00Z" && (s.overview || s.images?.length))
+    .map((s) => ({ kind: "series" as const, item: s, added: s.added! }));
+
+  const picks = [...movieCandidates, ...seriesCandidates]
+    .sort((a, b) => new Date(b.added).getTime() - new Date(a.added).getTime())
+    .slice(0, 10);
+
+  return Promise.all(
+    picks.map(async (pick) => {
+      const { kind, item } = pick;
+      const tmdbId = item.tmdbId;
+      const [logoUrl, imdbRating] = await Promise.all([
+        tmdbId ? getTitleLogo(tmdbId, kind === "movie" ? "movie" : "series") : Promise.resolve(null),
+        kind === "movie"
+          ? Promise.resolve(item.ratings?.imdb?.value != null ? item.ratings.imdb.value.toFixed(1) : null)
+          : tmdbId ? getImdbRating(tmdbId, "series") : Promise.resolve(null),
+      ]);
+      return {
+        id: item.id,
+        mediaType: kind,
+        title: item.title,
+        overview: item.overview ?? null,
+        backdropUrl: backdropUrl(item.images, "full"),
+        logoUrl,
+        imdbRating,
+        href: kind === "movie" ? `/radarr/${item.id}` : `/sonarr/${item.id}`,
+      };
+    })
+  );
+}
+
 // ─── Torrents ─────────────────────────────────────────────────────────────────
 
 async function fetchTorrents(): Promise<TorrentItem[]> {
@@ -367,9 +424,10 @@ function getDiskSection(): DashboardSection<DiskStats> {
 export async function buildDashboardPayload(
   session: { jfId?: string } | null
 ): Promise<DashboardPayload> {
-  const [services, activity, recentMovies, recentSeries, torrents] = await Promise.all([
+  const [services, activity, hero, recentMovies, recentSeries, torrents] = await Promise.all([
     withCacheSafe("dashboard:services",      TTL.SHORT,      probeServices),
     withCacheSafe("dashboard:activity",      TTL.MEDIUM,     fetchActivity),
+    withCacheSafe("dashboard:hero",          TTL.MEDIUM,     fetchHero),
     withCacheSafe("dashboard:recent:movies", TTL.MEDIUM,     fetchRecentMovies),
     withCacheSafe("dashboard:recent:series", TTL.MEDIUM,     fetchRecentSeries),
     withCacheSafe("dashboard:torrents",      TTL.VERY_SHORT, fetchTorrents),
@@ -380,7 +438,7 @@ export async function buildDashboardPayload(
     ? await withCacheSafe(`dashboard:resume:${session.jfId}`, TTL.SHORT, () => fetchResume(session.jfId!))
     : { data: { items: [] }, available: true, error: null, updatedAt: null, stale: false };
 
-  return { services, activity, resume, recentMovies, recentSeries, torrents, disk };
+  return { services, activity, resume, hero, recentMovies, recentSeries, torrents, disk };
 }
 
 export async function GET(req: NextRequest) {

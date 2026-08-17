@@ -16,6 +16,7 @@ import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { DashboardHero } from "@/components/DashboardHero";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -540,6 +541,10 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
 
   return (
     <div>
+      {data?.hero.available && data.hero.data && data.hero.data.length > 0 && (
+        <DashboardHero items={data.hero.data} />
+      )}
+
       <PageHeader title={t('dashboard.pageTitle')} subtitle={t('dashboard.pageSubtitle')} />
 
       {isLoading && !data && <SkeletonSection />}

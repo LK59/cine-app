@@ -186,6 +186,17 @@ function createTmdbClient(lang = "fr-FR") {
       fetchJson<{ results: { key: string; site: string; type: string; official: boolean }[] }>(
         `${BASE}/tv/${tmdbTvId}/videos?api_key=${apiKey}&language=${lang}&include_video_language=${videoLangs}`
       ),
+    // "logos" are TMDB's title-treatment images (transparent PNGs with the film/show's actual
+    // logo/wordmark) — distinct from posters/backdrops, used for the home hero's Netflix-style
+    // title art instead of plain text where one's available.
+    getMovieImages: (tmdbId: number) =>
+      fetchJson<{ logos: { file_path: string; iso_639_1: string | null; vote_average: number }[] }>(
+        `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${videoLangs}`
+      ),
+    getTvImages: (tmdbTvId: number) =>
+      fetchJson<{ logos: { file_path: string; iso_639_1: string | null; vote_average: number }[] }>(
+        `${BASE}/tv/${tmdbTvId}/images?api_key=${apiKey}&include_image_language=${videoLangs}`
+      ),
     getPersonDetails: (personId: number) =>
       fetchJson<{
         id: number;

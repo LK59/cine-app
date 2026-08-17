@@ -15,6 +15,14 @@ export function posterUrl(images?: RadarrSonarrImage[], size: "thumb" | "full" =
   return size === "thumb" ? tmdbResize(img.remoteUrl, "w342") : tmdbResize(img.remoteUrl, "w500");
 }
 
+// Same remoteUrl-only constraint as posterUrl — Radarr/Sonarr's own `url` field points at their
+// internal Docker hostname, unreachable from the browser.
+export function backdropUrl(images?: RadarrSonarrImage[], size: "thumb" | "full" = "full"): string | null {
+  const img = images?.find((i) => i.coverType === "fanart");
+  if (!img?.remoteUrl) return null;
+  return size === "thumb" ? tmdbResize(img.remoteUrl, "w780") : tmdbResize(img.remoteUrl, "original");
+}
+
 export function tmdbResize(url: string | null | undefined, size: string): string | null {
   if (!url) return null;
   return url.replace(/\/(original|w\d+)\//, `/${size}/`);
