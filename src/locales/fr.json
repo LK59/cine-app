@@ -126,6 +126,7 @@
   },
   "dashboard": {
     "resumeWatching": "Continuer à regarder",
+    "myList": "Ma liste",
     "recentlyAdded": "Récemment ajouté à la bibliothèque",
     "seeAll": "Voir tout",
     "activeDownloads": "Téléchargements en cours",

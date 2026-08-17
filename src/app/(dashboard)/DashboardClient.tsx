@@ -22,6 +22,8 @@ import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/hooks/useLongPress";
 import type { DashboardPayload, ServiceStatus, ActivityItem, ResumeItem, RecentItem, TorrentItem } from "@/app/api/dashboard/route";
 import type { DiskStats } from "@/lib/disk-stats";
+import type { WatchlistItem } from "@/lib/db";
+import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 
 import { fmtSize, relativeTime, relativeTimeAbs, formatResumeTicks } from "@/lib/format";
 
@@ -89,6 +91,7 @@ function ResumeCard({ item }: { item: ResumeItem }) {
           alt={item.name}
           unoptimized
         />
+        {item.imdbRating && <ImdbBadge rating={item.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
         {/* A dark gradient behind the bar guarantees contrast against any poster art —
             the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
             Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
@@ -297,6 +300,79 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
   );
 }
 
+function WatchlistTeaserCard({ item, href, imdbRating }: { item: WatchlistItem; href: string | null; imdbRating: string | null }) {
+  const poster = item.posterPath
+    ? item.posterPath.startsWith("http") ? item.posterPath : `${TMDB_IMAGE_BASE}/w342${item.posterPath}`
+    : null;
+  const body = (
+    <>
+      <div className="relative">
+        <PosterImage src={poster} alt={item.title} />
+        {imdbRating && <ImdbBadge rating={imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
+      </div>
+      <div className="p-2">
+        <p className="truncate text-xs font-medium text-white">{item.title}</p>
+        {item.year && <p className="text-[11px] text-slate-500">{item.year}</p>}
+      </div>
+    </>
+  );
+  // Only clickable once the item is actually in the library (Radarr/Sonarr) — a pure "à voir"
+  // wish-list entry with nothing downloaded yet has no sheet of its own to open, same fallback
+  // as ResumeCard for items without a cinemaHref.
+  return href ? (
+    <Link href={href} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
+      {body}
+    </Link>
+  ) : (
+    <div className="card w-28 shrink-0 overflow-hidden touch-manipulation select-none">{body}</div>
+  );
+}
+
+// Home teaser for the watchlist — deliberately only the "to_watch" status (not favorites/
+// watched/etc.), matching what Louis actually asked for: a quick-glance row of what's queued
+// up next, not the whole watchlist (that's what the dedicated /watchlist page is for).
+function WatchlistSection() {
+  const t = useT();
+  const { data } = useSWR<{ items: WatchlistItem[] }>("/api/watchlist?status=to_watch", fetcher);
+  const { data: libMap } = useSWR<{
+    movieMap: Record<number, number>;
+    seriesMap: Record<number, number>;
+  }>("/api/library/map", fetcher, { revalidateOnFocus: false });
+  const items = data?.items ?? [];
+
+  const ratingsKey = items.length > 0
+    ? `/api/watchlist/ratings?items=${items.map((i) => `${i.mediaType}:${i.tmdbId}`).join(",")}`
+    : null;
+  const { data: ratingsMap } = useSWR<Record<string, string | null>>(ratingsKey, fetcher, { revalidateOnFocus: false });
+
+  if (items.length === 0) return null;
+
+  return (
+    <>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-white">{t('dashboard.myList')}</h2>
+        <Link href="/watchlist" className="flex items-center gap-0.5 text-xs text-slate-500 hover:text-slate-300">
+          {t('dashboard.seeAll')} <ChevronRight size={13} />
+        </Link>
+      </div>
+      <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+        {items.slice(0, 20).map((item) => {
+          const id = item.mediaType === "movie" ? libMap?.movieMap[item.tmdbId] : libMap?.seriesMap[item.tmdbId];
+          const href = id ? (item.mediaType === "movie" ? `/radarr/${id}` : `/sonarr/${id}`) : null;
+          return (
+            <WatchlistTeaserCard
+              key={`${item.mediaType}:${item.tmdbId}`}
+              item={item}
+              href={href}
+              imdbRating={ratingsMap?.[`${item.mediaType}:${item.tmdbId}`] ?? null}
+            />
+          );
+        })}
+      </HorizontalCarousel>
+    </>
+  );
+}
+
 function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
   const t = useT();
   const active = torrents.filter((item) => ["downloading", "stalledDL", "metaDL", "forcedDL"].includes(item.state));
@@ -474,6 +550,9 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
           {data.resume.available && data.resume.data && (
             <ResumeSection items={data.resume.data.items} />
           )}
+
+          {/* Ma liste (statut "à voir" uniquement) */}
+          <WatchlistSection />
 
           {/* Récemment ajouté */}
           <RecentSection

@@ -55,6 +55,7 @@ export interface ResumeItem {
   runtimeTicks: number;
   imageTag: string | null;
   cinemaHref: string | null;
+  imdbRating: string | null;
 }
 
 export interface RecentItem {
@@ -225,8 +226,8 @@ async function fetchResume(jfId: string): Promise<{ items: ResumeItem[] }> {
     cachedMovies().catch(() => []),
     cachedSeries().catch(() => []),
   ]);
-  const moviesByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
-  const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s.id]));
+  const moviesByTmdb = new Map(movies.map((m) => [m.tmdbId, m]));
+  const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s]));
 
   // Jellyfin never puts ProviderIds on Episode items, only on their parent
   // Series — fetch the series' TVDB id separately (deduped) so episodes in
@@ -241,23 +242,51 @@ async function fetchResume(jfId: string): Promise<{ items: ResumeItem[] }> {
     if (tvdb) seriesTvdbById.set(seriesId, parseInt(tvdb, 10));
   }));
 
+  // Series IMDb ratings resolved once, in a single batch — Sonarr's own `ratings` field isn't
+  // IMDb-specific (see getImdbRating), unlike movies, which read Radarr's own free
+  // ratings.imdb.value directly below with no external call at all.
+  const neededSeriesTmdbIds = new Set<number>();
+  for (const item of resumeData.Items) {
+    let seriesEntry: (typeof series)[number] | undefined;
+    if (item.Type === "Series" && item.ProviderIds?.Tvdb) {
+      seriesEntry = seriesByTvdb.get(parseInt(item.ProviderIds.Tvdb, 10));
+    } else if (item.Type === "Episode" && item.SeriesId) {
+      const tvdb = seriesTvdbById.get(item.SeriesId);
+      seriesEntry = tvdb ? seriesByTvdb.get(tvdb) : undefined;
+    }
+    if (seriesEntry?.tmdbId) neededSeriesTmdbIds.add(seriesEntry.tmdbId);
+  }
+  const seriesRatingByTmdb = new Map(
+    await Promise.all([...neededSeriesTmdbIds].map(async (id) => [id, await getImdbRating(id, "series")] as const))
+  );
+
   const items: ResumeItem[] = resumeData.Items.map((item) => {
     const pos = item.UserData?.PlaybackPositionTicks ?? 0;
     const rt = item.RunTimeTicks ?? 0;
     const progress = rt > 0 ? Math.min((pos / rt) * 100, 99) : 0;
     let cinemaHref: string | null = null;
+    let imdbRating: string | null = null;
     if (item.Type === "Movie" && item.ProviderIds?.Tmdb) {
-      const id = moviesByTmdb.get(parseInt(item.ProviderIds.Tmdb, 10));
-      if (id) cinemaHref = `/radarr/${id}`;
+      const movie = moviesByTmdb.get(parseInt(item.ProviderIds.Tmdb, 10));
+      if (movie) {
+        cinemaHref = `/radarr/${movie.id}`;
+        imdbRating = movie.ratings?.imdb?.value != null ? movie.ratings.imdb.value.toFixed(1) : null;
+      }
     } else if (item.Type === "Series" && item.ProviderIds?.Tvdb) {
-      const id = seriesByTvdb.get(parseInt(item.ProviderIds.Tvdb, 10));
-      if (id) cinemaHref = `/sonarr/${id}`;
+      const s = seriesByTvdb.get(parseInt(item.ProviderIds.Tvdb, 10));
+      if (s) {
+        cinemaHref = `/sonarr/${s.id}`;
+        imdbRating = s.tmdbId ? seriesRatingByTmdb.get(s.tmdbId) ?? null : null;
+      }
     } else if (item.Type === "Episode" && item.SeriesId) {
       const tvdb = seriesTvdbById.get(item.SeriesId);
-      const id = tvdb ? seriesByTvdb.get(tvdb) : undefined;
-      if (id) cinemaHref = `/sonarr/${id}`;
+      const s = tvdb ? seriesByTvdb.get(tvdb) : undefined;
+      if (s) {
+        cinemaHref = `/sonarr/${s.id}`;
+        imdbRating = s.tmdbId ? seriesRatingByTmdb.get(s.tmdbId) ?? null : null;
+      }
     }
-    return { id: item.Id, name: item.Type === "Episode" && item.SeriesName ? item.SeriesName : item.Name, subtitle: item.Type === "Episode" ? `S${String(item.ParentIndexNumber ?? 1).padStart(2,"0")}E${String(item.IndexNumber ?? 1).padStart(2,"0")} · ${item.Name}` : null, type: item.Type ?? "Unknown", progress: Math.round(progress), positionTicks: pos, runtimeTicks: rt, imageTag: item.ImageTags?.Primary ?? null, cinemaHref };
+    return { id: item.Id, name: item.Type === "Episode" && item.SeriesName ? item.SeriesName : item.Name, subtitle: item.Type === "Episode" ? `S${String(item.ParentIndexNumber ?? 1).padStart(2,"0")}E${String(item.IndexNumber ?? 1).padStart(2,"0")} · ${item.Name}` : null, type: item.Type ?? "Unknown", progress: Math.round(progress), positionTicks: pos, runtimeTicks: rt, imageTag: item.ImageTags?.Primary ?? null, cinemaHref, imdbRating };
   });
   return { items };
 }
