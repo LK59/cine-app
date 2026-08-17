@@ -320,7 +320,10 @@
       "pause": "Pause",
       "deleteFilesToo": "Dateien auch von der Festplatte löschen",
       "confirmRemove": "Löschen bestätigen"
-    }
+    },
+    "filterStatusAll": "Alle Status",
+    "filterCategoryAll": "Alle Kategorien",
+    "filterTrackerAll": "Alle Tracker"
   },
   "health": {
     "pageTitle": "Systemstatus",

@@ -98,6 +98,7 @@ export interface QbTorrent {
   size: number;
   eta: number;
   category: string;
+  tracker: string;
   ratio: number;
   added_on: number;
   uploaded: number;

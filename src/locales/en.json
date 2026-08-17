@@ -320,7 +320,10 @@
       "pause": "Pause",
       "deleteFilesToo": "Also delete files from disk",
       "confirmRemove": "Confirm deletion"
-    }
+    },
+    "filterStatusAll": "All statuses",
+    "filterCategoryAll": "All categories",
+    "filterTrackerAll": "All trackers"
   },
   "health": {
     "pageTitle": "System health",

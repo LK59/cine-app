@@ -4,7 +4,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
-import { Pause, Play, Trash2, ArrowDown, ArrowUp, Search } from "lucide-react";
+import { Pause, Play, Trash2, ArrowDown, ArrowUp, Search, ChevronDown } from "lucide-react";
 import type { QbTorrent } from "@/lib/clients/qbittorrent";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
@@ -27,6 +27,24 @@ function statePriority(state: string): number {
   return 1;
 }
 
+function trackerHost(tracker: string): string {
+  try {
+    return new URL(tracker).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+type StatusFilter = "all" | "downloading" | "seeding" | "paused";
+
+function matchesStatus(state: string, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  const p = statePriority(state);
+  if (filter === "downloading") return p === 0;
+  if (filter === "seeding") return p === 1;
+  return p === 2;
+}
+
 function sortTorrents(torrents: QbTorrent[]): QbTorrent[] {
   return [...torrents].sort((a, b) => {
     const pa = statePriority(a.state);
@@ -44,6 +62,9 @@ export default function QbittorrentPage() {
   const t = useT();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [trackerFilter, setTrackerFilter] = useState("all");
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const { data: torrents, error, isLoading } = useSWR<QbTorrent[]>(
     "/api/qbittorrent/torrents",
@@ -56,11 +77,25 @@ export default function QbittorrentPage() {
     { refreshInterval: INTERVALS.TORRENTS }
   );
 
+  const categories = useMemo(
+    () => Array.from(new Set((torrents ?? []).map((t) => t.category).filter(Boolean))).sort(),
+    [torrents]
+  );
+  const trackers = useMemo(
+    () => Array.from(new Set((torrents ?? []).map((t) => trackerHost(t.tracker)).filter(Boolean))).sort(),
+    [torrents]
+  );
+
   const filteredTorrents = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return torrents ?? [];
-    return (torrents ?? []).filter((t) => t.name.toLowerCase().includes(q));
-  }, [torrents, query]);
+    return (torrents ?? []).filter((t) => {
+      if (q && !t.name.toLowerCase().includes(q)) return false;
+      if (!matchesStatus(t.state, statusFilter)) return false;
+      if (categoryFilter !== "all" && t.category !== categoryFilter) return false;
+      if (trackerFilter !== "all" && trackerHost(t.tracker) !== trackerFilter) return false;
+      return true;
+    });
+  }, [torrents, query, statusFilter, categoryFilter, trackerFilter]);
   const sortedTorrents = useMemo(() => sortTorrents(filteredTorrents), [filteredTorrents]);
   const visibleTorrents = sortedTorrents.slice(0, visibleCount);
   const hasMore = visibleCount < sortedTorrents.length;
@@ -68,7 +103,7 @@ export default function QbittorrentPage() {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [query, torrents?.length]);
+  }, [query, statusFilter, categoryFilter, trackerFilter, torrents?.length]);
 
   async function action(hash: string, action: "pause" | "resume") {
     await fetch(`/api/qbittorrent/torrents/${hash}`, {
@@ -117,6 +152,50 @@ export default function QbittorrentPage() {
               placeholder={t('qbittorrent.searchPlaceholder')}
               className="input w-full pl-9"
             />
+          </div>
+
+          <div className="scrollbar-none mb-3 flex gap-2 overflow-x-auto pb-0.5 [touch-action:pan-x] sm:flex-wrap sm:overflow-visible">
+            <div className="relative shrink-0">
+              <select
+                className="input appearance-none pr-7 text-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              >
+                <option value="all">{t('qbittorrent.filterStatusAll')}</option>
+                <option value="downloading">{t('qbittorrent.sectionActive')}</option>
+                <option value="seeding">{t('qbittorrent.sectionSeed')}</option>
+                <option value="paused">{t('qbittorrent.sectionPaused')}</option>
+              </select>
+              <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+            </div>
+
+            {categories.length > 0 && (
+              <div className="relative shrink-0">
+                <select
+                  className="input appearance-none pr-7 text-sm"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                >
+                  <option value="all">{t('qbittorrent.filterCategoryAll')}</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+              </div>
+            )}
+
+            {trackers.length > 0 && (
+              <div className="relative shrink-0">
+                <select
+                  className="input appearance-none pr-7 text-sm"
+                  value={trackerFilter}
+                  onChange={(e) => setTrackerFilter(e.target.value)}
+                >
+                  <option value="all">{t('qbittorrent.filterTrackerAll')}</option>
+                  {trackers.map((tr) => <option key={tr} value={tr}>{tr}</option>)}
+                </select>
+                <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+              </div>
+            )}
           </div>
 
           {sortedTorrents.length === 0 ? (

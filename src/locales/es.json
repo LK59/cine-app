@@ -320,7 +320,10 @@
       "pause": "Pausa",
       "deleteFilesToo": "Eliminar también los archivos del disco",
       "confirmRemove": "Confirmar eliminación"
-    }
+    },
+    "filterStatusAll": "Todos los estados",
+    "filterCategoryAll": "Todas las categorías",
+    "filterTrackerAll": "Todos los indexadores"
   },
   "health": {
     "pageTitle": "Estado del sistema",

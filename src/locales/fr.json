@@ -320,7 +320,10 @@
       "pause": "Pause",
       "deleteFilesToo": "Supprimer aussi les fichiers du disque",
       "confirmRemove": "Confirmer la suppression"
-    }
+    },
+    "filterStatusAll": "Tous les statuts",
+    "filterCategoryAll": "Toutes les catégories",
+    "filterTrackerAll": "Tous les indexeurs"
   },
   "health": {
     "pageTitle": "Santé système",
