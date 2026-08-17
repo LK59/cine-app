@@ -77,52 +77,80 @@ function ResumeCard({ item }: { item: ResumeItem }) {
   const resumeAt = item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined;
   const playLabel =
     item.positionTicks > 0 ? `${t('common.resume')} - ${formatResumeTicks(item.positionTicks)}` : t('common.play');
-  return (
+
+  // Shared by both the Link and div branches below — kept as a single JSX block rather than a
+  // separate component so the two wrapper cases can't drift out of sync with each other.
+  const cardBody = (
     <>
-      <div
-        {...lp}
-        className="card w-36 shrink-0 overflow-hidden sm:w-40 touch-manipulation select-none"
-      >
-        <div className="relative">
-          <PosterImage
-            src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-            alt={item.name}
-            unoptimized
-          />
-          {/* A dark gradient behind the bar guarantees contrast against any poster art —
-              the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
-              Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
-              not just the filled one. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/80 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/25">
-            <div className="h-full bg-accent-500 shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ width: `${item.progress}%` }} />
-          </div>
-        </div>
-        <div className="p-2">
-          <p className="truncate text-xs font-medium text-white">{item.name}</p>
-          {item.subtitle && <p className="truncate text-[11px] text-slate-500">{item.subtitle}</p>}
-          <div className="mt-1.5 flex gap-1">
-            <PlayButton
-              itemId={item.id}
-              title={item.name}
-              resumeTicks={item.positionTicks}
-              runtimeTicks={item.runtimeTicks}
-              variant="icon"
-              iconSize={13}
-              className="rounded-sm bg-accent-600/80 px-2 py-1 text-white hover:bg-accent-600"
-            />
-            <a href={`/api/jellyfin/redirect?itemId=${item.id}`} target="_blank" rel="noopener noreferrer"
-              className="flex-1 rounded-sm bg-accent-600/20 px-2 py-1 text-center text-[11px] text-accent-400 hover:bg-accent-600/30">
-              Jellyfin
-            </a>
-            {item.cinemaHref && (
-              <Link href={item.cinemaHref} className="rounded-sm bg-white/5 px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10">
-                {t('dashboard.sheetLink')}
-              </Link>
-            )}
-          </div>
+      <div className="relative">
+        <PosterImage
+          src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
+          alt={item.name}
+          unoptimized
+        />
+        {/* A dark gradient behind the bar guarantees contrast against any poster art —
+            the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
+            Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
+            not just the filled one. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/80 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/25">
+          <div className="h-full bg-accent-500 shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ width: `${item.progress}%` }} />
         </div>
       </div>
+      <div className="p-2">
+        <p className="truncate text-xs font-medium text-white">{item.name}</p>
+        {item.subtitle && <p className="truncate text-[11px] text-slate-500">{item.subtitle}</p>}
+        <div className="mt-1.5 flex gap-1">
+          <PlayButton
+            itemId={item.id}
+            title={item.name}
+            resumeTicks={item.positionTicks}
+            runtimeTicks={item.runtimeTicks}
+            variant="icon"
+            iconSize={13}
+            className="rounded-sm bg-accent-600/80 px-2 py-1 text-white hover:bg-accent-600"
+          />
+          {/* A plain <a> here would nest an anchor inside the card's own Link below — browsers
+              auto-close the outer anchor when they hit a nested one, breaking its navigation
+              entirely. A button + window.open() (identical to the ActionSheet's own "Jellyfin"
+              action just below) sidesteps that without changing the visible behavior at all. */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank");
+            }}
+            className="flex-1 rounded-sm bg-accent-600/20 px-2 py-1 text-center text-[11px] text-accent-400 hover:bg-accent-600/30"
+          >
+            Jellyfin
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Whole card opens the sheet on click — the separate "Fiche" text link this replaced
+          is gone, its destination is now just clicking the card. Only when a Radarr/Sonarr
+          mapping actually exists (cinemaHref): a pure-Jellyfin item with no such mapping has
+          nowhere else to navigate to and stays a plain, non-navigating div, same as before. */}
+      {item.cinemaHref ? (
+        <Link
+          {...lp}
+          href={item.cinemaHref}
+          className="card w-36 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 sm:w-40 touch-manipulation select-none"
+        >
+          {cardBody}
+        </Link>
+      ) : (
+        <div
+          {...lp}
+          className="card w-36 shrink-0 overflow-hidden sm:w-40 touch-manipulation select-none"
+        >
+          {cardBody}
+        </div>
+      )}
       <ActionSheet
         open={open}
         onClose={() => setOpen(false)}
