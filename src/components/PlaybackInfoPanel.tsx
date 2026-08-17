@@ -5,6 +5,7 @@ import type { PlaybackInfoSummary } from "@/components/PlayerHost";
 
 interface Props {
   info: PlaybackInfoSummary | null;
+  networkBitrate: number | null;
   open: boolean;
   onClose: () => void;
 }
@@ -53,7 +54,7 @@ function formatBitrate(bitRate: number | null): string | null {
   return `${(bitRate / 1_000_000).toFixed(1)} Mb/s`;
 }
 
-export function PlaybackInfoPanel({ info, open, onClose }: Props) {
+export function PlaybackInfoPanel({ info, networkBitrate, open, onClose }: Props) {
   if (!open || !info) return null;
   const method = METHOD_LABELS[info.playMethod];
 
@@ -80,6 +81,16 @@ export function PlaybackInfoPanel({ info, open, onClose }: Props) {
           <p className={`text-sm font-semibold ${method.color}`}>{method.label}</p>
           <p className="mt-0.5 text-slate-400">{describeMethod(info)}</p>
         </div>
+
+        {networkBitrate != null && (
+          <div className="mb-3">
+            <p className="mb-1 font-medium text-slate-300">Réseau</p>
+            <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-400">
+              <dt className="text-slate-500">Débit estimé</dt>
+              <dd>{formatBitrate(networkBitrate) ?? "—"}</dd>
+            </dl>
+          </div>
+        )}
 
         {info.transcodeReasons.length > 0 && (
           <div className="mb-3">

@@ -420,6 +420,22 @@ export function PlayerControls({
     };
   }, [itemId]);
 
+  // Pre-warms the browser's own HTTP cache with every trickplay sprite tile as soon as the
+  // metadata is known, instead of only fetching a tile the first time the seek bar is actually
+  // hovered — trades a bit of upfront bandwidth (a handful of small JPEGs — Jellyfin packs
+  // hundreds of thumbnails per tile) for the preview never showing a blank/loading frame on
+  // the first scrub. Fire-and-forget: nothing reads the Image objects, only their side effect
+  // of populating the cache under the same URL updatePreview will request later.
+  useEffect(() => {
+    if (!trickplay) return;
+    const perTile = trickplay.tileWidth * trickplay.tileHeight;
+    const tileCount = Math.ceil(trickplay.thumbnailCount / perTile);
+    for (let i = 0; i < tileCount; i++) {
+      const img = new Image();
+      img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${i}`;
+    }
+  }, [trickplay, itemId]);
+
   const seekBarRef = useRef<HTMLDivElement>(null);
   const [previewTime, setPreviewTime] = useState<number | null>(null);
   const [previewFraction, setPreviewFraction] = useState(0);
@@ -449,23 +465,48 @@ export function PlayerControls({
   const previewDisplayWidth = trickplay ? Math.round(trickplay.width * previewScale) : 160;
   const previewDisplayHeight = trickplay ? Math.round(trickplay.height * previewScale) : 90;
 
-  let previewTile: { url: string; bgX: number; bgY: number } | null = null;
-  if (trickplay && previewTime !== null) {
+  // Shared by the seek-bar hover preview and the chapters menu thumbnails below — same sprite
+  // lookup math, just called at a different `time`. Plain function, not useCallback: same
+  // reasoning as updatePreview above (nothing needs referential stability, and the React
+  // Compiler's memoization check gets confused by unrelated nearby state).
+  function trickplayTileAt(time: number): { url: string; bgX: number; bgY: number } | null {
+    if (!trickplay) return null;
     const thumbIndex = Math.min(
       trickplay.thumbnailCount - 1,
-      Math.max(0, Math.floor((previewTime * 1000) / trickplay.intervalMs))
+      Math.max(0, Math.floor((time * 1000) / trickplay.intervalMs))
     );
     const perTile = trickplay.tileWidth * trickplay.tileHeight;
     const tileIndex = Math.floor(thumbIndex / perTile);
     const posInTile = thumbIndex % perTile;
     const row = Math.floor(posInTile / trickplay.tileWidth);
     const col = posInTile % trickplay.tileWidth;
-    previewTile = {
+    return {
       url: `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${tileIndex}`,
       bgX: -(col * trickplay.width),
       bgY: -(row * trickplay.height),
     };
   }
+  const previewTile = previewTime !== null ? trickplayTileAt(previewTime) : null;
+
+  // Which chapter (if any) `time` currently falls inside — the last chapter whose start is
+  // <= time. Shared by the scrub preview's discreet chapter label and could also back the
+  // menu's "current chapter" highlight, but that one's own inline check is left untouched to
+  // keep this change scoped to what was asked.
+  function chapterIndexAt(time: number): number {
+    let idx = -1;
+    for (let i = 0; i < chapters.length; i++) {
+      if (time >= chapters[i].start) idx = i;
+      else break;
+    }
+    return idx;
+  }
+
+  // Fixed small thumbnail size for the chapters menu — cropped to a consistent 16:9-ish box
+  // regardless of Jellyfin's actual trickplay tile resolution, so the list stays tidy even if
+  // that resolution ever changes.
+  const chapterThumbWidth = 64;
+  const chapterThumbScale = trickplay ? chapterThumbWidth / trickplay.width : 1;
+  const chapterThumbHeight = trickplay ? Math.round(trickplay.height * chapterThumbScale) : 36;
 
   function toggleMute() {
     const video = videoRef.current;
@@ -889,20 +930,43 @@ export function PlayerControls({
                 </button>
               ))}
             {menu === "chapters" &&
-              chapters.map((ch, i) => (
-                <button
-                  key={i}
-                  onClick={() => jumpToChapter(ch.start)}
-                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                    currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)
-                      ? "text-accent-400"
-                      : "text-white"
-                  }`}
-                >
-                  <span className="truncate">{ch.name}</span>
-                  <span className="shrink-0 tabular-nums text-white/50">{formatTime(ch.start)}</span>
-                </button>
-              ))}
+              chapters.map((ch, i) => {
+                const tile = trickplayTileAt(ch.start);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => jumpToChapter(ch.start)}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                      currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)
+                        ? "text-accent-400"
+                        : "text-white"
+                    }`}
+                  >
+                    {trickplay && (
+                      <div
+                        className="shrink-0 overflow-hidden rounded bg-black/40"
+                        style={{ width: chapterThumbWidth, height: chapterThumbHeight }}
+                      >
+                        {tile && (
+                          <div
+                            style={{
+                              width: trickplay.width,
+                              height: trickplay.height,
+                              transform: `scale(${chapterThumbScale})`,
+                              transformOrigin: "top left",
+                              backgroundImage: `url(${tile.url})`,
+                              backgroundPosition: `${tile.bgX}px ${tile.bgY}px`,
+                              backgroundSize: `${trickplay.width * trickplay.tileWidth}px ${trickplay.height * trickplay.tileHeight}px`,
+                            }}
+                          />
+                        )}
+                      </div>
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{ch.name}</span>
+                    <span className="shrink-0 tabular-nums text-white/50">{formatTime(ch.start)}</span>
+                  </button>
+                );
+              })}
           </div>
         )}
 
@@ -1045,9 +1109,14 @@ export function PlayerControls({
                     }}
                   />
                 )}
-                <p className="absolute inset-x-0 bottom-0 bg-black/70 py-0.5 text-center text-[11px] tabular-nums text-white">
-                  {formatTime(previewTime)}
-                </p>
+                <div className="absolute inset-x-0 bottom-0 bg-black/70 px-1 py-0.5 text-center text-white">
+                  {/* Discreet — a smaller, dimmer line above the time, not competing with it.
+                      Only shown once the item actually has chapters. */}
+                  {chapters.length > 0 && chapterIndexAt(previewTime) >= 0 && (
+                    <p className="truncate text-[10px] text-white/60">{chapters[chapterIndexAt(previewTime)].name}</p>
+                  )}
+                  <p className="text-[11px] tabular-nums">{formatTime(previewTime)}</p>
+                </div>
               </div>
             )}
             <input

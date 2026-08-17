@@ -183,6 +183,11 @@ function ActivePlayer({
   // recovered. Comparing against the previous poll's reading turns it into a recent-window rate
   // that can properly drop back down.
   const lastQuality = useRef<{ total: number; dropped: number } | null>(null);
+  // Estimated actual network throughput (hls.js's own adaptive-bitrate estimate) — distinct
+  // from playbackInfo.video.bitRate/audio.bitRate, which are the STATIC target bitrate Jellyfin
+  // encoded/is streaming at. Only meaningful on the hls.js path (Transcode/DirectStream on
+  // Chrome/Firefox); native Safari HLS has no equivalent and this just stays null there.
+  const [networkBitrate, setNetworkBitrate] = useState<number | null>(null);
   // True once loading/reconnecting has been ongoing for >3s — drives the "still loading, don't
   // close the player" reassurance line for heavy flows (a 4K track switch can legitimately take
   // 15-20s across the grace delay, codec ladder and reload escalation).
@@ -287,6 +292,7 @@ function ActivePlayer({
       lastSeekAt.current = 0;
       lastQuality.current = null;
       setBadConnection(false);
+      setNetworkBitrate(null);
 
       // (An earlier revision also waited for the "emptied" event here before reassigning src —
       // removed: it was built on a disproven teardown-timing theory and only added up to 300ms
@@ -454,6 +460,12 @@ function ActivePlayer({
         networkRetryCount.current = 0;
         mediaRetryCount.current = 0;
         setReconnecting(false);
+        // hls.js keeps refining this per fragment even with a single-rendition stream (no real
+        // ABR ladder from Jellyfin's transcoder) — piggybacking on the same event that already
+        // resets the retry counters avoids adding a separate polling interval just for this.
+        if (typeof hls.bandwidthEstimate === "number" && hls.bandwidthEstimate > 0) {
+          setNetworkBitrate(Math.round(hls.bandwidthEstimate));
+        }
       });
 
       // hls.js's own per-request retry/backoff (fragLoadingMaxRetry etc.) already absorbs a
@@ -938,7 +950,12 @@ function ActivePlayer({
         />
       )}
       {!isMini && (
-        <PlaybackInfoPanel info={playbackInfo} open={showPlaybackInfo} onClose={() => setShowPlaybackInfo(false)} />
+        <PlaybackInfoPanel
+          info={playbackInfo}
+          networkBitrate={networkBitrate}
+          open={showPlaybackInfo}
+          onClose={() => setShowPlaybackInfo(false)}
+        />
       )}
       {isMini && !error && !needsReauth && (
         <MiniPlayerChrome title={title} playing={playing} onTogglePlay={toggleMiniPlay} onClose={handleClose} />
