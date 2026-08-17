@@ -110,7 +110,7 @@ export const jellyseerr = {
       }),
     }),
   getMovieMedia: (tmdbId: number, cookie?: string) =>
-    fetchJson<{ title?: string; posterPath?: string | null; mediaInfo?: { status: number } }>(
+    fetchJson<{ title?: string; posterPath?: string | null; mediaInfo?: { id: number; status: number } }>(
       `${url}/api/v1/movie/${tmdbId}`, { headers: authHeaders(cookie) }
     ),
   // `seasons` (TMDB-sourced: number/name/episodeCount per season) and `mediaInfo.seasons`
@@ -122,6 +122,15 @@ export const jellyseerr = {
       name?: string;
       posterPath?: string | null;
       seasons?: { seasonNumber: number; name?: string; episodeCount?: number }[];
-      mediaInfo?: { status: number; seasons?: { seasonNumber: number; status: number }[] };
+      mediaInfo?: { id: number; status: number; seasons?: { seasonNumber: number; status: number }[] };
     }>(`${url}/api/v1/tv/${tmdbId}`, { headers: authHeaders(cookie) }),
+  // Clears Jellyseerr's own tracking for a title (its Media row, cascading its Request rows) —
+  // `mediaInfo.id` above, NOT the tmdbId. Deleting a movie/series directly in Radarr/Sonarr (not
+  // through Jellyseerr) doesn't tell Jellyseerr anything; without this, its database keeps
+  // treating the title as already requested/available forever, and a real re-request later 500s
+  // or gets rejected as a duplicate — reported live, reproduced, confirmed fixed by removing the
+  // stale entry from Jellyseerr's own UI. This automates that same cleanup on cine-app's own
+  // delete action.
+  deleteMedia: (mediaId: number, cookie?: string) =>
+    fetchJson<void>(`${url}/api/v1/media/${mediaId}`, { method: "DELETE", headers: authHeaders(cookie) }),
 };

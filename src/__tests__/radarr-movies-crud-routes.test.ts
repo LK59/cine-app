@@ -11,6 +11,11 @@ const mockRadarr = {
   deleteMovieFile: vi.fn(),
 };
 vi.mock("@/lib/clients/radarr", () => ({ radarr: mockRadarr }));
+const mockJellyseerr = { getMovieMedia: vi.fn(), deleteMedia: vi.fn() };
+vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr: mockJellyseerr }));
+vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+const mockVerifySessionFull = vi.fn();
+vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 const mockCachedMovies = vi.fn();
 const mockInvalidateLibrary = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
@@ -22,12 +27,17 @@ vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 function fakeReq(opts: { params?: Record<string, string>; body?: unknown } = {}): NextRequest {
   return {
     nextUrl: { searchParams: new URLSearchParams(opts.params ?? {}) },
+    cookies: { get: () => undefined },
     json: async () => opts.body ?? null,
   } as unknown as NextRequest;
 }
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockRadarr.getMovie.mockResolvedValue({ id: 7, tmdbId: 99 });
+  mockJellyseerr.getMovieMedia.mockResolvedValue({ mediaInfo: undefined });
+});
 
 describe("GET/POST /api/radarr/movies", () => {
   it("GET returns the cached movie list", async () => {
@@ -87,6 +97,26 @@ describe("/api/radarr/movies/[id]", () => {
     const res = await DELETE(fakeReq(), params("7"));
     expect(res.status).toBe(500);
     expect(mockInvalidateLibrary).not.toHaveBeenCalled();
+  });
+
+  it("DELETE also clears the stale Jellyseerr media record for this title", async () => {
+    mockRadarr.deleteMovie.mockResolvedValue(undefined);
+    mockJellyseerr.getMovieMedia.mockResolvedValue({ mediaInfo: { id: 321, status: 5 } });
+    const { DELETE } = await import("@/app/api/radarr/movies/[id]/route");
+    const res = await DELETE(fakeReq(), params("7"));
+    expect(mockJellyseerr.getMovieMedia).toHaveBeenCalledWith(99, undefined);
+    expect(mockJellyseerr.deleteMedia).toHaveBeenCalledWith(321, undefined);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it("DELETE still succeeds even if the Jellyseerr cleanup fails", async () => {
+    mockRadarr.deleteMovie.mockResolvedValue(undefined);
+    mockJellyseerr.getMovieMedia.mockRejectedValue(new Error("Jellyseerr down"));
+    const { DELETE } = await import("@/app/api/radarr/movies/[id]/route");
+    const res = await DELETE(fakeReq(), params("7"));
+    const body = await res.json();
+    expect(body).toEqual({ ok: true });
+    expect(mockInvalidateLibrary).toHaveBeenCalled();
   });
 });
 
