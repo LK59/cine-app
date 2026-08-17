@@ -16,6 +16,7 @@ import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { DashboardHero } from "@/components/DashboardHero";
+import { RequestButton } from "@/components/RequestButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -350,7 +351,16 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
       {body}
     </Link>
   ) : (
-    <div className="card w-28 shrink-0 overflow-hidden touch-manipulation select-none">{body}</div>
+    // Not in the library yet — a static, unclickable poster here was dead weight (nothing to
+    // open). Hover overlay with the same request action as the /watchlist page at least gives
+    // it a purpose; group-focus-within is the fallback for Tab-key access on devices without
+    // real hover.
+    <div className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none">
+      {body}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} />
+      </div>
+    </div>
   );
 }
 

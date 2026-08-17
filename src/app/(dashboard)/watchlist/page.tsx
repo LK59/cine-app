@@ -20,6 +20,7 @@ import { useRole } from "@/lib/useRole";
 import dynamic from "next/dynamic";
 const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
 import { useT } from "@/components/TranslationProvider";
+import { RequestButton } from "@/components/RequestButton";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -305,39 +306,6 @@ function AddModal({ existingKeys, onClose, onAdded }: {
   );
 }
 
-// ─── Request Button (desktop overlay) ────────────────────────────────────────
-
-function RequestButton({ item }: { item: WatchlistItem }) {
-  const t = useT();
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
-  async function doRequest(e: React.MouseEvent) {
-    e.preventDefault(); e.stopPropagation();
-    setState("loading");
-    try {
-      const res = await fetch("/api/jellyseerr/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaType: item.mediaType === "movie" ? "movie" : "tv", mediaId: item.tmdbId }),
-      });
-      setState(res.ok ? "done" : "error");
-    } catch { setState("error"); }
-  }
-  return (
-    <button
-      onClick={doRequest}
-      disabled={state === "loading" || state === "done"}
-      className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
-        state === "done" ? "bg-emerald-500/20 text-emerald-400" :
-        state === "error" ? "bg-red-500/20 text-red-400" :
-        "bg-white/10 text-white hover:bg-white/20"
-      }`}
-    >
-      <CirclePlus size={9} />
-      {state === "done" ? t('common.requested') : state === "loading" ? "…" : t('common.request')}
-    </button>
-  );
-}
-
 // ─── Watchlist Card ───────────────────────────────────────────────────────────
 
 function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusChange, onNoteEdit, onRemove }: {
@@ -487,7 +455,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                   <ExternalLink size={9} /> {t('common.viewSheet')}
                 </Link>
               ) : (
-                <RequestButton item={item} />
+                <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} />
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); onNoteEdit(); }}
