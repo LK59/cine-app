@@ -627,7 +627,7 @@ export default function SonarrSeriesDetailPage() {
               return (
                 <div key={seasonNumber} className="card overflow-hidden">
                   <div
-                    className="flex cursor-pointer items-center justify-between p-3"
+                    className="flex cursor-pointer flex-col gap-2 p-3 md:flex-row md:items-center md:justify-between md:gap-3"
                     onClick={() => toggleSeasonOpen(seasonNumber)}
                   >
                     <div className="flex items-center gap-2 text-sm text-white">
@@ -637,7 +637,9 @@ export default function SonarrSeriesDetailPage() {
                         {t('sonarr.episodesCount', { file: String(fileCount), total: String(seasonEpisodes.length) })}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                    {/* Its own full-width row on mobile (buttons can wrap instead of overflowing
+                        the screen edge); back to a single inline row with the title past md. */}
+                    <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:gap-3" onClick={(e) => e.stopPropagation()}>
                       {/* Guests only get the auto-search entry point when the season is missing
                           at least one episode file — a complete season is a fact, not something
                           to search for. Admins always keep it, regardless of completion. */}
