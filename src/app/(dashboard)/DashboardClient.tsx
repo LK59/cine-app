@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
-import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LoadingState, EmptyState } from "@/components/StateViews";
 import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight } from "lucide-react";
@@ -572,8 +571,6 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
       {data?.hero.available && data.hero.data && data.hero.data.length > 0 && (
         <DashboardHero items={data.hero.data} />
       )}
-
-      <PageHeader title={t('dashboard.pageTitle')} subtitle={t('dashboard.pageSubtitle')} />
 
       {isLoading && !data && <SkeletonSection />}
 
