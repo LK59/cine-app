@@ -151,9 +151,11 @@ export default function SonarrPage() {
         title={t('sonarr.pageTitle')}
         subtitle={series ? t('sonarr.subtitle', { n: series.length }) : undefined}
         action={
-          <button className="btn-primary" onClick={() => setShowAdd(true)}>
-            <Plus size={16} /> {t('sonarr.addSeries')}
-          </button>
+          !isGuest && (
+            <button className="btn-primary" onClick={() => setShowAdd(true)}>
+              <Plus size={16} /> {t('sonarr.addSeries')}
+            </button>
+          )
         }
       />
 

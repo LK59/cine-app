@@ -19,14 +19,21 @@ function isPublicClaraPhoto(pathname: string): boolean {
   return pathname !== "/api/gallery/clara" && pathname.startsWith("/api/gallery/clara/");
 }
 
-// The guest role is read-only everywhere except requesting a new movie/series
-// (the Radarr/Sonarr "add" endpoints) and logging out. Every other mutation
-// (delete, quality/monitored changes, interactive search & grab, qBittorrent
-// actions, Jellyseerr approve/decline, Bazarr subtitle download, Jackett
-// test...) is blocked here, server-side, regardless of what the UI shows.
+// The guest role is read-only everywhere except playback tracking, managing their own
+// watchlist, requesting a movie/series through Jellyseerr (tracked/attributed — see
+// /api/jellyseerr/requests), and logging out. Every other mutation (delete, quality/monitored
+// changes, interactive/auto search, adding new content directly to Radarr/Sonarr, qBittorrent
+// actions, Jellyseerr approve/decline, Bazarr subtitle download, Jackett test...) is blocked
+// here, server-side, regardless of what the UI shows.
+//
+// "POST /api/radarr/movies" and "POST /api/sonarr/series" (direct library add, monitored,
+// immediate auto-search — distinct from the Jellyseerr request flow above) used to be listed
+// here. They were removed after finding their UI buttons were never gated by isGuest either:
+// any guest could add arbitrary new content straight into Radarr/Sonarr, bypassing the whole
+// per-user request/attribution system entirely. Both the buttons and this whitelist entry were
+// the two halves of the same bug — see AddMovieModal/AddSeriesModal in radarr/page.tsx and
+// sonarr/page.tsx.
 const GUEST_ALLOWED_MUTATIONS = new Set([
-  "POST /api/radarr/movies",
-  "POST /api/sonarr/series",
   "POST /api/auth/logout",
   "POST /api/jellyfin/played",
   "POST /api/jellyfin/playback/start",

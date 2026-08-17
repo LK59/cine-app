@@ -140,9 +140,11 @@ export default function RadarrPage() {
         title={t('radarr.pageTitle')}
         subtitle={movies ? t('radarr.subtitle', { n: movies.length }) : undefined}
         action={
-          <button className="btn-primary" onClick={() => setShowAdd(true)}>
-            <Plus size={16} /> {t('radarr.addMovie')}
-          </button>
+          !isGuest && (
+            <button className="btn-primary" onClick={() => setShowAdd(true)}>
+              <Plus size={16} /> {t('radarr.addMovie')}
+            </button>
+          )
         }
       />
 

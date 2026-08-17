@@ -722,7 +722,7 @@ export default function SonarrSeriesDetailPage() {
                                     runtimeTicks={jfEp.RunTimeTicks}
                                     variant="pill"
                                     iconSize={14}
-                                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent-600/80 py-2 text-xs font-medium text-white hover:bg-accent-600"
+                                    className="flex w-full min-w-24 max-w-48 items-center justify-center gap-1.5 rounded-lg bg-accent-600/80 py-2 text-xs font-medium text-white hover:bg-accent-600"
                                     getNextEpisode={getNextEpisode}
                                   />
                                 )}
