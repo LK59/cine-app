@@ -92,25 +92,26 @@ describe("Radarr movie detail page — guest button visibility", () => {
     expect(screen.getByText("radarr.deleteFromRadarr")).toBeInTheDocument();
   });
 
-  it("guest with a downloaded file sees no search action at all — a file is a fact", async () => {
+  it("guest with a downloaded file sees no search action at all — a file is a fact — but still sees NFO", async () => {
     mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
     mockMovieFetches(true);
     renderPage();
 
     await screen.findByText("Test Movie");
     expect(screen.queryByText("common.autoSearch")).not.toBeInTheDocument();
-    expect(screen.queryByText("NFO")).not.toBeInTheDocument();
     expect(screen.queryByText("common.interactiveSearch")).not.toBeInTheDocument();
     expect(screen.queryByText("radarr.deleteFromRadarr")).not.toBeInTheDocument();
+    // NFO is read-only (file path/codec/bitrate) — no reason to hide it from guests.
+    expect(screen.getByText("NFO")).toBeInTheDocument();
   });
 
-  it("guest with no file yet sees exactly auto-search, never interactive search", async () => {
+  it("guest with no file yet sees exactly auto-search, never interactive search, but still sees NFO", async () => {
     mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
     mockMovieFetches(false);
     renderPage();
 
     expect(await screen.findByText("common.autoSearch")).toBeInTheDocument();
     expect(screen.queryByText("common.interactiveSearch")).not.toBeInTheDocument();
-    expect(screen.queryByText("NFO")).not.toBeInTheDocument();
+    expect(screen.getByText("NFO")).toBeInTheDocument();
   });
 });

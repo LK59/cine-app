@@ -417,15 +417,15 @@ export default function RadarrMovieDetailPage() {
             <RefreshCw size={16} className={autoSearching ? "animate-spin" : ""} /> {t('common.autoSearch')}
           </button>
         )}
+        {/* NFO is a read-only technical info panel (file path, codec, bitrate...) — no mutation,
+            no reason to hide it from guests the way the admin-only actions below are. */}
+        <button className="btn-ghost px-3" onClick={() => setShowNfo(true)}>
+          <Info size={16} /> NFO
+        </button>
         {!isGuest && (
-          <>
-            <button className="btn-ghost px-3" onClick={() => setShowNfo(true)}>
-              <Info size={16} /> NFO
-            </button>
-            <button className="btn-primary" onClick={() => setShowSearch(true)}>
-              <Search size={16} /> {t('common.interactiveSearch')}
-            </button>
-          </>
+          <button className="btn-primary" onClick={() => setShowSearch(true)}>
+            <Search size={16} /> {t('common.interactiveSearch')}
+          </button>
         )}
       </div>
 
