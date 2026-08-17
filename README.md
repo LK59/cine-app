@@ -10,9 +10,17 @@ Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin 
 
 ## Features
 
+### Home Page
+
+- **Rotating hero banner** - showcases the 10 newest additions across movies and series, TMDB title-logo art when available, auto-advances every 8s with a segmented progress bar to jump back to a previous pick
+- **Continue Watching** - Jellyfin resume progress with IMDb rating badge, click straight through to the sheet
+- **My List** - quick-glance row of watchlist items marked "A voir"; titles not yet in the library get an inline "Demander" action
+- **Recently Added** - separate movie/series rows with a "Voir tout" link to the full library page
+- **TV-remote style keyboard navigation** - arrow keys move focus across every row on the home page, Enter opens the highlighted title
+
 ### Library & Media Management
 
-- **Radarr and Sonarr library views** - grid and list modes, filtering, quick search, keyboard navigation
+- **Radarr and Sonarr library views** - grid and list modes, filtering, quick search, sort (including by IMDb rating), keyboard navigation
 - **Movie and series detail pages** - poster, metadata, cast carousel, active downloads, file info, IMDb/RT/Metacritic ratings
 
 <img src="docs/screenshots/fiche-film-1.png" height="210"> <img src="docs/screenshots/fiche-film-2.png" height="210"> <img src="docs/screenshots/fiche-film-mobile.PNG" height="210">
@@ -25,15 +33,16 @@ Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin 
 - **Discover** - trending movies and series with genre filters, TMDB search, "Pour vous" tab based on Jellyfin play history
 - **Recommendations** - personalised rows based on recently watched Jellyfin history
 - **Release search modal** - browse and grab releases directly from Radarr/Sonarr inside the app
-- **Interactive search** - admin-only Telescope button on Watchlist, Discover and Recommendations cards to add a title and open the release search in one step
-- **Remove from Radarr/Sonarr** - discrete button on detail pages with in-app confirmation modal
+- **Interactive search (movies)** - admin-only button on Watchlist, Discover and Recommendations cards to add a movie and open the release search in one step; the movie is added unmonitored until a release is actually picked, so an abandoned search doesn't leave Radarr endlessly re-searching an empty entry
+- **Add to library (series)** - admin-only button that adds a series to Sonarr directly; per-season interactive search and a one-click automatic search (Sonarr's own standard search, available to every user) both live on the series' own detail page
+- **Remove from Radarr/Sonarr** - discrete button on detail pages with in-app confirmation modal, also clears the matching Jellyseerr record so the title can be requested again cleanly
 
 ### Unified Visual Identity
 
 All media grids (Watchlist, Discover, Recommendations) share the same card design:
 
 - Poster-only card with `aspect-[2/3]`
-- **Desktop** - hover overlay with 5 status buttons, Voir la fiche / Demander, and admin Recherche interactive
+- **Desktop** - hover overlay with 5 status buttons, Voir la fiche / Demander, and admin-only Recherche interactive (movies) / Ajouter (series)
 - **Mobile** - tap to open an ActionSheet with real-time swipe-to-close gesture
 - **IMDb rating badge** - always visible bottom-left, fetched via OMDB API
 - **"Dispo" badge** (green) - file actually downloaded
@@ -46,11 +55,15 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Recently added and recently played
 - Mark watched / unwatched from any detail page
 - Per-user recommendations based on play history
-- **In-app playback** (optional, disabled by default - see [In-App Playback](#in-app-playback)) - play movies and episodes directly in Cine App instead of redirecting to Jellyfin web, with resume, audio/subtitle track selection, skip-intro and automatic next-episode advance
+- **In-app playback** (optional, disabled by default - see [In-App Playback](#in-app-playback)) - play movies and episodes directly in Cine App instead of redirecting to Jellyfin web, with resume, audio/subtitle track selection, chapters, playback speed, trickplay scrubbing previews, skip-intro and automatic next-episode advance
+- **Draggable mini-player** - shrink playback into a small, freely draggable window while browsing the rest of the app; playback keeps running uninterrupted
 
 ### Requests & Downloads
 
-- **Jellyseerr request management** - send, track and display requests with status badges
+- **Jellyseerr request management** - requests are made and tracked using each logged-in user's own Jellyseerr account (auto-linked at login via the same Jellyfin credentials), not a shared admin key, so status and history are correctly attributed per person
+  - Movies - one-click request with confirmation
+  - Series - pick specific seasons to request, based on their actual current status in Jellyseerr (already requested/available seasons are shown as such and excluded); requesting more seasons later for a partially-requested series works as a normal follow-up request, not a rejected duplicate
+  - Admins see and manage every pending request instance-wide; regular users only see their own
 - **qBittorrent monitoring** - live torrent list with section separators (En cours / Seed / Pauses), progress bars, speed indicators, start/stop/remove actions
 
 ### Calendar & Timeline
@@ -61,7 +74,8 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 ### Ratings
 
 - **MDBList** - IMDb, Rotten Tomatoes, Metacritic, Letterboxd, Trakt on detail pages
-- **OMDB** - IMDb rating fetched per-item on Watchlist cards, cached 24 h server-side
+- **OMDB** - IMDb rating badge shown on Watchlist cards, the home page (hero, Continue Watching, My List, Recently Added) and the Radarr/Sonarr library grids, cached 24 h server-side; movies read Radarr's own rating data directly with no extra API call
+- **Sort by IMDb rating** - available on the Radarr and Sonarr library pages alongside the existing sort options
 - TMDB vote average shown on Discover and Recommendations cards
 
 ### Stats
@@ -88,6 +102,7 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Trailer modal
 - Installable PWA
 - Web Push notifications including iOS Safari / Apple Web Push
+- Multi-language interface - French, English, Spanish, German, including the in-app video player
 - Mobile-first navigation with haptic feedback
 
 <img src="docs/screenshots/menu-mobile.PNG" height="320">
@@ -142,7 +157,7 @@ Edit `.env` and configure:
 | `MDBLIST_API_KEY` | Optional - multi-source ratings on detail pages |
 | `APP_LANGUAGE` | Default instance language (`fr` \| `en` \| `es` \| `de`) — used for accounts with no saved preference and on the login page (default: `en`) |
 | `VAPID_*` | Optional - Web Push notifications |
-| `PLAYER_ENABLED` | Optional, default `false` - in-app video playback (requires server-side transcoding, see [In-App Playback](#in-app-playback)) |
+| `PLAYER_ENABLED` | Optional, default `false` - in-app video playback, may require server-side transcoding depending on the file/browser (see [In-App Playback](#in-app-playback)) |
 
 ### Docker Compose Setup
 
@@ -418,9 +433,11 @@ Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and restart.
 
 ### In-App Playback
 
-Play movies and episodes directly inside Cine App - custom player with seek, audio track and subtitle selection, resume, fullscreen, AirPlay, skip-intro and automatic next-episode advance (via the [Intro Skipper](https://github.com/intro-skipper/intro-skipper) Jellyfin plugin, if installed) - instead of redirecting to Jellyfin's own web client.
+Play movies and episodes directly inside Cine App - custom player with seek, audio track and subtitle selection (size and manual offset), chapters, playback speed, trickplay scrubbing previews, resume, fullscreen, AirPlay/Chromecast casting, a draggable mini-player, skip-intro and automatic next-episode advance (via the [Intro Skipper](https://github.com/intro-skipper/intro-skipper) Jellyfin plugin, if installed) - instead of redirecting to Jellyfin's own web client.
 
-**This requires real server-side transcoding on every playback**, disabled by default for that reason. To keep the player reliably compatible with every browser, Cine App always asks Jellyfin to transcode to H.264/AAC over HLS rather than negotiating per-browser direct-play - the same tradeoff Jellyfin's official clients make, but applied unconditionally here. That's real CPU/GPU load on your Jellyfin server for every single play, not just for exotic files. Only enable this if your Jellyfin server has hardware transcoding (Quick Sync, NVENC, VAAPI, ...) or enough spare CPU to transcode in software.
+Playback negotiates DirectPlay / DirectStream / Transcode the same way Jellyfin's own web client does, based on what the source file and the requesting browser actually support: a compatible file plays untouched (DirectPlay), an incompatible container with compatible streams gets remuxed without re-encoding (DirectStream), and only a genuinely incompatible codec/profile triggers a real transcode. A "Playback Info" panel inside the player shows which of the three is active, the reason if transcoding, and an estimated network bitrate.
+
+Transcoding, when it does happen, still needs real server-side CPU/GPU work - how often that is depends entirely on your library's formats and the browsers you actually watch on. In-app playback is disabled by default as a precaution against that variable cost. Only enable it if your Jellyfin server has hardware transcoding (Quick Sync, NVENC, VAAPI, ...) or enough spare CPU to transcode in software when it's actually needed.
 
 Without it, the existing "Open in Jellyfin" link still works exactly as before - this feature is purely additive.
 
