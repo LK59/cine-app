@@ -96,6 +96,21 @@ function migrate(db: Database.Database): void {
       UNIQUE(media_type, tmdb_id)
     );
 
+    -- One row per Jellyseerr request made through cine-app, until the notification cron finds
+    -- it available and deletes the row (see checkRequestAvailability in notificationJobs.ts).
+    -- Deliberately NOT sourced from Jellyseerr itself at check time (its own API is the fragile,
+    -- session-auth-gated moving target this whole session kept running into) — this only ever
+    -- reads the already-cached Radarr/Sonarr library data the watchlist-availability check also
+    -- uses, so it can't be broken by anything Jellyseerr-side.
+    CREATE TABLE IF NOT EXISTS request_notifications (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    TEXT    NOT NULL,
+      media_type TEXT    NOT NULL CHECK (media_type IN ('movie', 'series')),
+      tmdb_id    INTEGER NOT NULL,
+      seasons    TEXT,
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       jti          TEXT    PRIMARY KEY,
       user_id      TEXT    NOT NULL,
@@ -362,6 +377,34 @@ export const availabilityNotifDb = {
   },
   cleanup(olderThanMs: number): void {
     getDb().prepare("DELETE FROM availability_notifications WHERE notified_at < ?").run(Date.now() - olderThanMs);
+  },
+};
+
+// ─── Pending request notifications ───────────────────────────────────────────
+
+export interface PendingRequest {
+  id: number;
+  userId: string;
+  mediaType: "movie" | "series";
+  tmdbId: number;
+  /** null for a movie request; the specific season numbers requested for a series. */
+  seasons: number[] | null;
+}
+
+export const pendingRequestDb = {
+  add(userId: string, mediaType: "movie" | "series", tmdbId: number, seasons: number[] | null): void {
+    getDb().prepare(
+      "INSERT INTO request_notifications (user_id, media_type, tmdb_id, seasons, created_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(userId, mediaType, tmdbId, seasons ? JSON.stringify(seasons) : null, Date.now());
+  },
+  getAll(): PendingRequest[] {
+    const rows = getDb().prepare(
+      "SELECT id, user_id AS userId, media_type AS mediaType, tmdb_id AS tmdbId, seasons FROM request_notifications"
+    ).all() as { id: number; userId: string; mediaType: "movie" | "series"; tmdbId: number; seasons: string | null }[];
+    return rows.map((r) => ({ ...r, seasons: r.seasons ? (JSON.parse(r.seasons) as number[]) : null }));
+  },
+  remove(id: number): void {
+    getDb().prepare("DELETE FROM request_notifications WHERE id = ?").run(id);
   },
 };
 

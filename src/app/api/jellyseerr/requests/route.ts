@@ -5,6 +5,7 @@ import { withErrorHandling } from "@/lib/api-helpers";
 import { SESSION_COOKIE, type SessionPayload } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { withCache } from "@/lib/server-cache";
+import { pendingRequestDb } from "@/lib/db";
 
 const USERS_TTL = 5 * 60_000; // 5 min — user list rarely changes
 
@@ -75,18 +76,32 @@ export async function POST(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
 
+  // Recorded once the request actually succeeds below — this is what lets
+  // checkRequestAvailability() later notify exactly this person (and only them) once it's ready,
+  // without ever having to ask Jellyseerr itself "whose request was this" again.
+  function trackForAvailability() {
+    if (!session?.u) return;
+    pendingRequestDb.add(session.u, mediaType === "tv" ? "series" : "movie", mediaId!, seasons ?? null);
+  }
+
   // With a session cookie, Jellyseerr already knows who's asking — no userId override needed
   // (that override was itself the admin-only "request on behalf of" path this fork now blocks
   // for anything but a genuinely authenticated session).
   if (session?.jsCookie) {
-    return withErrorHandling(() =>
-      jellyseerr.createRequest(mediaType, mediaId, undefined, session.jsCookie, seasons)
-    );
+    return withErrorHandling(async () => {
+      const result = await jellyseerr.createRequest(mediaType, mediaId, undefined, session.jsCookie, seasons);
+      trackForAvailability();
+      return result;
+    });
   }
 
   const jellyseerrUserId = session?.jfUser
     ? await resolveJellyseerrUserId(session.jfUser)
     : undefined;
 
-  return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId, jellyseerrUserId, undefined, seasons));
+  return withErrorHandling(async () => {
+    const result = await jellyseerr.createRequest(mediaType, mediaId, jellyseerrUserId, undefined, seasons);
+    trackForAvailability();
+    return result;
+  });
 }

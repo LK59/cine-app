@@ -31,6 +31,14 @@ export const NOTIFICATION_CATEGORIES = [
     descKey: "notifications.categoriesList.newEpisode.description",
     enabledByDefault: true,
   },
+  {
+    id: "request-available",
+    label: "Ta demande est disponible",
+    labelKey: "notifications.categoriesList.requestAvailable.label",
+    description: "Quand un film ou une série que tu as demandé via Jellyseerr devient disponible.",
+    descKey: "notifications.categoriesList.requestAvailable.description",
+    enabledByDefault: true,
+  },
 ] as const;
 
 export type NotificationCategory = typeof NOTIFICATION_CATEGORIES[number]["id"];

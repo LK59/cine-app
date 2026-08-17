@@ -553,6 +553,10 @@
       "newEpisode": {
         "label": "Nuevo episodio",
         "description": "Cuando se importa un nuevo episodio de una serie seguida."
+      },
+      "requestAvailable": {
+        "label": "Tu solicitud está disponible",
+        "description": "Cuando una película o serie que solicitaste vía Jellyseerr está disponible."
       }
     },
     "push": {
