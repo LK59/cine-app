@@ -23,12 +23,21 @@ export async function POST(req: NextRequest) {
 
   let jellyfinRes: Response;
   try {
+    // DeviceId used to be a single hardcoded constant ("cine-app-server") shared by every login,
+    // from every user, every browser tab, every re-login — Jellyfin treats DeviceId as identifying
+    // one physical device, so every fresh AuthenticateByName call under that same DeviceId
+    // re-registers "the device" and can invalidate whichever token was previously issued to it,
+    // even for a completely different person. With several people using cine-app against the
+    // same server, this is what was silently kicking the video player's stored token out from
+    // under someone else — not time-based (no fixed-hours expiry), triggered by ANYONE logging
+    // in. A fresh random id per login makes every login its own distinct "device" to Jellyfin, so
+    // tokens can never collide/evict each other this way again.
+    const deviceId = `cine-app-${crypto.randomUUID()}`;
     jellyfinRes = await fetch(`${config.jellyfin.url}/Users/AuthenticateByName`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization:
-          'MediaBrowser Client="CineApp", Device="Server", DeviceId="cine-app-server", Version="1.0.0"',
+        Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="1.0.0"`,
       },
       body: JSON.stringify({ Username: username, Pw: password }),
     });
