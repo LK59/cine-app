@@ -602,7 +602,11 @@ export default function WatchlistPage() {
     hasFileSeriesIds: number[];
   }>("/api/library/map", fetcher, { revalidateOnFocus: false });
 
-  const allItems = allData?.items ?? [];
+  // Memoized: a bare `allData?.items ?? []` would hand out a brand new array reference every
+  // render whenever allData.items is falsy (loading/error), which defeated memoization for
+  // every hook below keyed on allItems — they'd recompute on every render regardless of whether
+  // the actual data had changed.
+  const allItems = useMemo(() => allData?.items ?? [], [allData]);
 
   // Build IMDb ratings query once the list is loaded
   const ratingsKey = useMemo(() => {
