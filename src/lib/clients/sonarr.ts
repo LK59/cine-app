@@ -132,10 +132,15 @@ export const sonarr = {
       headers,
       body: JSON.stringify({ guid, indexerId }),
     }),
-  triggerSearch: (seriesId: number) =>
+  // Standard automatic search — Sonarr's own normal search+grab pipeline (quality profile rules,
+  // best-match auto-pick), no manual release list involved. Distinct from the interactive one
+  // above (grabRelease), which requires a human to pick a specific release themselves.
+  triggerSearch: (seriesId: number, seasonNumber?: number) =>
     fetchJson<void>(`${url}/api/v3/command`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ name: "SeriesSearch", seriesId }),
+      body: seasonNumber != null
+        ? JSON.stringify({ name: "SeasonSearch", seriesId, seasonNumber })
+        : JSON.stringify({ name: "SeriesSearch", seriesId }),
     }),
 };

@@ -358,7 +358,7 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
     <div className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none">
       {body}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-        <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} />
+        <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} title={item.title} />
       </div>
     </div>
   );

@@ -31,11 +31,16 @@ export async function POST(req: NextRequest) {
 
       if (movie.id) return NextResponse.json({ radarrId: movie.id });
 
+      // Unmonitored: this add is always immediately followed by an interactive search the user
+      // can abandon without picking anything — reported live as leaving a monitored, empty entry
+      // that Radarr kept auto-searching for indefinitely. Grabbing a release (see
+      // /api/radarr/releases) flips this back to monitored; abandoning it just leaves an inert
+      // entry instead of one that keeps hitting indexers for nothing.
       const added = await radarr.addMovie({
         ...movie,
         qualityProfileId: vfProfile(profiles)?.id,
         rootFolderPath: folders[0]?.path,
-        monitored: true,
+        monitored: false,
         addOptions: { searchForMovie: false },
       });
       invalidateLibrary();
@@ -54,6 +59,10 @@ export async function POST(req: NextRequest) {
 
       if (series.id) return NextResponse.json({ sonarrId: series.id });
 
+      // Monitored (unlike the movie branch above): this is now only ever called from the
+      // deliberate "Ajouter" action, not paired with an immediate interactive search a user
+      // could abandon — the orphan-risk this whole unmonitored pattern exists for doesn't apply
+      // here. Per-season interactive/automatic search happen afterward, on the series' own sheet.
       const added = await sonarr.addSeries({
         ...series,
         qualityProfileId: vfProfile(profiles)?.id,

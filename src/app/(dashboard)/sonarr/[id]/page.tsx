@@ -32,6 +32,7 @@ import {
   Send,
   PlayCircle,
   Trash2,
+  RefreshCw,
 } from "lucide-react";
 import type { SonarrSeries, SonarrEpisode } from "@/lib/clients/sonarr";
 import type { BazarrEpisodeDetails } from "@/lib/clients/bazarr";
@@ -117,6 +118,7 @@ export default function SonarrSeriesDetailPage() {
   const [saving, setSaving] = useState(false);
   const [openSeasons, setOpenSeasons] = useState<Set<number>>(new Set());
   const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
+  const [autoSearching, setAutoSearching] = useState<number | null>(null);
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -262,6 +264,20 @@ export default function SonarrSeriesDetailPage() {
       toast.error(t('sonarr.watchedError'));
     } finally {
       setTogglingWatched(false);
+    }
+  }
+
+  // Standard automatic search (Sonarr's own SeasonSearch command) — available to every user,
+  // unlike the interactive one below (a human picking a specific release), which stays
+  // admin/non-guest-only same as before.
+  async function triggerAutoSearch(seasonNumber: number) {
+    setAutoSearching(seasonNumber);
+    try {
+      const res = await fetch(`/api/sonarr/series/${id}/search?seasonNumber=${seasonNumber}`, { method: "POST" });
+      if (res.ok) toast.success(t('sonarr.searchLaunched'));
+      else toast.error(t('common.unknown'));
+    } finally {
+      setAutoSearching(null);
     }
   }
 
@@ -622,6 +638,14 @@ export default function SonarrSeriesDetailPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="btn-ghost px-2 py-1 text-xs"
+                        onClick={() => triggerAutoSearch(seasonNumber)}
+                        disabled={autoSearching === seasonNumber}
+                        title={t('sonarr.autoSearchSeason', { n: String(seasonNumber) })}
+                      >
+                        <RefreshCw size={12} className={autoSearching === seasonNumber ? "animate-spin" : ""} /> {t('common.autoSearch')}
+                      </button>
                       {isGuest ? (
                         <span className="badge bg-white/5 text-xs">
                           {seasonMeta?.monitored ? t('common.monitored') : t('common.notMonitored')}

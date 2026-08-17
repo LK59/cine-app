@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Star, BookCheck, CirclePlus, ExternalLink, Loader2, Clock,
-  Eye, Heart, X, CircleCheck, Telescope, Film, Tv,
+  Eye, Heart, X, CircleCheck, Telescope, Film, Tv, Plus,
 } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
+import { RequestFlowModal } from "@/components/RequestFlowModal";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
@@ -47,11 +48,11 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
   const t = useT();
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [requesting, setRequesting] = useState(false);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requested, setRequested] = useState(false);
   const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist(item.watchlistStatus ?? null);
   const [addingSearch, setAddingSearch] = useState(false);
-  const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string } | null>(null);
+  const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string; mediaId?: number } | null>(null);
 
   const STATUS_META: Record<WatchlistStatus, { label: string; icon: React.ElementType; textColor: string; bgSolid: string }> = {
     to_watch:   { label: t("watchlist.statuses.toWatch"),   icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
@@ -75,25 +76,9 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
     );
   }
 
-  async function doRequest(e?: React.MouseEvent) {
-    e?.preventDefault(); e?.stopPropagation();
-    if (requested || requesting) return;
-    setRequesting(true);
-    const res = await fetch("/api/jellyseerr/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaType: mediaType === "series" ? "tv" : "movie", mediaId: item.tmdbId }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error || t("common.unknown"));
-    } else {
-      setRequested(true);
-      fetch("/api/cache/invalidate", { method: "POST" }).catch(() => {});
-    }
-    setRequesting(false);
-  }
-
+  // Movies only — series no longer pair an add with an immediate interactive search a user can
+  // abandon without picking anything (reported live as leaving a monitored, endlessly-re-searched
+  // empty entry). discover/add now adds a movie unmonitored; grabbing a release flips it back.
   async function doInteractiveSearch(e?: React.MouseEvent) {
     e?.preventDefault(); e?.stopPropagation();
     setAddingSearch(true);
@@ -101,16 +86,36 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
       const res = await fetch("/api/discover/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: mediaType, tmdbId: item.tmdbId }),
+        body: JSON.stringify({ type: "movie", tmdbId: item.tmdbId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.error || t("common.unknown")); return; }
-      if (mediaType === "movie" && data.radarrId) {
+      if (data.radarrId) {
         onAdded?.(item.tmdbId);
-        setReleaseModal({ searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/releases` });
-      } else if (mediaType === "series" && data.sonarrId) {
+        setReleaseModal({ searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/releases`, mediaId: data.radarrId });
+      }
+    } finally {
+      setAddingSearch(false);
+    }
+  }
+
+  // Series: a deliberate, explicit "add to my library" action — no interactive search follows,
+  // so no orphan-on-abandon risk; added normally monitored. Per-season interactive AND automatic
+  // search live on the series' own sheet once it's in the library.
+  async function addSeriesToLibrary(e?: React.MouseEvent) {
+    e?.preventDefault(); e?.stopPropagation();
+    setAddingSearch(true);
+    try {
+      const res = await fetch("/api/discover/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "series", tmdbId: item.tmdbId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || t("common.unknown")); return; }
+      if (data.sonarrId) {
         onAdded?.(item.tmdbId);
-        setReleaseModal({ searchEndpoint: `/api/sonarr/series/${data.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
+        toast.success(t("watchlist.addedToLibrary"));
       }
     } finally {
       setAddingSearch(false);
@@ -139,18 +144,25 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
     }),
     ...(item.libraryHref
       ? [{ label: t("recommendations.viewSheet"), icon: <ExternalLink size={16} />, onClick: () => router.push(item.libraryHref!) }]
-      : [{
-          label: requested ? t("recommendations.requestSent") : requesting ? t("recommendations.requesting") : t("recommendations.request"),
-          icon: <CirclePlus size={16} />,
-          onClick: () => doRequest(),
-          disabled: requested || requesting,
-          variant: requested ? "accent" as const : "default" as const,
-        }]
+      : []
     ),
-    ...(isAdmin && !item.inLibrary ? [{
+    {
+      label: requested ? t("recommendations.requestSent") : t("recommendations.request"),
+      icon: <CirclePlus size={16} />,
+      onClick: () => setRequestModalOpen(true),
+      disabled: requested,
+      variant: requested ? "accent" as const : "default" as const,
+    },
+    ...(isAdmin && mediaType === "movie" && !item.inLibrary ? [{
       label: t("recommendations.interactiveSearch"),
       icon: <Telescope size={16} />,
       onClick: () => doInteractiveSearch(),
+      disabled: addingSearch,
+    }] : []),
+    ...(isAdmin && mediaType === "series" && !item.inLibrary ? [{
+      label: t("watchlist.addToLibrary"),
+      icon: <Plus size={16} />,
+      onClick: () => addSeriesToLibrary(),
       disabled: addingSearch,
     }] : []),
   ];
@@ -240,17 +252,17 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                 </Link>
               ) : (
                 <button
-                  onClick={(e) => doRequest(e)}
-                  disabled={requested || requesting}
+                  onClick={(e) => { e.stopPropagation(); setRequestModalOpen(true); }}
+                  disabled={requested}
                   className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
                     requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
                   }`}
                 >
                   <CirclePlus size={9} />
-                  {requested ? t("recommendations.requested") : requesting ? "…" : t("recommendations.request")}
+                  {requested ? t("recommendations.requested") : t("recommendations.request")}
                 </button>
               )}
-              {isAdmin && !item.inLibrary && (
+              {isAdmin && mediaType === "movie" && !item.inLibrary && (
                 <button
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}
@@ -259,6 +271,17 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                   className="flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
                 >
                   {addingSearch ? <Loader2 size={iconSize} className="animate-spin" /> : <Telescope size={iconSize} />}
+                </button>
+              )}
+              {isAdmin && mediaType === "series" && !item.inLibrary && (
+                <button
+                  onClick={(e) => addSeriesToLibrary(e)}
+                  disabled={addingSearch}
+                  title={t("watchlist.addToLibrary")}
+                  style={{ height: btnSize, width: btnSize }}
+                  className="flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  {addingSearch ? <Loader2 size={iconSize} className="animate-spin" /> : <Plus size={iconSize} />}
                 </button>
               )}
             </div>
@@ -285,7 +308,18 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
           title={item.title}
           searchEndpoint={releaseModal.searchEndpoint}
           grabEndpoint={releaseModal.grabEndpoint}
+          mediaId={releaseModal.mediaId}
           onClose={() => setReleaseModal(null)}
+        />
+      )}
+
+      {requestModalOpen && (
+        <RequestFlowModal
+          mediaType={mediaType}
+          tmdbId={item.tmdbId}
+          title={item.title}
+          onClose={() => setRequestModalOpen(false)}
+          onSuccess={() => setRequested(true)}
         />
       )}
     </>

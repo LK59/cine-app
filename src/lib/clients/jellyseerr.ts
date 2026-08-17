@@ -88,18 +88,40 @@ export const jellyseerr = {
   // No `userId` when a cookie is supplied — the session already identifies the requester to
   // Jellyseerr, so passing one would be redundant (and userId-as-another-user is itself the
   // admin-only "request on behalf of" path this whole change moves away from).
-  createRequest: (mediaType: "movie" | "tv", mediaId: number, userId?: number, cookie?: string) =>
+  // `seasons` is what a TV request was missing entirely before (root cause of the "Cannot read
+  // properties of undefined (reading 'filter')" crash reported live) — Jellyseerr's own request
+  // handler processes it as an array of season numbers for a `mediaType: "tv"` request; omitted
+  // entirely for movies, which have no such concept.
+  createRequest: (
+    mediaType: "movie" | "tv",
+    mediaId: number,
+    userId?: number,
+    cookie?: string,
+    seasons?: number[]
+  ) =>
     fetchJson<{ id: number }>(`${url}/api/v1/request`, {
       method: "POST",
       headers: authHeaders(cookie),
-      body: JSON.stringify({ mediaType, mediaId, ...(cookie ? {} : userId != null ? { userId } : {}) }),
+      body: JSON.stringify({
+        mediaType,
+        mediaId,
+        ...(seasons ? { seasons } : {}),
+        ...(cookie ? {} : userId != null ? { userId } : {}),
+      }),
     }),
-  getMovieMedia: (tmdbId: number) =>
+  getMovieMedia: (tmdbId: number, cookie?: string) =>
     fetchJson<{ title?: string; posterPath?: string | null; mediaInfo?: { status: number } }>(
-      `${url}/api/v1/movie/${tmdbId}`, { headers }
+      `${url}/api/v1/movie/${tmdbId}`, { headers: authHeaders(cookie) }
     ),
-  getTvMedia: (tmdbId: number) =>
-    fetchJson<{ name?: string; posterPath?: string | null; mediaInfo?: { status: number } }>(
-      `${url}/api/v1/tv/${tmdbId}`, { headers }
-    ),
+  // `seasons` (TMDB-sourced: number/name/episodeCount per season) and `mediaInfo.seasons`
+  // (Jellyseerr's own per-season request/availability status, same MediaStatus enum as the
+  // overall `mediaInfo.status`) are both present on the real response — verified live against
+  // this instance — but were previously untyped/unused since nothing needed per-season detail.
+  getTvMedia: (tmdbId: number, cookie?: string) =>
+    fetchJson<{
+      name?: string;
+      posterPath?: string | null;
+      seasons?: { seasonNumber: number; name?: string; episodeCount?: number }[];
+      mediaInfo?: { status: number; seasons?: { seasonNumber: number; status: number }[] };
+    }>(`${url}/api/v1/tv/${tmdbId}`, { headers: authHeaders(cookie) }),
 };

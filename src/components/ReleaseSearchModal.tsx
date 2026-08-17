@@ -30,11 +30,18 @@ export function ReleaseSearchModal({
   title,
   searchEndpoint,
   grabEndpoint,
+  mediaId,
   onClose,
 }: {
   title: string;
   searchEndpoint: string;
   grabEndpoint: string;
+  /** Radarr movie id — only passed by the discover/add-triggered flow, where the movie was just
+   *  added unmonitored (see /api/discover/add) specifically so it doesn't get auto-searched
+   *  before anything's actually been picked here. Grabbing a release flips it back to monitored
+   *  server-side (see /api/radarr/releases) so it behaves normally afterwards; other callers
+   *  (an existing, already-monitored library item's own manual search) simply omit this. */
+  mediaId?: number;
   onClose: () => void;
 }) {
   const toast = useToast();
@@ -53,7 +60,7 @@ export function ReleaseSearchModal({
       const res = await fetch(grabEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guid: release.guid, indexerId: release.indexerId }),
+        body: JSON.stringify({ guid: release.guid, indexerId: release.indexerId, ...(mediaId ? { mediaId } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

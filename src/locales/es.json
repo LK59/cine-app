@@ -63,6 +63,7 @@
     "updateAvailable": "Nueva versión disponible",
     "retry": "Reintentar",
     "search": "Buscar",
+    "autoSearch": "Búsqueda auto",
     "request": "Solicitar",
     "requesting": "En curso…",
     "requested": "Solicitado ✓",
@@ -269,6 +270,8 @@
     "seasonSpecial": "Temporada especial",
     "episodesLoadError": "No se pudieron cargar los episodios.",
     "searchSeason": "Búsqueda · Temporada {n}",
+    "autoSearchSeason": "Búsqueda automática · Temporada {n}",
+    "searchLaunched": "Búsqueda iniciada",
     "episodeSearch": "Búsqueda · {title}",
     "seriesSearch": "Búsqueda · {title}",
     "seriesWatched": "Vista",
@@ -750,6 +753,8 @@
     "removeFromList": "Eliminar de la lista",
     "editNote": "Editar nota",
     "addNote": "Añadir nota",
+    "addToLibrary": "Añadir",
+    "addedToLibrary": "Añadida a la biblioteca",
     "empty": "Tu lista está vacía.",
     "emptyFilter": "Sin resultados para esta búsqueda o filtro.",
     "statuses": {
@@ -895,6 +900,18 @@
         "close": "Cerrar ventana / deseleccionar"
       },
       "openClose": "Pulsa {key} para abrir / cerrar"
+    },
+    "request": {
+      "confirmTitle": "Confirmar solicitud",
+      "confirmBody": "La solicitud se enviará vía Jellyseerr y quedará asociada a tu cuenta.",
+      "loadingSeasons": "Cargando temporadas…",
+      "loadError": "No se pudieron cargar las temporadas.",
+      "noSeasons": "No se encontraron temporadas para esta serie.",
+      "allCovered": "Ya solicitada o disponible por completo.",
+      "pickSeasons": "Elige las temporadas a solicitar:",
+      "alreadyRequested": "Ya solicitada",
+      "requestMore": "Solicitar más",
+      "sentToast": "Solicitud enviada"
     }
   },
   "api": {

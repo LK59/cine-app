@@ -60,9 +60,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const mediaType = body?.mediaType as "movie" | "tv" | undefined;
   const mediaId = body?.mediaId as number | undefined;
+  // Required for "tv" — Jellyseerr's own request handler crashes without it (root cause of the
+  // "Cannot read properties of undefined (reading 'filter')" 500 reported live: a tv request was
+  // being sent with no seasons field at all). Never sent for "movie", which has no such concept.
+  const seasons = Array.isArray(body?.seasons) ? (body.seasons as number[]) : undefined;
 
   if (!mediaType || !mediaId) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+  }
+  if (mediaType === "tv" && (!seasons || seasons.length === 0)) {
+    return NextResponse.json({ error: "Sélectionne au moins une saison" }, { status: 400 });
   }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -72,12 +79,14 @@ export async function POST(req: NextRequest) {
   // (that override was itself the admin-only "request on behalf of" path this fork now blocks
   // for anything but a genuinely authenticated session).
   if (session?.jsCookie) {
-    return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId, undefined, session.jsCookie));
+    return withErrorHandling(() =>
+      jellyseerr.createRequest(mediaType, mediaId, undefined, session.jsCookie, seasons)
+    );
   }
 
   const jellyseerrUserId = session?.jfUser
     ? await resolveJellyseerrUserId(session.jfUser)
     : undefined;
 
-  return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId, jellyseerrUserId));
+  return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId, jellyseerrUserId, undefined, seasons));
 }

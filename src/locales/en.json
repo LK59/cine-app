@@ -63,6 +63,7 @@
     "updateAvailable": "New version available",
     "retry": "Retry",
     "search": "Search",
+    "autoSearch": "Auto search",
     "request": "Request",
     "requesting": "In progress…",
     "requested": "Requested ✓",
@@ -269,6 +270,8 @@
     "seasonSpecial": "Special season",
     "episodesLoadError": "Could not load episodes.",
     "searchSeason": "Search · Season {n}",
+    "autoSearchSeason": "Automatic search · Season {n}",
+    "searchLaunched": "Search started",
     "episodeSearch": "Search · {title}",
     "seriesSearch": "Search · {title}",
     "seriesWatched": "Watched",
@@ -750,6 +753,8 @@
     "removeFromList": "Remove from list",
     "editNote": "Edit note",
     "addNote": "Add note",
+    "addToLibrary": "Add",
+    "addedToLibrary": "Added to the library",
     "empty": "Your list is empty.",
     "emptyFilter": "No results for this search or filter.",
     "statuses": {
@@ -895,6 +900,18 @@
         "close": "Close window / deselect"
       },
       "openClose": "Press {key} to open / close"
+    },
+    "request": {
+      "confirmTitle": "Confirm request",
+      "confirmBody": "The request will be sent via Jellyseerr and tied to your account.",
+      "loadingSeasons": "Loading seasons…",
+      "loadError": "Couldn't load seasons.",
+      "noSeasons": "No seasons found for this series.",
+      "allCovered": "Already requested or fully available.",
+      "pickSeasons": "Pick the seasons to request:",
+      "alreadyRequested": "Already requested",
+      "requestMore": "Request more",
+      "sentToast": "Request sent"
     }
   },
   "api": {

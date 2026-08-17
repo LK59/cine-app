@@ -50,8 +50,10 @@ describe("GET /api/jellyseerr/media", () => {
     mockJellyseerr.getTvMedia.mockResolvedValue({ mediaInfo: { status: 4 } });
     const { GET } = await import("@/app/api/jellyseerr/media/route");
     const res = await GET(fakeReq({ params: { tmdbId: "7", type: "tv" } }));
-    expect(mockJellyseerr.getTvMedia).toHaveBeenCalledWith(7);
-    expect((await res.json()).status).toBe(4);
+    expect(mockJellyseerr.getTvMedia).toHaveBeenCalledWith(7, undefined);
+    const body = await res.json();
+    expect(body.status).toBe(4);
+    expect(body.seasons).toEqual([]);
   });
 });
 
@@ -156,7 +158,7 @@ describe("POST /api/jellyseerr/requests", () => {
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
-    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, 5);
+    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, 5, undefined, undefined);
   });
 
   it("creates the request with no user id for a session with no Jellyfin account", async () => {
@@ -164,7 +166,7 @@ describe("POST /api/jellyseerr/requests", () => {
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
-    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined);
+    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined, undefined, undefined);
   });
 
   it("prefers the session's own Jellyseerr cookie over resolving a userId", async () => {
@@ -172,7 +174,22 @@ describe("POST /api/jellyseerr/requests", () => {
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
-    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined, "s%3Asecret");
+    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined, "s%3Asecret", undefined);
     expect(mockJellyseerr.getUsers).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tv request with no seasons — Jellyseerr's own handler crashes without one", async () => {
+    const { POST } = await import("@/app/api/jellyseerr/requests/route");
+    const res = await POST(fakeReq({ body: { mediaType: "tv", mediaId: 7 } }));
+    expect(res.status).toBe(400);
+    expect(mockJellyseerr.createRequest).not.toHaveBeenCalled();
+  });
+
+  it("passes seasons through for a tv request", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis", jsCookie: "s%3Asecret" });
+    mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
+    const { POST } = await import("@/app/api/jellyseerr/requests/route");
+    await POST(fakeReq({ body: { mediaType: "tv", mediaId: 7, seasons: [1, 2] } }));
+    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("tv", 7, undefined, "s%3Asecret", [1, 2]);
   });
 });

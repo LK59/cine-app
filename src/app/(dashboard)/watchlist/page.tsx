@@ -12,6 +12,7 @@ import {
   Plus, Star, Telescope,
 } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
+import { useToast } from "@/components/Toast";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import Link from "next/link";
@@ -21,6 +22,7 @@ import dynamic from "next/dynamic";
 const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
 import { useT } from "@/components/TranslationProvider";
 import { RequestButton } from "@/components/RequestButton";
+import { RequestFlowModal } from "@/components/RequestFlowModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -318,15 +320,23 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
   onRemove: () => void;
 }) {
   const t = useT();
+  const toast = useToast();
   const { role } = useRole();
   const isAdmin = role === "admin";
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [addingSearch, setAddingSearch] = useState(false);
-  const [releaseModal, setReleaseModal] = useState<{ title: string; searchEndpoint: string; grabEndpoint: string } | null>(null);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [releaseModal, setReleaseModal] = useState<{ title: string; searchEndpoint: string; grabEndpoint: string; mediaId?: number } | null>(null);
   const m = STATUS_META[item.status];
   const poster = posterSrc(item.posterPath);
 
+  // Movies only from here on — series no longer pair an add with an immediate interactive
+  // search (see addSeriesToLibrary below), the exact "added but nothing ever grabbed, no
+  // automatic search running, silently orphaned" pattern reported live. discover/add itself now
+  // adds a movie unmonitored; the grab endpoint flips it back to monitored the moment a release
+  // is actually picked, so abandoning this modal with nothing chosen just leaves an inert,
+  // non-searched entry instead of one Radarr keeps hammering indexers for.
   async function doInteractiveSearch(e?: React.MouseEvent) {
     e?.stopPropagation();
     setAddingSearch(true);
@@ -334,15 +344,38 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
       const res = await fetch("/api/discover/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: item.mediaType, tmdbId: item.tmdbId }),
+        body: JSON.stringify({ type: "movie", tmdbId: item.tmdbId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return;
-      if (item.mediaType === "movie" && data.radarrId) {
-        setReleaseModal({ title: item.title, searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/releases` });
-      } else if (item.mediaType === "series" && data.sonarrId) {
-        setReleaseModal({ title: item.title, searchEndpoint: `/api/sonarr/series/${data.sonarrId}/releases`, grabEndpoint: `/api/sonarr/releases` });
+      if (data.radarrId) {
+        setReleaseModal({
+          title: item.title,
+          searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`,
+          grabEndpoint: `/api/radarr/releases`,
+          mediaId: data.radarrId,
+        });
       }
+    } finally {
+      setAddingSearch(false);
+    }
+  }
+
+  // Series: a deliberate, explicit "add to my library" action — no interactive search follows,
+  // so no orphan-on-abandon risk here; added normally monitored, same as adding through Sonarr's
+  // own UI. Per-season interactive AND automatic search live on the series' own sheet once it's
+  // in the library (sonarr/[id]).
+  async function addSeriesToLibrary(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setAddingSearch(true);
+    try {
+      const res = await fetch("/api/discover/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "series", tmdbId: item.tmdbId }),
+      });
+      if (res.ok) toast.success(t('watchlist.addedToLibrary'));
+      else toast.error(t('common.unknown'));
     } finally {
       setAddingSearch(false);
     }
@@ -363,19 +396,18 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
         disabled: isActive,
       };
     }),
-    // Library or request
+    { label: item.note ? t('watchlist.editNote') : t('watchlist.addNote'), icon: <MessageSquare size={16} />, onClick: onNoteEdit },
     ...(libraryHref
       ? [{ label: t('common.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => { window.location.href = libraryHref; } }]
-      : [{ label: t('common.request'), icon: <CirclePlus size={16} />, onClick: async () => {
-          await fetch("/api/jellyseerr/requests", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mediaType: item.mediaType === "movie" ? "movie" : "tv", mediaId: item.tmdbId }),
-          });
-        }}]
+      : []
     ),
-    { label: item.note ? t('watchlist.editNote') : t('watchlist.addNote'), icon: <MessageSquare size={16} />, onClick: onNoteEdit },
-    ...(isAdmin && !isAvailable ? [{ label: t('common.interactiveSearch'), icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }] : []),
+    { label: t('common.request'), icon: <CirclePlus size={16} />, onClick: () => setRequestModalOpen(true) },
+    ...(isAdmin && item.mediaType === "movie" && !isAvailable
+      ? [{ label: t('common.interactiveSearch'), icon: <Telescope size={16} />, onClick: () => doInteractiveSearch(), disabled: addingSearch }]
+      : []),
+    ...(isAdmin && item.mediaType === "series" && !libraryHref
+      ? [{ label: t('watchlist.addToLibrary'), icon: <Plus size={16} />, onClick: () => addSeriesToLibrary(), disabled: addingSearch }]
+      : []),
     { label: t('watchlist.removeFromList'), icon: <Trash2 size={16} />, onClick: () => setPendingDelete(true), variant: "danger" as const },
   ];
 
@@ -455,7 +487,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                   <ExternalLink size={9} /> {t('common.viewSheet')}
                 </Link>
               ) : (
-                <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} />
+                <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} title={item.title} />
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); onNoteEdit(); }}
@@ -464,7 +496,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
               >
                 <MessageSquare size={9} />
               </button>
-              {isAdmin && !isAvailable && (
+              {isAdmin && item.mediaType === "movie" && !isAvailable && (
                 <button
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}
@@ -472,6 +504,16 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                   className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
                 >
                   <Telescope size={9} />
+                </button>
+              )}
+              {isAdmin && item.mediaType === "series" && !libraryHref && (
+                <button
+                  onClick={(e) => addSeriesToLibrary(e)}
+                  disabled={addingSearch}
+                  title={t('watchlist.addToLibrary')}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  <Plus size={9} />
                 </button>
               )}
               <button
@@ -518,7 +560,18 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
           title={releaseModal.title}
           searchEndpoint={releaseModal.searchEndpoint}
           grabEndpoint={releaseModal.grabEndpoint}
+          mediaId={releaseModal.mediaId}
           onClose={() => setReleaseModal(null)}
+        />
+      )}
+
+      {/* Request confirmation / season picker */}
+      {requestModalOpen && (
+        <RequestFlowModal
+          mediaType={item.mediaType}
+          tmdbId={item.tmdbId}
+          title={item.title}
+          onClose={() => setRequestModalOpen(false)}
         />
       )}
     </>

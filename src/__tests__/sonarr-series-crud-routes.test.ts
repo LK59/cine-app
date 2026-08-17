@@ -85,11 +85,18 @@ describe("POST /api/sonarr/series/[id]/search", () => {
     expect(res.status).toBe(400);
   });
 
-  it("triggers a search for a valid id", async () => {
+  it("triggers a series-wide search for a valid id", async () => {
     mockSonarr.triggerSearch.mockResolvedValue({ ok: true });
     const { POST } = await import("@/app/api/sonarr/series/[id]/search/route");
     await POST(fakeReq(), params("7"));
-    expect(mockSonarr.triggerSearch).toHaveBeenCalledWith(7);
+    expect(mockSonarr.triggerSearch).toHaveBeenCalledWith(7, undefined);
+  });
+
+  it("triggers a season-scoped search when seasonNumber is given", async () => {
+    mockSonarr.triggerSearch.mockResolvedValue({ ok: true });
+    const { POST } = await import("@/app/api/sonarr/series/[id]/search/route");
+    await POST(fakeReq({ params: { seasonNumber: "2" } }), params("7"));
+    expect(mockSonarr.triggerSearch).toHaveBeenCalledWith(7, 2);
   });
 });
 

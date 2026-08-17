@@ -64,8 +64,10 @@ describe("POST /api/discover/add", () => {
     const body = await res.json();
 
     expect(body).toEqual({ radarrId: 99 });
+    // Unmonitored — added right before an interactive search the user can abandon without
+    // picking anything; grabbing a release (see /api/radarr/releases) is what flips this back.
     expect(mockRadarr.addMovie).toHaveBeenCalledWith(
-      expect.objectContaining({ qualityProfileId: 2, rootFolderPath: "/movies", monitored: true })
+      expect.objectContaining({ qualityProfileId: 2, rootFolderPath: "/movies", monitored: false })
     );
     expect(mockInvalidateLibrary).toHaveBeenCalled();
   });
