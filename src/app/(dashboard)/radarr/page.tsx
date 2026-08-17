@@ -17,6 +17,7 @@ import { prefetchMovieDetail } from "@/lib/prefetch";
 import { useListKeyNav } from "@/lib/useListKeyNav";
 import { useToast } from "@/components/Toast";
 import { PosterImage } from "@/components/PosterImage";
+import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
 
 function poster(movie: RadarrMovie) {
@@ -25,7 +26,7 @@ function poster(movie: RadarrMovie) {
 
 import { fmtSize, relDate } from "@/lib/format";
 
-type SortKey = "added" | "title" | "year" | "size";
+type SortKey = "added" | "title" | "year" | "size" | "rating";
 type StatusFilter = "all" | "downloaded" | "missing";
 type ViewMode = "grid" | "list";
 type DecadeFilter = "all" | "2020s" | "2010s" | "2000s" | "1990s" | "older";
@@ -98,6 +99,7 @@ export default function RadarrPage() {
       if (sort === "title") return a.title.localeCompare(b.title);
       if (sort === "year") return (b.year ?? 0) - (a.year ?? 0);
       if (sort === "size") return (b.sizeOnDisk ?? 0) - (a.sizeOnDisk ?? 0);
+      if (sort === "rating") return (b.ratings?.imdb?.value ?? 0) - (a.ratings?.imdb?.value ?? 0);
       return 0;
     });
 
@@ -188,6 +190,7 @@ export default function RadarrPage() {
                   <option value="title">{t('common.sortTitleAZ')}</option>
                   <option value="year">{t('common.sortYear')}</option>
                   <option value="size">{t('common.sortSize')}</option>
+                  <option value="rating">{t('common.sortImdbRating')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
@@ -249,6 +252,9 @@ export default function RadarrPage() {
                       className={`card group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
                     >
                       <PosterImage src={poster(movie)} alt={movie.title} />
+                      {movie.ratings?.imdb?.value != null && (
+                        <ImdbBadge rating={movie.ratings.imdb.value} className="absolute left-2 top-2 shadow" />
+                      )}
                       <div className="p-2">
                         <p className="truncate text-xs font-medium text-white">{movie.title}</p>
                         <p className="text-xs text-slate-500">{movie.year}</p>
@@ -300,6 +306,7 @@ export default function RadarrPage() {
                       <p className="text-xs text-slate-500">{movie.year}</p>
                     </div>
                     <div className="hidden items-center gap-3 sm:flex">
+                      <ImdbBadge rating={movie.ratings?.imdb?.value} />
                       <span className={`badge ${movie.hasFile ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>
                         {movie.hasFile ? "Téléchargé" : "Manquant"}
                       </span>

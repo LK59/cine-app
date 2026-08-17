@@ -15,6 +15,7 @@ import { getDiskStats, type DiskStats } from "@/lib/disk-stats";
 import { classifyError } from "@/lib/api-error";
 import { posterUrl } from "@/lib/images";
 import { config } from "@/lib/config";
+import { getImdbRating } from "@/lib/imdb-rating";
 
 // Checked before any network call so "not configured" never gets confused
 // with "configured but unreachable" — both would otherwise surface as the
@@ -64,6 +65,8 @@ export interface RecentItem {
   hasFile?: boolean;
   status?: string;
   posterUrl: string | null;
+  tmdbId?: number;
+  imdbRating: string | null;
 }
 
 export interface TorrentItem {
@@ -267,16 +270,39 @@ async function fetchRecentMovies(): Promise<RecentItem[]> {
     .filter((m) => m.added && m.added !== "0001-01-01T00:00:00Z")
     .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
     .slice(0, 8)
-    .map((m) => ({ id: m.id, title: m.title, year: m.year, added: m.added, hasFile: m.hasFile, posterUrl: posterUrl(m.images, "thumb") }));
+    .map((m) => ({
+      id: m.id,
+      title: m.title,
+      year: m.year,
+      added: m.added,
+      hasFile: m.hasFile,
+      posterUrl: posterUrl(m.images, "thumb"),
+      tmdbId: m.tmdbId,
+      // Radarr already resolves this itself (Skyhook metadata) — free, no OMDb call needed.
+      imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,
+    }));
 }
 
 async function fetchRecentSeries(): Promise<RecentItem[]> {
   const series = await cachedSeries();
-  return series
+  const recent = series
     .filter((s) => s.added && s.added !== "0001-01-01T00:00:00Z")
     .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-    .slice(0, 8)
-    .map((s) => ({ id: s.id, title: s.title, year: s.year, added: s.added, status: s.status, posterUrl: posterUrl(s.images, "thumb") }));
+    .slice(0, 8);
+  // Unlike Radarr, Sonarr's own `ratings` field isn't IMDb-specific — each lookup goes through
+  // getImdbRating's own 24h persistent cache, so this only ever actually calls OMDb once per
+  // series per day regardless of how often the dashboard itself is refreshed.
+  const ratings = await Promise.all(recent.map((s) => (s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null))));
+  return recent.map((s, i) => ({
+    id: s.id,
+    title: s.title,
+    year: s.year,
+    added: s.added,
+    status: s.status,
+    posterUrl: posterUrl(s.images, "thumb"),
+    tmdbId: s.tmdbId,
+    imdbRating: ratings[i],
+  }));
 }
 
 // ─── Torrents ─────────────────────────────────────────────────────────────────

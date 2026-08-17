@@ -106,6 +106,7 @@
     "sortTitleAZ": "Title A–Z",
     "sortYear": "Year",
     "sortSize": "Size",
+    "sortImdbRating": "IMDb rating",
     "sortEpisodes": "Episodes",
     "allStatuses": "All statuses",
     "allGenres": "All genres",
@@ -126,6 +127,7 @@
   "dashboard": {
     "resumeWatching": "Continue watching",
     "recentlyAdded": "Recently added to library",
+    "seeAll": "See all",
     "activeDownloads": "Active downloads",
     "waitingSeeds": "Waiting for seeds",
     "showMore": "+{n} more — see all",

@@ -17,13 +17,14 @@ import { prefetchSeriesDetail } from "@/lib/prefetch";
 import { useListKeyNav } from "@/lib/useListKeyNav";
 import { useToast } from "@/components/Toast";
 import { PosterImage } from "@/components/PosterImage";
+import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
 
 function poster(series: SonarrSeries) {
   return posterUrl(series.images);
 }
 
-type SortKey = "added" | "title" | "year" | "episodes";
+type SortKey = "added" | "title" | "year" | "episodes" | "rating";
 type StatusFilter = "all" | "complete" | "missing" | "continuing" | "ended";
 type ViewMode = "grid" | "list";
 type DecadeFilter = "all" | "2020s" | "2010s" | "2000s" | "1990s" | "older";
@@ -61,10 +62,18 @@ export default function SonarrPage() {
     return [...set].sort();
   }, [series]);
 
-  const filtered = useMemo(() => {
+  const PAGE = 60;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+
+  // Filtering only — kept separate from the final sorted `filtered` below so the IMDb-ratings
+  // fetch (needed for "rating" sort/badges, since unlike Radarr, Sonarr's own `ratings` field
+  // isn't IMDb-specific — see getImdbRating) can depend on this filtered-but-unsorted list
+  // without depending on `filtered` itself, which would otherwise need that same ratings data
+  // to sort by rating in the first place — a circular dependency.
+  const filteredUnsorted = useMemo(() => {
     if (!series) return [];
     const term = search.trim().toLowerCase();
-    let list = series.filter((s) => {
+    return series.filter((s) => {
       if (term && !s.title.toLowerCase().includes(term)) return false;
       if (statusFilter === "complete") {
         const complete =
@@ -82,24 +91,40 @@ export default function SonarrPage() {
       if (decadeFilter !== "all" && decadeOf(s.year) !== decadeFilter) return false;
       return true;
     });
+  }, [series, search, statusFilter, genreFilter, decadeFilter]);
 
-    list = [...list].sort((a, b) => {
+  // Which series need an IMDb rating resolved: the whole filtered set when actually sorting by
+  // rating (an accurate full-catalog sort needs every item's value up front), otherwise just a
+  // page's worth — still enough to show the badge on every card actually on screen, without
+  // ever fetching (and OMDb-rate-limiting on) the entire library on a normal page load.
+  const ratingsSource = sort === "rating" ? filteredUnsorted : filteredUnsorted.slice(0, visibleCount);
+  // Not memoized: cheap (filter+map+join over at most a page's worth of items, or the full
+  // catalog only in the deliberate "rating" sort case), and memoizing it would need the same
+  // ids-as-a-string trick either way since a plain array/object dep is never referentially
+  // stable across renders.
+  const ratingsIds = ratingsSource.filter((s) => s.tmdbId).map((s) => `series:${s.tmdbId}`);
+  const ratingsKey = ratingsIds.length > 0 ? `/api/watchlist/ratings?items=${ratingsIds.join(",")}` : null;
+  const { data: ratingsMap } = useSWR<Record<string, string | null>>(ratingsKey, fetcher, { revalidateOnFocus: false });
+
+  const filtered = useMemo(() => {
+    return [...filteredUnsorted].sort((a, b) => {
       if (sort === "added") return (b.added ?? "").localeCompare(a.added ?? "");
       if (sort === "title") return a.title.localeCompare(b.title);
       if (sort === "year") return (b.year ?? 0) - (a.year ?? 0);
       if (sort === "episodes") {
         return (b.statistics?.episodeFileCount ?? 0) - (a.statistics?.episodeFileCount ?? 0);
       }
+      if (sort === "rating") {
+        const ra = a.tmdbId ? Number(ratingsMap?.[`series:${a.tmdbId}`] ?? 0) : 0;
+        const rb = b.tmdbId ? Number(ratingsMap?.[`series:${b.tmdbId}`] ?? 0) : 0;
+        return rb - ra;
+      }
       return 0;
     });
-
-    return list;
-  }, [series, search, sort, statusFilter, genreFilter, decadeFilter]);
+  }, [filteredUnsorted, sort, ratingsMap]);
 
   const navCursor = useListKeyNav(filtered.length, (i) => `/sonarr/${filtered[i]?.id}`);
 
-  const PAGE = 60;
-  const [visibleCount, setVisibleCount] = useState(PAGE);
   const sentinelRef = useRef<HTMLDivElement>(null);
   // Reset pagination when filters change — applied during render (not in an effect) per
   // React's guidance for adjusting state from a computed value change.
@@ -176,6 +201,7 @@ export default function SonarrPage() {
                   <option value="title">{t('common.sortTitleAZ')}</option>
                   <option value="year">{t('common.sortYear')}</option>
                   <option value="episodes">{t('common.sortEpisodes')}</option>
+                  <option value="rating">{t('common.sortImdbRating')}</option>
                 </select>
                 <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
@@ -229,6 +255,9 @@ export default function SonarrPage() {
                       className={`card group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
                     >
                       <PosterImage src={poster(show)} alt={show.title} />
+                      {show.tmdbId != null && (
+                        <ImdbBadge rating={ratingsMap?.[`series:${show.tmdbId}`]} className="absolute left-2 top-2 shadow" />
+                      )}
                       <div className="p-2">
                         <p className="truncate text-xs font-medium text-white">{show.title}</p>
                         <p className="text-xs text-slate-500">
@@ -282,6 +311,7 @@ export default function SonarrPage() {
                         <p className="text-xs text-slate-500">{show.year}</p>
                       </div>
                       <div className="hidden items-center gap-3 sm:flex">
+                        {show.tmdbId != null && <ImdbBadge rating={ratingsMap?.[`series:${show.tmdbId}`]} />}
                         <span className={`badge ${complete ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>
                           {show.statistics?.episodeFileCount ?? 0}/{show.statistics?.episodeCount ?? 0} ép.
                         </span>

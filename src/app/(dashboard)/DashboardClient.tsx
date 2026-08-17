@@ -11,10 +11,11 @@ import { INTERVALS } from "@/lib/refresh-intervals";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LoadingState, EmptyState } from "@/components/StateViews";
-import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play } from "lucide-react";
+import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight } from "lucide-react";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
+import { ImdbBadge } from "@/components/ImdbBadge";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -176,6 +177,7 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
       <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
         <div className="relative">
           <PosterImage src={m.posterUrl} alt={m.title} />
+          {m.imdbRating && <ImdbBadge rating={m.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
           {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
         </div>
         <div className="p-2">
@@ -204,7 +206,10 @@ function RecentSeriesCard({ s }: { s: RecentItem }) {
   return (
     <>
       <Link {...lp} href={`/sonarr/${s.id}`} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none">
-        <PosterImage src={s.posterUrl} alt={s.title} />
+        <div className="relative">
+          <PosterImage src={s.posterUrl} alt={s.title} />
+          {s.imdbRating && <ImdbBadge rating={s.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
+        </div>
         <div className="p-2">
           <p className="truncate text-xs font-medium text-white">{s.title}</p>
           <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(s.added!, t)}</div>
@@ -264,7 +269,12 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
       <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.recentlyAdded')}</h2>
       {movies && movies.length > 0 && (
         <div className="mb-5">
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500"><Film size={12} /> {t('common.movies')}</p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs text-slate-500"><Film size={12} /> {t('common.movies')}</p>
+            <Link href="/radarr" className="flex items-center gap-0.5 text-xs text-slate-500 hover:text-slate-300">
+              {t('dashboard.seeAll')} <ChevronRight size={13} />
+            </Link>
+          </div>
           <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
             {movies.map((m) => <RecentMovieCard key={m.id} m={m} />)}
           </HorizontalCarousel>
@@ -272,7 +282,12 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
       )}
       {series && series.length > 0 && (
         <div className="mb-8">
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500"><Tv size={12} /> {t('common.seriesPlural')}</p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs text-slate-500"><Tv size={12} /> {t('common.seriesPlural')}</p>
+            <Link href="/sonarr" className="flex items-center gap-0.5 text-xs text-slate-500 hover:text-slate-300">
+              {t('dashboard.seeAll')} <ChevronRight size={13} />
+            </Link>
+          </div>
           <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
             {series.map((s) => <RecentSeriesCard key={s.id} s={s} />)}
           </HorizontalCarousel>

@@ -21,6 +21,10 @@ export interface RadarrMovie {
   imdbId?: string;
   added?: string;
   genres?: string[];
+  // Present in the real API response (verified live) but previously untyped/unused — Radarr
+  // resolves this itself at add/refresh time via its Skyhook metadata proxy, so it's already
+  // sitting in every /movie response for free, no extra OMDb/TMDB call needed to sort by it.
+  ratings?: { imdb?: { value: number; votes: number } };
   inCinemas?: string;
   digitalRelease?: string;
   physicalRelease?: string;
