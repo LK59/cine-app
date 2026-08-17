@@ -638,14 +638,19 @@ export default function SonarrSeriesDetailPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="btn-ghost px-2 py-1 text-xs"
-                        onClick={() => triggerAutoSearch(seasonNumber)}
-                        disabled={autoSearching === seasonNumber}
-                        title={t('sonarr.autoSearchSeason', { n: String(seasonNumber) })}
-                      >
-                        <RefreshCw size={12} className={autoSearching === seasonNumber ? "animate-spin" : ""} /> {t('common.autoSearch')}
-                      </button>
+                      {/* Guests only get the auto-search entry point when the season is missing
+                          at least one episode file — a complete season is a fact, not something
+                          to search for. Admins always keep it, regardless of completion. */}
+                      {(!isGuest || fileCount < seasonEpisodes.length) && (
+                        <button
+                          className="btn-ghost px-2 py-1 text-xs"
+                          onClick={() => triggerAutoSearch(seasonNumber)}
+                          disabled={autoSearching === seasonNumber}
+                          title={t('sonarr.autoSearchSeason', { n: String(seasonNumber) })}
+                        >
+                          <RefreshCw size={12} className={autoSearching === seasonNumber ? "animate-spin" : ""} /> {t('common.autoSearch')}
+                        </button>
+                      )}
                       {isGuest ? (
                         <span className="badge bg-white/5 text-xs">
                           {seasonMeta?.monitored ? t('common.monitored') : t('common.notMonitored')}

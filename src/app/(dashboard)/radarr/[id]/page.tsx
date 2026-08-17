@@ -34,6 +34,7 @@ import {
   ExternalLink,
   Send,
   PlayCircle,
+  RefreshCw,
 } from "lucide-react";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
@@ -116,6 +117,7 @@ export default function RadarrMovieDetailPage() {
   const [confirmModal, setConfirmModal] = useState<null | "file" | "radarr">(null);
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
   const [activeTab, setActiveTab] = useState<"infos" | "casting" | "fichier">("infos");
 
@@ -236,6 +238,17 @@ export default function RadarrMovieDetailPage() {
       toast.error(t('radarr.requestError'));
     } finally {
       setRequesting(false);
+    }
+  }
+
+  async function triggerAutoSearch() {
+    setAutoSearching(true);
+    try {
+      const res = await fetch(`/api/radarr/movies/${id}/search`, { method: "POST" });
+      if (res.ok) toast.success(t('sonarr.searchLaunched'));
+      else toast.error(t('common.unknown'));
+    } finally {
+      setAutoSearching(false);
     }
   }
 
@@ -394,6 +407,13 @@ export default function RadarrMovieDetailPage() {
         {info?.trailerKey && (
           <button className="btn-ghost px-3" onClick={() => setShowTrailer(true)}>
             <PlayCircle size={16} /> {t('common.trailer')}
+          </button>
+        )}
+        {/* Guests only get the auto-search entry point when there's no file yet — a downloaded
+            movie is a fact, not something to search for. Admins always keep it. */}
+        {(!isGuest || !movie.hasFile) && (
+          <button className="btn-ghost px-3" onClick={triggerAutoSearch} disabled={autoSearching}>
+            <RefreshCw size={16} className={autoSearching ? "animate-spin" : ""} /> {t('common.autoSearch')}
           </button>
         )}
         {!isGuest && (
