@@ -327,7 +327,6 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requested, setRequested] = useState(false);
-  const lp = useLongPress(() => setSheetOpen(true));
   const poster = item.posterPath
     ? item.posterPath.startsWith("http") ? item.posterPath : `${TMDB_IMAGE_BASE}/w342${item.posterPath}`
     : null;
@@ -360,11 +359,16 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
     // Not in the library yet — a static, unclickable poster here was dead weight (nothing to
     // open). Desktop keeps the hover overlay (real :hover, plus group-focus-within as the Tab-key
     // fallback) with the same RequestButton as the /watchlist page. Touch devices have no hover
-    // state at all, so that overlay was simply unreachable there — long-press (same gesture the
-    // resume/recent cards already use) opens a one-action ActionSheet instead, same underlying
-    // RequestFlowModal either way.
+    // state at all, so that overlay was simply unreachable there — a plain tap on the card opens
+    // a one-action ActionSheet instead (same underlying RequestFlowModal either way). Deliberately
+    // NOT the long-press gesture the resume/recent cards use elsewhere: on a poster image, iOS's
+    // own long-press (save-image / link-preview) gesture fires at the same delay and the two
+    // fought each other.
     <>
-      <div {...lp} className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none">
+      <div
+        onClick={() => setSheetOpen(true)}
+        className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none"
+      >
         {body}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
           <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} title={item.title} />
