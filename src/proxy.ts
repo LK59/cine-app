@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
+
+// Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
+// Edge-only middleware, so verifySessionFull's better-sqlite3-backed revocation check (a native
+// module, impossible under Edge) is safe to call directly here. Previously this used the
+// Edge-compatible verifySessionToken (signature + expiry only), which meant logout only cleared
+// the cookie client-side and deleted the DB row, but every route that doesn't individually call
+// verifySessionFull relied solely on this gate — so a revoked session (logged out, or
+// force-expired) stayed fully usable against most of the app for up to its full 7-day lifetime.
 
 const PUBLIC_PATHS = [
   "/login",
@@ -58,7 +67,7 @@ export async function proxy(req: NextRequest) {
   }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifySessionFull(token);
 
   if (!session) {
     if (pathname.startsWith("/api/")) {

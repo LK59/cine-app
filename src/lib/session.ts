@@ -1,5 +1,5 @@
-// Node.js only — do NOT import this from middleware.ts (Edge Runtime)
-// Use verifySessionToken from @/lib/auth for Edge-compatible crypto-only verification.
+// Node.js only (better-sqlite3 is a native module) — safe to import from src/proxy.ts since
+// Next.js 16's Proxy always runs on the Node.js runtime (unlike the old Edge-only middleware).
 import { verifySessionToken, SESSION_COOKIE, type SessionPayload } from "@/lib/auth";
 import { sessionDb } from "@/lib/db";
 import type { NextRequest } from "next/server";
