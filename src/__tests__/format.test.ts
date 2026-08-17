@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { fmtSize, relativeTime, relDate, selectBio } from "@/lib/format";
+import { fmtSize, fmtEta, formatResumeTicks, relativeTime, relativeTimeAbs, relDate, selectBio } from "@/lib/format";
 import { createT } from "@/lib/i18n";
 import fr from "@/locales/fr.json";
 
@@ -40,6 +40,51 @@ describe("fmtSize", () => {
 
   it("caps at TB for very large values", () => {
     expect(fmtSize(1024 ** 5)).toMatch(/TB$/);
+  });
+});
+
+describe("formatResumeTicks", () => {
+  it("formats seconds-only durations without an hour segment", () => {
+    expect(formatResumeTicks(0)).toBe("0min00");
+    expect(formatResumeTicks(65 * 10_000_000)).toBe("1min05");
+  });
+
+  it("adds an hour segment past 60 minutes", () => {
+    expect(formatResumeTicks(3661 * 10_000_000)).toBe("1h01min01");
+  });
+});
+
+describe("fmtEta", () => {
+  it("returns — for zero, negative, or missing values", () => {
+    expect(fmtEta(0)).toBe("—");
+    expect(fmtEta(-10)).toBe("—");
+  });
+
+  it("returns — for qBittorrent's 8640000 'no estimate' sentinel and beyond", () => {
+    expect(fmtEta(8_640_000)).toBe("—");
+    expect(fmtEta(9_000_000)).toBe("—");
+  });
+
+  it("formats seconds-only durations under a minute", () => {
+    expect(fmtEta(45)).toBe("45s");
+  });
+
+  it("formats minutes, dropping the seconds", () => {
+    expect(fmtEta(125)).toBe("2min");
+  });
+
+  it("formats hours+minutes, dropping the seconds", () => {
+    expect(fmtEta(3725)).toBe("1h02");
+  });
+});
+
+describe("relativeTimeAbs", () => {
+  it("delegates to relativeTime using a Unix ms timestamp", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-08T12:00:00Z"));
+    const ts = Date.now() - 5 * 60_000;
+    expect(relativeTimeAbs(ts, t)).toBe("il y a 5 min");
+    vi.useRealTimers();
   });
 });
 

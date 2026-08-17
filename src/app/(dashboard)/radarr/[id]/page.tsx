@@ -40,6 +40,7 @@ import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
+import { canAutoSearchMovie } from "@/lib/mediaPermissions";
 import { useT } from "@/components/TranslationProvider";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
@@ -411,7 +412,7 @@ export default function RadarrMovieDetailPage() {
         )}
         {/* Guests only get the auto-search entry point when there's no file yet — a downloaded
             movie is a fact, not something to search for. Admins always keep it. */}
-        {(!isGuest || !movie.hasFile) && (
+        {canAutoSearchMovie(isGuest, movie.hasFile) && (
           <button className="btn-ghost px-3" onClick={triggerAutoSearch} disabled={autoSearching}>
             <RefreshCw size={16} className={autoSearching ? "animate-spin" : ""} /> {t('common.autoSearch')}
           </button>

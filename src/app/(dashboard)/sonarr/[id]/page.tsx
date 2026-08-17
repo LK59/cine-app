@@ -40,6 +40,7 @@ import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { posterUrl } from "@/lib/images";
 import { formatResumeTicks } from "@/lib/format";
 import { useRole } from "@/lib/useRole";
+import { canAutoSearchSeason } from "@/lib/mediaPermissions";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { WatchlistButton } from "@/components/WatchlistButton";
@@ -643,7 +644,7 @@ export default function SonarrSeriesDetailPage() {
                       {/* Guests only get the auto-search entry point when the season is missing
                           at least one episode file — a complete season is a fact, not something
                           to search for. Admins always keep it, regardless of completion. */}
-                      {(!isGuest || fileCount < seasonEpisodes.length) && (
+                      {canAutoSearchSeason(isGuest, fileCount, seasonEpisodes.length) && (
                         <button
                           className="btn-ghost px-2 py-1 text-xs"
                           onClick={() => triggerAutoSearch(seasonNumber)}
