@@ -16,12 +16,14 @@ export function SubtitleSearchModal({
   downloadEndpoint,
   downloadExtra,
   onClose,
+  onDownloaded,
 }: {
   title: string;
   searchEndpoint: string;
   downloadEndpoint: string;
   downloadExtra?: Record<string, unknown>;
   onClose: () => void;
+  onDownloaded?: () => void;
 }) {
   const { data, error, isLoading } = useSWR<{ data: BazarrSubtitleCandidate[] }>(
     searchEndpoint,
@@ -49,6 +51,7 @@ export function SubtitleSearchModal({
       }
       setDownloaded((prev) => new Set(prev).add(index));
       toast.success(t('modals.subtitles.downloadSuccess', { lang: candidate.language }));
+      onDownloaded?.();
     } catch (err) {
       setDownloadError(err instanceof Error ? err.message : t('modals.subtitles.unknown'));
       toast.error(t('modals.subtitles.downloadError'));

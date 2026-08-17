@@ -583,7 +583,8 @@
     "nothingPending": "Nichts ausstehend.",
     "missingLangs": "Fehlend: {langs}",
     "searchButton": "Suchen",
-    "modalTitle": "Untertitel · {title}"
+    "modalTitle": "Untertitel · {title}",
+    "loadMore": "Mehr laden"
   },
   "jackett": {
     "pageTitle": "Indexer",

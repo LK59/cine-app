@@ -67,14 +67,14 @@ export interface BazarrSubtitleCandidate {
 
 export const bazarr = {
   getStatus: () => fetchJson<{ data: any }>(`${url}/api/system/status`, { headers }),
-  getWantedMovies: () =>
+  getWantedMovies: (length = 25) =>
     fetchJson<{ data: BazarrWantedMovie[]; total: number }>(
-      `${url}/api/movies/wanted?start=0&length=25`,
+      `${url}/api/movies/wanted?start=0&length=${length}`,
       { headers }
     ),
-  getWantedEpisodes: () =>
+  getWantedEpisodes: (length = 25) =>
     fetchJson<{ data: BazarrWantedEpisode[]; total: number }>(
-      `${url}/api/episodes/wanted?start=0&length=25`,
+      `${url}/api/episodes/wanted?start=0&length=${length}`,
       { headers }
     ),
   getProviders: () => fetchJson<{ data: any[] }>(`${url}/api/providers`, { headers }),

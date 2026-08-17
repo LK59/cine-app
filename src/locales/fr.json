@@ -583,7 +583,8 @@
     "nothingPending": "Rien en attente.",
     "missingLangs": "Manque : {langs}",
     "searchButton": "Rechercher",
-    "modalTitle": "Sous-titres · {title}"
+    "modalTitle": "Sous-titres · {title}",
+    "loadMore": "Charger plus"
   },
   "jackett": {
     "pageTitle": "Indexeurs",

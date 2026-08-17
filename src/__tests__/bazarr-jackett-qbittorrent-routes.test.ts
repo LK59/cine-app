@@ -65,8 +65,10 @@ describe("GET /api/bazarr/wanted", () => {
     mockBazarr.getWantedMovies.mockResolvedValue([{ id: 1 }]);
     mockBazarr.getWantedEpisodes.mockResolvedValue([{ id: 2 }]);
     const { GET } = await import("@/app/api/bazarr/wanted/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     expect(body).toEqual({ movies: [{ id: 1 }], episodes: [{ id: 2 }] });
+    expect(mockBazarr.getWantedMovies).toHaveBeenCalledWith(25);
+    expect(mockBazarr.getWantedEpisodes).toHaveBeenCalledWith(25);
   });
 });
 

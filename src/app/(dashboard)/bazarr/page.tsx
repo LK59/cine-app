@@ -23,10 +23,17 @@ interface ActiveSearch {
   downloadExtra?: Record<string, unknown>;
 }
 
+const PAGE_SIZE = 25;
+
 export default function BazarrPage() {
   const { isGuest } = useRole();
   const t = useT();
-  const { data, error, isLoading } = useSWR<WantedResponse>("/api/bazarr/wanted", fetcher);
+  const [movieLength, setMovieLength] = useState(PAGE_SIZE);
+  const [episodeLength, setEpisodeLength] = useState(PAGE_SIZE);
+  const { data, error, isLoading, mutate } = useSWR<WantedResponse>(
+    `/api/bazarr/wanted?movieLength=${movieLength}&episodeLength=${episodeLength}`,
+    fetcher
+  );
   const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
 
   return (
@@ -78,6 +85,14 @@ export default function BazarrPage() {
                 ))}
               </ul>
             )}
+            {data.movies.data.length < data.movies.total && (
+              <button
+                className="btn-ghost mt-3 w-full justify-center text-xs"
+                onClick={() => setMovieLength((n) => n + PAGE_SIZE)}
+              >
+                {t('bazarr.loadMore')}
+              </button>
+            )}
           </div>
 
           <div className="card p-4">
@@ -123,6 +138,14 @@ export default function BazarrPage() {
                 ))}
               </ul>
             )}
+            {data.episodes.data.length < data.episodes.total && (
+              <button
+                className="btn-ghost mt-3 w-full justify-center text-xs"
+                onClick={() => setEpisodeLength((n) => n + PAGE_SIZE)}
+              >
+                {t('bazarr.loadMore')}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -134,6 +157,7 @@ export default function BazarrPage() {
           downloadEndpoint={activeSearch.downloadEndpoint}
           downloadExtra={activeSearch.downloadExtra}
           onClose={() => setActiveSearch(null)}
+          onDownloaded={() => mutate()}
         />
       )}
     </div>

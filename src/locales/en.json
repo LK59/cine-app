@@ -583,7 +583,8 @@
     "nothingPending": "Nothing pending.",
     "missingLangs": "Missing: {langs}",
     "searchButton": "Search",
-    "modalTitle": "Subtitles · {title}"
+    "modalTitle": "Subtitles · {title}",
+    "loadMore": "Load more"
   },
   "jackett": {
     "pageTitle": "Indexers",
