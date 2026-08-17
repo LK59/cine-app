@@ -5,6 +5,7 @@ import { sessionDb, userPrefsDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
+import { jellyseerr } from "@/lib/clients/jellyseerr";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -46,7 +47,24 @@ export async function POST(req: NextRequest) {
   const jellyfinToken: string = data.AccessToken ?? "";
   const role: Role = isAdmin ? "admin" : "guest";
 
-  const { token, jti } = await createSessionToken(jellyfinUsername, role, jellyfinUsername, jellyfinId, jellyfinToken);
+  // Logs into Jellyseerr AS this same user, with the same credentials they just used here — the
+  // only correct way to attribute a later request (e.g. from the "Demander" buttons) to them
+  // specifically, since Jellyseerr auto-links an account to this exact Jellyfin identity the
+  // first time it sees it (same mechanism as logging into Jellyseerr's own web UI). Best-effort:
+  // a Jellyseerr outage or misconfiguration must not block signing into cine-app itself, whose
+  // own auth is against Jellyfin, not Jellyseerr.
+  const jellyseerrCookie = config.jellyseerr.apiKey
+    ? await jellyseerr.login(username, password).catch(() => null)
+    : null;
+
+  const { token, jti } = await createSessionToken(
+    jellyfinUsername,
+    role,
+    jellyfinUsername,
+    jellyfinId,
+    jellyfinToken,
+    jellyseerrCookie ?? undefined
+  );
   const userId = jellyfinId || jellyfinUsername;
   sessionDb.create(jti, userId);
   const lang = userPrefsDb.getLang(userId, config.app.language);

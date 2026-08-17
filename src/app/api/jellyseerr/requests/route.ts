@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { withErrorHandling } from "@/lib/api-helpers";
-import { SESSION_COOKIE } from "@/lib/auth"
+import { SESSION_COOKIE, type SessionPayload } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { withCache } from "@/lib/server-cache";
 
 const USERS_TTL = 5 * 60_000; // 5 min — user list rarely changes
 
-async function getJellyseerrUsers() {
-  return withCache("jellyseerr:users", USERS_TTL, () => jellyseerr.getUsers());
+async function getJellyseerrUsers(cookie?: string) {
+  return withCache("jellyseerr:users", USERS_TTL, () => jellyseerr.getUsers(cookie));
 }
 
+// Legacy fallback (no session cookie — local-admin login, or the Jellyseerr login at sign-in
+// failed): resolves via the master API key's own user list, which this Jellyseerr fork may or
+// may not still permit depending on the calling key's own account permissions.
 async function resolveJellyseerrUserId(jfUser: string): Promise<number | undefined> {
   try {
     const usersData = await getJellyseerrUsers();
@@ -23,6 +26,16 @@ async function resolveJellyseerrUserId(jfUser: string): Promise<number | undefin
   }
 }
 
+// Own id via the session's own cookie — doesn't require the admin-gated full user list, just a
+// valid session for whoever is asking about themselves.
+async function resolveOwnUserId(session: SessionPayload): Promise<number | undefined> {
+  if (session.jsCookie) {
+    const me = await jellyseerr.getMe(session.jsCookie).catch(() => null);
+    if (me?.id) return me.id;
+  }
+  return session.jfUser ? resolveJellyseerrUserId(session.jfUser) : undefined;
+}
+
 export async function GET(req: NextRequest) {
   const filter = (req.nextUrl.searchParams.get("filter") as "pending" | "approved" | "all") || "pending";
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -30,15 +43,15 @@ export async function GET(req: NextRequest) {
 
   if (session?.role === "guest" && session.jfUser) {
     return withErrorHandling(async () => {
-      const jellyseerrUserId = await resolveJellyseerrUserId(session.jfUser!);
+      const jellyseerrUserId = await resolveOwnUserId(session);
       if (!jellyseerrUserId) return { results: [], pageInfo: { results: 0 } };
-      const data = await jellyseerr.getRequestsByUser(jellyseerrUserId);
+      const data = await jellyseerr.getRequestsByUser(jellyseerrUserId, session.jsCookie);
       return { ...data, results: await enrichRequests(data.results) };
     });
   }
 
   return withErrorHandling(async () => {
-    const data = await jellyseerr.getRequests(filter);
+    const data = await jellyseerr.getRequests(filter, session?.jsCookie);
     return { ...data, results: await enrichRequests(data.results) };
   });
 }
@@ -54,6 +67,13 @@ export async function POST(req: NextRequest) {
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
+
+  // With a session cookie, Jellyseerr already knows who's asking — no userId override needed
+  // (that override was itself the admin-only "request on behalf of" path this fork now blocks
+  // for anything but a genuinely authenticated session).
+  if (session?.jsCookie) {
+    return withErrorHandling(() => jellyseerr.createRequest(mediaType, mediaId, undefined, session.jsCookie));
+  }
 
   const jellyseerrUserId = session?.jfUser
     ? await resolveJellyseerrUserId(session.jfUser)

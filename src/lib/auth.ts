@@ -13,6 +13,12 @@ export interface SessionPayload {
   jfUser?: string;   // Jellyfin username — set when authenticated via Jellyfin SSO
   jfId?: string;     // Jellyfin user UUID — required for watch status operations
   jfToken?: string;  // Jellyfin access token — used for deep-link auth redirect
+  jsCookie?: string; // Jellyseerr session cookie (connect.sid value) — this fork requires a real
+                      // session for user-attributed actions (requests), the admin API key alone
+                      // is no longer sufficient. Obtained by also logging into Jellyseerr with
+                      // the same Jellyfin credentials at sign-in time (see /api/auth/jellyfin).
+                      // Absent for the local-admin login (no Jellyfin identity to authenticate
+                      // to Jellyseerr with) or if that login attempt failed.
 }
 
 function base64url(input: ArrayBuffer | Uint8Array): string {
@@ -62,7 +68,8 @@ export async function createSessionToken(
   role: Role,
   jellyfinUser?: string,
   jellyfinId?: string,
-  jellyfinToken?: string
+  jellyfinToken?: string,
+  jellyseerrCookie?: string
 ): Promise<{ token: string; jti: string }> {
   const jti = generateJti();
   const payload: SessionPayload = {
@@ -73,6 +80,12 @@ export async function createSessionToken(
     ...(jellyfinUser ? { jfUser: jellyfinUser } : {}),
     ...(jellyfinId ? { jfId: jellyfinId } : {}),
     ...(jellyfinToken ? { jfToken: jellyfinToken } : {}),
+    // cine-app's own session (7 days, MAX_AGE_SECONDS above) is deliberately shorter than
+    // Jellyseerr's own cookie lifetime (30 days, confirmed in seerr's own session middleware
+    // config) — a cine-app session can never legitimately outlive the Jellyseerr cookie it
+    // carries, so there's no expiry-mismatch case to handle: by the time this cookie could
+    // expire, the user will already have had to sign into cine-app (and thus Jellyseerr) again.
+    ...(jellyseerrCookie ? { jsCookie: jellyseerrCookie } : {}),
   };
   const encodedPayload = base64url(new TextEncoder().encode(JSON.stringify(payload)));
   const signature = await sign(encodedPayload);

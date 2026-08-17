@@ -2,7 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 vi.mock("@/lib/config", () => ({
-  config: { jellyfin: { url: "http://jellyfin.local" }, app: { cookieSecure: false, language: "fr" } },
+  config: {
+    jellyfin: { url: "http://jellyfin.local" },
+    jellyseerr: { url: "http://jellyseerr.local", apiKey: "seerr-key" },
+    app: { cookieSecure: false, language: "fr" },
+  },
+}));
+const mockJellyseerrLogin = vi.fn();
+vi.mock("@/lib/clients/jellyseerr", () => ({
+  jellyseerr: { login: (...args: unknown[]) => mockJellyseerrLogin(...args) },
 }));
 const mockCreateSessionToken = vi.fn();
 vi.mock("@/lib/auth", () => ({
@@ -29,6 +37,7 @@ beforeEach(() => {
   rateLimitOk = true;
   mockCreateSessionToken.mockResolvedValue({ token: "signed-token", jti: "jti-1" });
   mockUserPrefsDb.getLang.mockReturnValue("fr");
+  mockJellyseerrLogin.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -77,9 +86,28 @@ describe("POST /api/auth/jellyfin", () => {
     const body = await res.json();
 
     expect(body).toEqual({ ok: true, role: "admin" });
-    expect(mockCreateSessionToken).toHaveBeenCalledWith("louis", "admin", "louis", "jf-1", "jf-token");
+    expect(mockJellyseerrLogin).toHaveBeenCalledWith("louis", "x");
+    expect(mockCreateSessionToken).toHaveBeenCalledWith("louis", "admin", "louis", "jf-1", "jf-token", undefined);
     expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1");
     expect(res.cookies.get("cine_session")?.value).toBe("signed-token");
+  });
+
+  it("also logs into Jellyseerr with the same credentials and carries its session cookie", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        User: { Name: "louis", Id: "jf-1", Policy: { IsAdministrator: true } },
+        AccessToken: "jf-token",
+      }),
+    });
+    mockJellyseerrLogin.mockResolvedValue("s%3Aabc123.signature");
+
+    const { POST } = await import("@/app/api/auth/jellyfin/route");
+    await POST(fakeReq({ username: "louis", password: "x" }));
+
+    expect(mockCreateSessionToken).toHaveBeenCalledWith(
+      "louis", "admin", "louis", "jf-1", "jf-token", "s%3Aabc123.signature"
+    );
   });
 
   it("maps a non-administrator Jellyfin user to the guest role", async () => {

@@ -7,6 +7,7 @@ const mockJellyseerr = {
   getRequests: vi.fn(),
   getRequestsByUser: vi.fn(),
   getUsers: vi.fn(),
+  getMe: vi.fn(),
   approveRequest: vi.fn(),
   declineRequest: vi.fn(),
   createRequest: vi.fn(),
@@ -60,7 +61,7 @@ describe("GET /api/jellyseerr/my-requests", () => {
     mockJellyseerr.getRequests.mockResolvedValue({ results: [{ id: 1 }] });
     const { GET } = await import("@/app/api/jellyseerr/my-requests/route");
     const res = await GET(fakeReq());
-    expect(mockJellyseerr.getRequests).toHaveBeenCalledWith("all");
+    expect(mockJellyseerr.getRequests).toHaveBeenCalledWith("all", undefined);
     expect((await res.json()).results).toEqual([{ id: 1 }]);
   });
 
@@ -77,7 +78,7 @@ describe("GET /api/jellyseerr/my-requests", () => {
     mockJellyseerr.getRequestsByUser.mockResolvedValue({ results: [{ id: 9 }] });
     const { GET } = await import("@/app/api/jellyseerr/my-requests/route");
     const res = await GET(fakeReq());
-    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(5);
+    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(5, undefined);
     expect((await res.json()).results).toEqual([{ id: 9 }]);
   });
 
@@ -95,14 +96,14 @@ describe("POST /api/jellyseerr/requests/[id]", () => {
     mockJellyseerr.approveRequest.mockResolvedValue({ ok: true });
     const { POST } = await import("@/app/api/jellyseerr/requests/[id]/route");
     await POST(fakeReq({ body: { action: "approve" } }), { params: Promise.resolve({ id: "3" }) });
-    expect(mockJellyseerr.approveRequest).toHaveBeenCalledWith(3);
+    expect(mockJellyseerr.approveRequest).toHaveBeenCalledWith(3, undefined);
   });
 
   it("declines on action=decline", async () => {
     mockJellyseerr.declineRequest.mockResolvedValue({ ok: true });
     const { POST } = await import("@/app/api/jellyseerr/requests/[id]/route");
     await POST(fakeReq({ body: { action: "decline" } }), { params: Promise.resolve({ id: "3" }) });
-    expect(mockJellyseerr.declineRequest).toHaveBeenCalledWith(3);
+    expect(mockJellyseerr.declineRequest).toHaveBeenCalledWith(3, undefined);
   });
 
   it("returns 400 for an unknown action", async () => {
@@ -119,7 +120,7 @@ describe("GET /api/jellyseerr/requests", () => {
     mockJellyseerr.getRequestsByUser.mockResolvedValue({ results: [{ id: 1 }], pageInfo: { results: 1 } });
     const { GET } = await import("@/app/api/jellyseerr/requests/route");
     const res = await GET(fakeReq());
-    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(5);
+    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(5, undefined);
     expect(mockJellyseerr.getRequests).not.toHaveBeenCalled();
     expect((await res.json()).results).toEqual([{ id: 1 }]);
   });
@@ -138,7 +139,7 @@ describe("GET /api/jellyseerr/requests", () => {
     mockJellyseerr.getRequests.mockResolvedValue({ results: [], pageInfo: { results: 0 } });
     const { GET } = await import("@/app/api/jellyseerr/requests/route");
     await GET(fakeReq({ params: { filter: "approved" } }));
-    expect(mockJellyseerr.getRequests).toHaveBeenCalledWith("approved");
+    expect(mockJellyseerr.getRequests).toHaveBeenCalledWith("approved", undefined);
   });
 });
 
@@ -164,5 +165,14 @@ describe("POST /api/jellyseerr/requests", () => {
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
     expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined);
+  });
+
+  it("prefers the session's own Jellyseerr cookie over resolving a userId", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis", jsCookie: "s%3Asecret" });
+    mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
+    const { POST } = await import("@/app/api/jellyseerr/requests/route");
+    await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
+    expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined, "s%3Asecret");
+    expect(mockJellyseerr.getUsers).not.toHaveBeenCalled();
   });
 });
