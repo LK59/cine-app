@@ -302,7 +302,25 @@
     "sectionSeed": "Seed / Upload",
     "sectionPaused": "Pausés",
     "confirmDelete": "Supprimer ce torrent (fichiers conservés) ?",
-    "loadMore": "Charger 20 de plus"
+    "loadMore": "Charger 20 de plus",
+    "searchPlaceholder": "Rechercher un torrent…",
+    "noMatches": "Aucun torrent ne correspond à la recherche.",
+    "eta": "ETA",
+    "detail": {
+      "fullName": "Nom complet",
+      "path": "Fichier",
+      "status": "Statut",
+      "size": "Taille",
+      "down": "Vitesse descente",
+      "up": "Vitesse envoi",
+      "ratio": "Ratio",
+      "downloaded": "Total téléchargé",
+      "uploaded": "Total envoyé",
+      "age": "Ajouté",
+      "pause": "Pause",
+      "deleteFilesToo": "Supprimer aussi les fichiers du disque",
+      "confirmRemove": "Confirmer la suppression"
+    }
   },
   "health": {
     "pageTitle": "Santé système",

@@ -4,14 +4,15 @@ import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
-import { Pause, Play, Trash2, ArrowDown, ArrowUp } from "lucide-react";
+import { Pause, Play, Trash2, ArrowDown, ArrowUp, Search } from "lucide-react";
 import type { QbTorrent } from "@/lib/clients/qbittorrent";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useEffect, useMemo, useState } from "react";
+import { TorrentDetailModal } from "@/components/TorrentDetailModal";
 
-import { fmtSize as formatBytes } from "@/lib/format";
+import { fmtSize as formatBytes, fmtEta } from "@/lib/format";
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +43,8 @@ export default function QbittorrentPage() {
   const { isGuest } = useRole();
   const t = useT();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [query, setQuery] = useState("");
+  const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const { data: torrents, error, isLoading } = useSWR<QbTorrent[]>(
     "/api/qbittorrent/torrents",
     fetcher,
@@ -53,13 +56,19 @@ export default function QbittorrentPage() {
     { refreshInterval: INTERVALS.TORRENTS }
   );
 
-  const sortedTorrents = useMemo(() => sortTorrents(torrents ?? []), [torrents]);
+  const filteredTorrents = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return torrents ?? [];
+    return (torrents ?? []).filter((t) => t.name.toLowerCase().includes(q));
+  }, [torrents, query]);
+  const sortedTorrents = useMemo(() => sortTorrents(filteredTorrents), [filteredTorrents]);
   const visibleTorrents = sortedTorrents.slice(0, visibleCount);
   const hasMore = visibleCount < sortedTorrents.length;
+  const selectedTorrent = torrents?.find((t) => t.hash === selectedHash) ?? null;
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [torrents?.length]);
+  }, [query, torrents?.length]);
 
   async function action(hash: string, action: "pause" | "resume") {
     await fetch(`/api/qbittorrent/torrents/${hash}`, {
@@ -73,6 +82,12 @@ export default function QbittorrentPage() {
   async function remove(hash: string) {
     if (!confirm(t('qbittorrent.confirmDelete'))) return;
     await fetch(`/api/qbittorrent/torrents/${hash}?deleteFiles=false`, { method: "DELETE" });
+    mutate("/api/qbittorrent/torrents");
+  }
+
+  async function removeWithFiles(hash: string, deleteFiles: boolean) {
+    await fetch(`/api/qbittorrent/torrents/${hash}?deleteFiles=${deleteFiles}`, { method: "DELETE" });
+    setSelectedHash(null);
     mutate("/api/qbittorrent/torrents");
   }
 
@@ -93,6 +108,21 @@ export default function QbittorrentPage() {
 
       {torrents && torrents.length > 0 && (
         <div>
+          <div className="relative mb-3">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('qbittorrent.searchPlaceholder')}
+              className="input w-full pl-9"
+            />
+          </div>
+
+          {sortedTorrents.length === 0 ? (
+            <EmptyState label={t('qbittorrent.noMatches')} />
+          ) : (
+          <>
           <div className="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
             <span>
               {t('qbittorrent.showing', { n: String(visibleTorrents.length), total: String(sortedTorrents.length) })}
@@ -121,10 +151,13 @@ export default function QbittorrentPage() {
                   {sectionLabel}
                 </div>
               )}
-            <div className="flex items-center gap-4 p-3">
+            <div
+              className="flex cursor-pointer items-center gap-4 p-3 hover:bg-white/5"
+              onClick={() => setSelectedHash(torrent.hash)}
+            >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-white">{torrent.name}</p>
-                <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                   <span>{formatBytes(torrent.size)}</span>
                   <span className="flex items-center gap-1 text-emerald-400">
                     <ArrowDown size={12} /> {formatBytes(torrent.dlspeed)}/s
@@ -132,6 +165,7 @@ export default function QbittorrentPage() {
                   <span className="flex items-center gap-1 text-accent-400">
                     <ArrowUp size={12} /> {formatBytes(torrent.upspeed)}/s
                   </span>
+                  {curPriority === 0 && <span>{t('qbittorrent.eta')} {fmtEta(torrent.eta)}</span>}
                   <span className="capitalize">{torrent.state}</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800">
@@ -142,7 +176,7 @@ export default function QbittorrentPage() {
                 </div>
               </div>
               {!isGuest && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   {isPaused(torrent.state) ? (
                     <button onClick={() => action(torrent.hash, "resume")} className="btn-ghost px-2">
                       <Play size={14} />
@@ -173,7 +207,19 @@ export default function QbittorrentPage() {
               </button>
             </div>
           )}
+          </>
+          )}
         </div>
+      )}
+
+      {selectedTorrent && (
+        <TorrentDetailModal
+          torrent={selectedTorrent}
+          isGuest={isGuest}
+          onClose={() => setSelectedHash(null)}
+          onAction={action}
+          onRemove={removeWithFiles}
+        />
       )}
     </div>
   );

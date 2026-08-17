@@ -8,6 +8,17 @@ export function formatResumeTicks(ticks: number): string {
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}min${ss}` : `${m}min${ss}`;
 }
 
+/** Formats a qBittorrent ETA in seconds into a short label — qBittorrent uses 8640000 (100 days)
+ *  as a sentinel for "no estimate" (seeding, stalled, paused), which reads as "—" instead of days. */
+export function fmtEta(seconds: number): string {
+  if (!seconds || seconds <= 0 || seconds >= 8640000) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}`;
+  if (m > 0) return `${m}min`;
+  return `${seconds % 60}s`;
+}
+
 /** Formats a byte count into a human-readable string (e.g. 1.4 GB) */
 export function fmtSize(bytes: number): string {
   if (bytes <= 0) return "—";

@@ -302,7 +302,25 @@
     "sectionSeed": "Seed / Upload",
     "sectionPaused": "Pausiert",
     "confirmDelete": "Diesen Torrent löschen (Dateien behalten)?",
-    "loadMore": "20 weitere laden"
+    "loadMore": "20 weitere laden",
+    "searchPlaceholder": "Torrent suchen…",
+    "noMatches": "Kein Torrent entspricht der Suche.",
+    "eta": "ETA",
+    "detail": {
+      "fullName": "Vollständiger Name",
+      "path": "Datei",
+      "status": "Status",
+      "size": "Größe",
+      "down": "Download-Geschwindigkeit",
+      "up": "Upload-Geschwindigkeit",
+      "ratio": "Verhältnis",
+      "downloaded": "Insgesamt heruntergeladen",
+      "uploaded": "Insgesamt hochgeladen",
+      "age": "Hinzugefügt",
+      "pause": "Pause",
+      "deleteFilesToo": "Dateien auch von der Festplatte löschen",
+      "confirmRemove": "Löschen bestätigen"
+    }
   },
   "health": {
     "pageTitle": "Systemstatus",

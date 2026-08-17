@@ -98,6 +98,13 @@ export interface QbTorrent {
   size: number;
   eta: number;
   category: string;
+  ratio: number;
+  added_on: number;
+  uploaded: number;
+  downloaded: number;
+  content_path: string;
+  num_seeds: number;
+  num_leechs: number;
 }
 
 export const qbittorrent = {

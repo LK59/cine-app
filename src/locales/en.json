@@ -302,7 +302,25 @@
     "sectionSeed": "Seed / Upload",
     "sectionPaused": "Paused",
     "confirmDelete": "Remove this torrent (files kept)?",
-    "loadMore": "Load 20 more"
+    "loadMore": "Load 20 more",
+    "searchPlaceholder": "Search a torrent…",
+    "noMatches": "No torrent matches your search.",
+    "eta": "ETA",
+    "detail": {
+      "fullName": "Full name",
+      "path": "File",
+      "status": "Status",
+      "size": "Size",
+      "down": "Download speed",
+      "up": "Upload speed",
+      "ratio": "Ratio",
+      "downloaded": "Total downloaded",
+      "uploaded": "Total uploaded",
+      "age": "Added",
+      "pause": "Pause",
+      "deleteFilesToo": "Also delete files from disk",
+      "confirmRemove": "Confirm deletion"
+    }
   },
   "health": {
     "pageTitle": "System health",
