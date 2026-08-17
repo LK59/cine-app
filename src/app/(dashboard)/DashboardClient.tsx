@@ -10,13 +10,14 @@ import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LoadingState, EmptyState } from "@/components/StateViews";
-import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight } from "lucide-react";
+import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight, CirclePlus } from "lucide-react";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { DashboardHero } from "@/components/DashboardHero";
 import { RequestButton } from "@/components/RequestButton";
+import { RequestFlowModal } from "@/components/RequestFlowModal";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet } from "@/components/ActionSheet";
@@ -322,6 +323,11 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
 }
 
 function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: WatchlistItem; href: string | null; index: number; imdbRating: string | null }) {
+  const t = useT();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const lp = useLongPress(() => setSheetOpen(true));
   const poster = item.posterPath
     ? item.posterPath.startsWith("http") ? item.posterPath : `${TMDB_IMAGE_BASE}/w342${item.posterPath}`
     : null;
@@ -352,15 +358,43 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
     </Link>
   ) : (
     // Not in the library yet — a static, unclickable poster here was dead weight (nothing to
-    // open). Hover overlay with the same request action as the /watchlist page at least gives
-    // it a purpose; group-focus-within is the fallback for Tab-key access on devices without
-    // real hover.
-    <div className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none">
-      {body}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-        <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} title={item.title} />
+    // open). Desktop keeps the hover overlay (real :hover, plus group-focus-within as the Tab-key
+    // fallback) with the same RequestButton as the /watchlist page. Touch devices have no hover
+    // state at all, so that overlay was simply unreachable there — long-press (same gesture the
+    // resume/recent cards already use) opens a one-action ActionSheet instead, same underlying
+    // RequestFlowModal either way.
+    <>
+      <div {...lp} className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none">
+        {body}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+          <RequestButton mediaType={item.mediaType} tmdbId={item.tmdbId} title={item.title} />
+        </div>
       </div>
-    </div>
+      <ActionSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title={item.title}
+        subtitle={item.year ? String(item.year) : undefined}
+        poster={poster}
+        actions={[
+          {
+            label: requested ? t('common.requested') : t('common.request'),
+            icon: <CirclePlus size={16} />,
+            disabled: requested,
+            onClick: () => setRequestOpen(true),
+          },
+        ]}
+      />
+      {requestOpen && (
+        <RequestFlowModal
+          mediaType={item.mediaType}
+          tmdbId={item.tmdbId}
+          title={item.title}
+          onClose={() => setRequestOpen(false)}
+          onSuccess={() => setRequested(true)}
+        />
+      )}
+    </>
   );
 }
 
