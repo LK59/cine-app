@@ -1052,7 +1052,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className="pointer-events-none absolute top-0 h-1 rounded-full bg-white/25"
+                className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25"
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -1073,7 +1073,7 @@ export function PlayerControls({
               chapters.map((ch, i) => (
                 <div
                   key={i}
-                  className="pointer-events-none absolute top-0 h-1 w-px bg-black/50"
+                  className="pointer-events-none absolute top-1/2 h-1 w-px -translate-y-1/2 bg-black/50"
                   style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}
@@ -1161,11 +1161,15 @@ export function PlayerControls({
                 setPreviewTime(null);
                 setTimeout(() => showControls(5000), 0);
               }}
-              // m-0: native range inputs carry a small default margin in some engines' UA
-              // stylesheets that isn't reset by Tailwind's own base styles — left in place, the
-              // buffered/chapter overlays (positioned at a bare top: 0 in the same container)
-              // rendered visibly offset from the native track itself instead of flush with it.
-              className="m-0 block h-1 w-full cursor-pointer accent-accent-500"
+              // h-5 (20px), not h-1: the native range control keeps its visual groove thin and
+              // vertically centered regardless of the element's own box height, so a taller box
+              // only grows the invisible hit area — reported live as too easy to lose while
+              // trying to hold the mouse still on the bar to keep the trickplay preview up
+              // during a straight horizontal drag. m-0: native range inputs carry a small
+              // default margin in some engines' UA stylesheets that isn't reset by Tailwind's
+              // own base styles — left in place, that margin would throw off centering the
+              // buffered/chapter overlays on this taller box (see their top-1/2 above).
+              className="m-0 block h-5 w-full cursor-pointer accent-accent-500"
               style={{ WebkitTouchCallout: "none" }}
             />
           </div>
