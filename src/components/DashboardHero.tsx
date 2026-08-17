@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Info } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { HeroItem } from "@/app/api/dashboard/route";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
@@ -14,20 +14,60 @@ const BACKDROP_MASK =
   "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)";
 
 const ROTATE_MS = 8000;
+const HERO_INDEX_KEY = "cine:hero-index";
 
 export function DashboardHero({ items }: { items: HeroItem[] }) {
   const t = useT();
-  const [index, setIndex] = useState(0);
+  // The dashboard payload polls on an interval (see INTERVALS.FAST in DashboardClient) — every
+  // poll hands this a brand new `items` array even when the actual picks haven't changed, so
+  // resetting on array IDENTITY (the previous approach) snapped the hero back to index 0 every
+  // few seconds, not just on navigation. A content signature — which item ids are actually
+  // showing — only changes when the picks themselves genuinely change.
+  const itemsKey = items.map((it) => `${it.mediaType}:${it.id}`).join(",");
 
-  // Reset to the first item whenever a fresh dashboard refresh actually replaces the pick
-  // list — applied during render (not an effect) per React's guidance for adjusting state from
-  // a prop change; an index into a stale/reordered list would otherwise silently point at the
-  // wrong item.
-  const [resetForItems, setResetForItems] = useState(items);
-  if (items !== resetForItems) {
-    setResetForItems(items);
+  // Persisted across a full remount too (leaving the dashboard and coming back, a fresh page
+  // load in the same tab) — sessionStorage rather than localStorage: this is "where was I in
+  // the rotation", not a durable cross-device preference worth keeping forever.
+  const [index, setIndex] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(HERO_INDEX_KEY);
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw) as { key: string; index: number };
+      return parsed.key === itemsKey ? parsed.index : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  // Reset to the first item only when the picks THEMSELVES actually changed (see itemsKey
+  // above) — applied during render, not an effect, per React's guidance for adjusting state
+  // from a prop change.
+  const [resetForKey, setResetForKey] = useState(itemsKey);
+  if (itemsKey !== resetForKey) {
+    setResetForKey(itemsKey);
     setIndex(0);
   }
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(HERO_INDEX_KEY, JSON.stringify({ key: itemsKey, index }));
+    } catch {
+      // Storage unavailable — the rotation just won't survive a remount this time.
+    }
+  }, [itemsKey, index]);
+
+  // Pre-warms the browser's cache with every backdrop/logo up front — otherwise the very first
+  // time a given pick's segment is reached (auto-advance or a manual click), its image visibly
+  // loads in after the segment already switched. Re-runs only when the actual picks change
+  // (itemsKey), not on every poll — already-cached URLs make this a fast no-op anyway, but no
+  // reason to even try again every few seconds.
+  useEffect(() => {
+    for (const it of items) {
+      if (it.backdropUrl) Object.assign(new Image(), { src: it.backdropUrl });
+      if (it.logoUrl) Object.assign(new Image(), { src: it.logoUrl });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsKey]);
 
   // Re-armed on every index change — whether that came from this same timer firing or from a
   // manual segment click below — so a manual jump always gets its own full ROTATE_MS, instead
@@ -77,7 +117,7 @@ export function DashboardHero({ items }: { items: HeroItem[] }) {
 
         <div className="flex items-center gap-2">
           <Link href={item.href} className="btn-primary">
-            <Info size={16} /> {t('dashboard.heroMoreInfo')}
+            {t('common.viewSheet')} <ChevronRight size={16} />
           </Link>
         </div>
 

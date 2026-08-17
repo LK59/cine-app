@@ -21,6 +21,7 @@ import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/hooks/useLongPress";
+import { useTvGridNav } from "@/lib/useTvGridNav";
 import type { DashboardPayload, ServiceStatus, ActivityItem, ResumeItem, RecentItem, TorrentItem } from "@/app/api/dashboard/route";
 import type { DiskStats } from "@/lib/disk-stats";
 import type { WatchlistItem } from "@/lib/db";
@@ -72,7 +73,9 @@ function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
   );
 }
 
-function ResumeCard({ item }: { item: ResumeItem }) {
+const TV_NAV_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+
+function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
   const router = useRouter();
   const t = useT();
   const playback = usePlayback();
@@ -144,7 +147,10 @@ function ResumeCard({ item }: { item: ResumeItem }) {
         <Link
           {...lp}
           href={item.cinemaHref}
-          className="card w-36 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 sm:w-40 touch-manipulation select-none"
+          data-tv-card
+          data-tv-row="resume"
+          data-tv-col={index}
+          className={`card w-36 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 sm:w-40 touch-manipulation select-none ${TV_NAV_RING}`}
         >
           {cardBody}
         </Link>
@@ -171,14 +177,21 @@ function ResumeCard({ item }: { item: ResumeItem }) {
   );
 }
 
-function RecentMovieCard({ m }: { m: RecentItem }) {
+function RecentMovieCard({ m, index }: { m: RecentItem; index: number }) {
   const router = useRouter();
   const t = useT();
   const [open, setOpen] = useState(false);
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link {...lp} href={`/radarr/${m.id}`} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
+      <Link
+        {...lp}
+        href={`/radarr/${m.id}`}
+        data-tv-card
+        data-tv-row="recent-movies"
+        data-tv-col={index}
+        className={`card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
+      >
         <div className="relative">
           <PosterImage src={m.posterUrl} alt={m.title} />
           {m.imdbRating && <ImdbBadge rating={m.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
@@ -202,14 +215,21 @@ function RecentMovieCard({ m }: { m: RecentItem }) {
   );
 }
 
-function RecentSeriesCard({ s }: { s: RecentItem }) {
+function RecentSeriesCard({ s, index }: { s: RecentItem; index: number }) {
   const router = useRouter();
   const t = useT();
   const [open, setOpen] = useState(false);
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link {...lp} href={`/sonarr/${s.id}`} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none">
+      <Link
+        {...lp}
+        href={`/sonarr/${s.id}`}
+        data-tv-card
+        data-tv-row="recent-series"
+        data-tv-col={index}
+        className={`card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
+      >
         <div className="relative">
           <PosterImage src={s.posterUrl} alt={s.title} />
           {s.imdbRating && <ImdbBadge rating={s.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
@@ -259,7 +279,7 @@ function ResumeSection({ items }: { items: ResumeItem[] }) {
     <>
       <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.resumeWatching')}</h2>
       <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
-        {items.map((item) => <ResumeCard key={item.id} item={item} />)}
+        {items.map((item, i) => <ResumeCard key={item.id} item={item} index={i} />)}
       </HorizontalCarousel>
     </>
   );
@@ -280,7 +300,7 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
             </Link>
           </div>
           <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
-            {movies.map((m) => <RecentMovieCard key={m.id} m={m} />)}
+            {movies.map((m, i) => <RecentMovieCard key={m.id} m={m} index={i} />)}
           </HorizontalCarousel>
         </div>
       )}
@@ -293,7 +313,7 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
             </Link>
           </div>
           <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
-            {series.map((s) => <RecentSeriesCard key={s.id} s={s} />)}
+            {series.map((s, i) => <RecentSeriesCard key={s.id} s={s} index={i} />)}
           </HorizontalCarousel>
         </div>
       )}
@@ -301,7 +321,7 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
   );
 }
 
-function WatchlistTeaserCard({ item, href, imdbRating }: { item: WatchlistItem; href: string | null; imdbRating: string | null }) {
+function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: WatchlistItem; href: string | null; index: number; imdbRating: string | null }) {
   const poster = item.posterPath
     ? item.posterPath.startsWith("http") ? item.posterPath : `${TMDB_IMAGE_BASE}/w342${item.posterPath}`
     : null;
@@ -321,7 +341,13 @@ function WatchlistTeaserCard({ item, href, imdbRating }: { item: WatchlistItem; 
   // wish-list entry with nothing downloaded yet has no sheet of its own to open, same fallback
   // as ResumeCard for items without a cinemaHref.
   return href ? (
-    <Link href={href} className="card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none">
+    <Link
+      href={href}
+      data-tv-card
+      data-tv-row="watchlist"
+      data-tv-col={index}
+      className={`card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
+    >
       {body}
     </Link>
   ) : (
@@ -357,7 +383,7 @@ function WatchlistSection() {
         </Link>
       </div>
       <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
-        {items.slice(0, 20).map((item) => {
+        {items.slice(0, 20).map((item, i) => {
           const id = item.mediaType === "movie" ? libMap?.movieMap[item.tmdbId] : libMap?.seriesMap[item.tmdbId];
           const href = id ? (item.mediaType === "movie" ? `/radarr/${id}` : `/sonarr/${id}`) : null;
           return (
@@ -365,6 +391,7 @@ function WatchlistSection() {
               key={`${item.mediaType}:${item.tmdbId}`}
               item={item}
               href={href}
+              index={i}
               imdbRating={ratingsMap?.[`${item.mediaType}:${item.tmdbId}`] ?? null}
             />
           );
@@ -538,6 +565,7 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
     refreshInterval: INTERVALS.FAST,
     fallbackData: initialData,
   });
+  useTvGridNav();
 
   return (
     <div>

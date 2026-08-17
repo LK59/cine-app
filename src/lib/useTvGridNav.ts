@@ -1,0 +1,88 @@
+"use client";
+
+import { useEffect } from "react";
+
+// TV-remote-style arrow-key navigation across the home page's poster carousels — deliberately
+// NOT built as a React-state-tracked cursor (compare useListKeyNav.ts, which drives a single
+// linear list via j/k on the radarr/sonarr pages): with several independent rows of cards each
+// owned by their own component, tracking "which row/col is focused" as shared state would mean
+// threading that state (and a re-render on every arrow press) through every card. Native DOM
+// focus already gives all of that for free — the browser tracks "what's focused", moves the
+// natural :focus-visible ring with it, and Enter already activates a focused <a>/<button> with
+// zero extra code. This hook's only job is deciding which element to move focus TO.
+//
+// Cards opt in by rendering data-tv-card + data-tv-row (any shared string per row, e.g.
+// "resume", "recent-movies") + data-tv-col (its index within that row) on their outer focusable
+// element (an <a> or <button> — never a plain <div>, so Enter/click already just works).
+function isInputFocused(): boolean {
+  const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
+}
+
+function getRows(): HTMLElement[][] {
+  const all = Array.from(document.querySelectorAll<HTMLElement>("[data-tv-card]"));
+  const byRow = new Map<string, HTMLElement[]>();
+  for (const el of all) {
+    const row = el.dataset.tvRow ?? "";
+    if (!byRow.has(row)) byRow.set(row, []);
+    byRow.get(row)!.push(el);
+  }
+  for (const cards of byRow.values()) {
+    cards.sort((a, b) => Number(a.dataset.tvCol) - Number(b.dataset.tvCol));
+  }
+  // Ordered by actual on-screen position, not insertion order — a row conditionally absent
+  // this render (e.g. no resume items) just doesn't appear, no gap-in-sequence bookkeeping needed.
+  return [...byRow.values()].sort((a, b) => a[0].getBoundingClientRect().top - b[0].getBoundingClientRect().top);
+}
+
+function focusCard(el: HTMLElement) {
+  el.focus();
+  el.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+}
+
+export function useTvGridNav() {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (isInputFocused()) return;
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+
+      const rows = getRows();
+      if (rows.length === 0) return;
+
+      const active = document.activeElement as HTMLElement | null;
+      const activeRowIdx = active ? rows.findIndex((r) => r.includes(active)) : -1;
+
+      // Nothing focused in the grid yet — Down/Right from wherever the user was jumps straight
+      // into the first card, so the very first press already does something useful.
+      if (activeRowIdx === -1) {
+        if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+          e.preventDefault();
+          focusCard(rows[0][0]);
+        }
+        return;
+      }
+
+      const row = rows[activeRowIdx];
+      const colIdx = row.indexOf(active!);
+
+      if (e.key === "ArrowLeft" && colIdx > 0) {
+        e.preventDefault();
+        focusCard(row[colIdx - 1]);
+      } else if (e.key === "ArrowRight" && colIdx < row.length - 1) {
+        e.preventDefault();
+        focusCard(row[colIdx + 1]);
+      } else if (e.key === "ArrowUp" && activeRowIdx > 0) {
+        e.preventDefault();
+        const target = rows[activeRowIdx - 1];
+        focusCard(target[Math.min(colIdx, target.length - 1)]);
+      } else if (e.key === "ArrowDown" && activeRowIdx < rows.length - 1) {
+        e.preventDefault();
+        const target = rows[activeRowIdx + 1];
+        focusCard(target[Math.min(colIdx, target.length - 1)]);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+}
