@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { bazarr } from "@/lib/clients/bazarr";
@@ -8,6 +8,9 @@ import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { tmdb } from "@/lib/clients/tmdb";
 import { omdb } from "@/lib/clients/omdb";
+import { getJellyseerrPendingCount } from "@/lib/jellyseerr-scope";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 
 interface ServiceStatus {
   name: string;
@@ -25,7 +28,8 @@ async function probe(name: string, fn: () => Promise<{ detail?: string; stats?: 
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const results = await Promise.all([
     probe("radarr", async () => {
       const [status, movies, missing, queue] = await Promise.all([
@@ -74,13 +78,15 @@ export async function GET() {
       };
     }),
     probe("jellyseerr", async () => {
-      const [status, pending] = await Promise.all([
+      // Admin sees the instance-wide pending count; anyone else only their own — same scoping
+      // as the dashboard's own services card (see jellyseerr-scope.ts).
+      const [status, pendingCount] = await Promise.all([
         jellyseerr.getStatus(),
-        jellyseerr.getRequests("pending"),
+        getJellyseerrPendingCount(session),
       ]);
       return {
         detail: `v${status.version}`,
-        stats: { "Demandes en attente": pending.pageInfo?.results ?? pending.results.length },
+        stats: { "Demandes en attente": pendingCount },
       };
     }),
     probe("qbittorrent", async () => {

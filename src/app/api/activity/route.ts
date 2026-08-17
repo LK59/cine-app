@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
-import { jellyseerr } from "@/lib/clients/jellyseerr";
+import { getJellyseerrActivityItems } from "@/lib/jellyseerr-scope";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 
 export interface ActivityItem {
   id: string;
@@ -28,11 +30,13 @@ const SONARR_EVENT_LABELS: Record<string, string> = {
   downloadFailed: "Téléchargement échoué",
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const [radarrHistory, sonarrHistory, jellyseerrRequests] = await Promise.all([
     radarr.getHistory(15).catch(() => ({ records: [] })),
     sonarr.getHistory(15).catch(() => ({ records: [] })),
-    jellyseerr.getRequests("all").catch(() => ({ results: [] })),
+    // Admin sees everyone's requests; anyone else only their own — see jellyseerr-scope.ts.
+    getJellyseerrActivityItems(session, 15),
   ]);
 
   const items: ActivityItem[] = [];
@@ -64,7 +68,7 @@ export async function GET() {
     });
   }
 
-  for (const req of jellyseerrRequests.results.slice(0, 15)) {
+  for (const req of jellyseerrRequests) {
     items.push({
       id: `jellyseerr-${req.id}`,
       date: req.createdAt,

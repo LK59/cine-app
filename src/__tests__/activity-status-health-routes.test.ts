@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { NextRequest } from "next/server";
 
 const mockRadarr = { getHistory: vi.fn(), getSystemStatus: vi.fn(), getMovies: vi.fn(), getMissingCount: vi.fn(), getQueueCount: vi.fn() };
 const mockSonarr = { getHistory: vi.fn(), getSystemStatus: vi.fn(), getSeries: vi.fn(), getMissingCount: vi.fn(), getQueueCount: vi.fn() };
-const mockJellyseerr = { getRequests: vi.fn(), getStatus: vi.fn() };
+const mockJellyseerr = { getRequests: vi.fn(), getRequestsByUser: vi.fn(), getMe: vi.fn(), getStatus: vi.fn() };
 const mockBazarr = { getWantedMovies: vi.fn(), getWantedEpisodes: vi.fn() };
 const mockJackett = { getIndexers: vi.fn() };
 const mockJellyfin = { getSystemInfo: vi.fn(), getLibraryCounts: vi.fn(), getSessions: vi.fn() };
@@ -29,12 +30,23 @@ vi.mock("@/lib/config", () => ({
     qbittorrent: { url: "http://qbit.local" },
   },
 }));
+vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+const mockVerifySessionFull = vi.fn();
+vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
+
+function fakeReq(): NextRequest {
+  return { cookies: { get: () => undefined } } as unknown as NextRequest;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockRadarr.getHistory.mockResolvedValue({ records: [] });
   mockSonarr.getHistory.mockResolvedValue({ records: [] });
   mockJellyseerr.getRequests.mockResolvedValue({ results: [] });
+  // Admin by default — the pre-existing tests below care about the general shape of the
+  // response, not the admin/self scoping (covered separately in jellyseerr-scope.test.ts),
+  // and admin is the branch that matches their original (pre-scoping) getRequests-based mocks.
+  mockVerifySessionFull.mockResolvedValue({ role: "admin" });
 });
 
 describe("GET /api/activity", () => {
@@ -46,7 +58,7 @@ describe("GET /api/activity", () => {
       records: [{ id: 2, date: "2024-06-01T00:00:00Z", eventType: "downloadFolderImported", sourceTitle: "New" }],
     });
     const { GET } = await import("@/app/api/activity/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     expect(body.map((i: { id: string }) => i.id)).toEqual(["sonarr-2", "radarr-1"]);
   });
 });
@@ -75,7 +87,7 @@ describe("GET /api/status", () => {
     mockOmdb.checkKey.mockResolvedValue({ Response: "True" });
 
     const { GET } = await import("@/app/api/status/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     const radarrStatus = body.find((s: { name: string }) => s.name === "radarr");
     expect(radarrStatus).toMatchObject({ up: false, detail: "ECONNREFUSED" });
   });
@@ -103,7 +115,7 @@ describe("GET /api/status", () => {
     mockOmdb.checkKey.mockResolvedValue({ Response: "True" });
 
     const { GET } = await import("@/app/api/status/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
     const tmdbStatus = body.find((s: { name: string }) => s.name === "tmdb");
     expect(tmdbStatus).toMatchObject({ up: false, detail: "Clé API non configurée (TMDB_API_KEY)" });
   });

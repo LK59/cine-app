@@ -17,6 +17,8 @@ import { posterUrl, backdropUrl } from "@/lib/images";
 import { config } from "@/lib/config";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { getTitleLogo } from "@/lib/title-logo";
+import { getJellyseerrPendingCount, getJellyseerrActivityItems } from "@/lib/jellyseerr-scope";
+import type { SessionPayload } from "@/lib/auth";
 
 // Checked before any network call so "not configured" never gets confused
 // with "configured but unreachable" — both would otherwise surface as the
@@ -116,7 +118,7 @@ export interface DashboardPayload {
 
 // ─── Service status probe ─────────────────────────────────────────────────────
 
-async function probeServices(): Promise<ServiceStatus[]> {
+async function probeServices(session: SessionPayload | null): Promise<ServiceStatus[]> {
   return Promise.all([
     probe("radarr", async () => {
       if (!config.radarr.apiKey) throw notConfigured("RADARR_API_KEY");
@@ -160,8 +162,11 @@ async function probeServices(): Promise<ServiceStatus[]> {
     }),
     probe("jellyseerr", async () => {
       if (!config.jellyseerr.apiKey) throw notConfigured("JELLYSEERR_API_KEY");
-      const [status, pending] = await Promise.all([jellyseerr.getStatus(), jellyseerr.getRequests("pending")]);
-      return { detail: `v${status.version}`, stats: { "Demandes en attente": pending.pageInfo?.results ?? pending.results.length } };
+      // Admin sees the instance-wide pending count (what they're there to manage); anyone else
+      // sees only their own — this fork gates listing other users' requests behind admin
+      // permissions anyway, matching the same per-user session-cookie auth used for requests.
+      const [status, pendingCount] = await Promise.all([jellyseerr.getStatus(), getJellyseerrPendingCount(session)]);
+      return { detail: `v${status.version}`, stats: { "Demandes en attente": pendingCount } };
     }),
     probe("qbittorrent", async () => {
       if (!config.qbittorrent.password) throw notConfigured("QBITTORRENT_PASSWORD");
@@ -211,11 +216,13 @@ const SONARR_LABELS: Record<string, string> = {
   episodeFileDeleted: "Supprimé", downloadFailed: "Téléchargement échoué",
 };
 
-async function fetchActivity(): Promise<ActivityItem[]> {
-  const [rH, sH, jsR] = await Promise.all([
+async function fetchActivity(session: SessionPayload | null): Promise<ActivityItem[]> {
+  const [rH, sH, jsRequests] = await Promise.all([
     radarr.getHistory(15).catch(() => ({ records: [] })),
     sonarr.getHistory(15).catch(() => ({ records: [] })),
-    jellyseerr.getRequests("all").catch(() => ({ results: [] })),
+    // Admin sees everyone's requests (with who asked, matching the requester name shown below);
+    // anyone else only sees their own — same reasoning as the pending-count widget above.
+    getJellyseerrActivityItems(session, 15),
   ]);
   const items: ActivityItem[] = [];
   for (const r of rH.records) {
@@ -224,7 +231,7 @@ async function fetchActivity(): Promise<ActivityItem[]> {
   for (const r of sH.records) {
     items.push({ id: `sonarr-${r.id}`, date: r.date, source: "sonarr", type: SONARR_LABELS[r.eventType] ?? r.eventType, title: r.series?.title ?? r.sourceTitle, detail: r.episode ? `S${String(r.episode.seasonNumber).padStart(2,"0")}E${String(r.episode.episodeNumber).padStart(2,"0")}` : undefined, href: r.series?.id ? `/sonarr/${r.series.id}` : undefined });
   }
-  for (const req of jsR.results.slice(0, 15)) {
+  for (const req of jsRequests) {
     items.push({ id: `jellyseerr-${req.id}`, date: req.createdAt, source: "jellyseerr", type: "Demande", title: req.media.title ?? "Demande média", detail: req.requestedBy?.displayName ?? req.requestedBy?.username, href: "/jellyseerr" });
   }
   items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -422,11 +429,15 @@ function getDiskSection(): DashboardSection<DiskStats> {
 // caches in server-cache.ts, so calling this a second time from the page is
 // normally a cache hit, not a duplicate fetch.
 export async function buildDashboardPayload(
-  session: { jfId?: string } | null
+  session: SessionPayload | null
 ): Promise<DashboardPayload> {
+  // services/activity now carry Jellyseerr data scoped to whoever's asking (admin vs their own
+  // requests only — see jellyseerr-scope.ts), so the cache can no longer be a single shared
+  // entry for every viewer; keyed per-user like the resume cache below already was.
+  const viewerKey = session?.jfId ?? "anon";
   const [services, activity, hero, recentMovies, recentSeries, torrents] = await Promise.all([
-    withCacheSafe("dashboard:services",      TTL.SHORT,      probeServices),
-    withCacheSafe("dashboard:activity",      TTL.MEDIUM,     fetchActivity),
+    withCacheSafe(`dashboard:services:${viewerKey}`, TTL.SHORT,      () => probeServices(session)),
+    withCacheSafe(`dashboard:activity:${viewerKey}`, TTL.MEDIUM,     () => fetchActivity(session)),
     withCacheSafe("dashboard:hero",          TTL.MEDIUM,     fetchHero),
     withCacheSafe("dashboard:recent:movies", TTL.MEDIUM,     fetchRecentMovies),
     withCacheSafe("dashboard:recent:series", TTL.MEDIUM,     fetchRecentSeries),
