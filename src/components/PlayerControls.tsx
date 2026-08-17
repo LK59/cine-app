@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { useT } from "@/components/TranslationProvider";
 
 export interface Track {
   id: number;
@@ -40,11 +41,14 @@ interface PlayerControlsProps {
 const NEXT_UP_COUNTDOWN_S = 10;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const VOLUME_STORAGE_KEY = "cine:player-volume";
+// labelKey, not a literal string — SUBTITLE_SIZES is a module-level constant (evaluated once,
+// outside any component), so it can't call the useT() hook itself; each label is resolved via
+// t(`player.${labelKey}`) at render time instead.
 const SUBTITLE_SIZES = [
-  { label: "Petite", value: 0.75 },
-  { label: "Normale", value: 1 },
-  { label: "Grande", value: 1.3 },
-  { label: "Très grande", value: 1.6 },
+  { labelKey: "subtitleSizeSmall", value: 0.75 },
+  { labelKey: "subtitleSizeNormal", value: 1 },
+  { labelKey: "subtitleSizeLarge", value: 1.3 },
+  { labelKey: "subtitleSizeXLarge", value: 1.6 },
 ];
 const SUBTITLE_SIZE_KEY = "cine:subtitle-size";
 
@@ -79,6 +83,7 @@ export function PlayerControls({
   nextEpisode,
   onAdvance,
 }: PlayerControlsProps) {
+  const t = useT();
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -680,7 +685,7 @@ export function PlayerControls({
             right: "max(1rem, env(safe-area-inset-right))",
           }}
         >
-          Passer l&rsquo;intro
+          {t('player.skipIntro')}
         </button>
       )}
 
@@ -692,11 +697,11 @@ export function PlayerControls({
             right: "max(1rem, env(safe-area-inset-right))",
           }}
         >
-          <p className="mb-1 text-xs text-slate-400">Épisode suivant · {nextUpCountdown}s</p>
+          <p className="mb-1 text-xs text-slate-400">{t('player.nextEpisodeIn', { n: nextUpCountdown })}</p>
           <p className="mb-3 truncate text-sm font-medium text-white">{nextEpisode.title}</p>
           <div className="flex gap-2">
             <button onClick={onAdvance} className="btn-primary flex-1 justify-center py-1.5 text-xs">
-              Lire maintenant
+              {t('player.playNow')}
             </button>
             <button
               onClick={() => setNextUpDismissed(true)}
@@ -762,7 +767,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 setMenu(menu === "more" ? null : "more");
               }}
-              title="Plus d'options"
+              title={t('player.moreOptions')}
               className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "more" ? "bg-white/20" : "bg-white/10"}`}
             >
               <EllipsisVertical size={18} />
@@ -772,7 +777,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 handleMinimizeClick();
               }}
-              title="Réduire"
+              title={t('player.minimize')}
               className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
             >
               <ChevronDown size={20} />
@@ -813,21 +818,21 @@ export function PlayerControls({
                   }}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  <Info size={16} /> Infos techniques
+                  <Info size={16} /> {t('player.playbackInfo')}
                 </button>
                 {chapters.length > 0 && (
                   <button
                     onClick={() => setMenu("chapters")}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
-                    <ListVideo size={16} /> Chapitres
+                    <ListVideo size={16} /> {t('player.chapters')}
                   </button>
                 )}
                 <button
                   onClick={() => setMenu("speed")}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                 >
-                  <Gauge size={16} /> Vitesse{speed !== 1 ? ` · ${speed}x` : ""}
+                  <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
                 {castSupported && (
                   <button
@@ -837,26 +842,26 @@ export function PlayerControls({
                     }}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
-                    <Cast size={16} /> Diffuser (AirPlay/Chromecast)
+                    <Cast size={16} /> {t('player.cast')}
                   </button>
                 )}
                 {subtitleTracks.length > 0 && (
                   <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-2 text-sm text-white">
                     <span className="flex items-center gap-3">
-                      <Captions size={16} /> Taille sous-titres
+                      <Captions size={16} /> {t('player.subtitleSize')}
                     </span>
                     <button
                       onClick={cycleSubtitleSize}
                       className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
                     >
-                      {SUBTITLE_SIZES.find((s) => s.value === subtitleSize)?.label}
+                      {t(`player.${SUBTITLE_SIZES.find((s) => s.value === subtitleSize)?.labelKey ?? "subtitleSizeNormal"}`)}
                     </button>
                   </div>
                 )}
                 {subtitleTracks.length > 0 && currentSubtitleId !== null && (
                   <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
                     <span className="flex items-center gap-3">
-                      <Captions size={16} /> Décalage
+                      <Captions size={16} /> {t('player.subtitleOffset')}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -885,7 +890,7 @@ export function PlayerControls({
                 onClick={() => setMenu("more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
               >
-                <ArrowLeft size={14} /> Retour
+                <ArrowLeft size={14} /> {t('common.back')}
               </button>
             )}
             {(menu === "audio" || menu === "subtitles") &&
@@ -914,7 +919,7 @@ export function PlayerControls({
                   currentSubtitleId === null ? "text-accent-400" : "text-white"
                 }`}
               >
-                Aucun
+                {t('player.none')}
               </button>
             )}
             {menu === "speed" &&
@@ -926,7 +931,7 @@ export function PlayerControls({
                     speed === rate ? "text-accent-400" : "text-white"
                   }`}
                 >
-                  {rate === 1 ? "Normale" : `${rate}x`}
+                  {rate === 1 ? t('player.speedNormal') : `${rate}x`}
                 </button>
               ))}
             {menu === "chapters" &&
@@ -982,7 +987,7 @@ export function PlayerControls({
                 skip(-10);
               }}
               className="rounded-full bg-black/40 p-3 text-white hover:bg-black/60"
-              title="Reculer de 10s"
+              title={t('player.rewind10')}
             >
               <RotateCcw size={22} />
             </button>
@@ -1001,7 +1006,7 @@ export function PlayerControls({
                 skip(10);
               }}
               className="rounded-full bg-black/40 p-3 text-white hover:bg-black/60"
-              title="Avancer de 10s"
+              title={t('player.forward10')}
             >
               <RotateCw size={22} />
             </button>

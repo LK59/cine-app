@@ -381,7 +381,7 @@ function ActivePlayer({
       loadWatchdog.current = setTimeout(() => {
         setReconnecting(false);
         setLoading(false);
-        setError("Le chargement prend trop de temps. Réessaie.");
+        setError(t('player.loadingTooLong'));
       }, 20_000);
 
       // Subtitles always come from the PlaybackInfo response as external VTT tracks (rendered
@@ -439,7 +439,7 @@ function ActivePlayer({
 
       const { default: Hls } = await import("hls.js");
       if (!Hls.isSupported()) {
-        setError("Ce navigateur ne peut pas lire ce flux.");
+        setError(t('player.unsupportedBrowser'));
         setLoading(false);
         return;
       }
@@ -480,7 +480,7 @@ function ActivePlayer({
             if (networkRetryCount.current >= MAX_NETWORK_RETRIES) {
               setReconnecting(false);
               setLoading(false);
-              setError("La lecture a été interrompue. Vérifie ta connexion et réessaie.");
+              setError(t('player.playbackInterruptedCheckConnection'));
               return;
             }
             networkRetryCount.current += 1;
@@ -497,7 +497,7 @@ function ActivePlayer({
             if (mediaRetryCount.current >= MAX_MEDIA_RETRIES) {
               setReconnecting(false);
               setLoading(false);
-              setError("La lecture a été interrompue. Réessaie.");
+              setError(t('player.playbackInterrupted'));
               return;
             }
             mediaRetryCount.current += 1;
@@ -508,12 +508,16 @@ function ActivePlayer({
           default:
             setReconnecting(false);
             setLoading(false);
-            setError("La lecture a été interrompue. Réessaie.");
+            setError(t('player.playbackInterrupted'));
         }
       });
       hls.loadSource(data.manifestUrl);
       hls.attachMedia(video);
     },
+    // t (from useT()) only changes on a locale switch mid-playback, an edge case not worth
+    // recreating this whole callback for — deps deliberately narrowed to itemId already (see
+    // startPlaybackRef's own comment below for why).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [itemId]
   );
 
@@ -787,10 +791,13 @@ function ActivePlayer({
       }
       setReconnecting(false);
       setLoading(false);
-      setError("La lecture a été interrompue. Réessaie.");
+      setError(t('player.playbackInterrupted'));
     }
     video.addEventListener("error", onError);
     return () => video.removeEventListener("error", onError);
+    // t (from useT()) only changes on a locale switch mid-playback, not worth re-binding this
+    // listener for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoKey, itemId, title, reloadAttempt]);
 
   // Browser-level connectivity, independent of hls.js's own retry state — shows the "Vous êtes
@@ -854,12 +861,12 @@ function ActivePlayer({
       {needsReauth ? (
         <div className="flex h-full items-center justify-center px-6 text-center">
           <div>
-            <p className="mb-4 text-sm text-white">Ta session Jellyfin a expiré.</p>
+            <p className="mb-4 text-sm text-white">{t('player.sessionExpired')}</p>
             <a
               href={`/login?reason=playback&next=${encodeURIComponent(window.location.pathname)}`}
               className="btn-primary inline-flex justify-center"
             >
-              Se reconnecter
+              {t('player.reconnect')}
             </a>
           </div>
         </div>
@@ -891,10 +898,10 @@ function ActivePlayer({
                     onClick={handleClose}
                     className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
                   >
-                    Quitter
+                    {t('player.quit')}
                   </button>
                   <button type="button" onClick={handleRetry} className="btn-primary inline-flex justify-center">
-                    Réessayer
+                    {t('common.retry')}
                   </button>
                 </div>
               </div>
@@ -904,10 +911,10 @@ function ActivePlayer({
             <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-[max(1rem,env(safe-area-inset-bottom))]">
               <div className="rounded-full bg-black/80 px-4 py-1.5 text-center text-xs text-white shadow-lg ring-1 ring-white/10">
                 {isOffline
-                  ? "Vous êtes hors ligne"
+                  ? t('player.offline')
                   : loadingLong
-                    ? "Le chargement est toujours en cours, ne fermez pas le lecteur…"
-                    : "Reconnexion…"}
+                    ? t('player.stillLoading')
+                    : t('player.reconnecting')}
               </div>
             </div>
           )}
