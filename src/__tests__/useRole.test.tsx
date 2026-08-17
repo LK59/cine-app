@@ -27,12 +27,12 @@ afterEach(() => {
 });
 
 describe("useRole", () => {
-  it("defaults to a loading-safe shape before the fetch resolves", () => {
+  it("defaults to the most restrictive shape before the fetch resolves — isGuest true even for an eventual admin", () => {
     mockMeResponse({ role: "admin", username: "louis", jfId: "abc", jfUser: "louis" });
     const { result } = renderHook(() => useRole(), { wrapper });
 
     expect(result.current.role).toBeUndefined();
-    expect(result.current.isGuest).toBe(false);
+    expect(result.current.isGuest).toBe(true);
     expect(result.current.jfId).toBeNull();
     expect(result.current.jfUser).toBeNull();
   });
