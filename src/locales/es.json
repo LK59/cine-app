@@ -537,7 +537,14 @@
       "seedCopy": "copia seed",
       "activeSeed": "seed activo",
       "activeSeedHint": "Un torrent correspondiente sigue activo en qBittorrent: elimínalo ahí primero, o el archivo reaparecerá o una recomprobación fallará.",
-      "beta": "Beta"
+      "beta": "Beta",
+      "forecastTitle": "Previsión de saturación",
+      "forecastGrowing": "~{days} días antes de saturarse al ritmo actual (+{rate}/semana)",
+      "forecastGrowingSoon": "Menos de una semana antes de saturarse al ritmo actual (+{rate}/semana)",
+      "forecastStable": "Uso estable — sin tendencia de crecimiento clara en {days} días",
+      "forecastShrinking": "El espacio usado está disminuyendo actualmente",
+      "forecastInsufficientData": "Historial insuficiente para una previsión — vuelve en unos días",
+      "forecastAdminOnly": "Solo administradores"
     }
   },
   "calendar": {

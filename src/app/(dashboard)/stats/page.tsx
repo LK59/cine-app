@@ -12,11 +12,33 @@ import type { PeopleStats } from "@/app/api/stats/people/route";
 import type { StorageStats } from "@/app/api/stats/storage/route";
 import { fmtSize, relativeTimeAbs } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
+import { useRole } from "@/lib/useRole";
+import type { DiskForecast } from "@/lib/diskForecast";
 
 interface DiskStats {
   moviesBytes: number;
   tvBytes: number;
   disk: { total: number; used: number; free: number };
+}
+
+function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
+  const t = useT();
+  if (!forecast) return null;
+
+  if (forecast.trend === "insufficient_data") {
+    return <p className="text-xs text-slate-600">{t('stats.storage.forecastInsufficientData')}</p>;
+  }
+  if (forecast.trend === "shrinking") {
+    return <p className="text-xs text-emerald-400">{t('stats.storage.forecastShrinking')}</p>;
+  }
+  if (forecast.trend === "stable") {
+    return <p className="text-xs text-slate-500">{t('stats.storage.forecastStable', { days: String(forecast.windowDays) })}</p>;
+  }
+  const ratePerWeek = fmtSize((forecast.growthBytesPerDay ?? 0) * 7);
+  const days = forecast.daysUntilFull ?? 0;
+  const key = days < 7 ? 'stats.storage.forecastGrowingSoon' : 'stats.storage.forecastGrowing';
+  const color = days < 14 ? "text-red-400" : days < 45 ? "text-amber-400" : "text-slate-400";
+  return <p className={`text-xs ${color}`}>{t(key, { days: String(days), rate: ratePerWeek })}</p>;
 }
 
 function qualityBucket(name: string): string {
@@ -139,7 +161,7 @@ function ListCard({ icon: Icon, iconColor, title, count, emptyLabel, children }:
   );
 }
 
-function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
+function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: StorageStats; onRefresh: () => void; forecast: DiskForecast | undefined; isAdmin: boolean }) {
   const t = useT();
   const movieMax = Math.max(storage.movieFiles.total, 1);
   const seriesMax = Math.max(storage.seriesFiles.total, 1);
@@ -167,6 +189,13 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
           </button>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="card mb-5 p-4">
+          <h3 className="mb-1.5 text-sm font-semibold text-slate-300">{t('stats.storage.forecastTitle')}</h3>
+          <ForecastLine forecast={forecast} />
+        </div>
+      )}
 
       <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-4 space-y-3">
@@ -296,6 +325,8 @@ const CHART_H = 120;
 
 export default function StatsPage() {
   const t = useT();
+  const { role } = useRole();
+  const isAdmin = role === "admin";
   const { data: lib, error: libError, isLoading, mutate: retryLib } = useSWR<LibraryStats>(
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
@@ -305,6 +336,12 @@ export default function StatsPage() {
   // so the client needs to keep checking back until the first computation lands.
   const { data: people } = useSWR<PeopleStats>("/api/stats/people", fetcher, { refreshInterval: INTERVALS.SLOW });
   const { data: storage, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: INTERVALS.SLOW });
+  // Admin-only, both server- (403 for guests) and client-gated — null key skips the fetch entirely.
+  const { data: forecast } = useSWR<DiskForecast>(
+    isAdmin ? "/api/stats/storage-forecast" : null,
+    fetcher,
+    { refreshInterval: INTERVALS.SLOW }
+  );
 
   async function handleStorageRefresh() {
     await fetch("/api/stats/storage?refresh=1");
@@ -394,12 +431,19 @@ export default function StatsPage() {
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes))}</span>
                   <span className="ml-auto text-slate-500">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
                 </div>
+                {isAdmin && (
+                  <div className="mt-3 border-t border-white/5 pt-3">
+                    <ForecastLine forecast={forecast} />
+                  </div>
+                )}
               </div>
             </section>
           )}
 
           {/* Storage cleanup */}
-          {storage && storage.computedAt > 0 && <StorageSection storage={storage} onRefresh={handleStorageRefresh} />}
+          {storage && storage.computedAt > 0 && (
+            <StorageSection storage={storage} onRefresh={handleStorageRefresh} forecast={forecast} isAdmin={isAdmin} />
+          )}
 
           {/* Monthly additions */}
           <section className="mb-8">

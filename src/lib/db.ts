@@ -153,6 +153,17 @@ function migrate(db: Database.Database): void {
       checked_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_capability_checks ON capability_checks (capability, checked_at);
+
+    -- Periodic disk usage samples — see src/lib/diskForecast.ts. Sampled hourly rather than at
+    -- service_checks' 60s cadence: disk usage moves slowly, and a saturation forecast needs
+    -- weeks of history, not fine-grained recent noise.
+    CREATE TABLE IF NOT EXISTS disk_usage_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      used_bytes  INTEGER NOT NULL,
+      total_bytes INTEGER NOT NULL,
+      recorded_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_disk_usage_history ON disk_usage_history (recorded_at);
   `);
 }
 
@@ -519,6 +530,24 @@ export const statusHistoryDb = {
     const db = getDb();
     db.prepare("DELETE FROM service_checks WHERE checked_at < ?").run(cutoff);
     db.prepare("DELETE FROM capability_checks WHERE checked_at < ?").run(cutoff);
+  },
+};
+
+// ─── Disk usage history (see src/lib/diskForecast.ts) ──────────────────────────
+
+export const diskUsageDb = {
+  record(usedBytes: number, totalBytes: number, recordedAt: number): void {
+    getDb().prepare("INSERT INTO disk_usage_history (used_bytes, total_bytes, recorded_at) VALUES (?, ?, ?)").run(usedBytes, totalBytes, recordedAt);
+  },
+
+  getHistory(sinceMs: number): { usedBytes: number; totalBytes: number; recordedAt: number }[] {
+    return getDb()
+      .prepare("SELECT used_bytes as usedBytes, total_bytes as totalBytes, recorded_at as recordedAt FROM disk_usage_history WHERE recorded_at >= ? ORDER BY recorded_at ASC")
+      .all(sinceMs) as { usedBytes: number; totalBytes: number; recordedAt: number }[];
+  },
+
+  cleanup(maxAgeMs: number): void {
+    getDb().prepare("DELETE FROM disk_usage_history WHERE recorded_at < ?").run(Date.now() - maxAgeMs);
   },
 };
 
