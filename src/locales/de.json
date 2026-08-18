@@ -541,10 +541,10 @@
       "forecastTitle": "Sättigungsprognose",
       "forecastGrowing": "~{days} Tage bis zur Sättigung beim aktuellen Tempo (+{rate}/Woche)",
       "forecastGrowingSoon": "Weniger als eine Woche bis zur Sättigung beim aktuellen Tempo (+{rate}/Woche)",
-      "forecastStable": "Stabile Nutzung — kein klarer Wachstumstrend über {days} Tage",
-      "forecastShrinking": "Der belegte Speicherplatz nimmt derzeit ab",
+      "forecastStable": "Stabile Nutzung — kein klarer Wachstumstrend über die letzten {months} Monate",
       "forecastInsufficientData": "Noch nicht genug Verlauf für eine Prognose — in ein paar Tagen erneut prüfen",
-      "forecastAdminOnly": "Nur für Administratoren"
+      "forecastAdminOnly": "Nur für Administratoren",
+      "monthlyGrowthLabel": "GB pro Monat hinzugefügt (letzte 12 Monate)"
     }
   },
   "calendar": {

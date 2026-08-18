@@ -30,6 +30,11 @@ interface FileStat {
   dev: number;
   ino: number;
   nlink: number;
+  /** mtime survives hardlinking (both links share the same inode) — this is when the file was
+   *  actually downloaded/completed, not when it was last linked into the library. Used to derive
+   *  "how many GB got added per month" straight from what's already on disk, with no separate
+   *  history to wait weeks for (see monthlyGrowth in StorageStats below). */
+  mtimeMs: number;
 }
 
 interface SeedFile extends FileStat {
@@ -73,6 +78,9 @@ export interface StorageStats {
     releases: { name: string; relativePath: string; sizeBytes: number; inLibrary: boolean }[];
   }[];
   heaviestH264: { type: "movie" | "series"; title: string; sizeBytes: number }[];
+  /** Library file bytes bucketed by the month they were added (file mtime), oldest first,
+   *  "YYYY-MM" keyed to match the app's other monthly charts. Covers the last 12 months. */
+  monthlyGrowth: { month: string; bytes: number }[];
 }
 
 function normalizeReleaseTitle(raw: string): string {
@@ -131,7 +139,7 @@ async function walk(root: string, depth = 0, maxDepth = 8): Promise<FileStat[]> 
       const full = path.join(root, e.name);
       try {
         const st = await fs.stat(full);
-        return { name: e.name, relPath: path.relative(MEDIA_ROOT, full), size: st.size, dev: st.dev, ino: st.ino, nlink: st.nlink };
+        return { name: e.name, relPath: path.relative(MEDIA_ROOT, full), size: st.size, dev: st.dev, ino: st.ino, nlink: st.nlink, mtimeMs: st.mtimeMs };
       } catch {
         return null;
       }
@@ -444,6 +452,8 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
 
   notHardlinked.sort((a, b) => b.sizeBytes - a.sizeBytes);
 
+  const monthlyGrowth = computeMonthlyGrowth([...movieItems, ...seriesItems]);
+
   return {
     computedAt: Date.now(),
     error: null,
@@ -455,7 +465,41 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     crossSeedByTracker,
     duplicates,
     heaviestH264: heaviestH264Top,
+    monthlyGrowth,
   };
+}
+
+const MONTHLY_GROWTH_MONTHS = 12;
+
+function monthKey(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Buckets library file bytes by the month they were added (mtime), for the last
+ *  MONTHLY_GROWTH_MONTHS months — including months with zero additions, so callers get a
+ *  fixed-length, chronologically contiguous series without having to fill gaps themselves. */
+function computeMonthlyGrowth(items: LibraryItem[]): { month: string; bytes: number }[] {
+  const now = new Date();
+  const buckets = new Map<string, number>();
+  for (let i = MONTHLY_GROWTH_MONTHS - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    buckets.set(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, 0);
+  }
+
+  const oldestKey = [...buckets.keys()][0];
+  for (const item of items) {
+    for (const f of item.files) {
+      const key = monthKey(f.mtimeMs);
+      // Anything older than the tracked window collapses into "before the chart" — irrelevant
+      // to a recent monthly-growth rate, and Map insertion order would otherwise put it first
+      // instead of dropping it.
+      if (key < oldestKey) continue;
+      if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + f.size);
+    }
+  }
+
+  return [...buckets.entries()].map(([month, bytes]) => ({ month, bytes }));
 }
 
 // ─── Internal state (fire-and-forget cache, mirrors disk-stats.ts) ────────────
@@ -469,6 +513,7 @@ const EMPTY: Omit<StorageStats, "computing" | "computedAt" | "error"> = {
   crossSeedByTracker: [],
   duplicates: [],
   heaviestH264: [],
+  monthlyGrowth: [],
 };
 
 let cached: Omit<StorageStats, "computing"> | null = null;

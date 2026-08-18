@@ -21,6 +21,8 @@ interface DiskStats {
   disk: { total: number; used: number; free: number };
 }
 
+const AVG_DAYS_PER_MONTH = 30.44;
+
 function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   const t = useT();
   if (!forecast) return null;
@@ -28,17 +30,42 @@ function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   if (forecast.trend === "insufficient_data") {
     return <p className="text-xs text-slate-600">{t('stats.storage.forecastInsufficientData')}</p>;
   }
-  if (forecast.trend === "shrinking") {
-    return <p className="text-xs text-emerald-400">{t('stats.storage.forecastShrinking')}</p>;
-  }
   if (forecast.trend === "stable") {
-    return <p className="text-xs text-slate-500">{t('stats.storage.forecastStable', { days: String(forecast.windowDays) })}</p>;
+    return <p className="text-xs text-slate-500">{t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) })}</p>;
   }
-  const ratePerWeek = fmtSize((forecast.growthBytesPerDay ?? 0) * 7);
+  const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * AVG_DAYS_PER_MONTH);
   const days = forecast.daysUntilFull ?? 0;
   const key = days < 7 ? 'stats.storage.forecastGrowingSoon' : 'stats.storage.forecastGrowing';
   const color = days < 14 ? "text-red-400" : days < 45 ? "text-amber-400" : "text-slate-400";
-  return <p className={`text-xs ${color}`}>{t(key, { days: String(days), rate: ratePerWeek })}</p>;
+  return <p className={`text-xs ${color}`}>{t(key, { days: String(days), rate })}</p>;
+}
+
+function MonthlyGrowthChart({ monthlyGrowth }: { monthlyGrowth: { month: string; bytes: number }[] }) {
+  const t = useT();
+  const max = Math.max(...monthlyGrowth.map((m) => m.bytes), 1);
+  const chartH = 60;
+
+  return (
+    <div className="mt-3 border-t border-white/5 pt-3">
+      <p className="mb-2 text-[11px] text-slate-500">{t('stats.storage.monthlyGrowthLabel')}</p>
+      <div className="flex items-end gap-1" style={{ height: `${chartH + 16}px` }}>
+        {monthlyGrowth.map((m) => {
+          const barPx = m.bytes > 0 ? Math.max(2, Math.round((m.bytes / max) * chartH)) : 0;
+          return (
+            <div key={m.month} className="group relative flex flex-1 flex-col items-center gap-1">
+              {m.bytes > 0 && (
+                <div className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  {fmtSize(m.bytes)}
+                </div>
+              )}
+              <div className="w-full rounded-t-sm bg-accent-500/70" style={{ height: `${barPx}px` }} />
+              <span className="text-[9px] text-slate-600 leading-none">{monthLabel(m.month, t)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function qualityBucket(name: string): string {
@@ -194,6 +221,9 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
         <div className="card mb-5 p-4">
           <h3 className="mb-1.5 text-sm font-semibold text-slate-300">{t('stats.storage.forecastTitle')}</h3>
           <ForecastLine forecast={forecast} />
+          {forecast && forecast.monthlyGrowth.some((m) => m.bytes > 0) && (
+            <MonthlyGrowthChart monthlyGrowth={forecast.monthlyGrowth} />
+          )}
         </div>
       )}
 

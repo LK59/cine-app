@@ -541,10 +541,10 @@
       "forecastTitle": "Saturation forecast",
       "forecastGrowing": "~{days} days until full at the current rate (+{rate}/week)",
       "forecastGrowingSoon": "Less than a week until full at the current rate (+{rate}/week)",
-      "forecastStable": "Stable usage — no clear growth trend over {days} days",
-      "forecastShrinking": "Used space is currently decreasing",
+      "forecastStable": "Stable usage — no clear growth trend over the last {months} months",
       "forecastInsufficientData": "Not enough history for a forecast yet — check back in a few days",
-      "forecastAdminOnly": "Admins only"
+      "forecastAdminOnly": "Admins only",
+      "monthlyGrowthLabel": "GB added per month (last 12 months)"
     }
   },
   "calendar": {

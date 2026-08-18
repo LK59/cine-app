@@ -541,10 +541,10 @@
       "forecastTitle": "Previsión de saturación",
       "forecastGrowing": "~{days} días antes de saturarse al ritmo actual (+{rate}/semana)",
       "forecastGrowingSoon": "Menos de una semana antes de saturarse al ritmo actual (+{rate}/semana)",
-      "forecastStable": "Uso estable — sin tendencia de crecimiento clara en {days} días",
-      "forecastShrinking": "El espacio usado está disminuyendo actualmente",
+      "forecastStable": "Uso estable — sin tendencia de crecimiento clara en los últimos {months} meses",
       "forecastInsufficientData": "Historial insuficiente para una previsión — vuelve en unos días",
-      "forecastAdminOnly": "Solo administradores"
+      "forecastAdminOnly": "Solo administradores",
+      "monthlyGrowthLabel": "GB añadidos por mes (últimos 12 meses)"
     }
   },
   "calendar": {

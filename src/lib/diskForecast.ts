@@ -1,68 +1,51 @@
 import { getDiskStats } from "@/lib/disk-stats";
-import { diskUsageDb } from "@/lib/db";
+import { getStorageStats } from "@/lib/storage-scan";
 
-const WINDOW_MS = 21 * 24 * 3600_000; // 3 weeks of history — recent enough to reflect current
-                                        // habits, long enough to smooth out one heavy download day.
-const MIN_SAMPLES = 3;
-// Below this, a slope is just measurement noise — showing a "347 days left" estimate off three
-// nearly-identical samples would be more misleading than saying nothing.
+// Below this, a slope is just measurement noise — showing a "347 days left" estimate off a
+// couple of near-empty months would be more misleading than saying nothing.
 const MIN_GROWTH_BYTES_PER_DAY = 50 * 1024 * 1024; // 50 MB/day
+const AVG_DAYS_PER_MONTH = 30.44;
+// How many recent complete months feed the average — long enough to smooth over one unusually
+// quiet or heavy month, short enough to still reflect current habits rather than the library's
+// entire history.
+const MONTHS_FOR_AVERAGE = 3;
 
-export type ForecastTrend = "growing" | "stable" | "shrinking" | "insufficient_data";
+export type ForecastTrend = "growing" | "stable" | "insufficient_data";
 
 export interface DiskForecast {
   trend: ForecastTrend;
   growthBytesPerDay: number | null;
   daysUntilFull: number | null;
-  sampleCount: number;
-  windowDays: number;
+  monthlyGrowth: { month: string; bytes: number }[];
+  monthsUsed: number;
 }
 
-/** Takes a fresh disk-usage sample and stores it — call periodically (see statusCron.ts), not
- *  on every request; disk usage moves slowly enough that hourly is already generous. */
-export function recordDiskUsageSample(): void {
-  const stats = getDiskStats();
-  if (stats.disk.total <= 0 || stats.disk.used < 0) return; // df failed — nothing usable to record
-  diskUsageDb.record(stats.disk.used, stats.disk.total, Date.now());
-}
-
-/** Least-squares linear regression of used-bytes over time — robust to a single noisy sample in
- *  a way a naive "first vs last point" comparison wouldn't be. */
-function linearRegressionSlope(points: { x: number; y: number }[]): number {
-  const n = points.length;
-  const sumX = points.reduce((s, p) => s + p.x, 0);
-  const sumY = points.reduce((s, p) => s + p.y, 0);
-  const meanX = sumX / n;
-  const meanY = sumY / n;
-  let num = 0;
-  let den = 0;
-  for (const p of points) {
-    num += (p.x - meanX) * (p.y - meanY);
-    den += (p.x - meanX) ** 2;
-  }
-  return den === 0 ? 0 : num / den; // bytes per ms
-}
-
+/** Derives a saturation forecast straight from what's already on disk — how many GB got added
+ *  per month, from each library file's own mtime (see monthlyGrowth in storage-scan.ts) —
+ *  instead of waiting weeks to accumulate a fresh sampling history. Available the moment the
+ *  storage scan itself has run once. */
 export function computeDiskForecast(): DiskForecast {
-  const windowDays = WINDOW_MS / (24 * 3600_000);
-  const history = diskUsageDb.getHistory(Date.now() - WINDOW_MS);
+  const storage = getStorageStats();
+  const disk = getDiskStats();
+  const monthlyGrowth = storage.monthlyGrowth;
 
-  if (history.length < MIN_SAMPLES) {
-    return { trend: "insufficient_data", growthBytesPerDay: null, daysUntilFull: null, sampleCount: history.length, windowDays };
+  // The current month is still in progress — including it would understate the real monthly
+  // rate (e.g. "3 GB so far" on the 2nd of the month reads as a near-empty month).
+  const nowMonth = monthlyGrowth[monthlyGrowth.length - 1]?.month;
+  const completeMonths = nowMonth ? monthlyGrowth.filter((m) => m.month !== nowMonth) : monthlyGrowth;
+  const recentMonths = completeMonths.slice(-MONTHS_FOR_AVERAGE).filter((m) => m.bytes > 0);
+
+  if (recentMonths.length === 0 || disk.disk.total <= 0) {
+    return { trend: "insufficient_data", growthBytesPerDay: null, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length };
   }
 
-  const slopePerMs = linearRegressionSlope(history.map((h) => ({ x: h.recordedAt, y: h.usedBytes })));
-  const growthBytesPerDay = slopePerMs * 24 * 3600_000;
-  const latest = history[history.length - 1];
-  const freeBytes = latest.totalBytes - latest.usedBytes;
+  const avgBytesPerMonth = recentMonths.reduce((s, m) => s + m.bytes, 0) / recentMonths.length;
+  const growthBytesPerDay = avgBytesPerMonth / AVG_DAYS_PER_MONTH;
 
-  if (Math.abs(growthBytesPerDay) < MIN_GROWTH_BYTES_PER_DAY) {
-    return { trend: "stable", growthBytesPerDay, daysUntilFull: null, sampleCount: history.length, windowDays };
-  }
-  if (growthBytesPerDay < 0) {
-    return { trend: "shrinking", growthBytesPerDay, daysUntilFull: null, sampleCount: history.length, windowDays };
+  if (growthBytesPerDay < MIN_GROWTH_BYTES_PER_DAY) {
+    return { trend: "stable", growthBytesPerDay, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length };
   }
 
-  const daysUntilFull = Math.round(freeBytes / growthBytesPerDay);
-  return { trend: "growing", growthBytesPerDay, daysUntilFull, sampleCount: history.length, windowDays };
+  const daysUntilFull = Math.round(disk.disk.free / growthBytesPerDay);
+  return { trend: "growing", growthBytesPerDay, daysUntilFull, monthlyGrowth, monthsUsed: recentMonths.length };
 }

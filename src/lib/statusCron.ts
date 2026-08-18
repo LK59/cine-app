@@ -1,13 +1,11 @@
 import { runAllServiceChecks, computeCapabilities } from "@/lib/healthChecks";
-import { statusHistoryDb, diskUsageDb } from "@/lib/db";
-import { recordDiskUsageSample } from "@/lib/diskForecast";
+import { statusHistoryDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 
 // 60s gives incident detection (see statusHistory.ts) fine enough granularity to tell a brief
 // container restart apart from a real outage — a longer interval would blur the two together.
 const POLL_INTERVAL_MS = 60_000;
 const RETENTION_MS = 35 * 24 * 3600_000;
-const DISK_RETENTION_MS = 90 * 24 * 3600_000;
 
 export async function runStatusPoll(): Promise<void> {
   try {
@@ -29,24 +27,17 @@ export async function runStatusPoll(): Promise<void> {
   }
 }
 
-function hourlyTick(): void {
+function cleanupStatusHistory(): void {
   try {
     statusHistoryDb.cleanup(RETENTION_MS);
   } catch (err) {
     logError("status.cleanup", err);
-  }
-  try {
-    recordDiskUsageSample();
-    diskUsageDb.cleanup(DISK_RETENTION_MS);
-  } catch (err) {
-    logError("status.diskSample", err);
   }
 }
 
 export function startStatusCron(): void {
   const startupDelay = setTimeout(() => {
     runStatusPoll();
-    recordDiskUsageSample();
   }, 10_000);
   startupDelay.unref?.();
 
@@ -55,8 +46,8 @@ export function startStatusCron(): void {
   }, POLL_INTERVAL_MS);
   pollInterval.unref?.();
 
-  const hourlyInterval = setInterval(hourlyTick, 3600_000);
-  hourlyInterval.unref?.();
+  const cleanupInterval = setInterval(cleanupStatusHistory, 3600_000);
+  cleanupInterval.unref?.();
 }
 
 export { POLL_INTERVAL_MS };
