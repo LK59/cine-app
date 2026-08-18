@@ -21,8 +21,6 @@ interface DiskStats {
   disk: { total: number; used: number; free: number };
 }
 
-const AVG_DAYS_PER_MONTH = 30.44;
-
 function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   const t = useT();
   if (!forecast) return null;
@@ -33,7 +31,7 @@ function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   if (forecast.trend === "stable") {
     return <p className="text-xs text-slate-500">{t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) })}</p>;
   }
-  const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * AVG_DAYS_PER_MONTH);
+  const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * 7);
   const days = forecast.daysUntilFull ?? 0;
   const key = days < 7 ? 'stats.storage.forecastGrowingSoon' : 'stats.storage.forecastGrowing';
   const color = days < 14 ? "text-red-400" : days < 45 ? "text-amber-400" : "text-slate-400";

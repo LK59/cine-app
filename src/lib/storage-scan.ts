@@ -488,8 +488,17 @@ function computeMonthlyGrowth(items: LibraryItem[]): { month: string; bytes: num
   }
 
   const oldestKey = [...buckets.keys()][0];
+  // A hardlinked file can legitimately show up under more than one library path (e.g. the same
+  // episode file linked into both a season folder and a "complete series" pack) — (dev, ino)
+  // identifies the actual physical file regardless of how many names point at it, so each one
+  // is only ever counted once here.
+  const seenInodes = new Set<string>();
   for (const item of items) {
     for (const f of item.files) {
+      const inodeKey = `${f.dev}:${f.ino}`;
+      if (seenInodes.has(inodeKey)) continue;
+      seenInodes.add(inodeKey);
+
       const key = monthKey(f.mtimeMs);
       // Anything older than the tracked window collapses into "before the chart" — irrelevant
       // to a recent monthly-growth rate, and Map insertion order would otherwise put it first
