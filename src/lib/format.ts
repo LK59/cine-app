@@ -1,3 +1,18 @@
+// hour12: false rather than relying on the browser locale to pick 24h — the locale can still be
+// en-US-flavored (region/OS setting) even when the app itself is in French, which otherwise
+// silently reintroduces AM/PM.
+const TIME_OPTS: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false };
+
+/** Formats a Date/timestamp/ISO string as a 24h HH:MM time, regardless of the browser's locale/region. */
+export function fmtTime(d: Date | number | string): string {
+  return new Date(d).toLocaleTimeString([], TIME_OPTS);
+}
+
+/** Formats a Date/timestamp/ISO string as a 24h date + time, regardless of the browser's locale/region. */
+export function fmtDateTime(d: Date | number | string): string {
+  return new Date(d).toLocaleString([], { ...TIME_OPTS, day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 /** Formats Jellyfin ticks (100ns units) into a resume-point label (e.g. "23min05", "1h04min12") */
 export function formatResumeTicks(ticks: number): string {
   const totalSeconds = Math.floor(ticks / 10_000_000);

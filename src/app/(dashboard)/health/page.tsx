@@ -5,21 +5,18 @@ import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/StateViews";
 import type { ServiceHealth } from "@/app/api/health/route";
-import { CircleCheckBig, AlertTriangle, CircleX, RefreshCw, Loader2 } from "lucide-react";
+import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench } from "lucide-react";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useState, useCallback } from "react";
 import { useT } from "@/components/TranslationProvider";
+import { useRole } from "@/lib/useRole";
+import { fmtTime } from "@/lib/format";
+import { CapabilitySection, StatusIcon, OVERALL_STYLE } from "@/components/CapabilityStatus";
 
 interface HealthResponse {
   overall: "ok" | "degraded" | "down";
   checkedAt: string;
   services: ServiceHealth[];
-}
-
-function StatusIcon({ status }: { status: ServiceHealth["status"] }) {
-  if (status === "ok")       return <CircleCheckBig   size={16} className="text-emerald-400" />;
-  if (status === "degraded") return <AlertTriangle size={16} className="text-amber-400" />;
-  return                            <CircleX       size={16} className="text-red-400" />;
 }
 
 function LatencyBar({ ms }: { ms: number | null }) {
@@ -35,12 +32,6 @@ function LatencyBar({ ms }: { ms: number | null }) {
     </div>
   );
 }
-
-const OVERALL_STYLE = {
-  ok:       "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  degraded: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  down:     "text-red-400 bg-red-500/10 border-red-500/20",
-};
 
 // ─── API endpoint health checks ───────────────────────────────────────────────
 
@@ -127,7 +118,7 @@ function ApiChecksSection() {
     setResults(API_ENDPOINTS.map((ep) => ({ ...ep, status: "pending", latencyMs: null, statusCode: null })));
     const settled = await Promise.allSettled(API_ENDPOINTS.map(runApiCheck));
     setResults(settled.map((r) => r.status === "fulfilled" ? r.value : { ...API_ENDPOINTS[0], status: "error", latencyMs: null, statusCode: null, error: "internalError" }));
-    setRanAt(new Date().toLocaleTimeString());
+    setRanAt(fmtTime(new Date()));
     setRunning(false);
   }, []);
 
@@ -218,9 +209,9 @@ function ApiChecksSection() {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Technical detail (admin only) ─────────────────────────────────────────────
 
-export default function HealthPage() {
+function TechnicalDetail() {
   const t = useT();
   const { data, isLoading, mutate, isValidating } = useSWR<HealthResponse>(
     "/api/health",
@@ -230,7 +221,7 @@ export default function HealthPage() {
 
   const overall = data?.overall ?? "ok";
   const services = data?.services ?? [];
-  const checkedAt = data?.checkedAt ? new Date(data.checkedAt).toLocaleTimeString() : null;
+  const checkedAt = data?.checkedAt ? fmtTime(data.checkedAt) : null;
 
   const OVERALL_LABEL = {
     ok:       t('health.overall.ok'),
@@ -240,10 +231,10 @@ export default function HealthPage() {
 
   return (
     <div>
-      <PageHeader
-        title={t('health.pageTitle')}
-        subtitle={t('health.subtitle')}
-      />
+      <div className="mb-4 flex items-center gap-2">
+        <Wrench size={16} className="text-slate-500" />
+        <h2 className="text-base font-semibold text-white">{t('health.technicalTitle')}</h2>
+      </div>
 
       {isLoading && <LoadingState label={t('health.checking')} />}
 
@@ -313,9 +304,31 @@ export default function HealthPage() {
 
           {/* API routes section */}
           <ApiChecksSection />
-
-
         </>
+      )}
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function HealthPage() {
+  const t = useT();
+  const { role } = useRole();
+
+  return (
+    <div>
+      <PageHeader
+        title={t('health.pageTitle')}
+        subtitle={t('health.subtitle')}
+      />
+
+      <CapabilitySection />
+
+      {role === "admin" && (
+        <div className="mt-10 border-t border-white/5 pt-8">
+          <TechnicalDetail />
+        </div>
       )}
     </div>
   );

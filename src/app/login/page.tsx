@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Clapperboard } from "lucide-react";
+import { Clapperboard, Activity } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
 export default function LoginPage() {
@@ -46,7 +47,7 @@ function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4">
       <div className="card w-full max-w-sm p-8">
         <div className="mb-6 flex items-center gap-3">
           <div className="rounded-lg bg-accent-600/20 p-2 text-accent-400">
@@ -139,6 +140,13 @@ function LoginForm() {
           )}
         </div>
       </div>
+
+      <Link
+        href="/status"
+        className="mt-4 flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300"
+      >
+        <Activity size={13} /> {t('health.pageTitle')}
+      </Link>
     </main>
   );
 }

@@ -12,9 +12,11 @@ import { verifySessionFull } from "@/lib/session";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/status",
   "/api/auth/login",
   "/api/auth/jellyfin",
   "/api/health",
+  "/api/status/public",
   "/api/config/public",
   "/api/push/vapid-key",
 ];

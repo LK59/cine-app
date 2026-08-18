@@ -3,6 +3,9 @@ export async function register() {
     const { startNotificationCron } = await import("./lib/notificationJobs");
     startNotificationCron();
 
+    const { startStatusCron } = await import("./lib/statusCron");
+    startStatusCron();
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(({ cachedMovies, cachedSeries }) => {

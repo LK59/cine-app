@@ -136,6 +136,24 @@ function migrate(db: Database.Database): void {
       updated_at INTEGER NOT NULL
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS service_checks (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      service    TEXT    NOT NULL,
+      status     TEXT    NOT NULL,
+      latency_ms INTEGER,
+      checked_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_checks ON service_checks (service, checked_at);
+
+    CREATE TABLE IF NOT EXISTS capability_checks (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      capability TEXT    NOT NULL,
+      status     TEXT    NOT NULL,
+      checked_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_capability_checks ON capability_checks (capability, checked_at);
+  `);
 }
 
 // ─── User preferences ─────────────────────────────────────────────────────────
@@ -465,6 +483,42 @@ export const kvCacheDb = {
   // Opportunistic cleanup — avoids unbounded growth from stale entries (removed movies, etc.)
   cleanup(maxAgeMs: number): void {
     getDb().prepare("DELETE FROM kv_cache WHERE fetched_at < ?").run(Date.now() - maxAgeMs);
+  },
+};
+
+// ─── Status/health history (see src/lib/healthChecks.ts + statusCron.ts) ──────
+
+export const statusHistoryDb = {
+  recordServiceChecks(results: Record<string, { status: string; latencyMs: number | null }>, checkedAt: number): void {
+    const db = getDb();
+    const stmt = db.prepare("INSERT INTO service_checks (service, status, latency_ms, checked_at) VALUES (?, ?, ?, ?)");
+    const tx = db.transaction((entries: [string, { status: string; latencyMs: number | null }][]) => {
+      for (const [service, r] of entries) stmt.run(service, r.status, r.latencyMs, checkedAt);
+    });
+    tx(Object.entries(results));
+  },
+
+  recordCapabilityChecks(results: { id: string; status: string }[], checkedAt: number): void {
+    const db = getDb();
+    const stmt = db.prepare("INSERT INTO capability_checks (capability, status, checked_at) VALUES (?, ?, ?)");
+    const tx = db.transaction((rows: { id: string; status: string }[]) => {
+      for (const r of rows) stmt.run(r.id, r.status, checkedAt);
+    });
+    tx(results);
+  },
+
+  getCapabilityHistory(capability: string, sinceMs: number): { status: string; checkedAt: number }[] {
+    return getDb()
+      .prepare("SELECT status, checked_at as checkedAt FROM capability_checks WHERE capability = ? AND checked_at >= ? ORDER BY checked_at ASC")
+      .all(capability, sinceMs) as { status: string; checkedAt: number }[];
+  },
+
+  // Opportunistic cleanup — keeps service_checks/capability_checks from growing forever.
+  cleanup(maxAgeMs: number): void {
+    const cutoff = Date.now() - maxAgeMs;
+    const db = getDb();
+    db.prepare("DELETE FROM service_checks WHERE checked_at < ?").run(cutoff);
+    db.prepare("DELETE FROM capability_checks WHERE checked_at < ?").run(cutoff);
   },
 };
 
