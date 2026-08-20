@@ -41,6 +41,13 @@ services:
       #   - clarabanner.jpg, used as the page banner
       # - /path/to/your/clara/photos:/app/gallery/clara:ro
 
+    # If your media folders aren't world-readable (e.g. mode 770 owned by your own
+    # user/group), the container's default user won't be able to read them — stats
+    # will silently under-report. Set this to "<container-uid>:<your-gid>" (keep the
+    # container's own uid, swap in `id -g youruser` from the host) so it can read
+    # your files without loosening permissions on the host.
+    # user: "1001:1000"
+
     # Optional direct access without a reverse proxy.
     # If you use Nginx Proxy Manager, Traefik or Caddy, you can leave this commented.
     # ports:

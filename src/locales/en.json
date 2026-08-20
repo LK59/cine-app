@@ -142,6 +142,7 @@
     "storageFree": "{free} free of {total}",
     "storageFilms": "Movies — {size}",
     "storageSeries": "Series — {size}",
+    "storageSeeds": "Seeds — {size}",
     "storageOther": "Other — {size}",
     "storageUsed": "{pct}% used",
     "activityTitle": "Recent activity",
@@ -464,6 +465,7 @@
     "diskLegend": {
       "movies": "Movies",
       "series": "Series",
+      "seeds": "Seeds",
       "other": "Other"
     },
     "diskUsed": "{pct}% used",

@@ -18,6 +18,7 @@ import type { DiskForecast } from "@/lib/diskForecast";
 interface DiskStats {
   moviesBytes: number;
   tvBytes: number;
+  seedsBytes: number;
   disk: { total: number; used: number; free: number };
 }
 
@@ -448,15 +449,20 @@ export default function StatsPage() {
                     <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }}
                       title={`${t('stats.diskLegend.series')} : ${fmtSize(disk.tvBytes)}`} />
                   )}
-                  {disk.disk.used - disk.moviesBytes - disk.tvBytes > 0 && (
+                  {disk.seedsBytes > 0 && (
+                    <div className="h-full bg-amber-500" style={{ width: `${(disk.seedsBytes / disk.disk.total) * 100}%` }}
+                      title={`${t('stats.diskLegend.seeds')} : ${fmtSize(disk.seedsBytes)}`} />
+                  )}
+                  {disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes > 0 && (
                     <div className="h-full bg-slate-600"
-                      style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes) / disk.disk.total) * 100}%` }} />
+                      style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes) / disk.disk.total) * 100}%` }} />
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('stats.diskLegend.movies')} — {fmtSize(disk.moviesBytes)}</span>
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('stats.diskLegend.series')} — {fmtSize(disk.tvBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes))}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('stats.diskLegend.seeds')} — {fmtSize(disk.seedsBytes)}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes))}</span>
                   <span className="ml-auto text-slate-500">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
                 </div>
                 {isAdmin && (

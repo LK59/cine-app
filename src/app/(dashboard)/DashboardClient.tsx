@@ -558,12 +558,14 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
           <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
             {disk.moviesBytes > 0 && <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })} />}
             {disk.tvBytes > 0 && <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })} />}
-            {disk.disk.used - disk.moviesBytes - disk.tvBytes > 0 && <div className="h-full bg-slate-600" style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes) / disk.disk.total) * 100}%` }} title={t('dashboard.storageOther', { size: "" })} />}
+            {disk.seedsBytes > 0 && <div className="h-full bg-amber-500" style={{ width: `${(disk.seedsBytes / disk.disk.total) * 100}%` }} title={t('dashboard.storageSeeds', { size: fmtSize(disk.seedsBytes) })} />}
+            {disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes > 0 && <div className="h-full bg-slate-600" style={{ width: `${((disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes) / disk.disk.total) * 100}%` }} title={t('dashboard.storageOther', { size: "" })} />}
           </div>
           <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })}</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('dashboard.storageOther', { size: fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes)) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('dashboard.storageSeeds', { size: fmtSize(disk.seedsBytes) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />{t('dashboard.storageOther', { size: fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes)) })}</span>
             <span className="ml-auto text-slate-500">{t('dashboard.storageUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
           </div>
         </div>

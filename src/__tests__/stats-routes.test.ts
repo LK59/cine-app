@@ -31,10 +31,10 @@ beforeEach(() => {
 
 describe("GET /api/stats", () => {
   it("returns the disk stats fields as-is", async () => {
-    mockGetDiskStats.mockReturnValue({ moviesBytes: 100, tvBytes: 200, disk: { total: 1, used: 1, free: 0 } });
+    mockGetDiskStats.mockReturnValue({ moviesBytes: 100, tvBytes: 200, seedsBytes: 50, disk: { total: 1, used: 1, free: 0 } });
     const { GET } = await import("@/app/api/stats/route");
     const body = await (await GET()).json();
-    expect(body).toEqual({ moviesBytes: 100, tvBytes: 200, disk: { total: 1, used: 1, free: 0 } });
+    expect(body).toEqual({ moviesBytes: 100, tvBytes: 200, seedsBytes: 50, disk: { total: 1, used: 1, free: 0 } });
   });
 });
 

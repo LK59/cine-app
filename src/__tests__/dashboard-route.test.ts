@@ -26,7 +26,7 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 vi.mock("@/lib/images", () => ({ posterUrl: () => null }));
-vi.mock("@/lib/disk-stats", () => ({ getDiskStats: () => ({ computedAt: 1, error: null, moviesBytes: 0, tvBytes: 0, disk: {} }) }));
+vi.mock("@/lib/disk-stats", () => ({ getDiskStats: () => ({ computedAt: 1, error: null, moviesBytes: 0, tvBytes: 0, seedsBytes: 0, disk: {} }) }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerifySessionFull(...a) }));
