@@ -3,13 +3,7 @@ import path from "path";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { bestTitleMatchScore } from "@/lib/search-natural-query";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
-
-const MEDIA_ROOT = "/mnt/media/video";
-const MOVIES_PATH = `${MEDIA_ROOT}/movies`;
-const TV_PATH = `${MEDIA_ROOT}/tv`;
-const SEED_MOVIES_PATH = `${MEDIA_ROOT}/downloads/seeds/movies`;
-const SEED_TV_PATH = `${MEDIA_ROOT}/downloads/seeds/tv`;
-const CROSS_SEED_PATH = `${MEDIA_ROOT}/downloads/seeds/cross-seed-links`;
+import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEED_MOVIES_PATH, SEED_TV_PATH, CROSS_SEED_PATH } from "@/lib/media-paths";
 
 const VIDEO_EXT = new Set([".mkv", ".mp4", ".avi", ".m4v", ".ts", ".wmv", ".mov"]);
 const EPISODE_TAG_RE = /^(.*?)[.\s_-]*S(\d{1,2})E(\d{1,3})\b/i;

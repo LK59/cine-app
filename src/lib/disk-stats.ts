@@ -1,12 +1,8 @@
 import { exec } from "child_process";
 import { promisify } from "util";
+import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEEDS_PATH } from "@/lib/media-paths";
 
 const execAsync = promisify(exec);
-
-const MEDIA_ROOT  = "/mnt/media/video";
-const MOVIES_PATH = `${MEDIA_ROOT}/movies`;
-const TV_PATH     = `${MEDIA_ROOT}/tv`;
-const SEEDS_PATH  = `${MEDIA_ROOT}/downloads/seeds`;
 
 export interface DiskStats {
   moviesBytes: number;

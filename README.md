@@ -222,9 +222,12 @@ In your local `docker-compose.yml`, adapt:
 
 - the external Docker network name;
 - the timezone (`TZ`);
-- the host media path mounted read-only (left side only — keep the container
-  side as `/mnt/media/video`, it's the fixed internal path storage/disk stats
-  expect, same idea as Radarr's `/movies` or Sonarr's `/tv`);
+- the host media path mounted read-only (left side). The container-side path
+  defaults to `/mnt/media/video`, matching the `MEDIA_ROOT` env var storage/disk
+  stats read by default — same idea as Radarr's `/movies` or Sonarr's `/tv`. If
+  you change the container-side path here, set `MEDIA_ROOT` (or the individual
+  `MOVIES_PATH`/`TV_PATH`/`SEEDS_PATH`/etc. vars) in `.env` to match — see
+  `.env.example`;
 - optional gallery/photo mounts;
 - the `ports` section if you want direct access without a reverse proxy.
 
