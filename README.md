@@ -194,8 +194,11 @@ services:
 
       # Optional media root, read-only.
       # Keep this enabled if you want disk/media-size stats based on your host path.
-      # Replace the left side with your own media folder.
-      - /path/to/your/media:/mnt/media/video:ro
+      # Replace the left side with your own media folder. The right side reads
+      # MEDIA_ROOT from .env (defaults to /mnt/media/video) — if you override
+      # MEDIA_ROOT in .env, it's picked up here automatically, no need to edit
+      # this file too.
+      - /path/to/your/media:${MEDIA_ROOT:-/mnt/media/video}:ro
 
       # Optional Clara Galle gallery.
       # Enable only if CLARA_GALLERY_ENABLED=true in .env.
@@ -223,10 +226,10 @@ In your local `docker-compose.yml`, adapt:
 - the external Docker network name;
 - the timezone (`TZ`);
 - the host media path mounted read-only (left side). The container-side path
-  defaults to `/mnt/media/video`, matching the `MEDIA_ROOT` env var storage/disk
-  stats read by default — same idea as Radarr's `/movies` or Sonarr's `/tv`. If
-  you change the container-side path here, set `MEDIA_ROOT` (or the individual
-  `MOVIES_PATH`/`TV_PATH`/`SEEDS_PATH`/etc. vars) in `.env` to match — see
+  reads `MEDIA_ROOT` from `.env` and defaults to `/mnt/media/video` — same idea
+  as Radarr's `/movies` or Sonarr's `/tv`. If you set `MEDIA_ROOT` (or the
+  individual `MOVIES_PATH`/`TV_PATH`/`SEEDS_PATH`/etc. vars) in `.env`, it's
+  picked up automatically both by the mount and by storage/disk stats — see
   `.env.example`;
 - optional gallery/photo mounts;
 - the `ports` section if you want direct access without a reverse proxy.

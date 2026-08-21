@@ -31,8 +31,11 @@ services:
 
       # Optional media root, read-only.
       # Keep this enabled if you want disk/media-size stats based on your host path.
-      # Replace the left side with your own media folder.
-      - /path/to/your/media:/mnt/media/video:ro
+      # Replace the left side with your own media folder. The right side reads
+      # MEDIA_ROOT from .env (defaults to /mnt/media/video) — if you override
+      # MEDIA_ROOT in .env, it's picked up here automatically, no need to edit
+      # this file too.
+      - /path/to/your/media:${MEDIA_ROOT:-/mnt/media/video}:ro
 
       # Optional Clara Galle gallery.
       # Enable only if CLARA_GALLERY_ENABLED=true in .env.
