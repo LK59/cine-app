@@ -31,6 +31,18 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+// Point storage-path checks at a directory guaranteed to exist in any environment, so
+// GET /api/health's "overall" status in these tests reflects only the mocked services
+// below, not whether /mnt/media/video happens to be mounted on the machine running tests.
+vi.mock("@/lib/media-paths", () => ({
+  MEDIA_ROOT: "/tmp",
+  MOVIES_PATH: "/tmp",
+  TV_PATH: "/tmp",
+  SEEDS_PATH: "/tmp",
+  SEED_MOVIES_PATH: "/tmp",
+  SEED_TV_PATH: "/tmp",
+  CROSS_SEED_PATH: "/tmp",
+}));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 

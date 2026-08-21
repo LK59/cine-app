@@ -342,6 +342,22 @@
     "statusOnline": "Online",
     "statusDegraded": "Eingeschränkt",
     "statusOffline": "Offline",
+    "storagePaths": {
+      "sectionTitle": "Speicherpfade",
+      "sectionSubtitle": "Prüft, ob die für Speicherplatz-/Mediengröße-Statistiken verwendeten Pfade eingebunden und lesbar sind",
+      "entries": "{n} Einträge",
+      "notFound": "Pfad existiert nicht — Volume-Mount und MEDIA_ROOT/.env prüfen",
+      "notReadable": "Pfad existiert, ist aber nicht lesbar — Container-Berechtigungen prüfen",
+      "names": {
+        "mediaRoot": "Medien-Root",
+        "movies": "Filme",
+        "tv": "Serien",
+        "seeds": "Seeds",
+        "seedMovies": "Seeds — Filme",
+        "seedTv": "Seeds — Serien",
+        "crossSeed": "Cross-Seed-Links"
+      }
+    },
     "apiTests": {
       "sectionTitle": "API-Routen testen",
       "sectionSubtitle": "Prüft jeden internen Endpunkt — Authentifizierung, Latenz und Antwortformat",

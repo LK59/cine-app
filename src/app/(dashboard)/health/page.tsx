@@ -4,8 +4,8 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/StateViews";
-import type { ServiceHealth } from "@/app/api/health/route";
-import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench } from "lucide-react";
+import type { ServiceHealth, StoragePathHealth } from "@/app/api/health/route";
+import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench, HardDrive } from "lucide-react";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useState, useCallback } from "react";
 import { useT } from "@/components/TranslationProvider";
@@ -17,6 +17,7 @@ interface HealthResponse {
   overall: "ok" | "degraded" | "down";
   checkedAt: string;
   services: ServiceHealth[];
+  paths: StoragePathHealth[];
 }
 
 function LatencyBar({ ms }: { ms: number | null }) {
@@ -209,6 +210,47 @@ function ApiChecksSection() {
   );
 }
 
+// ─── Storage path checks ────────────────────────────────────────────────────────
+
+function StoragePathsSection({ paths }: { paths: StoragePathHealth[] }) {
+  const t = useT();
+  if (paths.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex items-center gap-2">
+        <HardDrive size={16} className="text-slate-500" />
+        <div>
+          <h2 className="text-base font-semibold text-white">{t('health.storagePaths.sectionTitle')}</h2>
+          <p className="text-xs text-slate-500 mt-0.5">{t('health.storagePaths.sectionSubtitle')}</p>
+        </div>
+      </div>
+
+      <div className="card divide-y divide-white/5 overflow-hidden">
+        {paths.map((p) => (
+          <div key={p.path} className="flex items-center gap-3 px-4 py-2.5">
+            <StatusIcon status={p.status} />
+            <div className="min-w-0 flex-1">
+              <span className="text-sm text-slate-200">{t(`health.storagePaths.names.${p.name}`)}</span>
+              <span className="ml-2 font-mono text-[10px] text-slate-600">{p.path}</span>
+            </div>
+            <div className="shrink-0 text-right text-[11px]">
+              {p.status === "ok" && p.entries !== null && (
+                <span className="text-slate-500">{t('health.storagePaths.entries', { n: String(p.entries) })}</span>
+              )}
+              {p.error && (
+                <span className="text-red-400">
+                  {p.error === "notFound" ? t('health.storagePaths.notFound') : p.error === "notReadable" ? t('health.storagePaths.notReadable') : p.error}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Technical detail (admin only) ─────────────────────────────────────────────
 
 function TechnicalDetail() {
@@ -221,6 +263,7 @@ function TechnicalDetail() {
 
   const overall = data?.overall ?? "ok";
   const services = data?.services ?? [];
+  const paths = data?.paths ?? [];
   const checkedAt = data?.checkedAt ? fmtTime(data.checkedAt) : null;
 
   const OVERALL_LABEL = {
@@ -301,6 +344,9 @@ function TechnicalDetail() {
               </div>
             ))}
           </div>
+
+          {/* Storage path checks */}
+          <StoragePathsSection paths={paths} />
 
           {/* API routes section */}
           <ApiChecksSection />

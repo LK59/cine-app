@@ -342,6 +342,22 @@
     "statusOnline": "En ligne",
     "statusDegraded": "Dégradé",
     "statusOffline": "Hors ligne",
+    "storagePaths": {
+      "sectionTitle": "Chemins de stockage",
+      "sectionSubtitle": "Vérifie que les chemins utilisés pour les stats disque/média sont montés et lisibles",
+      "entries": "{n} éléments",
+      "notFound": "Le chemin n'existe pas — vérifier le montage du volume et MEDIA_ROOT/.env",
+      "notReadable": "Le chemin existe mais n'est pas lisible — vérifier les permissions du conteneur",
+      "names": {
+        "mediaRoot": "Racine média",
+        "movies": "Films",
+        "tv": "Séries",
+        "seeds": "Seeds",
+        "seedMovies": "Seeds — films",
+        "seedTv": "Seeds — séries",
+        "crossSeed": "Liens cross-seed"
+      }
+    },
     "apiTests": {
       "sectionTitle": "Tests des routes API",
       "sectionSubtitle": "Vérifie chaque endpoint interne — authentification, latence et forme de réponse",

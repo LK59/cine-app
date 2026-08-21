@@ -1,6 +1,8 @@
+import fs from "fs/promises";
 import { config } from "@/lib/config";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { getDb } from "@/lib/db";
+import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEEDS_PATH, SEED_MOVIES_PATH, SEED_TV_PATH, CROSS_SEED_PATH } from "@/lib/media-paths";
 
 export type CheckStatus = "ok" | "degraded" | "down";
 
@@ -161,6 +163,46 @@ export async function pingPushConfig(): Promise<ServiceHealth> {
     version: null,
     error: configured ? null : "VAPID keys not configured",
   };
+}
+
+// ─── Storage path checks ────────────────────────────────────────────────────────
+// Verifies the filesystem paths disk-stats.ts/storage-scan.ts read from are actually
+// mounted and readable inside the container. Without this, a misconfigured MEDIA_ROOT
+// (or a docker-compose volume that isn't mounted) silently shows up as "0 bytes" on the
+// stats page instead of a clear error — this makes the misconfiguration visible.
+
+export interface StoragePathHealth {
+  name: string;
+  path: string;
+  status: CheckStatus;
+  entries: number | null;
+  error: string | null;
+}
+
+async function checkStoragePath(name: string, path: string, optional = false): Promise<StoragePathHealth> {
+  try {
+    const entries = await fs.readdir(path);
+    return { name, path, status: "ok", entries: entries.length, error: null };
+  } catch (e: any) {
+    // Cross-seed-links is allowed to be absent (storage-scan.ts degrades gracefully) —
+    // don't flag a missing optional dir as a misconfiguration.
+    if (optional && e?.code === "ENOENT") {
+      return { name, path, status: "ok", entries: null, error: null };
+    }
+    return { name, path, status: "down", entries: null, error: e?.code === "ENOENT" ? "notFound" : (e?.message ?? "notReadable") };
+  }
+}
+
+export async function checkAllStoragePaths(): Promise<StoragePathHealth[]> {
+  return Promise.all([
+    checkStoragePath("mediaRoot", MEDIA_ROOT),
+    checkStoragePath("movies", MOVIES_PATH),
+    checkStoragePath("tv", TV_PATH),
+    checkStoragePath("seeds", SEEDS_PATH),
+    checkStoragePath("seedMovies", SEED_MOVIES_PATH),
+    checkStoragePath("seedTv", SEED_TV_PATH),
+    checkStoragePath("crossSeed", CROSS_SEED_PATH, true),
+  ]);
 }
 
 export type ServiceKey =

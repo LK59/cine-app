@@ -342,6 +342,22 @@
     "statusOnline": "En línea",
     "statusDegraded": "Degradado",
     "statusOffline": "Fuera de línea",
+    "storagePaths": {
+      "sectionTitle": "Rutas de almacenamiento",
+      "sectionSubtitle": "Comprueba que las rutas usadas para las estadísticas de disco/medios estén montadas y sean legibles",
+      "entries": "{n} elementos",
+      "notFound": "La ruta no existe — comprueba el montaje del volumen y MEDIA_ROOT/.env",
+      "notReadable": "La ruta existe pero no es legible — comprueba los permisos del contenedor",
+      "names": {
+        "mediaRoot": "Raíz de medios",
+        "movies": "Películas",
+        "tv": "Series",
+        "seeds": "Seeds",
+        "seedMovies": "Seeds — películas",
+        "seedTv": "Seeds — series",
+        "crossSeed": "Enlaces cross-seed"
+      }
+    },
     "apiTests": {
       "sectionTitle": "Tests de rutas API",
       "sectionSubtitle": "Verifica cada endpoint interno — autenticación, latencia y forma de respuesta",

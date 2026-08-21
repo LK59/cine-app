@@ -342,6 +342,22 @@
     "statusOnline": "Online",
     "statusDegraded": "Degraded",
     "statusOffline": "Offline",
+    "storagePaths": {
+      "sectionTitle": "Storage paths",
+      "sectionSubtitle": "Checks that the filesystem paths used for disk/media-size stats are mounted and readable",
+      "entries": "{n} entries",
+      "notFound": "Path does not exist — check the volume mount and MEDIA_ROOT/.env",
+      "notReadable": "Path exists but isn't readable — check container permissions",
+      "names": {
+        "mediaRoot": "Media root",
+        "movies": "Movies",
+        "tv": "TV",
+        "seeds": "Seeds",
+        "seedMovies": "Seeds — movies",
+        "seedTv": "Seeds — TV",
+        "crossSeed": "Cross-seed links"
+      }
+    },
     "apiTests": {
       "sectionTitle": "API route tests",
       "sectionSubtitle": "Checks each internal endpoint — authentication, latency and response shape",
