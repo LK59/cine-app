@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
 
-const DATA_DIR = process.env.DATA_DIR ?? path.join(process.cwd(), "data");
+export const DATA_DIR = process.env.DATA_DIR ?? path.join(process.cwd(), "data");
 const DB_PATH  = path.join(DATA_DIR, "cine.db");
 
 // ─── Singleton ────────────────────────────────────────────────────────────────

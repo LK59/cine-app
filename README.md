@@ -228,6 +228,12 @@ This is the exact content of `docker-compose.example.yml` — the two are kept i
 
 The `data` volume stores local app data such as the SQLite database. Do not commit it to git.
 
+The app also keeps its own rolling safety net for that database: once a day it dumps
+`data/cine.db` into `data/backups/cine-YYYY-MM-DD.db` (via SQLite's own online backup API,
+no downtime), keeping only the last 7 days. This is not a substitute for a real backup of
+the `data` volume itself — it only protects against a corrupted/truncated DB file on the
+same host, not disk loss.
+
 In your local `docker-compose.yml`, adapt:
 
 - the external Docker network name;

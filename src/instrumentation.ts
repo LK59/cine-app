@@ -6,6 +6,9 @@ export async function register() {
     const { startStatusCron } = await import("./lib/statusCron");
     startStatusCron();
 
+    const { startDbBackupCron } = await import("./lib/dbBackup");
+    startDbBackupCron();
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(({ cachedMovies, cachedSeries }) => {
