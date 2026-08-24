@@ -205,7 +205,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
           )}
 
           {item.rating > 0 && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/85 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-xs">
               <Star size={7} className="fill-current" /> {item.rating.toFixed(1)}
             </div>
           )}
@@ -217,7 +217,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/85 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             <div className="flex gap-0.5">
               {ALL_STATUSES.map((s) => {
                 const meta = STATUS_META[s];
