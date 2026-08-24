@@ -98,11 +98,11 @@
 }
 
 @utility card {
-  @apply rounded-xl border border-white/10 bg-slate-900/28 backdrop-blur-xl shadow-glow;
+  @apply rounded-xl border border-white/10 bg-slate-900/60 shadow-glow;
 }
 
 @utility glass-panel {
-  @apply border border-white/10 bg-slate-950/45 backdrop-blur-2xl;
+  @apply border border-white/10 bg-slate-950/75;
 }
 
 @utility btn {
@@ -126,7 +126,7 @@
 }
 
 @utility badge {
-  @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium backdrop-blur-xs;
+  @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium;
 }
 
 @utility select {
@@ -135,6 +135,11 @@
 
 @utility poster-grid {
   @apply grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6;
+
+  & > * {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 280px;
+  }
 }
 
 @utility scrollbar-thin {
@@ -227,7 +232,6 @@
       radial-gradient(circle at 15% 0%, rgba(124, 92, 255, 0.16), transparent 45%),
       radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.1), transparent 40%),
       radial-gradient(circle at 50% 100%, rgba(124, 92, 255, 0.08), transparent 50%);
-    background-attachment: fixed;
     overscroll-behavior-y: contain;
   }
 }
