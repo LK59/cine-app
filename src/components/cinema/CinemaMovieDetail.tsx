@@ -9,6 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
+import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -60,10 +61,17 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const [logoErrored, setLogoErrored] = useState(false);
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
-  // never need to press Down before Play is reachable.
+  // never need to press Down before Play is reachable. PlayButton itself only renders once
+  // usePlayerEnabled() resolves (it starts false while /api/config/public is in flight, same
+  // hook, separate call here) — on a mount that lands before that resolves, this ran once,
+  // found no Play row yet, and focused Bande-annonce instead: a click/Enter right after opening
+  // played the trailer instead of the film. Re-running once playerEnabled flips true (and once
+  // trailerKey is known, which can also reorder what's "first") re-targets focus at whichever
+  // row is now actually first, catching that race instead of freezing on its initial guess.
+  const playerEnabled = usePlayerEnabled();
   useEffect(() => {
     containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
-  }, []);
+  }, [playerEnabled, info?.trailerKey]);
 
   // Closes itself the instant Lecture actually starts full-screen playback — this component
   // stays MOUNTED underneath the player otherwise (only the player's higher z-index hides it
