@@ -53,9 +53,18 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
-  // A logoUrl existing doesn't mean the image actually loads (see CinemaHero's own note) —
-  // without this fallback a broken logo left no title at all, just an empty gap.
-  const [logoErrored, setLogoErrored] = useState(false);
+  // Text-first, logo-as-upgrade — see CinemaHero's own note. A background Image() probes the
+  // logo; only a CONFIRMED load swaps the title text for it, so a slow or broken logo never
+  // shows a blank gap or an ugly flicker (title → broken image → title again).
+  const [loadedLogoUrl, setLoadedLogoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const url = info?.logoUrl;
+    if (!url) return;
+    const img = new Image();
+    img.onload = () => setLoadedLogoUrl(url);
+    img.src = url;
+    return () => { img.onload = null; };
+  }, [info?.logoUrl]);
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable.
@@ -157,12 +166,11 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
 
       <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
         <div key={item.radarrId} className="flex w-full max-w-2xl animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
-          {info?.logoUrl && !logoErrored ? (
+          {info?.logoUrl && loadedLogoUrl === info.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={info.logoUrl}
               alt={item.title}
-              onError={() => setLogoErrored(true)}
               className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
             />
           ) : (

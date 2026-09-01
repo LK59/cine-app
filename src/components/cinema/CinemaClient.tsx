@@ -134,78 +134,6 @@ export function CinemaClient() {
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
 
-  // JS-driven row snapping (see the rows pane's own doc comment for why not CSS scroll-snap):
-  // once the pane has genuinely stopped scrolling — by any means, wheel/trackpad/keyboard — it
-  // settles with a row's top (label included) flush against the pane's own top edge, never a
-  // gap above it and never a label cut off.
-  //
-  // Two bugs, two fixes:
-  // 1) "Nearest row by raw top-edge distance" (the first version of this) picked whichever edge
-  //    was numerically closest — inside a tall row, the NEXT row's top can be closer than the
-  //    CURRENT row's own top just because the current row is tall, snapping forward past a row's
-  //    content or backward into a half-entered one. Fixed by asking a different question: not
-  //    "which edge is nearest" but "which row have I actually scrolled INTO" — the last row (in
-  //    document order) whose top has already crossed the pane's top edge — and aligning exactly
-  //    that one, however far its top now is.
-  // 2) A fixed-delay debounce (160ms) doesn't reliably mean "scrolling has stopped": wheel/
-  //    trackpad momentum on most platforms keeps generating scroll events well past when the
-  //    user's actual input ended, so it was firing WHILE the browser was still momentum-
-  //    scrolling on its own — the two fought, landing somewhere in between neither of them
-  //    intended (a half-visible row peeking in above the next one, no title visible at all,
-  //    etc). Fixed by using the browser's own native `scrollend` event (Chrome/Firefox/Safari
-  //    all current) instead of guessing a delay — it fires exactly once scrolling, including
-  //    inertial momentum, has actually settled. A debounced 'scroll' fallback only kicks in for
-  //    the rare browser without scrollend support.
-  const rowsPaneRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const pane = rowsPaneRef.current;
-    if (!pane) return;
-
-    function snapToCurrentRow() {
-      const paneEl = pane!;
-      const rows = Array.from(paneEl.querySelectorAll<HTMLElement>("[data-cinema-row]"));
-      if (rows.length === 0) return;
-      // Resting at the very start of the list — leave the pane's own pt-6 breathing room above
-      // the first row alone, nothing to correct toward.
-      if (paneEl.scrollTop <= 4) return;
-      const paneTop = paneEl.getBoundingClientRect().top;
-
-      // Rows are in top-to-bottom document order — the current one is the LAST whose top has
-      // already reached the pane's top edge (small tolerance so "just barely past" still
-      // counts, rather than needing to have scrolled a full extra pixel into it).
-      let current = rows[0];
-      for (const row of rows) {
-        if (row.getBoundingClientRect().top - paneTop <= 8) current = row;
-        else break;
-      }
-
-      const delta = current.getBoundingClientRect().top - paneTop;
-      // Already flush — including "this IS the settle after the corrective scrollTo below",
-      // which also fires its own scrollend once its animation finishes, so this naturally
-      // self-terminates with no separate "am I currently correcting" flag needed.
-      if (Math.abs(delta) <= 4) return;
-      paneEl.scrollTo({ top: paneEl.scrollTop + delta, behavior: "smooth" });
-    }
-
-    if ("onscrollend" in window) {
-      pane.addEventListener("scrollend", snapToCurrentRow);
-      return () => pane.removeEventListener("scrollend", snapToCurrentRow);
-    }
-
-    // Fallback for browsers without native scrollend support — a generous delay to safely
-    // outlast momentum scrolling rather than fight it.
-    let timer: ReturnType<typeof setTimeout>;
-    function onScroll() {
-      clearTimeout(timer);
-      timer = setTimeout(snapToCurrentRow, 300);
-    }
-    pane.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      pane.removeEventListener("scroll", onScroll);
-      clearTimeout(timer);
-    };
-  }, []);
-
   // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu — see the
   // hook's own doc comment.
   useTvGridNav(selectedItem === null);
@@ -346,14 +274,19 @@ export function CinemaClient() {
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
             breakpoint size, and the hover/focus scale-up room — so there's always at least one
             complete row on screen no matter how short the viewport is (see the hero pane's own
-            note above). Snapping is JS-driven (the effect below), not CSS scroll-snap: mandatory
-            forced every single wheel notch into a full row-jump ("blocked"), and proximity
-            turned out too weak to reliably catch a plain mouse wheel's scroll — settling the
-            scroll position a beat after it actually stops works the same regardless of what
-            triggered it (wheel, trackpad, or a keyboard-driven scrollIntoView). */}
-        <div ref={rowsPaneRef} className="scrollbar-thin relative min-h-80 flex-1 scroll-smooth overflow-y-auto pb-16 pt-6">
+            note above).
+            snap-y/snap-mandatory, back after two failed attempts at a hand-rolled JS equivalent
+            (nearest-edge, then "which row have I entered" + scrollend) — both eventually landed
+            wrong in some scroll direction or another (a half-visible row peeking in, a label
+            scrolled just out of view). Native scroll-snap is the browser's own well-tested
+            implementation and is unconditionally reliable about where it comes to rest; the
+            tradeoff, honestly, is that a plain (non-inertial) mouse wheel can feel like it snaps
+            one row per notch rather than gliding — a known, inherent trait of mandatory snap with
+            discrete wheel input, not something further JS here fixed better than the browser
+            itself. Reliability was the explicit priority over that. */}
+        <div className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6">
           {resumeMovies.length > 0 && (
-            <div data-cinema-row className="mb-6">
+            <div className="mb-6 snap-start">
               <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
               <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
                 {resumeMovies.map((item, i) => (
