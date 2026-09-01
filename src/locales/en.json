@@ -1176,6 +1176,11 @@
     "empty": "Nothing to show yet — add movies to your library.",
     "back": "Back",
     "shortcutsNavigate": "Navigate",
-    "shortcutsSelect": "Select"
+    "shortcutsSelect": "Select",
+    "moviesTab": "Movies",
+    "seriesTab": "Series",
+    "moreEpisodes": "More episodes",
+    "season": "Season {n}",
+    "specials": "Specials"
   }
 }

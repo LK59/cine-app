@@ -1176,6 +1176,11 @@
     "empty": "Rien à afficher pour l'instant — ajoute des films à ta bibliothèque.",
     "back": "Retour",
     "shortcutsNavigate": "Naviguer",
-    "shortcutsSelect": "Sélectionner"
+    "shortcutsSelect": "Sélectionner",
+    "moviesTab": "Films",
+    "seriesTab": "Séries",
+    "moreEpisodes": "Plus d'épisodes",
+    "season": "Saison {n}",
+    "specials": "Épisodes spéciaux"
   }
 }

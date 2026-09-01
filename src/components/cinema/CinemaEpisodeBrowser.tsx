@@ -1,0 +1,145 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, Play, Check } from "lucide-react";
+import { PosterImage } from "@/components/PosterImage";
+import { useT } from "@/components/TranslationProvider";
+import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+
+// "Plus d'épisodes" — Netflix's own TV-app episode browser: seasons as a vertical list on the
+// left, that season's episodes (thumbnail/title/duration/synopsis) on the right. Opened from
+// CinemaSeriesDetail's menu, portaled to document.body for the same containing-block reason
+// every other Cinema Mode fixed layer is (see CinemaClient's own doc comment) — and sits one
+// z-index above it (48 vs 46) so it visually replaces the detail sheet rather than stacking
+// under/beside it.
+export function CinemaEpisodeBrowser({
+  title,
+  seasons,
+  onClose,
+  onPlayEpisode,
+}: {
+  title: string;
+  seasons: CinemaSeason[];
+  onClose: () => void;
+  onPlayEpisode: (episode: CinemaEpisode) => void;
+}) {
+  const t = useT();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.seasonNumber ?? 0);
+  const episodes = seasons.find((s) => s.seasonNumber === selectedSeason)?.episodes ?? [];
+
+  useEffect(() => {
+    containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-season="true"]')?.focus();
+  }, []);
+
+  // Left/Right move between the season list and the episode list; Up/Down cycle within
+  // whichever one currently has focus — same roving-focus convention as the player's own
+  // directional nav and CinemaMovieDetail's vertical menu.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      const active = document.activeElement as HTMLElement | null;
+      const inSeasons = active?.getAttribute("data-episode-season") === "true";
+      const inEpisodes = active?.getAttribute("data-episode-item") === "true";
+      if (!inSeasons && !inEpisodes) return;
+
+      if (e.key === "ArrowRight" && inSeasons) {
+        e.preventDefault();
+        containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-item="true"]')?.focus();
+        return;
+      }
+      if (e.key === "ArrowLeft" && inEpisodes) {
+        e.preventDefault();
+        containerRef.current?.querySelector<HTMLButtonElement>(`[data-episode-season="true"][data-season="${selectedSeason}"]`)?.focus();
+        return;
+      }
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const selector = inSeasons ? '[data-episode-season="true"]' : '[data-episode-item="true"]';
+        const items = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>(selector) ?? []);
+        const idx = items.indexOf(active as HTMLButtonElement);
+        const next = e.key === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
+        next?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, selectedSeason]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div ref={containerRef} className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={{ zIndex: 48 }}>
+      <button
+        onClick={onClose}
+        className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
+        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+      >
+        <ArrowLeft size={16} /> {t("cinema.back")}
+      </button>
+
+      <div className="flex h-full pt-20">
+        <div className="scrollbar-thin w-56 shrink-0 overflow-y-auto border-r border-white/10 px-3 pb-8 sm:w-64">
+          <p className="mb-3 truncate px-2 text-sm font-medium text-white/60">{title}</p>
+          {seasons.map((season) => {
+            const active = season.seasonNumber === selectedSeason;
+            return (
+              <button
+                key={season.seasonNumber}
+                data-episode-season="true"
+                data-season={season.seasonNumber}
+                onFocus={() => setSelectedSeason(season.seasonNumber)}
+                onMouseEnter={() => setSelectedSeason(season.seasonNumber)}
+                className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none ${
+                  active ? "bg-accent-600/25 text-white ring-1 ring-accent-500/50" : "text-white/80 hover:bg-white/10"
+                }`}
+              >
+                {season.seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: season.seasonNumber })}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-6 pb-16 pt-1 sm:px-10">
+          <div className="mx-auto flex max-w-3xl flex-col gap-2">
+            {episodes.map((ep) => (
+              <button
+                key={ep.jellyfinItemId}
+                data-episode-item="true"
+                onClick={() => onPlayEpisode(ep)}
+                className="flex items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
+              >
+                <div className="relative w-40 shrink-0 sm:w-48">
+                  <PosterImage src={ep.thumbnailUrl} alt={ep.title} aspectRatio="aspect-video" unoptimized />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity hover:bg-black/30 hover:opacity-100">
+                    <Play size={28} className="text-white drop-shadow-lg" fill="currentColor" />
+                  </span>
+                  {ep.watched && (
+                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/90">
+                      <Check size={12} className="text-white" />
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-medium text-white">
+                      {ep.episodeNumber}. {ep.title}
+                    </span>
+                    {ep.runtimeMinutes && <span className="shrink-0 text-xs text-white/50">{ep.runtimeMinutes} min</span>}
+                  </div>
+                  {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-white/60">{ep.overview}</p>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}

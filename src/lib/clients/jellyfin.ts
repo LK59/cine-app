@@ -19,6 +19,7 @@ export interface JellyfinItem {
   ProviderIds?: { Tmdb?: string; Tvdb?: string; Imdb?: string };
   ImageTags?: { Primary?: string };
   RunTimeTicks?: number;
+  Overview?: string;
   SeriesName?: string;
   SeriesId?: string;
   IndexNumber?: number;
@@ -262,9 +263,12 @@ export const jellyfin = {
 
   // All episodes of a series, in one call — used to cross-reference against
   // Sonarr's season/episode list by (ParentIndexNumber, IndexNumber).
+  // Overview added on top of the original field list — Cinema Mode's episode browser needs a
+  // per-episode synopsis and this is the only call that already returns the full episode list;
+  // additive field, no effect on existing callers that don't read it.
   getSeriesEpisodes: (userId: string, seriesId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Shows/${seriesId}/Episodes?userId=${userId}&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber`,
+      `${url}/Shows/${seriesId}/Episodes?userId=${userId}&Fields=ProviderIds,UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,Overview`,
       { headers }
     ).then((res) => res.Items),
 

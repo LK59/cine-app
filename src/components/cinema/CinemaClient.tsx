@@ -11,9 +11,14 @@ import { PosterImage } from "@/components/PosterImage";
 import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
 import { CinemaMovieDetail } from "@/components/cinema/CinemaMovieDetail";
+import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
+import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
+import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
+import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
+import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
 
 const TV_NAV_RING =
@@ -83,8 +88,19 @@ function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
 export function CinemaClient() {
   const t = useT();
 
+  // Films/Séries — default left/movies, matching what's asked for. Series data is fetched lazily
+  // (SWR key is null until this is actually "series") rather than always alongside movies: the
+  // series route does its own per-title logo+rating fetching on a cold cache, same cost as the
+  // movies one, and movies must keep loading exactly as fast as before regardless of whether the
+  // user ever touches the series tab.
+  const [mediaType, setMediaType] = useState<"movies" | "series">("movies");
+
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
+    fetcher
+  );
+  const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
+    mediaType === "series" ? "/api/cinema/series" : null,
     fetcher
   );
   const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
@@ -114,21 +130,61 @@ export function CinemaClient() {
     return () => clearTimeout(timer);
   }, [movies]);
 
+  // Same warm-up, series side — fires once series data actually loads (i.e. only after the user
+  // has switched to that tab at least once), not on the initial movies-only load.
+  useEffect(() => {
+    if (!series) return;
+    const seen = new Set<number>();
+    const urls: string[] = [];
+    for (const list of Object.values(series.rows)) {
+      for (const s of list) {
+        if (seen.has(s.sonarrId)) continue;
+        seen.add(s.sonarrId);
+        if (s.backdropUrl) urls.push(s.backdropUrl);
+        if (s.logoUrl) urls.push(s.logoUrl);
+      }
+    }
+    const timer = setTimeout(() => {
+      for (const url of urls) Object.assign(new Image(), { src: url });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [series]);
+
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
   const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
+
+  // Series' own parallel focus/selection state — kept entirely separate from the movie state
+  // above (not touched) so each tab remembers its own position independently when you switch
+  // back and forth, same as Netflix's own Movies/TV Shows toggle.
+  const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
+  const [seriesSelectedItem, setSeriesSelectedItem] = useState<CinemaSeries | null>(null);
+  const seriesHeroItem = seriesFocusedItem ?? series?.spotlight[0] ?? null;
+
+  // Whichever tab is actually showing drives the shared background wash below — a plain union,
+  // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
+  const activeHeroItem = mediaType === "movies" ? heroItem : seriesHeroItem;
+  const activeHeroKey = activeHeroItem ? (mediaType === "movies" ? (activeHeroItem as CinemaMovie).radarrId : (activeHeroItem as CinemaSeries).sonarrId) : null;
 
   // The backdrop specifically (not the hero's own title/synopsis text, which still updates
   // instantly) is debounced before it's allowed to (re)trigger its crossfade — animating a fresh
   // <img> on every single focus event during fast arrow-key scrubbing across a row is exactly
   // what produced the backdrop "ghosting"/persisting-into-each-other bug (rapid, overlapping
   // restarts of the same opacity keyframe). Settling briefly before committing to a new backdrop
-  // keeps the nice crossfade for a deliberate selection without resurrecting that.
-  const [debouncedHeroItem, setDebouncedHeroItem] = useState(heroItem);
+  // keeps the nice crossfade for a deliberate selection without resurrecting that. The key travels
+  // WITH the item (not read from the live activeHeroKey at render time) — otherwise the <img>'s
+  // key would jump ahead of its own (still-debouncing) src, remounting/restarting the crossfade
+  // before the new backdrop was even the one committed, which is exactly the same bug again.
+  const [debouncedHero, setDebouncedHero] = useState<{ item: typeof activeHeroItem; key: number | null }>({
+    item: activeHeroItem,
+    key: activeHeroKey,
+  });
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedHeroItem(heroItem), 150);
+    const timer = setTimeout(() => setDebouncedHero({ item: activeHeroItem, key: activeHeroKey }), 150);
     return () => clearTimeout(timer);
-  }, [heroItem]);
+  }, [activeHeroItem, activeHeroKey]);
+  const debouncedHeroItem = debouncedHero.item;
+  const debouncedHeroKey = debouncedHero.key;
 
   // Whatever card was focused (mouse click also focuses a <button> natively) right before
   // CinemaMovieDetail opened — restored on close so arrow-nav resumes exactly where the user
@@ -147,8 +203,9 @@ export function CinemaClient() {
   const playback = usePlayback();
   // "full" specifically, not "closed" — a minimized (mini) player is a small floating widget;
   // browsing the grid underneath it should still work normally, only a full-screen player
-  // actively capturing the keyboard needs this stepping aside.
-  useTvGridNav(selectedItem === null && playback.mode !== "full");
+  // actively capturing the keyboard needs this stepping aside. Both selectedItem and
+  // seriesSelectedItem gate this now — either detail sheet owns the keyboard the same way.
+  useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full");
 
   function openDetail(item: CinemaMovie) {
     lastFocusedCard.current = document.activeElement as HTMLElement;
@@ -160,6 +217,16 @@ export function CinemaClient() {
     // The card is still in the DOM (the browse screen never unmounts under the overlay) but
     // isn't focused yet the instant this runs — the overlay's own focused button is still
     // mid-unmount. One frame later it's safe to move focus back.
+    requestAnimationFrame(() => lastFocusedCard.current?.focus());
+  }
+
+  function openSeriesDetail(item: CinemaSeries) {
+    lastFocusedCard.current = document.activeElement as HTMLElement;
+    setSeriesSelectedItem(item);
+  }
+
+  function closeSeriesDetail() {
+    setSeriesSelectedItem(null);
     requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }
 
@@ -232,6 +299,7 @@ export function CinemaClient() {
         <ArrowLeft size={16} />
       </button>
 
+      <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
       <CinemaShortcutsGuide />
 
       {/* One continuous ambient background for the WHOLE screen, not scoped to the hero pane —
@@ -247,7 +315,7 @@ export function CinemaClient() {
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={`blur-${debouncedHeroItem.radarrId}`}
+              key={`blur-${debouncedHeroKey}`}
               src={debouncedHeroItem.backdropUrl}
               alt=""
               className="absolute inset-0 h-full w-full scale-110 animate-fade-in object-cover object-top blur-2xl"
@@ -255,7 +323,7 @@ export function CinemaClient() {
             <div className="absolute inset-0 bg-slate-950/55" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={debouncedHeroItem.radarrId}
+              key={debouncedHeroKey}
               src={debouncedHeroItem.backdropUrl}
               alt=""
               className="absolute inset-0 h-full w-full animate-fade-in object-cover object-top"
@@ -287,7 +355,9 @@ export function CinemaClient() {
             from this pane shrinking, never from the row's guaranteed minimum. No resize
             listener needed — this is exactly what flex-shrink + a sibling's min-height is for. */}
         <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
-          {heroItem && <CinemaHero item={heroItem} />}
+          {mediaType === "movies"
+            ? heroItem && <CinemaHero item={heroItem} />
+            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
@@ -304,32 +374,67 @@ export function CinemaClient() {
             discrete wheel input, not something further JS here fixed better than the browser
             itself. Reliability was the explicit priority over that. */}
         <div className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6">
-          {resumeMovies.length > 0 && (
-            <div className="mb-6 snap-start">
-              <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-              <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
-                {resumeMovies.map((item, i) => (
-                  <ContinueCard key={item.id} item={item} index={i} />
-                ))}
-              </div>
-            </div>
-          )}
+          {mediaType === "movies" ? (
+            <>
+              {resumeMovies.length > 0 && (
+                <div className="mb-6 snap-start">
+                  <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
+                    {resumeMovies.map((item, i) => (
+                      <ContinueCard key={item.id} item={item} index={i} />
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {movies?.genres.map((genre) => (
-            <CinemaRow
-              key={genre}
-              label={genre}
-              rowKey={`genre-${genre}`}
-              items={movies.rows[genre] ?? []}
-              cardWidthClassName={CARD_WIDTH}
-              onFocusItem={setFocusedItem}
-              onSelectItem={openDetail}
-            />
-          ))}
+              {movies?.genres.map((genre) => (
+                <CinemaRow
+                  key={genre}
+                  label={genre}
+                  rowKey={`genre-${genre}`}
+                  items={movies.rows[genre] ?? []}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={setFocusedItem}
+                  onSelectItem={openDetail}
+                />
+              ))}
+            </>
+          ) : (
+            <>
+              {/* Inline states, not a full-screen early return like movies' own loading/error/
+                  empty branches above — those replace the WHOLE screen before the toggle even
+                  exists yet (fine, since movies always load first); series loads lazily after
+                  the toggle is already up, so its own states have to render inside the same
+                  chrome instead of hiding the toggle that got you here. */}
+              {seriesLoading && (
+                <div className="flex justify-center pt-12">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                </div>
+              )}
+              {seriesError && (
+                <p className="px-8 text-sm text-red-400 sm:px-12">{seriesError.message || t("common.unknown")}</p>
+              )}
+              {series && series.spotlight.length === 0 && (
+                <p className="px-8 text-sm text-slate-400 sm:px-12">{t("cinema.empty")}</p>
+              )}
+              {series?.genres.map((genre) => (
+                <CinemaSeriesRow
+                  key={genre}
+                  label={genre}
+                  rowKey={`genre-${genre}`}
+                  items={series.rows[genre] ?? []}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={setSeriesFocusedItem}
+                  onSelectItem={openSeriesDetail}
+                />
+              ))}
+            </>
+          )}
         </div>
       </div>
 
       {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={closeDetail} />}
+      {seriesSelectedItem && <CinemaSeriesDetail item={seriesSelectedItem} onClose={closeSeriesDetail} />}
     </div>,
     document.body
   );
