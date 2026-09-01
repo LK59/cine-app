@@ -132,6 +132,10 @@ export function CinemaClient() {
           2
         )}
       </pre>
+      <div style={{ border: "4px solid lime", marginTop: 16 }}>
+        <p>--- CinemaHero below, inside a lime border so we can see its actual box even if its own content is invisible ---</p>
+        {heroItem && <CinemaHero item={heroItem} />}
+      </div>
     </div>
   );
 }
