@@ -49,7 +49,8 @@
       "searchHint": "Movie, series, actor…",
       "sectionContent": "Content",
       "sectionManage": "Management"
-    }
+    },
+    "cinemaMode": "Cinema mode"
   },
   "common": {
     "loading": "Loading...",
@@ -1164,5 +1165,14 @@
         "DirectPlayError": "Direct play error"
       }
     }
+  },
+  "cinema": {
+    "standardMode": "Standard mode",
+    "cast": "Cast",
+    "trailer": "Trailer",
+    "markWatched": "Watched",
+    "addToList": "My list",
+    "continueWatching": "Continue watching",
+    "empty": "Nothing to show yet — add movies to your library."
   }
 }

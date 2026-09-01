@@ -49,7 +49,8 @@
       "searchHint": "Film, Serie, Schauspieler…",
       "sectionContent": "Inhalt",
       "sectionManage": "Verwaltung"
-    }
+    },
+    "cinemaMode": "Kinomodus"
   },
   "common": {
     "loading": "Laden...",
@@ -1164,5 +1165,14 @@
         "DirectPlayError": "Fehler bei Direktwiedergabe"
       }
     }
+  },
+  "cinema": {
+    "standardMode": "Standardmodus",
+    "cast": "Besetzung",
+    "trailer": "Trailer",
+    "markWatched": "Gesehen",
+    "addToList": "Meine Liste",
+    "continueWatching": "Weiterschauen",
+    "empty": "Noch nichts anzuzeigen — füge Filme zu deiner Bibliothek hinzu."
   }
 }

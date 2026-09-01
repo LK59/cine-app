@@ -49,7 +49,8 @@
       "searchHint": "Película, serie, actor…",
       "sectionContent": "Contenido",
       "sectionManage": "Gestión"
-    }
+    },
+    "cinemaMode": "Modo cine"
   },
   "common": {
     "loading": "Cargando...",
@@ -1164,5 +1165,14 @@
         "DirectPlayError": "Error de reproducción directa"
       }
     }
+  },
+  "cinema": {
+    "standardMode": "Modo estándar",
+    "cast": "Reparto",
+    "trailer": "Tráiler",
+    "markWatched": "Visto",
+    "addToList": "Mi lista",
+    "continueWatching": "Continuar viendo",
+    "empty": "Nada que mostrar todavía — añade películas a tu biblioteca."
   }
 }

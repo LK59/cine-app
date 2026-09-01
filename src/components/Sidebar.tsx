@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Clapperboard, LogOut, Search } from "lucide-react";
+import { Clapperboard, LogOut, MonitorPlay, Search } from "lucide-react";
 import { NAV_ITEMS } from "@/components/navItems";
 import { useRole } from "@/lib/useRole";
 import { prefetchRoute } from "@/lib/prefetch";
@@ -41,6 +41,18 @@ export function Sidebar() {
         <span className="flex-1 text-left text-xs">{t('nav.searchPlaceholder')}</span>
         <kbd className="text-[10px] text-slate-600">⌘K</kbd>
       </button>
+
+      {/* Distinct entry point, not folded into NAV_ITEMS below — this leaves the whole standard
+          shell (own layout, own visual language) for /cinema, a genuinely different mode rather
+          than just another page. */}
+      <Link
+        href="/cinema"
+        onMouseEnter={() => prefetchRoute("/cinema")}
+        className="mb-3 flex shrink-0 items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20"
+      >
+        <MonitorPlay size={16} />
+        {t("nav.cinemaMode")}
+      </Link>
 
       {/* Scrollable nav list */}
       <nav
