@@ -15,7 +15,6 @@ const PUBLIC_PATHS = [
   "/status",
   "/api/auth/login",
   "/api/auth/jellyfin",
-  "/api/health",
   "/api/status/public",
   "/api/config/public",
   "/api/push/vapid-key",

@@ -10,8 +10,9 @@ const SEVEN_DAYS_MS = 7 * 24 * 3600_000;
 
 // Public — no session required (see PUBLIC_PATHS in proxy.ts). Deliberately returns only
 // capability ids/statuses, never a raw hostname, port, API error message or version string —
-// unlike /api/health (also public, but meant for admins troubleshooting from inside the app),
-// this one is meant to be safe to expose to the open internet.
+// unlike /api/health (admin-only, behind the normal session gate — it returns internal service
+// URLs, versions, and filesystem paths for troubleshooting from inside the app), this one is
+// meant to be safe to expose to the open internet.
 export async function GET() {
   const services = await runAllServiceChecks();
   const capabilities = computeCapabilities(services);
