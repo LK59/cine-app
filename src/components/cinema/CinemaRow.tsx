@@ -21,7 +21,10 @@ export function CinemaRow({
   if (items.length === 0) return null;
 
   return (
-    <div className="mb-6">
+    // snap-start: the scroll pane above (CinemaClient) is snap-y/snap-mandatory — this makes
+    // THIS row's top edge (the label) one of the valid rest positions, so scrolling by any
+    // means always lands with a full row (label + posters) in view, never mid-row.
+    <div className="mb-6 snap-start">
       {/* Thin, small, muted — a section label, not a heading competing with the poster row
           beneath it. */}
       <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>

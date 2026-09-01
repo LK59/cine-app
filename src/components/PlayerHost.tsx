@@ -240,15 +240,6 @@ function ActivePlayer({
     setTimeout(() => playback.close(), CLOSE_MS);
   }, [playback, stopPlaybackNow]);
 
-  useEffect(() => {
-    if (mode !== "full") return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") handleClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode, handleClose]);
-
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
   // subtitles, which it exposes as switchable renditions), so changing audio
@@ -820,12 +811,14 @@ function ActivePlayer({
   // Tab order follows DOM order, not visual stacking — without this, keyboard focus is left
   // wherever it was on the page that opened playback (e.g. Cinema Mode's "Lecture" row, which
   // stays mounted underneath at a lower z-index) instead of moving into the now-visible player,
-  // so Tab/Enter appear to do nothing. One frame after mounting full-screen, land on the first
-  // control (play/pause) so keyboard control starts inside the player, matching mouse behavior.
+  // so Tab/Enter appear to do nothing. One frame after mounting full-screen, land specifically on
+  // play/pause (data-player-playpause, not just "the first button" — the skip/rewind buttons
+  // sitting either side of it in DOM order made that unpredictable) so keyboard control starts on
+  // the one control every remote/keyboard user reaches for first.
   useEffect(() => {
     if (mode !== "full") return;
     const id = requestAnimationFrame(() => {
-      containerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-player-playpause]")?.focus();
     });
     return () => cancelAnimationFrame(id);
   }, [mode]);

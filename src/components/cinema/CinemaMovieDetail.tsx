@@ -52,7 +52,7 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const containerRef = useRef<HTMLDivElement>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
-  const { addedStatus, addToWatchlist } = useAddToWatchlist();
+  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable.
@@ -79,18 +79,28 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Independent on/off toggles, not "reassign to the other status" — un-toggling either one
+  // goes back to no status at all (removeFromWatchlist), not to whatever the other button
+  // represents. Clicking the OTHER button while one is active still switches the single
+  // underlying status field (the schema only holds one status per item, never both at once —
+  // that part is inherent, not a bug), but a button no longer forcibly re-adds the item under a
+  // different status just because you were trying to turn it off.
   function toggleWatched() {
-    addToWatchlist(
-      { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-      addedStatus === "watched" ? "to_watch" : "watched"
-    );
+    if (watched) removeFromWatchlist({ tmdbId: item.tmdbId, mediaType: "movie" });
+    else
+      addToWatchlist(
+        { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
+        "watched"
+      );
   }
 
   function toggleAddToList() {
-    addToWatchlist(
-      { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-      "to_watch"
-    );
+    if (inList) removeFromWatchlist({ tmdbId: item.tmdbId, mediaType: "movie" });
+    else
+      addToWatchlist(
+        { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
+        "to_watch"
+      );
   }
 
   if (typeof document === "undefined") return null;
@@ -108,14 +118,22 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
-      {/* Localized blur, not a global filter on the image — only the lower third (where the
-          menu lives) gets softened; the rest of the backdrop stays crisp, like an actual hero
-          image instead of a frosted pane. backdrop-blur blurs whatever renders behind THIS div
-          (the sharp img above), so the img itself never needs its own blur filter. */}
-      <div className="absolute inset-x-0 bottom-0 h-2/3 backdrop-blur-md" />
-      <div className="absolute inset-0 bg-slate-950/35" />
-      <div className="absolute inset-0 bg-linear-to-r from-slate-950/90 via-slate-950/40 to-transparent" />
-      <div className="absolute inset-0 bg-linear-to-t from-slate-950/90 via-transparent to-transparent" />
+      {/* Localized, gradually-eased blur — not a global filter on the image, and not a flat
+          rectangle either (a plain backdrop-blur-md div has a hard visible seam where it starts,
+          which is what looked broken here). backdrop-blur blurs whatever renders behind THIS div
+          (the sharp img above); the mask ramps that blur in from nothing to full over the top
+          half of the div instead of switching on all at once, and the whole zone sits low and
+          short — only behind the synopsis/menu, not across the middle of the image. */}
+      <div
+        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
+        style={{
+          height: "45%",
+          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
+          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
+        }}
+      />
+      <div className="absolute inset-0 bg-linear-to-t from-slate-950/85 via-slate-950/15 to-transparent" />
+      <div className="absolute inset-0 bg-linear-to-r from-slate-950/70 via-slate-950/15 to-transparent" />
 
       {/* z-10, explicitly above the content column below: that column spans the full height
           (flex items-center, for vertical centering) and — even with a transparent background —

@@ -55,5 +55,25 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     }
   }
 
-  return { addedStatus, addToWatchlist };
+  // Un-toggling: back to no status at all, not silently reassigned to some other status. Needed
+  // by any "toggle" UI (Cinema Mode's Vu/À voir rows) built on a single-status field — without
+  // this, the only way to leave a status was to overwrite it with a DIFFERENT one, so clicking
+  // an already-active toggle to turn it off looked like it flipped to the other option instead.
+  async function removeFromWatchlist(payload: { tmdbId: number; mediaType: "movie" | "series" }) {
+    const previous = addedStatus;
+    setAddedStatus(null);
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setAddedStatus(previous);
+      toast.error(t("watchlist.addFailed"));
+    }
+  }
+
+  return { addedStatus, addToWatchlist, removeFromWatchlist };
 }

@@ -193,9 +193,13 @@ export function CinemaClient() {
           {heroItem && <CinemaHero item={heroItem} />}
         </div>
 
-        <div className="scrollbar-thin relative z-10 -mt-16 min-h-0 flex-1 scroll-smooth overflow-y-auto pb-16 pt-20">
+        {/* snap-y/snap-mandatory: vertical navigation — arrow keys (via focusCard's
+            scrollIntoView), mouse wheel, trackpad, all of it — always comes to rest with a whole
+            row (its label included) at the top, never stopped mid-row with the label scrolled
+            out of view above the fold. snap-start on each row below is the other half of this. */}
+        <div className="scrollbar-thin relative z-10 -mt-16 min-h-0 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-20">
           {resumeMovies.length > 0 && (
-            <div className="mb-6">
+            <div className="mb-6 snap-start">
               <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
               <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
                 {resumeMovies.map((item, i) => (

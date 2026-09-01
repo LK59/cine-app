@@ -998,6 +998,7 @@ export function PlayerControls({
               <RotateCcw size={22} />
             </button>
             <button
+              data-player-playpause
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();

@@ -60,6 +60,11 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
         />
       )}
       <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
+      {/* Explicit fade to the exact same solid color the rows pane sits on (bg-slate-950 on
+          CinemaClient's root) — the image's own BACKDROP_MASK above fades the PICTURE to
+          transparent, but that alone doesn't guarantee a clean blend into the pane below for
+          every backdrop; this guarantees it regardless of what the image looks like there. */}
+      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-b from-transparent to-slate-950" />
 
       <div key={item.radarrId} className="relative flex h-full max-w-2xl animate-fade-in flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
         {info?.logoUrl ? (
