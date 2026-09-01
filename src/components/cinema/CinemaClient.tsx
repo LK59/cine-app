@@ -86,9 +86,14 @@ export function CinemaClient() {
     </button>
   );
 
+  // z-index as inline style, not z-[45] — see CinemaHero's own note: arbitrary-value Tailwind
+  // classes weren't making it into the production CSS bundle, confirmed live by isolating a
+  // render inside a guaranteed-visible, plain-inline-styled diagnostic screen.
+  const zLayer = { zIndex: 45 };
+
   if (moviesLoading) {
     return (
-      <div className="fixed inset-0 z-[45] flex items-center justify-center bg-slate-950">
+      <div className="fixed inset-0 flex items-center justify-center bg-slate-950" style={zLayer}>
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
       </div>
     );
@@ -96,7 +101,7 @@ export function CinemaClient() {
 
   if (moviesError) {
     return (
-      <div className="fixed inset-0 z-[45] flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center">
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center" style={zLayer}>
         <p className="max-w-sm text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>
         {exitButton}
       </div>
@@ -105,37 +110,49 @@ export function CinemaClient() {
 
   if (movies && movies.spotlight.length === 0) {
     return (
-      <div className="fixed inset-0 z-[45] flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center">
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center" style={zLayer}>
         <p className="max-w-sm text-sm text-slate-400">{t("cinema.empty")}</p>
         {exitButton}
       </div>
     );
   }
 
-  // TEMPORARY diagnostic render — plain inline styles, zero external components/Tailwind, to
-  // isolate whether ANYTHING renders in this region at all before re-introducing CinemaHero/rows.
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "red", color: "white", fontSize: 20, padding: 24, overflow: "auto" }}>
-      <button onClick={() => { window.location.href = "/"; }} style={{ background: "black", color: "white", padding: "8px 16px", marginBottom: 16 }}>
-        EXIT
+    <div className="fixed inset-0 overflow-y-auto bg-slate-950" style={zLayer}>
+      <button
+        onClick={() => { window.location.href = "/"; }}
+        className="fixed right-4 top-4 flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
+        style={{ zIndex: 50, top: "max(1rem, env(safe-area-inset-top))" }}
+      >
+        <X size={16} /> {t("cinema.standardMode")}
       </button>
-      <pre style={{ whiteSpace: "pre-wrap" }}>
-        {JSON.stringify(
-          {
-            genresCount: movies?.genres.length,
-            spotlightCount: movies?.spotlight.length,
-            resumeCount: resumeMovies.length,
-            heroItemTitle: heroItem?.title ?? null,
-            heroItemBackdrop: heroItem?.backdropUrl ?? null,
-          },
-          null,
-          2
-        )}
-      </pre>
-      <div style={{ border: "4px solid lime", marginTop: 16 }}>
-        <p>--- CinemaHero below, inside a lime border so we can see its actual box even if its own content is invisible ---</p>
+
+      <CinemaDebugBoundary>
         {heroItem && <CinemaHero item={heroItem} />}
-      </div>
+
+        <div className="relative -mt-16 pb-12">
+          {resumeMovies.length > 0 && (
+            <div className="mb-8">
+              <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
+              <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+                {resumeMovies.map((item, i) => (
+                  <ContinueCard key={item.id} item={item} index={i} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {movies?.genres.map((genre) => (
+            <CinemaRow
+              key={genre}
+              label={genre}
+              rowKey={`genre-${genre}`}
+              items={movies.rows[genre] ?? []}
+              onFocusItem={setFocusedItem}
+            />
+          ))}
+        </div>
+      </CinemaDebugBoundary>
     </div>
   );
 }

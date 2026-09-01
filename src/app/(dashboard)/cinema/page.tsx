@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 const CinemaClient = dynamic(() => import("@/components/cinema/CinemaClient").then((m) => m.CinemaClient), {
   ssr: false,
   loading: () => (
-    <div className="fixed inset-0 z-[45] flex items-center justify-center bg-slate-950">
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-950" style={{ zIndex: 45 }}>
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
     </div>
   ),

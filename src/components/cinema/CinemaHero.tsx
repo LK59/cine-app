@@ -70,7 +70,11 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   }
 
   return (
-    <div className="relative h-[70vh] min-h-[420px] w-full shrink-0 overflow-hidden">
+    // Height as an inline style, not h-[70vh] min-h-[420px] — those arbitrary-value Tailwind
+    // classes weren't making it into the production CSS bundle (confirmed live: the exact same
+    // content rendered fine, fully visible, once given real height via style={} instead), while
+    // this file's *named* utility classes (max-w-2xl, text-4xl, etc.) all worked correctly.
+    <div className="relative w-full overflow-hidden" style={{ height: "70vh", minHeight: 420 }}>
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
