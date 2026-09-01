@@ -134,36 +134,52 @@ export function CinemaClient() {
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
 
-  // JS-driven row snapping (see the rows pane's own doc comment for why not CSS scroll-snap):
-  // a beat after the pane stops scrolling — by any means, wheel/trackpad/keyboard — it settles
-  // to whichever [data-cinema-row] sits closest to the top, so a category's label is never left
-  // scrolled half out of view above the fold.
+  // JS-driven row snapping (see the rows pane's own doc comment for why not CSS scroll-snap): a
+  // beat after the pane stops scrolling — by any means, wheel/trackpad/keyboard — it settles
+  // with a row's top (label included) flush against the pane's own top edge, never a gap above
+  // it and never a label cut off. "Nearest row by raw top-edge distance" (the first version of
+  // this) was the actual bug: in the middle of a tall row, the NEXT row's top can be numerically
+  // closer to the pane's top than the CURRENT row's top is (just because the current row is
+  // tall), which snapped forward past a row's own content or backward into a half-visible one —
+  // exactly "margin at the top scrolling down, cut off at the bottom scrolling up". The fix is a
+  // different question entirely: not "which edge is nearest", but "which row have I actually
+  // scrolled INTO" — the last row whose top has already crossed the pane's top edge — and
+  // align exactly that one, however far away its top now is.
   const rowsPaneRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const pane = rowsPaneRef.current;
     if (!pane) return;
     let timer: ReturnType<typeof setTimeout>;
+    let correcting = false;
     function onScroll() {
+      if (correcting) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
         const paneEl = pane!;
         const rows = Array.from(paneEl.querySelectorAll<HTMLElement>("[data-cinema-row]"));
         if (rows.length === 0) return;
+        // Resting at the very start of the list — leave the pane's own pt-6 breathing room above
+        // the first row alone, nothing to correct toward.
+        if (paneEl.scrollTop <= 4) return;
         const paneTop = paneEl.getBoundingClientRect().top;
-        let closest = rows[0];
-        let closestDelta = Infinity;
+
+        // Rows are in top-to-bottom document order — the current one is the LAST whose top has
+        // already reached the pane's top edge (small tolerance so "just barely past" still
+        // counts, rather than needing to have scrolled a full extra pixel into it).
+        let current = rows[0];
         for (const row of rows) {
-          const delta = row.getBoundingClientRect().top - paneTop;
-          if (Math.abs(delta) < Math.abs(closestDelta)) {
-            closest = row;
-            closestDelta = delta;
-          }
+          if (row.getBoundingClientRect().top - paneTop <= 8) current = row;
+          else break;
         }
-        // Already close enough (including "this scroll WAS the correction") — don't re-trigger
-        // a smooth-scroll that would just fight itself.
-        if (Math.abs(closestDelta) > 4) {
-          paneEl.scrollTo({ top: paneEl.scrollTop + closestDelta, behavior: "smooth" });
-        }
+
+        const delta = current.getBoundingClientRect().top - paneTop;
+        if (Math.abs(delta) <= 4) return; // already flush — including "this scroll WAS the correction"
+        correcting = true;
+        paneEl.scrollTo({ top: paneEl.scrollTop + delta, behavior: "smooth" });
+        // scrollTo({behavior:"smooth"}) keeps firing 'scroll' events for the duration of its own
+        // animation — without this guard those would just re-trigger this same effect on
+        // itself. ~400ms comfortably covers a short smooth-scroll's animation on any browser.
+        setTimeout(() => { correcting = false; }, 400);
       }, 160);
     }
     pane.addEventListener("scroll", onScroll, { passive: true });
