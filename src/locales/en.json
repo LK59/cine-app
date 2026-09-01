@@ -1173,6 +1173,9 @@
     "markWatched": "Watched",
     "addToList": "My list",
     "continueWatching": "Continue watching",
-    "empty": "Nothing to show yet — add movies to your library."
+    "empty": "Nothing to show yet — add movies to your library.",
+    "back": "Back",
+    "shortcutsNavigate": "Navigate",
+    "shortcutsSelect": "Select"
   }
 }

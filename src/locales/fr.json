@@ -1173,6 +1173,9 @@
     "markWatched": "Vu",
     "addToList": "Ma liste",
     "continueWatching": "Reprendre",
-    "empty": "Rien à afficher pour l'instant — ajoute des films à ta bibliothèque."
+    "empty": "Rien à afficher pour l'instant — ajoute des films à ta bibliothèque.",
+    "back": "Retour",
+    "shortcutsNavigate": "Naviguer",
+    "shortcutsSelect": "Sélectionner"
   }
 }

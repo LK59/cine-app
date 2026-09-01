@@ -16,8 +16,9 @@ interface PlayButtonProps {
   className?: string;
   iconSize?: number;
   /** "primary": solid button, progress fill inside when resuming (movie/series sheets) ·
-   *  "pill": small rounded button with label (cards, lists) · "icon": icon-only, no label. */
-  variant?: "primary" | "pill" | "icon";
+   *  "pill": small rounded button with label (cards, lists) · "icon": icon-only, no label ·
+   *  "row": full-width menu row with a circular icon badge (Cinema Mode's detail overlay). */
+  variant?: "primary" | "pill" | "icon" | "row";
   /** Overrides the default Lire/Reprendre text — for the series-level button,
    *  which needs episode context, e.g. "Reprendre EP3 S2 - 23min05". */
   label?: string;
@@ -57,10 +58,13 @@ export function PlayButton({
       ? "rounded-full bg-accent-600/80 p-1.5 text-white hover:bg-accent-600"
       : variant === "primary"
         ? "btn-primary relative overflow-hidden"
-        : "flex items-center gap-1.5 rounded-lg bg-accent-600/80 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-accent-600";
+        : variant === "row"
+          ? "flex w-full items-center gap-4 rounded-lg px-6 py-4 text-left text-white hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
+          : "flex items-center gap-1.5 rounded-lg bg-accent-600/80 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-accent-600";
 
   return (
     <button
+      data-detail-menu={variant === "row" ? "" : undefined}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -72,10 +76,19 @@ export function PlayButton({
       {variant === "primary" && progressPct !== null && (
         <span className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${progressPct}%` }} />
       )}
-      <span className="relative z-10 inline-flex items-center gap-1.5">
-        <PlayCircle size={iconSize} />
-        {variant !== "icon" && label}
-      </span>
+      {variant === "row" ? (
+        <>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10">
+            <PlayCircle size={iconSize} />
+          </span>
+          <span className="text-base font-medium">{label}</span>
+        </>
+      ) : (
+        <span className="relative z-10 inline-flex items-center gap-1.5">
+          <PlayCircle size={iconSize} />
+          {variant !== "icon" && label}
+        </span>
+      )}
     </button>
   );
 }

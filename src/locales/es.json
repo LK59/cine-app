@@ -1173,6 +1173,9 @@
     "markWatched": "Visto",
     "addToList": "Mi lista",
     "continueWatching": "Continuar viendo",
-    "empty": "Nada que mostrar todavía — añade películas a tu biblioteca."
+    "empty": "Nada que mostrar todavía — añade películas a tu biblioteca.",
+    "back": "Volver",
+    "shortcutsNavigate": "Navegar",
+    "shortcutsSelect": "Seleccionar"
   }
 }

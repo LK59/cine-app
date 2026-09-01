@@ -40,8 +40,13 @@ function focusCard(el: HTMLElement) {
   el.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
 }
 
-export function useTvGridNav() {
+// `enabled` lets a caller pause the hook without unmounting it (e.g. Cinema Mode's detail
+// overlay, which owns its own Up/Down + Escape handling for its vertical menu — leaving this
+// hook live at the same time would have it try to move focus across the grid underneath while
+// the overlay is open).
+export function useTvGridNav(enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     function onKeyDown(e: KeyboardEvent) {
       if (isInputFocused()) return;
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
@@ -84,5 +89,5 @@ export function useTvGridNav() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [enabled]);
 }

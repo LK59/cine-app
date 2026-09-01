@@ -3,13 +3,15 @@
 import useSWR from "swr";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
+import { CinemaMovieDetail } from "@/components/cinema/CinemaMovieDetail";
+import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
@@ -65,7 +67,6 @@ function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
 // no server-rendered HTML for it at all.
 export function CinemaClient() {
   const t = useT();
-  useTvGridNav();
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
@@ -75,7 +76,12 @@ export function CinemaClient() {
   const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
+  const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
   const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
+
+  // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu — see the
+  // hook's own doc comment.
+  useTvGridNav(selectedItem === null);
 
   // A hard navigation, not router.push — same reasoning as Sidebar's entry link into this page:
   // Next's client-side transition (RSC fetch, mode "cors") was failing at the network level in
@@ -90,7 +96,7 @@ export function CinemaClient() {
   // into the production CSS bundle — see CinemaHero's note on the height fix). 200, not 45: the
   // z-45 version still didn't show, and 45 was never actually proven safe (only the diagnostic's
   // z-9999 was) — this sits comfortably above every other always-mounted fixed layer in the app
-  // (UpdateBanner z-70, Toast z-100).
+  // (UpdateBanner z-70, Toast z-100). CinemaMovieDetail sits at 220, above this.
   const zLayer = { zIndex: 200 };
 
   // The actual bug, found by comparing rendered outerHTML against the DOM: `fixed inset-0` only
@@ -132,39 +138,55 @@ export function CinemaClient() {
   }
 
   return createPortal(
-    <div className="fixed inset-0 overflow-y-auto bg-slate-950" style={zLayer}>
+    <div className="fixed inset-0 bg-slate-950" style={zLayer}>
       <button
         onClick={() => { window.location.href = "/"; }}
-        className="fixed right-4 top-4 flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
-        style={{ zIndex: 201, top: "max(1rem, env(safe-area-inset-top))" }}
+        className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
+        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+        title={t("cinema.standardMode")}
       >
-        <X size={16} /> {t("cinema.standardMode")}
+        <ArrowLeft size={16} />
       </button>
 
-      {heroItem && <CinemaHero item={heroItem} />}
+      <CinemaShortcutsGuide />
 
-      <div className="relative -mt-16 pb-12">
-        {resumeMovies.length > 0 && (
-          <div className="mb-8">
-            <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
-            <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
-              {resumeMovies.map((item, i) => (
-                <ContinueCard key={item.id} item={item} index={i} />
-              ))}
+      {/* Split-screen TV layout: the top half is a live, non-scrolling preview of whatever card
+          has focus (never scrolls away — that's the "sticky" ask) and the bottom half is its own
+          independently scrolling region for the rows. Two panes, not one scroller with a sticky
+          hero, so the preview never has to fight scroll position math. */}
+      <div className="flex h-full flex-col">
+        {/* Height as inline style, not a basis-[54%] arbitrary-value class — those don't make it
+            into the production CSS bundle (see the z-index note above). */}
+        <div className="relative shrink-0" style={{ flexBasis: "54%" }}>
+          {heroItem && <CinemaHero item={heroItem} />}
+        </div>
+
+        <div className="scrollbar-thin flex-1 overflow-y-auto pb-8 pt-6">
+          {resumeMovies.length > 0 && (
+            <div className="mb-8">
+              <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
+              <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+                {resumeMovies.map((item, i) => (
+                  <ContinueCard key={item.id} item={item} index={i} />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {movies?.genres.map((genre) => (
-          <CinemaRow
-            key={genre}
-            label={genre}
-            rowKey={`genre-${genre}`}
-            items={movies.rows[genre] ?? []}
-            onFocusItem={setFocusedItem}
-          />
-        ))}
+          {movies?.genres.map((genre) => (
+            <CinemaRow
+              key={genre}
+              label={genre}
+              rowKey={`genre-${genre}`}
+              items={movies.rows[genre] ?? []}
+              onFocusItem={setFocusedItem}
+              onSelectItem={setSelectedItem}
+            />
+          ))}
+        </div>
       </div>
+
+      {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={() => setSelectedItem(null)} />}
     </div>,
     document.body
   );
