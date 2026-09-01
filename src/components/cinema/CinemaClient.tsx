@@ -9,7 +9,6 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
-import { CinemaDebugBoundary } from "@/components/cinema/CinemaDebugBoundary";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
@@ -129,32 +128,33 @@ export function CinemaClient() {
         <X size={16} /> {t("cinema.standardMode")}
       </button>
 
-      <CinemaDebugBoundary>
-        {heroItem && <CinemaHero item={heroItem} />}
+      {/* TEMP: CinemaDebugBoundary removed to test whether IT is the problem — the exit button
+          above renders fine every time, but nothing below it ever has, and this class-component
+          wrapper is the one thing in this tree never tested in isolation. */}
+      {heroItem && <CinemaHero item={heroItem} />}
 
-        <div className="relative -mt-16 pb-12">
-          {resumeMovies.length > 0 && (
-            <div className="mb-8">
-              <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
-              <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
-                {resumeMovies.map((item, i) => (
-                  <ContinueCard key={item.id} item={item} index={i} />
-                ))}
-              </div>
+      <div className="relative -mt-16 pb-12">
+        {resumeMovies.length > 0 && (
+          <div className="mb-8">
+            <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
+            <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+              {resumeMovies.map((item, i) => (
+                <ContinueCard key={item.id} item={item} index={i} />
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {movies?.genres.map((genre) => (
-            <CinemaRow
-              key={genre}
-              label={genre}
-              rowKey={`genre-${genre}`}
-              items={movies.rows[genre] ?? []}
-              onFocusItem={setFocusedItem}
-            />
-          ))}
-        </div>
-      </CinemaDebugBoundary>
+        {movies?.genres.map((genre) => (
+          <CinemaRow
+            key={genre}
+            label={genre}
+            rowKey={`genre-${genre}`}
+            items={movies.rows[genre] ?? []}
+            onFocusItem={setFocusedItem}
+          />
+        ))}
+      </div>
     </div>
   );
 }
