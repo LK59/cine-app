@@ -644,6 +644,21 @@ export function PlayerControls({
     return () => cancelAnimationFrame(id);
   }, [menu]);
 
+  // Fallback for however else the menu can close besides Escape (which already refocuses its
+  // own trigger explicitly): picking a subtitle/audio track, or any other item whose own onClick
+  // just does setMenu(null) with no focus handling, removes the FOCUSED button from the DOM —
+  // the browser's default is to drop focus to <body> when that happens, with nothing to catch
+  // it, which silently locked the keyboard out of the whole nav chain (Up/Down/Left/Right all
+  // read "nothing recognized" from there). If focus landed somewhere outside the player
+  // entirely once the menu is gone, bring it back to play/pause rather than leaving it stranded.
+  const prevMenuRef = useRef(menu);
+  useEffect(() => {
+    if (prevMenuRef.current && !menu && !containerRef.current?.contains(document.activeElement)) {
+      containerRef.current?.querySelector<HTMLButtonElement>('[data-player-nav="playpause"]')?.focus();
+    }
+    prevMenuRef.current = menu;
+  }, [menu, containerRef]);
+
   useEffect(() => {
     function focusNav(name: string) {
       containerRef.current?.querySelector<HTMLElement>(`[data-player-nav="${name}"]`)?.focus();
