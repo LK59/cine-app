@@ -86,10 +86,12 @@ export function CinemaClient() {
     </button>
   );
 
-  // z-index as inline style, not z-[45] — see CinemaHero's own note: arbitrary-value Tailwind
-  // classes weren't making it into the production CSS bundle, confirmed live by isolating a
-  // render inside a guaranteed-visible, plain-inline-styled diagnostic screen.
-  const zLayer = { zIndex: 45 };
+  // z-index as inline style, not a Tailwind class (arbitrary-value classes weren't making it
+  // into the production CSS bundle — see CinemaHero's note on the height fix). 200, not 45: the
+  // z-45 version still didn't show, and 45 was never actually proven safe (only the diagnostic's
+  // z-9999 was) — this sits comfortably above every other always-mounted fixed layer in the app
+  // (UpdateBanner z-70, Toast z-100).
+  const zLayer = { zIndex: 200 };
 
   if (moviesLoading) {
     return (
@@ -122,7 +124,7 @@ export function CinemaClient() {
       <button
         onClick={() => { window.location.href = "/"; }}
         className="fixed right-4 top-4 flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
-        style={{ zIndex: 50, top: "max(1rem, env(safe-area-inset-top))" }}
+        style={{ zIndex: 201, top: "max(1rem, env(safe-area-inset-top))" }}
       >
         <X size={16} /> {t("cinema.standardMode")}
       </button>
