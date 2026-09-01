@@ -51,10 +51,8 @@ export function WatchlistButton({
         });
         if (!res.ok) throw new Error();
       }
-      // Fire-and-forget: a revalidation failure here shouldn't surface as an unhandled promise
-      // rejection (the optimistic UI is already correct either way).
-      mutate(itemKey).catch(() => {});
-      mutate("/api/watchlist").catch(() => {});
+      mutate(itemKey);
+      mutate("/api/watchlist");
     } catch {
       mutate(itemKey); // rollback on error
     } finally {
