@@ -46,12 +46,19 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   // not after some additional invisible delay.
   const [loadedLogoUrl, setLoadedLogoUrl] = useState<string | null>(null);
   const [logoTimedOut, setLogoTimedOut] = useState(false);
-  // Reset adjusted during render (not inside the effect below) per React's own guidance for
-  // deriving state from a prop change, to avoid an extra render pass.
-  const [timedOutForId, setTimedOutForId] = useState(item.radarrId);
-  if (item.radarrId !== timedOutForId) {
-    setTimedOutForId(item.radarrId);
+  // Reset adjusted during render (not inside an effect) per React's own guidance for deriving
+  // state from a prop change, to avoid an extra render pass — and critically, SYNCHRONOUSLY in
+  // the same render item.radarrId itself changes, not a tick later. loadedLogoUrl not being
+  // reset at all was the actual bug behind "film1's logo flashes on film2": this is a single
+  // persistent component instance across focus changes (never remounted), so old state simply
+  // stays around — and during the debounce window right after switching, SWR briefly held film1's
+  // still-cached data under a not-yet-updated key, which momentarily made
+  // `loadedLogoUrl === info.logoUrl` true again by matching against film1's own URL, not film2's.
+  const [resetForId, setResetForId] = useState(item.radarrId);
+  if (item.radarrId !== resetForId) {
+    setResetForId(item.radarrId);
     setLogoTimedOut(false);
+    setLoadedLogoUrl(null);
   }
   useEffect(() => {
     const timer = setTimeout(() => setLogoTimedOut(true), 2000);

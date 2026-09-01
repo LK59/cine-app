@@ -134,9 +134,19 @@ export function CinemaClient() {
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
 
-  // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu — see the
-  // hook's own doc comment.
-  useTvGridNav(selectedItem === null);
+  // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu (see the
+  // hook's own doc comment) AND while the player is open. The player closes CinemaMovieDetail
+  // the moment Lecture actually starts (see CinemaMovieDetail's own note), which flips
+  // selectedItem back to null — without this second condition that alone was enough to
+  // re-arm this hook's own global arrow-key listener underneath the player: pressing Right on a
+  // player control it didn't recognize hit useTvGridNav's "nothing focused yet" branch, which
+  // jumps straight to the first poster card in the (still fully mounted, just hidden) browse
+  // grid — then Enter on THAT opened a completely different title's detail sheet.
+  const playback = usePlayback();
+  // "full" specifically, not "closed" — a minimized (mini) player is a small floating widget;
+  // browsing the grid underneath it should still work normally, only a full-screen player
+  // actively capturing the keyboard needs this stepping aside.
+  useTvGridNav(selectedItem === null && playback.mode !== "full");
 
   function openDetail(item: CinemaMovie) {
     lastFocusedCard.current = document.activeElement as HTMLElement;
