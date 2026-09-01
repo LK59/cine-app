@@ -606,43 +606,89 @@ export function PlayerControls({
     setSubtitleOffset((o) => Math.round((o + deltaSeconds) * 10) / 10);
   }
 
-  // Space/arrows/M/F, full-mode only (this component isn't rendered in mini mode at all) and
-  // skipped whenever an <input> already has focus — most relevantly the volume/seek range
-  // sliders, which already have their own native arrow-key behavior that this would otherwise
-  // fight over the exact same keys.
+  // Directional control nav — a fixed adjacency map, not a generic geometric grid solver, since
+  // the actual layout is fixed: topbar (captions/audio/more/minimize/close) above center
+  // (skip-back/playpause/skip-fwd) above seek above volume above fullscreen. Left/Right cycle
+  // within whichever row currently has focus (clamped, no wraparound); Up/Down cross rows, always
+  // landing on a specific, predictable control rather than "whatever was last focused there" —
+  // e.g. Up from seek always lands on playpause specifically, matching a TV remote's own
+  // predictability. Falls back to the old global skip(±10) behavior when nothing in here has
+  // focus at all (e.g. right after a menu closes and returns focus to <body>), so arrow keys
+  // still do something sane even outside the nav chain.
+  const NAV_DOWN: Record<string, string> = {
+    captions: "playpause", audio: "playpause", more: "playpause", minimize: "playpause", close: "playpause",
+    "skip-back": "seek", playpause: "seek", "skip-fwd": "seek",
+    seek: "volume",
+    volume: "fullscreen",
+  };
+  const NAV_UP: Record<string, string> = {
+    "skip-back": "captions", playpause: "captions", "skip-fwd": "captions",
+    seek: "playpause",
+    volume: "seek",
+    fullscreen: "volume",
+  };
+
   useEffect(() => {
+    function focusNav(name: string) {
+      containerRef.current?.querySelector<HTMLElement>(`[data-player-nav="${name}"]`)?.focus();
+    }
+
     function onKeyDown(e: KeyboardEvent) {
-      if (document.activeElement instanceof HTMLInputElement) return;
-      switch (e.code) {
-        case "Space":
-          // A keyboard-focused control button (Tab'd to via TV remote/keyboard nav) needs Space
-          // to actually activate IT — preventDefault() here suppresses the browser's own
-          // keyup-triggered click on that button (per spec, button activation via Space fires on
-          // keyup only if keydown's default wasn't prevented), which otherwise made every
-          // control except play/pause itself unreachable by keyboard.
-          if (document.activeElement instanceof HTMLButtonElement) return;
-          e.preventDefault(); // default: page scroll
-          togglePlay();
-          showControls();
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          skip(-10);
-          showControls();
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          skip(10);
-          showControls();
-          break;
-        case "KeyM":
-          toggleMute();
-          break;
-        case "KeyF":
-          if (fullscreenSupported) toggleFullscreen();
-          break;
-        default:
+      const active = document.activeElement;
+      const navName = active instanceof HTMLElement ? active.getAttribute("data-player-nav") : null;
+      const navGroup = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-player-navgroup]") : null;
+
+      if (e.code === "Space") {
+        // A keyboard-focused control button (Tab'd to, or landed on via this nav) needs Space to
+        // actually activate IT — preventDefault() here suppresses the browser's own
+        // keyup-triggered click on that button (per spec, button activation via Space fires on
+        // keyup only if keydown's default wasn't prevented), which otherwise made every control
+        // except play/pause itself unreachable by keyboard.
+        if (active instanceof HTMLButtonElement) return;
+        e.preventDefault(); // default: page scroll
+        togglePlay();
+        showControls();
+        return;
+      }
+      if (e.code === "KeyM") {
+        toggleMute();
+        return;
+      }
+      if (e.code === "KeyF") {
+        if (fullscreenSupported) toggleFullscreen();
+        return;
+      }
+
+      if (e.code === "ArrowUp" || e.code === "ArrowDown") {
+        const target = (e.code === "ArrowUp" ? NAV_UP : NAV_DOWN)[navName ?? ""];
+        if (!target) return;
+        e.preventDefault(); // otherwise a focused range input's own Up/Down would also nudge its value
+        focusNav(target);
+        showControls();
+        return;
+      }
+
+      if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+        // Range inputs (seek/volume) already handle their own Left/Right natively (adjust the
+        // value) — never hijack that.
+        if (active instanceof HTMLInputElement) return;
+
+        if (navGroup) {
+          const siblings = Array.from(navGroup.querySelectorAll<HTMLElement>("[data-player-nav]"));
+          const idx = siblings.indexOf(active as HTMLElement);
+          const next = e.code === "ArrowRight" ? siblings[idx + 1] : siblings[idx - 1];
+          if (next) {
+            e.preventDefault();
+            next.focus();
+            showControls();
+          }
           return;
+        }
+
+        // Nothing player-related focused — same global shortcut this always was.
+        e.preventDefault();
+        skip(e.code === "ArrowRight" ? 10 : -10);
+        showControls();
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -745,9 +791,10 @@ export function PlayerControls({
               close) stay directly on the bar — on a portrait phone, 9 icons in a row was too
               much. Everything else (info, chapters, speed, AirPlay, PiP) lives one tap deeper
               behind "···", grouped as a labeled list rather than more bare icons. */}
-          <div className="flex shrink-0 items-center gap-2">
+          <div data-player-navgroup="topbar" className="flex shrink-0 items-center gap-2">
             {subtitleTracks.length > 0 && (
               <button
+                data-player-nav="captions"
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenu(menu === "subtitles" ? null : "subtitles");
@@ -759,6 +806,7 @@ export function PlayerControls({
             )}
             {audioTracks.length > 1 && (
               <button
+                data-player-nav="audio"
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenu(menu === "audio" ? null : "audio");
@@ -769,6 +817,7 @@ export function PlayerControls({
               </button>
             )}
             <button
+              data-player-nav="more"
               onClick={(e) => {
                 e.stopPropagation();
                 setMenu(menu === "more" ? null : "more");
@@ -779,6 +828,7 @@ export function PlayerControls({
               <EllipsisVertical size={18} />
             </button>
             <button
+              data-player-nav="minimize"
               onClick={(e) => {
                 e.stopPropagation();
                 handleMinimizeClick();
@@ -789,6 +839,7 @@ export function PlayerControls({
               <ChevronDown size={20} />
             </button>
             <button
+              data-player-nav="close"
               onClick={(e) => {
                 e.stopPropagation();
                 handleCloseClick();
@@ -986,8 +1037,9 @@ export function PlayerControls({
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
         {!loading && !buffering && (
-          <div className="pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6">
+          <div data-player-navgroup="center" className="pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6">
             <button
+              data-player-nav="skip-back"
               onClick={(e) => {
                 e.stopPropagation();
                 skip(-10);
@@ -998,7 +1050,7 @@ export function PlayerControls({
               <RotateCcw size={22} />
             </button>
             <button
-              data-player-playpause
+              data-player-nav="playpause"
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();
@@ -1008,6 +1060,7 @@ export function PlayerControls({
               {playing ? <Pause size={28} /> : <Play size={28} />}
             </button>
             <button
+              data-player-nav="skip-fwd"
               onClick={(e) => {
                 e.stopPropagation();
                 skip(10);
@@ -1132,6 +1185,7 @@ export function PlayerControls({
               </div>
             )}
             <input
+              data-player-nav="seek"
               type="range"
               min={0}
               max={duration || 0}
@@ -1194,6 +1248,7 @@ export function PlayerControls({
                 {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
               <input
+                data-player-nav="volume"
                 type="range"
                 min={0}
                 max={1}
@@ -1203,7 +1258,7 @@ export function PlayerControls({
                 className="h-1 w-16 cursor-pointer accent-accent-500"
               />
               {fullscreenSupported && (
-                <button onClick={toggleFullscreen} className="rounded-lg p-1.5 hover:bg-white/10">
+                <button data-player-nav="fullscreen" onClick={toggleFullscreen} className="rounded-lg p-1.5 hover:bg-white/10">
                   {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
                 </button>
               )}

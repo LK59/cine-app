@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -18,6 +18,15 @@ import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+
+// Fades the SHARP copy of the backdrop out by ~72% of the *whole screen's* height (not just the
+// hero pane's own box — this mask is applied to a full-height image, see the background layer
+// below) — a blurred, darkened duplicate sits behind it, so wherever this one has faded to
+// transparent, the blurred one shows through instead of hitting solid slate-950. That's what
+// makes the wash "keep going" past the hero into the rows pane instead of stopping at a hard
+// edge right at the category label.
+const BACKDROP_MASK =
+  "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)";
 
 // w-24→xl:w-36 (96px→144px), down from the original w-40/sm:w-48 (160/192px) fixed pair — that
 // fixed size overflowed the row on anything shorter than a large desktop window, pushing the row
@@ -80,6 +89,28 @@ export function CinemaClient() {
   );
   const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
   const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
+
+  // Warms the browser's own image cache for every distinct backdrop in the library, same
+  // technique DashboardHero already uses for its (much smaller) rotation set — without it, the
+  // FIRST time focus lands on any given title, its backdrop is a cold network fetch, which read
+  // as "a second of nothing, then the picture just pops in." Deferred by a beat so it doesn't
+  // compete with the initial screen's own critical images (hero, first row).
+  useEffect(() => {
+    if (!movies) return;
+    const seen = new Set<number>();
+    const urls: string[] = [];
+    for (const list of Object.values(movies.rows)) {
+      for (const m of list) {
+        if (seen.has(m.radarrId)) continue;
+        seen.add(m.radarrId);
+        if (m.backdropUrl) urls.push(m.backdropUrl);
+      }
+    }
+    const timer = setTimeout(() => {
+      for (const url of urls) Object.assign(new Image(), { src: url });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [movies]);
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
@@ -178,26 +209,57 @@ export function CinemaClient() {
 
       <CinemaShortcutsGuide />
 
+      {/* One continuous ambient background for the WHOLE screen, not scoped to the hero pane —
+          a sharp copy of the focused item's backdrop (masked, fading out by ~72% of the full
+          screen height) sits over a blurred+darkened duplicate that spans the full height, so
+          wherever the sharp one has faded away the wash keeps going (blurred, dim) instead of
+          hitting a hard edge right at the rows pane. Both panes below render on top of this with
+          transparent backgrounds — the only thing they visually share is this backdrop, not any
+          overlapping text/labels (an earlier -mt-16 overlap trick pulled row labels into literal
+          collision with the hero's own synopsis/cast line). */}
+      <div className="absolute inset-0 overflow-hidden">
+        {heroItem?.backdropUrl && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={`blur-${heroItem.radarrId}`}
+              src={heroItem.backdropUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full scale-110 object-cover object-top blur-2xl"
+            />
+            <div className="absolute inset-0 bg-slate-950/55" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={heroItem.radarrId}
+              src={heroItem.backdropUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover object-top"
+              style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
+            />
+          </>
+        )}
+        <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b from-transparent to-slate-950" />
+      </div>
+
       {/* Split-screen TV layout: the top pane is a live, non-scrolling preview of whatever card
           has focus (never scrolls away — that's the "sticky" ask) and the bottom pane is its own
           independently scrolling region for the rows. Two panes, not one scroller with a sticky
-          hero, so the preview never has to fight scroll position math. Deliberately NO content
-          overlap between them (an earlier -mt-16 overlap trick pulled row labels visually into
-          the hero's own text, colliding with the synopsis/cast line) — the only thing they share
-          is color and a blurred/dimmed hint of the backdrop at the very bottom of the hero (see
-          CinemaHero's own fade+blur), not actual overlapping elements. */}
-      <div className="flex h-full flex-col">
-        {/* Height as inline style, not a basis-[54%] arbitrary-value class — those don't make it
-            into the production CSS bundle (see the z-index note above). */}
-        <div className="relative shrink-0" style={{ flexBasis: "54%" }}>
+          hero, so the preview never has to fight scroll position math. */}
+      <div className="relative z-10 flex h-full flex-col">
+        {/* Height as inline style, not a basis-[66%] arbitrary-value class — those don't make it
+            into the production CSS bundle (see the z-index note above). Taller than the panel
+            actually needs for its own text so the shared backdrop above reads as a real hero,
+            not cut short right where the text ends. */}
+        <div className="relative shrink-0" style={{ flexBasis: "66%" }}>
           {heroItem && <CinemaHero item={heroItem} />}
         </div>
 
-        {/* snap-y/snap-mandatory: vertical navigation — arrow keys (via focusCard's
-            scrollIntoView), mouse wheel, trackpad, all of it — always comes to rest with a whole
-            row (its label included) at the top, never stopped mid-row with the label scrolled
-            out of view above the fold. snap-start on each row below is the other half of this. */}
-        <div className="scrollbar-thin relative z-10 min-h-0 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6">
+        {/* snap-y/snap-proximity, not snap-mandatory: mandatory forced every wheel tick to a full
+            row-jump, which read as "blocked" for anyone trying to scroll through several rows
+            quickly. Proximity still settles cleanly on a row boundary (label included) once the
+            scroll comes to rest near one, but doesn't fight a fast scroll on the way there. */}
+        <div className="scrollbar-thin relative min-h-0 flex-1 snap-y snap-proximity scroll-smooth overflow-y-auto pb-16 pt-6">
           {resumeMovies.length > 0 && (
             <div className="mb-6 snap-start">
               <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>

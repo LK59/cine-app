@@ -812,9 +812,9 @@ function ActivePlayer({
   // wherever it was on the page that opened playback (e.g. Cinema Mode's "Lecture" row, which
   // stays mounted underneath at a lower z-index) instead of moving into the now-visible player,
   // so Tab/Enter appear to do nothing. One frame after mounting full-screen, land specifically on
-  // play/pause (data-player-playpause, not just "the first button" — the skip/rewind buttons
-  // sitting either side of it in DOM order made that unpredictable) so keyboard control starts on
-  // the one control every remote/keyboard user reaches for first.
+  // play/pause (data-player-nav="playpause", not just "the first button" — the skip/rewind
+  // buttons sitting either side of it in DOM order made that unpredictable) so keyboard control
+  // starts on the one control every remote/keyboard user reaches for first.
   // A single requestAnimationFrame here isn't enough: PlayerControls only renders the
   // play/pause button once `!loading && !buffering` (a spinner shows until then), and mode
   // flips to "full" the instant playback.play() is called — long before the stream has actually
@@ -828,7 +828,7 @@ function ActivePlayer({
     let attempts = 0;
     const id = setInterval(() => {
       attempts += 1;
-      const btn = containerRef.current?.querySelector<HTMLButtonElement>("[data-player-playpause]");
+      const btn = containerRef.current?.querySelector<HTMLButtonElement>('[data-player-nav="playpause"]');
       if (btn) {
         btn.focus();
         clearInterval(id);

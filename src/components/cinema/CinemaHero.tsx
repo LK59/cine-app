@@ -6,13 +6,6 @@ import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
-// Same treatment as DashboardHero/the fiche pages' own hero — kept as a literal duplicate
-// (not extracted to a shared constant) since Cinema Mode's hero is a good deal taller and could
-// reasonably diverge from the standard hero's exact fade curve later without that being a
-// surprise cross-component change.
-const BACKDROP_MASK =
-  "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)";
-
 interface RadarrCastMember {
   tmdbId: number;
   name: string;
@@ -26,12 +19,15 @@ interface RadarrInfo {
   logoUrl: string | null;
 }
 
-// Passive preview pane for the browse screen — no buttons here on purpose (Netflix TV home:
-// the top pane is just a live preview of whatever's focused, never actionable on its own).
-// Opening CinemaMovieDetail (click/Enter on a card) is what surfaces Lecture/Bande-annonce/Vu/Ma
-// liste. Cast still fetched here (not just in the detail overlay) since this pane already shows
-// it, same lazy/debounced approach so fast arrow-key scrubbing across a row doesn't fire a
-// request per card it passes through.
+// Text only — the backdrop image/gradients live in CinemaClient now, as one continuous
+// full-screen background layer shared with the rows pane beneath (see its own doc comment for
+// why: keeping the image scoped to just this component's box was exactly what produced a hard
+// seam where the hero "ended"). This is purely a passive preview pane — no buttons here on
+// purpose (Netflix TV home: the top pane is just a live preview of whatever's focused, never
+// actionable on its own). Opening CinemaMovieDetail (click/Enter on a card) is what surfaces
+// Lecture/Bande-annonce/Vu/À voir. Cast still fetched here (not just in the detail overlay) since
+// this pane already shows it, same lazy/debounced approach so fast arrow-key scrubbing across a
+// row doesn't fire a request per card it passes through.
 export function CinemaHero({ item }: { item: CinemaMovie }) {
   const [debouncedId, setDebouncedId] = useState(item.radarrId);
   useEffect(() => {
@@ -44,64 +40,29 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   const info = debouncedId === item.radarrId ? rawInfo : undefined;
 
   return (
-    // Height as an inline style, not h-[70vh] min-h-[420px] — those arbitrary-value Tailwind
-    // classes weren't making it into the production CSS bundle (confirmed live: the exact same
-    // content rendered fine, fully visible, once given real height via style={} instead), while
-    // this file's *named* utility classes (max-w-2xl, text-4xl, etc.) all worked correctly.
-    <div className="relative h-full w-full overflow-hidden">
-      {item.backdropUrl && (
+    <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+      {info?.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={item.radarrId}
-          src={item.backdropUrl}
-          alt=""
-          // No fade-in animation here on purpose: fast arrow-key scrubbing across a row remounts
-          // this element (new key) on every step, and a restarted opacity keyframe on each of
-          // those in quick succession is what was reported as backdrops "ghosting"/persisting
-          // into one another — an instant swap has no transient state left to overlap.
-          className="absolute inset-0 h-full w-full object-cover object-top"
-          style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
-        />
+        <img src={info.logoUrl} alt={item.title} className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24" />
+      ) : (
+        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
       )}
-      <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
-      {/* A soft, gradually-eased blur behind the bottom third (same masked-backdrop-blur
-          technique as CinemaMovieDetail) plus a fade to the exact solid color the rows pane sits
-          on — "the only thing the two panes share is color and a blurred/dimmed hint of the
-          backdrop", not overlapping content. */}
-      <div
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
-        style={{
-          height: "35%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 70%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 70%)",
-        }}
-      />
-      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-b from-transparent to-slate-950" />
 
-      <div key={item.radarrId} className="relative flex h-full max-w-2xl animate-fade-in flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
-        {info?.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={info.logoUrl} alt={item.title} className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24" />
-        ) : (
-          <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
-          <span>{item.year}</span>
-          {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-          {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
-        </div>
-
-        <p className="line-clamp-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
-          {info?.tmdb?.overview || item.overview}
-        </p>
-
-        {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-          <p className="max-w-xl truncate text-xs text-white/60">
-            {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
-          </p>
-        )}
+      <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+        <span>{item.year}</span>
+        {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+        {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
       </div>
+
+      <p className="line-clamp-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+        {info?.tmdb?.overview || item.overview}
+      </p>
+
+      {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
+        <p className="max-w-xl truncate text-xs text-white/60">
+          {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
+        </p>
+      )}
     </div>
   );
 }
