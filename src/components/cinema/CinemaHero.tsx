@@ -96,7 +96,7 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
           {info?.tmdb?.overview || item.overview}
         </p>
 
-        {info?.tmdb && info.tmdb.cast.length > 0 && (
+        {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
           <p className="max-w-xl truncate text-xs text-white/60">
             {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
           </p>
