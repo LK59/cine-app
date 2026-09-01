@@ -118,6 +118,22 @@ export default function CinemaPage() {
         <X size={16} /> {t("cinema.standardMode")}
       </button>
 
+      {/* Temporary — always-visible raw state readout, independent of CinemaHero's own
+          rendering, to pin down a "nothing visible, no error anywhere" report. Remove once
+          Cinema Mode is confirmed stable. */}
+      <pre className="relative z-50 max-h-64 overflow-auto whitespace-pre-wrap break-all bg-black/80 p-3 text-[10px] text-lime-400">
+        {JSON.stringify(
+          {
+            genresCount: movies?.genres.length,
+            spotlightCount: movies?.spotlight.length,
+            resumeCount: resumeMovies.length,
+            heroItem,
+          },
+          null,
+          2
+        )}
+      </pre>
+
       <CinemaDebugBoundary>
         {heroItem && <CinemaHero item={heroItem} />}
 
