@@ -270,8 +270,15 @@ export function CinemaClient() {
       {/* Split-screen TV layout: the top pane is a live, non-scrolling preview of whatever card
           has focus (never scrolls away — that's the "sticky" ask) and the bottom pane is its own
           independently scrolling region for the rows. Two panes, not one scroller with a sticky
-          hero, so the preview never has to fight scroll position math. */}
-      <div className="relative z-10 flex h-full flex-col">
+          hero, so the preview never has to fight scroll position math.
+          No z-index here (was z-10, same as the exit button above) — that tied both at the same
+          stacking level, and since this wrapper comes LATER in DOM order, it silently won the
+          tie and sat on top of the button in that corner (transparent there, but still catching
+          every click aimed at it) — the exact same bug CinemaMovieDetail's own back button had.
+          DOM order alone already paints this correctly above the backgroundlayer right before it
+          (that one has no z-index either), so nothing here needs to compete with the fixed
+          buttons at all. */}
+      <div className="relative flex h-full flex-col">
         {/* flex-basis 50% via inline style (arbitrary-value classes don't make it into the
             production CSS bundle — see the z-index note above), grow-0 (never grows past 50% on
             a tall screen) shrink (free to shrink below it) — paired with the rows pane's own
