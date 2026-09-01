@@ -1,6 +1,7 @@
-// v6: flushes every already-installed client's cached assets after the player's
-// codec-negotiation overhaul, so no session keeps running the pre-fallback-ladder player code.
-const CACHE_NAME = "cine-app-v6";
+// v7: flushes cached navigations/chunks from the several broken Cinema Mode iterations tested
+// live this session — a client that had cached one of those earlier responses (network-first
+// falls back to whatever's cached on any failure) could keep reproducing an already-fixed bug.
+const CACHE_NAME = "cine-app-v7";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {
@@ -55,8 +56,16 @@ self.addEventListener("fetch", (event) => {
       .catch(() =>
         caches.match(event.request).then((cached) => {
           if (cached) return cached;
-          if (event.request.mode === "navigate") return caches.match("/offline.html");
-          return undefined;
+          if (event.request.mode === "navigate") {
+            return caches
+              .match("/offline.html")
+              .then((offline) => offline ?? new Response("Offline", { status: 503 }));
+          }
+          // event.respondWith() throws "Failed to convert value to 'Response'" if this ever
+          // resolves to undefined (a real failure mode hit live: a non-navigate request whose
+          // network fetch failed with nothing cached) — a synthetic error response is always
+          // valid where undefined isn't.
+          return new Response("", { status: 504, statusText: "Network error, nothing cached" });
         })
       )
   );
