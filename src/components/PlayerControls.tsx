@@ -92,6 +92,7 @@ export function PlayerControls({
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [castSupported, setCastSupported] = useState(false);
@@ -628,6 +629,21 @@ export function PlayerControls({
     fullscreen: "volume",
   };
 
+  // Which topbar control reopens each menu on Escape, to land focus back where it came from.
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more" };
+
+  // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
+  // only focuses THAT button (native click behavior), never moves focus into the popup that
+  // then renders beside it, so without this, Up/Down here had no menu items to cycle through at
+  // all: the trigger button's own nav target (playpause) is what Down actually reached.
+  useEffect(() => {
+    if (!menu) return;
+    const id = requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [menu]);
+
   useEffect(() => {
     function focusNav(name: string) {
       containerRef.current?.querySelector<HTMLElement>(`[data-player-nav="${name}"]`)?.focus();
@@ -637,6 +653,38 @@ export function PlayerControls({
       const active = document.activeElement;
       const navName = active instanceof HTMLElement ? active.getAttribute("data-player-nav") : null;
       const navGroup = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-player-navgroup]") : null;
+
+      // A menu (captions/audio/···/chapters/speed) is open — Up/Down/Escape belong entirely to
+      // it while it's up, not to the control-bar nav map below (its own targets, like Down from
+      // "captions" going to playpause, would otherwise fight this every press). No data-player-
+      // nav tagging needed on each item: every button rendered inside the popup is a valid stop,
+      // in the order they appear.
+      if (menu) {
+        if (e.code === "Escape") {
+          e.preventDefault();
+          setMenu(null);
+          focusNav(MENU_TRIGGER[menu] ?? "more");
+          return;
+        }
+        if (e.code === "ArrowUp" || e.code === "ArrowDown") {
+          e.preventDefault();
+          const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+          if (items.length === 0) return;
+          const idx = items.indexOf(active as HTMLButtonElement);
+          const next = e.code === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
+          next?.focus();
+          return;
+        }
+        if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+          // Not seekable controls — swallow rather than falling through to the global skip(±10)
+          // below, which would otherwise fire while browsing a plain list of menu items.
+          e.preventDefault();
+          return;
+        }
+        // Space/Enter fall through to native button activation as usual; everything else
+        // (M/F/etc.) is deliberately ignored while a menu has focus.
+        if (e.code !== "Space") return;
+      }
 
       if (e.code === "Space") {
         // A keyboard-focused control button (Tab'd to, or landed on via this nav) needs Space to
@@ -693,8 +741,12 @@ export function PlayerControls({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+    // menu is a real dependency (not just omitted-by-habit like the others here) — this branches
+    // on it directly, and without it in the array the closure would keep whatever `menu` was set
+    // to the last time fullscreenSupported changed, silently going stale every time a menu
+    // actually opens or closes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreenSupported]);
+  }, [fullscreenSupported, menu]);
 
   if (hidden) return null;
 
@@ -853,6 +905,7 @@ export function PlayerControls({
 
         {menu && (
           <div
+            ref={menuRef}
             className="pointer-events-auto absolute w-56 max-h-[60vh] overflow-y-auto overscroll-contain rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
             style={{
               // `bottom` deliberately not set here: an absolutely-positioned element with both
@@ -1225,6 +1278,26 @@ export function PlayerControls({
                 seekingRef.current = false;
                 commitSeek(Number((e.target as HTMLInputElement).value));
                 setPreviewTime(null);
+                setTimeout(() => showControls(5000), 0);
+              }}
+              // Same preview/commit split as the mouse/touch handlers above, for arrow-key
+              // seeking — without this, Left/Right looked like it "fought the bar and snapped
+              // back to where it already was": onChange only calls previewSeek (updates the
+              // displayed time, never the real video.currentTime), and with seekingRef never set
+              // for a keyboard press, the very next 'timeupdate' tick (fires ~4x/s during
+              // playback) overwrote that optimistic value straight back to the stale actual
+              // position. keydown marks the same "don't let timeupdate clobber this" window
+              // mouse/touch already get; keyup is this input method's equivalent of
+              // mouseup/touchend, committing the real seek.
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                seekingRef.current = true;
+                holdControls();
+              }}
+              onKeyUp={(e) => {
+                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                seekingRef.current = false;
+                commitSeek(Number((e.target as HTMLInputElement).value));
                 setTimeout(() => showControls(5000), 0);
               }}
               // h-5 (20px), not h-1: the native range control keeps its visual groove thin and

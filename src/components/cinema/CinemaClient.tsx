@@ -90,11 +90,12 @@ export function CinemaClient() {
   const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
   const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
 
-  // Warms the browser's own image cache for every distinct backdrop in the library, same
-  // technique DashboardHero already uses for its (much smaller) rotation set — without it, the
-  // FIRST time focus lands on any given title, its backdrop is a cold network fetch, which read
-  // as "a second of nothing, then the picture just pops in." Deferred by a beat so it doesn't
-  // compete with the initial screen's own critical images (hero, first row).
+  // Warms the browser's own image cache for every distinct backdrop AND logo in the library,
+  // same technique DashboardHero already uses for its (much smaller) rotation set — without it,
+  // the FIRST time focus lands on any given title, its backdrop/logo is a cold network fetch,
+  // which read as "a second of nothing, then the picture just pops in" (backdrops) or a visible
+  // flash before the text fallback kicked in (logos). Deferred by a beat so it doesn't compete
+  // with the initial screen's own critical images (hero, first row).
   useEffect(() => {
     if (!movies) return;
     const seen = new Set<number>();
@@ -104,6 +105,7 @@ export function CinemaClient() {
         if (seen.has(m.radarrId)) continue;
         seen.add(m.radarrId);
         if (m.backdropUrl) urls.push(m.backdropUrl);
+        if (m.logoUrl) urls.push(m.logoUrl);
       }
     }
     const timer = setTimeout(() => {

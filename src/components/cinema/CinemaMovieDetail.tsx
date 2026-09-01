@@ -37,7 +37,6 @@ interface RadarrCastMember {
 interface RadarrInfo {
   tmdb: { overview: string; cast: RadarrCastMember[] } | null;
   trailerKey: string | null;
-  logoUrl: string | null;
 }
 
 // "The banner opened big" — click/Enter on a card (or the hero) escalates from CinemaHero's
@@ -54,24 +53,11 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
-  // Nothing shown at t=0 — see CinemaHero's own note for the full timing (2s window for the
-  // logo to arrive and swap in immediately; text fallback only once that elapses; the logo still
-  // replaces the text if it arrives after that).
-  const [loadedLogoUrl, setLoadedLogoUrl] = useState<string | null>(null);
-  const [logoTimedOut, setLogoTimedOut] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setLogoTimedOut(true), 2000);
-    return () => clearTimeout(timer);
-  }, [item.radarrId]);
-  useEffect(() => {
-    const url = info?.logoUrl;
-    if (!url) return;
-    const img = new Image();
-    img.onload = () => setLoadedLogoUrl(url);
-    img.src = url;
-    return () => { img.onload = null; };
-  }, [info?.logoUrl]);
-  const logoConfirmedAbsent = info !== undefined && !info.logoUrl;
+  // item.logoUrl comes bulk-included in the /api/cinema/movies payload now (see CinemaHero's own
+  // note) — known synchronously, prefetched alongside backdrops by CinemaClient's warm-up
+  // effect. This component remounts fresh per item (a new instance each time selectedItem
+  // changes), so no reset-on-change needed the way CinemaHero requires.
+  const [logoErrored, setLogoErrored] = useState(false);
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable.
@@ -188,16 +174,17 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
 
       <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
         <div key={item.radarrId} className="flex w-full max-w-2xl animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
-          {info?.logoUrl && loadedLogoUrl === info.logoUrl ? (
+          {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={info.logoUrl}
+              src={item.logoUrl}
               alt={item.title}
+              onError={() => setLogoErrored(true)}
               className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
             />
-          ) : logoTimedOut || logoConfirmedAbsent ? (
+          ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">{item.title}</h1>
-          ) : null}
+          )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>

@@ -16,7 +16,6 @@ interface RadarrCastMember {
 interface RadarrInfo {
   tmdb: { overview: string; cast: RadarrCastMember[] } | null;
   trailerKey: string | null;
-  logoUrl: string | null;
 }
 
 // Text only — the backdrop image/gradients live in CinemaClient now, as one continuous
@@ -38,56 +37,36 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   // Guards against showing the PREVIOUS item's cast under the new title during the debounce
   // window — SWR still has that data cached from before debouncedId catches up.
   const info = debouncedId === item.radarrId ? rawInfo : undefined;
-  // Nothing shown at t=0 (not even the text) — a 2s window to let the logo arrive and swap in
-  // the instant it does; only once that window elapses with no logo yet does the text title
-  // appear as a fallback, and if the logo THEN arrives late, it still replaces the text. Keyed
-  // on item.radarrId (known immediately on focus) rather than info?.logoUrl (only known once the
-  // debounced /info fetch resolves) so the 2s clock starts the moment focus actually lands here,
-  // not after some additional invisible delay.
-  const [loadedLogoUrl, setLoadedLogoUrl] = useState<string | null>(null);
-  const [logoTimedOut, setLogoTimedOut] = useState(false);
-  // Reset adjusted during render (not inside an effect) per React's own guidance for deriving
-  // state from a prop change, to avoid an extra render pass — and critically, SYNCHRONOUSLY in
-  // the same render item.radarrId itself changes, not a tick later. loadedLogoUrl not being
-  // reset at all was the actual bug behind "film1's logo flashes on film2": this is a single
-  // persistent component instance across focus changes (never remounted), so old state simply
-  // stays around — and during the debounce window right after switching, SWR briefly held film1's
-  // still-cached data under a not-yet-updated key, which momentarily made
-  // `loadedLogoUrl === info.logoUrl` true again by matching against film1's own URL, not film2's.
+
+  // item.logoUrl now comes bulk-included in the /api/cinema/movies payload (same as
+  // poster/backdrop already were) instead of a separate per-item fetch — known synchronously
+  // the instant this renders, no debounce/timing dance needed at all, and CinemaClient's own
+  // warm-up effect prefetches every logo image alongside the backdrops, so by the time focus
+  // actually lands here the browser has usually already cached it. Just a plain onError
+  // fallback to text, same pattern as any other image in this app.
+  const [logoErrored, setLogoErrored] = useState(false);
+  // Reset adjusted during render (not an effect), synchronously in the same render item.radarrId
+  // changes — this is a single persistent component instance across focus changes, not
+  // remounted per item, so stale error state would otherwise survive into the next title.
   const [resetForId, setResetForId] = useState(item.radarrId);
   if (item.radarrId !== resetForId) {
     setResetForId(item.radarrId);
-    setLogoTimedOut(false);
-    setLoadedLogoUrl(null);
+    setLogoErrored(false);
   }
-  useEffect(() => {
-    const timer = setTimeout(() => setLogoTimedOut(true), 2000);
-    return () => clearTimeout(timer);
-  }, [item.radarrId]);
-  useEffect(() => {
-    const url = info?.logoUrl;
-    if (!url) return;
-    const img = new Image();
-    img.onload = () => setLoadedLogoUrl(url);
-    img.src = url;
-    return () => { img.onload = null; };
-  }, [info?.logoUrl]);
-  // Once /info has actually resolved and confirms there's no logo at all, no reason to keep
-  // waiting out the rest of the 2s window — show the text right away.
-  const logoConfirmedAbsent = info !== undefined && !info.logoUrl;
 
   return (
     <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
-      {info?.logoUrl && loadedLogoUrl === info.logoUrl ? (
+      {item.logoUrl && !logoErrored ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={info.logoUrl}
+          src={item.logoUrl}
           alt={item.title}
+          onError={() => setLogoErrored(true)}
           className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
         />
-      ) : logoTimedOut || logoConfirmedAbsent ? (
+      ) : (
         <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
-      ) : null}
+      )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
         <span>{item.year}</span>

@@ -13,7 +13,6 @@ vi.mock("@/lib/clients/tmdb", () => ({
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
 vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR" }));
-vi.mock("@/lib/title-logo", () => ({ getTitleLogo: vi.fn(async () => null) }));
 const mockCachedMovies = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...args: unknown[]) => mockCachedMovies(...args),
