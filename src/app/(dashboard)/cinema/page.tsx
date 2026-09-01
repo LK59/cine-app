@@ -43,6 +43,10 @@ function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
         src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
         alt={item.name}
         aspectRatio="aspect-video"
+        // Auth-gated route — Next's image optimizer proxies through an internal request that
+        // doesn't forward cookies, so it 400s there. Same reasoning as DashboardClient's
+        // identical resume-card image (see PosterImage's own doc comment).
+        unoptimized
       />
       <div className="absolute inset-x-0 bottom-0 h-1.5 bg-white/25">
         <div className="h-full bg-accent-500" style={{ width: `${item.progress}%` }} />
@@ -57,16 +61,44 @@ export default function CinemaPage() {
   const t = useT();
   useTvGridNav();
 
-  const { data: movies } = useSWR<CinemaMoviesPayload>("/api/cinema/movies", fetcher);
+  const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
+    "/api/cinema/movies",
+    fetcher
+  );
   const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
   const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
 
+  const exitButton = (
+    <button onClick={() => router.push("/")} className="btn-primary">
+      {t("cinema.standardMode")}
+    </button>
+  );
+
+  // Never render a silent blank screen — a slow or failed /api/cinema/movies fetch previously
+  // just left the black background with only the exit button, indistinguishable from a real bug.
+  if (moviesLoading) {
+    return (
+      <div className="fixed inset-0 z-[45] flex items-center justify-center bg-slate-950">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      </div>
+    );
+  }
+
+  if (moviesError) {
+    return (
+      <div className="fixed inset-0 z-[45] flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center">
+        <p className="max-w-sm text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>
+        {exitButton}
+      </div>
+    );
+  }
+
   if (movies && movies.spotlight.length === 0) {
     return (
-      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center">
+      <div className="fixed inset-0 z-[45] flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center">
         <p className="max-w-sm text-sm text-slate-400">{t("cinema.empty")}</p>
         <button onClick={() => router.push("/")} className="btn-primary">
           {t("cinema.standardMode")}
@@ -76,7 +108,7 @@ export default function CinemaPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-950">
+    <div className="fixed inset-0 z-[45] overflow-y-auto bg-slate-950">
       <button
         onClick={() => router.push("/")}
         className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
