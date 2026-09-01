@@ -4,6 +4,7 @@ import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
+import { getTitleLogo } from "@/lib/title-logo";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -12,12 +13,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const movie = await radarr.getMovie(id).catch(() => null);
   if (!movie) return NextResponse.json({ error: "Film introuvable" }, { status: 404 });
 
-  const [tmdbInfo, tmdbVideos, rating, subtitles, queue] = await Promise.all([
+  const [tmdbInfo, tmdbVideos, rating, subtitles, queue, logoUrl] = await Promise.all([
     tmdb.isEnabled() ? tmdb.getMovie(movie.tmdbId).catch(() => null) : Promise.resolve(null),
     tmdb.isEnabled() ? tmdb.getMovieVideos(movie.tmdbId).catch(() => ({ results: [] })) : Promise.resolve({ results: [] }),
     omdb.isEnabled() && movie.imdbId ? omdb.getRating(movie.imdbId).catch(() => null) : Promise.resolve(null),
     bazarr.getMovieDetails(id).catch(() => null),
     radarr.getQueue().catch(() => ({ records: [] as any[] })),
+    getTitleLogo(movie.tmdbId, "movie"),
   ]);
 
   const activeDownload = queue.records.find((r: any) => r.movieId === id || r.movie?.id === id) ?? null;
@@ -46,6 +48,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         }
       : null,
     trailerKey: trailer?.key ?? null,
+    logoUrl,
     imdbRating: rating && rating.Response === "True" ? rating.imdbRating : null,
     imdbVotes: rating && rating.Response === "True" ? rating.imdbVotes : null,
     subtitles: subtitles?.subtitles ?? [],

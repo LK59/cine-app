@@ -19,11 +19,12 @@ const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) 
 // icon-only version (Plus↔Bookmark, both thin 16px outlines) read as "nothing happened" even
 // though the request had gone through.
 const MENU_ROW =
-  "flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-white transition-colors focus-visible:outline-none";
+  "flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-white transition-all duration-300 focus-visible:outline-none";
 const MENU_ROW_INACTIVE = "hover:bg-white/10 focus-visible:bg-white/10";
 const MENU_ROW_ACTIVE = "bg-accent-600/25 ring-1 ring-accent-500/50 hover:bg-accent-600/30";
-const MENU_BADGE = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10";
-const MENU_BADGE_ACTIVE = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-500/30 text-accent-300";
+const MENU_BADGE = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 transition-all duration-300";
+const MENU_BADGE_ACTIVE =
+  "flex h-8 w-8 shrink-0 scale-110 items-center justify-center rounded-full bg-accent-500/30 text-accent-300 transition-all duration-300";
 
 interface RadarrCastMember {
   tmdbId: number;
@@ -35,17 +36,17 @@ interface RadarrCastMember {
 interface RadarrInfo {
   tmdb: { overview: string; cast: RadarrCastMember[] } | null;
   trailerKey: string | null;
+  logoUrl: string | null;
 }
 
 // "The banner opened big" — click/Enter on a card (or the hero) escalates from CinemaHero's
 // passive preview into this: a full-screen, ONLY-this-on-screen detail à la Netflix's TV app.
-// The backdrop fills the entire screen (blurred + darkened, not cropped to a header strip) with
-// the title/synopsis/menu anchored to the left, over the darkest part of it — same "ambient
-// background, content on the left" layout as Netflix's own TV UI. No standard button row — one
-// row per action instead (Lecture/Bande-annonce/Vu/Ma liste), each with its own icon badge,
-// native-focusable so the TV-remote arrow keys below just move between them. Portaled to
-// document.body for the same reason CinemaClient's own fixed layers are (see its doc comment):
-// PageTransition's lingering transform breaks `position: fixed` otherwise.
+// The backdrop fills the entire screen and stays crisp everywhere EXCEPT a soft backdrop-blur
+// zone behind the bottom third (where the menu sits) — the earlier version blurred the whole
+// image, which just looked broken instead of ambient. Only the button column is narrow — the
+// title/synopsis/cast get the full text column width so the title doesn't wrap onto 3 lines.
+// Portaled to document.body for the same reason CinemaClient's own fixed layers are (see its doc
+// comment): PageTransition's lingering transform breaks `position: fixed` otherwise.
 export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClose: () => void }) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,20 +106,21 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
     <div ref={containerRef} className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={{ zIndex: 46 }}>
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={item.backdropUrl}
-          alt=""
-          // scale-110: blur-2xl softens the image's own edges too, which would otherwise show a
-          // faint unblurred fringe right at the viewport edge — scaling past the frame first
-          // pushes that fringe outside it.
-          className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
-        />
+        <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
-      {/* Full-bleed dim + a stronger left-side gradient so the content column always sits over
-          the darkest part of the image regardless of what the backdrop looks like. */}
-      <div className="absolute inset-0 bg-slate-950/55" />
-      <div className="absolute inset-0 bg-linear-to-r from-slate-950 via-slate-950/60 to-slate-950/10" />
+      {/* Localized blur, not a global filter on the image — only the lower third (where the
+          menu lives) gets softened; the rest of the backdrop stays crisp, like an actual hero
+          image instead of a frosted pane. backdrop-blur blurs whatever renders behind THIS div
+          (the sharp img above), so the img itself never needs its own blur filter. */}
+      <div className="absolute inset-x-0 bottom-0 h-2/3 backdrop-blur-md" />
+      <div className="absolute inset-0 bg-slate-950/35" />
+      <div className="absolute inset-0 bg-linear-to-r from-slate-950/90 via-slate-950/40 to-transparent" />
+      <div className="absolute inset-0 bg-linear-to-t from-slate-950/90 via-transparent to-transparent" />
 
+      {/* z-10, explicitly above the content column below: that column spans the full height
+          (flex items-center, for vertical centering) and — even with a transparent background —
+          would otherwise sit on top of this button in DOM/paint order and silently eat every
+          mouse click aimed at it, leaving only the Escape/Backspace keyboard path working. */}
       <button
         onClick={onClose}
         className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
@@ -127,9 +129,14 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
 
-      <div className="relative z-10 flex h-full items-center overflow-y-auto scroll-smooth py-16">
-        <div key={item.radarrId} className="flex w-full max-w-md animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
-          <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
+      <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
+        <div key={item.radarrId} className="flex w-full max-w-2xl animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
+          {info?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={info.logoUrl} alt={item.title} className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28" />
+          ) : (
+            <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">{item.title}</h1>
+          )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>
@@ -137,17 +144,19 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
-          <p className="line-clamp-3 text-sm text-white/90 drop-shadow-sm sm:text-base">
+          <p className="line-clamp-3 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
             {info?.tmdb?.overview || item.overview}
           </p>
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-            <p className="truncate text-xs text-white/60">
+            <p className="max-w-xl truncate text-xs text-white/60">
               {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
             </p>
           )}
 
-          <div className="mt-2 flex flex-col gap-1">
+          {/* Narrower than the text above it, and left-aligned on its own — Netflix's TV menu
+              never stretches to the width of the synopsis paragraph above it. */}
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
             <PlayButton itemId={item.jellyfinItemId} title={item.title} variant="row" />
 
             {info?.trailerKey && (
@@ -180,7 +189,9 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
               <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
                 {inList ? <Bookmark size={14} /> : <Plus size={14} />}
               </span>
-              <span className="text-sm font-medium">{t("cinema.addToList")}</span>
+              {/* "watchlist.statuses.toWatch" ("À voir"), not the more ambiguous "Ma liste" —
+                  this is exactly the status the click sets, so the label should say so. */}
+              <span className="text-sm font-medium">{t("watchlist.statuses.toWatch")}</span>
             </button>
           </div>
         </div>

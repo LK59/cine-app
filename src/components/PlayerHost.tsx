@@ -817,6 +817,19 @@ function ActivePlayer({
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(mode === "mini", handleExpand);
 
+  // Tab order follows DOM order, not visual stacking — without this, keyboard focus is left
+  // wherever it was on the page that opened playback (e.g. Cinema Mode's "Lecture" row, which
+  // stays mounted underneath at a lower z-index) instead of moving into the now-visible player,
+  // so Tab/Enter appear to do nothing. One frame after mounting full-screen, land on the first
+  // control (play/pause) so keyboard control starts inside the player, matching mouse behavior.
+  useEffect(() => {
+    if (mode !== "full") return;
+    const id = requestAnimationFrame(() => {
+      containerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [mode]);
+
   function toggleMiniPlay() {
     const video = videoRef.current;
     if (!video) return;

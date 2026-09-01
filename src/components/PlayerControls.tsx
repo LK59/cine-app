@@ -615,6 +615,12 @@ export function PlayerControls({
       if (document.activeElement instanceof HTMLInputElement) return;
       switch (e.code) {
         case "Space":
+          // A keyboard-focused control button (Tab'd to via TV remote/keyboard nav) needs Space
+          // to actually activate IT — preventDefault() here suppresses the browser's own
+          // keyup-triggered click on that button (per spec, button activation via Space fires on
+          // keyup only if keydown's default wasn't prevented), which otherwise made every
+          // control except play/pause itself unreachable by keyboard.
+          if (document.activeElement instanceof HTMLButtonElement) return;
           e.preventDefault(); // default: page scroll
           togglePlay();
           showControls();

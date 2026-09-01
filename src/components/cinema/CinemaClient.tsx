@@ -45,7 +45,7 @@ function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
           resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined,
         })
       }
-      className={`relative ${CARD_WIDTH} shrink-0 overflow-hidden rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:scale-110 ${TV_NAV_RING}`}
+      className={`relative ${CARD_WIDTH} shrink-0 overflow-hidden rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
       <PosterImage
         src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
@@ -193,11 +193,11 @@ export function CinemaClient() {
           {heroItem && <CinemaHero item={heroItem} />}
         </div>
 
-        <div className="scrollbar-thin relative z-10 -mt-16 min-h-0 flex-1 scroll-smooth overflow-y-auto pb-8 pt-20">
+        <div className="scrollbar-thin relative z-10 -mt-16 min-h-0 flex-1 scroll-smooth overflow-y-auto pb-16 pt-20">
           {resumeMovies.length > 0 && (
-            <div className="mb-8">
-              <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
-              <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+            <div className="mb-6">
+              <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+              <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
                 {resumeMovies.map((item, i) => (
                   <ContinueCard key={item.id} item={item} index={i} />
                 ))}

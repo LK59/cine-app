@@ -23,6 +23,7 @@ interface RadarrCastMember {
 interface RadarrInfo {
   tmdb: { overview: string; cast: RadarrCastMember[] } | null;
   trailerKey: string | null;
+  logoUrl: string | null;
 }
 
 // Passive preview pane for the browse screen — no buttons here on purpose (Netflix TV home:
@@ -61,7 +62,12 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
       <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
 
       <div key={item.radarrId} className="relative flex h-full max-w-2xl animate-fade-in flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
-        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
+        {info?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={info.logoUrl} alt={item.title} className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24" />
+        ) : (
+          <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
           <span>{item.year}</span>

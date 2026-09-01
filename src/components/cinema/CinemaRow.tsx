@@ -21,9 +21,15 @@ export function CinemaRow({
   if (items.length === 0) return null;
 
   return (
-    <div className="mb-8">
-      <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{label}</h2>
-      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+    <div className="mb-6">
+      {/* Thin, small, muted — a section label, not a heading competing with the poster row
+          beneath it. */}
+      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>
+      {/* pt-3, not just pb-4: the row scroller forces overflow-y to `auto` too (any element
+          with overflow-x:auto and no explicit overflow-y computes it that way per spec), so a
+          hover/focus-scaled card with no room above it gets its top edge clipped by this same
+          box — this is what "les affiches sont coupées" turned out to be. */}
+      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
         {items.map((item, i) => (
           <CinemaCard
             key={item.radarrId}
