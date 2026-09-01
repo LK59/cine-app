@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { useTvGridNav } from "@/lib/useTvGridNav";
@@ -92,33 +93,45 @@ export function CinemaClient() {
   // (UpdateBanner z-70, Toast z-100).
   const zLayer = { zIndex: 200 };
 
+  // The actual bug, found by comparing rendered outerHTML against the DOM: `fixed inset-0` only
+  // pins to the viewport when NO ancestor has a non-`none` transform. The (dashboard) layout
+  // wraps every page in PageTransition, whose fade-in-up keyframes end on `transform:
+  // translateY(0)` with fill-mode `both` — that's a non-none transform value, retained forever,
+  // so it permanently makes PageTransition's wrapper div the containing block for our fixed
+  // layer instead of the viewport. The fixed div then collapses inside that zero-size ancestor:
+  // fully populated in the DOM (title, backdrop, rows all present, confirmed via outerHTML) but
+  // invisible. Portaling straight to document.body — same escape hatch already used by
+  // Modal/TrailerModal/PlayerHost/ActionSheet — sidesteps the containing-block issue entirely.
   if (moviesLoading) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 flex items-center justify-center bg-slate-950" style={zLayer}>
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-      </div>
+      </div>,
+      document.body
     );
   }
 
   if (moviesError) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center" style={zLayer}>
         <p className="max-w-sm text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>
         {exitButton}
-      </div>
+      </div>,
+      document.body
     );
   }
 
   if (movies && movies.spotlight.length === 0) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center" style={zLayer}>
         <p className="max-w-sm text-sm text-slate-400">{t("cinema.empty")}</p>
         {exitButton}
-      </div>
+      </div>,
+      document.body
     );
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 overflow-y-auto bg-slate-950" style={zLayer}>
       <button
         onClick={() => { window.location.href = "/"; }}
@@ -128,9 +141,6 @@ export function CinemaClient() {
         <X size={16} /> {t("cinema.standardMode")}
       </button>
 
-      {/* TEMP: CinemaDebugBoundary removed to test whether IT is the problem — the exit button
-          above renders fine every time, but nothing below it ever has, and this class-component
-          wrapper is the one thing in this tree never tested in isolation. */}
       {heroItem && <CinemaHero item={heroItem} />}
 
       <div className="relative -mt-16 pb-12">
@@ -155,6 +165,7 @@ export function CinemaClient() {
           />
         ))}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
