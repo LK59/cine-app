@@ -115,11 +115,63 @@ export function CinemaClient() {
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
   const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
+
+  // The backdrop specifically (not the hero's own title/synopsis text, which still updates
+  // instantly) is debounced before it's allowed to (re)trigger its crossfade — animating a fresh
+  // <img> on every single focus event during fast arrow-key scrubbing across a row is exactly
+  // what produced the backdrop "ghosting"/persisting-into-each-other bug (rapid, overlapping
+  // restarts of the same opacity keyframe). Settling briefly before committing to a new backdrop
+  // keeps the nice crossfade for a deliberate selection without resurrecting that.
+  const [debouncedHeroItem, setDebouncedHeroItem] = useState(heroItem);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedHeroItem(heroItem), 150);
+    return () => clearTimeout(timer);
+  }, [heroItem]);
+
   // Whatever card was focused (mouse click also focuses a <button> natively) right before
   // CinemaMovieDetail opened — restored on close so arrow-nav resumes exactly where the user
   // left it instead of snapping back to the first card (useTvGridNav treats "nothing focused"
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
+
+  // JS-driven row snapping (see the rows pane's own doc comment for why not CSS scroll-snap):
+  // a beat after the pane stops scrolling — by any means, wheel/trackpad/keyboard — it settles
+  // to whichever [data-cinema-row] sits closest to the top, so a category's label is never left
+  // scrolled half out of view above the fold.
+  const rowsPaneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const pane = rowsPaneRef.current;
+    if (!pane) return;
+    let timer: ReturnType<typeof setTimeout>;
+    function onScroll() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const paneEl = pane!;
+        const rows = Array.from(paneEl.querySelectorAll<HTMLElement>("[data-cinema-row]"));
+        if (rows.length === 0) return;
+        const paneTop = paneEl.getBoundingClientRect().top;
+        let closest = rows[0];
+        let closestDelta = Infinity;
+        for (const row of rows) {
+          const delta = row.getBoundingClientRect().top - paneTop;
+          if (Math.abs(delta) < Math.abs(closestDelta)) {
+            closest = row;
+            closestDelta = delta;
+          }
+        }
+        // Already close enough (including "this scroll WAS the correction") — don't re-trigger
+        // a smooth-scroll that would just fight itself.
+        if (Math.abs(closestDelta) > 4) {
+          paneEl.scrollTo({ top: paneEl.scrollTop + closestDelta, behavior: "smooth" });
+        }
+      }, 160);
+    }
+    pane.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      pane.removeEventListener("scroll", onScroll);
+      clearTimeout(timer);
+    };
+  }, []);
 
   // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu — see the
   // hook's own doc comment.
@@ -218,22 +270,22 @@ export function CinemaClient() {
           overlapping text/labels (an earlier -mt-16 overlap trick pulled row labels into literal
           collision with the hero's own synopsis/cast line). */}
       <div className="absolute inset-0 overflow-hidden">
-        {heroItem?.backdropUrl && (
+        {debouncedHeroItem?.backdropUrl && (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={`blur-${heroItem.radarrId}`}
-              src={heroItem.backdropUrl}
+              key={`blur-${debouncedHeroItem.radarrId}`}
+              src={debouncedHeroItem.backdropUrl}
               alt=""
-              className="absolute inset-0 h-full w-full scale-110 object-cover object-top blur-2xl"
+              className="absolute inset-0 h-full w-full scale-110 animate-fade-in object-cover object-top blur-2xl"
             />
             <div className="absolute inset-0 bg-slate-950/55" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={heroItem.radarrId}
-              src={heroItem.backdropUrl}
+              key={debouncedHeroItem.radarrId}
+              src={debouncedHeroItem.backdropUrl}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover object-top"
+              className="absolute inset-0 h-full w-full animate-fade-in object-cover object-top"
               style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
             />
           </>
@@ -247,21 +299,28 @@ export function CinemaClient() {
           independently scrolling region for the rows. Two panes, not one scroller with a sticky
           hero, so the preview never has to fight scroll position math. */}
       <div className="relative z-10 flex h-full flex-col">
-        {/* Height as inline style, not a basis-[66%] arbitrary-value class — those don't make it
-            into the production CSS bundle (see the z-index note above). Taller than the panel
-            actually needs for its own text so the shared backdrop above reads as a real hero,
-            not cut short right where the text ends. */}
-        <div className="relative shrink-0" style={{ flexBasis: "66%" }}>
+        {/* flex-basis 50% via inline style (arbitrary-value classes don't make it into the
+            production CSS bundle — see the z-index note above), grow-0 (never grows past 50% on
+            a tall screen) shrink (free to shrink below it) — paired with the rows pane's own
+            min-h-80 below, the browser's own flex algorithm does the rest: on a short viewport
+            (a 13" laptop, say) where 50% + one full row wouldn't both fit, ALL the give comes
+            from this pane shrinking, never from the row's guaranteed minimum. No resize
+            listener needed — this is exactly what flex-shrink + a sibling's min-height is for. */}
+        <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
           {heroItem && <CinemaHero item={heroItem} />}
         </div>
 
-        {/* snap-y/snap-proximity, not snap-mandatory: mandatory forced every wheel tick to a full
-            row-jump, which read as "blocked" for anyone trying to scroll through several rows
-            quickly. Proximity still settles cleanly on a row boundary (label included) once the
-            scroll comes to rest near one, but doesn't fight a fast scroll on the way there. */}
-        <div className="scrollbar-thin relative min-h-0 flex-1 snap-y snap-proximity scroll-smooth overflow-y-auto pb-16 pt-6">
+        {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
+            breakpoint size, and the hover/focus scale-up room — so there's always at least one
+            complete row on screen no matter how short the viewport is (see the hero pane's own
+            note above). Snapping is JS-driven (the effect below), not CSS scroll-snap: mandatory
+            forced every single wheel notch into a full row-jump ("blocked"), and proximity
+            turned out too weak to reliably catch a plain mouse wheel's scroll — settling the
+            scroll position a beat after it actually stops works the same regardless of what
+            triggered it (wheel, trackpad, or a keyboard-driven scrollIntoView). */}
+        <div ref={rowsPaneRef} className="scrollbar-thin relative min-h-80 flex-1 scroll-smooth overflow-y-auto pb-16 pt-6">
           {resumeMovies.length > 0 && (
-            <div className="mb-6 snap-start">
+            <div data-cinema-row className="mb-6">
               <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
               <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
                 {resumeMovies.map((item, i) => (
