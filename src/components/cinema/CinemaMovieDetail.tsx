@@ -53,6 +53,9 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
+  // A logoUrl existing doesn't mean the image actually loads (see CinemaHero's own note) —
+  // without this fallback a broken logo left no title at all, just an empty gap.
+  const [logoErrored, setLogoErrored] = useState(false);
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable.
@@ -154,9 +157,14 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
 
       <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
         <div key={item.radarrId} className="flex w-full max-w-2xl animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
-          {info?.logoUrl ? (
+          {info?.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={info.logoUrl} alt={item.title} className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28" />
+            <img
+              src={info.logoUrl}
+              alt={item.title}
+              onError={() => setLogoErrored(true)}
+              className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
+            />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">{item.title}</h1>
           )}

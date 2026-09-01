@@ -38,12 +38,30 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   // Guards against showing the PREVIOUS item's cast under the new title during the debounce
   // window — SWR still has that data cached from before debouncedId catches up.
   const info = debouncedId === item.radarrId ? rawInfo : undefined;
+  // A logoUrl existing doesn't mean the image actually loads — TMDB logo assets 404 or time out
+  // often enough in practice that this needs its own fallback, same as any other image here.
+  // Without it, a broken logo left NOTHING in its place (no title at all, just an empty gap) —
+  // there was never a text fallback to fall back to since the choice between <img>/<h1> was
+  // already locked in before the browser even tried loading the image.
+  const [logoErrored, setLogoErrored] = useState(false);
+  // Reset when the logo itself changes, adjusted during render (not a separate effect) per
+  // React's own guidance for deriving state from a prop change, to avoid an extra render pass.
+  const [lastLogoUrl, setLastLogoUrl] = useState(info?.logoUrl);
+  if (info?.logoUrl !== lastLogoUrl) {
+    setLastLogoUrl(info?.logoUrl);
+    setLogoErrored(false);
+  }
 
   return (
     <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
-      {info?.logoUrl ? (
+      {info?.logoUrl && !logoErrored ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={info.logoUrl} alt={item.title} className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24" />
+        <img
+          src={info.logoUrl}
+          alt={item.title}
+          onError={() => setLogoErrored(true)}
+          className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
+        />
       ) : (
         <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
       )}

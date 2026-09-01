@@ -134,53 +134,70 @@ export function CinemaClient() {
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
 
-  // JS-driven row snapping (see the rows pane's own doc comment for why not CSS scroll-snap): a
-  // beat after the pane stops scrolling — by any means, wheel/trackpad/keyboard — it settles
-  // with a row's top (label included) flush against the pane's own top edge, never a gap above
-  // it and never a label cut off. "Nearest row by raw top-edge distance" (the first version of
-  // this) was the actual bug: in the middle of a tall row, the NEXT row's top can be numerically
-  // closer to the pane's top than the CURRENT row's top is (just because the current row is
-  // tall), which snapped forward past a row's own content or backward into a half-visible one —
-  // exactly "margin at the top scrolling down, cut off at the bottom scrolling up". The fix is a
-  // different question entirely: not "which edge is nearest", but "which row have I actually
-  // scrolled INTO" — the last row whose top has already crossed the pane's top edge — and
-  // align exactly that one, however far away its top now is.
+  // JS-driven row snapping (see the rows pane's own doc comment for why not CSS scroll-snap):
+  // once the pane has genuinely stopped scrolling — by any means, wheel/trackpad/keyboard — it
+  // settles with a row's top (label included) flush against the pane's own top edge, never a
+  // gap above it and never a label cut off.
+  //
+  // Two bugs, two fixes:
+  // 1) "Nearest row by raw top-edge distance" (the first version of this) picked whichever edge
+  //    was numerically closest — inside a tall row, the NEXT row's top can be closer than the
+  //    CURRENT row's own top just because the current row is tall, snapping forward past a row's
+  //    content or backward into a half-entered one. Fixed by asking a different question: not
+  //    "which edge is nearest" but "which row have I actually scrolled INTO" — the last row (in
+  //    document order) whose top has already crossed the pane's top edge — and aligning exactly
+  //    that one, however far its top now is.
+  // 2) A fixed-delay debounce (160ms) doesn't reliably mean "scrolling has stopped": wheel/
+  //    trackpad momentum on most platforms keeps generating scroll events well past when the
+  //    user's actual input ended, so it was firing WHILE the browser was still momentum-
+  //    scrolling on its own — the two fought, landing somewhere in between neither of them
+  //    intended (a half-visible row peeking in above the next one, no title visible at all,
+  //    etc). Fixed by using the browser's own native `scrollend` event (Chrome/Firefox/Safari
+  //    all current) instead of guessing a delay — it fires exactly once scrolling, including
+  //    inertial momentum, has actually settled. A debounced 'scroll' fallback only kicks in for
+  //    the rare browser without scrollend support.
   const rowsPaneRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const pane = rowsPaneRef.current;
     if (!pane) return;
+
+    function snapToCurrentRow() {
+      const paneEl = pane!;
+      const rows = Array.from(paneEl.querySelectorAll<HTMLElement>("[data-cinema-row]"));
+      if (rows.length === 0) return;
+      // Resting at the very start of the list — leave the pane's own pt-6 breathing room above
+      // the first row alone, nothing to correct toward.
+      if (paneEl.scrollTop <= 4) return;
+      const paneTop = paneEl.getBoundingClientRect().top;
+
+      // Rows are in top-to-bottom document order — the current one is the LAST whose top has
+      // already reached the pane's top edge (small tolerance so "just barely past" still
+      // counts, rather than needing to have scrolled a full extra pixel into it).
+      let current = rows[0];
+      for (const row of rows) {
+        if (row.getBoundingClientRect().top - paneTop <= 8) current = row;
+        else break;
+      }
+
+      const delta = current.getBoundingClientRect().top - paneTop;
+      // Already flush — including "this IS the settle after the corrective scrollTo below",
+      // which also fires its own scrollend once its animation finishes, so this naturally
+      // self-terminates with no separate "am I currently correcting" flag needed.
+      if (Math.abs(delta) <= 4) return;
+      paneEl.scrollTo({ top: paneEl.scrollTop + delta, behavior: "smooth" });
+    }
+
+    if ("onscrollend" in window) {
+      pane.addEventListener("scrollend", snapToCurrentRow);
+      return () => pane.removeEventListener("scrollend", snapToCurrentRow);
+    }
+
+    // Fallback for browsers without native scrollend support — a generous delay to safely
+    // outlast momentum scrolling rather than fight it.
     let timer: ReturnType<typeof setTimeout>;
-    let correcting = false;
     function onScroll() {
-      if (correcting) return;
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        const paneEl = pane!;
-        const rows = Array.from(paneEl.querySelectorAll<HTMLElement>("[data-cinema-row]"));
-        if (rows.length === 0) return;
-        // Resting at the very start of the list — leave the pane's own pt-6 breathing room above
-        // the first row alone, nothing to correct toward.
-        if (paneEl.scrollTop <= 4) return;
-        const paneTop = paneEl.getBoundingClientRect().top;
-
-        // Rows are in top-to-bottom document order — the current one is the LAST whose top has
-        // already reached the pane's top edge (small tolerance so "just barely past" still
-        // counts, rather than needing to have scrolled a full extra pixel into it).
-        let current = rows[0];
-        for (const row of rows) {
-          if (row.getBoundingClientRect().top - paneTop <= 8) current = row;
-          else break;
-        }
-
-        const delta = current.getBoundingClientRect().top - paneTop;
-        if (Math.abs(delta) <= 4) return; // already flush — including "this scroll WAS the correction"
-        correcting = true;
-        paneEl.scrollTo({ top: paneEl.scrollTop + delta, behavior: "smooth" });
-        // scrollTo({behavior:"smooth"}) keeps firing 'scroll' events for the duration of its own
-        // animation — without this guard those would just re-trigger this same effect on
-        // itself. ~400ms comfortably covers a short smooth-scroll's animation on any browser.
-        setTimeout(() => { correcting = false; }, 400);
-      }, 160);
+      timer = setTimeout(snapToCurrentRow, 300);
     }
     pane.addEventListener("scroll", onScroll, { passive: true });
     return () => {
