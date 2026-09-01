@@ -8,6 +8,7 @@ import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check } from "lucide-r
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { PlayButton } from "@/components/PlayButton";
+import { usePlayback } from "@/components/PlaybackProvider";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -53,10 +54,15 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
-  // Text-first, logo-as-upgrade — see CinemaHero's own note. A background Image() probes the
-  // logo; only a CONFIRMED load swaps the title text for it, so a slow or broken logo never
-  // shows a blank gap or an ugly flicker (title → broken image → title again).
+  // Nothing shown at t=0 — see CinemaHero's own note for the full timing (2s window for the
+  // logo to arrive and swap in immediately; text fallback only once that elapses; the logo still
+  // replaces the text if it arrives after that).
   const [loadedLogoUrl, setLoadedLogoUrl] = useState<string | null>(null);
+  const [logoTimedOut, setLogoTimedOut] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLogoTimedOut(true), 2000);
+    return () => clearTimeout(timer);
+  }, [item.radarrId]);
   useEffect(() => {
     const url = info?.logoUrl;
     if (!url) return;
@@ -65,12 +71,28 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
     img.src = url;
     return () => { img.onload = null; };
   }, [info?.logoUrl]);
+  const logoConfirmedAbsent = info !== undefined && !info.logoUrl;
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable.
   useEffect(() => {
     containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
   }, []);
+
+  // Closes itself the instant Lecture actually starts full-screen playback — this component
+  // stays MOUNTED underneath the player otherwise (only the player's higher z-index hides it
+  // visually), so its own Up/Down handler below kept fighting PlayerControls' for the keyboard:
+  // every arrow press, this component's handler would ALSO run on the same event, find the
+  // player's focused control wasn't one of ITS OWN [data-detail-menu] buttons, and yank focus
+  // back to "Lecture" — silently breaking all keyboard control of the player. `initialMode` is
+  // captured once at mount so this only reacts to Lecture being pressed FROM this sheet, not to
+  // some already-running session (e.g. a minimized player for a different title) that happened
+  // to be active before this sheet even opened.
+  const playback = usePlayback();
+  const initialPlaybackMode = useRef(playback.mode);
+  useEffect(() => {
+    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) onClose();
+  }, [playback.mode, onClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -173,9 +195,9 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
               alt={item.title}
               className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
             />
-          ) : (
+          ) : logoTimedOut || logoConfirmedAbsent ? (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">{item.title}</h1>
-          )}
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>

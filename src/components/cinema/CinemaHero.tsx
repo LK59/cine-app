@@ -38,13 +38,25 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   // Guards against showing the PREVIOUS item's cast under the new title during the debounce
   // window — SWR still has that data cached from before debouncedId catches up.
   const info = debouncedId === item.radarrId ? rawInfo : undefined;
-  // Text-first, logo-as-upgrade: an <img src=logoUrl> that's still loading (or that 404s) shows
-  // nothing for a beat, or forever — either way the title read as flickering/missing rather than
-  // "just not decorated yet." Instead the text title is always what's on screen the instant this
-  // renders; a plain background Image() probes the logo, and only on a CONFIRMED load does the
-  // text get swapped for it. Never a blank gap, never two visible changes for a load that
-  // succeeds (title → broken image → title again) — at most one clean swap, title → logo.
+  // Nothing shown at t=0 (not even the text) — a 2s window to let the logo arrive and swap in
+  // the instant it does; only once that window elapses with no logo yet does the text title
+  // appear as a fallback, and if the logo THEN arrives late, it still replaces the text. Keyed
+  // on item.radarrId (known immediately on focus) rather than info?.logoUrl (only known once the
+  // debounced /info fetch resolves) so the 2s clock starts the moment focus actually lands here,
+  // not after some additional invisible delay.
   const [loadedLogoUrl, setLoadedLogoUrl] = useState<string | null>(null);
+  const [logoTimedOut, setLogoTimedOut] = useState(false);
+  // Reset adjusted during render (not inside the effect below) per React's own guidance for
+  // deriving state from a prop change, to avoid an extra render pass.
+  const [timedOutForId, setTimedOutForId] = useState(item.radarrId);
+  if (item.radarrId !== timedOutForId) {
+    setTimedOutForId(item.radarrId);
+    setLogoTimedOut(false);
+  }
+  useEffect(() => {
+    const timer = setTimeout(() => setLogoTimedOut(true), 2000);
+    return () => clearTimeout(timer);
+  }, [item.radarrId]);
   useEffect(() => {
     const url = info?.logoUrl;
     if (!url) return;
@@ -53,6 +65,9 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
     img.src = url;
     return () => { img.onload = null; };
   }, [info?.logoUrl]);
+  // Once /info has actually resolved and confirms there's no logo at all, no reason to keep
+  // waiting out the rest of the 2s window — show the text right away.
+  const logoConfirmedAbsent = info !== undefined && !info.logoUrl;
 
   return (
     <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
@@ -63,9 +78,9 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
           alt={item.title}
           className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
         />
-      ) : (
+      ) : logoTimedOut || logoConfirmedAbsent ? (
         <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
         <span>{item.year}</span>
