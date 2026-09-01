@@ -91,6 +91,7 @@ function LoginForm() {
               className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               required
             />
           </div>
@@ -130,6 +131,7 @@ function LoginForm() {
                 placeholder="Mot de passe"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
               />
               {error && <p className="text-sm text-red-400">{error}</p>}

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useState } from "react";
 import { X } from "lucide-react";
@@ -65,7 +64,6 @@ function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
 // for this page sidesteps the whole class of problem: nothing to mismatch against since there's
 // no server-rendered HTML for it at all.
 export function CinemaClient() {
-  const router = useRouter();
   const t = useT();
   useTvGridNav();
 
@@ -79,8 +77,11 @@ export function CinemaClient() {
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
 
+  // A hard navigation, not router.push — same reasoning as Sidebar's entry link into this page:
+  // Next's client-side transition (RSC fetch, mode "cors") was failing at the network level in
+  // production for this route specifically.
   const exitButton = (
-    <button onClick={() => router.push("/")} className="btn-primary">
+    <button onClick={() => { window.location.href = "/"; }} className="btn-primary">
       {t("cinema.standardMode")}
     </button>
   );
@@ -114,7 +115,7 @@ export function CinemaClient() {
   return (
     <div className="fixed inset-0 z-[45] overflow-y-auto bg-slate-950">
       <button
-        onClick={() => router.push("/")}
+        onClick={() => { window.location.href = "/"; }}
         className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
       >

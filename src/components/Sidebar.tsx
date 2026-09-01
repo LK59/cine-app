@@ -44,15 +44,20 @@ export function Sidebar() {
 
       {/* Distinct entry point, not folded into NAV_ITEMS below — this leaves the whole standard
           shell (own layout, own visual language) for /cinema, a genuinely different mode rather
-          than just another page. */}
-      <Link
+          than just another page. Plain <a>, not <Link>: Next's client-side transition fetches
+          the target route's RSC payload via a special same-URL request (mode "cors", not
+          "navigate") — that specific fetch was failing at the network/transport level in
+          production (confirmed live: the service worker's catch-all only triggers on a true
+          fetch rejection, not an HTTP error status), while a real full navigation to the exact
+          same URL works. A plain anchor forces a real navigation, sidestepping the client-side
+          transition path entirely rather than chasing why that one specific fetch fails. */}
+      <a
         href="/cinema"
-        onMouseEnter={() => prefetchRoute("/cinema")}
         className="mb-3 flex shrink-0 items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20"
       >
         <MonitorPlay size={16} />
         {t("nav.cinemaMode")}
-      </Link>
+      </a>
 
       {/* Scrollable nav list */}
       <nav
