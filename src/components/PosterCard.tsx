@@ -8,6 +8,7 @@ import {
   Eye, Heart, X, CircleCheck, Telescope, Film, Tv, Plus,
 } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
+import { PosterHoverPreview } from "@/components/PosterHoverPreview";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
 import { RequestFlowModal } from "@/components/RequestFlowModal";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
@@ -49,6 +50,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [hovering, setHovering] = useState(false);
   const [requested, setRequested] = useState(false);
   const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist(item.watchlistStatus ?? null);
   const [addingSearch, setAddingSearch] = useState(false);
@@ -178,6 +180,8 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
         <div
           className={`relative aspect-2/3 overflow-hidden bg-slate-800 cursor-pointer ${carousel ? "rounded-lg" : "rounded-xl"}`}
           onClick={handlePosterClick}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
         >
           {item.posterUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -192,6 +196,11 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
               {mediaType === "movie" ? <Film size={carousel ? 28 : 40} /> : <Tv size={carousel ? 28 : 40} />}
             </div>
           )}
+
+          {/* Only items already scanned into Jellyfin have trickplay data to preview — the
+              component itself still needs mounting unconditionally-per-hover-target though, so
+              gate here rather than inside it. */}
+          {item.inLibrary && <PosterHoverPreview tmdbId={item.tmdbId} mediaType={mediaType} hovering={hovering} />}
 
           {item.inLibrary && (
             <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
@@ -216,8 +225,9 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
             </div>
           )}
 
-          {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          {/* Desktop hover overlay — delayed past the trickplay hover-preview's own 700ms start
+              delay so the preview gets a moment to show before this covers it again. */}
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 delay-1000 group-hover:opacity-100">
             <div className="flex gap-0.5">
               {ALL_STATUSES.map((s) => {
                 const meta = STATUS_META[s];
