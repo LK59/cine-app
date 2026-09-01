@@ -181,15 +181,15 @@ export function CinemaClient() {
       {/* Split-screen TV layout: the top pane is a live, non-scrolling preview of whatever card
           has focus (never scrolls away — that's the "sticky" ask) and the bottom pane is its own
           independently scrolling region for the rows. Two panes, not one scroller with a sticky
-          hero, so the preview never has to fight scroll position math. The rows pane overlaps up
-          into the hero by -mt-16, and the hero's own bottom mask already fades its backdrop to
-          transparent (see CinemaHero) — together that blends the two panes into one continuous
-          gradient instead of a hard seam. */}
+          hero, so the preview never has to fight scroll position math. Deliberately NO content
+          overlap between them (an earlier -mt-16 overlap trick pulled row labels visually into
+          the hero's own text, colliding with the synopsis/cast line) — the only thing they share
+          is color and a blurred/dimmed hint of the backdrop at the very bottom of the hero (see
+          CinemaHero's own fade+blur), not actual overlapping elements. */}
       <div className="flex h-full flex-col">
-        {/* Height as inline style, not a basis-[46%] arbitrary-value class — those don't make it
-            into the production CSS bundle (see the z-index note above). Smaller than the first
-            pass (54%) so the rows pane — and the row labels — has enough room not to overflow. */}
-        <div className="relative shrink-0" style={{ flexBasis: "46%" }}>
+        {/* Height as inline style, not a basis-[54%] arbitrary-value class — those don't make it
+            into the production CSS bundle (see the z-index note above). */}
+        <div className="relative shrink-0" style={{ flexBasis: "54%" }}>
           {heroItem && <CinemaHero item={heroItem} />}
         </div>
 
@@ -197,7 +197,7 @@ export function CinemaClient() {
             scrollIntoView), mouse wheel, trackpad, all of it — always comes to rest with a whole
             row (its label included) at the top, never stopped mid-row with the label scrolled
             out of view above the fold. snap-start on each row below is the other half of this. */}
-        <div className="scrollbar-thin relative z-10 -mt-16 min-h-0 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-20">
+        <div className="scrollbar-thin relative z-10 min-h-0 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6">
           {resumeMovies.length > 0 && (
             <div className="mb-6 snap-start">
               <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>

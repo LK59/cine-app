@@ -55,15 +55,27 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
           key={item.radarrId}
           src={item.backdropUrl}
           alt=""
-          className="absolute inset-0 h-full w-full animate-fade-in object-cover object-top"
+          // No fade-in animation here on purpose: fast arrow-key scrubbing across a row remounts
+          // this element (new key) on every step, and a restarted opacity keyframe on each of
+          // those in quick succession is what was reported as backdrops "ghosting"/persisting
+          // into one another — an instant swap has no transient state left to overlap.
+          className="absolute inset-0 h-full w-full object-cover object-top"
           style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
         />
       )}
       <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
-      {/* Explicit fade to the exact same solid color the rows pane sits on (bg-slate-950 on
-          CinemaClient's root) — the image's own BACKDROP_MASK above fades the PICTURE to
-          transparent, but that alone doesn't guarantee a clean blend into the pane below for
-          every backdrop; this guarantees it regardless of what the image looks like there. */}
+      {/* A soft, gradually-eased blur behind the bottom third (same masked-backdrop-blur
+          technique as CinemaMovieDetail) plus a fade to the exact solid color the rows pane sits
+          on — "the only thing the two panes share is color and a blurred/dimmed hint of the
+          backdrop", not overlapping content. */}
+      <div
+        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
+        style={{
+          height: "35%",
+          maskImage: "linear-gradient(to bottom, transparent 0%, black 70%)",
+          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 70%)",
+        }}
+      />
       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-b from-transparent to-slate-950" />
 
       <div key={item.radarrId} className="relative flex h-full max-w-2xl animate-fade-in flex-col justify-end gap-3 px-8 pb-10 sm:px-12">

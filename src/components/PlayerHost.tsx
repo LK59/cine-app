@@ -815,12 +815,30 @@ function ActivePlayer({
   // play/pause (data-player-playpause, not just "the first button" — the skip/rewind buttons
   // sitting either side of it in DOM order made that unpredictable) so keyboard control starts on
   // the one control every remote/keyboard user reaches for first.
+  // A single requestAnimationFrame here isn't enough: PlayerControls only renders the
+  // play/pause button once `!loading && !buffering` (a spinner shows until then), and mode
+  // flips to "full" the instant playback.play() is called — long before the stream has actually
+  // loaded. That one-shot attempt was landing on nothing, silently, so focus just stayed
+  // wherever it was (a Cinema Mode menu row, hidden behind the player) — which then made
+  // PlayerControls' own "don't steal Space from a focused button" guard swallow Space too,
+  // since SOME button still technically had focus, just the wrong one. Poll instead, until the
+  // button actually exists (or mode changes away from full).
   useEffect(() => {
     if (mode !== "full") return;
-    const id = requestAnimationFrame(() => {
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-player-playpause]")?.focus();
-    });
-    return () => cancelAnimationFrame(id);
+    let attempts = 0;
+    const id = setInterval(() => {
+      attempts += 1;
+      const btn = containerRef.current?.querySelector<HTMLButtonElement>("[data-player-playpause]");
+      if (btn) {
+        btn.focus();
+        clearInterval(id);
+      } else if (attempts > 40) {
+        // ~10s cap — a fatal load error keeps `loading` true forever with no button to ever
+        // find, so this has to give up eventually rather than poll indefinitely.
+        clearInterval(id);
+      }
+    }, 250);
+    return () => clearInterval(id);
   }, [mode]);
 
   function toggleMiniPlay() {

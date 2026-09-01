@@ -62,6 +62,11 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // TrailerModal has its own Escape handler (also on window) that closes just itself —
+      // without this guard, Escape while the trailer is open closed BOTH it and this whole
+      // detail overlay at once, since nothing stops this listener from also firing on the same
+      // keypress.
+      if (showTrailer) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         onClose();
@@ -77,7 +82,7 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, showTrailer]);
 
   // Independent on/off toggles, not "reassign to the other status" — un-toggling either one
   // goes back to no status at all (removeFromWatchlist), not to whatever the other button
