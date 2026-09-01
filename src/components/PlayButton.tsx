@@ -59,7 +59,7 @@ export function PlayButton({
       : variant === "primary"
         ? "btn-primary relative overflow-hidden"
         : variant === "row"
-          ? "flex w-full items-center gap-4 rounded-lg px-6 py-4 text-left text-white hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
+          ? "flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-white transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
           : "flex items-center gap-1.5 rounded-lg bg-accent-600/80 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-accent-600";
 
   return (
@@ -78,10 +78,10 @@ export function PlayButton({
       )}
       {variant === "row" ? (
         <>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10">
             <PlayCircle size={iconSize} />
           </span>
-          <span className="text-base font-medium">{label}</span>
+          <span className="text-sm font-medium">{label}</span>
         </>
       ) : (
         <span className="relative z-10 inline-flex items-center gap-1.5">

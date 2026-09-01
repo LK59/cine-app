@@ -17,12 +17,14 @@ export function CinemaCard({
   item,
   index,
   rowKey,
+  widthClassName,
   onFocusItem,
   onSelectItem,
 }: {
   item: CinemaMovie;
   index: number;
   rowKey: string;
+  widthClassName: string;
   onFocusItem: (item: CinemaMovie) => void;
   onSelectItem: (item: CinemaMovie) => void;
 }) {
@@ -35,7 +37,7 @@ export function CinemaCard({
       onFocus={() => onFocusItem(item)}
       onMouseEnter={() => onFocusItem(item)}
       onClick={() => onSelectItem(item)}
-      className={`w-40 shrink-0 overflow-hidden rounded-lg transition-transform duration-200 hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:scale-110 sm:w-48 ${TV_NAV_RING}`}
+      className={`${widthClassName} shrink-0 overflow-hidden rounded-lg transition-transform duration-200 hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:scale-110 ${TV_NAV_RING}`}
     >
       <PosterImage src={item.posterUrl} alt={item.title} />
     </button>

@@ -7,12 +7,14 @@ export function CinemaRow({
   label,
   rowKey,
   items,
+  cardWidthClassName,
   onFocusItem,
   onSelectItem,
 }: {
   label: string;
   rowKey: string;
   items: CinemaMovie[];
+  cardWidthClassName: string;
   onFocusItem: (item: CinemaMovie) => void;
   onSelectItem: (item: CinemaMovie) => void;
 }) {
@@ -21,13 +23,14 @@ export function CinemaRow({
   return (
     <div className="mb-8">
       <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{label}</h2>
-      <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
         {items.map((item, i) => (
           <CinemaCard
             key={item.radarrId}
             item={item}
             index={i}
             rowKey={rowKey}
+            widthClassName={cardWidthClassName}
             onFocusItem={onFocusItem}
             onSelectItem={onSelectItem}
           />

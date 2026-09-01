@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -18,6 +18,12 @@ import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+
+// w-24→xl:w-36 (96px→144px), down from the original w-40/sm:w-48 (160/192px) fixed pair — that
+// fixed size overflowed the row on anything shorter than a large desktop window, pushing the row
+// label itself off (above) the visible area. Shared between ContinueCard and CinemaCard so both
+// grids stay visually aligned.
+const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 
 // Continue-watching items come from Jellyfin's resume list (via the existing dashboard payload —
 // same data DashboardClient's own resume row already uses), not the /api/cinema/movies library
@@ -39,7 +45,7 @@ function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
           resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined,
         })
       }
-      className={`relative w-40 shrink-0 overflow-hidden rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:scale-110 sm:w-48 ${TV_NAV_RING}`}
+      className={`relative ${CARD_WIDTH} shrink-0 overflow-hidden rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:scale-110 ${TV_NAV_RING}`}
     >
       <PosterImage
         src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
@@ -78,10 +84,28 @@ export function CinemaClient() {
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
   const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
+  // Whatever card was focused (mouse click also focuses a <button> natively) right before
+  // CinemaMovieDetail opened — restored on close so arrow-nav resumes exactly where the user
+  // left it instead of snapping back to the first card (useTvGridNav treats "nothing focused"
+  // as "start over").
+  const lastFocusedCard = useRef<HTMLElement | null>(null);
 
   // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu — see the
   // hook's own doc comment.
   useTvGridNav(selectedItem === null);
+
+  function openDetail(item: CinemaMovie) {
+    lastFocusedCard.current = document.activeElement as HTMLElement;
+    setSelectedItem(item);
+  }
+
+  function closeDetail() {
+    setSelectedItem(null);
+    // The card is still in the DOM (the browse screen never unmounts under the overlay) but
+    // isn't focused yet the instant this runs — the overlay's own focused button is still
+    // mid-unmount. One frame later it's safe to move focus back.
+    requestAnimationFrame(() => lastFocusedCard.current?.focus());
+  }
 
   // A hard navigation, not router.push — same reasoning as Sidebar's entry link into this page:
   // Next's client-side transition (RSC fetch, mode "cors") was failing at the network level in
@@ -93,11 +117,15 @@ export function CinemaClient() {
   );
 
   // z-index as inline style, not a Tailwind class (arbitrary-value classes weren't making it
-  // into the production CSS bundle — see CinemaHero's note on the height fix). 200, not 45: the
-  // z-45 version still didn't show, and 45 was never actually proven safe (only the diagnostic's
-  // z-9999 was) — this sits comfortably above every other always-mounted fixed layer in the app
-  // (UpdateBanner z-70, Toast z-100). CinemaMovieDetail sits at 220, above this.
-  const zLayer = { zIndex: 200 };
+  // into the production CSS bundle — see CinemaHero's note on the height fix). Cinema Mode is
+  // conceptually just page content (it only uses `fixed` for its own split-screen layout
+  // trick), so it belongs BELOW the app's real overlays, not above them — 45 sits above
+  // MobileNav (z-40) but below Modal/GlobalSearch (z-50), ActionSheet (z-60), TrailerModal/
+  // UpdateBanner (z-70), and critically PlayerHost (z-80): with the old z-200, pressing Lecture
+  // started playback (audio, Chrome's media-session UI) entirely behind this screen's opaque
+  // background — the player was rendering, just invisible under a higher layer. CinemaMovieDetail
+  // sits at 46, just above this.
+  const zLayer = { zIndex: 45 };
 
   // The actual bug, found by comparing rendered outerHTML against the DOM: `fixed inset-0` only
   // pins to the viewport when NO ancestor has a non-`none` transform. The (dashboard) layout
@@ -138,10 +166,10 @@ export function CinemaClient() {
   }
 
   return createPortal(
-    <div className="fixed inset-0 bg-slate-950" style={zLayer}>
+    <div className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={zLayer}>
       <button
         onClick={() => { window.location.href = "/"; }}
-        className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-black/70"
+        className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
         title={t("cinema.standardMode")}
       >
@@ -150,22 +178,26 @@ export function CinemaClient() {
 
       <CinemaShortcutsGuide />
 
-      {/* Split-screen TV layout: the top half is a live, non-scrolling preview of whatever card
-          has focus (never scrolls away — that's the "sticky" ask) and the bottom half is its own
+      {/* Split-screen TV layout: the top pane is a live, non-scrolling preview of whatever card
+          has focus (never scrolls away — that's the "sticky" ask) and the bottom pane is its own
           independently scrolling region for the rows. Two panes, not one scroller with a sticky
-          hero, so the preview never has to fight scroll position math. */}
+          hero, so the preview never has to fight scroll position math. The rows pane overlaps up
+          into the hero by -mt-16, and the hero's own bottom mask already fades its backdrop to
+          transparent (see CinemaHero) — together that blends the two panes into one continuous
+          gradient instead of a hard seam. */}
       <div className="flex h-full flex-col">
-        {/* Height as inline style, not a basis-[54%] arbitrary-value class — those don't make it
-            into the production CSS bundle (see the z-index note above). */}
-        <div className="relative shrink-0" style={{ flexBasis: "54%" }}>
+        {/* Height as inline style, not a basis-[46%] arbitrary-value class — those don't make it
+            into the production CSS bundle (see the z-index note above). Smaller than the first
+            pass (54%) so the rows pane — and the row labels — has enough room not to overflow. */}
+        <div className="relative shrink-0" style={{ flexBasis: "46%" }}>
           {heroItem && <CinemaHero item={heroItem} />}
         </div>
 
-        <div className="scrollbar-thin flex-1 overflow-y-auto pb-8 pt-6">
+        <div className="scrollbar-thin relative z-10 -mt-16 min-h-0 flex-1 scroll-smooth overflow-y-auto pb-8 pt-20">
           {resumeMovies.length > 0 && (
             <div className="mb-8">
               <h2 className="mb-3 px-8 text-lg font-semibold text-white sm:px-12">{t("cinema.continueWatching")}</h2>
-              <div className="scrollbar-thin flex gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
+              <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 sm:px-12">
                 {resumeMovies.map((item, i) => (
                   <ContinueCard key={item.id} item={item} index={i} />
                 ))}
@@ -179,14 +211,15 @@ export function CinemaClient() {
               label={genre}
               rowKey={`genre-${genre}`}
               items={movies.rows[genre] ?? []}
+              cardWidthClassName={CARD_WIDTH}
               onFocusItem={setFocusedItem}
-              onSelectItem={setSelectedItem}
+              onSelectItem={openDetail}
             />
           ))}
         </div>
       </div>
 
-      {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={() => setSelectedItem(null)} />}
+      {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={closeDetail} />}
     </div>,
     document.body
   );

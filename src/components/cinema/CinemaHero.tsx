@@ -60,8 +60,8 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
       )}
       <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
 
-      <div className="relative flex h-full max-w-2xl flex-col justify-end gap-4 px-8 pb-10 sm:px-12">
-        <h1 className="text-4xl font-bold leading-tight text-white drop-shadow-lg sm:text-6xl">{item.title}</h1>
+      <div key={item.radarrId} className="relative flex h-full max-w-2xl animate-fade-in flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
 
         <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
           <span>{item.year}</span>
