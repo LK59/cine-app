@@ -86,6 +86,7 @@ out vec4 fragColor;
 // what iOS reported.
 uniform highp usampler2D yPlane;
 uniform highp usampler2D uPlane;
+// Unused on the semi-planar path, where chroma comes interleaved from uPlane's two channels.
 uniform highp usampler2D vPlane;
 // Peak brightness the source is mastered for, in nits. 1000 covers most HDR10 grades; the value
 // only sets where the roll-off starts, so being a little off is a gentle change in contrast
@@ -117,10 +118,20 @@ float toneMapLuma(float l, float white) {
 }
 
 void main() {
-  // 10-bit code values, 0..1023.
+#ifdef SEMI_PLANAR
+  // P010: two planes, chroma interleaved as Cb,Cr pairs, and the ten bits sit in the HIGH end of
+  // each 16-bit word rather than the low one — which is what Apple's hardware decoder produces
+  // for 10-bit video, and reading it as low-aligned gives a picture with no signal at all.
+  float y = float(texture(yPlane, uv).r >> 6u) / 1023.0;
+  uvec2 chroma = texture(uPlane, uv).rg >> 6u;
+  float cb = float(chroma.r) / 1023.0;
+  float cr = float(chroma.g) / 1023.0;
+#else
+  // I420P10 and friends: three planes, ten bits low-aligned.
   float y = float(texture(yPlane, uv).r) / 1023.0;
   float cb = float(texture(uPlane, uv).r) / 1023.0;
   float cr = float(texture(vPlane, uv).r) / 1023.0;
+#endif
 
   // Limited range uses 64-940 of 1023 for luma and 64-960 for chroma; full range uses all of it.
   float yScaled = mix((y * 1023.0 - 64.0) / 876.0, y, fullRange);
@@ -181,13 +192,16 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string): WebG
 function planeGeometry(
   frame: VideoFrame,
   layout: { offset: number; stride: number }[],
-  totalSize: number
+  totalSize: number,
+  semiPlanar: boolean
 ): { width: number; height: number; stride: number }[] {
-  return [0, 1, 2].map((index) => {
+  return layout.map((_, index) => {
     const stride = layout[index].stride;
     const end = index < layout.length - 1 ? layout[index + 1].offset : totalSize;
     const height = Math.max(1, Math.floor((end - layout[index].offset) / stride));
     if (index === 0) return { width: frame.codedWidth, height, stride };
+    // Semi-planar chroma is always half-width in pixels (two samples per pixel).
+    if (semiPlanar) return { width: Math.ceil(frame.codedWidth / 2), height, stride };
     // 4:2:0 and 4:2:2 halve the chroma width, 4:4:4 keeps it. The stride says which: a padded
     // full-width plane is still far closer to the luma width than a half-width one.
     const full = stride / 2 >= frame.codedWidth * 0.75;
@@ -197,7 +211,8 @@ function planeGeometry(
 
 class ToneMapRenderer implements FrameRenderer {
   private readonly gl: WebGL2RenderingContext;
-  private readonly program: WebGLProgram;
+  private program: WebGLProgram | null = null;
+  private semiPlanar = false;
   private readonly textures: WebGLTexture[] = [];
   private buffer: ArrayBuffer | null = null;
 
@@ -205,16 +220,31 @@ class ToneMapRenderer implements FrameRenderer {
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, desynchronized: true });
     if (!gl) throw new Error("WebGL2 est indisponible : la conversion HDR ne peut pas s'exécuter.");
     this.gl = gl;
+  }
+
+  /**
+   * Builds the program for the layout the decoder actually produced.
+   *
+   * Deferred to the first frame on purpose: whether chroma arrives as two separate planes or one
+   * interleaved plane is a property of the decoder, not of the file, and it cannot be known
+   * before a frame exists. Guessing it wrong is a black screen.
+   */
+  private build(semiPlanar: boolean): void {
+    const gl = this.gl;
+    const fragment = semiPlanar
+      ? FRAGMENT_SHADER.replace("#version 300 es", "#version 300 es\n#define SEMI_PLANAR")
+      : FRAGMENT_SHADER;
 
     const program = gl.createProgram();
     if (!program) throw new Error("Impossible de créer le programme WebGL.");
     gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER));
-    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER));
+    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, fragment));
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       throw new Error(`Édition de liens WebGL échouée : ${gl.getProgramInfoLog(program) ?? ""}`);
     }
     this.program = program;
+    this.semiPlanar = semiPlanar;
     gl.useProgram(program);
 
     const vertices = new Float32Array([-1, -1, 3, -1, -1, 3]);
@@ -225,6 +255,10 @@ class ToneMapRenderer implements FrameRenderer {
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
 
+    // A rebuild (the layout changed under us) starts from clean textures rather than leaking the
+    // previous set.
+    for (const texture of this.textures) gl.deleteTexture(texture);
+    this.textures.length = 0;
     for (let i = 0; i < 3; i++) {
       const texture = gl.createTexture();
       if (!texture) throw new Error("Impossible d'allouer les textures de plan.");
@@ -258,17 +292,27 @@ class ToneMapRenderer implements FrameRenderer {
     if (!this.buffer || this.buffer.byteLength < size) this.buffer = new ArrayBuffer(size);
     const bytes = new Uint8Array(this.buffer, 0, size);
     const layout = await frame.copyTo(bytes);
-    if (layout.length < 3) throw new Error(`Format d'image inattendu (${layout.length} plan(s)).`);
+    if (layout.length !== 2 && layout.length !== 3) {
+      throw new Error(`Disposition d'image non gérée (${layout.length} plan(s)).`);
+    }
 
-    const planes = planeGeometry(frame, layout, size);
-    for (let i = 0; i < 3; i++) {
+    const semiPlanar = layout.length === 2;
+    if (!this.program || this.semiPlanar !== semiPlanar) this.build(semiPlanar);
+
+    const planes = planeGeometry(frame, layout, size, semiPlanar);
+    for (let i = 0; i < planes.length; i++) {
       const { width, height, stride } = planes[i];
+      // A semi-planar chroma plane holds two samples per pixel, so its rows are twice as wide in
+      // samples as they are in pixels.
+      const samplesPerPixel = semiPlanar && i === 1 ? 2 : 1;
       const samples = new Uint16Array(this.buffer, layout[i].offset, (stride / 2) * height);
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.bindTexture(gl.TEXTURE_2D, this.textures[i]);
       // The stride can exceed the row's real width, so rows are only contiguous by accident.
-      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, stride / 2);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16UI, width, height, 0, gl.RED_INTEGER, gl.UNSIGNED_SHORT, samples);
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, stride / 2 / samplesPerPixel);
+      const format = samplesPerPixel === 2 ? gl.RG_INTEGER : gl.RED_INTEGER;
+      const internal = samplesPerPixel === 2 ? gl.RG16UI : gl.R16UI;
+      gl.texImage2D(gl.TEXTURE_2D, 0, internal, width, height, 0, format, gl.UNSIGNED_SHORT, samples);
     }
     gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
 
@@ -278,7 +322,7 @@ class ToneMapRenderer implements FrameRenderer {
   destroy(): void {
     const gl = this.gl;
     for (const texture of this.textures) gl.deleteTexture(texture);
-    gl.deleteProgram(this.program);
+    if (this.program) gl.deleteProgram(this.program);
   }
 }
 

@@ -205,6 +205,10 @@ export function ExperimentalPlayerHost({
       ref={containerRef}
       style={style}
       className={isMini ? "animate-fade-in-scale" : "app-viewport"}
+      // Every touch is an opportunity to unblock the audio hardware — see resumeAudio(). Capture
+      // phase and pointerdown specifically, so the permission is used before any control's own
+      // handler has a chance to await something and lose it.
+      onPointerDownCapture={() => void engineRef.current?.resumeAudio()}
       {...(isMini ? handlers : {})}
     >
       <canvas ref={canvasRef} className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} />

@@ -13,7 +13,7 @@
 // be decoded directly, so a silent fallback to another pipeline would defeat the purpose.
 
 import { HttpByteSource, type ByteSource } from "./byteSource";
-import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "./matroska";
+import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
 import { SampleReader } from "./sampleReader";
 import { audioConfigCandidates, audioConfigFor, videoConfigFor, unsupportedReason } from "./codecConfig";
 import { createRenderer, type FrameRenderer } from "./renderer";
@@ -122,6 +122,16 @@ export class PlaybackEngine {
   private softwareAudio: SoftwareAudioTrack | null = null;
   private softwareAudioGeneration = 0;
   private readonly frames: VideoFrame[] = [];
+  /**
+   * Encoded video samples read but not yet handed to the decoder.
+   *
+   * Audio and video are interleaved in the file, so the only way to reach the next audio sample
+   * is to read past the video samples in front of it. Stopping the read because the video queue
+   * is full therefore starves the audio — which is exactly what happened. Video that has nowhere
+   * to go waits here instead, and the read continues. These are compressed samples: tens of them
+   * are a few megabytes, against a hundred for the same number of decoded 4K frames.
+   */
+  private pendingVideo: MediaSample[] = [];
   /**
    * Subtitle lines per track, read ahead of the playhead and dropped as they expire.
    *
@@ -471,6 +481,20 @@ export class PlaybackEngine {
     return !this.playing;
   }
 
+  /**
+   * Unblocks the audio hardware. Must be called from inside a real user gesture.
+   *
+   * iOS starts every AudioContext suspended and only lets it resume from the task of a genuine
+   * interaction — an await in between is enough to lose that permission. Playback here starts
+   * from an async chain (open the file, parse it, configure the decoders), so by the time play()
+   * runs the gesture is long gone and the sound never comes: the pipeline decodes correctly into
+   * a context that is not running. The host therefore also calls this straight from a pointer
+   * handler, where the permission still holds.
+   */
+  async resumeAudio(): Promise<void> {
+    await this.audio?.resume();
+  }
+
   async play(): Promise<void> {
     if (this.destroyed || this.playing) return;
     this.playing = true;
@@ -515,6 +539,7 @@ export class PlaybackEngine {
 
     for (const frame of this.frames) frame.close();
     this.frames.length = 0;
+    this.pendingVideo = [];
     this.pendingCues.clear();
     this.activeCue = null;
     this.emit("subtitle", null);
@@ -561,7 +586,28 @@ export class PlaybackEngine {
     data.close();
   }
 
-  /** Feeds the decoders until something downstream is full, or the file ends. */
+  /** True while the video decoder has room for another sample. */
+  private get videoHasRoom(): boolean {
+    return this.frames.length < this.depth.frames && (this.videoDecoder?.decodeQueueSize ?? 0) < this.depth.decode;
+  }
+
+  private decodeVideoSample(sample: MediaSample): void {
+    if (this.videoDecoder?.state !== "configured") return;
+    if (this.needsKeyframe) {
+      if (!sample.isKey) return;
+      this.needsKeyframe = false;
+    }
+    this.videoDecoder.decode(
+      new EncodedVideoChunk({
+        type: sample.isKey ? "key" : "delta",
+        timestamp: sample.timestampUs,
+        ...(sample.durationUs !== null ? { duration: sample.durationUs } : {}),
+        data: sample.data,
+      })
+    );
+  }
+
+  /** Feeds the decoders until everything downstream is satisfied, or the file ends. */
   private async pump(): Promise<void> {
     if (this.demuxing || this.destroyed || !this.reader) return;
     this.demuxing = true;
@@ -572,9 +618,19 @@ export class PlaybackEngine {
         // A seek happened while this pass was awaiting a read; everything it would feed now
         // belongs to the position the viewer just left.
         if (generation !== this.generation) return;
-        if (this.frames.length >= this.depth.frames) return;
-        if ((this.videoDecoder?.decodeQueueSize ?? 0) >= this.depth.decode) return;
-        if (this.audio && !this.audio.needsMore && this.frames.length > 2) return;
+
+        // Anything held back earlier goes in first, so the queue drains in file order.
+        while (this.pendingVideo.length > 0 && this.videoHasRoom) {
+          this.decodeVideoSample(this.pendingVideo.shift()!);
+        }
+
+        // The native audio decoder is fed from here; the software one runs its own loop and
+        // needs nothing from this one.
+        const audioWants = !!this.audioDecoder && !!this.audio && this.audio.needsMore;
+        if (!this.videoHasRoom && !audioWants) return;
+        // Reading on for audio's sake is bounded: past this the file is simply ahead of the
+        // decoder and waiting is the right answer.
+        if (!this.videoHasRoom && this.pendingVideo.length >= 120) return;
 
         const sample = await this.reader.next();
         if (!sample) {
@@ -584,19 +640,9 @@ export class PlaybackEngine {
           return;
         }
 
-        if (this.videoTrack && sample.trackNumber === this.videoTrack.number && this.videoDecoder?.state === "configured") {
-          if (this.needsKeyframe) {
-            if (!sample.isKey) continue;
-            this.needsKeyframe = false;
-          }
-          this.videoDecoder.decode(
-            new EncodedVideoChunk({
-              type: sample.isKey ? "key" : "delta",
-              timestamp: sample.timestampUs,
-              ...(sample.durationUs !== null ? { duration: sample.durationUs } : {}),
-              data: sample.data,
-            })
-          );
+        if (this.videoTrack && sample.trackNumber === this.videoTrack.number) {
+          if (this.videoHasRoom) this.decodeVideoSample(sample);
+          else this.pendingVideo.push(sample);
         } else if (this.subtitleTracksByNumber.has(sample.trackNumber)) {
           // Text subtitles are not decoded, only timed: the block payload is the line itself, and
           // its duration is how long it stays up.
