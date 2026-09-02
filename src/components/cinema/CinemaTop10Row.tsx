@@ -45,7 +45,7 @@ export function CinemaTop10Row<T extends Top10Item>({
   return (
     <div className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>
-      <div className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+      <div className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (
           <CinemaTop10Card
             key={idOf(item)}
@@ -55,6 +55,8 @@ export function CinemaTop10Row<T extends Top10Item>({
             addedAt={item.addedAt}
             widthClassName="w-24 sm:w-28 md:w-32 lg:w-36"
             numberFontSize="6.5rem"
+            singleWidth="2.8rem"
+            doubleWidth="5.2rem"
             rowKey={rowKey}
             index={i}
             onFocusItem={() => onFocusItem(item)}

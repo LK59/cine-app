@@ -14,7 +14,6 @@ import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { ImdbBadge } from "@/components/ImdbBadge";
-import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
 import { CinemaSimilarRow } from "@/components/cinema/CinemaSimilarRow";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -201,7 +200,6 @@ export function CinemaMobileDetail({
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
-          <CinemaMatchBadge rating={item.imdbRating} />
           <span>{item.year}</span>
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
           {isSeries && seasons.length > 0 && (

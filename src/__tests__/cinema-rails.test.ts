@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isRecentlyAdded, recentlyAddedRail, top10Rail, matchPercent, uniqueById } from "@/lib/cinemaRails";
+import { isRecentlyAdded, recentlyAddedRail, top10Rail, uniqueById } from "@/lib/cinemaRails";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 
 const NOW = Date.parse("2026-09-02T12:00:00Z");
@@ -56,19 +56,6 @@ describe("top10Rail", () => {
       { imdbRating: "8.0", addedAt: daysAgo(2) },
     ]);
     expect(rail[0].addedAt).toBe(daysAgo(2));
-  });
-});
-
-describe("matchPercent", () => {
-  it("renders the rating as a percentage, floored at 50 and capped at 99", () => {
-    expect(matchPercent("8.7")).toBe(87);
-    expect(matchPercent("2.0")).toBe(50);
-    expect(matchPercent("10")).toBe(99);
-  });
-
-  it("has nothing to show without a rating", () => {
-    expect(matchPercent(null)).toBeNull();
-    expect(matchPercent("n/a")).toBeNull();
   });
 });
 

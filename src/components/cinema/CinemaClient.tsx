@@ -594,7 +594,7 @@ export function CinemaClient() {
               {resumeMovies.length > 0 && (
                 <div className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
                     {resumeMovies.map((item, i) => (
                       <ContinueCard
                         key={item.id}
@@ -673,7 +673,7 @@ export function CinemaClient() {
               {continueSeries.length > 0 && (
                 <div className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
                     {continueSeries.map((item, i) => (
                       <ContinueCard
                         key={item.jellyfinItemId}

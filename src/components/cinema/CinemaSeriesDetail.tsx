@@ -7,7 +7,6 @@ import useSWR from "swr";
 import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, ListVideo, RotateCcw } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
-import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
 import { CinemaSimilarRow, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -196,15 +195,19 @@ export function CinemaSeriesDetail({
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
 
-      {/* flex-col + mt-auto on the child, NOT items-end: a flex container aligned to its end edge
-          clips whatever overflows past its START edge and makes it unreachable by scrolling —
-          which is exactly what adding the similar-titles row did here, pushing the logo and title
-          up off the top of the screen with no way to scroll back to them. An auto margin does the
-          same bottom-alignment while a taller-than-the-viewport column simply scrolls normally. */}
-      <div className="scrollbar-thin relative flex h-full flex-col overflow-y-auto scroll-smooth py-16">
+      {/* Two snap positions, like the browse screen: the title block, then the similar titles.
+          Each section is min-h-full so it fills the viewport on its own, which is what stops the
+          scroll from ever resting halfway between the two.
+
+          justify-end inside a min-h-full section, NOT items-end on the scroller: a flex container
+          aligned to its end edge clips whatever overflows past its START edge and makes it
+          unreachable by scrolling — that's what pushed the logo and title off the top of the
+          screen when the similar row first landed here. A section that simply grows can't. */}
+      <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
+        <div className="flex min-h-full snap-start flex-col justify-end py-16">
         <div
           key={item.sonarrId}
-          className={`mt-auto flex w-full max-w-2xl shrink-0 flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -219,7 +222,6 @@ export function CinemaSeriesDetail({
           )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
-            <CinemaMatchBadge rating={item.imdbRating} />
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
@@ -319,10 +321,17 @@ export function CinemaSeriesDetail({
             </button>
           </div>
 
-          {onSelectSimilar && (
-            <CinemaSimilarRow subject={item} mediaType="series" onSelect={(next) => onSelectSimilar(next as CinemaSeries)} />
-          )}
         </div>
+        </div>
+
+        {/* Its own full-height snap position — centred rather than pinned to the top, so landing
+            on it reads as a deliberate second screen instead of one row stranded above a lot of
+            empty backdrop. */}
+        {onSelectSimilar && (
+          <div className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
+            <CinemaSimilarRow subject={item} mediaType="series" onSelect={(next) => onSelectSimilar(next as CinemaSeries)} />
+          </div>
+        )}
       </div>
 
       {showTrailer && info?.trailerKey && (

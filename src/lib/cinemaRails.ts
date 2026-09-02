@@ -59,15 +59,6 @@ export function top10Rail<T extends RailItem>(items: T[]): T[] {
     .slice(0, 10);
 }
 
-// Netflix's "97 % de correspondance". Theirs is personalized; ours is openly the IMDb rating
-// rendered the same way (8.7 → 87 %), floored at 50 so nothing in your own library is presented
-// as a bad match, and capped at 99 because a round 100 reads as a bug.
-export function matchPercent(imdbRating: string | null): number | null {
-  const n = imdbRating ? Number.parseFloat(imdbRating) : NaN;
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.min(99, Math.max(50, Math.round(n * 10)));
-}
-
 // The rows map repeats a title once per genre and omits any title with no genre at all, so
 // "everything in the payload" means the union of every list it carries, de-duplicated.
 export function uniqueById<T>(items: T[], id: (item: T) => number): T[] {

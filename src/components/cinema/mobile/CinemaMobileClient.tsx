@@ -332,6 +332,8 @@ export function CinemaMobileClient() {
                 addedAt={item.addedAt}
                 widthClassName={POSTER_WIDTH}
                 numberFontSize="4.5rem"
+                singleWidth="1.9rem"
+                doubleWidth="3.6rem"
                 onSelectItem={() => openDetail(item, mediaType)}
               />
             ))}
@@ -410,7 +412,7 @@ function MobileRow({ label, children }: { label: string; children: React.ReactNo
   return (
     <section className="mt-6" style={ROW_CONTAINMENT}>
       <h2 className="mb-2 px-4 text-sm font-semibold text-white">{label}</h2>
-      <div className="scrollbar-thin flex gap-3 overflow-x-auto px-4 pb-1">{children}</div>
+      <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">{children}</div>
     </section>
   );
 }

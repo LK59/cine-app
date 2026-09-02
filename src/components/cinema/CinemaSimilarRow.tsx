@@ -53,16 +53,20 @@ export function CinemaSimilarRow({
   if (items.length === 0) return null;
 
   return (
-    <section className="mt-4 w-full">
+    <section className="w-full">
       <h2 className="mb-2 text-sm font-medium text-white/70">{t("cinema.similar")}</h2>
-      <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-2">
+      {/* py-4 + overflow-y-hidden: a focused poster scales up and needs room inside this box, or
+          it gets clipped by the scroller's own edge (any element with overflow-x:auto computes
+          overflow-y to auto too, so the box really does clip). Hidden rather than auto on the
+          vertical axis also hands the mouse wheel back to the page instead of the row eating it. */}
+      <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden py-4">
         {items.map((item) => (
           <button
             key={idOf(item)}
             type="button"
             data-detail-similar
             onClick={() => onSelect(item)}
-            className="relative w-20 shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-transform hover:scale-105 focus-visible:scale-105 sm:w-24"
+            className="relative w-24 shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 outline-none transition-transform hover:scale-105 focus-visible:scale-105 sm:w-28 md:w-32"
           >
             <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="120px" />
             <CinemaNewBadge addedAt={item.addedAt} />
