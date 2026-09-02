@@ -275,14 +275,14 @@ export class PlaybackEngine {
     const generation = ++this.softwareAudioGeneration;
 
     try {
-      for await (const data of software.samples(fromSeconds)) {
+      for await (const decoded of software.samples(fromSeconds)) {
         // A seek or a track change started a newer loop; this one's samples belong to a position
         // nobody is watching any more.
-        if (this.destroyed || generation !== this.softwareAudioGeneration) {
-          data.close();
-          return;
+        if (this.destroyed || generation !== this.softwareAudioGeneration) return;
+        if (this.audio) {
+          this.audioChunks += 1;
+          this.audio.enqueuePcm(decoded.planes, decoded.sampleRate, decoded.timestampSeconds);
         }
-        this.onAudioData(data);
         // Decoding runs about ten times faster than playback, so without waiting for the queue to
         // drain it would decode the whole film into memory in a couple of minutes.
         while (!this.destroyed && generation === this.softwareAudioGeneration && this.audio && !this.audio.needsMore) {
@@ -453,6 +453,7 @@ export class PlaybackEngine {
         ? `${this.audioChunks} décodés`
         : `${this.audioFed} fournis, ${this.audioChunks} décodés`,
       "Sortie": this.audio ? this.audio.outputState : "—",
+      "Niveau audio": this.audio ? this.audio.level : "—",
       "Audio en avance": this.audio ? `${this.audio.bufferedAhead.toFixed(2)} s` : "—",
       "Images en file": `${this.frames.length} décodées, ${this.pendingVideo.length} en attente`,
       "Horloge": `${this.currentTime.toFixed(1)} s`,

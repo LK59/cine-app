@@ -67,14 +67,27 @@ export class SoftwareAudioTrack {
     );
   }
 
-  /** Decoded audio from `fromSeconds` onwards, as the WebCodecs type the output stage expects. */
-  async *samples(fromSeconds: number): AsyncGenerator<AudioData> {
+  /**
+   * Decoded audio from `fromSeconds` onwards, as plain float planes.
+   *
+   * Deliberately NOT via AudioSample.toAudioData(). That step was the one part of this chain
+   * never verified anywhere: reading the PCM straight off the sample is what was measured
+   * against real library files (6-channel E-AC3, peak 0.145, ten times real time), while
+   * toAudioData() constructs a WebCodecs object whose relationship to the sample's memory is an
+   * assumption. Handing back the floats keeps the proven path and removes a conversion nobody
+   * needs.
+   */
+  async *samples(fromSeconds: number): AsyncGenerator<DecodedAudio> {
     for await (const sample of this.sink.samples(fromSeconds)) {
-      // toAudioData() hands over an AudioData that owns its own memory, so the sample itself can
-      // be released immediately — otherwise the decoder's buffers pile up behind the playhead.
-      const data = sample.toAudioData();
+      const planes: Float32Array[] = [];
+      for (let channel = 0; channel < sample.numberOfChannels; channel++) {
+        const plane = new Float32Array(sample.numberOfFrames);
+        sample.copyTo(plane, { planeIndex: channel, format: "f32-planar" });
+        planes.push(plane);
+      }
+      const decoded = { planes, sampleRate: sample.sampleRate, timestampSeconds: sample.timestamp };
       sample.close();
-      yield data;
+      yield decoded;
     }
   }
 
@@ -83,7 +96,20 @@ export class SoftwareAudioTrack {
   }
 }
 
+/** Decoded audio in the one representation both decoder paths agree on. */
+export interface DecodedAudio {
+  planes: Float32Array[];
+  sampleRate: number;
+  /** Presentation time in seconds. */
+  timestampSeconds: number;
+}
+
 interface SoftwareSample {
-  toAudioData(): AudioData;
+  readonly numberOfChannels: number;
+  readonly numberOfFrames: number;
+  readonly sampleRate: number;
+  /** Seconds, per mediabunny's own convention. */
+  readonly timestamp: number;
+  copyTo(destination: Float32Array, options: { planeIndex: number; format: string }): void;
   close(): void;
 }

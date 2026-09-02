@@ -64,6 +64,9 @@ export class AudioOutput {
   private anchorContextTime = 0;
   private started = false;
   private lastChannelCount = 0;
+  private lastPeak = 0;
+  /** Media element the graph plays through — see the constructor for why it exists. */
+  private element: HTMLAudioElement | null = null;
   /** Scratch for interleaved blocks: copied once per block, read by every channel. */
   private interleaved: ArrayBuffer | null = null;
   private interleavedFor: AudioData | null = null;
@@ -78,7 +81,30 @@ export class AudioOutput {
     // source node resamples it to the context's on playback.
     this.context = new AudioContext({ latencyHint: "playback" });
     this.gain = this.context.createGain();
-    this.gain.connect(this.context.destination);
+
+    // The output goes through a media element rather than straight to the context's destination.
+    //
+    // On iOS, Web Audio plays under an audio session that the ring/silent switch mutes, while a
+    // media element gets the playback session that does not. The symptom is precise and was
+    // exactly what the diagnostics showed: a running context, blocks decoded, the buffer ahead of
+    // the playhead, the graph correct — and nothing audible. Routing through an <audio> element
+    // promotes the session, and costs a few milliseconds of latency that a film does not notice.
+    try {
+      const stream = this.context.createMediaStreamDestination();
+      this.gain.connect(stream);
+      const element = document.createElement("audio");
+      element.srcObject = stream.stream;
+      element.autoplay = true;
+      // Never rendered, but attached: a detached element is not reliably allowed to play.
+      element.style.display = "none";
+      element.setAttribute("playsinline", "");
+      document.body.appendChild(element);
+      this.element = element;
+    } catch {
+      // Anything unsupported here falls back to the direct connection, which is correct
+      // everywhere except under a silent switch.
+      this.gain.connect(this.context.destination);
+    }
   }
 
   get sampleRate(): number {
@@ -92,7 +118,13 @@ export class AudioOutput {
 
   /** Channels actually handed to the audio graph, and the gain they pass through. */
   get outputState(): string {
-    return `${this.lastChannelCount} canal(aux), gain ${this.gain.gain.value.toFixed(2)}`;
+    const route = this.element ? `élément ${this.element.paused ? "en pause" : "actif"}` : "direct";
+    return `${this.lastChannelCount} canal(aux), gain ${this.gain.gain.value.toFixed(2)}, ${route}`;
+  }
+
+  /** Peak of the last block handed to the graph. Zero here means the audio is genuinely silent. */
+  get level(): string {
+    return this.lastPeak.toFixed(3);
   }
 
   /** True once enough audio has been queued that playback can begin. */
@@ -117,6 +149,8 @@ export class AudioOutput {
 
   async resume(): Promise<void> {
     if (this.context.state === "suspended") await this.context.resume();
+    // The element has its own autoplay gate, and this is called from a real gesture.
+    await this.element?.play().catch(() => {});
   }
 
   async suspend(): Promise<void> {
@@ -124,18 +158,14 @@ export class AudioOutput {
   }
 
   /**
-   * Queues one decoded chunk. `mediaSeconds` is its presentation time in the file, which is what
-   * lets the clock report a real position rather than "time since play was pressed".
-   */
-  /**
    * Reads one channel out of a decoded block as floats, whatever the decoder's own layout.
    *
-   * Written the long way on purpose. The previous version asked copyTo to convert to
-   * "f32-planar" and assumed every browser would — an assumption never verified, and the kind
-   * that fails invisibly: copyTo throwing inside a decoder's output callback is swallowed by the
-   * browser, so the symptom is silence with a perfect picture and no error anywhere. Requesting
-   * the format the decoder actually produced can't fail that way, and the conversion is a few
-   * lines of arithmetic.
+   * Written the long way on purpose. An earlier version asked copyTo to convert to "f32-planar"
+   * and assumed every browser would — an assumption never verified, and the kind that fails
+   * invisibly: copyTo throwing inside a decoder's output callback is swallowed by the browser, so
+   * the symptom is silence with a perfect picture and no error anywhere. Requesting the format the
+   * decoder actually produced cannot fail that way, and the conversion is a few lines of
+   * arithmetic.
    */
   private channelFloats(data: AudioData, channel: number, frames: number): Float32Array {
     const format = data.format ?? "f32-planar";
@@ -175,29 +205,33 @@ export class AudioOutput {
   }
 
   /**
-   * Queues one decoded chunk. `mediaSeconds` is its presentation time in the file, which is what
-   * lets the clock report a real position rather than "time since play was pressed".
+   * Queues one decoded chunk, whatever produced it.
    *
-   * Returns false if the block could not be queued, with the reason handed to onError — this runs
-   * inside a decoder callback, where a thrown exception disappears without trace.
+   * Both decoder paths converge here on plain float planes: the native one converts its AudioData
+   * (see channelFloats), the software one reads them straight off its sample. One representation
+   * means one place where the audio can be wrong, and one place that measures it.
    */
-  enqueue(data: AudioData, mediaSeconds: number): boolean {
+  enqueuePcm(planes: Float32Array[], sampleRate: number, mediaSeconds: number): boolean {
     try {
-      const sourceChannels = data.numberOfChannels;
-      const frames = data.numberOfFrames;
-      const planes: Float32Array[] = [];
-      for (let channel = 0; channel < sourceChannels; channel++) {
-        planes.push(this.channelFloats(data, channel, frames));
-      }
+      const frames = planes[0]?.length ?? 0;
+      if (frames === 0) return false;
 
       // Anything above stereo is folded down here rather than handed to the audio graph to
-      // downmix. Every file in this library is 5.1, every one of them was silent, and the
-      // diagnostics ruled everything else out: the context running, 719 blocks decoded, the
-      // buffer 0.6s ahead, and no sound. A multichannel AudioBuffer that a browser declines to
-      // downmix fails exactly that way — it accepts everything and plays nothing.
-      const output = sourceChannels > 2 ? foldToStereo(planes, frames) : planes;
+      // downmix: a multichannel AudioBuffer a browser declines to downmix accepts everything and
+      // plays nothing, which is indistinguishable from a working player with no sound.
+      const output = planes.length > 2 ? foldToStereo(planes, frames) : planes;
+
+      // The one thing the diagnostics could not see: whether the samples carry any signal at all.
+      // Silence with a perfect pipeline and silence with an empty buffer look identical from the
+      // outside, and they have nothing in common as problems.
+      let peak = 0;
+      for (const plane of output) {
+        for (let i = 0; i < frames; i += 32) peak = Math.max(peak, Math.abs(plane[i]));
+      }
+      this.lastPeak = peak;
+
       this.lastChannelCount = output.length;
-      const buffer = this.context.createBuffer(output.length, frames, data.sampleRate);
+      const buffer = this.context.createBuffer(output.length, frames, sampleRate);
       for (let channel = 0; channel < output.length; channel++) {
         buffer.copyToChannel(output[channel], channel);
       }
@@ -229,6 +263,20 @@ export class AudioOutput {
     }
   }
 
+  /** The native decoder's path: convert its AudioData to planes, then the shared route above. */
+  enqueue(data: AudioData, mediaSeconds: number): boolean {
+    try {
+      const planes: Float32Array[] = [];
+      for (let channel = 0; channel < data.numberOfChannels; channel++) {
+        planes.push(this.channelFloats(data, channel, data.numberOfFrames));
+      }
+      return this.enqueuePcm(planes, data.sampleRate, mediaSeconds);
+    } catch (error) {
+      this.onError?.(error instanceof Error ? error.message : "lecture du bloc audio impossible");
+      return false;
+    }
+  }
+
   /** Current playback position in the file, in seconds. */
   currentMediaTime(): number {
     if (!this.started) return this.anchorMediaSeconds;
@@ -253,6 +301,12 @@ export class AudioOutput {
 
   async close(): Promise<void> {
     this.flush(0);
+    if (this.element) {
+      this.element.pause();
+      this.element.srcObject = null;
+      this.element.remove();
+      this.element = null;
+    }
     await this.context.close().catch(() => {});
   }
 }
