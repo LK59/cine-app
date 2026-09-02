@@ -185,8 +185,8 @@ export function CinemaTrailerBackdrop({
           of the vignette instead of a hard cutout, and only shown for as long as that overlay
           actually lingers (see showCenterMask's own effect above) — not permanently. */}
       <div
-        className={`pointer-events-none absolute left-1/2 h-14 w-40 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-slate-950/90 backdrop-blur-md transition-opacity duration-500 ${showCenterMask ? "opacity-100" : "opacity-0"}`}
-        style={{ top: "44%" }}
+        className={`pointer-events-none absolute left-1/2 h-16 w-56 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-slate-950/90 backdrop-blur-md transition-opacity duration-500 ${showCenterMask ? "opacity-100" : "opacity-0"}`}
+        style={{ top: "63%" }}
       />
 
       {/* Mouse-only, deliberately not part of the TV-remote grid nav chain (same reasoning as
