@@ -8,6 +8,7 @@ import { Check, ChevronDown, Play, Plus, RotateCcw, Video, X } from "lucide-reac
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -55,6 +56,9 @@ export function CinemaMobileDetail({
   const [showTrailer, setShowTrailer] = useState(false);
   const { closing, requestClose } = useDelayedClose(onClose, 220);
   const similar = useCinemaSimilar(item, mediaType);
+  // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
+  // a handle; everything from the Lire button down scrolls as usual.
+  const swipe = useSwipeToDismiss(requestClose);
 
   const isSeries = mediaType === "series";
   const infoUrl = isSeries
@@ -161,15 +165,38 @@ export function CinemaMobileDetail({
 
   return createPortal(
     <div
-      className={`fixed inset-0 overflow-y-auto overscroll-contain bg-slate-950 ${closing ? "animate-fade-out" : "animate-slide-up"}`}
+      // The entrance/exit animations are dropped for the duration of a drag: they animate the
+      // same transform this does, and a running animation wins over an inline style — the sheet
+      // would refuse to follow the finger at all.
+      className={`fixed inset-0 overflow-y-auto overscroll-contain bg-slate-950 ${
+        swipe.offset > 0 ? "" : closing ? "animate-fade-out" : "animate-slide-up"
+      }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
       // button lands in the murk.
-      style={{ zIndex: 46, paddingTop: "env(safe-area-inset-top, 0px)" }}
+      style={{
+        zIndex: 46,
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        transform: swipe.offset > 0 ? `translateY(${swipe.offset}px)` : undefined,
+        // No transition while the finger is down: the sheet is not animating towards the finger,
+        // it is where the finger is. On release the spring back (or the rest of the way out) is
+        // what gets eased.
+        transition: swipe.dragging ? "none" : "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+        // A little of the screen behind showing through as it goes, so the gesture reads as
+        // "moving this out of the way" rather than "sliding a solid panel around".
+        opacity: swipe.offset > 0 ? Math.max(0.4, 1 - swipe.offset / (window.innerHeight * 1.2)) : undefined,
+      }}
     >
       {/* 16:9 header image, bleeding into the page under a gradient rather than ending on a hard
           edge — the same treatment the desktop sheet uses, scaled to a phone. */}
-      <div className="relative aspect-video w-full">
+      <div
+        className="relative aspect-video w-full"
+        {...swipe.handlers}
+        // touch-action none: the browser must not claim this gesture for its own scrolling, or
+        // it steals the pointer stream halfway through the drag. Only this block gives that up —
+        // the rest of the sheet scrolls natively.
+        style={{ touchAction: "none" }}
+      >
         {item.backdropUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -179,6 +206,7 @@ export function CinemaMobileDetail({
         <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/20 to-transparent" />
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={requestClose}
           aria-label={t("cinema.back")}
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
