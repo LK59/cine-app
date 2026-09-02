@@ -141,7 +141,7 @@ function fakeRemuxer(segments: number, delay = 0.2) {
     nextSegment: async (): Promise<RemuxSegment | null> => {
       if (index >= segments) return null;
       index += 1;
-      return { video: new Uint8Array([10 + index]), audio: new Uint8Array([20 + index]), endSeconds: index * 2 };
+      return { video: new Uint8Array([10 + index]), audio: new Uint8Array([20 + index]), subtitles: [], endSeconds: index * 2 };
     },
   };
   return remuxer as unknown as Remuxer & { seeks: number[] };

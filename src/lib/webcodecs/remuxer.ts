@@ -8,6 +8,7 @@
 // pipeline: no canvas, no per-frame JavaScript, no colour conversion, HDR handled natively.
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
+import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
 import { avcCodecString, hevcCodecString } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
@@ -40,9 +41,19 @@ const FALLBACK_AUDIO_FRAME_US = 32_000;
 export interface RemuxSegment {
   video: Uint8Array | null;
   audio: Uint8Array | null;
+  /**
+   * Subtitle lines found while reading this stretch of the file, already timed on the player's
+   * clock. They come free: every sample in the file passes through here anyway, so picking the
+   * subtitle ones out costs no extra reading. A separate reader over the same clusters would
+   * have doubled the I/O to fetch bytes that had already gone by.
+   */
+  subtitles: SubtitleCue[];
   /** Presentation time of the end of this segment, in seconds. */
   endSeconds: number;
 }
+
+/** How long a subtitle stays up when the file does not say. Long enough to read a short line. */
+const SUBTITLE_FALLBACK_SECONDS = 3;
 
 export interface RemuxPlan {
   videoMimeType: string;
@@ -89,6 +100,25 @@ function videoCodecString(track: MatroskaTrack): string | null {
   return null;
 }
 
+/**
+ * The MIME types the remuxed segments would carry, derivable from the track headers alone.
+ *
+ * Worth having separately from `plan()`: opening a remuxer reads from the file — an AC-3 track
+ * cannot be described without seeing a frame — and there is no point paying for that before
+ * knowing whether the browser would accept the result.
+ */
+export function plannedMimeTypes(
+  videoTrack: MatroskaTrack,
+  audioTrack: MatroskaTrack | null
+): { video: string | null; audio: string | null } {
+  const video = videoCodecString(videoTrack);
+  const audio = audioTrack ? audioCodecString(audioTrack) : null;
+  return {
+    video: video ? `video/mp4; codecs="${video}"` : null,
+    audio: audio ? `audio/mp4; codecs="${audio}"` : null,
+  };
+}
+
 /** Whether this track can be remuxed at all — checked before any of the work starts. */
 export function remuxableVideo(track: MatroskaTrack): boolean {
   return videoCodecString(track) !== null;
@@ -105,6 +135,8 @@ export class Remuxer {
   private audioDecodeTime = 0;
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
+  private subtitleTrackNumber: number | null = null;
+  private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
   private sequence = 1;
   private done = false;
@@ -196,6 +228,24 @@ export class Remuxer {
     };
   }
 
+  /** Which subtitle track to pick out of the stream, or null for none. Takes effect immediately. */
+  setSubtitleTrack(trackNumber: number | null): void {
+    const track = this.file.tracks.find((t) => t.number === trackNumber);
+    this.subtitleTrackNumber = track && TEXT_SUBTITLE_CODECS.has(track.codecId) ? track.number : null;
+    this.pendingSubtitles = [];
+  }
+
+  /** The subtitle tracks this path can render — the text ones; styled formats are not handled. */
+  subtitleTracks(): MatroskaTrack[] {
+    return this.file.tracks.filter(
+      (t) => t.type === "subtitle" && t.isEnabled && TEXT_SUBTITLE_CODECS.has(t.codecId)
+    );
+  }
+
+  audioTracks(): MatroskaTrack[] {
+    return this.file.tracks.filter((t) => t.type === "audio");
+  }
+
   diagnostics(): RemuxDiagnostics {
     return {
       presentationDelaySeconds: (this.presentationDelayUs ?? 0) / TIMESCALE,
@@ -214,6 +264,7 @@ export class Remuxer {
     this.reader.seekTo(offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart);
     this.pendingVideo = [];
     this.pendingAudio = [];
+    this.pendingSubtitles = [];
     this.done = false;
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
@@ -244,6 +295,8 @@ export class Remuxer {
         this.pendingVideo.push(sample);
       } else if (this.audioTrack && sample.trackNumber === this.audioTrack.number) {
         this.pendingAudio.push(sample);
+      } else if (this.subtitleTrackNumber !== null && sample.trackNumber === this.subtitleTrackNumber) {
+        this.pendingSubtitles.push(sample);
       }
     }
 
@@ -251,13 +304,38 @@ export class Remuxer {
 
     const video = this.buildVideo();
     const audio = this.buildAudio();
+    const subtitles = this.buildSubtitles();
     const endUs = this.videoDecodeTime;
 
     this.pendingVideo = boundary ? [boundary] : [];
     this.pendingAudio = [];
+    this.pendingSubtitles = [];
     this.sequence += 1;
 
-    return { video, audio, endSeconds: endUs / TIMESCALE };
+    return { video, audio, subtitles, endSeconds: endUs / TIMESCALE };
+  }
+
+  private buildSubtitles(): SubtitleCue[] {
+    if (this.pendingSubtitles.length === 0) return [];
+    const track = this.file.tracks.find((t) => t.number === this.subtitleTrackNumber);
+    if (!track) return [];
+
+    // Timed on the player's clock like everything else, so a line appears with the picture it
+    // belongs to rather than a fifth of a second before it.
+    const delay = (this.presentationDelayUs ?? 0) / TIMESCALE;
+    const cues: SubtitleCue[] = [];
+    for (const sample of this.pendingSubtitles) {
+      const text = subtitleText(new TextDecoder().decode(sample.data), track.codecId);
+      if (!text) continue;
+      const startSeconds = sample.timestampUs / TIMESCALE + delay;
+      cues.push({
+        startSeconds,
+        endSeconds:
+          startSeconds + (sample.durationUs !== null ? sample.durationUs / TIMESCALE : SUBTITLE_FALLBACK_SECONDS),
+        text,
+      });
+    }
+    return cues;
   }
 
   private buildVideo(): Uint8Array | null {
