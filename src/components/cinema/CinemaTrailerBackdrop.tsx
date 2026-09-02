@@ -157,6 +157,11 @@ export function CinemaTrailerBackdrop({
           same as they already do for the still-image backdrop. */}
       <div className="pointer-events-none absolute inset-0" style={{ background: VIGNETTE }} />
 
+      {/* Masks YouTube's own center play/prev/next controls, which flash briefly at start
+          regardless of controls=0 — a small opaque patch over just that spot, since the top-crop
+          trick can't reach the middle of the frame without cropping the actual picture. */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-20 w-52 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-slate-950" />
+
       {/* Mouse-only, deliberately not part of the TV-remote grid nav chain (same reasoning as
           the back button / shortcuts guide floating outside it) — a discreet corner affordance,
           not a focusable stop along the browse flow. */}
