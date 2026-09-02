@@ -847,6 +847,17 @@
       "subtitle": "Interface, synopsis et moteur de recherche",
       "reloadNotice": "Rechargement nécessaire pour appliquer {lang}",
       "apply": "Appliquer"
+    },
+    "trailers": {
+      "title": "Bandes-annonces automatiques",
+      "subtitle": "Aperçu vidéo dans Cinéma, à partir de fichiers téléchargés localement",
+      "explanation": "Nécessite de télécharger les bandes-annonces localement avant de pouvoir être activé. Une fois téléchargées, elles remplacent l'aperçu YouTube partout dans l'app (démarrage instantané, sans interface YouTube).",
+      "downloadNow": "Télécharger maintenant",
+      "downloading": "Téléchargement en cours…",
+      "progress": "{completed} / {total} téléchargées",
+      "failedCount": "{n} échec(s)",
+      "toggleLabel": "Activer les bandes-annonces auto",
+      "toggleDisabledHint": "Termine d'abord le téléchargement pour pouvoir activer cette option."
     }
   },
   "watchlist": {

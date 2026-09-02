@@ -51,6 +51,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface SeriesInfo {
   trailerKey: string | null;
+  localTrailerUrl: string | null;
   tmdb: {
     overview: string;
     tagline?: string;
@@ -778,7 +779,12 @@ export default function SonarrSeriesDetailPage() {
       </div>{/* end saisons tab */}
 
       {showTrailer && info?.trailerKey && (
-        <TrailerModal youtubeKey={info.trailerKey} title={t('sonarr.trailerModalTitle', { title: series.title })} onClose={() => setShowTrailer(false)} />
+        <TrailerModal
+          youtubeKey={info.trailerKey}
+          localTrailerUrl={info.localTrailerUrl}
+          title={t('sonarr.trailerModalTitle', { title: series.title })}
+          onClose={() => setShowTrailer(false)}
+        />
       )}
       {activeSearch && (
         <ReleaseSearchModal

@@ -4,16 +4,19 @@ export function Toggle({
   checked,
   onChange,
   label,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="inline-flex items-center gap-2 text-sm text-slate-300"
+      className={`inline-flex items-center gap-2 text-sm text-slate-300 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
     >
       <span
         className={`relative inline-block h-5 w-9 shrink-0 rounded-full border border-white/10 backdrop-blur-xs transition-colors ${

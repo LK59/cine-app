@@ -4,6 +4,8 @@ import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
+import { resolveTrailerKey } from "@/lib/trailerKey";
+import { getLocalTrailerPath } from "@/lib/trailerDownload";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -22,9 +24,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
   const activeDownload = queue.records.find((r: any) => r.movieId === id || r.movie?.id === id) ?? null;
 
-  const trailer = tmdbVideos.results.find(
-    (v) => v.type === "Trailer" && v.site === "YouTube" && v.official
-  ) ?? tmdbVideos.results.find((v) => v.type === "Trailer" && v.site === "YouTube") ?? null;
+  const trailerKey = resolveTrailerKey(tmdbVideos);
+  // A locally-downloaded file (see trailerDownload.ts) is preferred over the live YouTube embed
+  // wherever a trailer plays — instant start, no iframe chrome. Falls back to null (YouTube)
+  // when not yet downloaded.
+  const localTrailerUrl = getLocalTrailerPath(movie.tmdbId, "movie") ? `/api/cinema/trailer-file/movie/${movie.tmdbId}` : null;
 
   return NextResponse.json({
     tmdb: tmdbInfo
@@ -45,7 +49,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             : null,
         }
       : null,
-    trailerKey: trailer?.key ?? null,
+    trailerKey,
+    localTrailerUrl,
     imdbRating: rating && rating.Response === "True" ? rating.imdbRating : null,
     imdbVotes: rating && rating.Response === "True" ? rating.imdbVotes : null,
     subtitles: subtitles?.subtitles ?? [],

@@ -5,10 +5,13 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 
-export function TrailerModal({ youtubeKey, title, onClose }: {
+export function TrailerModal({ youtubeKey, title, onClose, localTrailerUrl }: {
   youtubeKey: string;
   title: string;
   onClose: () => void;
+  // A locally-downloaded file (see trailerDownload.ts) is preferred when available — instant
+  // start, no iframe chrome, native <video> seeking. Falls back to the YouTube embed when null.
+  localTrailerUrl?: string | null;
 }) {
   // Self-contained exit animation — see the hook's own doc comment. No change needed on any of
   // this modal's callers: they still just pass onClose and it still fires eventually, just after
@@ -44,13 +47,22 @@ export function TrailerModal({ youtubeKey, title, onClose }: {
           </button>
         </div>
         <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-white/10">
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${youtubeKey}?autoplay=1&rel=0`}
-            title={title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="absolute inset-0 h-full w-full"
-          />
+          {localTrailerUrl ? (
+            <video
+              src={localTrailerUrl}
+              controls
+              autoPlay
+              className="absolute inset-0 h-full w-full"
+            />
+          ) : (
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${youtubeKey}?autoplay=1&rel=0`}
+              title={title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="absolute inset-0 h-full w-full"
+            />
+          )}
         </div>
       </div>
     </div>,

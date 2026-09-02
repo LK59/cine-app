@@ -16,19 +16,23 @@ interface SonarrCastMember {
 interface SonarrInfo {
   tmdb: { overview: string; cast: SonarrCastMember[] } | null;
   trailerKey: string | null;
+  localTrailerUrl: string | null;
 }
 
 // Series-typed mirror of CinemaHero — see its own doc comment (text-only passive preview,
 // logo/backdrop + dwell-triggered trailer video live in CinemaClient's shared background,
-// debounced cast fetch, trailerKey lifted up via onTrailerKeyChange). Fetches
+// debounced cast fetch, trailerKey/localTrailerUrl lifted up via callbacks). Fetches
 // /api/sonarr/series/[id]/info — the standard (non-Cinema) series info route, already shaped as
-// {tmdb:{overview,cast}, trailerKey}, same as the movie one — no new endpoint needed for this.
+// {tmdb:{overview,cast}, trailerKey, localTrailerUrl}, same as the movie one — no new endpoint
+// needed for this.
 export function CinemaSeriesHero({
   item,
   onTrailerKeyChange,
+  onLocalTrailerUrlChange,
 }: {
   item: CinemaSeries;
   onTrailerKeyChange?: (key: string | null) => void;
+  onLocalTrailerUrlChange?: (url: string | null) => void;
 }) {
   const [debouncedId, setDebouncedId] = useState(item.sonarrId);
   useEffect(() => {
@@ -40,7 +44,8 @@ export function CinemaSeriesHero({
 
   useEffect(() => {
     onTrailerKeyChange?.(info?.trailerKey ?? null);
-  }, [info?.trailerKey, onTrailerKeyChange]);
+    onLocalTrailerUrlChange?.(info?.localTrailerUrl ?? null);
+  }, [info?.trailerKey, info?.localTrailerUrl, onTrailerKeyChange, onLocalTrailerUrlChange]);
 
   const [logoErrored, setLogoErrored] = useState(false);
   const [resetForId, setResetForId] = useState(item.sonarrId);

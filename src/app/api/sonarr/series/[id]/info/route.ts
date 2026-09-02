@@ -4,6 +4,8 @@ import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
+import { resolveTrailerKey } from "@/lib/trailerKey";
+import { getLocalTrailerPath } from "@/lib/trailerDownload";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -27,12 +29,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
   const activeDownloads = queue.records.filter((r: any) => r.seriesId === id);
 
-  const trailer = tmdbVideos.results.find(
-    (v) => v.type === "Trailer" && v.site === "YouTube" && v.official
-  ) ?? tmdbVideos.results.find((v) => v.type === "Trailer" && v.site === "YouTube") ?? null;
+  const trailerKey = resolveTrailerKey(tmdbVideos);
+  // Keyed by Sonarr's own series.tmdbId (same key the bulk download job uses), not tmdbTvId
+  // above (TVDB-resolved, could theoretically diverge) — keeps the local-file lookup consistent
+  // with how trailerJob.ts names files on disk.
+  const localTrailerUrl = series.tmdbId ? (getLocalTrailerPath(series.tmdbId, "series") ? `/api/cinema/trailer-file/series/${series.tmdbId}` : null) : null;
 
   return NextResponse.json({
-    trailerKey: trailer?.key ?? null,
+    trailerKey,
+    localTrailerUrl,
     tmdb: tmdbInfo
       ? {
           overview: tmdbInfo.overview,

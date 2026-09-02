@@ -847,6 +847,17 @@
       "subtitle": "Interfaz, sinopsis y motor de búsqueda",
       "reloadNotice": "Se necesita recargar para aplicar {lang}",
       "apply": "Aplicar"
+    },
+    "trailers": {
+      "title": "Vista previa automática de trailers",
+      "subtitle": "Vista previa en vídeo en Modo Cine, a partir de archivos descargados localmente",
+      "explanation": "Requiere descargar los trailers localmente antes de poder activarse. Una vez descargados, sustituyen la vista previa de YouTube en toda la app (inicio instantáneo, sin interfaz de YouTube).",
+      "downloadNow": "Descargar ahora",
+      "downloading": "Descargando…",
+      "progress": "{completed} / {total} descargados",
+      "failedCount": "{n} fallo(s)",
+      "toggleLabel": "Activar vista previa automática",
+      "toggleDisabledHint": "Termina primero la descarga para activar esta opción."
     }
   },
   "watchlist": {

@@ -317,3 +317,43 @@ describe("recommendationsDb", () => {
     expect(hidden.has("movie:900")).toBe(true);
   });
 });
+
+describe("trailerDb", () => {
+  it("defaults auto-preview to disabled on a fresh db", () => {
+    expect(db.trailerDb.getSettings()).toEqual({ autoPreviewEnabled: false });
+  });
+
+  it("setAutoPreviewEnabled persists", () => {
+    db.trailerDb.setAutoPreviewEnabled(true);
+    expect(db.trailerDb.getSettings()).toEqual({ autoPreviewEnabled: true });
+    db.trailerDb.setAutoPreviewEnabled(false);
+    expect(db.trailerDb.getSettings()).toEqual({ autoPreviewEnabled: false });
+  });
+
+  it("returns null when no job has ever run", () => {
+    // Fresh temp DB, isolated per test file run — no job started yet at this point.
+    expect(db.trailerDb.getLatestJob()).toBeNull();
+  });
+
+  it("startJob/updateJobProgress/finishJob/getLatestJob round-trip", () => {
+    const id = db.trailerDb.startJob(10);
+    let job = db.trailerDb.getLatestJob();
+    expect(job).toMatchObject({ id, status: "running", total: 10, completed: 0, failed: 0 });
+    expect(job!.finishedAt).toBeNull();
+
+    db.trailerDb.updateJobProgress(id, 4, 1);
+    job = db.trailerDb.getLatestJob();
+    expect(job).toMatchObject({ completed: 4, failed: 1 });
+
+    db.trailerDb.finishJob(id, "done");
+    job = db.trailerDb.getLatestJob();
+    expect(job?.status).toBe("done");
+    expect(job?.finishedAt).not.toBeNull();
+  });
+
+  it("getLatestJob returns the most recently started job", () => {
+    db.trailerDb.startJob(5);
+    const id2 = db.trailerDb.startJob(20);
+    expect(db.trailerDb.getLatestJob()?.id).toBe(id2);
+  });
+});
