@@ -80,6 +80,14 @@ export function useTvGridNav(enabled = true) {
         e.preventDefault();
         const target = rows[activeRowIdx - 1];
         focusCard(target[Math.min(colIdx, target.length - 1)]);
+      } else if (e.key === "ArrowUp" && activeRowIdx === 0) {
+        // Top row: nowhere left to go within the grid — hand off to whatever wants to sit
+        // above it (Cinema Mode's Films/Séries toggle marks itself with this attribute).
+        const escapeTarget = document.querySelector<HTMLElement>("[data-tv-escape-up]");
+        if (escapeTarget) {
+          e.preventDefault();
+          escapeTarget.focus();
+        }
       } else if (e.key === "ArrowDown" && activeRowIdx < rows.length - 1) {
         e.preventDefault();
         const target = rows[activeRowIdx + 1];

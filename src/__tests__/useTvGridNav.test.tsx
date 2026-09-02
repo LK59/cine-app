@@ -121,6 +121,19 @@ describe("useTvGridNav", () => {
     expect(document.activeElement).toBe(only);
   });
 
+  it("ArrowUp from the top row hands focus to a data-tv-escape-up element, when one exists", () => {
+    const escapeTarget = document.createElement("button");
+    escapeTarget.dataset.tvEscapeUp = "true";
+    document.body.appendChild(escapeTarget);
+    const topRow0 = makeCard("row-a", 0, 0);
+    renderHook(() => useTvGridNav());
+    topRow0.focus();
+
+    press("ArrowUp");
+
+    expect(document.activeElement).toBe(escapeTarget);
+  });
+
   it("removes its keydown listener on unmount", () => {
     const removeSpy = vi.spyOn(window, "removeEventListener");
     const { unmount } = renderHook(() => useTvGridNav());
