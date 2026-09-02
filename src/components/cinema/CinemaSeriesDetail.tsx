@@ -95,17 +95,23 @@ export function CinemaSeriesDetail({
     containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
   }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode]);
 
+  // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
+  // closing the player comes back here, and stands down from the keyboard while it's up there.
   const playback = usePlayback();
-  const initialPlaybackMode = useRef(playback.mode);
+  const playerOwnsKeyboard = playback.mode === "full";
+  const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
-    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) requestClose();
-  }, [playback.mode, requestClose]);
+    if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+    }
+    wasPlayerFullScreen.current = playerOwnsKeyboard;
+  }, [playerOwnsKeyboard]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
       // itself — same guard TrailerModal needed, for the same reason.
-      if (showTrailer || showEpisodes) return;
+      if (showTrailer || showEpisodes || playerOwnsKeyboard) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         requestClose();
@@ -125,7 +131,7 @@ export function CinemaSeriesDetail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showEpisodes]);
+  }, [requestClose, showTrailer, showEpisodes, playerOwnsKeyboard]);
 
   function toggleWatched() {
     if (watched) removeFromWatchlist({ tmdbId: item.tmdbId ?? 0, mediaType: "series" });

@@ -102,11 +102,8 @@ export function CinemaMobileDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [requestClose, showTrailer]);
 
-  // Closes itself once real playback takes over, so backing out of the player lands on the browse
-  // grid rather than on a sheet for something already playing — same behavior as desktop.
-  useEffect(() => {
-    if (playback.mode === "full") requestClose();
-  }, [playback.mode, requestClose]);
+  // Deliberately stays open underneath the player: dismissing the player should land back on
+  // the sheet you started from, not on the browse grid behind it.
 
   const nextEpisode = episodesData?.nextEpisode;
   const resumeTicks = isSeries ? nextEpisode?.resumeTicks ?? null : progress?.resumeTicks ?? null;
@@ -165,11 +162,13 @@ export function CinemaMobileDetail({
 
   return createPortal(
     <div
-      // The entrance/exit animations are dropped for the duration of a drag: they animate the
-      // same transform this does, and a running animation wins over an inline style — the sheet
-      // would refuse to follow the finger at all.
+      // The entrance animation is dropped from the first touch onwards, not just while the
+      // finger is down: it animates the same transform this does (a running animation beats an
+      // inline style, so the sheet wouldn't follow the finger at all), and letting it back in on
+      // release made the sheet replay its whole entrance every time a drag sprang back — which
+      // is what the "weird animation on release" was.
       className={`fixed inset-0 overflow-y-auto overscroll-contain bg-slate-950 ${
-        swipe.offset > 0 ? "" : closing ? "animate-fade-out" : "animate-slide-up"
+        swipe.touched ? "" : closing ? "animate-fade-out" : "animate-slide-up"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
@@ -177,14 +176,20 @@ export function CinemaMobileDetail({
       style={{
         zIndex: 46,
         paddingTop: "env(safe-area-inset-top, 0px)",
-        transform: swipe.offset > 0 ? `translateY(${swipe.offset}px)` : undefined,
+        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // No transition while the finger is down: the sheet is not animating towards the finger,
         // it is where the finger is. On release the spring back (or the rest of the way out) is
         // what gets eased.
-        transition: swipe.dragging ? "none" : "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-        // A little of the screen behind showing through as it goes, so the gesture reads as
-        // "moving this out of the way" rather than "sliding a solid panel around".
-        opacity: swipe.offset > 0 ? Math.max(0.4, 1 - swipe.offset / (window.innerHeight * 1.2)) : undefined,
+        transition: swipe.dragging
+          ? "none"
+          : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 200ms ease-out",
+        // Stays fully opaque on the way down — fading it turned the gesture into a screen effect
+        // you could see the grid through. It's one solid panel being moved out of the way, so it
+        // gets the two things a panel gets when it lifts off the screen edge: corners and a
+        // shadow, both proportional to how far it has come.
+        borderTopLeftRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        borderTopRightRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
       }}
     >
       {/* 16:9 header image, bleeding into the page under a gradient rather than ending on a hard

@@ -26,6 +26,12 @@ export interface SwipeToDismiss {
   offset: number;
   /** True while a finger is down — the caller kills its transition so the sheet tracks 1:1. */
   dragging: boolean;
+  /**
+   * True from the first touch of the session onwards, offset back at 0 included. The caller uses
+   * it to keep its CSS entrance animation off for good: that animation drives the same transform,
+   * so letting it back in after a spring-back replays the whole entrance.
+   */
+  touched: boolean;
   handlers: {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
@@ -37,6 +43,7 @@ export interface SwipeToDismiss {
 export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [touched, setTouched] = useState(false);
   const active = useRef(false);
   const startY = useRef(0);
   const startedAt = useRef(0);
@@ -49,6 +56,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
     startedAt.current = performance.now();
     latest.current = 0;
     setDragging(true);
+    setTouched(true);
     // Capture: the finger drags the sheet down out from under itself, so it leaves the handle
     // almost immediately — without this the gesture would die on the first pixel.
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -86,6 +94,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
   return {
     offset,
     dragging,
+    touched,
     handlers: { onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: finish },
   };
 }

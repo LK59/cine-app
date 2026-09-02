@@ -111,23 +111,27 @@ export function CinemaMovieDetail({
     containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
   }, [playerEnabled, info?.trailerKey]);
 
-  // Closes itself the instant Lecture actually starts full-screen playback — this component
-  // stays MOUNTED underneath the player otherwise (only the player's higher z-index hides it
-  // visually), so its own Up/Down handler below kept fighting PlayerControls' for the keyboard:
-  // every arrow press, this component's handler would ALSO run on the same event, find the
-  // player's focused control wasn't one of ITS OWN [data-detail-menu] buttons, and yank focus
-  // back to "Lecture" — silently breaking all keyboard control of the player. `initialMode` is
-  // captured once at mount so this only reacts to Lecture being pressed FROM this sheet, not to
-  // some already-running session (e.g. a minimized player for a different title) that happened
-  // to be active before this sheet even opened.
+  // Stays open underneath the player instead of closing when Lecture starts, so dismissing the
+  // player lands you back on the sheet you started from rather than on the browse grid. What
+  // originally forced the close was this component's own Up/Down handler fighting
+  // PlayerControls' for the keyboard — every arrow press ran here too, found the player's
+  // focused control wasn't one of ITS [data-detail-menu] buttons, and yanked focus back to
+  // Lecture. The handler now stands down while the player is full-screen instead, and takes the
+  // keyboard back (and the focus with it) the moment the player is gone.
   const playback = usePlayback();
-  const initialPlaybackMode = useRef(playback.mode);
+  const playerOwnsKeyboard = playback.mode === "full";
+  const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
-    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) requestClose();
-  }, [playback.mode, requestClose]);
+    if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+    }
+    wasPlayerFullScreen.current = playerOwnsKeyboard;
+  }, [playerOwnsKeyboard]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // The player is on top and owns the keyboard — see above.
+      if (playerOwnsKeyboard) return;
       // TrailerModal has its own Escape handler (also on window) that closes just itself —
       // without this guard, Escape while the trailer is open closed BOTH it and this whole
       // detail overlay at once, since nothing stops this listener from also firing on the same
@@ -152,7 +156,7 @@ export function CinemaMovieDetail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer]);
+  }, [requestClose, showTrailer, playerOwnsKeyboard]);
 
   // Independent on/off toggles, not "reassign to the other status" — un-toggling either one
   // goes back to no status at all (removeFromWatchlist), not to whatever the other button
