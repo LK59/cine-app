@@ -21,10 +21,14 @@ const DWELL_MS = 500;
 // loops back to 0, this drops below the threshold again, hiding the backdrop for exactly as
 // long as the overlay reappears on the restart.
 const REVEAL_AT_SECONDS = 4;
-// Coming back to a backgrounded tab, the player re-buffers and briefly redraws that same overlay
-// even though playback is already well past REVEAL_AT_SECONDS — so returning to the tab re-hides
-// the backdrop and holds it hidden this long, rather than trusting the position check alone.
-const RESUME_GRACE_MS = 2500;
+// ...and, on top of the position check, playback has to have been advancing *smoothly* for this
+// long. The position alone isn't enough after an interruption: the browser suspends media in
+// background tabs (nothing we can opt out of), so coming back to the tab restarts playback with
+// the overlay redrawn even though the position is long past REVEAL_AT_SECONDS. Requiring a
+// stretch of uninterrupted progress covers every one of those cases with a single rule — first
+// start, loop restart, tab return, or a mid-playback buffering stall — instead of a separate
+// fixed grace period per case.
+const STEADY_PLAYBACK_MS = 2500;
 // Crops this many pixels off the video's own top edge — YouTube's title/channel overlay is a
 // roughly fixed-height band regardless of how large the video itself is scaled, so a fixed pixel
 // offset tracks it more reliably than a percentage would.
@@ -58,8 +62,10 @@ export function CinemaTrailerBackdrop({
   const t = useT();
   const mountRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
-  // Timestamp before which the backdrop stays hidden regardless of playback position.
-  const suppressUntilRef = useRef(0);
+  // Last playback position seen by the poll, and when the current uninterrupted stretch of
+  // forward progress started (0 = not currently progressing smoothly).
+  const lastPositionRef = useRef(-1);
+  const steadySinceRef = useRef(0);
   const [dwelled, setDwelled] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -84,23 +90,34 @@ export function CinemaTrailerBackdrop({
     const poll = setInterval(() => {
       const player = playerRef.current;
       if (!player) return;
+      let position: number;
       try {
-        setPlaying(player.getCurrentTime() >= REVEAL_AT_SECONDS && Date.now() >= suppressUntilRef.current);
+        position = player.getCurrentTime();
       } catch {
-        /* player not ready yet (or already torn down) — next tick will do */
+        return; // player not ready yet (or already torn down) — next tick will do
       }
+
+      const previous = lastPositionRef.current;
+      lastPositionRef.current = position;
+      // Forward, but not by more than a poll interval's worth of slack — a jump backwards is the
+      // loop restarting, a jump forwards or a frozen position is a stall/seek. Either way the
+      // overlay comes back, so the steady stretch starts over.
+      const progressedSmoothly = position > previous && position - previous < 1;
+      if (!progressedSmoothly) steadySinceRef.current = 0;
+      else if (steadySinceRef.current === 0) steadySinceRef.current = Date.now();
+
+      const steadyFor = steadySinceRef.current === 0 ? 0 : Date.now() - steadySinceRef.current;
+      setPlaying(position >= REVEAL_AT_SECONDS && steadyFor >= STEADY_PLAYBACK_MS);
     }, 250);
     return () => clearInterval(poll);
   }, [dwelled, itemKey]);
 
-  // See RESUME_GRACE_MS. Hides immediately on either transition (leaving the tab costs nothing
-  // since it isn't visible anyway; coming back is the one that matters) and lets the poll above
-  // bring it back once the grace window has passed.
+  // Hides instantly on a tab switch rather than waiting for the next poll tick (up to 250ms, long
+  // enough to catch a frame of the redrawn overlay on the way back) — the poll's own steady-
+  // progress rule above is what decides when it comes back.
   useEffect(() => {
     function onVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        suppressUntilRef.current = Date.now() + RESUME_GRACE_MS;
-      }
+      steadySinceRef.current = 0;
       setPlaying(false);
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
