@@ -7,6 +7,7 @@ import {
   audioConfigFor,
   unsupportedReason,
 } from "@/lib/webcodecs/codecConfig";
+import { selectCue } from "@/lib/webcodecs/engine";
 import type { MatroskaTrack } from "@/lib/webcodecs/matroska";
 
 // A codec string is matched character for character against the browser's hardware capabilities.
@@ -123,5 +124,39 @@ describe("track configuration", () => {
     expect(audioConfigFor(track({ ...base, codecId: "A_OPUS" }))?.codec).toBe("opus");
     expect(audioConfigFor(track({ ...base, codecId: "A_FLAC" }))?.codec).toBe("flac");
     expect(audioConfigFor(track({ ...base, codecId: "A_MPEG/L3" }))?.codec).toBe("mp3");
+  });
+});
+
+describe("subtitle cue selection", () => {
+  const cues = () => [
+    { startSeconds: 1, endSeconds: 3, text: "un" },
+    { startSeconds: 3.5, endSeconds: 5, text: "deux" },
+    { startSeconds: 10, endSeconds: 12, text: "trois" },
+  ];
+
+  it("shows the line whose window contains the playhead", () => {
+    expect(selectCue(cues(), 2)?.text).toBe("un");
+    expect(selectCue(cues(), 4)?.text).toBe("deux");
+    expect(selectCue(cues(), 11)?.text).toBe("trois");
+  });
+
+  it("shows nothing in the gaps, including before the first line", () => {
+    expect(selectCue(cues(), 0.5)).toBeNull();
+    expect(selectCue(cues(), 3.2)).toBeNull();
+    expect(selectCue(cues(), 99)).toBeNull();
+  });
+
+  it("includes both edges of a line's window", () => {
+    expect(selectCue(cues(), 1)?.text).toBe("un");
+    expect(selectCue(cues(), 3)?.text).toBe("un");
+  });
+
+  // Cues arrive in order and are consumed in order; dropping the past ones is what stops this
+  // re-scanning a growing list on every animation frame.
+  it("discards expired lines as it goes", () => {
+    const queue = cues();
+    selectCue(queue, 11);
+    expect(queue).toHaveLength(1);
+    expect(queue[0].text).toBe("trois");
   });
 });

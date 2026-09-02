@@ -13,7 +13,15 @@ import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT } from "@/components/TranslationProvider";
 import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
+import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
+
+/** "Français — VFF", falling back to whatever the file actually gives us. */
+function trackLabel(track: EngineTrack): string {
+  const parts = [track.language ?? undefined, track.name ?? undefined].filter(Boolean);
+  const label = parts.join(" — ");
+  return label || `Piste ${track.number}`;
+}
 
 const TRANSITION =
   "top 300ms cubic-bezier(0.4,0,0.2,1), left 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)";
@@ -58,6 +66,12 @@ export function ExperimentalPlayerHost({
   const [closing, setClosing] = useState(false);
   const [facade, setFacade] = useState<MediaElementFacade | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [subtitle, setSubtitle] = useState<string | null>(null);
+  // Mirrored into state from the engine so the controls' menus can be driven by props, the way
+  // they already are for the stable player.
+  const [tracks, setTracks] = useState<{ audio: EngineTrack[]; subtitles: EngineTrack[] }>({ audio: [], subtitles: [] });
+  const [currentAudio, setCurrentAudio] = useState<number | null>(null);
+  const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
 
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
   const error =
@@ -109,6 +123,7 @@ export function ExperimentalPlayerHost({
       engine.on("playing", () => setPlaying(true)),
       engine.on("pause", () => setPlaying(false)),
       engine.on("ended", () => setPlaying(false)),
+      engine.on("subtitle", (payload) => setSubtitle(typeof payload === "string" ? payload : null)),
     ];
 
     engine
@@ -121,6 +136,8 @@ export function ExperimentalPlayerHost({
         const built = new MediaElementFacade(engine);
         facadeRef.current = built;
         setFacade(built);
+        setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
+        setCurrentAudio(engine.currentAudioTrack);
         setReady(true);
         await engine.play().catch(() => {});
       })
@@ -177,6 +194,19 @@ export function ExperimentalPlayerHost({
     >
       <canvas ref={canvasRef} className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} />
 
+      {subtitle && !isMini && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 z-10 flex justify-center px-8">
+          <p
+            className="max-w-4xl whitespace-pre-line text-center text-lg font-medium leading-snug text-white sm:text-2xl"
+            // Drawn with a shadow rather than a box: a background plate is heavier over a moving
+            // picture, and this is what every player converges on.
+            style={{ textShadow: "0 2px 6px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,1)" }}
+          >
+            {subtitle}
+          </p>
+        </div>
+      )}
+
       {!isMini && (
         <span className="pointer-events-none absolute left-4 top-4 z-10 rounded-full bg-fuchsia-500/20 px-2.5 py-1 text-xs font-medium text-fuchsia-200 ring-1 ring-fuchsia-400/30">
           {t("player.experimental.badge")}
@@ -228,15 +258,20 @@ export function ExperimentalPlayerHost({
             title={title}
             onClose={handleClose}
             onMinimize={() => playback.minimize()}
-            audioTracks={(info?.audio ?? []).map((track) => ({
-              id: track.index,
-              label: track.displayTitle ?? track.language ?? `Piste ${track.index}`,
-            }))}
-            currentAudioId={info?.audio.find((a) => a.isDefault)?.index ?? null}
-            onChangeAudio={() => {}}
-            subtitleTracks={[]}
-            currentSubtitleId={null}
-            onChangeSubtitle={() => {}}
+            // Straight from the container the engine is reading, not from Jellyfin's view of the
+            // file: those are the tracks it can actually switch between.
+            audioTracks={tracks.audio.map((track) => ({ id: track.number, label: trackLabel(track) }))}
+            currentAudioId={currentAudio}
+            onChangeAudio={(id) => {
+              setCurrentAudio(id);
+              void engineRef.current?.setAudioTrack(id);
+            }}
+            subtitleTracks={tracks.subtitles.map((track) => ({ id: track.number, label: trackLabel(track) }))}
+            currentSubtitleId={currentSubtitle}
+            onChangeSubtitle={(id) => {
+              setCurrentSubtitle(id);
+              engineRef.current?.setSubtitleTrack(id);
+            }}
             onTogglePlaybackInfo={() => {}}
             hidden={false}
             loading={!ready}
