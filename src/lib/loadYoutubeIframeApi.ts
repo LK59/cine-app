@@ -8,6 +8,7 @@ export interface YTPlayer {
   /** Seconds elapsed in the current playback — polled to time the backdrop's reveal past
    *  YouTube's own startup overlay (see CinemaTrailerBackdrop). */
   getCurrentTime(): number;
+  seekTo(seconds: number, allowSeekAhead?: boolean): void;
 }
 
 interface YTPlayerVars {

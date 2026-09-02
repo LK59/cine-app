@@ -69,6 +69,8 @@ export function CinemaTrailerBackdrop({
   const [dwelled, setDwelled] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
+  // Skips the fade for hides that must not be seen at all (see the visibilitychange effect).
+  const [instantHide, setInstantHide] = useState(false);
 
   // Resets synchronously during render (not in an effect — this project's react-hooks/
   // set-state-in-effect rule) on every title change, even before the debounce that gates
@@ -107,18 +109,39 @@ export function CinemaTrailerBackdrop({
       else if (steadySinceRef.current === 0) steadySinceRef.current = Date.now();
 
       const steadyFor = steadySinceRef.current === 0 ? 0 : Date.now() - steadySinceRef.current;
-      setPlaying(position >= REVEAL_AT_SECONDS && steadyFor >= STEADY_PLAYBACK_MS);
+      const reveal = position >= REVEAL_AT_SECONDS && steadyFor >= STEADY_PLAYBACK_MS;
+      // Back to a normal fade for the way in — instantHide only ever applies to the hide itself.
+      if (reveal) setInstantHide(false);
+      setPlaying(reveal);
     }, 250);
     return () => clearInterval(poll);
   }, [dwelled, itemKey]);
 
-  // Hides instantly on a tab switch rather than waiting for the next poll tick (up to 250ms, long
-  // enough to catch a frame of the redrawn overlay on the way back) — the poll's own steady-
-  // progress rule above is what decides when it comes back.
+  // Tab switches, both ways. Three things have to happen here, and missing any one of them was
+  // what made coming back to the tab look so bad (a flash of the overlay, then a fade down to the
+  // still banner, then a fade back up into another overlay):
+  //  1. Hide WITHOUT the usual fade. A hidden tab isn't rendered, so a fade started on the way
+  //     out never actually runs — the browser picks it up on the way back in, replaying it in
+  //     full view over the very frames we're trying to hide.
+  //  2. Hide from the visibilitychange event rather than the next poll tick, which can be up to
+  //     250ms later — long enough to show the redrawn overlay on return.
+  //  3. Rewind to 0 on the way back. The overlay is drawn relative to playback *starting*, so
+  //     letting it resume mid-video would show it again at a position already past
+  //     REVEAL_AT_SECONDS, i.e. with nothing left to gate on. Restarting means the same
+  //     position + steady-progress rules that cover the first play cover this too.
   useEffect(() => {
     function onVisibilityChange() {
       steadySinceRef.current = 0;
+      lastPositionRef.current = -1;
+      setInstantHide(true);
       setPlaying(false);
+      if (document.visibilityState === "visible") {
+        try {
+          playerRef.current?.seekTo(0);
+        } catch {
+          /* player gone or not ready — the poll's own rules still hold it hidden */
+        }
+      }
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -202,7 +225,7 @@ export function CinemaTrailerBackdrop({
 
   return (
     <div
-      className={`absolute inset-0 h-full w-full overflow-hidden transition-opacity duration-700 ${playing ? "opacity-100" : "opacity-0"}`}
+      className={`absolute inset-0 h-full w-full overflow-hidden transition-opacity ${instantHide ? "duration-0" : "duration-700"} ${playing ? "opacity-100" : "opacity-0"}`}
     >
       <div ref={mountRef} className="pointer-events-none absolute inset-0" />
 
@@ -215,12 +238,16 @@ export function CinemaTrailerBackdrop({
 
       {/* Mouse-only, deliberately not part of the TV-remote grid nav chain (same reasoning as
           the back button / shortcuts guide floating outside it) — a discreet corner affordance,
-          not a focusable stop along the browse flow. */}
+          not a focusable stop along the browse flow.
+          z-20 because this lives inside CinemaClient's BACKGROUND layer, which comes before the
+          hero/rows content wrapper in DOM order — that wrapper spans the whole screen and, even
+          though it's transparent there, would otherwise win the paint-order tie and swallow every
+          click aimed at this button (the same bug the detail sheet's own back button hit). */}
       <button
         type="button"
         onClick={toggleMute}
         aria-label={muted ? t("cinema.unmutePreview") : t("cinema.mutePreview")}
-        className="pointer-events-auto absolute right-4 top-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/70 backdrop-blur-xs transition-colors hover:bg-black/60 hover:text-white"
+        className="pointer-events-auto absolute right-4 top-20 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/70 backdrop-blur-xs transition-colors hover:bg-black/60 hover:text-white"
         style={{ top: "max(5rem, calc(env(safe-area-inset-top) + 4rem))" }}
       >
         {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
