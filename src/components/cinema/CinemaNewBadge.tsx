@@ -8,6 +8,10 @@ import { useT } from "@/components/TranslationProvider";
 // added to the library within the last month.
 //
 // Renders nothing at all when the title isn't recent — callers can drop it in unconditionally.
+//
+// Callers that are themselves "here's what's new" (the Récemment ajoutés rail, and the Top 10,
+// which on a growing library is mostly recent) pass showNewBadge={false}: stamping NEW on every
+// item of a rail whose whole point is newness says nothing.
 export function CinemaNewBadge({ addedAt }: { addedAt: string | null }) {
   const t = useT();
   if (!isRecentlyAdded(addedAt)) return null;

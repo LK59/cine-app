@@ -57,6 +57,7 @@ export function CinemaTop10Row<T extends Top10Item>({
             numberFontSize="6.5rem"
             singleWidth="2.8rem"
             doubleWidth="5.2rem"
+            showNewBadge={false}
             rowKey={rowKey}
             index={i}
             onFocusItem={() => onFocusItem(item)}

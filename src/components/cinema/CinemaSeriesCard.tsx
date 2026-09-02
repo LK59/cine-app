@@ -20,6 +20,7 @@ export function CinemaSeriesCard({
   widthClassName,
   onFocusItem,
   onSelectItem,
+  showNewBadge = true,
 }: {
   item: CinemaSeries;
   index: number;
@@ -27,6 +28,8 @@ export function CinemaSeriesCard({
   widthClassName: string;
   onFocusItem: (item: CinemaSeries) => void;
   onSelectItem: (item: CinemaSeries) => void;
+  // Off on the rails that are themselves about what's new — see CinemaNewBadge.
+  showNewBadge?: boolean;
 }) {
   return (
     <button
@@ -53,7 +56,7 @@ export function CinemaSeriesCard({
         // poster sized for the slot rather than the shared grid default.
         sizes={"(max-width: 640px) 96px, (max-width: 768px) 112px, (max-width: 1024px) 128px, 144px"}
       />
-      <CinemaNewBadge addedAt={item.addedAt} />
+      {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
     </button>
   );
 }

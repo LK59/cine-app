@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useIsShortViewport } from "@/lib/useIsMobile";
+import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -77,7 +78,13 @@ export function CinemaMobileClient() {
   // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
-  const hero = isSeries ? series?.spotlight[0] : movies?.spotlight[0];
+  // A rotating carousel of the latest arrivals rather than a single fixed pick — same idea and
+  // same cadence as the dashboard's own hero, kept in this screen's own visual language (poster
+  // key art, Lire / Plus d'infos). Pauses while a sheet or the search is covering it: rotating
+  // artwork nobody can see just burns image decodes.
+  const heroItems = (payload?.recentlyAdded?.length ? payload.recentlyAdded : payload?.spotlight ?? []).slice(0, 8);
+  const [heroIndex, setHeroIndex] = useRotatingIndex(heroItems.length, selected !== null || searchOpen);
+  const hero = heroItems[heroIndex];
   const myList = isSeries ? myListSeries : myListMovies;
   // The two payloads key their items differently; every rail below just needs *a* stable id.
   const itemId = (item: CinemaMovie | CinemaSeries) =>
@@ -92,6 +99,25 @@ export function CinemaMobileClient() {
   if (typeof document === "undefined") return null;
 
   const loading = moviesLoading || (isSeries && seriesLoading && !series);
+
+  // Progress segments, same pattern (and same fill animation) as the dashboard hero's own — the
+  // one place the carousel is visible as a carousel, and a way to jump straight to a title.
+  const heroDots = heroItems.length > 1 && (
+    <div className="mt-3 flex max-w-xs gap-1">
+      {heroItems.map((item, i) => (
+        <button
+          key={itemId(item)}
+          type="button"
+          onClick={() => setHeroIndex(i)}
+          aria-label={item.title}
+          className="h-1 flex-1 overflow-hidden rounded-full bg-white/25"
+        >
+          {i < heroIndex && <div className="h-full w-full bg-white" />}
+          {i === heroIndex && <div key={heroIndex} className="h-full animate-hero-fill bg-white" />}
+        </button>
+      ))}
+    </div>
+  );
 
   // Identical in both hero layouts below — same buttons, same handlers, only the box around them
   // changes with the orientation.
@@ -214,6 +240,7 @@ export function CinemaMobileClient() {
                     <p className="mb-3 truncate text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
                   )}
                   {heroActions}
+                  {heroDots}
                 </div>
               </div>
             ) : (
@@ -230,6 +257,7 @@ export function CinemaMobileClient() {
                     <p className="mb-3 text-center text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
                   )}
                   {heroActions}
+                  {heroDots}
                 </div>
               </div>
             )}
@@ -331,6 +359,7 @@ export function CinemaMobileClient() {
                 posterUrl={item.posterUrl}
                 addedAt={item.addedAt}
                 widthClassName={POSTER_WIDTH}
+                showNewBadge={false}
                 numberFontSize="4.5rem"
                 singleWidth="1.9rem"
                 doubleWidth="3.6rem"
@@ -340,7 +369,7 @@ export function CinemaMobileClient() {
           </MobileRow>
         )}
 
-        <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />
+        <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} showNewBadge={false} />
         <PosterRow label={t("cinema.myList")} items={myList} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />
 
         {payload?.genres.map((genre) => {
@@ -384,11 +413,13 @@ function PosterRow<T extends { title: string; posterUrl: string | null; addedAt:
   items,
   itemId,
   onSelect,
+  showNewBadge = true,
 }: {
   label: string;
   items: T[];
   itemId: (item: T) => number;
   onSelect: (item: T) => void;
+  showNewBadge?: boolean;
 }) {
   if (items.length === 0) return null;
   return (
@@ -401,7 +432,7 @@ function PosterRow<T extends { title: string; posterUrl: string | null; addedAt:
           className={`${POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
-          <CinemaNewBadge addedAt={item.addedAt} />
+          {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
         </button>
       ))}
     </MobileRow>

@@ -22,6 +22,7 @@ import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
 import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
 import { useCinemaMyList } from "@/lib/useCinemaMyList";
+import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { CinemaTrailerBackdrop } from "@/components/cinema/CinemaTrailerBackdrop";
 import { useT } from "@/components/TranslationProvider";
@@ -260,14 +261,22 @@ export function CinemaClient() {
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
   const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
-  const heroItem = focusedItem ?? movies?.spotlight[0] ?? null;
+  // Before you touch anything, the hero cycles through the latest arrivals instead of sitting on
+  // one fixed pick — the same carousel (and the same 8s cadence) as the dashboard's own hero.
+  // The moment a card takes focus it wins and the rotation stops: this pane's job from then on
+  // is to preview whatever you're pointing at.
+  const movieCarousel = (movies?.recentlyAdded?.length ? movies.recentlyAdded : movies?.spotlight ?? []).slice(0, 8);
+  const [movieCarouselIndex] = useRotatingIndex(movieCarousel.length, focusedItem !== null);
+  const heroItem = focusedItem ?? movieCarousel[movieCarouselIndex] ?? null;
 
   // Series' own parallel focus/selection state — kept entirely separate from the movie state
   // above (not touched) so each tab remembers its own position independently when you switch
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
   const [seriesSelectedItem, setSeriesSelectedItem] = useState<CinemaSeries | null>(null);
-  const seriesHeroItem = seriesFocusedItem ?? series?.spotlight[0] ?? null;
+  const seriesCarousel = (series?.recentlyAdded?.length ? series.recentlyAdded : series?.spotlight ?? []).slice(0, 8);
+  const [seriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
+  const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
 
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
   // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
@@ -632,6 +641,7 @@ export function CinemaClient() {
                 <CinemaRow
                   label={t("cinema.recentlyAdded")}
                   rowKey="recent-movies"
+                  showNewBadge={false}
                   rowIndex={RAIL_COUNT}
                   items={movies.recentlyAdded}
                   cardWidthClassName={CARD_WIDTH}
@@ -724,6 +734,7 @@ export function CinemaClient() {
                 <CinemaSeriesRow
                   label={t("cinema.recentlyAdded")}
                   rowKey="recent-series"
+                  showNewBadge={false}
                   rowIndex={RAIL_COUNT}
                   items={series.recentlyAdded}
                   cardWidthClassName={CARD_WIDTH}

@@ -27,6 +27,7 @@ export function CinemaTop10Card({
   doubleWidth,
   rowKey,
   index,
+  showNewBadge = true,
   onFocusItem,
   onSelectItem,
 }: {
@@ -43,6 +44,8 @@ export function CinemaTop10Card({
   // which has no keyboard to navigate with.
   rowKey?: string;
   index?: number;
+  // Off on rails that are themselves "what's new" — see CinemaNewBadge's own note.
+  showNewBadge?: boolean;
   onFocusItem?: () => void;
   onSelectItem: () => void;
 }) {
@@ -66,7 +69,11 @@ export function CinemaTop10Card({
         style={{
           width: rank >= 10 ? doubleWidth : singleWidth,
           fontSize: numberFontSize,
-          lineHeight: 0.78,
+          // 1, not a tighter value: the row clips its own vertical overflow (it has to, or a
+          // focus-scaled poster spills out of it), and a line box shorter than the glyph let the
+          // digits hang below it and get their feet cut off — which is what made the 4 in
+          // particular look broken.
+          lineHeight: 1,
           // Hollow numeral — the fill matches the page so only the outline reads, exactly like
           // Netflix's. A solid digit at this size would fight the poster next to it.
           WebkitTextStroke: "2px rgba(255,255,255,0.45)",
@@ -76,7 +83,7 @@ export function CinemaTop10Card({
       </span>
       <div className={`${widthClassName} relative -ml-2 overflow-hidden rounded-lg shadow-lg shadow-black/40`}>
         <PosterImage src={posterUrl} alt={title} subtle unoptimized sizes="150px" />
-        <CinemaNewBadge addedAt={addedAt} />
+        {showNewBadge && <CinemaNewBadge addedAt={addedAt} />}
       </div>
     </button>
   );

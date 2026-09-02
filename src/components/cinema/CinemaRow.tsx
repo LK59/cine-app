@@ -27,6 +27,7 @@ export const CinemaRow = memo(function CinemaRow({
   cardWidthClassName,
   onFocusItem,
   onSelectItem,
+  showNewBadge = true,
 }: {
   label: string;
   rowKey: string;
@@ -38,6 +39,7 @@ export const CinemaRow = memo(function CinemaRow({
   rowIndex?: number;
   items: CinemaMovie[];
   cardWidthClassName: string;
+  showNewBadge?: boolean;
   onFocusItem: (item: CinemaMovie) => void;
   onSelectItem: (item: CinemaMovie) => void;
 }) {
@@ -62,6 +64,7 @@ export const CinemaRow = memo(function CinemaRow({
             index={i}
             rowKey={rowKey}
             widthClassName={cardWidthClassName}
+            showNewBadge={showNewBadge}
             onFocusItem={onFocusItem}
             onSelectItem={onSelectItem}
           />
