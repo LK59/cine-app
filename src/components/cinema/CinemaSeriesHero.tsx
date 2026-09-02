@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaHeroActions } from "@/components/cinema/CinemaHeroActions";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
 interface SonarrCastMember {
@@ -26,9 +27,17 @@ interface SonarrInfo {
 export function CinemaSeriesHero({
   item,
   onTrailerKeyChange,
+  onPlay,
+  onMoreInfo,
+  playBusy,
 }: {
   item: CinemaSeries;
   onTrailerKeyChange?: (key: string | null) => void;
+  // See CinemaHero's own note — same pair of actions, supplied by CinemaClient.
+  onPlay?: () => void;
+  onMoreInfo?: () => void;
+  // True while the series' next-up episode is being resolved for a press of Lecture.
+  playBusy?: boolean;
 }) {
   const [debouncedId, setDebouncedId] = useState(item.sonarrId);
   useEffect(() => {
@@ -78,6 +87,8 @@ export function CinemaSeriesHero({
           {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
         </p>
       )}
+
+      {onPlay && onMoreInfo && <CinemaHeroActions onPlay={onPlay} onMoreInfo={onMoreInfo} busy={playBusy} />}
     </div>
   );
 }

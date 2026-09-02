@@ -55,8 +55,6 @@ export function CinemaTop10Row<T extends Top10Item>({
             addedAt={item.addedAt}
             widthClassName="w-24 sm:w-28 md:w-32 lg:w-36"
             numberFontSize="6.5rem"
-            singleWidth="2.8rem"
-            doubleWidth="5.2rem"
             showNewBadge={false}
             rowKey={rowKey}
             index={i}

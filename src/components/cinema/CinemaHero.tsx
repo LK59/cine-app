@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaHeroActions } from "@/components/cinema/CinemaHeroActions";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 interface RadarrCastMember {
@@ -31,6 +32,8 @@ interface RadarrInfo {
 export function CinemaHero({
   item,
   onTrailerKeyChange,
+  onPlay,
+  onMoreInfo,
 }: {
   item: CinemaMovie;
   // Reports this item's trailer key up to CinemaClient, which owns the dwell-triggered video
@@ -38,6 +41,10 @@ export function CinemaHero({
   // than a second parallel fetch there, so the two never have their own independently-debounced
   // (and therefore possibly briefly disagreeing) opinions about what the current trailer is.
   onTrailerKeyChange?: (key: string | null) => void;
+  // Supplied by CinemaClient, which owns both the resume data and the detail sheet — see
+  // CinemaHeroActions. Optional so the pane still renders as a pure preview without them.
+  onPlay?: () => void;
+  onMoreInfo?: () => void;
 }) {
   const [debouncedId, setDebouncedId] = useState(item.radarrId);
   useEffect(() => {
@@ -98,6 +105,8 @@ export function CinemaHero({
           {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
         </p>
       )}
+
+      {onPlay && onMoreInfo && <CinemaHeroActions onPlay={onPlay} onMoreInfo={onMoreInfo} />}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
+import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -125,7 +126,13 @@ export function CinemaMobileClient() {
     <div className="flex gap-2">
       <button
         type="button"
-        onClick={() => playback.play({ itemId: hero.jellyfinItemId, title: hero.title })}
+        // A series id isn't playable on its own — it has to resolve its next-up episode first
+        // (see playSeriesNextEpisode). This was starting a Series item id before.
+        onClick={() =>
+          isSeries
+            ? playSeriesNextEpisode(playback, hero)
+            : playback.play({ itemId: hero.jellyfinItemId, title: hero.title })
+        }
         className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-slate-950 transition-transform active:scale-95"
       >
         <Play size={16} fill="currentColor" />
@@ -361,8 +368,6 @@ export function CinemaMobileClient() {
                 widthClassName={POSTER_WIDTH}
                 showNewBadge={false}
                 numberFontSize="4.5rem"
-                singleWidth="1.9rem"
-                doubleWidth="3.6rem"
                 onSelectItem={() => openDetail(item, mediaType)}
               />
             ))}

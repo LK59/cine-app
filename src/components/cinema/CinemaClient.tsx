@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -23,6 +23,7 @@ import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
 import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
 import { useCinemaMyList } from "@/lib/useCinemaMyList";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
+import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { CinemaTrailerBackdrop } from "@/components/cinema/CinemaTrailerBackdrop";
 import { useT } from "@/components/TranslationProvider";
@@ -233,7 +234,11 @@ export function CinemaClient() {
   // rail is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
-  const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
+  // Memoized: it's a dependency of the hero's play callback below, and a fresh [] on every
+  // render would give that callback a new identity on every keypress — which is exactly what the
+  // memoized rows exist to avoid.
+  const resumeItems = useMemo(() => resume?.items ?? [], [resume]);
+  const resumeMovies = resumeItems.filter((r) => r.type === "Movie");
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
   const continueSeries = nextUp?.items ?? [];
@@ -339,6 +344,29 @@ export function CinemaClient() {
 
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [heroPlayBusy, setHeroPlayBusy] = useState(false);
+
+  // The hero's Lecture button. A movie resumes from wherever /api/jellyfin/resume already says
+  // it stopped — that payload is loaded for the Continue Watching rail anyway, so this costs
+  // nothing extra. A series has to resolve its next-up episode first (a series id isn't
+  // playable), which is one request, made on the press.
+  const playHeroMovie = useCallback((movie: CinemaMovie) => {
+    const entry = resumeItems.find((r) => r.id === movie.jellyfinItemId);
+    playback.play({
+      itemId: movie.jellyfinItemId,
+      title: movie.title,
+      resumeAt: entry?.positionTicks ? entry.positionTicks / 10_000_000 : undefined,
+    });
+  }, [playback, resumeItems]);
+
+  const playHeroSeries = useCallback(async (series: CinemaSeries) => {
+    setHeroPlayBusy(true);
+    try {
+      await playSeriesNextEpisode(playback, series);
+    } finally {
+      setHeroPlayBusy(false);
+    }
+  }, [playback]);
 
   // "full" specifically, not "closed" — a minimized (mini) player is a small floating widget;
   // browsing the grid underneath it should still work normally, only a full-screen player
@@ -572,8 +600,23 @@ export function CinemaClient() {
             not on every arrow-key scrub. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "50%" }}>
           {mediaType === "movies"
-            ? heroItem && <CinemaHero item={heroItem} onTrailerKeyChange={setHeroTrailerKey} />
-            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} onTrailerKeyChange={setHeroTrailerKey} />}
+            ? heroItem && (
+                <CinemaHero
+                  item={heroItem}
+                  onTrailerKeyChange={setHeroTrailerKey}
+                  onPlay={() => playHeroMovie(heroItem)}
+                  onMoreInfo={() => openDetail(heroItem)}
+                />
+              )
+            : seriesHeroItem && (
+                <CinemaSeriesHero
+                  item={seriesHeroItem}
+                  onTrailerKeyChange={setHeroTrailerKey}
+                  onPlay={() => playHeroSeries(seriesHeroItem)}
+                  onMoreInfo={() => openSeriesDetail(seriesHeroItem)}
+                  playBusy={heroPlayBusy}
+                />
+              )}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest

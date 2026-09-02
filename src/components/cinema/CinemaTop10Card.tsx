@@ -23,8 +23,6 @@ export function CinemaTop10Card({
   addedAt,
   widthClassName,
   numberFontSize,
-  singleWidth,
-  doubleWidth,
   rowKey,
   index,
   showNewBadge = true,
@@ -37,9 +35,6 @@ export function CinemaTop10Card({
   addedAt: string | null;
   widthClassName: string;
   numberFontSize: string;
-  // Width of the digit slot — one value for ranks 1-9, a wider one for 10.
-  singleWidth: string;
-  doubleWidth: string;
   // Desktop only — wires the card into useTvGridNav's arrow-key navigation. Omitted on mobile,
   // which has no keyboard to navigate with.
   rowKey?: string;
@@ -59,15 +54,12 @@ export function CinemaTop10Card({
       aria-label={`${rank}. ${title}`}
       className={`flex shrink-0 items-end transition duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
-      {/* Fixed-width slot, digits right-aligned inside it: glyph widths differ a lot at this size
-          (a 1 is half a 4, a 10 is twice one), so letting the digit size the box made each card
-          in the rail sit differently against its poster. The slot is what the poster overlaps,
-          not the glyph, so every entry lines up. */}
+      {/* The digit sizes its own box. A fixed-width slot was tried and reverted: right-aligning
+          the glyph in it pulled every number tight against its poster, which read as cramped. */}
       <span
         aria-hidden
-        className="flex shrink-0 select-none justify-end font-black leading-none text-slate-950"
+        className="shrink-0 select-none font-black leading-none text-slate-950"
         style={{
-          width: rank >= 10 ? doubleWidth : singleWidth,
           fontSize: numberFontSize,
           // 1, not a tighter value: the row clips its own vertical overflow (it has to, or a
           // focus-scaled poster spills out of it), and a line box shorter than the glyph let the
@@ -81,7 +73,7 @@ export function CinemaTop10Card({
       >
         {rank}
       </span>
-      <div className={`${widthClassName} relative -ml-2 overflow-hidden rounded-lg shadow-lg shadow-black/40`}>
+      <div className={`${widthClassName} relative -ml-3 overflow-hidden rounded-lg shadow-lg shadow-black/40`}>
         <PosterImage src={posterUrl} alt={title} subtle unoptimized sizes="150px" />
         {showNewBadge && <CinemaNewBadge addedAt={addedAt} />}
       </div>
