@@ -156,6 +156,10 @@ export class PlaybackEngine {
   /** Encoded blocks fed IN. The gap between the two is what exposes a decoder that lies. */
   private audioFed = 0;
   private demotingAudio = false;
+  private seekInFlight = false;
+  private requestedSeek: number | null = null;
+  /** Bumped for every decoder built, so frames from a retired one can be recognised and dropped. */
+  private decoderEpoch = 0;
   private silenceReported = false;
   private playStartedAt = 0;
   private softwareAudioGeneration = 0;
@@ -358,16 +362,8 @@ export class PlaybackEngine {
       throw new Error(`Ce navigateur ne sait pas décoder ${videoConfig.codec} (${this.videoTrack.codecId}).`);
     }
 
-    // Tone-mapping needs the frame's planes on the CPU, and copyTo is a full readback: at 4K
-    // that is roughly 12 MB per frame, 300 MB/s at 24fps, which on a phone is enough to take the
-    // hardware decoder down with it — the observed failure being a flat "Decoder failure" on a
-    // 4K HDR file. Above that size the picture goes through the plain canvas instead: flat
-    // colours, but a picture, and a decoder that survives.
-    const pixels = videoConfig.codedWidth * videoConfig.codedHeight;
-    const tooLargeForToneMapping = pixels > 2_500_000;
     this.renderer = createRenderer(this.canvas, {
-      hdr: options.hdr && !tooLargeForToneMapping,
-      hdrWithoutToneMapping: options.hdr && tooLargeForToneMapping,
+      hdr: options.hdr,
       peakNits: options.peakNits,
       // Surfaced rather than swallowed: the picture still plays, but flat, and knowing that is
       // the difference between "HDR isn't working here" and "this player is broken".
@@ -375,8 +371,9 @@ export class PlaybackEngine {
         this.emit("warning", `Conversion HDR indisponible, image affichée sans (${reason}).`),
     });
 
+    const epoch = ++this.decoderEpoch;
     this.videoDecoder = new VideoDecoder({
-      output: (frame) => this.onVideoFrame(frame),
+      output: (frame) => this.onVideoFrame(frame, epoch),
       error: (error) => this.fail(`Décodage vidéo interrompu : ${error.message}`),
     });
     this.videoDecoder.configure(videoConfig);
@@ -631,7 +628,35 @@ export class PlaybackEngine {
     this.audio?.setVolume(volume, muted);
   }
 
+  /**
+   * Seeking, serialised.
+   *
+   * Dragging along the seek bar fires one of these per pointer move. Each builds a decoder and
+   * throws the previous one away, and on a 4K stream the phone's hardware decoder does not
+   * survive several of those overlapping — which is the "Decoder failure" a fast scrub produced.
+   * Only one seek runs at a time; a request arriving during one is remembered, and the last
+   * position asked for is honoured once the current one finishes. Intermediate positions on the
+   * way are exactly what nobody wants decoded.
+   */
   async seek(seconds: number): Promise<void> {
+    if (this.destroyed) return;
+    this.requestedSeek = seconds;
+    if (this.seekInFlight) return;
+
+    this.seekInFlight = true;
+    try {
+      let target: number | null = this.requestedSeek;
+      while (target !== null) {
+        this.requestedSeek = null;
+        await this.performSeek(target);
+        target = this.requestedSeek;
+      }
+    } finally {
+      this.seekInFlight = false;
+    }
+  }
+
+  private async performSeek(seconds: number): Promise<void> {
     if (!this.file || !this.reader || this.destroyed) return;
     const target = Math.max(0, Math.min(seconds, this.duration || seconds));
     const targetUs = Math.round(target * 1e6);
@@ -649,8 +674,13 @@ export class PlaybackEngine {
     const videoConfig = this.videoTrack ? videoConfigFor(this.videoTrack) : null;
     if (videoConfig) {
       try { this.videoDecoder?.close(); } catch { /* already closed */ }
+      // A decoder delivers asynchronously, so the one being replaced can still emit frames after
+      // close() — frames belonging to a position nobody is watching. Each decoder carries the
+      // epoch it was built in and its output is dropped once that epoch is over, which keeps
+      // 4K frames from a retired decoder out of the queue and out of memory.
+      const epoch = ++this.decoderEpoch;
       this.videoDecoder = new VideoDecoder({
-        output: (frame) => this.onVideoFrame(frame),
+        output: (frame) => this.onVideoFrame(frame, epoch),
         error: (error) => this.fail(`Décodage vidéo interrompu : ${error.message}`),
       });
       this.videoDecoder.configure(videoConfig);
@@ -687,8 +717,8 @@ export class PlaybackEngine {
 
   // ── decode ────────────────────────────────────────────────────────────────
 
-  private onVideoFrame(frame: VideoFrame): void {
-    if (this.destroyed) {
+  private onVideoFrame(frame: VideoFrame, epoch: number): void {
+    if (this.destroyed || epoch !== this.decoderEpoch) {
       frame.close();
       return;
     }

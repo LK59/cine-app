@@ -209,12 +209,19 @@ function planeGeometry(
   });
 }
 
+// A 24fps film gives 41ms per frame for everything. Spending more than a third of that pulling
+// pixels back from the GPU means the pipeline cannot keep up, whatever the resolution.
+const READBACK_BUDGET_MS = 14;
+const MEASURE_FRAMES = 3;
+
 class ToneMapRenderer implements FrameRenderer {
   private readonly gl: WebGL2RenderingContext;
   private program: WebGLProgram | null = null;
   private semiPlanar = false;
   private readonly textures: WebGLTexture[] = [];
   private buffer: ArrayBuffer | null = null;
+  private measured = 0;
+  private readbackMs = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly peakNits: number, private readonly fullRange: boolean) {
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, desynchronized: true });
@@ -291,7 +298,22 @@ class ToneMapRenderer implements FrameRenderer {
     const size = frame.allocationSize();
     if (!this.buffer || this.buffer.byteLength < size) this.buffer = new ArrayBuffer(size);
     const bytes = new Uint8Array(this.buffer, 0, size);
+    const startedAt = performance.now();
     const layout = await frame.copyTo(bytes);
+
+    // Measured rather than assumed. The readback is what makes tone mapping expensive, and how
+    // expensive depends on the device, not on the resolution — a desktop reads back 4K without
+    // noticing, a phone chokes on it and takes the decoder down. So the first frames are timed
+    // against the budget a 24fps film allows, and the renderer steps aside if it cannot hold it.
+    // An earlier version guessed from a pixel count instead, which denied a capable machine a
+    // correct picture and gave an incapable one a crash.
+    if (this.measured < MEASURE_FRAMES) {
+      this.measured += 1;
+      this.readbackMs = Math.max(this.readbackMs, performance.now() - startedAt);
+      if (this.readbackMs > READBACK_BUDGET_MS) {
+        throw new Error(`relecture trop lente pour cet appareil (${this.readbackMs.toFixed(0)} ms/image)`);
+      }
+    }
     if (layout.length !== 2 && layout.length !== 3) {
       throw new Error(`Disposition d'image non gérée (${layout.length} plan(s)).`);
     }
@@ -337,11 +359,17 @@ class FallbackRenderer implements FrameRenderer {
   private active: FrameRenderer;
   private fellBack = false;
 
-  constructor(private readonly canvas: HTMLCanvasElement, hdr: () => FrameRenderer, private readonly onFallback: (reason: string) => void) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    hdr: () => FrameRenderer,
+    private readonly onFallback: (reason: string) => void,
+    /** What to use instead. For an HDR source that is the GPU recovery, never the bare canvas. */
+    private readonly makeFallback: (canvas: HTMLCanvasElement) => FrameRenderer = (c) => new CanvasRenderer(c)
+  ) {
     try {
       this.active = hdr();
     } catch (error) {
-      this.active = new CanvasRenderer(canvas);
+      this.active = this.makeFallback(canvas);
       this.fellBack = true;
       onFallback(error instanceof Error ? error.message : "conversion HDR indisponible");
     }
@@ -371,7 +399,7 @@ class FallbackRenderer implements FrameRenderer {
     // A fresh canvas context: the element already holds a WebGL context, and a canvas cannot
     // hand out a 2D one afterwards.
     this.canvas.replaceWith(this.canvas.cloneNode() as HTMLCanvasElement);
-    this.active = new CanvasRenderer(this.canvas);
+    this.active = this.makeFallback(this.canvas);
     this.onFallback(error instanceof Error ? error.message : "conversion HDR interrompue");
   }
 
@@ -486,21 +514,21 @@ export function createRenderer(
   canvas: HTMLCanvasElement,
   options: {
     hdr: boolean;
-    /** HDR source that cannot afford the readback: recovered on the GPU instead of tone mapped. */
-    hdrWithoutToneMapping?: boolean;
     peakNits?: number;
     fullRange?: boolean;
     onHdrFallback?: (reason: string) => void;
   }
 ): FrameRenderer {
-  if (!options.hdr) {
-    if (!options.hdrWithoutToneMapping) return new CanvasRenderer(canvas);
-    return new FallbackRenderer(canvas, () => new PunchRenderer(canvas), options.onHdrFallback ?? (() => {}));
-  }
+  if (!options.hdr) return new CanvasRenderer(canvas);
+
+  // Tone mapping is attempted for every HDR source, whatever its size, and steps aside on its own
+  // if the readback proves too slow for this device. When it does, the picture falls to the GPU
+  // recovery rather than to the bare canvas: still not tone mapping, but not flat either.
   return new FallbackRenderer(
     canvas,
     () => new ToneMapRenderer(canvas, options.peakNits ?? 1000, options.fullRange ?? false),
-    options.onHdrFallback ?? (() => {})
+    options.onHdrFallback ?? (() => {}),
+    (element) => new PunchRenderer(element)
   );
 }
 
