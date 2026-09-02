@@ -290,7 +290,11 @@ export class PlaybackEngine {
         }
       }
     } catch (error) {
-      this.emit("error", `Décodage audio logiciel interrompu : ${error instanceof Error ? error.message : "erreur"}`);
+      const message = error instanceof Error ? error.message : "erreur";
+      // The iterator throwing because we disposed its Input on purpose is a shutdown, not a
+      // failure — and it must never replace the picture with an error panel.
+      if (generation !== this.softwareAudioGeneration || /disposed/i.test(message)) return;
+      this.emit("warning", `Décodage audio logiciel interrompu : ${message}`);
     }
   }
 
@@ -361,15 +365,9 @@ export class PlaybackEngine {
     // colours, but a picture, and a decoder that survives.
     const pixels = videoConfig.codedWidth * videoConfig.codedHeight;
     const tooLargeForToneMapping = pixels > 2_500_000;
-    if (options.hdr && tooLargeForToneMapping) {
-      this.emit(
-        "warning",
-        "Conversion HDR désactivée sur ce fichier : trop lourde en 4K pour cet appareil. Image affichée sans."
-      );
-    }
-
     this.renderer = createRenderer(this.canvas, {
       hdr: options.hdr && !tooLargeForToneMapping,
+      hdrWithoutToneMapping: options.hdr && tooLargeForToneMapping,
       peakNits: options.peakNits,
       // Surfaced rather than swallowed: the picture still plays, but flat, and knowing that is
       // the difference between "HDR isn't working here" and "this player is broken".
@@ -491,9 +489,17 @@ export class PlaybackEngine {
   private async configureAudioFor(track: MatroskaTrack, fromSeconds: number): Promise<boolean> {
     // Whatever was running has to go first: two decoders feeding one output would interleave
     // two soundtracks.
+    // The software loop is an `for await` over mediabunny's sink; disposing its Input while it is
+    // still iterating makes the iterator throw "Input has been disposed" — which is exactly the
+    // error a track switch was producing. Invalidating the generation first makes the loop exit
+    // at its next step, and a tick of grace lets it get there before the Input goes away.
     this.softwareAudioGeneration += 1;
-    this.softwareAudio?.close();
-    this.softwareAudio = null;
+    if (this.softwareAudio) {
+      const closing = this.softwareAudio;
+      this.softwareAudio = null;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      closing.close();
+    }
     try { this.audioDecoder?.close(); } catch { /* already closed */ }
     this.audioDecoder = null;
     await this.audio?.close();

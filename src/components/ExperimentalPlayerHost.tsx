@@ -109,6 +109,38 @@ export function ExperimentalPlayerHost({
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
 
+  // Polled only while the panel is open: it is a debugging surface, not something to run twice a
+  // second behind a closed drawer.
+  useEffect(() => {
+    if (!showInfo) return;
+    const read = () => {
+      try {
+        setDiagnostics(engineRef.current?.diagnostics ?? { Moteur: "non démarré" });
+      } catch (error) {
+        // A panel that silently shows nothing is worse than one that shows why.
+        setDiagnostics({ "Diagnostic indisponible": error instanceof Error ? error.message : "erreur" });
+      }
+    };
+    read(); // straight away, not after the first tick
+    const id = setInterval(read, 500);
+    return () => clearInterval(id);
+  }, [showInfo]);
+
+  // iOS starts every AudioContext suspended and only lets it resume from the task of a real
+  // interaction. The player's own container already tries on each pointer down, but a tap can
+  // land on a control that stops propagation, or on browser chrome — so the document is watched
+  // too, in the capture phase, for as long as the player is open. Resuming an already-running
+  // context costs nothing, which is why this can afford to be indiscriminate.
+  useEffect(() => {
+    const resume = () => void engineRef.current?.resumeAudio();
+    document.addEventListener("pointerdown", resume, true);
+    document.addEventListener("touchend", resume, true);
+    return () => {
+      document.removeEventListener("pointerdown", resume, true);
+      document.removeEventListener("touchend", resume, true);
+    };
+  }, []);
+
   // Sets up the whole pipeline once the file's description has arrived. Everything it can refuse
   // is refused here, with the reason, rather than deeper down where the message would be opaque.
   useEffect(() => {

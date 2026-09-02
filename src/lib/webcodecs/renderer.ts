@@ -380,11 +380,123 @@ class FallbackRenderer implements FrameRenderer {
   }
 }
 
+
+// ── HDR source, SDR canvas, no readback ──────────────────────────────────────
+
+const PUNCH_VERTEX = `#version 300 es
+in vec2 position;
+out vec2 uv;
+void main() {
+  uv = position * 0.5 + 0.5;
+  gl_Position = vec4(position.x, -position.y, 0.0, 1.0);
+}`;
+
+const PUNCH_FRAGMENT = `#version 300 es
+precision highp float;
+in vec2 uv;
+out vec4 fragColor;
+uniform sampler2D source;
+
+void main() {
+  vec3 c = texture(source, uv).rgb;
+
+  // What arrives here has already been flattened to sRGB by the browser: an HDR grade squeezed
+  // into a standard range by clipping, which is what makes it look washed out and grey. None of
+  // the original highlight detail survives that, so nothing here can recover it — this only
+  // undoes the flatness, by restoring the contrast and saturation the squeeze took away.
+  vec3 linear = pow(c, vec3(2.2));
+
+  // Gentle S-curve around mid grey: darks a little darker, brights a little brighter.
+  vec3 contrasted = clamp((linear - 0.18) * 1.18 + 0.18, 0.0, 1.0);
+
+  float luma = dot(contrasted, vec3(0.2126, 0.7152, 0.0722));
+  vec3 saturated = clamp(mix(vec3(luma), contrasted, 1.18), 0.0, 1.0);
+
+  fragColor = vec4(pow(saturated, vec3(1.0 / 2.2)), 1.0);
+}`;
+
+/**
+ * For HDR frames that cannot afford a readback — 4K on a phone, where copying the planes out is
+ * 300 MB/s and takes the decoder down with it.
+ *
+ * The frame is uploaded straight to the GPU as a texture, which means the browser has already
+ * converted it to sRGB and the HDR information is gone before this sees it. So this is explicitly
+ * not tone mapping: it is contrast and saturation put back after a conversion that removed them.
+ * It costs nothing, and it is the difference between a picture that looks broken and one that
+ * looks like a film.
+ */
+class PunchRenderer implements FrameRenderer {
+  private readonly gl: WebGL2RenderingContext;
+  private readonly program: WebGLProgram;
+  private readonly texture: WebGLTexture;
+
+  constructor(private readonly canvas: HTMLCanvasElement) {
+    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, desynchronized: true });
+    if (!gl) throw new Error("WebGL2 indisponible.");
+    this.gl = gl;
+
+    const program = gl.createProgram();
+    if (!program) throw new Error("Programme WebGL indisponible.");
+    gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, PUNCH_VERTEX));
+    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, PUNCH_FRAGMENT));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(`Édition de liens WebGL échouée : ${gl.getProgramInfoLog(program) ?? ""}`);
+    }
+    this.program = program;
+    gl.useProgram(program);
+
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const position = gl.getAttribLocation(program, "position");
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+    const texture = gl.createTexture();
+    if (!texture) throw new Error("Texture indisponible.");
+    this.texture = texture;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.uniform1i(gl.getUniformLocation(program, "source"), 0);
+  }
+
+  draw(frame: VideoFrame): void {
+    const gl = this.gl;
+    fitCanvas(this.canvas, frame);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    // The upload is a GPU-side blit — no copy through the CPU, which is the whole point.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  destroy(): void {
+    this.gl.deleteTexture(this.texture);
+    this.gl.deleteProgram(this.program);
+  }
+}
+
 export function createRenderer(
   canvas: HTMLCanvasElement,
-  options: { hdr: boolean; peakNits?: number; fullRange?: boolean; onHdrFallback?: (reason: string) => void }
+  options: {
+    hdr: boolean;
+    /** HDR source that cannot afford the readback: recovered on the GPU instead of tone mapped. */
+    hdrWithoutToneMapping?: boolean;
+    peakNits?: number;
+    fullRange?: boolean;
+    onHdrFallback?: (reason: string) => void;
+  }
 ): FrameRenderer {
-  if (!options.hdr) return new CanvasRenderer(canvas);
+  if (!options.hdr) {
+    if (!options.hdrWithoutToneMapping) return new CanvasRenderer(canvas);
+    return new FallbackRenderer(canvas, () => new PunchRenderer(canvas), options.onHdrFallback ?? (() => {}));
+  }
   return new FallbackRenderer(
     canvas,
     () => new ToneMapRenderer(canvas, options.peakNits ?? 1000, options.fullRange ?? false),
