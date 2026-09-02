@@ -7,6 +7,7 @@ import { NAV_ITEMS } from "@/components/navItems";
 import { useRole } from "@/lib/useRole";
 import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
+import { enterCinema } from "@/lib/leaveCinema";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -44,20 +45,22 @@ export function Sidebar() {
 
       {/* Distinct entry point, not folded into NAV_ITEMS below — this leaves the whole standard
           shell (own layout, own visual language) for /cinema, a genuinely different mode rather
-          than just another page. Plain <a>, not <Link>: Next's client-side transition fetches
-          the target route's RSC payload via a special same-URL request (mode "cors", not
-          "navigate") — that specific fetch was failing at the network/transport level in
-          production (confirmed live: the service worker's catch-all only triggers on a true
-          fetch rejection, not an HTTP error status), while a real full navigation to the exact
-          same URL works. A plain anchor forces a real navigation, sidestepping the client-side
-          transition path entirely rather than chasing why that one specific fetch fails. */}
-      <a
-        href="/cinema"
+          than just another page.
+
+          It was a plain <a> (a full page load) because Next's client-side transition to this
+          route was seen failing at transport level in production. Two things have changed since:
+          the service worker no longer intercepts those requests, and the proxy's logs record
+          every recent one succeeding. So it goes back to a real transition — via enterCinema,
+          which falls back to a full load if the URL hasn't changed shortly after, so the worst
+          case is exactly the old behaviour rather than a dead button. */}
+      <button
+        type="button"
+        onClick={() => enterCinema(router)}
         className="mb-3 flex shrink-0 items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20"
       >
         <MonitorPlay size={16} />
         {t("nav.cinemaMode")}
-      </a>
+      </button>
 
       {/* Scrollable nav list */}
       <nav

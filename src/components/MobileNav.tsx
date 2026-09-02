@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { enterCinema } from "@/lib/leaveCinema";
 import { LogOut, MonitorPlay, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Settings, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
@@ -284,16 +285,16 @@ export function MobileNav() {
           {/* Cinema Mode's own entry point, matching the sidebar's on desktop: kept out of the
               section grids below because it doesn't navigate to another page inside this shell —
               it replaces the shell entirely with a full-screen mode of its own (the phone layout,
-              see CinemaMobileClient). Plain <a> for the same reason the sidebar uses one: Next's
-              client-side transition to this route was failing at the transport level in
-              production, while a real navigation to the identical URL works. */}
-          <a
-            href="/cinema"
+              see CinemaMobileClient). Goes through enterCinema for the same reason the sidebar
+              does — see its comment. */}
+          <button
+            type="button"
+            onClick={() => { setOpen(false); enterCinema(router); }}
             className="mb-4 flex w-full items-center gap-3 rounded-xl border border-accent-500/30 bg-accent-500/10 px-4 py-3 text-sm font-medium text-accent-400 transition-colors hover:bg-accent-500/20"
           >
             <MonitorPlay size={17} />
             {t("nav.cinemaMode")}
-          </a>
+          </button>
 
           <SheetSection title={t('nav.mobile.sectionContent')} items={SECTION_CONTENT} isActive={isActive} onClose={() => setOpen(false)} />
           <SheetSection title={t('nav.mobile.sectionManage')} items={SECTION_GESTION} isActive={isActive} onClose={() => setOpen(false)} />
