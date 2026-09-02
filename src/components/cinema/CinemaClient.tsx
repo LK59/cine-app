@@ -244,12 +244,10 @@ export function CinemaClient() {
   // this project's react-hooks/set-state-in-effect rule) whenever the active item itself
   // changes, so a stale key from the previous title can't briefly pair with the new one.
   const [heroTrailerKey, setHeroTrailerKey] = useState<string | null>(null);
-  const [heroLocalTrailerUrl, setHeroLocalTrailerUrl] = useState<string | null>(null);
   const [trailerResetKey, setTrailerResetKey] = useState(activeHeroKey);
   if (activeHeroKey !== trailerResetKey) {
     setTrailerResetKey(activeHeroKey);
     setHeroTrailerKey(null);
-    setHeroLocalTrailerUrl(null);
   }
 
   // Whatever card was focused (mouse click also focuses a <button> natively) right before
@@ -400,7 +398,7 @@ export function CinemaClient() {
                 naturally paints on top (see the z-index note elsewhere in this file for that
                 convention) with no z-index of its own needed. The image never unmounts
                 underneath it: nothing to do if there's no trailer, or before it's ready. */}
-            <CinemaTrailerBackdrop itemKey={debouncedHeroKey ?? ""} trailerKey={heroTrailerKey} localTrailerUrl={heroLocalTrailerUrl} />
+            <CinemaTrailerBackdrop itemKey={debouncedHeroKey ?? ""} trailerKey={heroTrailerKey} />
           </>
         )}
         <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
@@ -433,16 +431,8 @@ export function CinemaClient() {
             not on every arrow-key scrub. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "50%" }}>
           {mediaType === "movies"
-            ? heroItem && (
-                <CinemaHero item={heroItem} onTrailerKeyChange={setHeroTrailerKey} onLocalTrailerUrlChange={setHeroLocalTrailerUrl} />
-              )
-            : seriesHeroItem && (
-                <CinemaSeriesHero
-                  item={seriesHeroItem}
-                  onTrailerKeyChange={setHeroTrailerKey}
-                  onLocalTrailerUrlChange={setHeroLocalTrailerUrl}
-                />
-              )}
+            ? heroItem && <CinemaHero item={heroItem} onTrailerKeyChange={setHeroTrailerKey} />
+            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} onTrailerKeyChange={setHeroTrailerKey} />}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest

@@ -39,7 +39,6 @@ interface SonarrCastMember {
 interface SonarrInfo {
   tmdb: { overview: string; cast: SonarrCastMember[] } | null;
   trailerKey: string | null;
-  localTrailerUrl: string | null;
 }
 
 // Series-typed mirror of CinemaMovieDetail — see its own doc comment for the shared layout
@@ -304,7 +303,6 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
       {showTrailer && info?.trailerKey && (
         <TrailerModal
           youtubeKey={info.trailerKey}
-          localTrailerUrl={info.localTrailerUrl}
           title={item.title}
           onClose={() => {
             setShowTrailer(false);

@@ -847,17 +847,6 @@
       "subtitle": "Interface, synopses and search engine",
       "reloadNotice": "Reload required to apply {lang}",
       "apply": "Apply"
-    },
-    "trailers": {
-      "title": "Automatic trailer previews",
-      "subtitle": "Video preview in Cinema Mode, from locally downloaded files",
-      "explanation": "Requires downloading trailers locally before it can be enabled. Once downloaded, they replace the YouTube preview everywhere in the app (instant start, no YouTube chrome).",
-      "downloadNow": "Download now",
-      "downloading": "Downloading…",
-      "progress": "{completed} / {total} downloaded",
-      "failedCount": "{n} failed",
-      "toggleLabel": "Enable auto trailer previews",
-      "toggleDisabledHint": "Finish downloading first to enable this option."
     }
   },
   "watchlist": {

@@ -42,7 +42,6 @@ interface RadarrCastMember {
 interface RadarrInfo {
   tmdb: { overview: string; cast: RadarrCastMember[] } | null;
   trailerKey: string | null;
-  localTrailerUrl: string | null;
 }
 
 // "The banner opened big" — click/Enter on a card (or the hero) escalates from CinemaHero's
@@ -312,7 +311,6 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
       {showTrailer && info?.trailerKey && (
         <TrailerModal
           youtubeKey={info.trailerKey}
-          localTrailerUrl={info.localTrailerUrl}
           title={item.title}
           onClose={() => {
             setShowTrailer(false);

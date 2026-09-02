@@ -50,7 +50,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface MovieInfo {
   trailerKey: string | null;
-  localTrailerUrl: string | null;
   tmdb: {
     overview: string;
     tagline?: string;
@@ -668,12 +667,7 @@ export default function RadarrMovieDetailPage() {
       )}
 
       {showTrailer && info?.trailerKey && (
-        <TrailerModal
-          youtubeKey={info.trailerKey}
-          localTrailerUrl={info.localTrailerUrl}
-          title={t('radarr.trailerModalTitle', { title: movie.title })}
-          onClose={() => setShowTrailer(false)}
-        />
+        <TrailerModal youtubeKey={info.trailerKey} title={t('radarr.trailerModalTitle', { title: movie.title })} onClose={() => setShowTrailer(false)} />
       )}
       {showNfo && movie && <MediaInfoModal movie={movie} onClose={() => setShowNfo(false)} />}
 

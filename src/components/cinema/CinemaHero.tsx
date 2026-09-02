@@ -16,7 +16,6 @@ interface RadarrCastMember {
 interface RadarrInfo {
   tmdb: { overview: string; cast: RadarrCastMember[] } | null;
   trailerKey: string | null;
-  localTrailerUrl: string | null;
 }
 
 // Text only — the backdrop image/gradients (and, once focus dwells long enough, the trailer
@@ -32,7 +31,6 @@ interface RadarrInfo {
 export function CinemaHero({
   item,
   onTrailerKeyChange,
-  onLocalTrailerUrlChange,
 }: {
   item: CinemaMovie;
   // Reports this item's trailer key up to CinemaClient, which owns the dwell-triggered video
@@ -40,9 +38,6 @@ export function CinemaHero({
   // than a second parallel fetch there, so the two never have their own independently-debounced
   // (and therefore possibly briefly disagreeing) opinions about what the current trailer is.
   onTrailerKeyChange?: (key: string | null) => void;
-  // Same lift-up, for the locally-downloaded file (see trailerDownload.ts) when one exists —
-  // CinemaTrailerBackdrop prefers this over the live YouTube fallback.
-  onLocalTrailerUrlChange?: (url: string | null) => void;
 }) {
   const [debouncedId, setDebouncedId] = useState(item.radarrId);
   useEffect(() => {
@@ -56,8 +51,7 @@ export function CinemaHero({
 
   useEffect(() => {
     onTrailerKeyChange?.(info?.trailerKey ?? null);
-    onLocalTrailerUrlChange?.(info?.localTrailerUrl ?? null);
-  }, [info?.trailerKey, info?.localTrailerUrl, onTrailerKeyChange, onLocalTrailerUrlChange]);
+  }, [info?.trailerKey, onTrailerKeyChange]);
 
   // item.logoUrl now comes bulk-included in the /api/cinema/movies payload (same as
   // poster/backdrop already were) instead of a separate per-item fetch — known synchronously

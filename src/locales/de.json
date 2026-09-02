@@ -847,17 +847,6 @@
       "subtitle": "Oberfläche, Inhaltsübersichten und Suchmaschine",
       "reloadNotice": "Neustart erforderlich, um {lang} anzuwenden",
       "apply": "Anwenden"
-    },
-    "trailers": {
-      "title": "Automatische Trailer-Vorschau",
-      "subtitle": "Video-Vorschau im Kinomodus, aus lokal heruntergeladenen Dateien",
-      "explanation": "Erfordert das vorherige lokale Herunterladen der Trailer. Nach dem Download ersetzen sie die YouTube-Vorschau in der gesamten App (sofortiger Start, keine YouTube-Oberfläche).",
-      "downloadNow": "Jetzt herunterladen",
-      "downloading": "Wird heruntergeladen…",
-      "progress": "{completed} / {total} heruntergeladen",
-      "failedCount": "{n} fehlgeschlagen",
-      "toggleLabel": "Automatische Vorschau aktivieren",
-      "toggleDisabledHint": "Schließe zuerst den Download ab, um diese Option zu aktivieren."
     }
   },
   "watchlist": {

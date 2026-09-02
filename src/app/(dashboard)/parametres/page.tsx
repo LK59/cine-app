@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CircleCheckBig, Film, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
+import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
@@ -309,21 +309,6 @@ export default function ParametresPage() {
           </section>
         )}
 
-        {role === "admin" && (
-          <section>
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-400 ring-1 ring-inset ring-amber-500/20">
-                <Film size={18} />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-white">{t('settings.trailers.title')}</h2>
-                <p className="text-xs text-slate-500">{t('settings.trailers.subtitle')}</p>
-              </div>
-            </div>
-            <TrailerSettingsCard />
-          </section>
-        )}
-
       </div>
     </div>
   );
@@ -477,104 +462,6 @@ function PwaUpdateCard() {
         <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
         {refreshing ? t('settings.app.checking') : t('settings.app.updateButton')}
       </button>
-    </div>
-  );
-}
-
-interface TrailerStatus {
-  autoPreviewEnabled: boolean;
-  job: { status: "running" | "done" | "error"; total: number; completed: number; failed: number } | null;
-}
-
-// Auto-preview (see CinemaTrailerBackdrop.tsx) needs local trailer files to exist first — off by
-// default, and the toggle itself stays disabled until a download job has actually completed
-// (server-side enforced too, see /api/admin/trailers/toggle's own guard). Plain fetch + interval
-// poll while a job is running, matching this page's own existing pattern (SessionsCard,
-// PwaUpdateCard) rather than introducing SWR into a file that doesn't otherwise use it.
-function TrailerSettingsCard() {
-  const t = useT();
-  const [status, setStatus] = useState<TrailerStatus | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [toggling, setToggling] = useState(false);
-
-  const refresh = useCallback(() => {
-    fetch("/api/admin/trailers/status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j) setStatus(j); });
-  }, []);
-
-  useEffect(() => { refresh(); }, [refresh]);
-
-  useEffect(() => {
-    if (status?.job?.status !== "running") return;
-    const interval = setInterval(refresh, 2000);
-    return () => clearInterval(interval);
-  }, [status?.job?.status, refresh]);
-
-  async function downloadAll() {
-    setStarting(true);
-    try {
-      const res = await fetch("/api/admin/trailers/download", { method: "POST" });
-      if (res.ok) refresh();
-    } finally {
-      setStarting(false);
-    }
-  }
-
-  async function toggleAuto(enabled: boolean) {
-    setToggling(true);
-    try {
-      const res = await fetch("/api/admin/trailers/toggle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      if (res.ok) refresh();
-    } finally {
-      setToggling(false);
-    }
-  }
-
-  const job = status?.job ?? null;
-  const running = job?.status === "running";
-  const jobDone = job?.status === "done";
-  const pct = job && job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
-
-  return (
-    <div className="card p-5 space-y-4">
-      <p className="text-xs leading-5 text-slate-500">{t('settings.trailers.explanation')}</p>
-
-      <div className="flex items-center justify-between gap-4">
-        <button
-          onClick={downloadAll}
-          disabled={running || starting}
-          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
-        >
-          {running ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
-          {running ? t('settings.trailers.downloading') : t('settings.trailers.downloadNow')}
-        </button>
-
-        <Toggle
-          checked={status?.autoPreviewEnabled ?? false}
-          onChange={toggleAuto}
-          disabled={toggling || !jobDone}
-          label={t('settings.trailers.toggleLabel')}
-        />
-      </div>
-
-      {job && (
-        <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div className="h-full bg-accent-500 transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="mt-1.5 text-xs text-slate-500">
-            {t('settings.trailers.progress', { completed: job.completed, total: job.total })}
-            {job.failed > 0 && ` · ${t('settings.trailers.failedCount', { n: job.failed })}`}
-          </p>
-        </div>
-      )}
-
-      {!jobDone && <p className="text-xs text-slate-600">{t('settings.trailers.toggleDisabledHint')}</p>}
     </div>
   );
 }

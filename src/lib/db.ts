@@ -159,28 +159,6 @@ function migrate(db: Database.Database): void {
   // library file mtimes (see diskForecast.ts) — no history to wait weeks for, and one less
   // cron/table to maintain. Drops the now-unused table from the brief window it existed in.
   db.exec("DROP TABLE IF EXISTS disk_usage_history");
-
-  // Locally-downloaded trailer files (see trailerDownload.ts/trailerJob.ts) — a single-row
-  // settings table (the toggle rarely changes) kept separate from the per-run job table
-  // (appended to, queried by "latest") rather than folding both into one row, which would mean
-  // encoding "is a job running" as a magic sentinel instead of a natural row.
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS trailer_settings (
-      id                    INTEGER PRIMARY KEY CHECK (id = 1),
-      auto_preview_enabled  INTEGER NOT NULL DEFAULT 0
-    );
-    INSERT OR IGNORE INTO trailer_settings (id, auto_preview_enabled) VALUES (1, 0);
-
-    CREATE TABLE IF NOT EXISTS trailer_jobs (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      status       TEXT    NOT NULL CHECK (status IN ('running','done','error')),
-      total        INTEGER NOT NULL DEFAULT 0,
-      completed    INTEGER NOT NULL DEFAULT 0,
-      failed       INTEGER NOT NULL DEFAULT 0,
-      started_at   INTEGER NOT NULL,
-      finished_at  INTEGER
-    );
-  `);
 }
 
 // ─── User preferences ─────────────────────────────────────────────────────────
@@ -579,52 +557,5 @@ export const sessionDb = {
   deleteOthers(userId: string, currentJti: string): number {
     const r = getDb().prepare("DELETE FROM sessions WHERE user_id = ? AND jti != ?").run(userId, currentJti);
     return r.changes;
-  },
-};
-
-// ─── Local trailer downloads (see trailerDownload.ts/trailerJob.ts) ───────────
-
-export interface TrailerJob {
-  id: number;
-  status: "running" | "done" | "error";
-  total: number;
-  completed: number;
-  failed: number;
-  startedAt: number;
-  finishedAt: number | null;
-}
-
-export const trailerDb = {
-  getSettings(): { autoPreviewEnabled: boolean } {
-    const row = getDb().prepare("SELECT auto_preview_enabled AS enabled FROM trailer_settings WHERE id = 1").get() as
-      | { enabled: number }
-      | undefined;
-    return { autoPreviewEnabled: row?.enabled === 1 };
-  },
-
-  setAutoPreviewEnabled(enabled: boolean): void {
-    getDb().prepare("UPDATE trailer_settings SET auto_preview_enabled = ? WHERE id = 1").run(enabled ? 1 : 0);
-  },
-
-  startJob(total: number): number {
-    const r = getDb()
-      .prepare("INSERT INTO trailer_jobs (status, total, completed, failed, started_at) VALUES ('running', ?, 0, 0, ?)")
-      .run(total, Date.now());
-    return r.lastInsertRowid as number;
-  },
-
-  updateJobProgress(id: number, completed: number, failed: number): void {
-    getDb().prepare("UPDATE trailer_jobs SET completed = ?, failed = ? WHERE id = ?").run(completed, failed, id);
-  },
-
-  finishJob(id: number, status: "done" | "error"): void {
-    getDb().prepare("UPDATE trailer_jobs SET status = ?, finished_at = ? WHERE id = ?").run(status, Date.now(), id);
-  },
-
-  getLatestJob(): TrailerJob | null {
-    const row = getDb().prepare(
-      "SELECT id, status, total, completed, failed, started_at AS startedAt, finished_at AS finishedAt FROM trailer_jobs ORDER BY id DESC LIMIT 1"
-    ).get() as TrailerJob | undefined;
-    return row ?? null;
   },
 };
