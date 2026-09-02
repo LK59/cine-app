@@ -1187,6 +1187,8 @@
     "restartFromBeginning": "Start from the beginning",
     "mutePreview": "Mute preview",
     "unmutePreview": "Unmute preview",
-    "nextUpBadge": "Up next"
+    "nextUpBadge": "Up next",
+    "moreInfo": "More info",
+    "seasonCount": "{n} season(s)"
   }
 }

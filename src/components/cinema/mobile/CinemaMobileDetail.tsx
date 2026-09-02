@@ -1,0 +1,335 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
+import useSWR from "swr";
+import { Check, ChevronDown, Play, Plus, RotateCcw, Video, X } from "lucide-react";
+import { fetcher } from "@/lib/swr";
+import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
+import { usePlayback } from "@/components/PlaybackProvider";
+import { PosterImage } from "@/components/PosterImage";
+import { ImdbBadge } from "@/components/ImdbBadge";
+import { useT } from "@/components/TranslationProvider";
+import type { CinemaMovie } from "@/app/api/cinema/movies/route";
+import type { CinemaSeries } from "@/app/api/cinema/series/route";
+import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
+import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+
+const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
+
+interface DetailInfo {
+  tmdb: { overview: string; cast: { tmdbId: number; name: string }[] } | null;
+  trailerKey: string | null;
+}
+
+// Netflix's own mobile title page: a 16:9 preview up top, then title/meta, a white primary
+// action, the synopsis, a row of icon actions, and — for a series — the season's episode list.
+//
+// One component for both media types here, unlike the desktop pair (CinemaMovieDetail /
+// CinemaSeriesDetail): on mobile this is a single scrolling column whose two branches are small
+// and local (which /info endpoint to read, and whether an episode list follows), so splitting it
+// would mean two near-identical 300-line files rather than the genuinely diverging layouts the
+// desktop split exists for.
+export function CinemaMobileDetail({
+  item,
+  mediaType,
+  onClose,
+}: {
+  item: CinemaMovie | CinemaSeries;
+  mediaType: "movies" | "series";
+  onClose: () => void;
+}) {
+  const t = useT();
+  const playback = usePlayback();
+  const playerEnabled = usePlayerEnabled();
+  const [showTrailer, setShowTrailer] = useState(false);
+  const { closing, requestClose } = useDelayedClose(onClose, 220);
+
+  const isSeries = mediaType === "series";
+  const infoUrl = isSeries
+    ? `/api/sonarr/series/${(item as CinemaSeries).sonarrId}/info`
+    : `/api/radarr/movies/${(item as CinemaMovie).radarrId}/info`;
+  const { data: info } = useSWR<DetailInfo>(infoUrl, fetcher);
+
+  // Movies carry their resume point on a per-user endpoint (the library payload is shared across
+  // viewers); a series' equivalent is whichever episode Jellyfin says is next up.
+  const { data: progress } = useSWR<CinemaProgressPayload>(
+    isSeries ? null : `/api/cinema/progress/${item.jellyfinItemId}`,
+    fetcher
+  );
+  const { data: episodesData } = useSWR<CinemaEpisodesPayload>(
+    isSeries ? `/api/cinema/series/${item.jellyfinItemId}/episodes` : null,
+    fetcher
+  );
+
+  const tmdbId = item.tmdbId ?? 0;
+  const statusMap = useWatchlistStatusMap(tmdbId ? [{ mediaType: isSeries ? "series" : "movie", tmdbId }] : []);
+  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
+    tmdbId ? statusMap[`${isSeries ? "series" : "movie"}:${tmdbId}`] ?? null : null
+  );
+  const watched = addedStatus === "watched";
+  const inList = addedStatus === "to_watch";
+
+  const [logoErrored, setLogoErrored] = useState(false);
+  const seasons = episodesData?.seasons ?? [];
+  const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
+  const activeSeason = selectedSeason ?? seasons[0]?.seasonNumber ?? null;
+  const episodes = seasons.find((s) => s.seasonNumber === activeSeason)?.episodes ?? [];
+
+  // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and
+  // desktop browsers emulating a phone viewport, both reach this screen.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (showTrailer) return;
+      if (e.key === "Escape") requestClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [requestClose, showTrailer]);
+
+  // Closes itself once real playback takes over, so backing out of the player lands on the browse
+  // grid rather than on a sheet for something already playing — same behavior as desktop.
+  useEffect(() => {
+    if (playback.mode === "full") requestClose();
+  }, [playback.mode, requestClose]);
+
+  const nextEpisode = episodesData?.nextEpisode;
+  const resumeTicks = isSeries ? nextEpisode?.resumeTicks ?? null : progress?.resumeTicks ?? null;
+  const runtimeTicks = isSeries ? nextEpisode?.runtimeTicks ?? null : progress?.runtimeTicks ?? null;
+  const hasResume = !!resumeTicks && resumeTicks > 0;
+  const playTargetId = isSeries ? nextEpisode?.itemId : item.jellyfinItemId;
+  const playTargetTitle = isSeries ? nextEpisode?.title ?? item.title : item.title;
+
+  // Flat (season, episode) order — powers the player's own credits-time auto-advance, same
+  // contract PlayButton/PlayerHost already expect on desktop.
+  function getNextEpisode(currentItemId: string) {
+    const flat = seasons.flatMap((s) => s.episodes);
+    const idx = flat.findIndex((e) => e.jellyfinItemId === currentItemId);
+    if (idx === -1 || idx === flat.length - 1) return null;
+    return { itemId: flat[idx + 1].jellyfinItemId, title: flat[idx + 1].title };
+  }
+
+  function play(fromStart = false) {
+    if (!playTargetId) return;
+    playback.play({
+      itemId: playTargetId,
+      title: playTargetTitle,
+      resumeAt: !fromStart && resumeTicks ? resumeTicks / 10_000_000 : undefined,
+      ...(isSeries ? { getNextEpisode } : {}),
+    });
+  }
+
+  function playEpisode(episode: CinemaEpisode) {
+    playback.play({
+      itemId: episode.jellyfinItemId,
+      title: episode.title,
+      resumeAt: episode.resumeTicks ? episode.resumeTicks / 10_000_000 : undefined,
+      getNextEpisode,
+    });
+  }
+
+  function toggleWatched() {
+    if (watched) removeFromWatchlist({ tmdbId, mediaType: isSeries ? "series" : "movie" });
+    else
+      addToWatchlist(
+        { tmdbId, mediaType: isSeries ? "series" : "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
+        "watched"
+      );
+  }
+
+  function toggleInList() {
+    if (inList) removeFromWatchlist({ tmdbId, mediaType: isSeries ? "series" : "movie" });
+    else
+      addToWatchlist(
+        { tmdbId, mediaType: isSeries ? "series" : "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
+        "to_watch"
+      );
+  }
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className={`fixed inset-0 overflow-y-auto overscroll-contain bg-slate-950 ${closing ? "animate-fade-out" : "animate-slide-up"}`}
+      style={{ zIndex: 46 }}
+    >
+      {/* 16:9 header image, bleeding into the page under a gradient rather than ending on a hard
+          edge — the same treatment the desktop sheet uses, scaled to a phone. */}
+      <div className="relative aspect-video w-full">
+        {item.backdropUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-slate-900" />
+        )}
+        <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/20 to-transparent" />
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label={t("cinema.back")}
+          className="absolute right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-xs active:scale-95"
+          style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="-mt-6 px-4 pb-16">
+        {item.logoUrl && !logoErrored ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.logoUrl}
+            alt={item.title}
+            onError={() => setLogoErrored(true)}
+            className="mb-3 max-h-16 w-auto max-w-full object-contain object-left drop-shadow-lg"
+          />
+        ) : (
+          <h1 className="mb-3 text-2xl font-bold leading-tight text-white">{item.title}</h1>
+        )}
+
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
+          <span>{item.year}</span>
+          {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+          {isSeries && seasons.length > 0 && (
+            <span>{t("cinema.seasonCount", { n: seasons.length })}</span>
+          )}
+          {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).join(" · ")}</span>}
+        </div>
+
+        {playerEnabled && playTargetId && (
+          <button
+            type="button"
+            onClick={() => play()}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-slate-950 transition-transform active:scale-95"
+          >
+            <Play size={18} fill="currentColor" />
+            {formatContinueLabel(
+              t,
+              resumeTicks,
+              runtimeTicks,
+              isSeries ? nextEpisode?.seasonNumber : null,
+              isSeries ? nextEpisode?.episodeNumber : null
+            )}
+          </button>
+        )}
+
+        {playerEnabled && playTargetId && hasResume && (
+          <button
+            type="button"
+            onClick={() => play(true)}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
+          >
+            <RotateCcw size={16} />
+            {t("cinema.restartFromBeginning")}
+          </button>
+        )}
+
+        {info?.trailerKey && (
+          <button
+            type="button"
+            onClick={() => setShowTrailer(true)}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
+          >
+            <Video size={16} />
+            {t("cinema.trailer")}
+          </button>
+        )}
+
+        <p className="mb-3 text-sm leading-6 text-white/90">{info?.tmdb?.overview || item.overview}</p>
+
+        {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
+          <p className="mb-5 text-xs leading-5 text-white/50">
+            {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
+          </p>
+        )}
+
+        {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing
+            with the primary white one above. */}
+        <div className="mb-6 flex items-start gap-8">
+          <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
+            {inList ? <Check size={22} className="text-accent-400" /> : <Plus size={22} className="text-white" />}
+            <span className="text-center text-xs leading-tight text-white/70">{t("watchlist.statuses.toWatch")}</span>
+          </button>
+          <button type="button" onClick={toggleWatched} aria-pressed={watched} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
+            <Check size={22} className={watched ? "text-accent-400" : "text-white"} />
+            <span className="text-center text-xs leading-tight text-white/70">{t("cinema.markWatched")}</span>
+          </button>
+        </div>
+
+        {isSeries && seasons.length > 0 && (
+          <>
+            {/* Horizontal season pills rather than Netflix's dropdown: same job, one tap instead
+                of two, and no popover to position/dismiss on a small screen. */}
+            {seasons.length > 1 && (
+              <div className="scrollbar-thin -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+                {seasons.map((season) => {
+                  const active = season.seasonNumber === activeSeason;
+                  return (
+                    <button
+                      key={season.seasonNumber}
+                      type="button"
+                      onClick={() => setSelectedSeason(season.seasonNumber)}
+                      className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                        active ? "bg-white text-slate-950 font-medium" : "bg-white/10 text-white/80"
+                      }`}
+                    >
+                      {season.seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: season.seasonNumber })}
+                      {active && <ChevronDown size={14} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {episodes.map((episode) => (
+                <button
+                  key={episode.jellyfinItemId}
+                  type="button"
+                  onClick={() => playEpisode(episode)}
+                  className="flex w-full gap-3 text-left active:scale-95"
+                >
+                  <div className="relative w-32 shrink-0">
+                    <PosterImage src={episode.thumbnailUrl} alt={episode.title} aspectRatio="aspect-video" unoptimized subtle />
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xs">
+                        <Play size={14} fill="currentColor" />
+                      </span>
+                    </span>
+                    {episode.watched && (
+                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent-500/90">
+                        <Check size={10} className="text-white" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-white">
+                      {episode.episodeNumber}. {episode.title}
+                      {episode.jellyfinItemId === nextEpisode?.itemId && (
+                        <span className="ml-2 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-300">
+                          {t("cinema.nextUpBadge")}
+                        </span>
+                      )}
+                    </p>
+                    {episode.runtimeMinutes && <p className="mt-0.5 text-xs text-white/50">{episode.runtimeMinutes} min</p>}
+                    {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-white/60">{episode.overview}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {showTrailer && info?.trailerKey && (
+        <TrailerModal youtubeKey={info.trailerKey} title={item.title} onClose={() => setShowTrailer(false)} />
+      )}
+    </div>,
+    document.body
+  );
+}

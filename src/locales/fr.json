@@ -1187,6 +1187,8 @@
     "restartFromBeginning": "Recommencer depuis le début",
     "mutePreview": "Couper le son de l'aperçu",
     "unmutePreview": "Activer le son de l'aperçu",
-    "nextUpBadge": "À suivre"
+    "nextUpBadge": "À suivre",
+    "moreInfo": "Plus d'infos",
+    "seasonCount": "{n} saison(s)"
   }
 }

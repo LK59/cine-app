@@ -1187,6 +1187,8 @@
     "restartFromBeginning": "Von vorne beginnen",
     "mutePreview": "Vorschau stummschalten",
     "unmutePreview": "Ton der Vorschau aktivieren",
-    "nextUpBadge": "Als Nächstes"
+    "nextUpBadge": "Als Nächstes",
+    "moreInfo": "Mehr Infos",
+    "seasonCount": "{n} Staffel(n)"
   }
 }

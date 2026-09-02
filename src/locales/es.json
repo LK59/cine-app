@@ -1187,6 +1187,8 @@
     "restartFromBeginning": "Empezar desde el principio",
     "mutePreview": "Silenciar la vista previa",
     "unmutePreview": "Activar el sonido de la vista previa",
-    "nextUpBadge": "A continuación"
+    "nextUpBadge": "A continuación",
+    "moreInfo": "Más información",
+    "seasonCount": "{n} temporada(s)"
   }
 }
