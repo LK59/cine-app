@@ -34,6 +34,11 @@ export class AudioOutput {
     return this.context.sampleRate;
   }
 
+  /** "running", "suspended" or "closed" — the single most useful fact when there is no sound. */
+  get state(): string {
+    return `${this.context.state} @ ${this.context.sampleRate} Hz`;
+  }
+
   /** True once enough audio has been queued that playback can begin. */
   get primed(): boolean {
     return this.started;

@@ -27,15 +27,22 @@ export class SoftwareAudioTrack {
   ) {}
 
   /**
-   * Opens the given Matroska track for software decoding, or returns null if this build cannot
-   * decode it after all — the caller then reports a silent film rather than pretending.
+   * Opens the given Matroska track for software decoding.
+   *
+   * Throws with a specific reason rather than returning null: "no sound" with no explanation is
+   * exactly the kind of failure that costs a round trip to diagnose, and every step here can fail
+   * for a different reason — the module not loading, the worker not starting, the track not being
+   * found, the decoder declining it.
    */
-  static async open(source: ByteSource, trackNumber: number): Promise<SoftwareAudioTrack | null> {
+  static async open(source: ByteSource, trackNumber: number): Promise<SoftwareAudioTrack> {
     // Dynamic: a file whose audio the browser already decodes never pays for this.
-    const [{ Input, CustomSource, MatroskaInputFormat, AudioSampleSink }, { registerAc3Decoder }] = await Promise.all([
-      import("mediabunny"),
-      import("@mediabunny/ac3"),
-    ]);
+    let modules;
+    try {
+      modules = await Promise.all([import("mediabunny"), import("@mediabunny/ac3")]);
+    } catch (error) {
+      throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
+    }
+    const [{ Input, CustomSource, MatroskaInputFormat, AudioSampleSink }, { registerAc3Decoder }] = modules;
     registerAc3Decoder();
 
     const input = new Input({
@@ -50,7 +57,8 @@ export class SoftwareAudioTrack {
 
     const tracks = await input.getAudioTracks();
     const track = tracks.find((t) => t.id === trackNumber) ?? tracks[0];
-    if (!track || !(await track.canDecode())) return null;
+    if (!track) throw new Error("aucune piste audio trouvée par le décodeur logiciel");
+    if (!(await track.canDecode())) throw new Error(`le décodeur logiciel refuse ${track.codec ?? "cette piste"}`);
 
     return new SoftwareAudioTrack(
       new AudioSampleSink(track) as unknown as { samples(from: number): AsyncIterable<SoftwareSample> },

@@ -82,6 +82,7 @@ export function ExperimentalPlayerHost({
   const [currentAudio, setCurrentAudio] = useState<number | null>(null);
   const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
 
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
   const error =
@@ -278,6 +279,9 @@ export function ExperimentalPlayerHost({
             />
             <InfoRow label="Pistes" value={`${tracks.audio.length} audio, ${tracks.subtitles.length} sous-titres`} />
             <InfoRow label="Transcodage serveur" value="aucun" />
+            {Object.entries(diagnostics).map(([label, value]) => (
+              <InfoRow key={label} label={label} value={value} />
+            ))}
           </dl>
         </div>
       )}

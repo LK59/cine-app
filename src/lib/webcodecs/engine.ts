@@ -82,6 +82,35 @@ export interface EngineOptions {
   audioTrackNumber?: number;
 }
 
+/**
+ * Codec strings a browser claimed to support and then decoded nothing from.
+ *
+ * This project already learned this the hard way on the stable player: an iPhone's capability
+ * query claims E-AC-3 and its pipeline then produces nothing at all — no error, no samples, just
+ * silence. A capability query is a claim; the only trustworthy probe is a real decode. Kept in
+ * localStorage so the lie is discovered once per device rather than on every playback.
+ */
+const AUDIO_LIAR_KEY = "cine:webcodecs-audio-liars:v1";
+
+function readAudioLiars(): string[] {
+  try {
+    const raw = localStorage.getItem(AUDIO_LIAR_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberAudioLiar(codec: string): void {
+  try {
+    const liars = new Set(readAudioLiars());
+    liars.add(codec);
+    localStorage.setItem(AUDIO_LIAR_KEY, JSON.stringify([...liars]));
+  } catch {
+    // Storage unavailable — the check still works for this session.
+  }
+}
+
 // Enough decoded video to ride out a stall, not so much that it becomes the problem. The depth
 // is chosen from the resolution because a decoded frame is not a small object: eight 4K frames
 // are on the order of a hundred megabytes of GPU memory, which on a phone buys a stutter of a
@@ -120,6 +149,13 @@ export class PlaybackEngine {
   private audioConfig: AudioConfig | null = null;
   /** Set instead of audioDecoder when the platform has no decoder for this track. */
   private softwareAudio: SoftwareAudioTrack | null = null;
+  private audioPath: "native" | "software" | "none" = "none";
+  private audioDiagnostic: string | null = null;
+  /** Decoded blocks that came OUT of the decoder. */
+  private audioChunks = 0;
+  /** Encoded blocks fed IN. The gap between the two is what exposes a decoder that lies. */
+  private audioFed = 0;
+  private demotingAudio = false;
   private softwareAudioGeneration = 0;
   private readonly frames: VideoFrame[] = [];
   /**
@@ -205,9 +241,18 @@ export class PlaybackEngine {
    */
   private async startSoftwareAudio(track: MatroskaTrack, fromSeconds: number): Promise<boolean> {
     if (!this.source) return false;
-    const software = await SoftwareAudioTrack.open(this.source, track.number);
-    if (!software) return false;
+    let software: SoftwareAudioTrack;
+    try {
+      software = await SoftwareAudioTrack.open(this.source, track.number);
+    } catch (error) {
+      // Surfaced, not swallowed: "no sound" with no reason is the single most expensive kind of
+      // bug to chase, and the reason is right here.
+      this.audioDiagnostic = error instanceof Error ? error.message : "ouverture du décodeur logiciel échouée";
+      return false;
+    }
 
+    this.audioPath = "software";
+    this.audioFed = 0;
     this.softwareAudio = software;
     this.audio = new AudioOutput(software.format);
     this.audio.setVolume(this.volume, this.muted);
@@ -242,7 +287,10 @@ export class PlaybackEngine {
 
   /** The configuration this platform accepts for a track, or null if it accepts none. */
   private async supportedAudioConfig(track: MatroskaTrack) {
+    const liars = readAudioLiars();
     for (const config of audioConfigCandidates(track)) {
+      // Already caught claiming this one on this device.
+      if (liars.includes(config.codec)) continue;
       const support = await AudioDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
       if (support.supported) return config;
     }
@@ -297,8 +345,22 @@ export class PlaybackEngine {
       throw new Error(`Ce navigateur ne sait pas décoder ${videoConfig.codec} (${this.videoTrack.codecId}).`);
     }
 
+    // Tone-mapping needs the frame's planes on the CPU, and copyTo is a full readback: at 4K
+    // that is roughly 12 MB per frame, 300 MB/s at 24fps, which on a phone is enough to take the
+    // hardware decoder down with it — the observed failure being a flat "Decoder failure" on a
+    // 4K HDR file. Above that size the picture goes through the plain canvas instead: flat
+    // colours, but a picture, and a decoder that survives.
+    const pixels = videoConfig.codedWidth * videoConfig.codedHeight;
+    const tooLargeForToneMapping = pixels > 2_500_000;
+    if (options.hdr && tooLargeForToneMapping) {
+      this.emit(
+        "warning",
+        "Conversion HDR désactivée sur ce fichier : trop lourde en 4K pour cet appareil. Image affichée sans."
+      );
+    }
+
     this.renderer = createRenderer(this.canvas, {
-      hdr: options.hdr,
+      hdr: options.hdr && !tooLargeForToneMapping,
       peakNits: options.peakNits,
       // Surfaced rather than swallowed: the picture still plays, but flat, and knowing that is
       // the difference between "HDR isn't working here" and "this player is broken".
@@ -320,14 +382,13 @@ export class PlaybackEngine {
         // The platform can't decode this one. Before giving up on sound, try the software
         // decoder — which is where most of this library ends up, since AC3 and E-AC3 are not
         // part of the web baseline and iOS doesn't expose them either.
-        const started = await this.startSoftwareAudio(this.audioTrack, options.startSeconds ?? 0).catch(() => false);
+        const started = await this.startSoftwareAudio(this.audioTrack, options.startSeconds ?? 0);
         if (!started) {
           // Reported, not fatal: a silent picture is still worth showing, and naming the codec
           // is what tells us which files this pipeline genuinely cannot handle.
           this.emit(
             "error",
-            unsupportedReason(this.audioTrack) ??
-              `Aucun décodeur disponible pour l'audio ${this.audioTrack.codecId.replace("A_", "")}.`
+            `Pas de son : ${this.audioDiagnostic ?? unsupportedReason(this.audioTrack) ?? `aucun décodeur pour ${this.audioTrack.codecId.replace("A_", "")}`}.`
           );
           this.audioTrack = null;
         }
@@ -367,6 +428,26 @@ export class PlaybackEngine {
     this.renderer?.destroy();
     void this.audio?.close();
     this.source?.close();
+  }
+
+  /**
+   * What the engine is actually doing, for the technical panel.
+   *
+   * Written because three rounds of "no sound" were diagnosed by reasoning about code rather than
+   * by looking: the audio path, the state of the audio hardware and whether any samples reached
+   * it answer in one glance what an afternoon of hypotheses did not.
+   */
+  get diagnostics(): Record<string, string> {
+    return {
+      "Chemin audio": this.audioPath === "software" ? "décodeur logiciel" : this.audioPath === "native" ? "natif (plateforme)" : "aucun",
+      "Piste audio": this.audioTrack ? `${this.audioTrack.codecId.replace("A_", "")} ${this.audioTrack.audio?.channels ?? "?"}ch` : "—",
+      "Sortie audio": this.audio ? this.audio.state : "non créée",
+      "Blocs audio": `${this.audioFed} fournis, ${this.audioChunks} décodés`,
+      "Audio en avance": this.audio ? `${this.audio.bufferedAhead.toFixed(2)} s` : "—",
+      "Images en file": `${this.frames.length} décodées, ${this.pendingVideo.length} en attente`,
+      "Horloge": `${this.currentTime.toFixed(1)} s`,
+      ...(this.audioDiagnostic ? { "Dernier échec audio": this.audioDiagnostic } : {}),
+    };
   }
 
   // ── tracks ────────────────────────────────────────────────────────────────
@@ -413,6 +494,9 @@ export class PlaybackEngine {
     const config = await this.supportedAudioConfig(track);
     if (config) {
       this.audioConfig = config;
+      this.audioPath = "native";
+      this.audioFed = 0;
+      this.audioChunks = 0;
       this.audio = new AudioOutput({ sampleRate: config.sampleRate, numberOfChannels: config.numberOfChannels });
       this.audio.setVolume(this.volume, this.muted);
       this.audioDecoder = new AudioDecoder({
@@ -423,7 +507,7 @@ export class PlaybackEngine {
       return true;
     }
 
-    return this.startSoftwareAudio(track, fromSeconds).catch(() => false);
+    return this.startSoftwareAudio(track, fromSeconds);
   }
 
   /**
@@ -547,6 +631,12 @@ export class PlaybackEngine {
     this.wallClock.seek(target);
     this.endOfFile = false;
     this.presentFromUs = targetUs;
+    // Held until a frame for the new position actually exists. Letting the clock run from the
+    // target while the decoder is still catching up means every frame it produces is already
+    // late and gets dropped — which is the "jumps, then freezes for a second, then resumes"
+    // that a seek was showing. thaw() starts it again on the first frame.
+    this.starved = true;
+    this.wallClock.stop();
 
     this.reader.seekTo(clusterOffsetForTime(this.file, targetUs) ?? this.file.firstClusterOffset ?? 0);
     // The software path is a separate producer and doesn't go through the reader — it gets its
@@ -582,6 +672,7 @@ export class PlaybackEngine {
       data.close();
       return;
     }
+    this.audioChunks += 1;
     this.audio.enqueue(data, data.timestamp / 1e6);
     data.close();
   }
@@ -658,6 +749,7 @@ export class PlaybackEngine {
             this.pendingCues.set(sample.trackNumber, queue);
           }
         } else if (this.audioTrack && sample.trackNumber === this.audioTrack.number && this.audioDecoder?.state === "configured") {
+          this.audioFed += 1;
           this.audioDecoder.decode(
             new EncodedAudioChunk({
               type: "key",
@@ -673,6 +765,40 @@ export class PlaybackEngine {
     } finally {
       this.demuxing = false;
     }
+  }
+
+  /**
+   * Catches a decoder that claimed a codec and then produced nothing.
+   *
+   * A hard failure arrives through the decoder's error callback; this is the other kind, where
+   * everything reports success and no sound comes out. Enough blocks fed with none returned is
+   * the evidence — at which point the codec string is remembered as a liar for this device and
+   * the software decoder takes over from the current position.
+   */
+  private maybeDemoteNativeAudio(): void {
+    if (this.demotingAudio || this.audioPath !== "native" || !this.audioTrack) return;
+    if (this.audioFed < 12 || this.audioChunks > 0) return;
+
+    this.demotingAudio = true;
+    const track = this.audioTrack;
+    const codec = this.audioConfig?.codec;
+    if (codec) rememberAudioLiar(codec);
+    this.audioDiagnostic = `${codec ?? "le décodeur natif"} annoncé comme géré mais silencieux — bascule sur le décodeur logiciel`;
+
+    const resumeAt = this.currentTime;
+    void this.configureAudioFor(track, resumeAt)
+      .then(async (ok) => {
+        if (!ok) {
+          this.emit("warning", `Pas de son : ${this.audioDiagnostic}.`);
+          this.audioTrack = null;
+          return;
+        }
+        this.emit("warning", `Son rétabli par le décodeur logiciel (${codec ?? "codec natif"} ne produisait rien).`);
+        await this.seek(resumeAt);
+      })
+      .finally(() => {
+        this.demotingAudio = false;
+      });
   }
 
   /**
@@ -710,6 +836,7 @@ export class PlaybackEngine {
       if (this.destroyed) return;
       this.rafHandle = requestAnimationFrame(tick);
       this.presentDueFrame();
+      this.maybeDemoteNativeAudio();
       void this.pump();
     };
     this.rafHandle = requestAnimationFrame(tick);
