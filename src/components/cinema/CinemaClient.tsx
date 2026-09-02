@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, Play } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -17,6 +18,7 @@ import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
 import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
+import { CinemaTrailerBackdrop } from "@/components/cinema/CinemaTrailerBackdrop";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
@@ -25,15 +27,6 @@ import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
-
-// Fades the SHARP copy of the backdrop out by ~72% of the *whole screen's* height (not just the
-// hero pane's own box — this mask is applied to a full-height image, see the background layer
-// below) — a blurred, darkened duplicate sits behind it, so wherever this one has faded to
-// transparent, the blurred one shows through instead of hitting solid slate-950. That's what
-// makes the wash "keep going" past the hero into the rows pane instead of stopping at a hard
-// edge right at the category label.
-const BACKDROP_MASK =
-  "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)";
 
 // w-24→xl:w-36 (96px→144px), down from the original w-40/sm:w-48 (160/192px) fixed pair — that
 // fixed size overflowed the row on anything shorter than a large desktop window, pushing the row
@@ -244,6 +237,19 @@ export function CinemaClient() {
   const debouncedHeroItem = debouncedHero.item;
   const debouncedHeroKey = debouncedHero.key;
 
+  // Reported up by whichever hero component is currently mounted (CinemaHero or
+  // CinemaSeriesHero — only one at a time, so a single piece of state covers both) via
+  // onTrailerKeyChange — see CinemaHero's own doc comment on why this is a lifted callback
+  // rather than a second parallel fetch here. Reset synchronously during render (not an effect —
+  // this project's react-hooks/set-state-in-effect rule) whenever the active item itself
+  // changes, so a stale key from the previous title can't briefly pair with the new one.
+  const [heroTrailerKey, setHeroTrailerKey] = useState<string | null>(null);
+  const [trailerResetKey, setTrailerResetKey] = useState(activeHeroKey);
+  if (activeHeroKey !== trailerResetKey) {
+    setTrailerResetKey(activeHeroKey);
+    setHeroTrailerKey(null);
+  }
+
   // Whatever card was focused (mouse click also focuses a <button> natively) right before
   // CinemaMovieDetail opened — restored on close so arrow-nav resumes exactly where the user
   // left it instead of snapping back to the first card (useTvGridNav treats "nothing focused"
@@ -387,6 +393,12 @@ export function CinemaClient() {
               className="absolute inset-0 h-full w-full animate-fade-in object-cover object-top"
               style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
             />
+            {/* Takes over from the still image above once its own dwell timer + confirmed
+                "now playing" state clear — same mask, same role, later in DOM order so it
+                naturally paints on top (see the z-index note elsewhere in this file for that
+                convention) with no z-index of its own needed. The image never unmounts
+                underneath it: nothing to do if there's no trailer, or before it's ready. */}
+            <CinemaTrailerBackdrop itemKey={debouncedHeroKey ?? ""} trailerKey={heroTrailerKey} />
           </>
         )}
         <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
@@ -419,8 +431,8 @@ export function CinemaClient() {
             not on every arrow-key scrub. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "50%" }}>
           {mediaType === "movies"
-            ? heroItem && <CinemaHero item={heroItem} />
-            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}
+            ? heroItem && <CinemaHero item={heroItem} onTrailerKeyChange={setHeroTrailerKey} />
+            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} onTrailerKeyChange={setHeroTrailerKey} />}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
