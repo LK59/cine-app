@@ -39,6 +39,11 @@ class FakeBuffer extends EventTarget {
     this.ranges = end > start ? [[start, end]] : [];
   }
 
+  /** Several disjoint spans, as a browser reports after a seek away and back. */
+  setRanges(ranges: [number, number][]) {
+    this.ranges = ranges;
+  }
+
   appendBuffer(data: Uint8Array) {
     if (this.quotaOnNextAppend) {
       this.quotaOnNextAppend = false;
@@ -127,12 +132,14 @@ const PLAN: RemuxPlan = {
   durationSeconds: 3600,
 };
 
-function fakeRemuxer(segments: number, delay = 0.2) {
+function fakeRemuxer(segments: number, delay = 0.2, seekable = true) {
   let index = 0;
   const seeks: number[] = [];
   const remuxer = {
     seeks,
+    seekable,
     plan: () => PLAN,
+    setAudioTrack: async () => {},
     diagnostics: () => ({ presentationDelaySeconds: delay, clampedSamples: 0 }),
     seekTo: (s: number) => {
       seeks.push(s);
@@ -332,6 +339,160 @@ describe("MseSource", () => {
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
     expect(onError).toHaveBeenCalledWith(expect.stringContaining("refusé"));
+  });
+
+  // The bug this whole group exists for: the transport controls write straight to the element on
+  // this path, exactly as they would for any <video>. Without acting on that, the element waits
+  // at a time nothing will ever be appended to while the reader grinds forward from where it was.
+  it("serves a seek the viewer made on the element itself", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    expect(remuxer.seeks).toEqual([]);
+
+    (video as unknown as { currentTime: number }).currentTime = 1800;
+    video.dispatchEvent(new Event("seeking"));
+    await flush();
+
+    expect(remuxer.seeks).toEqual([1799.8]);
+    expect(FakeSource.instances[0].buffers[0].removed).toContainEqual([0, Infinity]);
+  });
+
+  it("does no work for a step inside what is already buffered", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    const buffer = FakeSource.instances[0].buffers[0];
+    buffer.setBuffered(0, 40);
+    buffer.removed.length = 0;
+
+    (video as unknown as { currentTime: number }).currentTime = 12;
+    video.dispatchEvent(new Event("seeking"));
+    await flush();
+    // Re-reading the file to reach media the browser is already holding would turn a free step
+    // into a network round trip.
+    expect(remuxer.seeks).toEqual([]);
+    expect(buffer.removed).toEqual([]);
+  });
+
+  it("does not serve its own seek twice", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+
+    await mse.seek(900);
+    // The element fires seeking in response to that move; acting on it again would clear the
+    // buffers currently being refilled.
+    video.dispatchEvent(new Event("seeking"));
+    await flush();
+    expect(remuxer.seeks).toEqual([899.8]);
+  });
+
+  it("measures the buffer from the playhead's own range, not the last one left over", async () => {
+    const video = fakeVideo();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
+    await flush();
+    const buffer = FakeSource.instances[0].buffers[0];
+    const before = buffer.appended.length;
+
+    // What a browser reports after seeking back: a stale span far ahead, and the playhead sitting
+    // in front of almost nothing. Measuring against the far one reports a deep buffer and the
+    // player quietly stops fetching.
+    buffer.setRanges([[100, 101], [900, 940]]);
+    (video as unknown as { currentTime: number }).currentTime = 100.5;
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+    expect(buffer.appended.length).toBeGreaterThan(before);
+  });
+
+  it("refuses a seek a file without an index cannot serve, and says so without stopping", async () => {
+    const video = fakeVideo();
+    const onWarning = vi.fn();
+    const onError = vi.fn();
+    const remuxer = fakeRemuxer(500, 0.2, false);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onWarning });
+    await flush();
+
+    await mse.seek(1800);
+    // Starting over from the beginning and reading forward — which is what the fallback did —
+    // looks like the player thinking very hard and arriving minutes later.
+    expect(remuxer.seeks).toEqual([]);
+    expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("index"));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("replaces the audio track's description without disturbing the video buffer", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
+    await flush();
+    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
+    const videoAppends = videoBuffer.appended.length;
+
+    await mse.replaceAudio(PLAN.audioMimeType, new Uint8Array([99]));
+    // The picture must not stop for a language change: only the sound is re-described.
+    expect(videoBuffer.appended.length).toBe(videoAppends);
+    expect(videoBuffer.removed).toEqual([]);
+    expect(audioBuffer.removed).toContainEqual([0, Infinity]);
+    expect(Array.from(audioBuffer.appended[audioBuffer.appended.length - 1])).toEqual([99]);
+  });
+
+  it("starts reading where the viewer is resuming, not at the beginning of the file", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() }, 1200);
+    await flush();
+    // Filling thirty seconds from zero and then discarding all of it is what made resuming a
+    // part-watched episode feel slow.
+    expect(remuxer.seeks).toEqual([1200]);
+    expect(video.currentTime).toBe(1200);
+  });
+
+  it("steps the playhead onto media that begins just after it", async () => {
+    const video = fakeVideo();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
+    await flush();
+    const buffer = FakeSource.instances[0].buffers[0];
+
+    // What a seek onto an index point produces: the media begins one presentation delay later
+    // than the playhead, and the element would otherwise wait there indefinitely.
+    (video as unknown as { currentTime: number }).currentTime = 600;
+    buffer.setBuffered(600.2, 620);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+    expect(video.currentTime).toBe(600.2);
+  });
+
+  it("leaves a real hole in the stream alone rather than skipping over it", async () => {
+    const video = fakeVideo();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
+    await flush();
+    const buffer = FakeSource.instances[0].buffers[0];
+
+    (video as unknown as { currentTime: number }).currentTime = 600;
+    buffer.setBuffered(640, 660);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+    // Jumping forty seconds without being asked would hide a genuine fault behind a silent skip.
+    expect(video.currentTime).toBe(600);
+  });
+
+  it("serves only the last of a burst of seeks", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+
+    // A finger dragging across a scrub bar. Serving each in turn means every one is stale before
+    // its media arrives, and the picture never catches up.
+    void mse.seek(300);
+    void mse.seek(900);
+    await mse.seek(1500);
+    await flush();
+
+    expect(remuxer.seeks).toEqual([1499.8]);
   });
 
   it("detaches cleanly, leaving nothing listening", async () => {

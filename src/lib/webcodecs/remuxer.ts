@@ -128,6 +128,50 @@ export function remuxableAudio(track: MatroskaTrack): boolean {
   return audioCodecString(track) !== null;
 }
 
+/**
+ * Builds the box that tells a decoder how to read this audio track.
+ *
+ * AC-3 and E-AC-3 carry no description in the Matroska header — it has to be read out of a frame.
+ * The probe uses its own reader and throws its samples away rather than handing them to the
+ * segment builder: the byte source caches what it read, so starting over costs nothing, and there
+ * is then no second copy of the opening samples to accidentally emit twice. How far the first
+ * audio frame sits from the start varies a lot between files; some open with a long run of video
+ * before any sound.
+ */
+async function describeAudio(
+  source: ByteSource,
+  file: MatroskaFile,
+  start: number,
+  track: MatroskaTrack
+): Promise<MuxTrackInfo> {
+  let firstFrame: Uint8Array | null = null;
+  if (track.codecId === "A_AC3" || track.codecId === "A_EAC3") {
+    const probe = new SampleReader(source, file, start);
+    for (let i = 0; i < 20_000 && !firstFrame; i++) {
+      const sample = await probe.next();
+      if (!sample) break;
+      if (sample.trackNumber === track.number) firstFrame = sample.data;
+    }
+    if (!firstFrame) throw new Error("Aucune trame audio trouvée pour décrire la piste AC-3.");
+  }
+
+  return {
+    id: 2,
+    kind: "audio",
+    timescale: TIMESCALE,
+    sampleEntry: audioSampleEntryFor({
+      codecId: track.codecId,
+      codecPrivate: track.codecPrivate,
+      channels: track.audio?.channels ?? 2,
+      sampleRate: track.audio?.sampleRate ?? 48000,
+      firstFrame,
+    }),
+    width: 0,
+    height: 0,
+    language: track.language ?? "und",
+  };
+}
+
 export class Remuxer {
   private pendingVideo: MediaSample[] = [];
   private pendingAudio: MediaSample[] = [];
@@ -144,15 +188,16 @@ export class Remuxer {
   private constructor(
     private readonly file: MatroskaFile,
     private readonly videoTrack: MatroskaTrack,
-    private readonly audioTrack: MatroskaTrack | null,
+    private audioTrack: MatroskaTrack | null,
     private readonly videoInfo: MuxTrackInfo,
-    private readonly audioInfo: MuxTrackInfo | null,
+    private audioInfo: MuxTrackInfo | null,
     /**
      * The same reader the audio probe used, not a fresh one. A second reader would restart at
      * the beginning of the file and hand back the samples the probe already consumed, which
      * duplicates the opening keyframe and shifts the entire presentation timeline.
      */
-    private readonly reader: SampleReader
+    private readonly reader: SampleReader,
+    private readonly source: ByteSource
   ) {}
 
   static async open(
@@ -166,24 +211,7 @@ export class Remuxer {
     if (audioTrack && !remuxableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
     const start = file.firstClusterOffset ?? file.segmentDataStart;
-
-    // AC-3 and E-AC-3 carry no description in the Matroska header: it has to be read out of a
-    // frame. The probe uses its own reader and throws its samples away rather than handing them
-    // to the segment builder — the byte source caches what it read, so starting over costs
-    // nothing, and there is then no second copy of the opening samples to accidentally emit
-    // twice. How far the first audio frame sits from the start varies a lot between files: some
-    // open with a long run of video before any sound.
-    let firstAudioFrame: Uint8Array | null = null;
-    if (audioTrack && (audioTrack.codecId === "A_AC3" || audioTrack.codecId === "A_EAC3")) {
-      const probe = new SampleReader(source, file, start);
-      for (let i = 0; i < 20_000 && !firstAudioFrame; i++) {
-        const sample = await probe.next();
-        if (!sample) break;
-        if (sample.trackNumber === audioTrack.number) firstAudioFrame = sample.data;
-      }
-      if (!firstAudioFrame) throw new Error("Aucune trame audio trouvée pour décrire la piste AC-3.");
-    }
-
+    const audioInfo = audioTrack ? await describeAudio(source, file, start, audioTrack) : null;
     const reader = new SampleReader(source, file, start);
 
     const videoInfo: MuxTrackInfo = {
@@ -196,25 +224,7 @@ export class Remuxer {
       language: videoTrack.language ?? "und",
     };
 
-    const audioInfo: MuxTrackInfo | null = audioTrack
-      ? {
-          id: 2,
-          kind: "audio",
-          timescale: TIMESCALE,
-          sampleEntry: audioSampleEntryFor({
-            codecId: audioTrack.codecId,
-            codecPrivate: audioTrack.codecPrivate,
-            channels: audioTrack.audio?.channels ?? 2,
-            sampleRate: audioTrack.audio?.sampleRate ?? 48000,
-            firstFrame: firstAudioFrame,
-          }),
-          width: 0,
-          height: 0,
-          language: audioTrack.language ?? "und",
-        }
-      : null;
-
-    return new Remuxer(file, videoTrack, audioTrack, videoInfo, audioInfo, reader);
+    return new Remuxer(file, videoTrack, audioTrack, videoInfo, audioInfo, reader, source);
   }
 
   plan(): RemuxPlan {
@@ -226,6 +236,31 @@ export class Remuxer {
       audioInit: this.audioInfo ? initSegment(this.audioInfo, duration) : null,
       durationSeconds: duration,
     };
+  }
+
+  /**
+   * Swaps the audio track without disturbing anything else.
+   *
+   * The video description, the reader and the presentation delay all stay as they are: only the
+   * description of the sound and which samples are picked out of the stream change. Rebuilding
+   * the whole object instead would tear down the MediaSource the picture is playing through,
+   * which stops playback rather than changing its language.
+   */
+  async setAudioTrack(trackNumber: number): Promise<void> {
+    const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
+    if (!track) throw new Error(`Piste audio ${trackNumber} introuvable.`);
+    if (!remuxableAudio(track)) throw new Error(`Audio non remultiplexable : ${track.codecId}`);
+
+    const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
+    this.audioInfo = await describeAudio(this.source, this.file, start, track);
+    this.audioTrack = track;
+    this.pendingAudio = [];
+    this.audioFrameUs = null;
+  }
+
+  /** Whether the file carries an index. Without one there is no way to reach a time directly. */
+  get seekable(): boolean {
+    return this.file.cues.length > 0;
   }
 
   /** Which subtitle track to pick out of the stream, or null for none. Takes effect immediately. */

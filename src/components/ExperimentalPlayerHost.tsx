@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
@@ -245,6 +245,7 @@ export function ExperimentalPlayerHost({
       streamUrl: info.streamUrl,
       startSeconds,
       onError: (message) => setRuntimeError(message),
+      onWarning: (message) => setWarning(message),
     })
       .then((probe) => {
         if (cancelled) return;
@@ -367,8 +368,20 @@ export function ExperimentalPlayerHost({
           session, and there is no transcode session here — everything below is what the browser
           is actually doing. */}
       {showInfo && !isMini && (
-        <div className="absolute right-4 top-16 z-20 w-72 rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
-          <p className="mb-2 text-sm font-medium text-white">{t("player.experimental.badge")}</p>
+        <div className="absolute right-4 top-16 z-20 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-white">{t("player.experimental.badge")}</p>
+            {/* The panel sits over the controls, so without this the only way out was to close
+                the player. */}
+            <button
+              type="button"
+              onClick={() => setShowInfo(false)}
+              aria-label={t("common.close")}
+              className="-mr-1 -mt-1 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+            >
+              <X size={16} />
+            </button>
+          </div>
           <dl className="space-y-1.5">
             <InfoRow
               label="Méthode"

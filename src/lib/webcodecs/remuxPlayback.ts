@@ -18,6 +18,7 @@ export interface RemuxPlaybackOptions {
   streamUrl: string;
   startSeconds: number;
   onError: (message: string) => void;
+  onWarning?: (message: string) => void;
 }
 
 export type PathProbe =
@@ -107,11 +108,19 @@ export class RemuxPlayback {
   }
 
   private async attach(plan: Parameters<typeof MseSource.attach>[2], startSeconds: number): Promise<void> {
-    this.mse = await MseSource.attach(this.video, this.remuxer, plan, {
-      onError: this.options.onError,
-      onSubtitles: (cues) => this.collect(cues),
-    });
-    if (startSeconds > 0) await this.mse.seek(startSeconds);
+    this.mse = await MseSource.attach(
+      this.video,
+      this.remuxer,
+      plan,
+      {
+        onError: this.options.onError,
+        onWarning: this.options.onWarning,
+        onSubtitles: (cues) => this.collect(cues),
+      },
+      // Handed in rather than seeked to afterwards, so the first read happens where the viewer
+      // is resuming instead of at the beginning of the file.
+      startSeconds
+    );
   }
 
   private collect(cues: SubtitleCue[]): void {
@@ -152,32 +161,29 @@ export class RemuxPlayback {
   }
 
   /**
-   * Switching audio language rebuilds the stream.
+   * Changes audio language without interrupting the picture.
    *
-   * The audio track is baked into the segments, so there is nothing to swap in place: a new
-   * remuxer is opened on the chosen track and the source buffers are refilled from the current
-   * position. Video is re-read along with it, which is the cost of the audio living in the same
-   * pass over the file.
+   * Only the description of the sound and which samples are picked out of the stream change; the
+   * MediaSource, the video source buffer and the element itself are left alone. Tearing the whole
+   * thing down and rebuilding it — which is what this did first — detaches the element, and on
+   * Safari it does not reliably come back: playback simply stops.
    */
   async selectAudioTrack(trackNumber: number): Promise<void> {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
-    if (!track || this.destroyed || track.number === this.audioTrack?.number) return;
+    if (!track || this.destroyed || track.number === this.audioTrack?.number || !this.mse) return;
 
     const at = this.video.currentTime;
-    const wasPlaying = !this.video.paused;
-    this.mse?.destroy();
-    this.mse = null;
-
+    // Nothing may be reading while the remuxer is re-pointed, or one segment would end up
+    // describing one track and carrying another's samples.
+    await this.mse.quiesce();
+    await this.remuxer.setAudioTrack(trackNumber);
     this.audioTrack = track;
-    this.remuxer = await Remuxer.open(this.source, this.file, this.videoTrack, track, {
-      width: this.videoTrack.video?.width ?? 1920,
-      height: this.videoTrack.video?.height ?? 1080,
-    });
-    this.remuxer.setSubtitleTrack(this.currentSubtitle);
-    this.cues = [];
 
-    await this.attach(this.remuxer.plan(), at);
-    if (wasPlaying) await this.video.play().catch(() => {});
+    const plan = this.remuxer.plan();
+    await this.mse.replaceAudio(plan.audioMimeType, plan.audioInit);
+    // Refills from where the viewer is, so the new language starts at the picture on screen
+    // rather than wherever the reader happened to have got to.
+    await this.mse.seek(at);
   }
 
   seek(seconds: number): Promise<void> {

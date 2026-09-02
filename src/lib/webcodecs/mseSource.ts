@@ -21,6 +21,8 @@ export interface MseCallbacks {
   onError: (message: string) => void;
   /** Subtitle lines found in the stretch of file just read, already timed on the player's clock. */
   onSubtitles?: (cues: SubtitleCue[]) => void;
+  /** Something was refused but playback continues — a seek the file cannot serve, typically. */
+  onWarning?: (message: string) => void;
 }
 
 type MediaSourceCtor = typeof MediaSource | typeof ManagedMediaSource;
@@ -50,18 +52,23 @@ export class MseSource {
   private videoBuffer: SourceBuffer | null = null;
   private audioBuffer: SourceBuffer | null = null;
   private objectUrl: string | null = null;
-  private filling = false;
+  /** The read loop in flight, if any. A seek has to let it finish before moving the reader. */
+  private fillTask: Promise<void> | null = null;
   private destroyed = false;
   private ended = false;
   /** Bumped by every seek, so appends already in flight are recognised as stale and dropped. */
   private generation = 0;
   private pending: Promise<void> = Promise.resolve();
+  /** The most recent seek asked for. Dragging a scrub bar asks for dozens; only the last matters. */
+  private requestedSeek: number | null = null;
   private delaySeconds = 0;
+  /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
+  private lastSeekTarget = -1;
 
   private constructor(
     private readonly video: HTMLVideoElement,
     private readonly remuxer: Remuxer,
-    private readonly plan: RemuxPlan,
+    private plan: RemuxPlan,
     private readonly callbacks: MseCallbacks,
     Source: MediaSourceCtor
   ) {
@@ -72,13 +79,14 @@ export class MseSource {
     video: HTMLVideoElement,
     remuxer: Remuxer,
     plan: RemuxPlan,
-    callbacks: MseCallbacks
+    callbacks: MseCallbacks,
+    startSeconds = 0
   ): Promise<MseSource> {
     const Source = sourceConstructor();
     if (!Source) throw new Error("Ce navigateur ne propose pas MediaSource.");
 
     const instance = new MseSource(video, remuxer, plan, callbacks, Source);
-    await instance.open();
+    await instance.open(startSeconds);
     return instance;
   }
 
@@ -87,7 +95,7 @@ export class MseSource {
     return this.delaySeconds;
   }
 
-  private async open(): Promise<void> {
+  private async open(startSeconds: number): Promise<void> {
     // AirPlay cannot carry a managed stream, and Safari refuses to attach one until this is set.
     this.video.disableRemotePlayback = true;
 
@@ -122,10 +130,24 @@ export class MseSource {
       await this.appendTo(this.audioBuffer, this.plan.audioInit, this.generation);
     }
 
+    // Positioned before the first read, not after it. Filling thirty seconds from the beginning
+    // and then throwing all of it away is what made resuming a part-watched episode feel slow.
+    if (startSeconds > 1 && this.remuxer.seekable) {
+      this.remuxer.seekTo(startSeconds);
+      this.lastSeekTarget = startSeconds;
+      this.video.currentTime = startSeconds;
+    }
+
     // The system says when it wants data; a page that fetches regardless gets throttled.
     this.source.addEventListener("startstreaming", this.request);
     this.video.addEventListener("timeupdate", this.request);
-    this.video.addEventListener("seeking", this.request);
+    this.video.addEventListener("waiting", this.request);
+    // Not merely a hint to fetch more. On this path the transport controls write straight to the
+    // element, as they do for any <video>, so this event is the *only* notice that the viewer
+    // asked to be somewhere else. Without it the element waits at a time nothing will ever be
+    // appended to, while the reader keeps grinding forward from wherever it was — which looks
+    // exactly like the player decoding every frame up to the target before resuming.
+    this.video.addEventListener("seeking", this.onSeeking);
 
     await this.fill();
   }
@@ -134,21 +156,63 @@ export class MseSource {
     void this.fill();
   };
 
+  private readonly onSeeking = () => {
+    if (this.destroyed) return;
+    const target = this.video.currentTime;
+    // This object's own move, already being served — serving it again would clear the buffers
+    // it is in the middle of refilling.
+    if (Math.abs(target - this.lastSeekTarget) < 0.25) return void this.fill();
+    // A step inside what is already buffered needs no work from the file at all.
+    if (this.isBufferedAt(target)) return void this.fill();
+    void this.seek(target);
+  };
+
+  private isBufferedAt(seconds: number): boolean {
+    const ranges = this.videoBuffer?.buffered;
+    if (!ranges) return false;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= seconds && seconds < ranges.end(i)) return true;
+    }
+    return false;
+  }
+
   /** True while the system wants data. Plain MediaSource has no such signal, so it always does. */
   private get streamingWanted(): boolean {
     const managed = this.source as ManagedMediaSource;
     return typeof managed.streaming === "boolean" ? managed.streaming : true;
   }
 
+  /**
+   * How far the media runs on from the playhead without a gap.
+   *
+   * The range containing the playhead, not simply the last one. After a seek backwards there can
+   * be a later range left over, and measuring against that would report a deep buffer while the
+   * playhead sits in front of nothing at all — the player would then quietly stop fetching.
+   */
   private bufferedEnd(): number {
-    const buffer = this.videoBuffer;
-    if (!buffer || buffer.buffered.length === 0) return this.video.currentTime;
-    return buffer.buffered.end(buffer.buffered.length - 1);
+    const ranges = this.videoBuffer?.buffered;
+    const now = this.video.currentTime;
+    if (!ranges) return now;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
+    }
+    return now;
   }
 
-  private async fill(): Promise<void> {
-    if (this.filling || this.destroyed || this.ended) return;
-    this.filling = true;
+  private fill(): Promise<void> {
+    // Held onto rather than merely guarded against. A seek must wait for a read already in
+    // flight: moving the reader out from under it would leave the demuxer mid-cluster. The
+    // earlier version only refused to start a second loop, so a seek's own refill could return
+    // immediately without doing anything and playback would sit there waiting.
+    if (this.fillTask) return this.fillTask;
+    this.fillTask = this.runFill().finally(() => {
+      this.fillTask = null;
+    });
+    return this.fillTask;
+  }
+
+  private async runFill(): Promise<void> {
+    if (this.destroyed || this.ended) return;
     const generation = this.generation;
 
     try {
@@ -176,11 +240,10 @@ export class MseSource {
         if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
         if (segment.video && this.videoBuffer) await this.appendTo(this.videoBuffer, segment.video, generation);
         if (segment.audio && this.audioBuffer) await this.appendTo(this.audioBuffer, segment.audio, generation);
+        this.nudgeIntoBuffer();
       }
     } catch (error) {
       if (!this.destroyed) this.callbacks.onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      this.filling = false;
     }
   }
 
@@ -218,6 +281,33 @@ export class MseSource {
     });
   }
 
+  /**
+   * Moves the playhead onto the media, when it has landed just short of it.
+   *
+   * A seek starts reading at the indexed cluster at or before the requested time, but everything
+   * this path produces is shifted later by the presentation delay. Land on an index point exactly
+   * and the media therefore begins a fifth of a second *after* the playhead — a gap the element
+   * will sit in front of indefinitely, waiting for data that is never coming. The step is far too
+   * small to see, and it is the difference between a seek that works and one that hangs.
+   */
+  private nudgeIntoBuffer(): void {
+    const ranges = this.videoBuffer?.buffered;
+    if (!ranges || ranges.length === 0 || this.destroyed) return;
+
+    const now = this.video.currentTime;
+    let start: number | null = null;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= now && now < ranges.end(i)) return; // already on media
+      if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) start = ranges.start(i);
+    }
+    // Only a gap the size of the delay is closed this way. A larger one is a real hole in the
+    // stream, and stepping over it silently would hide a genuine fault.
+    if (start === null || start - now > 1) return;
+
+    this.lastSeekTarget = start;
+    this.video.currentTime = start;
+  }
+
   private evict(): void {
     const until = this.video.currentTime - KEEP_BEHIND_SECONDS;
     if (until <= 0) return;
@@ -237,16 +327,76 @@ export class MseSource {
    * the presentation delay is taken off here and nowhere else.
    */
   seek(playerSeconds: number): Promise<void> {
-    this.pending = this.pending.then(() => this.performSeek(playerSeconds)).catch((error) => {
-      if (!this.destroyed) this.callbacks.onError(error instanceof Error ? error.message : String(error));
-    });
+    // Coalesced, not queued. Dragging a scrub bar across a film asks to be in dozens of places;
+    // serving each in turn means every one of them is stale before its media arrives, and the
+    // picture never catches up with the finger.
+    this.requestedSeek = playerSeconds;
+    this.pending = this.pending
+      .then(() => {
+        const target = this.requestedSeek;
+        if (target === null || this.destroyed) return;
+        this.requestedSeek = null;
+        return this.performSeek(target);
+      })
+      .catch((error) => {
+        if (!this.destroyed) this.callbacks.onError(error instanceof Error ? error.message : String(error));
+      });
     return this.pending;
+  }
+
+  /**
+   * Stops the read loop and waits for it to come back.
+   *
+   * The caller needs this before moving anything the loop is reading through: a track swap that
+   * lands mid-read would produce one segment describing one track and carrying another's samples.
+   */
+  async quiesce(): Promise<void> {
+    this.generation += 1;
+    await this.fillTask?.catch(() => {});
+  }
+
+  /**
+   * Points the audio buffer at a different track, in place.
+   *
+   * Nothing about the video is touched, so the picture never stops. The initialisation segment
+   * is what a source buffer decodes by; replacing it and refilling is all a language change is.
+   */
+  async replaceAudio(mimeType: string | null, init: Uint8Array | null): Promise<void> {
+    const buffer = this.audioBuffer;
+    if (!buffer || !mimeType || !init || this.destroyed) return;
+    this.generation += 1;
+
+    if (mimeType !== this.plan.audioMimeType) {
+      if (typeof buffer.changeType !== "function") {
+        throw new Error("Ce navigateur ne sait pas changer de codec audio en cours de lecture.");
+      }
+      buffer.changeType(mimeType);
+    }
+    this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
+
+    await this.clear(buffer);
+    await this.appendTo(buffer, init, this.generation);
   }
 
   private async performSeek(playerSeconds: number): Promise<void> {
     if (this.destroyed) return;
+
+    // A file with no index cannot be reached at a time. Restarting from the beginning and
+    // reading forward would look like the player thinking very hard and then, minutes later,
+    // arriving — so it is refused, and playback carries on where it was.
+    if (!this.remuxer.seekable && playerSeconds > 1) {
+      this.callbacks.onWarning?.("Ce fichier n'a pas d'index de recherche : la navigation n'est pas possible.");
+      if (this.lastSeekTarget >= 0) this.video.currentTime = this.lastSeekTarget;
+      return;
+    }
+
     this.generation += 1;
     this.ended = false;
+    this.lastSeekTarget = playerSeconds;
+
+    // The loop breaks on the generation check, but only once whatever read it is awaiting comes
+    // back. Moving the reader before then would corrupt it.
+    await this.fillTask?.catch(() => {});
 
     for (const buffer of [this.videoBuffer, this.audioBuffer]) {
       if (!buffer) continue;
@@ -261,7 +411,9 @@ export class MseSource {
     }
 
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
-    this.video.currentTime = playerSeconds;
+    // Only when the element is not already there: reassigning would fire another seeking event
+    // and start this over.
+    if (Math.abs(this.video.currentTime - playerSeconds) > 0.05) this.video.currentTime = playerSeconds;
     await this.fill();
   }
 
@@ -289,7 +441,8 @@ export class MseSource {
 
     this.source.removeEventListener("startstreaming", this.request);
     this.video.removeEventListener("timeupdate", this.request);
-    this.video.removeEventListener("seeking", this.request);
+    this.video.removeEventListener("waiting", this.request);
+    this.video.removeEventListener("seeking", this.onSeeking);
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();
