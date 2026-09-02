@@ -82,6 +82,17 @@ export class PlaybackEngine {
     this.emit("error", message);
   }
 
+  /** The first track this platform will actually decode, asking rather than assuming. */
+  private async firstDecodable(tracks: MatroskaTrack[]): Promise<MatroskaTrack | null> {
+    for (const track of tracks) {
+      const config = audioConfigFor(track);
+      if (!config) continue;
+      const support = await AudioDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
+      if (support.supported) return track;
+    }
+    return null;
+  }
+
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
   async load(streamUrl: string, options: EngineOptions): Promise<void> {
@@ -93,11 +104,15 @@ export class PlaybackEngine {
     if (!this.videoTrack) throw new Error("Ce fichier n'a pas de piste vidéo lisible.");
 
     const audioCandidates = this.file.tracks.filter((t) => t.type === "audio" && t.isEnabled);
-    this.audioTrack =
-      audioCandidates.find((t) => t.number === options.audioTrackNumber) ??
-      audioCandidates.find((t) => t.isDefault) ??
-      audioCandidates[0] ??
-      null;
+    // An explicit choice always wins. Otherwise the default track is preferred, but only if the
+    // platform can actually decode it: on a library where most default tracks are AC3/E-AC3,
+    // silently picking one this browser cannot decode when a playable track sits right beside it
+    // would be a worse answer than switching language.
+    this.audioTrack = audioCandidates.find((t) => t.number === options.audioTrackNumber) ?? null;
+    if (!this.audioTrack) {
+      const preferred = audioCandidates.find((t) => t.isDefault) ?? audioCandidates[0] ?? null;
+      this.audioTrack = (await this.firstDecodable(preferred ? [preferred, ...audioCandidates] : audioCandidates)) ?? preferred;
+    }
 
     const videoConfig = videoConfigFor(this.videoTrack);
     if (!videoConfig) throw new Error(unsupportedReason(this.videoTrack) ?? "Piste vidéo non prise en charge.");

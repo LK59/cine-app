@@ -24,8 +24,15 @@ export interface AudioConfig extends DecoderConfig {
   numberOfChannels: number;
 }
 
-/** Audio codecs no browser decodes natively — they need the WebAssembly decoder. */
-export const SOFTWARE_AUDIO_CODECS = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_TRUEHD", "A_MLP"]);
+// AC3 and E-AC3 are worth *asking* for rather than assuming: they are not part of the web
+// platform's baseline, but they are decoded natively by the operating system on Apple devices
+// and on Windows, and WebCodecs exposes whatever the platform provides. Configuring them and
+// letting AudioDecoder.isConfigSupported() answer costs nothing and, where it says yes, turns a
+// silent film into a working one. Where it says no, the engine reports exactly that.
+//
+// DTS and TrueHD have no platform decoder anywhere and no codec string in the registry, so they
+// are refused up front instead of being asked about.
+export const SOFTWARE_AUDIO_CODECS = new Set(["A_DTS", "A_TRUEHD", "A_MLP", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]);
 
 function hex(value: number, digits = 2): string {
   return value.toString(16).toUpperCase().padStart(digits, "0");
@@ -134,6 +141,10 @@ export function audioConfigFor(track: MatroskaTrack): AudioConfig | null {
       return { codec: "flac", ...(priv ? { description: priv } : {}), ...base };
     case "A_MPEG/L3":
       return { codec: "mp3", ...base };
+    case "A_AC3":
+      return { codec: "ac-3", ...base };
+    case "A_EAC3":
+      return { codec: "ec-3", ...base };
     case "A_VORBIS":
       return { codec: "vorbis", ...(priv ? { description: priv } : {}), ...base };
     case "A_PCM/INT/LIT":
@@ -155,7 +166,7 @@ export function unsupportedReason(track: MatroskaTrack): string | null {
   if (track.type === "audio") {
     if (audioConfigFor(track)) return null;
     if (SOFTWARE_AUDIO_CODECS.has(track.codecId)) {
-      return `L'audio ${track.codecId.replace("A_", "")} demande le décodeur logiciel.`;
+      return `L'audio ${track.codecId.replace("A_", "")} n'a de décodeur sur aucune plateforme — il faudrait le décodeur logiciel.`;
     }
     return `Codec audio non pris en charge : ${track.codecId}.`;
   }

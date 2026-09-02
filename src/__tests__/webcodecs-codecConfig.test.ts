@@ -98,10 +98,20 @@ describe("track configuration", () => {
     expect(audioConfigFor(track({ ...base, codecId: "A_AAC", codecPrivate: null }))).toBeNull();
   });
 
-  // 78% of this library is AC3/EAC3/DTS — no browser decodes those, so they route to the
-  // WebAssembly decoder rather than counting as an unplayable file.
-  it("routes AC3/EAC3/DTS to the software decoder", () => {
-    for (const codecId of ["A_AC3", "A_EAC3", "A_DTS", "A_TRUEHD"]) {
+  // AC3 and E-AC3 are 71% of this library's default audio tracks. They are not part of the web
+  // platform's baseline, but Apple devices and Windows decode them at the OS level and WebCodecs
+  // exposes whatever the platform has — so they are configured and offered up for
+  // AudioDecoder.isConfigSupported() to accept or refuse, rather than written off in advance.
+  it("offers AC3 and E-AC3 to the platform instead of assuming they are impossible", () => {
+    const base = { type: "audio" as const, audio: { sampleRate: 48000, channels: 6 } };
+    expect(audioConfigFor(track({ ...base, codecId: "A_AC3" }))?.codec).toBe("ac-3");
+    expect(audioConfigFor(track({ ...base, codecId: "A_EAC3" }))?.codec).toBe("ec-3");
+  });
+
+  // DTS and TrueHD have no decoder on any platform and no registered codec string, so asking
+  // would be theatre.
+  it("refuses DTS and TrueHD up front, naming what is missing", () => {
+    for (const codecId of ["A_DTS", "A_TRUEHD", "A_MLP"]) {
       const t = track({ type: "audio", codecId, audio: { sampleRate: 48000, channels: 6 } });
       expect(audioConfigFor(t)).toBeNull();
       expect(unsupportedReason(t)).toContain("décodeur logiciel");
