@@ -6,6 +6,8 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
+import { useExperimentalPlayer } from "@/lib/useExperimentalPlayer";
+import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { detectCodecSupport } from "@/lib/codecSupport";
@@ -111,8 +113,26 @@ function pickMaxBitrate(): number {
 export function PlayerHost() {
   const playback = usePlayback();
   const { session, mode } = playback;
+  const experimental = useExperimentalPlayer();
+  // Set by the experimental player's own "switch to the stable player" button. Deliberately not
+  // persisted: it applies to this session only, so the option in settings stays the source of
+  // truth and the next playback tries the experimental path again — which is what makes it
+  // useful for finding out which files it actually cannot handle.
+  const [fallbackItemIds, setFallbackItemIds] = useState<string[]>([]);
 
   if (!session) return null;
+
+  const useExperimental = experimental.enabled && !fallbackItemIds.includes(session.itemId);
+  if (useExperimental) {
+    return (
+      <ExperimentalPlayerHost
+        session={session}
+        mode={mode === "mini" ? "mini" : "full"}
+        onFallback={() => setFallbackItemIds((ids) => [...ids, session.itemId])}
+      />
+    );
+  }
+
   return <ActivePlayer session={session} mode={mode === "mini" ? "mini" : "full"} />;
 }
 

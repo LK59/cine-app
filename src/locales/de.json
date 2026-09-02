@@ -1173,6 +1173,13 @@
         "AudioBitrateNotSupported": "Audio-Bitrate nicht unterstützt",
         "DirectPlayError": "Fehler bei Direktwiedergabe"
       }
+    },
+    "experimental": {
+      "title": "Der experimentelle Player konnte diese Datei nicht abspielen",
+      "switchToStable": "Zum stabilen Player wechseln",
+      "loading": "Datei wird gelesen…",
+      "badge": "Experimentell",
+      "noAudio": "Wiedergabe ohne Ton: {reason}"
     }
   },
   "cinema": {

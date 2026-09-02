@@ -1173,6 +1173,13 @@
         "AudioBitrateNotSupported": "Tasa de bits de audio no compatible",
         "DirectPlayError": "Error de reproducción directa"
       }
+    },
+    "experimental": {
+      "title": "El reproductor experimental no pudo reproducir este archivo",
+      "switchToStable": "Cambiar al reproductor estable",
+      "loading": "Analizando el archivo…",
+      "badge": "Experimental",
+      "noAudio": "Reproducción sin sonido: {reason}"
     }
   },
   "cinema": {

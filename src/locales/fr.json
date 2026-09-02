@@ -1173,6 +1173,13 @@
         "AudioBitrateNotSupported": "Débit audio non supporté",
         "DirectPlayError": "Erreur de lecture directe"
       }
+    },
+    "experimental": {
+      "title": "Le lecteur expérimental n'a pas pu lire ce fichier",
+      "switchToStable": "Passer au lecteur stable",
+      "loading": "Analyse du fichier…",
+      "badge": "Expérimental",
+      "noAudio": "Lecture sans son : {reason}"
     }
   },
   "cinema": {

@@ -1173,6 +1173,13 @@
         "AudioBitrateNotSupported": "Audio bitrate not supported",
         "DirectPlayError": "Direct play error"
       }
+    },
+    "experimental": {
+      "title": "The experimental player could not play this file",
+      "switchToStable": "Switch to the stable player",
+      "loading": "Reading the file…",
+      "badge": "Experimental",
+      "noAudio": "Playing without sound: {reason}"
     }
   },
   "cinema": {
