@@ -197,11 +197,13 @@ export function MobileNav() {
     <>
       {/* Bottom bar */}
       <nav
-        className="glass-panel fixed inset-x-0 z-40 flex items-stretch border-x-0 border-b-0 md:hidden"
-        style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) * -1)",
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) * 2)",
-        }}
+        className="glass-panel fixed inset-x-0 bottom-0 z-40 flex items-stretch border-x-0 border-b-0 md:hidden"
+        // Anchored to the bottom with the home-indicator clearance as padding INSIDE the panel:
+        // the glass still covers that strip, and the icons still sit above it. The previous
+        // version pulled the panel below the viewport with a negative offset and compensated
+        // with twice the padding, which reaches the same place only if the negative calc is
+        // honoured — and doubled the visible gap whenever it wasn't.
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex w-full items-center justify-around px-1 py-1 [@media(max-height:500px)_and_(orientation:landscape)]:py-0.5">
           {PINNED.map(({ href, label, icon: Icon }) => {

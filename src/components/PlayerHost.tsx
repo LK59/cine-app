@@ -875,7 +875,6 @@ function ActivePlayer({
         top: 0,
         left: 0,
         width: "100vw",
-        height: "100dvh",
         borderRadius: 0,
         zIndex: 80,
         background: "black",
@@ -884,7 +883,14 @@ function ActivePlayer({
       };
 
   return createPortal(
-    <div ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : ""} {...(isMini ? handlers : {})}>
+    <div
+      ref={containerRef}
+      style={style}
+      // app-viewport rather than an inline 100dvh — see its note in globals.css: the right unit
+      // for a full-screen shell differs between a browser tab and an installed PWA.
+      className={isMini ? "animate-fade-in-scale" : "app-viewport"}
+      {...(isMini ? handlers : {})}
+    >
       {needsReauth ? (
         <div className="flex h-full items-center justify-center px-6 text-center">
           <div>

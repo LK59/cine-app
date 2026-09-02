@@ -292,6 +292,28 @@
   }
 }
 
+@layer utilities {
+  /* Full-height app shells (the dashboard frame, Cinema Mode, the player).
+     
+     100dvh is right in a browser: it tracks Safari's toolbar sliding away, which is what keeps
+     the bottom nav sitting above it instead of underneath it.
+     
+     It is the wrong unit in an installed PWA. There is no toolbar to track there, and iOS lays
+     the app out at the smaller "toolbar visible" height first, only settling to the real one
+     after the first gesture — which is exactly the band of dead space under the bottom bar that
+     goes away as soon as you drag. With no browser chrome in standalone, vh is the same number
+     for the whole session and never wobbles, so it is both correct and stable. */
+  .app-viewport {
+    height: 100dvh;
+  }
+
+  @media (display-mode: standalone) {
+    .app-viewport {
+      height: 100vh;
+    }
+  }
+}
+
 @layer base {
   html {
     /* Standalone iOS: without this, an overscroll at the top of the page

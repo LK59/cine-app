@@ -174,8 +174,11 @@ export function CinemaMobileClient() {
     </div>
   );
 
+  // app-viewport instead of inset-0's implicit height: in an installed PWA that resolves to the
+  // real screen, where the viewport iOS lays the app out in at first is short — see the note in
+  // globals.css.
   return createPortal(
-    <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={{ zIndex: 45 }}>
+    <div className="app-viewport fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={{ zIndex: 45 }}>
       {/* Sticky chrome: exit on the left, the two library tabs as Netflix-style filter pills. */}
       {/* The safe-area inset alone puts this flush against the status bar, which iOS then dims
           and blurs over in a standalone PWA — the pills came out half-hidden. An explicit gap on

@@ -92,16 +92,16 @@ export function CinemaSearchOverlay({
   return createPortal(
     <div
       ref={containerRef}
-      className={`fixed inset-x-0 top-0 flex flex-col bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`app-viewport fixed inset-x-0 top-0 flex flex-col bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
       // Above the browse screen (45) and the detail sheets (46/48), below the player (80). It was
       // 44 — i.e. *under* the opaque browse screen: the field was really there and really focused
       // (the keyboard came up) but every pixel of it was painted over, so the search looked dead.
       //
-      // 100dvh rather than inset-0: on iOS the dynamic viewport unit is the one that tracks the
-      // browser chrome, so the results list ends where the screen does instead of running under it.
+      // A sized box rather than inset-0, so the results list ends where the visible screen does
+      // instead of running under the browser chrome — see .app-viewport in globals.css for why
+      // the unit differs between a browser tab and an installed PWA.
       style={{
         zIndex: 50,
-        height: "100dvh",
         paddingTop: "calc(env(safe-area-inset-top, 0px) + 1rem)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
