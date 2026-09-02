@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check } from "lucide-react";
+import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, RotateCcw } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -14,6 +15,7 @@ import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
+import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -54,6 +56,12 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const containerRef = useRef<HTMLDivElement>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
+  // CinemaMovie (the /api/cinema/movies payload) carries no per-user watch progress at all
+  // (Radarr/TMDB fields only, shared across every viewer) — without this, Lecture always started
+  // a partly-watched movie over from 0 unless the movie happened to be opened via the Continue
+  // Watching row instead (a different endpoint, with its own resume point already attached).
+  const { data: progress } = useSWR<CinemaProgressPayload>(`/api/cinema/progress/${item.jellyfinItemId}`, fetcher);
+  const hasResume = !!progress?.resumeTicks && progress.resumeTicks > 0;
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
   // watchlist — useAddToWatchlist only reflects whatever status is handed to it as initialStatus
   // (see its own doc comment), and nothing was passing one here, unlike every other surface that
@@ -219,7 +227,34 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
           {/* Narrower than the text above it, and left-aligned on its own — Netflix's TV menu
               never stretches to the width of the synopsis paragraph above it. */}
           <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
-            <PlayButton itemId={item.jellyfinItemId} title={item.title} variant="row" />
+            <PlayButton
+              itemId={item.jellyfinItemId}
+              title={item.title}
+              resumeTicks={progress?.resumeTicks ?? undefined}
+              runtimeTicks={progress?.runtimeTicks ?? undefined}
+              variant="row"
+              // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
+              // so a movie opened from the Continue Watching row and one opened from its own
+              // poster card show the identical "Reprendre - 1h10 restants" wording.
+              label={formatContinueLabel(t, progress?.resumeTicks, progress?.runtimeTicks)}
+            />
+
+            {/* Only when there's actually something to restart FROM — a movie with no progress
+                already opens fresh via Lecture above, so this would just be a redundant second
+                "Lire" button. resumeAt deliberately omitted (not 0): PlayerHost only seeks when
+                resumeAt is truthy, so leaving it out already starts at the beginning. */}
+            {hasResume && (
+              <button
+                data-detail-menu
+                onClick={() => playback.play({ itemId: item.jellyfinItemId, title: item.title })}
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              >
+                <span className={MENU_BADGE}>
+                  <RotateCcw size={14} />
+                </span>
+                <span className="text-sm font-medium">{t("cinema.restartFromBeginning")}</span>
+              </button>
+            )}
 
             {info?.trailerKey && (
               <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>

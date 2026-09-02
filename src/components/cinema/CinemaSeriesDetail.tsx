@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, ListVideo } from "lucide-react";
+import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, ListVideo, RotateCcw } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { PlayButton } from "@/components/PlayButton";
@@ -146,6 +146,7 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
   const watched = addedStatus === "watched";
   const inList = addedStatus === "to_watch";
   const nextEpisode = episodesData?.nextEpisode;
+  const hasResume = !!nextEpisode?.resumeTicks && nextEpisode.resumeTicks > 0;
 
   return createPortal(
     <div ref={containerRef} className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={{ zIndex: 46 }}>
@@ -224,6 +225,23 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
                   nextEpisode.episodeNumber
                 )}
               />
+            )}
+
+            {/* Only when the NEXT episode itself has progress — a fresh, never-started episode
+                already opens at 0 via Lire above, same reasoning as CinemaMovieDetail's own
+                restart row. resumeAt deliberately omitted, not 0 — PlayerHost only seeks when
+                it's truthy, so leaving it out already starts at the beginning. */}
+            {nextEpisode && hasResume && (
+              <button
+                data-detail-menu
+                onClick={() => playback.play({ itemId: nextEpisode.itemId, title: nextEpisode.title, getNextEpisode })}
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              >
+                <span className={MENU_BADGE}>
+                  <RotateCcw size={14} />
+                </span>
+                <span className="text-sm font-medium">{t("cinema.restartFromBeginning")}</span>
+              </button>
             )}
 
             {info?.trailerKey && (

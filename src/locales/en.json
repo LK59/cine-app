@@ -1183,6 +1183,7 @@
     "season": "Season {n}",
     "specials": "Specials",
     "timeRemaining": "{time} left",
-    "episodeShort": "Ep{episode} S{season}"
+    "episodeShort": "Ep{episode} S{season}",
+    "restartFromBeginning": "Start from the beginning"
   }
 }

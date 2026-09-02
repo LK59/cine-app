@@ -302,9 +302,13 @@ export const jellyfin = {
   // items still returns its UserData correctly. Used as a fallback when an
   // item can't be found in the bulk per-user list, so watched/resume state
   // doesn't just disappear for whichever titles are affected.
+  // RunTimeTicks added on top of the original Fields list — Cinema Mode's movie detail sheet
+  // needs it alongside UserData.PlaybackPositionTicks to compute a remaining-time resume label
+  // (see cinemaContinueLabel.ts) and this is already the per-item lookup it needs anyway.
+  // Additive field, no effect on existing callers that only read .UserData.
   getItemUserData: (userId: string, itemId: string) =>
-    fetchJson<{ UserData?: JellyfinItem["UserData"] }>(
-      `${url}/Users/${userId}/Items/${itemId}?Fields=UserData`,
+    fetchJson<{ UserData?: JellyfinItem["UserData"]; RunTimeTicks?: number }>(
+      `${url}/Users/${userId}/Items/${itemId}?Fields=UserData,RunTimeTicks`,
       { headers }
     ),
 
