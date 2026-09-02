@@ -85,9 +85,9 @@ export function CinemaHero({
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+        <CinemaMatchBadge rating={item.imdbRating} />
         <span>{item.year}</span>
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-        <CinemaMatchBadge rating={item.imdbRating} />
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
       </div>
 

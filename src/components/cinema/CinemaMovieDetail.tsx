@@ -9,7 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
-import { CinemaSimilarRow } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaSimilarRow, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -133,6 +133,10 @@ export function CinemaMovieDetail({
         requestClose();
         return;
       }
+      // The similar-titles row below the menu takes the arrow keys when focus is in it (and
+      // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
+      if (similarRowKeyNav(e, containerRef.current)) return;
+
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       const rows = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>("[data-detail-menu]") ?? []);
       if (rows.length === 0) return;
@@ -217,10 +221,15 @@ export function CinemaMovieDetail({
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
 
-      <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
+      {/* flex-col + mt-auto on the child, NOT items-end: a flex container aligned to its end edge
+          clips whatever overflows past its START edge and makes it unreachable by scrolling —
+          which is exactly what adding the similar-titles row did here, pushing the logo and title
+          up off the top of the screen with no way to scroll back to them. An auto margin does the
+          same bottom-alignment while a taller-than-the-viewport column simply scrolls normally. */}
+      <div className="scrollbar-thin relative flex h-full flex-col overflow-y-auto scroll-smooth py-16">
         <div
           key={item.radarrId}
-          className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          className={`mt-auto flex w-full max-w-2xl shrink-0 flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -235,9 +244,9 @@ export function CinemaMovieDetail({
           )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+            <CinemaMatchBadge rating={item.imdbRating} />
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-            <CinemaMatchBadge rating={item.imdbRating} />
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 

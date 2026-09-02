@@ -201,9 +201,9 @@ export function CinemaMobileDetail({
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
+          <CinemaMatchBadge rating={item.imdbRating} />
           <span>{item.year}</span>
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-          <CinemaMatchBadge rating={item.imdbRating} />
           {isSeries && seasons.length > 0 && (
             <span>{t("cinema.seasonCount", { n: seasons.length })}</span>
           )}

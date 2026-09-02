@@ -60,6 +60,7 @@ export function CinemaSimilarRow({
           <button
             key={idOf(item)}
             type="button"
+            data-detail-similar
             onClick={() => onSelect(item)}
             className="relative w-20 shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-transform hover:scale-105 focus-visible:scale-105 sm:w-24"
           >
@@ -70,4 +71,60 @@ export function CinemaSimilarRow({
       </div>
     </section>
   );
+}
+
+// Arrow-key navigation for the row, called from each detail sheet's own keydown handler before
+// its vertical menu logic. Returns true when it handled the key, so the caller stops there.
+//
+// The sheets navigate their menu with Up/Down over [data-detail-menu]; this row is horizontal and
+// sits below that menu, so it joins the same path rather than competing with it: Down off the
+// last menu item drops into the row, Up leaves it, Left/Right walk it. Everything is scrolled
+// into view as focus moves — the row lives at the bottom of a scrolling column.
+export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null): boolean {
+  if (!container) return false;
+  const cards = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-detail-similar]"));
+  if (cards.length === 0) return false;
+
+  const menu = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-detail-menu]"));
+  const active = document.activeElement as HTMLElement | null;
+  const index = cards.indexOf(active as HTMLButtonElement);
+
+  function focusCard(el: HTMLElement) {
+    el.focus();
+    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }
+
+  if (index === -1) {
+    // Only the last menu row hands off downwards — from anywhere else Down still means "next
+    // menu item", which the caller handles.
+    if (e.key === "ArrowDown" && menu.length > 0 && active === menu[menu.length - 1]) {
+      e.preventDefault();
+      focusCard(cards[0]);
+      return true;
+    }
+    return false;
+  }
+
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    focusCard(menu[menu.length - 1] ?? cards[0]);
+    return true;
+  }
+  if (e.key === "ArrowRight") {
+    e.preventDefault();
+    focusCard(cards[Math.min(index + 1, cards.length - 1)]);
+    return true;
+  }
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    focusCard(cards[Math.max(index - 1, 0)]);
+    return true;
+  }
+  // Down inside the row has nowhere to go — swallow it so it can't fall through to the menu
+  // handler and jump focus back up.
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    return true;
+  }
+  return false;
 }
