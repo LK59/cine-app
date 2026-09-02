@@ -3,8 +3,9 @@
 import useSWR from "swr";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Play } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { formatDurationShort } from "@/lib/format";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -19,6 +20,7 @@ import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
+import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
 
 const TV_NAV_RING =
@@ -39,41 +41,113 @@ const BACKDROP_MASK =
 // grids stay visually aligned.
 const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 
-// Continue-watching items come from Jellyfin's resume list (via the existing dashboard payload —
-// same data DashboardClient's own resume row already uses), not the /api/cinema/movies library
-// data — they don't carry backdrop/genres/overview, so they don't participate in the hero-focus
-// mechanic, just poster + progress + direct play. Still wired into the same data-tv-* grid so
-// keyboard/arrow navigation covers it seamlessly with the genre rows below.
-function ContinueCard({ item, index }: { item: ResumeItem; index: number }) {
+// Continue-watching cards are noticeably wider than genre-row posters (landscape source image,
+// and there's a label chip to fit beneath) — a distinct width from CARD_WIDTH, not a smaller
+// version of the same one.
+const CONTINUE_CARD_WIDTH = "w-32 sm:w-40 md:w-48 lg:w-56";
+
+// Netflix-style resume label: "Lire EpX SX" (a series with an unwatched next episode ready, no
+// progress yet), "Reprendre EpX SX - 30min restants" (an episode partway through), or
+// "Reprendre - 1h10 restants" (a movie partway through) — mirrors PlayButton's own Lire/Reprendre
+// wording (see its own doc comment) but shows REMAINING time, not elapsed: "how much is left" is
+// the more useful number for deciding whether to hit play right now, and it's what reads
+// naturally next to a progress bar that's already showing "how much is done".
+function continueLabel(
+  t: ReturnType<typeof useT>,
+  resumeTicks: number | null,
+  runtimeTicks: number | null,
+  seasonNumber?: number | null,
+  episodeNumber?: number | null
+): string {
+  const hasResume = !!resumeTicks && resumeTicks > 0;
+  const remaining = hasResume && runtimeTicks ? Math.max(runtimeTicks - resumeTicks!, 0) : null;
+  const timeLabel = remaining !== null ? t("cinema.timeRemaining", { time: formatDurationShort(remaining) }) : null;
+  const episodeCode =
+    seasonNumber != null && episodeNumber != null
+      ? t("cinema.episodeShort", { episode: episodeNumber, season: seasonNumber })
+      : null;
+
+  if (episodeCode) {
+    return hasResume && timeLabel ? `${t("common.resume")} ${episodeCode} - ${timeLabel}` : `${t("common.play")} ${episodeCode}`;
+  }
+  return hasResume && timeLabel ? `${t("common.resume")} - ${timeLabel}` : t("common.play");
+}
+
+// Continue-watching items come from Jellyfin's own resume/next-up feeds (via the dashboard resume
+// payload for movies, and /api/cinema/next-up for series — see that route's own doc comment), not
+// the /api/cinema/movies|series library data — they don't carry backdrop/genres/overview, so they
+// don't participate in the hero-focus mechanic, just thumbnail + progress + direct play. Still
+// wired into the same data-tv-* grid so keyboard/arrow navigation covers it seamlessly with the
+// genre rows below. Shared between the Films and Séries tabs (each with its own data source and
+// row key) — the card itself doesn't care which.
+function ContinueCard({
+  itemId,
+  title,
+  thumbnailUrl,
+  progress,
+  resumeTicks,
+  runtimeTicks,
+  seasonNumber,
+  episodeNumber,
+  rowKey,
+  index,
+}: {
+  itemId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  progress: number;
+  resumeTicks: number | null;
+  runtimeTicks: number | null;
+  seasonNumber?: number | null;
+  episodeNumber?: number | null;
+  rowKey: string;
+  index: number;
+}) {
+  const t = useT();
   const playback = usePlayback();
   return (
     <button
       type="button"
       data-tv-card
-      data-tv-row="continue"
+      data-tv-row={rowKey}
       data-tv-col={index}
       onClick={() =>
         playback.play({
-          itemId: item.id,
-          title: item.name,
-          resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined,
+          itemId,
+          title,
+          resumeAt: resumeTicks && resumeTicks > 0 ? resumeTicks / 10_000_000 : undefined,
         })
       }
-      className={`relative ${CARD_WIDTH} shrink-0 overflow-hidden rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
+      className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 overflow-visible rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
-      <PosterImage
-        src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-        alt={item.name}
-        aspectRatio="aspect-video"
-        // Auth-gated route — Next's image optimizer proxies through an internal request that
-        // doesn't forward cookies, so it 400s there. Same reasoning as DashboardClient's
-        // identical resume-card image (see PosterImage's own doc comment).
-        unoptimized
-      />
-      <div className="absolute inset-x-0 bottom-0 h-1.5 bg-white/25">
-        <div className="h-full bg-accent-500" style={{ width: `${item.progress}%` }} />
+      <div className="relative overflow-hidden rounded-lg">
+        <PosterImage
+          src={thumbnailUrl}
+          alt={title}
+          aspectRatio="aspect-video"
+          // Auth-gated route — Next's image optimizer proxies through an internal request that
+          // doesn't forward cookies, so it 400s there. Same reasoning as DashboardClient's
+          // identical resume-card image (see PosterImage's own doc comment).
+          unoptimized
+        />
+        {/* The "round button" — a plain, always-partly-visible play affordance centered on the
+            thumbnail (not hover-only: a TV remote user arrowing onto this card never hovers). */}
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white opacity-90 backdrop-blur-xs transition-transform duration-200 group-hover:scale-110 group-focus-visible:scale-110">
+            <Play size={16} fill="currentColor" />
+          </span>
+        </span>
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
+          <div className="h-full bg-accent-500" style={{ width: `${progress}%` }} />
+        </div>
       </div>
-      <p className="mt-1 truncate text-xs text-white/80">{item.name}</p>
+      <p className="mt-1.5 truncate text-xs font-medium text-white/90">{title}</p>
+      {/* text-xs, not an arbitrary text-[11px] — arbitrary-value Tailwind classes don't make it
+          into this project's production CSS bundle (see CinemaClient's z-index note for the same
+          pitfall hit before). */}
+      <span className="mt-1 block w-fit max-w-full truncate rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/70">
+        {continueLabel(t, resumeTicks, runtimeTicks, seasonNumber, episodeNumber)}
+      </span>
     </button>
   );
 }
@@ -105,6 +179,9 @@ export function CinemaClient() {
   );
   const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
   const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
+  // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
+  const continueSeries = nextUp?.items ?? [];
 
   // Warms the browser's own image cache for every distinct backdrop AND logo in the library,
   // same technique DashboardHero already uses for its (much smaller) rotation set — without it,
@@ -381,7 +458,17 @@ export function CinemaClient() {
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
                   <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
                     {resumeMovies.map((item, i) => (
-                      <ContinueCard key={item.id} item={item} index={i} />
+                      <ContinueCard
+                        key={item.id}
+                        itemId={item.id}
+                        title={item.name}
+                        thumbnailUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
+                        progress={item.progress}
+                        resumeTicks={item.positionTicks}
+                        runtimeTicks={item.runtimeTicks}
+                        rowKey="continue-movies"
+                        index={i}
+                      />
                     ))}
                   </div>
                 </div>
@@ -406,6 +493,31 @@ export function CinemaClient() {
                   exists yet (fine, since movies always load first); series loads lazily after
                   the toggle is already up, so its own states have to render inside the same
                   chrome instead of hiding the toggle that got you here. */}
+              {continueSeries.length > 0 && (
+                <div className="mb-6 snap-start">
+                  <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
+                    {continueSeries.map((item, i) => (
+                      <ContinueCard
+                        key={item.jellyfinItemId}
+                        itemId={item.jellyfinItemId}
+                        title={item.title}
+                        thumbnailUrl={item.thumbnailUrl}
+                        progress={
+                          item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0
+                        }
+                        resumeTicks={item.resumeTicks}
+                        runtimeTicks={item.runtimeTicks}
+                        seasonNumber={item.seasonNumber}
+                        episodeNumber={item.episodeNumber}
+                        rowKey="continue-series"
+                        index={i}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {seriesLoading && (
                 <div className="flex justify-center pt-12">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />

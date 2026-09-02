@@ -282,6 +282,19 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items[0] ?? null),
 
+  // Same endpoint as getNextUp, but with no SeriesId — Jellyfin's own home-screen "Next Up" feed,
+  // aggregated across the WHOLE library: one entry per series the user has any watch history on,
+  // each already resolved to either that series' in-progress episode (if one is partway through)
+  // or the next unwatched one after the last played episode. This is what lets Cinema Mode's own
+  // Continue Watching row show a series that hasn't been started yet ("Lire EpX SX") and not just
+  // ones with an actual partial episode ("Reprendre EpX SX") — getResumeItems only ever returns
+  // the latter, since by definition nothing has been played on the former.
+  getNextUpGlobal: (userId: string, limit = 10) =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${url}/Shows/NextUp?UserId=${userId}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId`,
+      { headers }
+    ).then((res) => res.Items),
+
   // Jellyfin 10.11's per-user recursive `/Users/{id}/Items` query silently
   // drops a large, seemingly arbitrary chunk of the library (confirmed:
   // ~27% of movies on this server) with no correlating permission/rating

@@ -1181,6 +1181,8 @@
     "seriesTab": "Series",
     "moreEpisodes": "Más episodios",
     "season": "Temporada {n}",
-    "specials": "Especiales"
+    "specials": "Especiales",
+    "timeRemaining": "quedan {time}",
+    "episodeShort": "Ep{episode} T{season}"
   }
 }

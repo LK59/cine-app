@@ -1181,6 +1181,8 @@
     "seriesTab": "Series",
     "moreEpisodes": "More episodes",
     "season": "Season {n}",
-    "specials": "Specials"
+    "specials": "Specials",
+    "timeRemaining": "{time} left",
+    "episodeShort": "Ep{episode} S{season}"
   }
 }

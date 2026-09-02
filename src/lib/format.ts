@@ -23,6 +23,16 @@ export function formatResumeTicks(ticks: number): string {
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}min${ss}` : `${m}min${ss}`;
 }
 
+/** Formats Jellyfin ticks (100ns units) into a short, minute-precision duration (e.g. "1h10",
+ *  "30min") — no seconds, unlike formatResumeTicks: this is for a REMAINING-time label (Cinema
+ *  Mode's Continue Watching cards), where second-level precision would be noise. */
+export function formatDurationShort(ticks: number): string {
+  const totalMinutes = Math.round(ticks / 10_000_000 / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+}
+
 /** Formats a qBittorrent ETA in seconds into a short label — qBittorrent uses 8640000 (100 days)
  *  as a sentinel for "no estimate" (seeding, stalled, paused), which reads as "—" instead of days. */
 export function fmtEta(seconds: number): string {

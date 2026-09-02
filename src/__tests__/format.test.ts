@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { fmtSize, fmtEta, formatResumeTicks, relativeTime, relativeTimeAbs, relDate, selectBio } from "@/lib/format";
+import { fmtSize, fmtEta, formatResumeTicks, formatDurationShort, relativeTime, relativeTimeAbs, relDate, selectBio } from "@/lib/format";
 import { createT } from "@/lib/i18n";
 import fr from "@/locales/fr.json";
 
@@ -51,6 +51,22 @@ describe("formatResumeTicks", () => {
 
   it("adds an hour segment past 60 minutes", () => {
     expect(formatResumeTicks(3661 * 10_000_000)).toBe("1h01min01");
+  });
+});
+
+describe("formatDurationShort", () => {
+  it("formats minutes-only durations without an hour segment", () => {
+    expect(formatDurationShort(30 * 60 * 10_000_000)).toBe("30min");
+    expect(formatDurationShort(0)).toBe("0min");
+  });
+
+  it("adds an hour segment past 60 minutes, zero-padding the minutes", () => {
+    expect(formatDurationShort((60 + 10) * 60 * 10_000_000)).toBe("1h10");
+    expect(formatDurationShort(2 * 3600 * 10_000_000)).toBe("2h00");
+  });
+
+  it("rounds to the nearest minute rather than truncating", () => {
+    expect(formatDurationShort(89 * 10_000_000)).toBe("1min"); // 1min29s rounds up
   });
 });
 
