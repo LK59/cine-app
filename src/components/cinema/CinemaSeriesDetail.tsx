@@ -13,6 +13,7 @@ import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -67,6 +68,9 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
   );
   const [logoErrored, setLogoErrored] = useState(false);
 
+  // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
+  const { closing, requestClose } = useDelayedClose(onClose, 220);
+
   const playerEnabled = usePlayerEnabled();
   // Re-runs once playerEnabled AND episodesData (Play only renders once nextEpisode is known —
   // see the doc comment above) resolve, same race this fixed on the movie side: landing before
@@ -78,8 +82,8 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
   const playback = usePlayback();
   const initialPlaybackMode = useRef(playback.mode);
   useEffect(() => {
-    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) onClose();
-  }, [playback.mode, onClose]);
+    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) requestClose();
+  }, [playback.mode, requestClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -88,7 +92,7 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
       if (showTrailer || showEpisodes) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
-        onClose();
+        requestClose();
         return;
       }
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
@@ -101,7 +105,7 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, showTrailer, showEpisodes]);
+  }, [requestClose, showTrailer, showEpisodes]);
 
   function toggleWatched() {
     if (watched) removeFromWatchlist({ tmdbId: item.tmdbId ?? 0, mediaType: "series" });
@@ -149,7 +153,11 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
   const hasResume = !!nextEpisode?.resumeTicks && nextEpisode.resumeTicks > 0;
 
   return createPortal(
-    <div ref={containerRef} className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={{ zIndex: 46 }}>
+    <div
+      ref={containerRef}
+      className={`fixed inset-0 overflow-hidden bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      style={{ zIndex: 46 }}
+    >
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -166,7 +174,7 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
       <div className="absolute inset-0 bg-linear-to-r from-slate-950/70 via-slate-950/15 to-transparent" />
 
       <button
-        onClick={onClose}
+        onClick={requestClose}
         className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
       >
@@ -174,7 +182,10 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
       </button>
 
       <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
-        <div key={item.sonarrId} className="flex w-full max-w-2xl animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
+        <div
+          key={item.sonarrId}
+          className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+        >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

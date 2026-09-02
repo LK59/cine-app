@@ -23,6 +23,23 @@
      Tailwind's generated animate-* utility can't read a JS constant. */
   --animate-hero-fill: hero-fill 8s linear forwards;
 
+  /* Exit counterparts of fade-in/fade-in-up/fade-in-scale — entrances above all use ease-out
+     (decelerate into place); these use ease-in (accelerate away) instead, the standard easing
+     pairing for enter/exit. Paired with lib/useDelayedClose.ts, which keeps a closing overlay
+     mounted just long enough for one of these to actually play before the real unmount happens —
+     see that hook's own doc comment for why a plain conditional unmount can't do this on its own.
+     Durations are shorter than their entrance counterparts on purpose: an exit only has to read as
+     "gone", not be admired, and Cinema Mode's own back-navigation needs to stay snappy. */
+  --animate-fade-out: fade-out 0.2s ease-in both;
+  --animate-fade-out-down: fade-out-down 0.2s ease-in both;
+  --animate-fade-out-scale: fade-out-scale 0.18s ease-in both;
+  /* "Going deeper" (series detail → its episode browser) slides in from the right and, on the
+     way back out, slides back out the same way it came — a spatial forward/back cue, not just a
+     crossfade, for the one place in Cinema Mode where one full screen genuinely replaces another
+     rather than layering on top of it. */
+  --animate-slide-in-right: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-out-right: slide-out-right 0.2s ease-in both;
+
   @keyframes fade-in {
     0% {
       opacity: 0;
@@ -49,6 +66,54 @@
     100% {
       opacity: 1;
       transform: scale(1);
+    }
+  }
+  @keyframes fade-out {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out-down {
+    0% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
+  @keyframes fade-out-scale {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+  @keyframes slide-in-right {
+    0% {
+      opacity: 0;
+      transform: translateX(32px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes slide-out-right {
+    0% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(32px);
     }
   }
   @keyframes shimmer {

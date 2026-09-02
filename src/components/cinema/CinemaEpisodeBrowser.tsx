@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
+import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 
@@ -27,7 +28,24 @@ export function CinemaEpisodeBrowser({
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.seasonNumber ?? 0);
-  const episodes = seasons.find((s) => s.seasonNumber === selectedSeason)?.episodes ?? [];
+
+  // Same debounce-before-crossfade pattern CinemaClient's own hero backdrop uses (see its doc
+  // comment on "ghosting") — selectedSeason changes on every arrow-key press while scrubbing
+  // through the season list (onFocus fires per row passed through), and the episode pane below
+  // is keyed by season number to crossfade on a change; without debouncing, holding Up/Down would
+  // restart that fade on every intermediate season instead of settling once on the one landed on.
+  const [displayedSeason, setDisplayedSeason] = useState(selectedSeason);
+  useEffect(() => {
+    const timer = setTimeout(() => setDisplayedSeason(selectedSeason), 150);
+    return () => clearTimeout(timer);
+  }, [selectedSeason]);
+  const episodes = seasons.find((s) => s.seasonNumber === displayedSeason)?.episodes ?? [];
+
+  // "Going deeper" from the detail sheet — see the hook's own doc comment and globals.css's note
+  // on slide-in-right/slide-out-right for why this gets a slide instead of every other Cinema
+  // Mode overlay's plain fade: this is the one place a full screen genuinely replaces another
+  // rather than layering on top of it.
+  const { closing, requestClose } = useDelayedClose(onClose, 220);
 
   useEffect(() => {
     containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-season="true"]')?.focus();
@@ -40,7 +58,7 @@ export function CinemaEpisodeBrowser({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
-        onClose();
+        requestClose();
         return;
       }
       const active = document.activeElement as HTMLElement | null;
@@ -69,21 +87,27 @@ export function CinemaEpisodeBrowser({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, selectedSeason]);
+  }, [requestClose, selectedSeason]);
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div ref={containerRef} className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={{ zIndex: 48 }}>
+    <div
+      ref={containerRef}
+      className={`fixed inset-0 overflow-hidden bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      style={{ zIndex: 48 }}
+    >
       <button
-        onClick={onClose}
+        onClick={requestClose}
         className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
       >
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
 
-      <div className="flex h-full pt-20">
+      {/* No position:fixed descendants here (the back button above is a sibling) — safe to
+          transform, unlike the outer root (see globals.css's own note on this pitfall). */}
+      <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <div className="scrollbar-thin w-56 shrink-0 overflow-y-auto border-r border-white/10 px-3 pb-8 sm:w-64">
           <p className="mb-3 truncate px-2 text-sm font-medium text-white/60">{title}</p>
           {seasons.map((season) => {
@@ -106,7 +130,10 @@ export function CinemaEpisodeBrowser({
         </div>
 
         <div className="scrollbar-thin flex-1 overflow-y-auto px-6 pb-16 pt-1 sm:px-10">
-          <div className="mx-auto flex max-w-3xl flex-col gap-2">
+          {/* Keyed by the debounced season, not the live one — remounting (and re-fading) this
+              on every intermediate season while scrubbing would be exactly the "ghosting" bug
+              CinemaClient's own hero backdrop hit; see displayedSeason's own doc comment above. */}
+          <div key={displayedSeason} className="mx-auto flex max-w-3xl animate-fade-in flex-col gap-2">
             {episodes.map((ep) => (
               <button
                 key={ep.jellyfinItemId}

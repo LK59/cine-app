@@ -404,7 +404,12 @@ export function CinemaClient() {
             (a 13" laptop, say) where 50% + one full row wouldn't both fit, ALL the give comes
             from this pane shrinking, never from the row's guaranteed minimum. No resize
             listener needed — this is exactly what flex-shrink + a sibling's min-height is for. */}
-        <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
+        {/* Keyed by mediaType, not by the focused item — CinemaHero/CinemaSeriesHero already
+            update their own text instantly as focus moves across cards WITHIN a tab (see
+            CinemaHero's own doc comment on why that's deliberate, not debounced); this key only
+            changes on an actual Films/Séries switch, so the crossfade plays once per tab flip,
+            not on every arrow-key scrub. */}
+        <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "50%" }}>
           {mediaType === "movies"
             ? heroItem && <CinemaHero item={heroItem} />
             : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}
@@ -424,6 +429,14 @@ export function CinemaClient() {
             discrete wheel input, not something further JS here fixed better than the browser
             itself. Reliability was the explicit priority over that. */}
         <div className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6">
+          {/* Keyed by mediaType so switching Films/Séries crossfades the whole rows pane in
+              instead of hard-cutting between them — only the ENTERING side needs an animation
+              here (the old content just vanishes underneath it, same instant swap as before,
+              but it reads fine masked by the new content fading in over it at this duration).
+              Opacity-only, no transform — this wraps every row below, so a transform here would
+              hit the exact same containing-block pitfall as everywhere else in Cinema Mode if any
+              of them ever grew a position:fixed descendant (see globals.css's own note). */}
+          <div key={mediaType} className="animate-fade-in">
           {mediaType === "movies" ? (
             <>
               {resumeMovies.length > 0 && (
@@ -515,6 +528,7 @@ export function CinemaClient() {
               ))}
             </>
           )}
+          </div>
         </div>
       </div>
 

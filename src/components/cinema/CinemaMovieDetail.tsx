@@ -13,6 +13,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
@@ -74,6 +75,12 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   // changes), so no reset-on-change needed the way CinemaHero requires.
   const [logoErrored, setLogoErrored] = useState(false);
 
+  // Keeps this overlay mounted for one exit animation's worth of time after a close is
+  // requested, instead of vanishing the instant onClose fires — see the hook's own doc comment.
+  // Every close trigger below (Escape/Backspace, the back button, the auto-close-on-play effect)
+  // calls requestClose() instead of onClose directly now.
+  const { closing, requestClose } = useDelayedClose(onClose, 220);
+
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable. PlayButton itself only renders once
   // usePlayerEnabled() resolves (it starts false while /api/config/public is in flight, same
@@ -99,8 +106,8 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const playback = usePlayback();
   const initialPlaybackMode = useRef(playback.mode);
   useEffect(() => {
-    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) onClose();
-  }, [playback.mode, onClose]);
+    if (playback.mode === "full" && playback.mode !== initialPlaybackMode.current) requestClose();
+  }, [playback.mode, requestClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -111,7 +118,7 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
       if (showTrailer) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
-        onClose();
+        requestClose();
         return;
       }
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
@@ -124,7 +131,7 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, showTrailer]);
+  }, [requestClose, showTrailer]);
 
   // Independent on/off toggles, not "reassign to the other status" — un-toggling either one
   // goes back to no status at all (removeFromWatchlist), not to whatever the other button
@@ -160,7 +167,11 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
     // into the production CSS bundle (see CinemaClient's own note). Just above CinemaClient's own
     // z-45 browse layer, both still well below PlayerHost's z-80 — pressing Lecture needs the
     // player to end up on TOP of this, not hidden behind it (see CinemaClient's z-index note).
-    <div ref={containerRef} className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={{ zIndex: 46 }}>
+    <div
+      ref={containerRef}
+      className={`fixed inset-0 overflow-hidden bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      style={{ zIndex: 46 }}
+    >
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -187,7 +198,7 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
           would otherwise sit on top of this button in DOM/paint order and silently eat every
           mouse click aimed at it, leaving only the Escape/Backspace keyboard path working. */}
       <button
-        onClick={onClose}
+        onClick={requestClose}
         className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
       >
@@ -195,7 +206,10 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
       </button>
 
       <div className="scrollbar-thin relative flex h-full items-end overflow-y-auto scroll-smooth py-16">
-        <div key={item.radarrId} className="flex w-full max-w-2xl animate-fade-in-up flex-col gap-4 px-8 sm:px-16">
+        <div
+          key={item.radarrId}
+          className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+        >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
