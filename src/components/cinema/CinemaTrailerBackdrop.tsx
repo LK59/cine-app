@@ -3,26 +3,38 @@
 import { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import { loadYoutubeIframeApi, type YTPlayer } from "@/lib/loadYoutubeIframeApi";
-import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useT } from "@/components/TranslationProvider";
 
 const DWELL_MS = 3000;
-// A small settle window AFTER the real "now playing" event fires, not instead of it — YouTube's
-// own startup title/channel card can still be fading out for a beat even once playback has
-// genuinely started. Short here on purpose: unlike the previous blind fixed-delay approach (which
-// had to guess long enough to *probably* cover the whole startup sequence, control flash and all),
-// this only has to cover the tail end of an already-confirmed "it's playing" state.
-const SETTLE_MS = 600;
+// A settle window AFTER the real "now playing" event fires, not instead of it — YouTube's own
+// startup title/channel card can still be visible for a while even once playback has genuinely
+// started; onStateChange alone wasn't enough of a signal by itself. Combined with the top-crop
+// below (belt and suspenders): even if a sliver of that overlay is still fading out somewhere in
+// the frame, it's now cropped away rather than depending purely on timing.
+const SETTLE_MS = 1500;
+// Crops this many pixels off the video's own top edge — YouTube's title/channel overlay is a
+// roughly fixed-height band regardless of how large the video itself is scaled, so a fixed pixel
+// offset tracks it more reliably than a percentage would.
+const TOP_CROP_PX = 64;
+
+// Radial vignette — transparent through the middle-right (where the video should read clearly),
+// darkening toward the true edges into the app's own slate-950, so it dissolves into the
+// surrounding background rather than being cut off by a hard rectangle. Off-center toward the
+// right/upper area on purpose: the title/synopsis text sits bottom-left, so that's where this
+// should already be darkest.
+const VIGNETTE = "radial-gradient(ellipse 80% 75% at 64% 36%, transparent 35%, transparent 52%, rgba(2,6,23,0.6) 78%, rgb(2,6,23) 100%)";
 
 // Netflix's own browse-hero behavior: once focus has rested on a title for DWELL_MS, its trailer
-// takes over the persistent backdrop banner itself — same role, same mask, same full-screen
-// treatment CinemaClient's still-image backdrop already uses — rather than a separate box
-// floating on top of the UI. Rendered as a sibling layered directly over that still image (later
-// in DOM order, no z-index needed — see CinemaClient's own note on that convention); the image
-// never unmounts underneath it, so it's always there as the fallback until (and unless) this
-// actually becomes visible. Shared by CinemaHero's and CinemaSeriesHero's tabs via CinemaClient,
-// which owns the debounced hero item this is keyed on — the logic here has nothing
-// movie/series-specific in it, just a trailer key and something to key the dwell timer on.
+// takes over the persistent backdrop banner itself — same role, same full-screen footprint
+// CinemaClient's still-image backdrop already has (own vignette here instead of that image's own
+// vertical mask, which was tuned for a still photo fading into the rows pane below, not a video
+// meant to stay bold across most of the frame) — rather than a separate box floating on top of
+// the UI. Rendered as a sibling layered directly over that still image (later in DOM order, no
+// z-index needed — see CinemaClient's own note on that convention); the image never unmounts
+// underneath it, so it's always there as the fallback until (and unless) this actually becomes
+// visible. Shared by CinemaHero's and CinemaSeriesHero's tabs via CinemaClient, which owns the
+// debounced hero item this is keyed on — the logic here has nothing movie/series-specific in it,
+// just a trailer key and something to key the dwell timer on.
 export function CinemaTrailerBackdrop({
   itemKey,
   trailerKey,
@@ -88,7 +100,10 @@ export function CinemaTrailerBackdrop({
           // it fill this component's box regardless of aspect ratio is applied here instead,
           // directly on the real iframe element (object-fit doesn't apply to iframes, so this is
           // the standard trick: oversize it via vw/vh and center/crop with overflow-hidden on
-          // the parent).
+          // the parent). The extra upward shift (+ matching height buffer, so the bottom still
+          // reaches the container's own bottom edge post-shift) crops the very top strip off —
+          // where YouTube's own title/channel overlay renders — physically out of view, rather
+          // than relying on SETTLE_MS alone to outlast it.
           onReady: (e) => {
             const iframe = e.target.getIframe();
             Object.assign(iframe.style, {
@@ -98,8 +113,8 @@ export function CinemaTrailerBackdrop({
               width: "177.78vh", // 16:9 of the viewport's own height
               height: "56.25vw", // 16:9 of the viewport's own width
               minWidth: "100%",
-              minHeight: "100%",
-              transform: "translateX(-50%)",
+              minHeight: `calc(100% + ${TOP_CROP_PX}px)`,
+              transform: `translate(-50%, -${TOP_CROP_PX}px)`,
               pointerEvents: "none",
             });
           },
@@ -132,16 +147,15 @@ export function CinemaTrailerBackdrop({
   return (
     <div
       className={`absolute inset-0 h-full w-full overflow-hidden transition-opacity duration-700 ${playing ? "opacity-100" : "opacity-0"}`}
-      style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
     >
       <div ref={mountRef} className="pointer-events-none absolute inset-0" />
 
-      {/* Same legibility treatment the still-image backdrop already gets from CinemaClient's own
-          sibling gradient divs (side darkening for the text column, bottom fade into the rows
-          pane) — this only needs its OWN top-level dark wash on top of the video so it doesn't
-          read as "too crisp/too much motion" next to those, mirroring what "fondu/assombri sur
-          les côtés" asked for. */}
-      <div className="pointer-events-none absolute inset-0 bg-slate-950/25" />
+      {/* The vignette IS the "fondu qui fait disparaître les bords" — a single radial falloff
+          rather than the previous stack of rectangular gradients, which read as a flat haze over
+          the whole video instead of a clean edge treatment. CinemaClient's own sibling gradients
+          (left-side text legibility, bottom fade into the rows pane) still apply on top of this,
+          same as they already do for the still-image backdrop. */}
+      <div className="pointer-events-none absolute inset-0" style={{ background: VIGNETTE }} />
 
       {/* Mouse-only, deliberately not part of the TV-remote grid nav chain (same reasoning as
           the back button / shortcuts guide floating outside it) — a discreet corner affordance,
