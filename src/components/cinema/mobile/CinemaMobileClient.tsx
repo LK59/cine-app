@@ -4,7 +4,9 @@ import useSWR from "swr";
 import { useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Info, Play, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
+import { leaveCinema } from "@/lib/leaveCinema";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -48,6 +50,7 @@ export function CinemaMobileClient() {
   const playback = usePlayback();
   const [mediaType, setMediaType] = useState<"movies" | "series">("movies");
   const [selected, setSelected] = useState<{ item: CinemaMovie | CinemaSeries; mediaType: "movies" | "series" } | null>(null);
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const short = useIsShortViewport();
 
@@ -74,10 +77,7 @@ export function CinemaMobileClient() {
     setSelected({ item, mediaType: type });
   }, []);
 
-  const exit = () => {
-    // Plain assignment, not router.push — same reasoning as the sidebar's own entry link.
-    window.location.href = "/";
-  };
+  const exit = () => leaveCinema(router);
 
   if (typeof document === "undefined") return null;
 

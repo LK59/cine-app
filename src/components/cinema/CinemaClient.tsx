@@ -4,7 +4,9 @@ import useSWR from "swr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
+import { leaveCinema } from "@/lib/leaveCinema";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useTvGridNav } from "@/lib/useTvGridNav";
@@ -315,6 +317,7 @@ export function CinemaClient() {
   // grid — then Enter on THAT opened a completely different title's detail sheet.
   const playback = usePlayback();
 
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
 
   // "full" specifically, not "closed" — a minimized (mini) player is a small floating widget;
@@ -373,7 +376,7 @@ export function CinemaClient() {
   // Next's client-side transition (RSC fetch, mode "cors") was failing at the network level in
   // production for this route specifically.
   const exitButton = (
-    <button onClick={() => { window.location.href = "/"; }} className="btn-primary">
+    <button onClick={() => leaveCinema(router)} className="btn-primary">
       {t("cinema.standardMode")}
     </button>
   );
@@ -450,7 +453,7 @@ export function CinemaClient() {
   return createPortal(
     <div className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={zLayer}>
       <button
-        onClick={() => { window.location.href = "/"; }}
+        onClick={() => leaveCinema(router)}
         className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
         title={t("cinema.standardMode")}
