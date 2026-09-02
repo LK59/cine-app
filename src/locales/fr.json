@@ -857,9 +857,7 @@
       "progress": "{completed} / {total} téléchargées",
       "failedCount": "{n} échec(s)",
       "toggleLabel": "Activer les bandes-annonces auto",
-      "toggleDisabledHint": "Termine d'abord le téléchargement pour pouvoir activer cette option.",
-      "cancel": "Annuler",
-      "cookiesHint": "En cas d'échecs répétés (YouTube demande une confirmation anti-robot) : exporte les cookies YouTube d'un navigateur connecté (ex. extension « Get cookies.txt LOCALLY ») et dépose le fichier dans data/youtube-cookies.txt sur le serveur, puis relance."
+      "toggleDisabledHint": "Termine d'abord le téléchargement pour pouvoir activer cette option."
     }
   },
   "watchlist": {

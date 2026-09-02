@@ -857,9 +857,7 @@
       "progress": "{completed} / {total} downloaded",
       "failedCount": "{n} failed",
       "toggleLabel": "Enable auto trailer previews",
-      "toggleDisabledHint": "Finish downloading first to enable this option.",
-      "cancel": "Cancel",
-      "cookiesHint": "If downloads keep failing (YouTube asks for bot confirmation): export YouTube cookies from a signed-in browser (e.g. the \"Get cookies.txt LOCALLY\" extension) and place the file at data/youtube-cookies.txt on the server, then retry."
+      "toggleDisabledHint": "Finish downloading first to enable this option."
     }
   },
   "watchlist": {

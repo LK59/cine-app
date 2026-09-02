@@ -495,7 +495,6 @@ function TrailerSettingsCard() {
   const t = useT();
   const [status, setStatus] = useState<TrailerStatus | null>(null);
   const [starting, setStarting] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   const [toggling, setToggling] = useState(false);
 
   const refresh = useCallback(() => {
@@ -519,16 +518,6 @@ function TrailerSettingsCard() {
       if (res.ok) refresh();
     } finally {
       setStarting(false);
-    }
-  }
-
-  async function cancel() {
-    setCancelling(true);
-    try {
-      const res = await fetch("/api/admin/trailers/cancel", { method: "POST" });
-      if (res.ok) refresh();
-    } finally {
-      setCancelling(false);
     }
   }
 
@@ -556,26 +545,14 @@ function TrailerSettingsCard() {
       <p className="text-xs leading-5 text-slate-500">{t('settings.trailers.explanation')}</p>
 
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={downloadAll}
-            disabled={running || starting}
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
-          >
-            {running ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
-            {running ? t('settings.trailers.downloading') : t('settings.trailers.downloadNow')}
-          </button>
-          {running && (
-            <button
-              onClick={cancel}
-              disabled={cancelling}
-              className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-60"
-            >
-              <CircleX size={13} />
-              {t('settings.trailers.cancel')}
-            </button>
-          )}
-        </div>
+        <button
+          onClick={downloadAll}
+          disabled={running || starting}
+          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
+        >
+          {running ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
+          {running ? t('settings.trailers.downloading') : t('settings.trailers.downloadNow')}
+        </button>
 
         <Toggle
           checked={status?.autoPreviewEnabled ?? false}
@@ -598,9 +575,6 @@ function TrailerSettingsCard() {
       )}
 
       {!jobDone && <p className="text-xs text-slate-600">{t('settings.trailers.toggleDisabledHint')}</p>}
-      {job && job.failed > 0 && (
-        <p className="text-xs text-slate-600">{t('settings.trailers.cookiesHint')}</p>
-      )}
     </div>
   );
 }
