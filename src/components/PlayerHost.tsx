@@ -5,6 +5,7 @@ import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
+import { useViewportResizing } from "@/lib/useViewportResizing";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { detectCodecSupport } from "@/lib/codecSupport";
@@ -807,6 +808,8 @@ function ActivePlayer({
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(mode === "mini", handleExpand);
+  // A rotation resizes the player; it should not *animate* that resize (see the hook).
+  const resizing = useViewportResizing();
 
   // Tab order follows DOM order, not visual stacking — without this, keyboard focus is left
   // wherever it was on the page that opened playback (e.g. Cinema Mode's "Lecture" row, which
@@ -864,7 +867,7 @@ function ActivePlayer({
         zIndex: 80,
         overflow: "hidden",
         boxShadow: "0 10px 30px rgba(0,0,0,.5)",
-        transition: isDragging ? "none" : TRANSITION,
+        transition: isDragging || resizing ? "none" : TRANSITION,
         touchAction: "none",
       }
     : {
@@ -876,7 +879,7 @@ function ActivePlayer({
         borderRadius: 0,
         zIndex: 80,
         background: "black",
-        transition: `${TRANSITION}, opacity 200ms ease-out`,
+        transition: resizing ? "opacity 200ms ease-out" : `${TRANSITION}, opacity 200ms ease-out`,
         opacity: closing ? 0 : 1,
       };
 

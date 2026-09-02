@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Pause, X } from "lucide-react";
 
 const MARGIN = 16;
@@ -66,7 +66,7 @@ export interface MiniPlayerDrag {
 // mouse + touch, no extra dependency. Resets to the bottom-right corner every time the mini
 // player (re)activates; otherwise free — no snap-to-corner.
 export function useMiniPlayerDrag(active: boolean, onTap: () => void): MiniPlayerDrag {
-  const [size] = useState(getMiniSize);
+  const [size, setSize] = useState(getMiniSize);
   const [pos, setPos] = useState<Point>(() => defaultPosition(size));
   const [isDragging, setIsDragging] = useState(false);
   const dragging = useRef(false);
@@ -79,8 +79,31 @@ export function useMiniPlayerDrag(active: boolean, onTap: () => void): MiniPlaye
   const [resetForActive, setResetForActive] = useState(active);
   if (active !== resetForActive) {
     setResetForActive(active);
-    if (active) setPos(defaultPosition(size));
+    if (active) {
+      const fresh = getMiniSize();
+      setSize(fresh);
+      setPos(defaultPosition(fresh));
+    }
   }
+
+  // Rotating the phone changes both the right size for the box and where "on screen" even is.
+  // Without this the size stayed whatever the first orientation picked (a 360px-wide box on a
+  // 390px-wide portrait screen), and — worse — the position was never re-clamped, so a mini
+  // player parked at the right edge in landscape ended up entirely past the portrait edge:
+  // playing, but invisible. Recomputing both on resize puts it back in the corner it belongs to.
+  useEffect(() => {
+    function onResize() {
+      const next = getMiniSize();
+      setSize(next);
+      setPos((current) => clampPosition(current, next));
+    }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;

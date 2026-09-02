@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Info, Play, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { useIsShortViewport } from "@/lib/useIsMobile";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -48,6 +49,7 @@ export function CinemaMobileClient() {
   const [mediaType, setMediaType] = useState<"movies" | "series">("movies");
   const [selected, setSelected] = useState<{ item: CinemaMovie | CinemaSeries; mediaType: "movies" | "series" } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const short = useIsShortViewport();
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
@@ -80,6 +82,29 @@ export function CinemaMobileClient() {
   if (typeof document === "undefined") return null;
 
   const loading = moviesLoading || (isSeries && seriesLoading && !series);
+
+  // Identical in both hero layouts below — same buttons, same handlers, only the box around them
+  // changes with the orientation.
+  const heroActions = hero && (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => playback.play({ itemId: hero.jellyfinItemId, title: hero.title })}
+        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-slate-950 transition-transform active:scale-95"
+      >
+        <Play size={16} fill="currentColor" />
+        {t("common.play")}
+      </button>
+      <button
+        type="button"
+        onClick={() => openDetail(hero, mediaType)}
+        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
+      >
+        <Info size={16} />
+        {t("cinema.moreInfo")}
+      </button>
+    </div>
+  );
 
   return createPortal(
     <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={{ zIndex: 45 }}>
@@ -154,41 +179,50 @@ export function CinemaMobileClient() {
         )}
 
         {/* Hero: portrait key art with the title treatment and its two actions inline, the shape
-            Netflix leads its own phone home screen with. */}
+            Netflix leads its own phone home screen with.
+
+            Sideways, that shape doesn't fit: a full-width 2:3 poster is roughly twice the height
+            of a landscape phone, so the art was cropped to a sliver and the title and buttons sat
+            below the fold — the "broken banner". The same pieces laid out as a row (small poster,
+            text and actions beside it) stay entirely on screen at any landscape height. The rows
+            underneath are untouched in both orientations. */}
         {hero && (
           <section className="px-4 pt-2">
-            <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
-              <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
-              <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950 via-slate-950/70 to-transparent p-4 pt-16">
-                {hero.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={hero.logoUrl} alt={hero.title} className="mx-auto mb-2 max-h-14 w-auto max-w-full object-contain drop-shadow-lg" />
-                ) : (
-                  <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg">{hero.title}</h1>
-                )}
-                {hero.genres.length > 0 && (
-                  <p className="mb-3 text-center text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => playback.play({ itemId: hero.jellyfinItemId, title: hero.title })}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-slate-950 transition-transform active:scale-95"
-                  >
-                    <Play size={16} fill="currentColor" />
-                    {t("common.play")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openDetail(hero, mediaType)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
-                  >
-                    <Info size={16} />
-                    {t("cinema.moreInfo")}
-                  </button>
+            {short ? (
+              <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
+                <div className="w-24 shrink-0 overflow-hidden rounded-lg">
+                  <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="120px" />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col justify-center">
+                  {hero.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={hero.logoUrl} alt={hero.title} className="mb-2 max-h-12 w-auto max-w-full self-start object-contain drop-shadow-lg" />
+                  ) : (
+                    <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{hero.title}</h1>
+                  )}
+                  {hero.genres.length > 0 && (
+                    <p className="mb-3 truncate text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
+                  )}
+                  {heroActions}
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
+                <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
+                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950 via-slate-950/70 to-transparent p-4 pt-16">
+                  {hero.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={hero.logoUrl} alt={hero.title} className="mx-auto mb-2 max-h-14 w-auto max-w-full object-contain drop-shadow-lg" />
+                  ) : (
+                    <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg">{hero.title}</h1>
+                  )}
+                  {hero.genres.length > 0 && (
+                    <p className="mb-3 text-center text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
+                  )}
+                  {heroActions}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
