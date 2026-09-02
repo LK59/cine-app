@@ -3,21 +3,26 @@ WORKDIR /app
 # Build tools required for native modules (better-sqlite3)
 RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json* ./
-RUN npm install
+# Cache mount rather than a layer: npm's download cache is reused across builds and updated in
+# place, so a dependency change re-downloads only what actually changed.
+RUN --mount=type=cache,target=/root/.npm npm install
 
 FROM node:24-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm test
-RUN npm run build
+# Next's compiler cache lives in .next/cache and is what makes a rebuild incremental. As a cache
+# mount it survives between builds and is updated in place, instead of every build recompiling
+# the whole app and writing a fresh layer for the result.
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
 # Runtime: libstdc++ for better-sqlite3, sharp for image optimization
-RUN apk add --no-cache libstdc++ && npm install --no-save sharp
+RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ && npm install --no-save sharp
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./

@@ -302,6 +302,20 @@ docker compose build && docker compose up -d     # deploy, as before
 It runs alongside production — different container, its own port, its own build directory — so
 the two never overwrite each other's output.
 
+When a real build is needed, three things keep it from being expensive:
+
+- `.dockerignore` excludes `data/` — the SQLite database, its backups and the image cache, 633 MB
+  of runtime state that was being copied into the build context and into an image layer on every
+  build while being useless to the image.
+- `npm install` and `next build` use BuildKit cache mounts, so npm's download cache and Next's
+  compiler cache survive between builds and are updated in place rather than recompiled from
+  scratch into a fresh layer.
+- Together: a rebuild after a source change transfers 61 kB of context instead of 676 MB, and
+  takes about 35 seconds instead of a minute and a half.
+
+The build cache does accumulate. `docker builder prune` reclaims it whenever it grows past what
+you want to give it.
+
 One caveat worth knowing: the development port is plain HTTP, and several browser APIs are
 restricted to secure contexts. In particular the experimental WebCodecs player (see below) will
 refuse to start there, saying so explicitly. Testing that specific feature needs HTTPS, so either

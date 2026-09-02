@@ -1,6 +1,22 @@
+# Everything that must not enter the build context.
+#
+# This matters more than it looks: whatever is here is copied into the build context and then
+# into an image layer on every single build. data/ alone was 633 MB — the SQLite database, its
+# backups and the optimized-image cache — rewritten to disk on each rebuild while being useless
+# to the image, since it is a runtime volume.
 node_modules
 .next
+.next-dev
 .git
+.github
 .env
 .env.local
 npm-debug.log*
+
+# Runtime state, mounted as a volume — never part of an image.
+data
+
+# Local scratch and documentation that the build has no use for.
+*.md
+!README.md
+gallery
