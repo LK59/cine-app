@@ -1,6 +1,10 @@
 "use client";
 
+import { useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
+
+const TV_NAV_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40";
 
 // Netflix's own "TV Shows / Movies" segmented switch — top center. It sits outside the poster
 // grid entirely, so it isn't one of useTvGridNav's data-tv-card cells; instead the active segment
@@ -15,11 +19,22 @@ export function CinemaModeToggle({
   onChange: (mode: "movies" | "series") => void;
 }) {
   const t = useT();
+  const moviesRef = useRef<HTMLButtonElement>(null);
+  const seriesRef = useRef<HTMLButtonElement>(null);
 
+  // Switching segments only updated `mode` — the DOM focus itself stayed put on whichever
+  // <button> the keypress originated from, which is a plain React prop change, not something
+  // that moves browser focus on its own. That left focus visually stranded on the now-INACTIVE
+  // segment (nothing here had a focus ring either, so a keyboard/remote user had no cue focus
+  // hadn't actually followed the selection change). Explicitly refocusing the segment that just
+  // became active keeps focus visibly attached to the current selection, the same as any other
+  // roving-focus control in this app.
   function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
-      onChange(mode === "movies" ? "series" : "movies");
+      const next = mode === "movies" ? "series" : "movies";
+      onChange(next);
+      (next === "movies" ? moviesRef : seriesRef).current?.focus();
     }
   }
 
@@ -29,20 +44,22 @@ export function CinemaModeToggle({
       style={{ top: "max(1rem, env(safe-area-inset-top))" }}
     >
       <button
+        ref={moviesRef}
         onClick={() => onChange("movies")}
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "movies" ? "true" : undefined}
-        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none ${
+        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
           mode === "movies" ? "bg-white text-slate-950" : "text-white/70 hover:text-white"
         }`}
       >
         {t("cinema.moviesTab")}
       </button>
       <button
+        ref={seriesRef}
         onClick={() => onChange("series")}
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "series" ? "true" : undefined}
-        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none ${
+        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
           mode === "series" ? "bg-white text-slate-950" : "text-white/70 hover:text-white"
         }`}
       >

@@ -11,6 +11,7 @@ import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -55,7 +56,14 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
   const [showEpisodes, setShowEpisodes] = useState(false);
   const { data: info } = useSWR<SonarrInfo>(`/api/sonarr/series/${item.sonarrId}/info`, fetcher);
   const { data: episodesData } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
+  // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
+  // un-toggled even for a series already on the watchlist. item.tmdbId can be null (Sonarr
+  // doesn't always resolve one) — bulk-status has nothing to look up then, same as toggleWatched/
+  // toggleAddToList below already treat that case (tmdbId ?? 0).
+  const statusMap = useWatchlistStatusMap(item.tmdbId ? [{ mediaType: "series", tmdbId: item.tmdbId }] : []);
+  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
+    item.tmdbId ? statusMap[`series:${item.tmdbId}`] ?? null : null
+  );
   const [logoErrored, setLogoErrored] = useState(false);
 
   const playerEnabled = usePlayerEnabled();
@@ -251,14 +259,27 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
       </div>
 
       {showTrailer && info?.trailerKey && (
-        <TrailerModal youtubeKey={info.trailerKey} title={item.title} onClose={() => setShowTrailer(false)} />
+        <TrailerModal
+          youtubeKey={info.trailerKey}
+          title={item.title}
+          onClose={() => {
+            setShowTrailer(false);
+            // Same focus-restore fix as CinemaMovieDetail — see its own note.
+            requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+          }}
+        />
       )}
 
       {showEpisodes && episodesData?.seasons && (
         <CinemaEpisodeBrowser
           title={item.title}
           seasons={episodesData.seasons}
-          onClose={() => setShowEpisodes(false)}
+          onClose={() => {
+            setShowEpisodes(false);
+            // Same focus-restore fix — CinemaEpisodeBrowser unmounting otherwise leaves focus
+            // stranded on <body>, same as TrailerModal above.
+            requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+          }}
           onPlayEpisode={playEpisode}
         />
       )}

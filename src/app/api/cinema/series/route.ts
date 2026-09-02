@@ -33,6 +33,13 @@ export interface CinemaSeriesPayload {
 // (OMDb-backed, 24h persistently cached — same helper the dashboard route already uses for its
 // own "recently added series" rail).
 async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<CinemaSeries> {
+  // Independent lookups (different upstreams, different cache keys) — run concurrently rather
+  // than one after the other, halving the cold-cache latency per series that hasn't been seen
+  // by either cache before (steady state is unaffected either way, both are cache reads then).
+  const [logoUrl, imdbRating] = await Promise.all([
+    getTitleLogo(s.tmdbId ?? 0, "series"),
+    s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null),
+  ]);
   return {
     sonarrId: s.id,
     jellyfinItemId,
@@ -42,9 +49,9 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
     year: s.year,
     posterUrl: posterUrl(s.images, "full"),
     backdropUrl: backdropUrl(s.images, "full"),
-    logoUrl: await getTitleLogo(s.tmdbId ?? 0, "series"),
+    logoUrl,
     overview: s.overview ?? null,
-    imdbRating: s.tmdbId ? await getImdbRating(s.tmdbId, "series") : null,
+    imdbRating,
     genres: s.genres ?? [],
   };
 }

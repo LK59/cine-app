@@ -11,6 +11,7 @@ import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
@@ -53,7 +54,12 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
   const containerRef = useRef<HTMLDivElement>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist();
+  // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
+  // watchlist — useAddToWatchlist only reflects whatever status is handed to it as initialStatus
+  // (see its own doc comment), and nothing was passing one here, unlike every other surface that
+  // uses this hook (PosterCard, recommendations).
+  const statusMap = useWatchlistStatusMap([{ mediaType: "movie", tmdbId: item.tmdbId }]);
+  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(statusMap[`movie:${item.tmdbId}`] ?? null);
   // item.logoUrl comes bulk-included in the /api/cinema/movies payload now (see CinemaHero's own
   // note) — known synchronously, prefetched alongside backdrops by CinemaClient's warm-up
   // effect. This component remounts fresh per item (a new instance each time selectedItem
@@ -254,7 +260,19 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
       </div>
 
       {showTrailer && info?.trailerKey && (
-        <TrailerModal youtubeKey={info.trailerKey} title={item.title} onClose={() => setShowTrailer(false)} />
+        <TrailerModal
+          youtubeKey={info.trailerKey}
+          title={item.title}
+          onClose={() => {
+            setShowTrailer(false);
+            // TrailerModal doesn't restore focus itself (it wasn't built with a keyboard-nav
+            // parent in mind) — without this, closing it leaves document.activeElement on
+            // <body>, so this overlay's own Up/Down handler (indexOf returns -1) needs an extra,
+            // wasted keypress before arrow-nav does anything again. Same class of bug already
+            // fixed for the player's own menu-close case.
+            requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+          }}
+        />
       )}
     </div>,
     document.body
