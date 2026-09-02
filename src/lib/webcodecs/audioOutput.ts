@@ -13,6 +13,46 @@ export interface AudioOutputOptions {
   numberOfChannels: number;
 }
 
+
+/**
+ * Folds a multichannel block down to stereo.
+ *
+ * Channel order follows the usual convention — front left, front right, centre, LFE, then the
+ * surrounds — which is what both libav and the browser decoders produce. The centre goes to both
+ * sides at -3 dB and each surround to its own side at -3 dB, which is the standard fold; the LFE
+ * is dropped, as it is in every stereo downmix, because a phone has nothing to reproduce it with
+ * and summing it in only eats headroom. The result is scaled to keep a loud mix from clipping.
+ */
+function foldToStereo(planes: Float32Array[], frames: number): Float32Array[] {
+  const left = new Float32Array(frames);
+  const right = new Float32Array(frames);
+  const centre = planes[2];
+  const surroundLeft = planes[4];
+  const surroundRight = planes[5];
+  const HALF_POWER = Math.SQRT1_2;
+  const HEADROOM = 0.8;
+
+  for (let i = 0; i < frames; i++) {
+    let l = planes[0][i];
+    let r = planes[1][i];
+    if (centre) {
+      l += HALF_POWER * centre[i];
+      r += HALF_POWER * centre[i];
+    }
+    if (surroundLeft) l += HALF_POWER * surroundLeft[i];
+    if (surroundRight) r += HALF_POWER * surroundRight[i];
+    // Anything beyond 5.1 (height channels, a second surround pair) is spread evenly rather than
+    // discarded — quieter is better than absent.
+    for (let extra = 6; extra < planes.length; extra++) {
+      l += 0.5 * planes[extra][i];
+      r += 0.5 * planes[extra][i];
+    }
+    left[i] = Math.max(-1, Math.min(1, l * HEADROOM));
+    right[i] = Math.max(-1, Math.min(1, r * HEADROOM));
+  }
+  return [left, right];
+}
+
 export class AudioOutput {
   private readonly context: AudioContext;
   private readonly gain: GainNode;
@@ -23,6 +63,7 @@ export class AudioOutput {
   private anchorMediaSeconds = 0;
   private anchorContextTime = 0;
   private started = false;
+  private lastChannelCount = 0;
   /** Scratch for interleaved blocks: copied once per block, read by every channel. */
   private interleaved: ArrayBuffer | null = null;
   private interleavedFor: AudioData | null = null;
@@ -47,6 +88,11 @@ export class AudioOutput {
   /** "running", "suspended" or "closed" — the single most useful fact when there is no sound. */
   get state(): string {
     return `${this.context.state} @ ${this.context.sampleRate} Hz`;
+  }
+
+  /** Channels actually handed to the audio graph, and the gain they pass through. */
+  get outputState(): string {
+    return `${this.lastChannelCount} canal(aux), gain ${this.gain.gain.value.toFixed(2)}`;
   }
 
   /** True once enough audio has been queued that playback can begin. */
@@ -137,11 +183,23 @@ export class AudioOutput {
    */
   enqueue(data: AudioData, mediaSeconds: number): boolean {
     try {
-      const channels = data.numberOfChannels;
+      const sourceChannels = data.numberOfChannels;
       const frames = data.numberOfFrames;
-      const buffer = this.context.createBuffer(channels, frames, data.sampleRate);
-      for (let channel = 0; channel < channels; channel++) {
-        buffer.copyToChannel(this.channelFloats(data, channel, frames), channel);
+      const planes: Float32Array[] = [];
+      for (let channel = 0; channel < sourceChannels; channel++) {
+        planes.push(this.channelFloats(data, channel, frames));
+      }
+
+      // Anything above stereo is folded down here rather than handed to the audio graph to
+      // downmix. Every file in this library is 5.1, every one of them was silent, and the
+      // diagnostics ruled everything else out: the context running, 719 blocks decoded, the
+      // buffer 0.6s ahead, and no sound. A multichannel AudioBuffer that a browser declines to
+      // downmix fails exactly that way — it accepts everything and plays nothing.
+      const output = sourceChannels > 2 ? foldToStereo(planes, frames) : planes;
+      this.lastChannelCount = output.length;
+      const buffer = this.context.createBuffer(output.length, frames, data.sampleRate);
+      for (let channel = 0; channel < output.length; channel++) {
+        buffer.copyToChannel(output[channel], channel);
       }
 
       const now = this.context.currentTime;

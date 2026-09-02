@@ -449,7 +449,10 @@ export class PlaybackEngine {
       "Chemin audio": this.audioPath === "software" ? "décodeur logiciel" : this.audioPath === "native" ? "natif (plateforme)" : "aucun",
       "Piste audio": this.audioTrack ? `${this.audioTrack.codecId.replace("A_", "")} ${this.audioTrack.audio?.channels ?? "?"}ch` : "—",
       "Sortie audio": this.audio ? this.audio.state : "non créée",
-      "Blocs audio": `${this.audioFed} fournis, ${this.audioChunks} décodés`,
+      "Blocs audio": this.audioPath === "software"
+        ? `${this.audioChunks} décodés`
+        : `${this.audioFed} fournis, ${this.audioChunks} décodés`,
+      "Sortie": this.audio ? this.audio.outputState : "—",
       "Audio en avance": this.audio ? `${this.audio.bufferedAhead.toFixed(2)} s` : "—",
       "Images en file": `${this.frames.length} décodées, ${this.pendingVideo.length} en attente`,
       "Horloge": `${this.currentTime.toFixed(1)} s`,
