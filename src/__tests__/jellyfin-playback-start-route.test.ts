@@ -11,7 +11,16 @@ vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 let playerEnabled = true;
-vi.mock("@/lib/config", () => ({ config: { get player() { return { enabled: playerEnabled }; } } }));
+vi.mock("@/lib/config", () => ({
+  config: {
+    get player() { return { enabled: playerEnabled }; },
+    jellyfin: { url: "http://jf.test" },
+  },
+}));
+
+// The route pre-warms Jellyfin's transcode by fetching the manifest itself; stubbed so no test
+// reaches the network, and so the pre-warm can be asserted on directly.
+const mockFetch = vi.fn(async (..._args: unknown[]) => ({ ok: true, text: async () => "#EXTM3U" }));
 
 function fakeReq(body?: unknown, cookie = "t"): NextRequest {
   return {
@@ -24,6 +33,7 @@ const validId = "a".repeat(32);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal("fetch", mockFetch);
   playerEnabled = true;
   mockJellyfin.reportPlaybackStart.mockResolvedValue(undefined);
   mockJellyfin.getEpisodeTimestamps.mockResolvedValue(null);
@@ -210,5 +220,38 @@ describe("POST /api/jellyfin/playback/start", () => {
     const body = await res.json();
     expect(body.playbackInfo.playMethod).toBe("DirectStream");
     expect(body.playbackInfo.transcodeReasons).toEqual(["AudioCodecNotSupported"]);
+  });
+
+  // The pre-warm exists to absorb ffmpeg's startup for Safari's native HLS pipeline, which gives
+  // up on a slow first manifest. hls.js retries patiently and gains nothing from waiting here.
+  function transcodingSource() {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "play-1",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/aaaa/master.m3u8?x=1", MediaStreams: [] }],
+    });
+  }
+
+  it("pre-warms the transcode for a native-HLS client", async () => {
+    transcodingSource();
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    await POST(fakeReq({ itemId: validId, nativeHls: true }));
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(String(mockFetch.mock.calls[0][0])).toContain("/videos/aaaa/master.m3u8");
+  });
+
+  it("still pre-warms when the client doesn't say (an older client)", async () => {
+    transcodingSource();
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    await POST(fakeReq({ itemId: validId }));
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it("skips the pre-warm for an hls.js client, so the response isn't held behind ffmpeg", async () => {
+    transcodingSource();
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId, nativeHls: false }));
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
   });
 });

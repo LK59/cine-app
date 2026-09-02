@@ -293,6 +293,21 @@ function ActivePlayer({
 
       const codecSupport = await detectCodecSupport();
 
+      // Safari and iOS play HLS natively and never touch hls.js; everything else needs it, and
+      // it is a 376 KB chunk. Awaiting that download only at its point of use — after
+      // /playback/start has already answered — put the whole thing on the critical path to the
+      // first frame. Kicking it off HERE overlaps it with the request, the negotiation and
+      // ffmpeg's warm-up, which is dead time it can hide behind entirely.
+      //
+      // The value is awaited far below, on the one branch that needs it; the DirectPlay and
+      // native-HLS branches return before then and simply leave it downloading into the browser
+      // cache, where the next transcoded title will find it. The extra .catch() is only there so
+      // an early return can't leave a rejected promise unhandled — the await below still sees
+      // (and throws) the original rejection exactly as it did before.
+      const nativeHls = !!video.canPlayType("application/vnd.apple.mpegurl");
+      const hlsModule = nativeHls ? null : import("hls.js");
+      hlsModule?.catch(() => {});
+
       const res = await fetch("/api/jellyfin/playback/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -303,6 +318,10 @@ function ActivePlayer({
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
           codecSupport,
           disableAudioCodecs,
+          // Lets the server skip its manifest pre-warm for us — see the route. hls.js retries a
+          // slow first manifest patiently; Safari's native pipeline does not, which is who that
+          // pre-warm was built for.
+          nativeHls,
         }),
       });
       if (res.status === 401) {
@@ -418,7 +437,7 @@ function ActivePlayer({
 
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      if (nativeHls) {
         video.src = data.manifestUrl;
         // Reassigning .src alone doesn't reliably tear down Safari's existing
         // HLS session when only the query string changes (e.g. switching
@@ -429,7 +448,9 @@ function ActivePlayer({
         return;
       }
 
-      const { default: Hls } = await import("hls.js");
+      // Started alongside the request above, not here — see its comment. Non-null because this
+      // branch is only reached when canPlayType said there is no native HLS.
+      const { default: Hls } = await hlsModule!;
       if (!Hls.isSupported()) {
         setError(t('player.unsupportedBrowser'));
         setLoading(false);

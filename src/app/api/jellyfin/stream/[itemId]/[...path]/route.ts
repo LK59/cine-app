@@ -22,7 +22,11 @@ const UPSTREAM_RETRY_DELAYS_MS = [200, 500, 1000];
 async function fetchWithRetry(target: string, headers: Record<string, string>, signal: AbortSignal) {
   let res = await fetch(target, { signal, headers });
   for (const delay of UPSTREAM_RETRY_DELAYS_MS) {
-    if (res.ok) return res;
+    // 5xx only. The race above surfaces as a transient 500 from Jellyfin, and that is worth
+    // waiting out. A 4xx is a definite answer — a segment past the end of a finished transcode
+    // after a seek, a stale PlaySessionId — and retrying it just spends 1.7s of sleeps before
+    // telling the browser something it could have known immediately.
+    if (res.ok || res.status < 500) return res;
     await new Promise((resolve) => setTimeout(resolve, delay));
     res = await fetch(target, { signal, headers });
   }

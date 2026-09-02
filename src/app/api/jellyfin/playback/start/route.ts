@@ -75,6 +75,10 @@ export async function POST(req: NextRequest) {
   // native HLS pipeline then rejects any ec-3 stream). The client's fallback ladder retries a
   // failed load with codecs disabled here, which makes Jellyfin negotiate a genuine server-side
   // audio transcode to a codec the device has actually proven it can play.
+  // Whether the client will play the HLS stream with the browser's own pipeline (Safari, iOS)
+  // rather than hls.js. Defaults to TRUE when absent, so a client from before this field existed
+  // keeps the pre-warm it has always had — see where it's used below.
+  const nativeHls = body?.nativeHls !== false;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -145,13 +149,24 @@ export async function POST(req: NextRequest) {
       // and Jellyfin can answer near-instantly. Best-effort and bounded: if this itself times out,
       // fall through anyway and let the client's own request (plus the proxy's existing retry) be
       // the fallback, rather than hanging the whole "start playback" action indefinitely.
-      try {
-        await fetch(`${config.jellyfin.url}${source.TranscodingUrl}`, {
-          headers: { "X-Emby-Token": session.jfToken },
-          signal: AbortSignal.timeout(15_000),
-        });
-      } catch {
-        // Fall through — see comment above.
+      //
+      // Only for the clients it was written for. On the hls.js path this wait buys nothing — that
+      // library retries a slow first manifest on its own, patiently, which is exactly why Firefox
+      // never hit the bug — and blocking here delays the response that lets the browser get on
+      // with downloading hls.js itself. Skipping it there lets ffmpeg warm up in parallel with
+      // that download instead of in front of it. Safari's behaviour is unchanged.
+      if (nativeHls) {
+        try {
+          const warmup = await fetch(`${config.jellyfin.url}${source.TranscodingUrl}`, {
+            headers: { "X-Emby-Token": session.jfToken },
+            signal: AbortSignal.timeout(15_000),
+          });
+          // Read it to completion (a ~700 byte playlist) rather than dropping the response on the
+          // floor: an unconsumed body holds its connection open until the GC gets to it.
+          await warmup.text().catch(() => "");
+        } catch {
+          // Fall through — see comment above.
+        }
       }
     }
 
