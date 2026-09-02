@@ -52,7 +52,7 @@ describe("buildDeviceProfile", () => {
   });
 
   it("declares HDR10/HLG/dual-layer-DolbyVision as an acceptable VideoRangeType for every supported video codec — without this Jellyfin tone-maps and fully re-encodes any HDR file even when a plain remux would do", () => {
-    const support: CodecSupport = { video: { "mp4/hevc": true }, audio: { aac: true } };
+    const support: CodecSupport = { video: { "mp4/hevc": true, "mp4/hevc10": true }, audio: { aac: true } };
     const profile = buildDeviceProfile(support, 8_000_000);
     expect(profile.CodecProfiles).toEqual([
       {
@@ -77,5 +77,42 @@ describe("buildDeviceProfile", () => {
   it("forwards maxBitrate to both the top-level profile and the streaming cap", () => {
     const profile = buildDeviceProfile(NO_SUPPORT, 12_345);
     expect(profile.MaxStreamingBitrate).toBe(12_345);
+  });
+
+  // HEVC Main and Main 10 are separate decoder capabilities, and this library is overwhelmingly
+  // Main 10 — declaring one on the strength of the other is expensive in both directions.
+  it("declares HEVC from either the 8-bit or the 10-bit probe", () => {
+    for (const key of ["mp4/hevc", "mp4/hevc10"]) {
+      const profile = buildDeviceProfile({ video: { [key]: true }, audio: { aac: true } }, 8_000_000);
+      expect(profile.DirectPlayProfiles[0].VideoCodec).toContain("hevc");
+    }
+  });
+
+  it("declares hevc once, not twice, when both probes pass", () => {
+    const profile = buildDeviceProfile({ video: { "mp4/hevc": true, "mp4/hevc10": true }, audio: { aac: true } }, 8_000_000);
+    expect(profile.DirectPlayProfiles[0].VideoCodec).toBe("hevc");
+    expect(profile.CodecProfiles.filter((p) => p.Codec === "hevc")).toHaveLength(1);
+  });
+
+  // The safety half: advertising HEVC to a device that only decodes 8-bit would hand it a Main
+  // 10 stream it cannot play — a black screen, where a slower transcode would have worked.
+  it("caps HEVC at 8 bits when only the 8-bit probe passed", () => {
+    const profile = buildDeviceProfile({ video: { "mp4/hevc": true }, audio: { aac: true } }, 8_000_000);
+    const hevc = profile.CodecProfiles.find((p) => p.Codec === "hevc")!;
+    expect(hevc.Conditions).toContainEqual({
+      Condition: "LessThanEqual",
+      Property: "VideoBitDepth",
+      Value: "8",
+      IsRequired: false,
+    });
+  });
+
+  it("does not cap bit depth once 10-bit is proven, nor on other codecs", () => {
+    const both = buildDeviceProfile({ video: { "mp4/hevc": true, "mp4/hevc10": true }, audio: { aac: true } }, 8_000_000);
+    const h264 = buildDeviceProfile({ video: { "mp4/h264": true }, audio: { aac: true } }, 8_000_000);
+    for (const profile of [both, h264]) {
+      const properties = profile.CodecProfiles.flatMap((p) => p.Conditions.map((c) => c.Property));
+      expect(properties).not.toContain("VideoBitDepth");
+    }
   });
 });

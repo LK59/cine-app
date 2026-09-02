@@ -24,7 +24,11 @@ export interface JellyfinDeviceProfile {
 // DeviceProfile expects.
 const VIDEO_CODEC_KEYS: { key: string; codec: string }[] = [
   { key: "mp4/h264", codec: "h264" },
+  // Either HEVC probe is enough to declare the codec itself; how deep that support goes is a
+  // separate question, answered by the bit-depth condition below rather than by omitting the
+  // codec entirely. A device that decodes 8-bit HEVC should still direct-play 8-bit HEVC.
   { key: "mp4/hevc", codec: "hevc" },
+  { key: "mp4/hevc10", codec: "hevc" },
   { key: "mp4/vp9", codec: "vp9" },
   { key: "mp4/av1", codec: "av1" },
 ];
@@ -59,7 +63,12 @@ const SAFE_VIDEO_RANGES = "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHDR10Pl
 // untouched (DirectPlay), an mkv file with compatible codecs gets remuxed server-side without
 // re-encoding, and only a genuine codec mismatch falls through to a real Transcode.
 export function buildDeviceProfile(support: CodecSupport, maxBitrate: number): JellyfinDeviceProfile {
-  const videoCodecs = VIDEO_CODEC_KEYS.filter((c) => support.video[c.key]).map((c) => c.codec);
+  const videoCodecs = [...new Set(VIDEO_CODEC_KEYS.filter((c) => support.video[c.key]).map((c) => c.codec))];
+  // The other half of declaring HEVC honestly. Advertising the codec while the device only
+  // decodes 8-bit would hand it a Main 10 stream it cannot play — a black screen instead of a
+  // slower-but-working transcode, which is the worse failure by far. The condition tells
+  // Jellyfin to fall back to a re-encode for 10-bit sources only, leaving 8-bit HEVC direct.
+  const hevc10 = support.video["mp4/hevc10"] === true;
   const audioCodecs = Object.entries(support.audio)
     .filter(([, supported]) => supported)
     .map(([codec]) => codec);
@@ -100,7 +109,12 @@ export function buildDeviceProfile(support: CodecSupport, maxBitrate: number): J
     CodecProfiles: (videoCodecs.length ? videoCodecs : ["h264"]).map((codec) => ({
       Type: "Video" as const,
       Codec: codec,
-      Conditions: [{ Condition: "EqualsAny", Property: "VideoRangeType", Value: SAFE_VIDEO_RANGES, IsRequired: false }],
+      Conditions: [
+        { Condition: "EqualsAny", Property: "VideoRangeType", Value: SAFE_VIDEO_RANGES, IsRequired: false },
+        ...(codec === "hevc" && !hevc10
+          ? [{ Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "8", IsRequired: false }]
+          : []),
+      ],
     })),
     // "External" is what makes Jellyfin extract embedded subtitle tracks (e.g. from an mkv
     // being direct-played, where the browser has no way to read them itself) as sidecar VTT,

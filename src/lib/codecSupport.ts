@@ -25,7 +25,14 @@ export interface CodecSupport {
 
 interface Candidate {
   key: string;
-  mime: string;
+  /**
+   * Every spelling worth trying for this capability — the key counts as supported if ANY of
+   * them does. Browsers genuinely disagree about which tag they recognise for HEVC (`hvc1` and
+   * `hev1` describe the same bitstream, differing only in where the parameter sets are stored),
+   * and rejecting a decoder over the spelling of its name is how you end up transcoding for a
+   * device that could have played the file untouched.
+   */
+  mimes: string[];
 }
 
 // One representative profile/level per codec is enough here — Jellyfin's own StreamBuilder
@@ -33,18 +40,25 @@ interface Candidate {
 // deciding DirectPlay vs DirectStream vs Transcode; this only needs to answer "can this browser
 // decode this codec inside an MP4 container at all".
 const VIDEO_CANDIDATES: Candidate[] = [
-  { key: "mp4/h264", mime: 'video/mp4; codecs="avc1.640028"' },
-  { key: "mp4/hevc", mime: 'video/mp4; codecs="hvc1.1.6.L153.B0"' },
-  { key: "mp4/vp9", mime: 'video/mp4; codecs="vp09.00.10.08"' },
-  { key: "mp4/av1", mime: 'video/mp4; codecs="av01.0.04M.08"' },
+  { key: "mp4/h264", mimes: ['video/mp4; codecs="avc1.640028"'] },
+  // HEVC Main (8-bit) and Main 10 are two different decoder capabilities, and a device can have
+  // one without the other — so they are probed separately rather than inferred from each other.
+  // This matters here specifically: this library is overwhelmingly Main 10, and the profile
+  // sent to Jellyfin used to advertise HEVC on the strength of an 8-bit-only probe. Getting
+  // that wrong in either direction is expensive — under-report and every 10-bit file is
+  // needlessly re-encoded, over-report and a device is handed a stream it cannot decode.
+  { key: "mp4/hevc", mimes: ['video/mp4; codecs="hvc1.1.6.L153.B0"', 'video/mp4; codecs="hev1.1.6.L153.B0"'] },
+  { key: "mp4/hevc10", mimes: ['video/mp4; codecs="hvc1.2.4.L153.B0"', 'video/mp4; codecs="hev1.2.4.L153.B0"'] },
+  { key: "mp4/vp9", mimes: ['video/mp4; codecs="vp09.00.10.08"'] },
+  { key: "mp4/av1", mimes: ['video/mp4; codecs="av01.0.04M.08"'] },
 ];
 
 const AUDIO_CANDIDATES: Candidate[] = [
-  { key: "aac", mime: 'audio/mp4; codecs="mp4a.40.2"' },
-  { key: "ac3", mime: 'audio/mp4; codecs="ac-3"' },
-  { key: "eac3", mime: 'audio/mp4; codecs="ec-3"' },
-  { key: "opus", mime: 'audio/mp4; codecs="opus"' },
-  { key: "flac", mime: 'audio/mp4; codecs="fLaC"' },
+  { key: "aac", mimes: ['audio/mp4; codecs="mp4a.40.2"'] },
+  { key: "ac3", mimes: ['audio/mp4; codecs="ac-3"'] },
+  { key: "eac3", mimes: ['audio/mp4; codecs="ec-3"'] },
+  { key: "opus", mimes: ['audio/mp4; codecs="opus"'] },
+  { key: "flac", mimes: ['audio/mp4; codecs="fLaC"'] },
 ];
 
 const SOURCEBUFFER_TIMEOUT_MS = 2000;
@@ -101,11 +115,20 @@ function checkViaCanPlayType(mime: string): boolean {
   return result === "probably" || result === "maybe";
 }
 
-async function checkCodec(mime: string, nativeHls: boolean): Promise<boolean> {
+async function checkOneMime(mime: string, nativeHls: boolean): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (nativeHls) return checkViaCanPlayType(mime);
   if (!("MediaSource" in window) || !MediaSource.isTypeSupported(mime)) return false;
   return testSourceBuffer(mime);
+}
+
+// Supported if any spelling is — see Candidate.mimes. Sequential on purpose: the common case is
+// the first one answering yes, and the fallback spellings each cost a real SourceBuffer probe.
+async function checkCodec(candidate: Candidate, nativeHls: boolean): Promise<boolean> {
+  for (const mime of candidate.mimes) {
+    if (await checkOneMime(mime, nativeHls)) return true;
+  }
+  return false;
 }
 
 // Bumped to v2 to auto-invalidate any client's cache from before the Safari native-HLS
@@ -114,7 +137,9 @@ async function checkCodec(mime: string, nativeHls: boolean): Promise<boolean> {
 // own localStorage. v3: force a re-detection on every existing client after the audio-codec
 // fallback-ladder overhaul, so all devices renegotiate from a clean slate (the per-browser
 // blocklist in PlayerHost then handles genuinely-broken codecs from real playback evidence).
-const CACHE_KEY = "cine:codec-support:v3";
+// v4: the HEVC probe now asks about Main 10 separately from Main — a cached v3 answer was
+// built from an 8-bit-only question and cannot be reinterpreted, so every client re-detects.
+const CACHE_KEY = "cine:codec-support:v4";
 
 interface CachedSupport {
   userAgent: string;
@@ -151,8 +176,8 @@ export async function detectCodecSupport(): Promise<CodecSupport> {
 
   const nativeHls = isNativeHlsBrowser();
   const [videoEntries, audioEntries] = await Promise.all([
-    Promise.all(VIDEO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c.mime, nativeHls)])),
-    Promise.all(AUDIO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c.mime, nativeHls)])),
+    Promise.all(VIDEO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c, nativeHls)])),
+    Promise.all(AUDIO_CANDIDATES.map(async (c): Promise<[string, boolean]> => [c.key, await checkCodec(c, nativeHls)])),
   ]);
 
   const support: CodecSupport = {
