@@ -204,7 +204,7 @@ export function CinemaSeriesDetail({
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
       <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
-        <div className="flex min-h-full snap-start flex-col justify-end py-16">
+        <div data-snap-section className="flex min-h-full snap-start flex-col justify-end py-16">
         <div
           key={item.sonarrId}
           className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
@@ -328,7 +328,7 @@ export function CinemaSeriesDetail({
             on it reads as a deliberate second screen instead of one row stranded above a lot of
             empty backdrop. */}
         {onSelectSimilar && (
-          <div className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
+          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
             <CinemaSimilarRow subject={item} mediaType="series" onSelect={(next) => onSelectSimilar(next as CinemaSeries)} />
           </div>
         )}

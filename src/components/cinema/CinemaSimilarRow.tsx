@@ -93,9 +93,22 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
   const active = document.activeElement as HTMLElement | null;
   const index = cards.indexOf(active as HTMLButtonElement);
 
-  function focusCard(el: HTMLElement) {
+  // Within the row, "nearest" is right: only the horizontal position needs adjusting.
+  function focusInRow(el: HTMLElement) {
     el.focus();
     el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }
+
+  // Crossing between the sheet's two sections is different: the scroller is snap-mandatory, so
+  // scrolling by the *element* moves the minimum needed to reveal it, the scroller then snaps to
+  // whichever position is nearest — which is the one it just left — and the view springs back
+  // while focus has already moved. Scrolling the whole section to the top lands exactly on a snap
+  // position, so it stays. focus(preventScroll) keeps the browser from doing its own element-
+  // sized scroll first and fighting this one.
+  function focusInOtherSection(el: HTMLElement) {
+    el.focus({ preventScroll: true });
+    const section = el.closest<HTMLElement>("[data-snap-section]");
+    (section ?? el).scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
   if (index === -1) {
@@ -103,7 +116,7 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
     // menu item", which the caller handles.
     if (e.key === "ArrowDown" && menu.length > 0 && active === menu[menu.length - 1]) {
       e.preventDefault();
-      focusCard(cards[0]);
+      focusInOtherSection(cards[0]);
       return true;
     }
     return false;
@@ -111,17 +124,17 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
 
   if (e.key === "ArrowUp") {
     e.preventDefault();
-    focusCard(menu[menu.length - 1] ?? cards[0]);
+    focusInOtherSection(menu[menu.length - 1] ?? cards[0]);
     return true;
   }
   if (e.key === "ArrowRight") {
     e.preventDefault();
-    focusCard(cards[Math.min(index + 1, cards.length - 1)]);
+    focusInRow(cards[Math.min(index + 1, cards.length - 1)]);
     return true;
   }
   if (e.key === "ArrowLeft") {
     e.preventDefault();
-    focusCard(cards[Math.max(index - 1, 0)]);
+    focusInRow(cards[Math.max(index - 1, 0)]);
     return true;
   }
   // Down inside the row has nowhere to go — swallow it so it can't fall through to the menu
