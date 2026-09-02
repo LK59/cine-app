@@ -8,6 +8,8 @@ import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, RotateCcw } fro
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
+import { CinemaSimilarRow } from "@/components/cinema/CinemaSimilarRow";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -52,7 +54,17 @@ interface RadarrInfo {
 // title/synopsis/cast get the full text column width so the title doesn't wrap onto 3 lines.
 // Portaled to document.body for the same reason CinemaClient's own fixed layers are (see its doc
 // comment): PageTransition's lingering transform breaks `position: fixed` otherwise.
-export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClose: () => void }) {
+export function CinemaMovieDetail({
+  item,
+  onClose,
+  onSelectSimilar,
+}: {
+  item: CinemaMovie;
+  onClose: () => void;
+  // Lets the "Titres similaires" row swap this sheet's subject for another title, rather than
+  // stacking a second sheet on top of the first.
+  onSelectSimilar?: (item: CinemaMovie) => void;
+}) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -225,6 +237,7 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+            <CinemaMatchBadge rating={item.imdbRating} />
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
@@ -305,6 +318,10 @@ export function CinemaMovieDetail({ item, onClose }: { item: CinemaMovie; onClos
               <span className="text-sm font-medium">{t("watchlist.statuses.toWatch")}</span>
             </button>
           </div>
+
+          {onSelectSimilar && (
+            <CinemaSimilarRow subject={item} mediaType="movies" onSelect={(next) => onSelectSimilar(next as CinemaMovie)} />
+          )}
         </div>
       </div>
 

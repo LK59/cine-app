@@ -7,6 +7,8 @@ import useSWR from "swr";
 import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, ListVideo, RotateCcw } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
+import { CinemaSimilarRow } from "@/components/cinema/CinemaSimilarRow";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -51,7 +53,16 @@ interface SonarrInfo {
 //      only actual episode files. That means Play only renders once /episodes has resolved,
 //      same async-gated pattern already used for the movie side's own usePlayerEnabled race.
 //   2. An extra "Plus d'épisodes" row opens CinemaEpisodeBrowser (seasons + episode picker).
-export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onClose: () => void }) {
+export function CinemaSeriesDetail({
+  item,
+  onClose,
+  onSelectSimilar,
+}: {
+  item: CinemaSeries;
+  onClose: () => void;
+  // Same role as CinemaMovieDetail's — swaps the subject instead of stacking sheets.
+  onSelectSimilar?: (item: CinemaSeries) => void;
+}) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -201,6 +212,7 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+            <CinemaMatchBadge rating={item.imdbRating} />
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
@@ -297,6 +309,10 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
               <span className="text-sm font-medium">{t("watchlist.statuses.toWatch")}</span>
             </button>
           </div>
+
+          {onSelectSimilar && (
+            <CinemaSimilarRow subject={item} mediaType="series" onSelect={(next) => onSelectSimilar(next as CinemaSeries)} />
+          )}
         </div>
       </div>
 

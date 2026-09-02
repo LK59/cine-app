@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { Search, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { searchCinemaLibrary } from "@/lib/cinemaSearch";
+import { uniqueById } from "@/lib/cinemaRails";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -19,15 +20,6 @@ import type { CinemaSeries, CinemaSeriesPayload } from "@/app/api/cinema/series/
 // One overlay for both layouts: the phone and the desktop want the same thing (a field on top, a
 // poster grid below), only at different densities — which is a responsive grid, not two
 // components.
-
-// The rows payload repeats a title once per genre it belongs to; the search wants each title once.
-function uniqueItems<T>(payload: { rows: Record<string, T[]>; spotlight: T[] } | undefined, id: (x: T) => number): T[] {
-  if (!payload) return [];
-  const byId = new Map<number, T>();
-  for (const item of payload.spotlight) byId.set(id(item), item);
-  for (const list of Object.values(payload.rows)) for (const item of list) byId.set(id(item), item);
-  return [...byId.values()];
-}
 
 const MAX_RESULTS = 60;
 
@@ -52,8 +44,14 @@ export function CinemaSearchOverlay({
   const { data: movies } = useSWR<CinemaMoviesPayload>("/api/cinema/movies", fetcher);
   const { data: series } = useSWR<CinemaSeriesPayload>("/api/cinema/series", fetcher);
 
-  const allMovies = useMemo(() => uniqueItems(movies, (m) => m.radarrId), [movies]);
-  const allSeries = useMemo(() => uniqueItems(series, (s) => s.sonarrId), [series]);
+  const allMovies = useMemo(
+    () => uniqueById([...(movies?.spotlight ?? []), ...Object.values(movies?.rows ?? {}).flat()], (m) => m.radarrId),
+    [movies]
+  );
+  const allSeries = useMemo(
+    () => uniqueById([...(series?.spotlight ?? []), ...Object.values(series?.rows ?? {}).flat()], (s) => s.sonarrId),
+    [series]
+  );
   const results = useMemo(
     () => searchCinemaLibrary(query, allMovies, allSeries, locale).slice(0, MAX_RESULTS),
     [query, allMovies, allSeries, locale]

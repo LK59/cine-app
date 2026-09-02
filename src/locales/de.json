@@ -1194,6 +1194,12 @@
     "searchHint": "Durchsucht deine Bibliothek: Titel, Genre, Jahr…",
     "searchEmpty": "Nichts in deiner Bibliothek passt zu dieser Suche.",
     "searchResults": "{n} Ergebnis(se)",
-    "search": "Suchen"
+    "search": "Suchen",
+    "myList": "Meine Liste",
+    "recentlyAdded": "Kürzlich hinzugefügt",
+    "top10": "Top 10 in deiner Bibliothek",
+    "newBadge": "Neu",
+    "matchPercent": "{n} % Übereinstimmung",
+    "similar": "Ähnliche Titel"
   }
 }

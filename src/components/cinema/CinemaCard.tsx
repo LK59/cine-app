@@ -1,6 +1,7 @@
 "use client";
 
 import { PosterImage } from "@/components/PosterImage";
+import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 const TV_NAV_RING =
@@ -37,7 +38,7 @@ export function CinemaCard({
       onFocus={() => onFocusItem(item)}
       onMouseEnter={() => onFocusItem(item)}
       onClick={() => onSelectItem(item)}
-      className={`${widthClassName} shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
+      className={`${widthClassName} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
       {/* unoptimized: these URLs are already TMDB CDN images requested at the exact width this
           card renders at (see the cinema payload routes). Routing them through Next's optimizer
@@ -53,6 +54,7 @@ export function CinemaCard({
         // poster sized for the slot rather than the shared grid default.
         sizes={"(max-width: 640px) 96px, (max-width: 768px) 112px, (max-width: 1024px) 128px, 144px"}
       />
+      <CinemaNewBadge addedAt={item.addedAt} />
     </button>
   );
 }

@@ -14,6 +14,8 @@ import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
+import { CinemaSimilarRow } from "@/components/cinema/CinemaSimilarRow";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -39,10 +41,14 @@ export function CinemaMobileDetail({
   item,
   mediaType,
   onClose,
+  onSelectSimilar,
 }: {
   item: CinemaMovie | CinemaSeries;
   mediaType: "movies" | "series";
   onClose: () => void;
+  // Swaps this sheet's subject when a "Titres similaires" poster is tapped, rather than stacking
+  // a second sheet on top of it.
+  onSelectSimilar?: (item: CinemaMovie | CinemaSeries) => void;
 }) {
   const t = useT();
   const playback = usePlayback();
@@ -197,6 +203,7 @@ export function CinemaMobileDetail({
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
           <span>{item.year}</span>
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+          <CinemaMatchBadge rating={item.imdbRating} />
           {isSeries && seasons.length > 0 && (
             <span>{t("cinema.seasonCount", { n: seasons.length })}</span>
           )}
@@ -326,6 +333,8 @@ export function CinemaMobileDetail({
             </div>
           </>
         )}
+
+        {onSelectSimilar && <CinemaSimilarRow subject={item} mediaType={mediaType} onSelect={onSelectSimilar} />}
       </div>
 
       {showTrailer && info?.trailerKey && (

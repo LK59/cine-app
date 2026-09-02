@@ -1194,6 +1194,12 @@
     "searchHint": "Searches your library: title, genre, year…",
     "searchEmpty": "Nothing in your library matches this search.",
     "searchResults": "{n} result(s)",
-    "search": "Search"
+    "search": "Search",
+    "myList": "My list",
+    "recentlyAdded": "Recently added",
+    "top10": "Top 10 in your library",
+    "newBadge": "New",
+    "matchPercent": "{n}% match",
+    "similar": "More like this"
   }
 }

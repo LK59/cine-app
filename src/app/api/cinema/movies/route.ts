@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleLogo } from "@/lib/title-logo";
+import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
 export interface CinemaMovie {
@@ -16,12 +17,19 @@ export interface CinemaMovie {
   overview: string | null;
   imdbRating: string | null;
   genres: string[];
+  // Drives the "Nouveau" badge and the "Récemment ajoutés" rail. Null when Radarr has no real
+  // date for it (its "never" sentinel included — see lib/cinemaRails).
+  addedAt: string | null;
 }
 
 export interface CinemaMoviesPayload {
   genres: string[];
   rows: Record<string, CinemaMovie[]>;
   spotlight: CinemaMovie[];
+  // Curated rails, computed here so the movie and series screens can't drift apart on what they
+  // mean (see lib/cinemaRails for each one's definition).
+  recentlyAdded: CinemaMovie[];
+  top10: CinemaMovie[];
 }
 
 // Bulk-included here (like poster/backdrop already were) rather than fetched per-item on focus
@@ -45,6 +53,7 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
     // OMDb/TMDB round trip needed, same field fetchHero() in the dashboard route uses.
     imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,
     genres: m.genres ?? [],
+    addedAt: m.added ?? null,
   };
 }
 
@@ -79,6 +88,12 @@ export async function GET() {
     .slice(0, 10)
     .map((m) => byRadarrId.get(m.id)!);
 
-  const payload: CinemaMoviesPayload = { genres: [...genreSet].sort(), rows, spotlight };
+  const payload: CinemaMoviesPayload = {
+    genres: [...genreSet].sort(),
+    rows,
+    spotlight,
+    recentlyAdded: recentlyAddedRail(cinemaMovies),
+    top10: top10Rail(cinemaMovies),
+  };
   return NextResponse.json(payload);
 }

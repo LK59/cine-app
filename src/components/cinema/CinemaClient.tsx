@@ -20,6 +20,8 @@ import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
 import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
+import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
+import { useCinemaMyList } from "@/lib/useCinemaMyList";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { CinemaTrailerBackdrop } from "@/components/cinema/CinemaTrailerBackdrop";
 import { useT } from "@/components/TranslationProvider";
@@ -52,6 +54,11 @@ const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 // Same edge-fade mask as CinemaRow/CinemaSeriesRow (see their own doc comment) — the Continue
 // Watching row is hand-rolled here rather than going through either of those (it renders
 // ContinueCard, not CinemaCard/CinemaSeriesCard), so it needs its own copy of the same treatment.
+// How many curated rails can sit above the genre rows (Continue, Top 10, Recently added, My
+// list). Only used as the genre rows' entrance-animation offset, which caps at 6 anyway — an
+// exact count per tab would buy nothing visible.
+const RAIL_COUNT = 4;
+
 const EDGE_FADE = {
   maskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
   WebkitMaskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
@@ -221,6 +228,10 @@ export function CinemaClient() {
     fetcher
   );
   const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>("/api/jellyfin/resume", fetcher);
+  // "Ma liste": the watchlist entries that are actually in the library, so every card on that
+  // rail is playable (see the hook).
+  const myListMovies = useCinemaMyList("movie", movies);
+  const myListSeries = useCinemaMyList("series", series);
   const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
@@ -463,7 +474,7 @@ export function CinemaClient() {
 
       <button
         onClick={() => setSearchOpen(true)}
-        className="fixed right-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
+        className="fixed right-4 z-20 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
         style={{ top: "max(1rem, env(safe-area-inset-top))" }}
         title={t("cinema.search")}
       >
@@ -601,12 +612,50 @@ export function CinemaClient() {
                 </div>
               )}
 
+              {/* The curated rails, ahead of the alphabetical genre rows: what's best, what just
+                  arrived, what you saved. A library sorted A→Z is a catalogue; these three are
+                  what make it read as a home screen. Each one hides itself when empty. */}
+              {movies && (
+                <CinemaTop10Row
+                  label={t("cinema.top10")}
+                  rowKey="top10-movies"
+                  rowIndex={resumeMovies.length > 0 ? 1 : 0}
+                  items={movies.top10}
+                  idOf={(m) => m.radarrId}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={setFocusedItem}
+                  onSelectItem={openDetail}
+                />
+              )}
+
+              {movies && (
+                <CinemaRow
+                  label={t("cinema.recentlyAdded")}
+                  rowKey="recent-movies"
+                  rowIndex={RAIL_COUNT}
+                  items={movies.recentlyAdded}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={setFocusedItem}
+                  onSelectItem={openDetail}
+                />
+              )}
+
+              <CinemaRow
+                label={t("cinema.myList")}
+                rowKey="mylist-movies"
+                rowIndex={RAIL_COUNT}
+                items={myListMovies}
+                cardWidthClassName={CARD_WIDTH}
+                onFocusItem={setFocusedItem}
+                onSelectItem={openDetail}
+              />
+
               {movies?.genres.map((genre, i) => (
                 <CinemaRow
                   key={genre}
                   label={genre}
                   rowKey={`genre-${genre}`}
-                  rowIndex={i + (resumeMovies.length > 0 ? 1 : 0)}
+                  rowIndex={i + RAIL_COUNT}
                   items={movies.rows[genre] ?? []}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={setFocusedItem}
@@ -657,12 +706,48 @@ export function CinemaClient() {
               {series && series.spotlight.length === 0 && (
                 <p className="px-8 text-sm text-slate-400 sm:px-12">{t("cinema.empty")}</p>
               )}
+              {/* Same three rails as the movies tab — see its own note above. */}
+              {series && (
+                <CinemaTop10Row
+                  label={t("cinema.top10")}
+                  rowKey="top10-series"
+                  rowIndex={continueSeries.length > 0 ? 1 : 0}
+                  items={series.top10}
+                  idOf={(x) => x.sonarrId}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={setSeriesFocusedItem}
+                  onSelectItem={openSeriesDetail}
+                />
+              )}
+
+              {series && (
+                <CinemaSeriesRow
+                  label={t("cinema.recentlyAdded")}
+                  rowKey="recent-series"
+                  rowIndex={RAIL_COUNT}
+                  items={series.recentlyAdded}
+                  cardWidthClassName={CARD_WIDTH}
+                  onFocusItem={setSeriesFocusedItem}
+                  onSelectItem={openSeriesDetail}
+                />
+              )}
+
+              <CinemaSeriesRow
+                label={t("cinema.myList")}
+                rowKey="mylist-series"
+                rowIndex={RAIL_COUNT}
+                items={myListSeries}
+                cardWidthClassName={CARD_WIDTH}
+                onFocusItem={setSeriesFocusedItem}
+                onSelectItem={openSeriesDetail}
+              />
+
               {series?.genres.map((genre, i) => (
                 <CinemaSeriesRow
                   key={genre}
                   label={genre}
                   rowKey={`genre-${genre}`}
-                  rowIndex={i + (continueSeries.length > 0 ? 1 : 0)}
+                  rowIndex={i + RAIL_COUNT}
                   items={series.rows[genre] ?? []}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={setSeriesFocusedItem}
@@ -675,8 +760,8 @@ export function CinemaClient() {
         </div>
       </div>
 
-      {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={closeDetail} />}
-      {seriesSelectedItem && <CinemaSeriesDetail item={seriesSelectedItem} onClose={closeSeriesDetail} />}
+      {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={closeDetail} onSelectSimilar={openDetail} />}
+      {seriesSelectedItem && <CinemaSeriesDetail item={seriesSelectedItem} onClose={closeSeriesDetail} onSelectSimilar={openSeriesDetail} />}
     </div>,
     document.body
   );

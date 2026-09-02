@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaMatchBadge } from "@/components/cinema/CinemaMatchBadge";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
 interface SonarrCastMember {
@@ -66,6 +67,7 @@ export function CinemaSeriesHero({
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
         <span>{item.year}</span>
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+        <CinemaMatchBadge rating={item.imdbRating} />
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
       </div>
 

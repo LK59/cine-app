@@ -3,6 +3,7 @@ import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } fro
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleLogo } from "@/lib/title-logo";
 import { getImdbRating } from "@/lib/imdb-rating";
+import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 
 export interface CinemaSeries {
@@ -18,12 +19,16 @@ export interface CinemaSeries {
   overview: string | null;
   imdbRating: string | null;
   genres: string[];
+  // Same role as the movie payload's own field — the "Nouveau" badge and the recently-added rail.
+  addedAt: string | null;
 }
 
 export interface CinemaSeriesPayload {
   genres: string[];
   rows: Record<string, CinemaSeries[]>;
   spotlight: CinemaSeries[];
+  recentlyAdded: CinemaSeries[];
+  top10: CinemaSeries[];
 }
 
 // Mirrors /api/cinema/movies/route.ts exactly (see its own comments for the reasoning behind
@@ -53,6 +58,7 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
     overview: s.overview ?? null,
     imdbRating,
     genres: s.genres ?? [],
+    addedAt: s.added ?? null,
   };
 }
 
@@ -88,6 +94,12 @@ export async function GET() {
     .slice(0, 10)
     .map((s) => bySonarrId.get(s.id)!);
 
-  const payload: CinemaSeriesPayload = { genres: [...genreSet].sort(), rows, spotlight };
+  const payload: CinemaSeriesPayload = {
+    genres: [...genreSet].sort(),
+    rows,
+    spotlight,
+    recentlyAdded: recentlyAddedRail(cinemaSeries),
+    top10: top10Rail(cinemaSeries),
+  };
   return NextResponse.json(payload);
 }

@@ -1194,6 +1194,12 @@
     "searchHint": "Busca en tu biblioteca: título, género, año…",
     "searchEmpty": "Nada en tu biblioteca coincide con esta búsqueda.",
     "searchResults": "{n} resultado(s)",
-    "search": "Buscar"
+    "search": "Buscar",
+    "myList": "Mi lista",
+    "recentlyAdded": "Añadidos recientemente",
+    "top10": "Top 10 de tu biblioteca",
+    "newBadge": "Nuevo",
+    "matchPercent": "{n} % de coincidencia",
+    "similar": "Títulos similares"
   }
 }

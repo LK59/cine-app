@@ -12,6 +12,9 @@ import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
+import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
+import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
+import { useCinemaMyList } from "@/lib/useCinemaMyList";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -71,7 +74,14 @@ export function CinemaMobileClient() {
   const continueSeries = nextUp?.items ?? [];
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
+  // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
+  const myListMovies = useCinemaMyList("movie", movies);
+  const myListSeries = useCinemaMyList("series", series);
   const hero = isSeries ? series?.spotlight[0] : movies?.spotlight[0];
+  const myList = isSeries ? myListSeries : myListMovies;
+  // The two payloads key their items differently; every rail below just needs *a* stable id.
+  const itemId = (item: CinemaMovie | CinemaSeries) =>
+    "radarrId" in item ? item.radarrId : item.sonarrId;
 
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
     setSelected({ item, mediaType: type });
@@ -309,29 +319,32 @@ export function CinemaMobileClient() {
           </MobileRow>
         )}
 
+        {/* The curated rails, ahead of the genre rows — same three as desktop, same definitions
+            (see lib/cinemaRails). Each hides itself when it has nothing to show. */}
+        {payload && payload.top10.length > 0 && (
+          <MobileRow label={t("cinema.top10")}>
+            {payload.top10.map((item, i) => (
+              <CinemaTop10Card
+                key={itemId(item)}
+                rank={i + 1}
+                title={item.title}
+                posterUrl={item.posterUrl}
+                addedAt={item.addedAt}
+                widthClassName={POSTER_WIDTH}
+                numberFontSize="4.5rem"
+                onSelectItem={() => openDetail(item, mediaType)}
+              />
+            ))}
+          </MobileRow>
+        )}
+
+        <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />
+        <PosterRow label={t("cinema.myList")} items={myList} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />
+
         {payload?.genres.map((genre) => {
           const items = (payload.rows[genre] ?? []).slice(0, ROW_ITEM_LIMIT);
           if (items.length === 0) return null;
-          return (
-            <MobileRow key={genre} label={genre}>
-              {items.map((item) => (
-                <button
-                  key={isSeries ? (item as CinemaSeries).sonarrId : (item as CinemaMovie).radarrId}
-                  type="button"
-                  onClick={() => openDetail(item, mediaType)}
-                  className={`${POSTER_WIDTH} shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
-                >
-                  <PosterImage
-                    src={item.posterUrl}
-                    alt={item.title}
-                    subtle
-                    unoptimized
-                    sizes="(max-width: 640px) 112px, 128px"
-                  />
-                </button>
-              ))}
-            </MobileRow>
-          );
+          return <PosterRow key={genre} label={genre} items={items} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />;
         })}
       </div>
 
@@ -340,6 +353,7 @@ export function CinemaMobileClient() {
           item={selected.item}
           mediaType={selected.mediaType}
           onClose={() => setSelected(null)}
+          onSelectSimilar={(item) => setSelected({ item, mediaType: selected.mediaType })}
         />
       )}
     </div>,
@@ -359,6 +373,38 @@ const ROW_CONTAINMENT = {
   contentVisibility: "auto",
   containIntrinsicSize: "auto 210px",
 } as React.CSSProperties;
+
+// One rail of posters — the shape every mobile row except Continue Watching and Top 10 uses.
+// Generic over the item type so the movie and series tabs share it; returns nothing when empty,
+// which is what lets the curated rails be dropped in unconditionally above.
+function PosterRow<T extends { title: string; posterUrl: string | null; addedAt: string | null }>({
+  label,
+  items,
+  itemId,
+  onSelect,
+}: {
+  label: string;
+  items: T[];
+  itemId: (item: T) => number;
+  onSelect: (item: T) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <MobileRow label={label}>
+      {items.map((item) => (
+        <button
+          key={itemId(item)}
+          type="button"
+          onClick={() => onSelect(item)}
+          className={`${POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
+        >
+          <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
+          <CinemaNewBadge addedAt={item.addedAt} />
+        </button>
+      ))}
+    </MobileRow>
+  );
+}
 
 function MobileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
