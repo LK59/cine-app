@@ -8,11 +8,14 @@ import { useSyncExternalStore } from "react";
 //
 // Two deliberate choices:
 //
-// 1. The state lives in the URL *hash*, not in query params. Changing a query param is a route
-//    change to Next's App Router, which fetches the target route's RSC payload — the exact
-//    request that was observed failing at transport level in production (see Sidebar's comment
-//    on the Cinema entry link, and lib/leaveCinema). A hash change is invisible to the router:
-//    no fetch, nothing to fail, and back/forward and deep links all still work.
+// 1. The state lives in the URL *hash*, not in query params. Which sheet is open is pure client
+//    state — no server data is keyed by it — and a query param change is a route change to
+//    Next's App Router: a network round-trip before an overlay that is already fully loaded can
+//    appear. A hash change is invisible to the router, so opening a sheet stays instant and
+//    works offline, while back/forward and deep links behave identically either way.
+//
+//    (This also sidestepped an RSC fetch failure that plagued this route for months. That is
+//    fixed and verified now — but the reasoning above is why the hash stays regardless.)
 //
 // 2. It's a plain external store over the History API rather than Next's useSearchParams, for
 //    the same reason — and because useSyncExternalStore gives every consumer (the browse client,

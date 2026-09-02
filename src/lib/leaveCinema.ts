@@ -13,11 +13,15 @@ type Router = ReturnType<typeof useRouter>;
 // layout — and the same <video> element — alive. Playback simply continues, with the mini player
 // carrying over onto the dashboard.
 //
-// The hard navigation existed for a reason though (see Sidebar's comment on the entry link):
-// Next's client-side transition fetches the target route's RSC payload, and that fetch was
-// observed failing at transport level in production. So this tries the client-side route first
-// and falls back to a real navigation if the URL hasn't actually changed shortly after. Worst
-// case is exactly the old behavior — you always end up on the dashboard.
+// The hard navigation existed for a reason: Next's client-side transition fetches the target
+// route's RSC payload, and that fetch was, for months, failing in production. It no longer does
+// — verified live in both directions — most likely because the service worker used to cache
+// those responses and convert a network failure into a synthetic 504 the router could only read
+// as a server error, which made a passing hiccup look permanent.
+//
+// The fallback stays anyway, and not out of superstition: the app is redeployed by hand, and a
+// click landing inside the few seconds the container takes to restart gets a real 502. Ten lines
+// turn that into a page reload instead of a button that does nothing.
 const FALLBACK_MS = 1200;
 
 export function leaveCinema(router: Router): void {
@@ -26,13 +30,10 @@ export function leaveCinema(router: Router): void {
 
 // Entering Cinema Mode, with the same belt-and-braces as leaving it.
 //
-// The entry links used a plain <a> — a full page load — because this client-side transition was
-// seen failing in production. The proxy's access logs since then record 40 of these requests for
-// /cinema, all 200, and no failure; the service worker also no longer intercepts them (it used to
-// cache them, and to convert a network failure into a synthetic 504 the router could only read as
-// a server error). So this is worth trying again — but tried, not assumed: if the URL hasn't
-// actually changed shortly after, it falls back to the full page load, which is exactly the old
-// behaviour. The button can never do nothing.
+// The entry links used a plain <a> — a full page load — because this transition was failing in
+// production. It works now (verified live: instant, no reload, and a minimized player survives
+// the crossing), so they go through the router again. Same fallback as above, for the same
+// deploy-window reason.
 export function enterCinema(router: Router): void {
   navigateWithFallback(router, "/cinema", (path) => !path.startsWith("/cinema"));
 }

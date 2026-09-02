@@ -47,12 +47,9 @@ export function Sidebar() {
           shell (own layout, own visual language) for /cinema, a genuinely different mode rather
           than just another page.
 
-          It was a plain <a> (a full page load) because Next's client-side transition to this
-          route was seen failing at transport level in production. Two things have changed since:
-          the service worker no longer intercepts those requests, and the proxy's logs record
-          every recent one succeeding. So it goes back to a real transition — via enterCinema,
-          which falls back to a full load if the URL hasn't changed shortly after, so the worst
-          case is exactly the old behaviour rather than a dead button. */}
+          It was a plain <a> (a full page load) for months, because the client-side transition to
+          this route was failing in production. It works again — see enterCinema, which also
+          carries the fallback that covers a click landing mid-redeploy. */}
       <button
         type="button"
         onClick={() => enterCinema(router)}

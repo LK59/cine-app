@@ -425,9 +425,8 @@ export function CinemaClient() {
     requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
-  // A hard navigation, not router.push — same reasoning as Sidebar's entry link into this page:
-  // Next's client-side transition (RSC fetch, mode "cors") was failing at the network level in
-  // production for this route specifically.
+  // Goes through leaveCinema rather than a bare router.push: playback has to survive the exit
+  // (see the helper), and its fallback covers a click landing mid-redeploy.
   const exitButton = (
     <button onClick={() => leaveCinema(router)} className="btn-primary">
       {t("cinema.standardMode")}
