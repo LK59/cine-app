@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -46,6 +46,60 @@ const EDGE_FADE = {
 // and there's a label chip to fit beneath) — a distinct width from CARD_WIDTH, not a smaller
 // version of the same one.
 const CONTINUE_CARD_WIDTH = "w-32 sm:w-40 md:w-48 lg:w-56";
+
+// Backdrop/logo warm-up budget. This used to queue EVERY title in the library at once — on a
+// ~800-title library that's ~1600 image requests fired in one burst, which saturates the
+// browser's own per-host connection pool and makes the visible poster images (the ones actually
+// on screen) queue behind them. Only what's reachable within a few keypresses is worth
+// pre-warming; anything further out is a cold fetch that the backdrop's own 150ms debounce and
+// the browser cache already cover well enough.
+const PREFETCH_PER_ROW = 8;
+const PREFETCH_LIMIT = 120;
+const PREFETCH_CHUNK = 6;
+const PREFETCH_CHUNK_DELAY_MS = 300;
+
+// Fires the prefetches a few at a time instead of all at once, and hands back a cancel function
+// so a data refresh (or unmount) doesn't leave a queue running for a list that no longer applies.
+function prefetchImages(urls: string[]): () => void {
+  let cancelled = false;
+  let index = 0;
+  let timer: ReturnType<typeof setTimeout>;
+
+  function pump() {
+    if (cancelled) return;
+    for (let n = 0; n < PREFETCH_CHUNK && index < urls.length; n++, index++) {
+      Object.assign(new Image(), { src: urls[index] });
+    }
+    if (index < urls.length) timer = setTimeout(pump, PREFETCH_CHUNK_DELAY_MS);
+  }
+
+  // Deferred by a beat so it doesn't compete with the initial screen's own critical images.
+  timer = setTimeout(pump, 400);
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+  };
+}
+
+// Spotlight first (that's what the hero opens on), then the head of each row — the cards you can
+// actually reach before scrolling. Deduped, capped, backdrop+logo per title.
+function warmUpUrls<T>(
+  spotlight: T[],
+  rows: Record<string, T[]>,
+  id: (item: T) => number,
+  urlsOf: (item: T) => (string | null)[]
+): string[] {
+  const seen = new Set<number>();
+  const urls: string[] = [];
+  const push = (item: T) => {
+    if (urls.length >= PREFETCH_LIMIT || seen.has(id(item))) return;
+    seen.add(id(item));
+    for (const url of urlsOf(item)) if (url) urls.push(url);
+  };
+  for (const item of spotlight) push(item);
+  for (const list of Object.values(rows)) for (const item of list.slice(0, PREFETCH_PER_ROW)) push(item);
+  return urls;
+}
 
 // Continue-watching items come from Jellyfin's own resume/next-up feeds (via the dashboard resume
 // payload for movies, and /api/cinema/next-up for series — see that route's own doc comment), not
@@ -157,48 +211,25 @@ export function CinemaClient() {
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
   const continueSeries = nextUp?.items ?? [];
 
-  // Warms the browser's own image cache for every distinct backdrop AND logo in the library,
-  // same technique DashboardHero already uses for its (much smaller) rotation set — without it,
-  // the FIRST time focus lands on any given title, its backdrop/logo is a cold network fetch,
-  // which read as "a second of nothing, then the picture just pops in" (backdrops) or a visible
-  // flash before the text fallback kicked in (logos). Deferred by a beat so it doesn't compete
-  // with the initial screen's own critical images (hero, first row).
+  // Warms the browser's own image cache for the backdrops/logos reachable within a few keypresses
+  // (see warmUpUrls/prefetchImages above for the budget and why it's capped) — without it, the
+  // FIRST time focus lands on a title its backdrop/logo is a cold network fetch, which read as "a
+  // second of nothing, then the picture just pops in" (backdrops) or a visible flash before the
+  // text fallback kicked in (logos).
   useEffect(() => {
     if (!movies) return;
-    const seen = new Set<number>();
-    const urls: string[] = [];
-    for (const list of Object.values(movies.rows)) {
-      for (const m of list) {
-        if (seen.has(m.radarrId)) continue;
-        seen.add(m.radarrId);
-        if (m.backdropUrl) urls.push(m.backdropUrl);
-        if (m.logoUrl) urls.push(m.logoUrl);
-      }
-    }
-    const timer = setTimeout(() => {
-      for (const url of urls) Object.assign(new Image(), { src: url });
-    }, 400);
-    return () => clearTimeout(timer);
+    return prefetchImages(
+      warmUpUrls(movies.spotlight, movies.rows, (m) => m.radarrId, (m) => [m.backdropUrl, m.logoUrl])
+    );
   }, [movies]);
 
   // Same warm-up, series side — fires once series data actually loads (i.e. only after the user
   // has switched to that tab at least once), not on the initial movies-only load.
   useEffect(() => {
     if (!series) return;
-    const seen = new Set<number>();
-    const urls: string[] = [];
-    for (const list of Object.values(series.rows)) {
-      for (const s of list) {
-        if (seen.has(s.sonarrId)) continue;
-        seen.add(s.sonarrId);
-        if (s.backdropUrl) urls.push(s.backdropUrl);
-        if (s.logoUrl) urls.push(s.logoUrl);
-      }
-    }
-    const timer = setTimeout(() => {
-      for (const url of urls) Object.assign(new Image(), { src: url });
-    }, 400);
-    return () => clearTimeout(timer);
+    return prefetchImages(
+      warmUpUrls(series.spotlight, series.rows, (s) => s.sonarrId, (s) => [s.backdropUrl, s.logoUrl])
+    );
   }, [series]);
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
@@ -231,6 +262,11 @@ export function CinemaClient() {
     key: activeHeroKey,
   });
   useEffect(() => {
+    // Never commit an empty hero: switching to a tab whose data is still loading momentarily has
+    // nothing to show, and blanking the backdrop for it drops the whole screen to flat slate for
+    // as long as the fetch takes. Holding the previous image until a real replacement exists
+    // makes the switch read as a crossfade rather than a blackout.
+    if (!activeHeroItem) return;
     const timer = setTimeout(() => setDebouncedHero({ item: activeHeroItem, key: activeHeroKey }), 150);
     return () => clearTimeout(timer);
   }, [activeHeroItem, activeHeroKey]);
@@ -271,28 +307,36 @@ export function CinemaClient() {
   // seriesSelectedItem gate this now — either detail sheet owns the keyboard the same way.
   useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full");
 
-  function openDetail(item: CinemaMovie) {
+  // Same three conditions gate the trailer preview below — anything opaque covering the browse
+  // screen means the preview has nothing to preview for.
+  const trailerSuspended = selectedItem !== null || seriesSelectedItem !== null || playback.mode === "full";
+
+  // All four are useCallback'd for one specific reason: the row components below are memo'd, and
+  // a fresh function identity on every render would defeat that entirely — the rows (and every
+  // card in them, which on a large library is thousands of nodes) would re-render on every single
+  // arrow keypress, since focus changes re-render this component by design.
+  const openDetail = useCallback((item: CinemaMovie) => {
     lastFocusedCard.current = document.activeElement as HTMLElement;
     setSelectedItem(item);
-  }
+  }, []);
 
-  function closeDetail() {
+  const closeDetail = useCallback(() => {
     setSelectedItem(null);
     // The card is still in the DOM (the browse screen never unmounts under the overlay) but
     // isn't focused yet the instant this runs — the overlay's own focused button is still
     // mid-unmount. One frame later it's safe to move focus back.
     requestAnimationFrame(() => lastFocusedCard.current?.focus());
-  }
+  }, []);
 
-  function openSeriesDetail(item: CinemaSeries) {
+  const openSeriesDetail = useCallback((item: CinemaSeries) => {
     lastFocusedCard.current = document.activeElement as HTMLElement;
     setSeriesSelectedItem(item);
-  }
+  }, []);
 
-  function closeSeriesDetail() {
+  const closeSeriesDetail = useCallback(() => {
     setSeriesSelectedItem(null);
     requestAnimationFrame(() => lastFocusedCard.current?.focus());
-  }
+  }, []);
 
   // A hard navigation, not router.push — same reasoning as Sidebar's entry link into this page:
   // Next's client-side transition (RSC fetch, mode "cors") was failing at the network level in
@@ -324,9 +368,29 @@ export function CinemaClient() {
   // invisible. Portaling straight to document.body — same escape hatch already used by
   // Modal/TrailerModal/PlayerHost/ActionSheet — sidesteps the containing-block issue entirely.
   if (moviesLoading) {
+    // A skeleton in the shape of the real screen, not a centred spinner: the layout it resolves
+    // into is already on screen, so the load reads as content filling in rather than a blank
+    // screen swapping for a full one.
     return createPortal(
-      <div className="fixed inset-0 flex items-center justify-center bg-slate-950" style={zLayer}>
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={zLayer}>
+        <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
+          <div className="flex h-full max-w-2xl flex-col justify-end gap-4 px-8 pb-10 sm:px-12">
+            <div className="skeleton h-12 w-72 rounded-lg sm:h-16" />
+            <div className="skeleton h-4 w-48 rounded" />
+            <div className="skeleton h-4 w-full max-w-xl rounded" />
+            <div className="skeleton h-4 w-2/3 max-w-md rounded" />
+          </div>
+        </div>
+        <div className="min-h-80 flex-1 pt-6">
+          <div className="mb-2 px-8 sm:px-12">
+            <div className="skeleton h-4 w-28 rounded" />
+          </div>
+          <div className="flex gap-3 px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+            {Array.from({ length: 10 }, (_, i) => (
+              <div key={i} className={`skeleton ${CARD_WIDTH} aspect-2/3 shrink-0 rounded-lg`} />
+            ))}
+          </div>
+        </div>
       </div>,
       document.body
     );
@@ -397,8 +461,14 @@ export function CinemaClient() {
                 "now playing" state clear — same mask, same role, later in DOM order so it
                 naturally paints on top (see the z-index note elsewhere in this file for that
                 convention) with no z-index of its own needed. The image never unmounts
-                underneath it: nothing to do if there's no trailer, or before it's ready. */}
-            <CinemaTrailerBackdrop itemKey={debouncedHeroKey ?? ""} trailerKey={heroTrailerKey} />
+                underneath it: nothing to do if there's no trailer, or before it's ready.
+                Unmounted outright (not just hidden) whenever something opaque is over it: a
+                detail sheet or the real player. Hiding alone would leave a YouTube player running
+                behind a full-screen overlay — burning CPU on frames nobody sees, and, if the user
+                had unmuted the preview, still audible underneath the film they just started. */}
+            {!trailerSuspended && (
+              <CinemaTrailerBackdrop itemKey={debouncedHeroKey ?? ""} trailerKey={heroTrailerKey} />
+            )}
           </>
         )}
         <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />

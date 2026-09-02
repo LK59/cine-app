@@ -11,7 +11,11 @@ export function CinemaShortcutsGuide() {
 
   return (
     <div
-      className="fixed right-4 z-10 flex items-center gap-3 rounded-full bg-black/40 px-4 py-2 text-xs text-white/70 backdrop-blur-xs"
+      // hidden below md: this legend is ~330px of chrome pinned right, and the Films/Séries
+      // toggle is centred at the same height — on a narrow window the two collide. The shortcuts
+      // it documents are the arrow keys, which anyone on a window that small is least likely to
+      // be driving the screen with anyway.
+      className="fixed right-4 z-10 hidden items-center gap-3 rounded-full bg-black/40 px-4 py-2 text-xs text-white/70 backdrop-blur-xs md:flex"
       style={{ top: "max(1rem, env(safe-area-inset-top))" }}
     >
       <span className="flex items-center gap-1">

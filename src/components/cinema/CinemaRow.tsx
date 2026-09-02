@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
@@ -13,7 +14,12 @@ const EDGE_FADE = {
   WebkitMaskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
 };
 
-export function CinemaRow({
+// memo'd: focus changes re-render CinemaClient on every arrow keypress (the hero above is driven
+// by whatever card has focus), and without this that walks the entire grid — every row, every
+// card — on each press. Every prop passed in is already stable across those renders (the item
+// arrays come straight off the SWR payload, the callbacks are useCallback'd there), so the rows
+// simply opt out of that work entirely.
+export const CinemaRow = memo(function CinemaRow({
   label,
   rowKey,
   rowIndex = 0,
@@ -63,4 +69,4 @@ export function CinemaRow({
       </div>
     </div>
   );
-}
+});

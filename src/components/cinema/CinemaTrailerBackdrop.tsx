@@ -82,7 +82,18 @@ export function CinemaTrailerBackdrop({
     setDwelled(false);
     setPlaying(false);
     setMuted(true);
+    setInstantHide(false);
   }
+
+  // The position/steady-progress refs belong to whichever player is current — carried into the
+  // next title they'd have the poll compare a fresh player's position against the previous one's,
+  // which can read as smooth progress by coincidence and reveal a beat early. Reset in an effect
+  // rather than in the render-time block above: writing refs during render is what this project's
+  // react-hooks/refs rule forbids.
+  useEffect(() => {
+    lastPositionRef.current = -1;
+    steadySinceRef.current = 0;
+  }, [itemKey]);
 
   // Drives the reveal off actual elapsed playback (see REVEAL_AT_SECONDS' own note). Runs both
   // ways on purpose — dropping back below the threshold (a loop restart) re-hides the backdrop,
@@ -149,6 +160,10 @@ export function CinemaTrailerBackdrop({
 
   useEffect(() => {
     if (!trailerKey) return;
+    // A video that starts playing on its own, unprompted, is exactly what "reduce motion" is
+    // asking not to happen — the still backdrop stays instead. Read per-effect rather than once
+    // at module load so a mid-session OS/browser change is picked up on the next focus.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const timer = setTimeout(() => setDwelled(true), DWELL_MS);
     return () => clearTimeout(timer);
   }, [itemKey, trailerKey]);

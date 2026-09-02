@@ -37,9 +37,16 @@ export function CinemaCard({
       onFocus={() => onFocusItem(item)}
       onMouseEnter={() => onFocusItem(item)}
       onClick={() => onSelectItem(item)}
-      className={`${widthClassName} shrink-0 overflow-hidden rounded-lg transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
+      className={`${widthClassName} shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
-      <PosterImage src={item.posterUrl} alt={item.title} subtle />
+      <PosterImage
+        src={item.posterUrl}
+        alt={item.title}
+        subtle
+        // Matches CARD_WIDTH's own breakpoints (96/112/128/144px) so Next serves a
+        // poster sized for the slot rather than the shared grid default.
+        sizes={"(max-width: 640px) 96px, (max-width: 768px) 112px, (max-width: 1024px) 128px, 144px"}
+      />
     </button>
   );
 }

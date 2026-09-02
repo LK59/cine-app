@@ -17,6 +17,11 @@ interface PosterImageProps {
   // loading at once; that many shimmers moving in sync reads as busy at that scale, where a
   // single flat tone doesn't.
   subtle?: boolean;
+  // Overrides the default responsive `sizes` hint. The default is tuned for this app's main
+  // poster grids (2-6 columns of a full-width layout); Cinema Mode's rows are far denser — a
+  // card there is at most 144px wide, so the default's 20vw makes Next serve a ~384px image for
+  // it, several times more pixels than the slot can show, on hundreds of cards at once.
+  sizes?: string;
 }
 
 export function PosterImage({
@@ -26,6 +31,7 @@ export function PosterImage({
   aspectRatio = "aspect-2/3",
   unoptimized = false,
   subtle = false,
+  sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw",
 }: PosterImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -46,7 +52,7 @@ export function PosterImage({
         alt={alt}
         fill
         unoptimized={unoptimized}
-        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+        sizes={sizes}
         className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         onLoad={() => setLoaded(true)}
         onError={() => setErrored(true)}

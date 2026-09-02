@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -10,7 +11,8 @@ const EDGE_FADE = {
   WebkitMaskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
 };
 
-export function CinemaSeriesRow({
+// memo'd for the same reason CinemaRow is — see its own note.
+export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   label,
   rowKey,
   rowIndex = 0,
@@ -47,4 +49,4 @@ export function CinemaSeriesRow({
       </div>
     </div>
   );
-}
+});

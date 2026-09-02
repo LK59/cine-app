@@ -56,6 +56,17 @@ export function CinemaEpisodeBrowser({
     containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-season="true"]')?.focus();
   }, []);
 
+  // The episode pane is keyed by displayedSeason, so changing season unmounts every button in it
+  // — including the focused one if focus was over there (hovering the season list with the mouse
+  // while navigating episodes by keyboard does exactly that). Focus then falls to <body>, where
+  // the key handler below matches neither list and arrow keys go dead until something is clicked.
+  // Same "menu closed and took focus with it" class of bug as elsewhere in Cinema Mode; catching
+  // it here keeps keyboard control alive through a mouse-driven season change.
+  useEffect(() => {
+    if (document.activeElement !== document.body) return;
+    containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-item="true"]')?.focus();
+  }, [displayedSeason]);
+
   // Left/Right move between the season list and the episode list; Up/Down cycle within
   // whichever one currently has focus — same roving-focus convention as the player's own
   // directional nav and CinemaMovieDetail's vertical menu.
