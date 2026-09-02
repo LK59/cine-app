@@ -9,7 +9,7 @@ import { useT } from "@/components/TranslationProvider";
 // created (and starts playing, invisibly) this early so that the REVEAL_AT_SECONDS countdown
 // below is already running while the user is still looking at the still backdrop. Kept short
 // for that reason — the visible reveal is gated on playback position, not on this.
-const DWELL_MS = 1000;
+const DWELL_MS = 500;
 // The reveal is gated on the video being genuinely this many seconds in — NOT on the "playing"
 // state event, and not on a fixed delay after it. YouTube's own startup overlay (title/channel
 // card, and the centre prev/play/next controls) is drawn by the embed itself and can't be
@@ -20,7 +20,11 @@ const DWELL_MS = 1000;
 // stalls can't slip the overlay into view — and it doubles as the loop handler: when the video
 // loops back to 0, this drops below the threshold again, hiding the backdrop for exactly as
 // long as the overlay reappears on the restart.
-const REVEAL_AT_SECONDS = 3.5;
+const REVEAL_AT_SECONDS = 4;
+// Coming back to a backgrounded tab, the player re-buffers and briefly redraws that same overlay
+// even though playback is already well past REVEAL_AT_SECONDS — so returning to the tab re-hides
+// the backdrop and holds it hidden this long, rather than trusting the position check alone.
+const RESUME_GRACE_MS = 2500;
 // Crops this many pixels off the video's own top edge — YouTube's title/channel overlay is a
 // roughly fixed-height band regardless of how large the video itself is scaled, so a fixed pixel
 // offset tracks it more reliably than a percentage would.
@@ -54,6 +58,8 @@ export function CinemaTrailerBackdrop({
   const t = useT();
   const mountRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
+  // Timestamp before which the backdrop stays hidden regardless of playback position.
+  const suppressUntilRef = useRef(0);
   const [dwelled, setDwelled] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -79,13 +85,27 @@ export function CinemaTrailerBackdrop({
       const player = playerRef.current;
       if (!player) return;
       try {
-        setPlaying(player.getCurrentTime() >= REVEAL_AT_SECONDS);
+        setPlaying(player.getCurrentTime() >= REVEAL_AT_SECONDS && Date.now() >= suppressUntilRef.current);
       } catch {
         /* player not ready yet (or already torn down) — next tick will do */
       }
     }, 250);
     return () => clearInterval(poll);
   }, [dwelled, itemKey]);
+
+  // See RESUME_GRACE_MS. Hides immediately on either transition (leaving the tab costs nothing
+  // since it isn't visible anyway; coming back is the one that matters) and lets the poll above
+  // bring it back once the grace window has passed.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        suppressUntilRef.current = Date.now() + RESUME_GRACE_MS;
+      }
+      setPlaying(false);
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
 
   useEffect(() => {
     if (!trailerKey) return;
