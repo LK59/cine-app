@@ -48,6 +48,10 @@ export function CinemaTrailerBackdrop({
   const [dwelled, setDwelled] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
+  const [showCenterMask, setShowCenterMask] = useState(false);
+  // Tracks the last `playing` value the mask-arming logic below has reacted to, so it can tell
+  // "playing just turned true" apart from "playing is still true from last render".
+  const [maskArmedFor, setMaskArmedFor] = useState(false);
 
   // Resets synchronously during render (not in an effect — this project's react-hooks/
   // set-state-in-effect rule) on every title change, even before the debounce that gates
@@ -59,7 +63,24 @@ export function CinemaTrailerBackdrop({
     setDwelled(false);
     setPlaying(false);
     setMuted(true);
+    setShowCenterMask(false);
+    setMaskArmedFor(false);
   }
+
+  // YouTube's own center play/prev/next controls only flash for a few seconds after playback
+  // actually starts, not indefinitely — so the mask covering them shouldn't be either. Turned on
+  // synchronously during render (not in an effect — this project's react-hooks/set-state-in-effect
+  // rule) the moment `playing` itself flips true; the effect below only owns the timer that turns
+  // it back off a few seconds later.
+  if (playing !== maskArmedFor) {
+    setMaskArmedFor(playing);
+    if (playing) setShowCenterMask(true);
+  }
+  useEffect(() => {
+    if (!showCenterMask) return;
+    const timer = setTimeout(() => setShowCenterMask(false), 3000);
+    return () => clearTimeout(timer);
+  }, [showCenterMask, itemKey]);
 
   useEffect(() => {
     if (!trailerKey) return;
@@ -157,10 +178,16 @@ export function CinemaTrailerBackdrop({
           same as they already do for the still-image backdrop. */}
       <div className="pointer-events-none absolute inset-0" style={{ background: VIGNETTE }} />
 
-      {/* Masks YouTube's own center play/prev/next controls, which flash briefly at start
-          regardless of controls=0 — a small opaque patch over just that spot, since the top-crop
-          trick can't reach the middle of the frame without cropping the actual picture. */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-20 w-52 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-slate-950" />
+      {/* Masks YouTube's own center play/prev/next controls, which flash for a few seconds after
+          playback starts regardless of controls=0 — a small, tightly-sized patch over just that
+          spot (the top-crop trick can't reach the middle of the frame without cropping the
+          actual picture), blurred + near-opaque rather than a flat black box so it reads as part
+          of the vignette instead of a hard cutout, and only shown for as long as that overlay
+          actually lingers (see showCenterMask's own effect above) — not permanently. */}
+      <div
+        className={`pointer-events-none absolute left-1/2 h-14 w-40 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-slate-950/90 backdrop-blur-md transition-opacity duration-500 ${showCenterMask ? "opacity-100" : "opacity-0"}`}
+        style={{ top: "44%" }}
+      />
 
       {/* Mouse-only, deliberately not part of the TV-remote grid nav chain (same reasoning as
           the back button / shortcuts guide floating outside it) — a discreet corner affordance,
