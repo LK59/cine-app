@@ -24,6 +24,9 @@ const TARGET_BUFFER_SECONDS = 30;
  */
 const MIN_BUFFER_SECONDS = 8;
 
+/** Refused appends in a row before playback is declared broken rather than merely interrupted. */
+const MAX_APPEND_FAILURES = 3;
+
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
 
@@ -72,10 +75,75 @@ export function playabilityOf(plan: RemuxPlan): { ok: true } | { ok: false; reas
   return { ok: true };
 }
 
+/** How long one buffer operation may go unanswered before the queue moves on without it. */
+const BUFFER_OPERATION_TIMEOUT_MS = 4000;
+
+/**
+ * Serialises everything done to one source buffer.
+ *
+ * MediaSource permits exactly one operation per buffer at a time: starting a second while the
+ * first is still running throws, and that throw used to surface as a fatal playback error even
+ * though nothing was actually broken. Appends, removals and codec changes all come through here
+ * in order, so overlapping is impossible rather than merely unlikely — which matters because the
+ * things that touch a buffer are driven by unrelated events (a seek, a language change, the
+ * eviction of played media) that can land in the same instant.
+ */
+class BufferQueue {
+  private chain: Promise<void> = Promise.resolve();
+
+  constructor(readonly buffer: SourceBuffer) {}
+
+  enqueue(operation: () => void): Promise<void> {
+    const run = this.chain.then(() => this.runOne(operation));
+    // The queue outlives a failed operation: one refused append must not wedge every later one.
+    this.chain = run.then(
+      () => {},
+      () => {}
+    );
+    return run;
+  }
+
+  private runOne(operation: () => void): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      // Passed through untouched rather than re-wrapped: a full buffer is signalled by the type
+      // of what is thrown, and coercing it to a plain Error loses exactly the distinction
+      // between "make room and carry on" and "this segment is bad".
+      const finish = (error?: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.buffer.removeEventListener("updateend", onEnd);
+        this.buffer.removeEventListener("error", onFail);
+        if (error !== undefined) reject(error);
+        else resolve();
+      };
+      const onEnd = () => finish();
+      const onFail = () => finish(new Error("Le navigateur a refusé une opération sur le tampon."));
+      // A browser that answers neither must not hold the queue for the rest of the session.
+      const timer = setTimeout(() => finish(), BUFFER_OPERATION_TIMEOUT_MS);
+
+      this.buffer.addEventListener("updateend", onEnd);
+      this.buffer.addEventListener("error", onFail);
+      try {
+        operation();
+        // changeType, and a removal of nothing, finish without ever going busy.
+        if (!this.buffer.updating) finish();
+      } catch (error) {
+        finish(error);
+      }
+    });
+  }
+}
+
 export class MseSource {
   private readonly source: MediaSource | ManagedMediaSource;
   private videoBuffer: SourceBuffer | null = null;
   private audioBuffer: SourceBuffer | null = null;
+  private videoOps: BufferQueue | null = null;
+  private audioOps: BufferQueue | null = null;
+  /** Consecutive refused appends. A single one is worth retrying; a run of them is not. */
+  private appendFailures = 0;
   private objectUrl: string | null = null;
   /** The read loop in flight, if any. A seek has to let it finish before moving the reader. */
   private fillTask: Promise<void> | null = null;
@@ -151,14 +219,16 @@ export class MseSource {
 
     this.videoBuffer = this.source.addSourceBuffer(this.plan.videoMimeType);
     this.videoBuffer.mode = "segments";
+    this.videoOps = new BufferQueue(this.videoBuffer);
     if (this.plan.audioMimeType) {
       this.audioBuffer = this.source.addSourceBuffer(this.plan.audioMimeType);
       this.audioBuffer.mode = "segments";
+      this.audioOps = new BufferQueue(this.audioBuffer);
     }
 
-    await this.appendTo(this.videoBuffer, this.plan.videoInit, this.generation);
-    if (this.audioBuffer && this.plan.audioInit) {
-      await this.appendTo(this.audioBuffer, this.plan.audioInit, this.generation);
+    await this.appendTo(this.videoOps, this.plan.videoInit, this.generation);
+    if (this.audioOps && this.plan.audioInit) {
+      await this.appendTo(this.audioOps, this.plan.audioInit, this.generation);
     }
 
     // Positioned before the first read, not after it. Filling thirty seconds from the beginning
@@ -295,8 +365,8 @@ export class MseSource {
         }
 
         if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
-        if (segment.video && this.videoBuffer) await this.appendTo(this.videoBuffer, segment.video, generation);
-        if (segment.audio && this.audioBuffer) await this.appendTo(this.audioBuffer, segment.audio, generation);
+        if (segment.video && this.videoOps) await this.appendTo(this.videoOps, segment.video, generation);
+        if (segment.audio && this.audioOps) await this.appendTo(this.audioOps, segment.audio, generation);
         // A seek arrived while those were in flight: this loop's appends were discarded, so its
         // reading of where the media is would be about a position no longer being served.
         if (this.generation !== generation || this.destroyed) break;
@@ -314,42 +384,33 @@ export class MseSource {
         }
       }
     } catch (error) {
-      if (!this.destroyed) this.callbacks.onError(error instanceof Error ? error.message : String(error));
+      if (this.destroyed) return;
+      // Reported by the viewer as a freeze that a second seek or a language change undoes — so
+      // nothing was actually lost, and declaring playback over was the wrong answer. A refused
+      // append is retried from where the playhead is; only a run of them is a real fault.
+      this.appendFailures += 1;
+      if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.video.currentTime)) {
+        this.callbacks.onWarning?.("Reprise après un segment refusé.");
+        return;
+      }
+      this.callbacks.onError(error instanceof Error ? error.message : String(error));
     }
   }
 
-  private appendTo(buffer: SourceBuffer, data: Uint8Array, generation: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.destroyed || this.generation !== generation) return resolve();
-
-      const done = () => {
-        buffer.removeEventListener("updateend", done);
-        buffer.removeEventListener("error", failed);
-        resolve();
-      };
-      const failed = () => {
-        buffer.removeEventListener("updateend", done);
-        buffer.removeEventListener("error", failed);
-        reject(new Error("Le navigateur a refusé un segment remultiplexé."));
-      };
-      buffer.addEventListener("updateend", done);
-      buffer.addEventListener("error", failed);
-
-      try {
-        buffer.appendBuffer(data as BufferSource);
-      } catch (error) {
-        buffer.removeEventListener("updateend", done);
-        buffer.removeEventListener("error", failed);
-        // The buffer is full rather than broken: drop what is behind the playhead and let the
-        // next pass try again. Any other failure is real and must be surfaced.
-        if (error instanceof DOMException && error.name === "QuotaExceededError") {
-          this.evict();
-          resolve();
-        } else {
-          reject(error instanceof Error ? error : new Error(String(error)));
-        }
+  private async appendTo(queue: BufferQueue, data: Uint8Array, generation: number): Promise<void> {
+    if (this.destroyed || this.generation !== generation) return;
+    try {
+      await queue.enqueue(() => queue.buffer.appendBuffer(data as BufferSource));
+      this.appendFailures = 0;
+    } catch (error) {
+      // The buffer is full rather than broken: drop what is behind the playhead and try again
+      // on the next pass.
+      if (error instanceof DOMException && error.name === "QuotaExceededError") {
+        this.evict();
+        return;
       }
-    });
+      throw error;
+    }
   }
 
   /**
@@ -382,14 +443,12 @@ export class MseSource {
   private evict(): void {
     const until = this.video.currentTime - KEEP_BEHIND_SECONDS;
     if (until <= 0) return;
-    for (const buffer of [this.videoBuffer, this.audioBuffer]) {
-      if (buffer && !buffer.updating && buffer.buffered.length > 0 && buffer.buffered.start(0) < until) {
-        try {
-          buffer.remove(0, until);
-        } catch {
-          // A remove that the browser declines is not worth failing playback over.
-        }
-      }
+    for (const queue of [this.videoOps, this.audioOps]) {
+      const buffer = queue?.buffer;
+      if (!queue || !buffer || buffer.buffered.length === 0 || buffer.buffered.start(0) >= until) continue;
+      // Queued rather than fired at the buffer directly: eviction is triggered by a full buffer
+      // in the middle of an append, which is exactly when the buffer is busy.
+      void queue.enqueue(() => buffer.remove(0, until)).catch(() => {});
     }
   }
 
@@ -418,37 +477,46 @@ export class MseSource {
   }
 
   /**
-   * Stops the read loop and waits for it to come back.
-   *
-   * The caller needs this before moving anything the loop is reading through: a track swap that
-   * lands mid-read would produce one segment describing one track and carrying another's samples.
-   */
-  async quiesce(): Promise<void> {
-    this.generation += 1;
-    await this.fillTask?.catch(() => {});
-  }
-
-  /**
    * Points the audio buffer at a different track, in place.
    *
    * Nothing about the video is touched, so the picture never stops. The initialisation segment
    * is what a source buffer decodes by; replacing it and refilling is all a language change is.
    */
   async replaceAudio(mimeType: string | null, init: Uint8Array | null): Promise<void> {
-    const buffer = this.audioBuffer;
-    if (!buffer || !mimeType || !init || this.destroyed) return;
+    const queue = this.audioOps;
+    if (!queue || !mimeType || !init || this.destroyed) return;
     this.generation += 1;
 
     if (mimeType !== this.plan.audioMimeType) {
-      if (typeof buffer.changeType !== "function") {
+      if (typeof queue.buffer.changeType !== "function") {
         throw new Error("Ce navigateur ne sait pas changer de codec audio en cours de lecture.");
       }
-      buffer.changeType(mimeType);
+      await queue.enqueue(() => queue.buffer.changeType(mimeType));
     }
     this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
 
-    await this.clear(buffer);
-    await this.appendTo(buffer, init, this.generation);
+    await this.clear(queue);
+    await queue.enqueue(() => queue.buffer.appendBuffer(init as BufferSource));
+  }
+
+  /**
+   * Runs something with the read loop stopped and no seek able to slip in beside it.
+   *
+   * Changing audio language is several steps — describe the new track, re-point the buffer,
+   * refill — and a seek arriving between any two of them touches the same buffer from the other
+   * side. That is the freeze reported after changing language just as a seek was settling.
+   */
+  async runExclusive<T>(action: () => Promise<T>): Promise<T> {
+    const task = this.pending.then(async () => {
+      this.generation += 1;
+      await this.fillTask?.catch(() => {});
+      return action();
+    });
+    this.pending = task.then(
+      () => {},
+      () => {}
+    );
+    return task;
   }
 
   private async performSeek(playerSeconds: number): Promise<void> {
@@ -476,16 +544,11 @@ export class MseSource {
     // back. Moving the reader before then would corrupt it.
     await this.fillTask?.catch(() => {});
 
-    for (const buffer of [this.videoBuffer, this.audioBuffer]) {
-      if (!buffer) continue;
-      if (buffer.updating) {
-        try {
-          buffer.abort();
-        } catch {
-          // Aborting a buffer whose source has closed throws; nothing to do about it here.
-        }
-      }
-      await this.clear(buffer);
+    // No abort() here any more. Cancelling an operation mid-flight leaves the buffer's parser in
+    // a state the next append has to be careful about, and the queue already guarantees that
+    // whatever was running has finished before this removal starts.
+    for (const queue of [this.videoOps, this.audioOps]) {
+      if (queue) await this.clear(queue);
     }
 
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
@@ -503,30 +566,14 @@ export class MseSource {
     void this.fill();
   }
 
-  private clear(buffer: SourceBuffer): Promise<void> {
-    return new Promise((resolve) => {
-      if (buffer.buffered.length === 0 || this.source.readyState !== "open") return resolve();
-
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        buffer.removeEventListener("updateend", finish);
-        resolve();
-      };
-      // Every seek waits on this. A browser that declines to answer would otherwise wedge the
-      // queue permanently, and every later seek behind it.
-      const timer = setTimeout(finish, 1500);
-      buffer.addEventListener("updateend", finish);
-
-      try {
-        // A finite end rather than Infinity: it is what the specification's examples use and
-        // what every implementation is exercised against.
-        buffer.remove(0, Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9);
-      } catch {
-        finish();
-      }
+  private async clear(queue: BufferQueue): Promise<void> {
+    if (queue.buffer.buffered.length === 0 || this.source.readyState !== "open") return;
+    // A finite end rather than Infinity: it is what the specification's examples use and what
+    // every implementation is exercised against.
+    const end = Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9;
+    await queue.enqueue(() => queue.buffer.remove(0, end)).catch(() => {
+      // A removal the browser declines is not worth failing a seek over; the append that follows
+      // will overwrite the range anyway.
     });
   }
 

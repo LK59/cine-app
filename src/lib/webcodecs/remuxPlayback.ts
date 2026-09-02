@@ -4,7 +4,7 @@
 // selection, same subtitle lookup — so the player component branches once on which path was
 // chosen and not again on every operation.
 
-import { HttpByteSource } from "./byteSource";
+import { HttpByteSource, type ByteSource } from "./byteSource";
 import { selectCue, type EngineTrack, type SubtitleCue } from "./engine";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
@@ -84,7 +84,7 @@ export class RemuxPlayback {
 
   private constructor(
     private readonly video: HTMLVideoElement,
-    private readonly source: HttpByteSource,
+    private readonly source: ByteSource,
     private readonly file: MatroskaFile,
     private readonly videoTrack: MatroskaTrack,
     private audioTrack: MatroskaTrack | null,
@@ -95,7 +95,7 @@ export class RemuxPlayback {
 
   static async start(
     video: HTMLVideoElement,
-    source: HttpByteSource,
+    source: ByteSource,
     file: MatroskaFile,
     videoTrack: MatroskaTrack,
     audioTrack: MatroskaTrack | null,
@@ -173,17 +173,20 @@ export class RemuxPlayback {
     if (!track || this.destroyed || track.number === this.audioTrack?.number || !this.mse) return;
 
     const at = this.video.currentTime;
-    // Nothing may be reading while the remuxer is re-pointed, or one segment would end up
-    // describing one track and carrying another's samples.
-    await this.mse.quiesce();
-    await this.remuxer.setAudioTrack(trackNumber);
-    this.audioTrack = track;
-
-    const plan = this.remuxer.plan();
-    await this.mse.replaceAudio(plan.audioMimeType, plan.audioInit);
+    const mse = this.mse;
+    // One indivisible step. Describing the new track, re-pointing the buffer and refilling are
+    // three operations on the same buffers, and a seek landing between any two of them reaches
+    // those buffers from the other side — which is the freeze seen when changing language just
+    // as a seek was settling.
+    await mse.runExclusive(async () => {
+      await this.remuxer.setAudioTrack(trackNumber);
+      this.audioTrack = track;
+      const plan = this.remuxer.plan();
+      await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
+    });
     // Refills from where the viewer is, so the new language starts at the picture on screen
     // rather than wherever the reader happened to have got to.
-    await this.mse.seek(at);
+    await mse.seek(at);
   }
 
   seek(seconds: number): Promise<void> {

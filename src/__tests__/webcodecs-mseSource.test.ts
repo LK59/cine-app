@@ -17,10 +17,32 @@ class FakeBuffer extends EventTarget {
   quotaOnNextAppend = false;
   /** Set to make the next append fail the way a segment the decoder rejects does. */
   failOnNextAppend = false;
+  /** Set to make every append fail, for the case where retrying cannot help. */
+  failAllAppends = false;
   /** Each media segment carries this much, so the buffer grows as it would in a browser. */
   secondsPerAppend = 2;
   /** An initialisation segment carries no media, so it adds no buffered range. */
   private initSeen = false;
+  /**
+   * How long an operation holds the buffer. A real one takes milliseconds of parsing, and that
+   * window is the only place a second operation can collide with it; the default keeps the
+   * other tests on microtasks so they stay fast.
+   */
+  busyMs = 0;
+
+  private finishSoon() {
+    const done = () => {
+      this.updating = false;
+      if (this.failOnNextAppend || this.failAllAppends) {
+        this.failOnNextAppend = false;
+        this.dispatchEvent(new Event("error"));
+      } else {
+        this.dispatchEvent(new Event("updateend"));
+      }
+    };
+    if (this.busyMs > 0) setTimeout(done, this.busyMs);
+    else queueMicrotask(done);
+  }
   private ranges: [number, number][] = [];
 
   constructor(readonly type: string) {
@@ -46,7 +68,13 @@ class FakeBuffer extends EventTarget {
     this.ranges = ranges;
   }
 
+  /** A real SourceBuffer permits one operation at a time and throws otherwise. */
+  private refuseIfBusy(what: string) {
+    if (this.updating) throw new DOMException(`${what} while updating`, "InvalidStateError");
+  }
+
   appendBuffer(data: Uint8Array) {
+    this.refuseIfBusy("appendBuffer");
     if (this.quotaOnNextAppend) {
       this.quotaOnNextAppend = false;
       throw new DOMException("full", "QuotaExceededError");
@@ -63,29 +91,33 @@ class FakeBuffer extends EventTarget {
       this.ranges = [[start, end]];
     }
     this.initSeen = true;
-    queueMicrotask(() => {
-      this.updating = false;
-      if (this.failOnNextAppend) {
-        this.failOnNextAppend = false;
-        this.dispatchEvent(new Event("error"));
-      } else {
-        this.dispatchEvent(new Event("updateend"));
-      }
-    });
+    this.finishSoon();
   }
 
   remove(start: number, end: number) {
+    this.refuseIfBusy("remove");
     this.removed.push([start, end]);
     this.ranges = [];
     this.updating = true;
-    queueMicrotask(() => {
-      this.updating = false;
-      this.dispatchEvent(new Event("updateend"));
-    });
+    if (this.busyMs > 0) {
+      setTimeout(() => {
+        this.updating = false;
+        this.dispatchEvent(new Event("updateend"));
+      }, this.busyMs);
+    } else {
+      queueMicrotask(() => {
+        this.updating = false;
+        this.dispatchEvent(new Event("updateend"));
+      });
+    }
   }
 
   abort() {
     this.aborted += 1;
+  }
+
+  changeType() {
+    this.refuseIfBusy("changeType");
   }
 }
 
@@ -148,7 +180,7 @@ const PLAN: RemuxPlan = {
   durationSeconds: 3600,
 };
 
-function fakeRemuxer(segments: number, delay = 0.2, seekable = true) {
+function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0) {
   let index = 0;
   const seeks: number[] = [];
   const remuxer = {
@@ -162,6 +194,9 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true) {
       index = 0;
     },
     nextSegment: async (): Promise<RemuxSegment | null> => {
+      // Reading takes time in reality, which is what leaves the read loop mid-append while
+      // something else reaches for the same buffer.
+      if (readMs) await new Promise((r) => setTimeout(r, readMs));
       if (index >= segments) return null;
       index += 1;
       return { video: new Uint8Array([10 + index]), audio: new Uint8Array([20 + index]), subtitles: [], endSeconds: index * 2 };
@@ -320,16 +355,19 @@ describe("MseSource", () => {
     buffer.quotaOnNextAppend = true;
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
+    await flush();
 
     // A full buffer is a condition to manage, not a fault to surface.
     expect(onError).not.toHaveBeenCalled();
     expect(buffer.removed.some(([start, end]) => start === 0 && end === 70)).toBe(true);
   });
 
-  it("reports a rejected segment rather than stalling on it", async () => {
+  it("recovers from a rejected segment instead of declaring playback over", async () => {
     const video = fakeVideo();
     const onError = vi.fn();
-    await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError });
+    const onWarning = vi.fn();
+    const remuxer = fakeRemuxer(200);
+    await MseSource.attach(video, remuxer, PLAN, { onError, onWarning });
     await flush();
 
     const buffer = FakeSource.instances[0].buffers[0];
@@ -337,7 +375,29 @@ describe("MseSource", () => {
     (video as unknown as { currentTime: number }).currentTime = 30;
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining("refusé"));
+
+    // Reported from a device as a freeze that a second seek undid — so nothing was lost, and
+    // ending playback was the wrong answer to a segment that simply needed sending again.
+    expect(onError).not.toHaveBeenCalled();
+    expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("Reprise"));
+    expect(remuxer.seeks.length).toBeGreaterThan(0);
+  });
+
+  it("stops pretending when the refusals do not let up", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError, onWarning: vi.fn() });
+    await flush();
+
+    const buffer = FakeSource.instances[0].buffers[0];
+    buffer.failAllAppends = true;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      (video as unknown as { currentTime: number }).currentTime = 30 + attempt * 100;
+      video.dispatchEvent(new Event("timeupdate"));
+      await flush();
+    }
+    // Retrying forever would be its own kind of freeze, quieter than the one it replaced.
+    expect(onError).toHaveBeenCalled();
   });
 
   // The bug this whole group exists for: the transport controls write straight to the element on
@@ -543,6 +603,49 @@ describe("MseSource", () => {
     await flush();
 
     expect(remuxer.seeks).toEqual([1499.8]);
+  });
+
+  it("never runs two operations on one buffer at once, however they arrive", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const mse = await MseSource.attach(video, fakeRemuxer(500, 0.2, true, 3), PLAN, { onError, onWarning: vi.fn() });
+    await flush();
+    for (const buffer of FakeSource.instances[0].buffers) buffer.busyMs = 6;
+
+    // MediaSource permits exactly one operation per buffer, and the things that touch one are
+    // driven by unrelated events: a seek, a language change, the read loop, eviction. Firing
+    // them into the same instant is what produced a freeze that a second seek then undid.
+    await Promise.all([
+      mse.seek(600),
+      mse.replaceAudio(PLAN.audioMimeType, new Uint8Array([7])),
+      mse.seek(900),
+      (async () => {
+        video.dispatchEvent(new Event("timeupdate"));
+        video.dispatchEvent(new Event("waiting"));
+      })(),
+    ]);
+    await flush();
+    await flush();
+
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("survives a language change landing while the read loop is mid-append", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const remuxer = fakeRemuxer(500, 0.2, true, 5);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onWarning: vi.fn() });
+    await flush();
+    for (const buffer of FakeSource.instances[0].buffers) buffer.busyMs = 6;
+
+    // The reported freeze, in the order it was reported: seek, then change language before the
+    // seek's refill has finished. Both reach for the audio buffer from different directions.
+    void mse.seek(600);
+    await new Promise((r) => setTimeout(r, 8));
+    await mse.replaceAudio(PLAN.audioMimeType, new Uint8Array([7]));
+    await new Promise((r) => setTimeout(r, 120));
+
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("detaches cleanly, leaving nothing listening", async () => {
