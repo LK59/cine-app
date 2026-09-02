@@ -192,7 +192,6 @@ export class RemuxPlayback {
 
   get diagnostics(): Record<string, string> {
     const remux = this.remuxer.diagnostics();
-    const buffered = this.video.buffered;
     return {
       Chemin: describePath(this.chosen),
       Décodage: "matériel, par le navigateur",
@@ -200,7 +199,11 @@ export class RemuxPlayback {
       Audio: this.audioTrack ? `${this.audioTrack.codecId} ${this.audioTrack.audio?.channels ?? "?"} canaux` : "aucune",
       "Décalage de présentation": `${(remux.presentationDelaySeconds * 1000).toFixed(0)} ms`,
       "Images recalées": String(remux.clampedSamples),
-      Tampon: buffered.length > 0 ? `${(buffered.end(buffered.length - 1) - this.video.currentTime).toFixed(1)} s d'avance` : "vide",
+      Index: `${this.file.cues.length} points`,
+      // The spans themselves, not one number derived from them. A single figure hid which range
+      // it was measured against, and read as a large negative number while the player was in
+      // fact working correctly on a range it had not been told about.
+      ...(this.mse?.debug ?? {}),
       "Sous-titres en mémoire": String(this.cues.length),
     };
   }

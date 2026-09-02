@@ -13,6 +13,31 @@ import type { Remuxer, RemuxPlan } from "./remuxer";
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
 const TARGET_BUFFER_SECONDS = 30;
 
+/**
+ * The depth that is fetched no matter what the system says.
+ *
+ * ManagedMediaSource tells a page when to stream and when to stop, and a page that ignores it
+ * gets throttled — but obeying it unconditionally means that if it says "stop" while the buffer
+ * in front of the playhead is empty, nothing is ever fetched again and the player sits there
+ * loading forever. Below this depth the media is needed to play at all, so it is fetched; above
+ * it, the system decides.
+ */
+const MIN_BUFFER_SECONDS = 8;
+
+/** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
+const STALL_TIMEOUT_MS = 700;
+
+/** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
+const WATCHDOG_MS = 250;
+
+/**
+ * How far the media being read may sit from the playhead before the reader is judged misplaced.
+ *
+ * Comfortably more than a segment, so ordinary reading ahead is never mistaken for it, and far
+ * less than the distance any real seek covers.
+ */
+const MISPLACED_SECONDS = 10;
+
 /** How much already-played media to keep before evicting, so a short step back does not re-fetch. */
 const KEEP_BEHIND_SECONDS = 30;
 
@@ -64,6 +89,12 @@ export class MseSource {
   private delaySeconds = 0;
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
+  private lastAppendAt = 0;
+  private seeksServed = 0;
+  private recoveries = 0;
+  private recoveryTarget = -1;
+  private recoveryStreak = 0;
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   private constructor(
     private readonly video: HTMLVideoElement,
@@ -148,6 +179,8 @@ export class MseSource {
     // appended to, while the reader keeps grinding forward from wherever it was — which looks
     // exactly like the player decoding every frame up to the target before resuming.
     this.video.addEventListener("seeking", this.onSeeking);
+    this.lastAppendAt = Date.now();
+    this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
     await this.fill();
   }
@@ -167,6 +200,18 @@ export class MseSource {
     void this.seek(target);
   };
 
+  /** How far the playhead is from the nearest media, or 0 when it is standing on some. */
+  private distanceToMedia(seconds: number): number {
+    const ranges = this.videoBuffer?.buffered;
+    if (!ranges || ranges.length === 0) return Infinity;
+    let best = Infinity;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= seconds && seconds < ranges.end(i)) return 0;
+      best = Math.min(best, Math.abs(ranges.start(i) - seconds), Math.abs(ranges.end(i) - seconds));
+    }
+    return best;
+  }
+
   private isBufferedAt(seconds: number): boolean {
     const ranges = this.videoBuffer?.buffered;
     if (!ranges) return false;
@@ -180,6 +225,11 @@ export class MseSource {
   private get streamingWanted(): boolean {
     const managed = this.source as ManagedMediaSource;
     return typeof managed.streaming === "boolean" ? managed.streaming : true;
+  }
+
+  /** How much media sits between the playhead and the end of its own run. */
+  private get lead(): number {
+    return this.bufferedEnd() - this.video.currentTime;
   }
 
   /**
@@ -216,8 +266,15 @@ export class MseSource {
     const generation = this.generation;
 
     try {
-      while (!this.destroyed && this.generation === generation && this.streamingWanted) {
-        if (this.bufferedEnd() - this.video.currentTime >= TARGET_BUFFER_SECONDS) break;
+      while (!this.destroyed && this.generation === generation) {
+        const lead = this.lead;
+        if (lead >= TARGET_BUFFER_SECONDS) break;
+        // Above the floor the system's word is final; below it, the media is needed to play at
+        // all and a refusal would strand the player with an empty buffer and a spinner.
+        if (lead >= MIN_BUFFER_SECONDS && !this.streamingWanted) break;
+        // A seek is waiting. Reading thirty more seconds of a place the viewer has already left
+        // is what makes a second seek feel like it does nothing for several seconds.
+        if (this.requestedSeek !== null) break;
 
         const segment = await this.remuxer.nextSegment();
         if (this.generation !== generation || this.destroyed) break;
@@ -240,7 +297,21 @@ export class MseSource {
         if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
         if (segment.video && this.videoBuffer) await this.appendTo(this.videoBuffer, segment.video, generation);
         if (segment.audio && this.audioBuffer) await this.appendTo(this.audioBuffer, segment.audio, generation);
+        // A seek arrived while those were in flight: this loop's appends were discarded, so its
+        // reading of where the media is would be about a position no longer being served.
+        if (this.generation !== generation || this.destroyed) break;
+
         this.nudgeIntoBuffer();
+        this.lastAppendAt = Date.now();
+
+        // The reader is filling a place the viewer is not. Something failed to tell us they
+        // moved — an event that did not fire, a seek that did not reach here — and the reader
+        // would otherwise read its way there one segment at a time, which is exactly what a
+        // seek looks like when it appears to recalculate the whole film. The watchdog cannot
+        // catch this on its own: media *is* arriving, just nowhere useful.
+        if (this.distanceToMedia(this.video.currentTime) > MISPLACED_SECONDS) {
+          if (this.recover(this.video.currentTime)) break;
+        }
       }
     } catch (error) {
       if (!this.destroyed) this.callbacks.onError(error instanceof Error ? error.message : String(error));
@@ -335,7 +406,9 @@ export class MseSource {
       .then(() => {
         const target = this.requestedSeek;
         if (target === null || this.destroyed) return;
-        this.requestedSeek = null;
+        // Deliberately not cleared here. The flag is what tells the read loop to stop filling a
+        // place the viewer has left, and it has to stay up for as long as that is still true —
+        // which is until the reader has actually been moved, inside performSeek.
         return this.performSeek(target);
       })
       .catch((error) => {
@@ -393,6 +466,11 @@ export class MseSource {
     this.generation += 1;
     this.ended = false;
     this.lastSeekTarget = playerSeconds;
+    this.seeksServed += 1;
+    // The refill starting below deserves the same grace as any other: without this the watchdog
+    // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
+    // the very same place — doubling the work at exactly the moment it is most wanted elsewhere.
+    this.lastAppendAt = Date.now();
 
     // The loop breaks on the generation check, but only once whatever read it is awaiting comes
     // back. Moving the reader before then would corrupt it.
@@ -414,24 +492,113 @@ export class MseSource {
     // Only when the element is not already there: reassigning would fire another seeking event
     // and start this over.
     if (Math.abs(this.video.currentTime - playerSeconds) > 0.05) this.video.currentTime = playerSeconds;
-    await this.fill();
+
+    // Served: the reader is where it was asked to be. Anything asked for after this point is a
+    // new seek, and the refill below is free to run.
+    if (this.requestedSeek === playerSeconds) this.requestedSeek = null;
+
+    // Not awaited. A seek is finished the moment the reader is repositioned; waiting for thirty
+    // seconds of media to be fetched before admitting so means the next seek queues behind a
+    // download of a place the viewer has already left.
+    void this.fill();
   }
 
   private clear(buffer: SourceBuffer): Promise<void> {
     return new Promise((resolve) => {
       if (buffer.buffered.length === 0 || this.source.readyState !== "open") return resolve();
-      const done = () => {
-        buffer.removeEventListener("updateend", done);
+
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        buffer.removeEventListener("updateend", finish);
         resolve();
       };
-      buffer.addEventListener("updateend", done);
+      // Every seek waits on this. A browser that declines to answer would otherwise wedge the
+      // queue permanently, and every later seek behind it.
+      const timer = setTimeout(finish, 1500);
+      buffer.addEventListener("updateend", finish);
+
       try {
-        buffer.remove(0, Infinity);
+        // A finite end rather than Infinity: it is what the specification's examples use and
+        // what every implementation is exercised against.
+        buffer.remove(0, Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9);
       } catch {
-        buffer.removeEventListener("updateend", done);
-        resolve();
+        finish();
       }
     });
+  }
+
+  /**
+   * The safety net, and the only part of this that does not depend on being told anything.
+   *
+   * Everything else here reacts to an event: the element announcing a seek, the system asking
+   * for data, a buffer reporting an append. Each of those can fail to arrive — a browser that
+   * does not fire seeking in some state, a system that stops asking and never starts again, an
+   * append quietly rejected — and the symptom is always identical and always the same fault:
+   * the playhead is somewhere no media is, and the reader is filling somewhere else.
+   *
+   * So rather than trying to enumerate the causes, this watches the one fact that matters and
+   * seeks to wherever the viewer actually is. It is checked on a timer precisely because the
+   * failure mode is that no event comes.
+   */
+  private readonly watchdog = () => {
+    if (this.destroyed || this.ended || !this.videoBuffer) return;
+
+    const now = this.video.currentTime;
+    // On media, or a seek already on its way to it: nothing to do.
+    if (this.isBufferedAt(now) || this.requestedSeek !== null) return;
+
+    // A read is in progress, so media is on its way; whether it is on its way to the right place
+    // is the read loop's own business, and it checks. Waiting on a clock instead would mean
+    // guessing how long a segment takes to arrive — and guessing short, as a 4K file over a slow
+    // link showed, means seeking again to the very place already being fetched.
+    if (this.fillTask) return;
+
+    // Nothing is being read and the playhead is on nothing: whatever failed to say so, the
+    // viewer is somewhere this player is not serving.
+    if (Date.now() - this.lastAppendAt < STALL_TIMEOUT_MS) return;
+    this.recover(now);
+  };
+
+  /**
+   * Seeks to where the viewer is, unless that has already been tried and did not help.
+   *
+   * Both recovery routes converge here so they share one limit. Without it, a target the file
+   * genuinely cannot serve — an index pointing somewhere the media is not — turns a recovery
+   * into a loop that seeks, fails to arrive, and seeks again as fast as it can.
+   */
+  private recover(target: number): boolean {
+    if (Math.abs(target - this.recoveryTarget) < 1) {
+      this.recoveryStreak += 1;
+      if (this.recoveryStreak > 3) {
+        this.callbacks.onWarning?.("Impossible d'atteindre cette position dans le fichier.");
+        return false;
+      }
+    } else {
+      this.recoveryTarget = target;
+      this.recoveryStreak = 1;
+    }
+    this.recoveries += 1;
+    void this.seek(target);
+    return true;
+  }
+
+  /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
+  get debug(): Record<string, string> {
+    const ranges = this.videoBuffer?.buffered;
+    const spans: string[] = [];
+    for (let i = 0; ranges && i < ranges.length; i++) {
+      spans.push(`${ranges.start(i).toFixed(0)}–${ranges.end(i).toFixed(0)}`);
+    }
+    return {
+      "Tampon vidéo": spans.join(" · ") || "vide",
+      "Avance sur la tête": `${this.lead.toFixed(1)} s`,
+      "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
+      "Lecture en cours": this.fillTask ? "oui" : "non",
+      "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
+    };
   }
 
   destroy(): void {
@@ -443,6 +610,8 @@ export class MseSource {
     this.video.removeEventListener("timeupdate", this.request);
     this.video.removeEventListener("waiting", this.request);
     this.video.removeEventListener("seeking", this.onSeeking);
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+    this.watchdogTimer = null;
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();
