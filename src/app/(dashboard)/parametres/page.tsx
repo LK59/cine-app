@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
+import { Bell, CircleCheckBig, FlaskConical, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
@@ -309,6 +311,8 @@ export default function ParametresPage() {
           </section>
         )}
 
+        {role === "admin" && <ExperimentalPlayerSection />}
+
       </div>
     </div>
   );
@@ -463,5 +467,77 @@ function PwaUpdateCard() {
         {refreshing ? t('settings.app.checking') : t('settings.app.updateButton')}
       </button>
     </div>
+  );
+}
+
+// The experimental WebCodecs player's opt-in. Admin-only and off by default, and the server
+// enforces both independently of this UI — the route that serves a file to it refuses anyone
+// who hasn't turned it on here.
+function ExperimentalPlayerSection() {
+  const t = useT();
+  const { data, mutate } = useSWR<{ experimentalPlayer?: { enabled: boolean; hdr: boolean } }>(
+    "/api/user/preferences",
+    fetcher
+  );
+  const enabled = data?.experimentalPlayer?.enabled ?? false;
+  const hdr = data?.experimentalPlayer?.hdr ?? false;
+
+  async function update(next: { experimentalPlayer?: boolean; experimentalPlayerHdr?: boolean }) {
+    // Optimistic, then reconciled with what the server actually stored — it can decide
+    // differently (turning the player off turns HDR off with it).
+    await mutate(
+      async () => {
+        const res = await fetch("/api/user/preferences", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        return res.ok ? { experimentalPlayer: (await res.json()).experimentalPlayer } : { experimentalPlayer: { enabled, hdr } };
+      },
+      {
+        optimisticData: {
+          experimentalPlayer: {
+            enabled: next.experimentalPlayer ?? enabled,
+            hdr: (next.experimentalPlayer ?? enabled) && (next.experimentalPlayerHdr ?? hdr),
+          },
+        },
+        revalidate: false,
+      }
+    );
+  }
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center gap-3">
+        <div className="rounded-lg bg-fuchsia-500/10 p-2 text-fuchsia-400 ring-1 ring-inset ring-fuchsia-500/20">
+          <FlaskConical size={18} />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-white">{t("settings.experimentalPlayer.title")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.experimentalPlayer.subtitle")}</p>
+        </div>
+      </div>
+
+      <div className="card space-y-5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-white">{t("settings.experimentalPlayer.enable")}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t("settings.experimentalPlayer.enableDesc")}</p>
+            <p className="mt-1 text-xs text-slate-600">{t("settings.experimentalPlayer.adminOnly")}</p>
+          </div>
+          <Toggle checked={enabled} onChange={(value) => update({ experimentalPlayer: value })} />
+        </div>
+
+        {/* Nested under the first, and disabled with it: an HDR switch on a player that isn't
+            running is a setting that looks active and does nothing. */}
+        <div className={`flex items-start justify-between gap-4 border-t border-white/5 pt-5 ${enabled ? "" : "opacity-40"}`}>
+          <div>
+            <p className="text-sm font-medium text-white">{t("settings.experimentalPlayer.hdr")}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t("settings.experimentalPlayer.hdrDesc")}</p>
+          </div>
+          <Toggle checked={hdr} onChange={(value) => enabled && update({ experimentalPlayerHdr: value })} />
+        </div>
+      </div>
+    </section>
   );
 }

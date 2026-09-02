@@ -1,0 +1,163 @@
+// Translates a Matroska track into the configuration WebCodecs wants.
+//
+// `VideoDecoder.configure()` takes a codec string that carries the exact profile, level and
+// constraints — not just "hevc" — because that string is what the browser matches against its
+// hardware decoder's capabilities. Getting it wrong doesn't degrade gracefully: the decoder
+// either refuses the configuration or, worse, accepts it and produces garbage. The values all
+// come out of CodecPrivate, which holds the same configuration record an MP4 would store.
+
+import type { MatroskaTrack } from "./matroska";
+
+export interface DecoderConfig {
+  codec: string;
+  /** The codec-private bytes a decoder needs to make sense of the samples. */
+  description?: Uint8Array;
+}
+
+export interface VideoConfig extends DecoderConfig {
+  codedWidth: number;
+  codedHeight: number;
+}
+
+export interface AudioConfig extends DecoderConfig {
+  sampleRate: number;
+  numberOfChannels: number;
+}
+
+/** Audio codecs no browser decodes natively — they need the WebAssembly decoder. */
+export const SOFTWARE_AUDIO_CODECS = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_TRUEHD", "A_MLP"]);
+
+function hex(value: number, digits = 2): string {
+  return value.toString(16).toUpperCase().padStart(digits, "0");
+}
+
+// The profile-compatibility field is written with its bits in reverse order — a quirk of the
+// codec-string spec, not of the file. Chrome compares the string it is given against one it
+// builds this same way, so a straight hex dump of the field simply never matches.
+function reverseBits32(value: number): number {
+  let out = 0;
+  for (let i = 0; i < 32; i++) {
+    out = (out << 1) | ((value >>> i) & 1);
+  }
+  return out >>> 0;
+}
+
+/**
+ * Builds an `hvc1.*` string from the hvcC record Matroska stores in CodecPrivate.
+ * Layout: [0] version, [1] profile_space<<6 | tier<<5 | profile_idc,
+ * [2..5] compatibility flags, [6..11] constraint flags, [12] level.
+ */
+export function hevcCodecString(hvcC: Uint8Array): string | null {
+  if (hvcC.length < 13) return null;
+
+  const profileSpace = (hvcC[1] >> 6) & 0x03;
+  const tier = (hvcC[1] >> 5) & 0x01;
+  const profileIdc = hvcC[1] & 0x1f;
+  const compatibility = reverseBits32((hvcC[2] << 24) | (hvcC[3] << 16) | (hvcC[4] << 8) | hvcC[5]);
+  const level = hvcC[12];
+
+  const space = ["", "A", "B", "C"][profileSpace];
+  const constraints: string[] = [];
+  for (let i = 6; i <= 11; i++) constraints.push(hex(hvcC[i]));
+  // Trailing zero constraint bytes are omitted by convention; keeping them produces a string no
+  // browser recognises.
+  while (constraints.length && constraints[constraints.length - 1] === "00") constraints.pop();
+
+  return [
+    `hvc1.${space}${profileIdc}`,
+    compatibility.toString(16).toUpperCase(),
+    `${tier ? "H" : "L"}${level}`,
+    ...constraints,
+  ].join(".");
+}
+
+/** Builds an `avc1.*` string from the avcC record: profile, compatibility and level. */
+export function avcCodecString(avcC: Uint8Array): string | null {
+  if (avcC.length < 4) return null;
+  // Lower-case hex here, upper-case for HEVC: that split is what the codec-string conventions
+  // actually use, and browsers are picky about the whole token matching.
+  return `avc1.${hex(avcC[1])}${hex(avcC[2])}${hex(avcC[3])}`.toLowerCase();
+}
+
+/** Builds an `av01.*` string from the av1C record. */
+export function av1CodecString(av1C: Uint8Array): string | null {
+  if (av1C.length < 2) return null;
+  const profile = (av1C[1] >> 5) & 0x07;
+  const level = av1C[1] & 0x1f;
+  const tier = (av1C[2] >> 7) & 0x01;
+  return `av01.${profile}.${String(level).padStart(2, "0")}${tier ? "H" : "M"}.08`;
+}
+
+export function videoConfigFor(track: MatroskaTrack): VideoConfig | null {
+  if (track.type !== "video" || !track.video) return null;
+  const size = { codedWidth: track.video.width, codedHeight: track.video.height };
+  const priv = track.codecPrivate;
+
+  switch (track.codecId) {
+    case "V_MPEGH/ISO/HEVC": {
+      if (!priv) return null;
+      const codec = hevcCodecString(priv);
+      return codec ? { codec, description: priv, ...size } : null;
+    }
+    case "V_MPEG4/ISO/AVC": {
+      if (!priv) return null;
+      const codec = avcCodecString(priv);
+      return codec ? { codec, description: priv, ...size } : null;
+    }
+    case "V_AV1": {
+      const codec = priv ? av1CodecString(priv) : "av01.0.08M.08";
+      return codec ? { codec, ...(priv ? { description: priv } : {}), ...size } : null;
+    }
+    case "V_VP9":
+      // VP9 carries everything it needs in-band; the profile in the string is advisory.
+      return { codec: "vp09.00.10.08", ...size };
+    case "V_VP8":
+      return { codec: "vp8", ...size };
+    default:
+      return null;
+  }
+}
+
+export function audioConfigFor(track: MatroskaTrack): AudioConfig | null {
+  if (track.type !== "audio" || !track.audio) return null;
+  const base = { sampleRate: Math.round(track.audio.sampleRate), numberOfChannels: track.audio.channels };
+  const priv = track.codecPrivate;
+
+  switch (track.codecId) {
+    case "A_AAC":
+      // The AudioSpecificConfig is mandatory for AAC in Matroska; without it the decoder cannot
+      // know the profile or whether SBR doubles the output rate.
+      return priv ? { codec: "mp4a.40.2", description: priv, ...base } : null;
+    case "A_OPUS":
+      return { codec: "opus", ...(priv ? { description: priv } : {}), ...base };
+    case "A_FLAC":
+      return { codec: "flac", ...(priv ? { description: priv } : {}), ...base };
+    case "A_MPEG/L3":
+      return { codec: "mp3", ...base };
+    case "A_VORBIS":
+      return { codec: "vorbis", ...(priv ? { description: priv } : {}), ...base };
+    case "A_PCM/INT/LIT":
+      return { codec: track.audio.bitDepth === 16 ? "pcm-s16" : "pcm-f32", ...base };
+    default:
+      return null;
+  }
+}
+
+/** Why a track cannot be played, phrased for the error the user actually sees. */
+export function unsupportedReason(track: MatroskaTrack): string | null {
+  if (track.type === "video") {
+    if (videoConfigFor(track)) return null;
+    if (!track.codecPrivate && (track.codecId === "V_MPEGH/ISO/HEVC" || track.codecId === "V_MPEG4/ISO/AVC")) {
+      return `La piste vidéo ${track.codecId} n'a pas de configuration de décodeur dans le fichier.`;
+    }
+    return `Codec vidéo non pris en charge par le lecteur expérimental : ${track.codecId}.`;
+  }
+  if (track.type === "audio") {
+    if (audioConfigFor(track)) return null;
+    if (SOFTWARE_AUDIO_CODECS.has(track.codecId)) {
+      return `L'audio ${track.codecId.replace("A_", "")} demande le décodeur logiciel.`;
+    }
+    return `Codec audio non pris en charge : ${track.codecId}.`;
+  }
+  return null;
+}

@@ -155,6 +155,13 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_capability_checks ON capability_checks (capability, checked_at);
   `);
 
+  // Per-user opt-in for the experimental WebCodecs player, and separately for letting it handle
+  // HDR. Two flags rather than one because they fail differently: the player either works or
+  // refuses with a reason, whereas HDR is a rendering question that can look wrong rather than
+  // break, so it has to be switchable on its own.
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN experimental_player INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN experimental_player_hdr INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
+
   // The disk-saturation forecast switched from hourly df sampling to deriving straight from
   // library file mtimes (see diskForecast.ts) — no history to wait weeks for, and one less
   // cron/table to maintain. Drops the now-unused table from the brief window it existed in.
@@ -177,6 +184,24 @@ export const userPrefsDb = {
       VALUES (?, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET lang = excluded.lang, updated_at = excluded.updated_at
     `).run(userId, lang, Date.now());
+  },
+
+  getExperimentalPlayer(userId: string): { enabled: boolean; hdr: boolean } {
+    const row = getDb()
+      .prepare("SELECT experimental_player, experimental_player_hdr FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { experimental_player: number | null; experimental_player_hdr: number | null } | undefined;
+    return { enabled: row?.experimental_player === 1, hdr: row?.experimental_player_hdr === 1 };
+  },
+
+  setExperimentalPlayer(userId: string, enabled: boolean, hdr: boolean): void {
+    getDb().prepare(`
+      INSERT INTO user_preferences (user_id, lang, experimental_player, experimental_player_hdr, updated_at)
+      VALUES (?, NULL, ?, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        experimental_player = excluded.experimental_player,
+        experimental_player_hdr = excluded.experimental_player_hdr,
+        updated_at = excluded.updated_at
+    `).run(userId, enabled ? 1 : 0, hdr ? 1 : 0, Date.now());
   },
 };
 

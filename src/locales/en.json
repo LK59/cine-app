@@ -847,6 +847,15 @@
       "subtitle": "Interface, synopses and search engine",
       "reloadNotice": "Reload required to apply {lang}",
       "apply": "Apply"
+    },
+    "experimentalPlayer": {
+      "title": "Experimental player",
+      "subtitle": "Next-generation playback pipeline, under development",
+      "enable": "Experimental player",
+      "enableDesc": "Decodes video directly in the browser (WebCodecs), with no server-side transcoding or remuxing. Faster to start, but no adaptive quality: best kept to your local network. On failure the player explains why and offers to switch back to the stable one.",
+      "hdr": "Play HDR with the experimental player",
+      "hdrDesc": "Tone-maps HDR10 / HLG / Dolby Vision with an HDR10 layer down to SDR on the GPU. Without this, HDR files are refused by the experimental player.",
+      "adminOnly": "Administrators only, off by default."
     }
   },
   "watchlist": {

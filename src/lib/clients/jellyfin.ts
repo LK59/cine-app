@@ -60,6 +60,11 @@ export interface JellyfinMediaStream {
   Profile?: string;
   BitRate?: number;
   BitDepth?: number;
+  // Jellyfin derives these from the video bitstream itself, not from the container — verified
+  // live: the Matroska Colour element is absent from these files, and ffprobe reports
+  // smpte2084/bt2020 by parsing the HEVC SPS. So this is the authoritative HDR signal.
+  VideoRange?: string;
+  VideoRangeType?: string;
   Width?: number;
   Height?: number;
   Channels?: number;
@@ -306,6 +311,17 @@ export const jellyfin = {
   // needs it alongside UserData.PlaybackPositionTicks to compute a remaining-time resume label
   // (see cinemaContinueLabel.ts) and this is already the per-item lookup it needs anyway.
   // Additive field, no effect on existing callers that only read .UserData.
+  // Everything the experimental WebCodecs player needs to decide whether it can play a file and
+  // how: container, per-stream codecs, HDR range, and the resume position — all from the one
+  // per-item lookup, with no PlaybackInfo call and therefore no transcode session created.
+  getItemMediaSources: (userId: string, itemId: string) =>
+    fetchJson<{
+      Name?: string;
+      RunTimeTicks?: number;
+      UserData?: JellyfinItem["UserData"];
+      MediaSources?: JellyfinMediaSource[];
+    }>(`${url}/Users/${userId}/Items/${itemId}?Fields=MediaSources,UserData,RunTimeTicks`, { headers }),
+
   getItemUserData: (userId: string, itemId: string) =>
     fetchJson<{ UserData?: JellyfinItem["UserData"]; RunTimeTicks?: number }>(
       `${url}/Users/${userId}/Items/${itemId}?Fields=UserData,RunTimeTicks`,

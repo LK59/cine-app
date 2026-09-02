@@ -6,7 +6,12 @@ const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 const mockNotificationPrefsDb = { getForUser: vi.fn(), set: vi.fn() };
 const mockPushDb = { getByUser: vi.fn(), remove: vi.fn() };
-const mockUserPrefsDb = { getLang: vi.fn(), setLang: vi.fn() };
+const mockUserPrefsDb = {
+  getLang: vi.fn(),
+  setLang: vi.fn(),
+  getExperimentalPlayer: vi.fn(() => ({ enabled: false, hdr: false })),
+  setExperimentalPlayer: vi.fn(),
+};
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn() };
 vi.mock("@/lib/db", () => ({
   notificationPrefsDb: mockNotificationPrefsDb,
@@ -127,6 +132,42 @@ describe("/api/user/preferences", () => {
     const res = await GET(fakeReq());
     expect(mockUserPrefsDb.getLang).toHaveBeenCalledWith("jf-1", "fr");
     expect((await res.json()).lang).toBe("en");
+  });
+
+  // The experimental player's opt-in shares this route. It is admin-only, and the two flags are
+  // coupled: an HDR switch on a disabled player is a setting that reads as active and does
+  // nothing.
+  it("PUT refuses to enable the experimental player for a non-admin", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "someone", jfId: "jf-2", role: "user" });
+    const { PUT } = await import("@/app/api/user/preferences/route");
+    const res = await PUT(fakeReq({ body: { experimentalPlayer: true } }));
+    expect(res.status).toBe(403);
+    expect(mockUserPrefsDb.setExperimentalPlayer).not.toHaveBeenCalled();
+  });
+
+  it("PUT lets an admin enable it", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
+    mockUserPrefsDb.getExperimentalPlayer.mockReturnValue({ enabled: false, hdr: false });
+    const { PUT } = await import("@/app/api/user/preferences/route");
+    const res = await PUT(fakeReq({ body: { experimentalPlayer: true } }));
+    expect(res.status).toBe(200);
+    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-1", true, false);
+  });
+
+  it("PUT turns HDR off with the player rather than leaving it dangling", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
+    mockUserPrefsDb.getExperimentalPlayer.mockReturnValue({ enabled: true, hdr: true });
+    const { PUT } = await import("@/app/api/user/preferences/route");
+    await PUT(fakeReq({ body: { experimentalPlayer: false } }));
+    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-1", false, false);
+  });
+
+  it("PUT keeps handling a plain language change", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    const { PUT } = await import("@/app/api/user/preferences/route");
+    const res = await PUT(fakeReq({ body: { lang: "en" } }));
+    expect(res.status).toBe(200);
+    expect(mockUserPrefsDb.setLang).toHaveBeenCalledWith("jf-1", "en");
   });
 
   it("PUT rejects an unsupported locale", async () => {
