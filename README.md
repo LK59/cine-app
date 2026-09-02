@@ -285,6 +285,28 @@ docker compose up -d
 
 The app listens on port `3000` inside Docker. Use a reverse proxy (Nginx Proxy Manager, Traefik, Caddy) or expose the port directly for testing.
 
+#### Development without rebuilding the image
+
+`docker compose build` re-runs the full production build and writes a new set of image layers
+every time — hundreds of megabytes of disk writes per iteration, which is pure waste when all
+that changed is a source file.
+
+For iterating, use the development stack instead. It runs `next dev` against the working tree,
+bind-mounted, so edits are picked up by hot reload and nothing is rebuilt:
+
+```bash
+docker compose -f docker-compose.dev.yml up      # http://<server>:3001, Ctrl-C to stop
+docker compose build && docker compose up -d     # deploy, as before
+```
+
+It runs alongside production — different container, its own port, its own build directory — so
+the two never overwrite each other's output.
+
+One caveat worth knowing: the development port is plain HTTP, and several browser APIs are
+restricted to secure contexts. In particular the experimental WebCodecs player (see below) will
+refuse to start there, saying so explicitly. Testing that specific feature needs HTTPS, so either
+deploy it or point a reverse-proxy host at port 3001.
+
 #### Reverse proxy: request header size (recommended)
 
 Next.js sends a `Next-Router-State-Tree` header on client-side navigations, describing the route

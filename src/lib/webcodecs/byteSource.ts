@@ -62,7 +62,7 @@ export class MemoryByteSource implements ByteSource {
 // header, then a 3-byte size, then a payload — issuing an HTTP request per call would be
 // thousands of round-trips. One chunk fetch answers hundreds of those.
 const CHUNK_SIZE = 1 << 20; // 1 MiB
-const MAX_CACHED_CHUNKS = 24; // ~24 MiB ceiling, enough to cover a seek's working set
+const MAX_CACHED_CHUNKS = 32; // ~32 MiB ceiling, enough to cover a seek's working set
 
 export class HttpByteSource implements ByteSource {
   readonly size: number;
@@ -128,6 +128,22 @@ export class HttpByteSource implements ByteSource {
     return promise;
   }
 
+  /**
+   * Starts fetching the chunk after the one just used, without waiting for it.
+   *
+   * Playback reads strictly forward, and a 1 MiB chunk is well under a second of 4K video — so
+   * without this, every chunk boundary is a full network round trip the decoder sits through.
+   * That stall is what turns a decoder that can keep up into one that visibly cannot.
+   */
+  private prefetchAfter(index: number): void {
+    const next = index + 1;
+    if (next * CHUNK_SIZE >= this.size) return;
+    if (this.chunks.has(next) || this.inflight.has(next)) return;
+    void this.fetchChunk(next).catch(() => {
+      // A failed read-ahead is not an error: the real read will try again and report properly.
+    });
+  }
+
   async read(offset: number, length: number): Promise<Uint8Array> {
     const start = Math.max(0, Math.min(offset, this.size));
     const end = Math.max(start, Math.min(offset + length, this.size));
@@ -139,6 +155,7 @@ export class HttpByteSource implements ByteSource {
     // Fast path: the whole read sits inside one chunk, so it's a view, not a copy.
     if (firstChunk === lastChunk) {
       const chunk = await this.fetchChunk(firstChunk);
+      this.prefetchAfter(firstChunk);
       const from = start - firstChunk * CHUNK_SIZE;
       return chunk.subarray(from, from + (end - start));
     }
@@ -155,6 +172,7 @@ export class HttpByteSource implements ByteSource {
         written += to - from;
       }
     }
+    this.prefetchAfter(lastChunk);
     return written === out.length ? out : out.subarray(0, written);
   }
 

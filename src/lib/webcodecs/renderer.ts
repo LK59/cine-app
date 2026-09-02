@@ -12,6 +12,29 @@
 //    PQ to linear light, BT.2390 roll-off down to the display's range, BT.2020 to BT.709
 //    primaries, then the sRGB curve. All of it on the GPU, per pixel, at no measurable cost.
 
+// Backing-store size for the canvas.
+//
+// Sizing it to the frame means blitting 3840x1680 pixels per frame on a phone whose screen is
+// 1170 wide — the browser then scales that down again in CSS. Sizing it to what is actually on
+// screen (capped at 2x device pixels, beyond which nothing is visible) is the same picture for a
+// fraction of the fill rate, and on a 4K file it is the difference between real time and a
+// slideshow.
+const MAX_DEVICE_PIXEL_RATIO = 2;
+
+function fitCanvas(canvas: HTMLCanvasElement, frame: VideoFrame): void {
+  const ratio = Math.min(window.devicePixelRatio || 1, MAX_DEVICE_PIXEL_RATIO);
+  const boxWidth = (canvas.clientWidth || frame.displayWidth) * ratio;
+  const boxHeight = (canvas.clientHeight || frame.displayHeight) * ratio;
+  // Never upscale: decoding at 1080p and painting 4K pixels would cost fill rate for nothing.
+  const scale = Math.min(boxWidth / frame.displayWidth, boxHeight / frame.displayHeight, 1);
+  const width = Math.max(1, Math.round(frame.displayWidth * scale));
+  const height = Math.max(1, Math.round(frame.displayHeight * scale));
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+}
+
 export interface FrameRenderer {
   /** Async on the HDR path: the frame's planes have to be copied out before they can be drawn. */
   draw(frame: VideoFrame): void | Promise<void>;
@@ -29,10 +52,7 @@ class CanvasRenderer implements FrameRenderer {
 
   draw(frame: VideoFrame): void {
     if (!this.ctx) return;
-    if (this.canvas.width !== frame.displayWidth || this.canvas.height !== frame.displayHeight) {
-      this.canvas.width = frame.displayWidth;
-      this.canvas.height = frame.displayHeight;
-    }
+    fitCanvas(this.canvas, frame);
     this.ctx.drawImage(frame, 0, 0, this.canvas.width, this.canvas.height);
   }
 
@@ -53,14 +73,20 @@ void main() {
 
 const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
+precision highp int;
 in vec2 uv;
 out vec4 fragColor;
 
 // Integer samplers: the planes are uploaded as raw 10-bit code values (R16UI) rather than
 // normalised textures, because WebGL2 has no normalised 16-bit format without an extension.
-uniform usampler2D yPlane;
-uniform usampler2D uPlane;
-uniform usampler2D vPlane;
+//
+// The precision qualifier is not optional here. GLSL ES 3.0 gives float samplers a default
+// precision but integer ones none, so a float precision declaration does not cover them —
+// leaving it out fails to compile with "'usampler2D' : No precision specified", which is exactly
+// what iOS reported.
+uniform highp usampler2D yPlane;
+uniform highp usampler2D uPlane;
+uniform highp usampler2D vPlane;
 // Peak brightness the source is mastered for, in nits. 1000 covers most HDR10 grades; the value
 // only sets where the roll-off starts, so being a little off is a gentle change in contrast
 // rather than a broken picture.
@@ -203,10 +229,7 @@ class ToneMapRenderer implements FrameRenderer {
 
   async draw(frame: VideoFrame): Promise<void> {
     const gl = this.gl;
-    if (this.canvas.width !== frame.displayWidth || this.canvas.height !== frame.displayHeight) {
-      this.canvas.width = frame.displayWidth;
-      this.canvas.height = frame.displayHeight;
-    }
+    fitCanvas(this.canvas, frame);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
     // copyTo is the only way to reach the frame's own 10-bit samples. Uploading the VideoFrame

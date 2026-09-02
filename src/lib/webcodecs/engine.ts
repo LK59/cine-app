@@ -15,9 +15,11 @@
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { SampleReader } from "./sampleReader";
-import { audioConfigFor, videoConfigFor, unsupportedReason } from "./codecConfig";
+import { audioConfigCandidates, audioConfigFor, videoConfigFor, unsupportedReason } from "./codecConfig";
 import { createRenderer, type FrameRenderer } from "./renderer";
+import type { AudioConfig } from "./codecConfig";
 import { AudioOutput, WallClock } from "./audioOutput";
+import { SoftwareAudioTrack } from "./softwareAudio";
 
 export type EngineEventName =
   | "loadedmetadata"
@@ -58,9 +60,16 @@ export interface EngineOptions {
   audioTrackNumber?: number;
 }
 
-/** Enough decoded video to ride out a stall, not so much that 4K frames pile up in memory. */
-const MAX_QUEUED_FRAMES = 8;
-const MAX_DECODE_QUEUE = 12;
+// Enough decoded video to ride out a stall, not so much that it becomes the problem. The depth
+// is chosen from the resolution because a decoded frame is not a small object: eight 4K frames
+// are on the order of a hundred megabytes of GPU memory, which on a phone buys a stutter of a
+// different kind. Below 4K the frames are small enough that a deeper queue is free.
+function queueDepthFor(width: number, height: number): { frames: number; decode: number } {
+  const pixels = width * height;
+  if (pixels >= 3840 * 1600) return { frames: 4, decode: 6 };
+  if (pixels >= 1920 * 1080) return { frames: 6, decode: 8 };
+  return { frames: 8, decode: 12 };
+}
 
 /**
  * The cue to show at `seconds`, dropping any that have expired.
@@ -85,6 +94,11 @@ export class PlaybackEngine {
 
   private videoTrack: MatroskaTrack | null = null;
   private audioTrack: MatroskaTrack | null = null;
+  /** The exact configuration the platform accepted, reused verbatim on every reconfigure. */
+  private audioConfig: AudioConfig | null = null;
+  /** Set instead of audioDecoder when the platform has no decoder for this track. */
+  private softwareAudio: SoftwareAudioTrack | null = null;
+  private softwareAudioGeneration = 0;
   private readonly frames: VideoFrame[] = [];
   /** Subtitle lines read ahead of the playhead, dropped as they expire. */
   private pendingCues: SubtitleCue[] = [];
@@ -94,6 +108,20 @@ export class PlaybackEngine {
   private destroyed = false;
   private demuxing = false;
   private endOfFile = false;
+  /**
+   * A freshly configured or reset decoder refuses anything but a keyframe — it answers "Key frame
+   * is required" and dies. Samples are therefore dropped until the first one arrives, which also
+   * covers the race where a demux started before a seek delivers an old delta frame afterwards.
+   */
+  private needsKeyframe = true;
+  /**
+   * Bumped by every seek. A demux pass that started before it aborts instead of feeding the
+   * decoder samples from where the viewer no longer is.
+   */
+  private generation = 0;
+  /** True while playback has run out of decoded frames — see freeze()/thaw(). */
+  private starved = false;
+  private depth = { frames: 8, decode: 12 };
   private rafHandle: number | null = null;
   private lastReportedTime = -1;
   /** Frames before this timestamp are decoded for context after a seek, but never shown. */
@@ -127,13 +155,62 @@ export class PlaybackEngine {
     this.emit("error", message);
   }
 
+  /**
+   * Runs the software decoder for a track the platform refuses, feeding the same AudioOutput the
+   * native path uses. It is its own producer loop rather than part of pump(): mediabunny does its
+   * own demuxing (through the engine's byte cache, so the file is still read once) and hands back
+   * decoded samples directly, so there is nothing for the demux loop to route.
+   */
+  private async startSoftwareAudio(track: MatroskaTrack, fromSeconds: number): Promise<boolean> {
+    if (!this.source) return false;
+    const software = await SoftwareAudioTrack.open(this.source, track.number);
+    if (!software) return false;
+
+    this.softwareAudio = software;
+    this.audio = new AudioOutput(software.format);
+    this.audio.setVolume(this.volume, this.muted);
+    void this.runSoftwareAudio(fromSeconds);
+    return true;
+  }
+
+  private async runSoftwareAudio(fromSeconds: number): Promise<void> {
+    const software = this.softwareAudio;
+    if (!software) return;
+    const generation = ++this.softwareAudioGeneration;
+
+    try {
+      for await (const data of software.samples(fromSeconds)) {
+        // A seek or a track change started a newer loop; this one's samples belong to a position
+        // nobody is watching any more.
+        if (this.destroyed || generation !== this.softwareAudioGeneration) {
+          data.close();
+          return;
+        }
+        this.onAudioData(data);
+        // Decoding runs about ten times faster than playback, so without waiting for the queue to
+        // drain it would decode the whole film into memory in a couple of minutes.
+        while (!this.destroyed && generation === this.softwareAudioGeneration && this.audio && !this.audio.needsMore) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+    } catch (error) {
+      this.emit("error", `Décodage audio logiciel interrompu : ${error instanceof Error ? error.message : "erreur"}`);
+    }
+  }
+
+  /** The configuration this platform accepts for a track, or null if it accepts none. */
+  private async supportedAudioConfig(track: MatroskaTrack) {
+    for (const config of audioConfigCandidates(track)) {
+      const support = await AudioDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
+      if (support.supported) return config;
+    }
+    return null;
+  }
+
   /** The first track this platform will actually decode, asking rather than assuming. */
   private async firstDecodable(tracks: MatroskaTrack[]): Promise<MatroskaTrack | null> {
     for (const track of tracks) {
-      const config = audioConfigFor(track);
-      if (!config) continue;
-      const support = await AudioDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
-      if (support.supported) return track;
+      if (await this.supportedAudioConfig(track)) return track;
     }
     return null;
   }
@@ -141,6 +218,15 @@ export class PlaybackEngine {
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
   async load(streamUrl: string, options: EngineOptions): Promise<void> {
+    // WebCodecs is secure-context only. Over plain HTTP — a LAN IP, a development port — the
+    // constructors simply do not exist, and the failure that follows is an opaque
+    // "VideoDecoder is not defined" rather than the actual reason.
+    if (typeof VideoDecoder === "undefined") {
+      throw new Error(
+        "WebCodecs n'est pas disponible ici. Le lecteur expérimental exige une connexion sécurisée (HTTPS) ou localhost."
+      );
+    }
+
     this.source = await HttpByteSource.open(streamUrl);
     this.file = await parseMatroska(this.source);
     this.duration = this.file.durationSeconds ?? 0;
@@ -176,27 +262,34 @@ export class PlaybackEngine {
       error: (error) => this.fail(`Décodage vidéo interrompu : ${error.message}`),
     });
     this.videoDecoder.configure(videoConfig);
+    this.needsKeyframe = true;
+    this.depth = queueDepthFor(videoConfig.codedWidth, videoConfig.codedHeight);
 
     if (this.audioTrack) {
-      const audioConfig = audioConfigFor(this.audioTrack);
+      const audioConfig = await this.supportedAudioConfig(this.audioTrack);
       if (!audioConfig) {
-        // Not fatal on its own — the caller decides whether a silent film is acceptable — but it
-        // is reported so the UI can say exactly which codec is missing.
-        this.emit("error", unsupportedReason(this.audioTrack) ?? "Piste audio non prise en charge.");
-        this.audioTrack = null;
-      } else {
-        const audioSupport = await AudioDecoder.isConfigSupported(audioConfig).catch(() => ({ supported: false }));
-        if (!audioSupport.supported) {
-          this.emit("error", `Ce navigateur ne sait pas décoder l'audio ${this.audioTrack.codecId}.`);
+        // The platform can't decode this one. Before giving up on sound, try the software
+        // decoder — which is where most of this library ends up, since AC3 and E-AC3 are not
+        // part of the web baseline and iOS doesn't expose them either.
+        const started = await this.startSoftwareAudio(this.audioTrack, options.startSeconds ?? 0).catch(() => false);
+        if (!started) {
+          // Reported, not fatal: a silent picture is still worth showing, and naming the codec
+          // is what tells us which files this pipeline genuinely cannot handle.
+          this.emit(
+            "error",
+            unsupportedReason(this.audioTrack) ??
+              `Aucun décodeur disponible pour l'audio ${this.audioTrack.codecId.replace("A_", "")}.`
+          );
           this.audioTrack = null;
-        } else {
-          this.audio = new AudioOutput({ sampleRate: audioConfig.sampleRate, numberOfChannels: audioConfig.numberOfChannels });
-          this.audioDecoder = new AudioDecoder({
-            output: (data) => this.onAudioData(data),
-            error: (error) => this.fail(`Décodage audio interrompu : ${error.message}`),
-          });
-          this.audioDecoder.configure(audioConfig);
         }
+      } else {
+        this.audioConfig = audioConfig;
+        this.audio = new AudioOutput({ sampleRate: audioConfig.sampleRate, numberOfChannels: audioConfig.numberOfChannels });
+        this.audioDecoder = new AudioDecoder({
+          output: (data) => this.onAudioData(data),
+          error: (error) => this.fail(`Décodage audio interrompu : ${error.message}`),
+        });
+        this.audioDecoder.configure(audioConfig);
       }
     }
 
@@ -220,6 +313,8 @@ export class PlaybackEngine {
     this.frames.length = 0;
     try { this.videoDecoder?.close(); } catch { /* already closed */ }
     try { this.audioDecoder?.close(); } catch { /* already closed */ }
+    this.softwareAudioGeneration += 1;
+    this.softwareAudio?.close();
     this.renderer?.destroy();
     void this.audio?.close();
     this.source?.close();
@@ -259,19 +354,15 @@ export class PlaybackEngine {
     const track = this.file?.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     if (!track || track.number === this.audioTrack?.number) return;
 
-    const config = audioConfigFor(track);
+    const config = await this.supportedAudioConfig(track);
     if (!config) {
-      this.emit("error", unsupportedReason(track) ?? "Piste audio non prise en charge.");
-      return;
-    }
-    const support = await AudioDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
-    if (!support.supported) {
-      this.emit("error", `Ce navigateur ne sait pas décoder l'audio ${track.codecId}.`);
+      this.emit("error", unsupportedReason(track) ?? `Ce navigateur ne sait pas décoder l'audio ${track.codecId.replace("A_", "")}.`);
       return;
     }
 
     const resumeAt = this.currentTime;
     this.audioTrack = track;
+    this.audioConfig = config;
     try { this.audioDecoder?.close(); } catch { /* already closed */ }
     await this.audio?.close();
 
@@ -306,8 +397,9 @@ export class PlaybackEngine {
   async play(): Promise<void> {
     if (this.destroyed || this.playing) return;
     this.playing = true;
+    this.starved = false;
     await this.audio?.resume();
-    if (!this.audio) this.wallClock.start(this.wallClock.currentMediaTime());
+    this.wallClock.start(this.wallClock.currentMediaTime());
     this.emit("playing");
     void this.pump();
   }
@@ -315,6 +407,7 @@ export class PlaybackEngine {
   pause(): void {
     if (!this.playing) return;
     this.playing = false;
+    this.starved = false;
     void this.audio?.suspend();
     this.wallClock.stop();
     this.emit("pause");
@@ -333,12 +426,15 @@ export class PlaybackEngine {
 
     // Decoders keep state across pictures; feeding them post-seek samples without a reset would
     // decode the new keyframe against the old reference frames and produce visible corruption.
+    // Invalidates any demux pass already in flight before touching the decoders, so a sample
+    // read for the old position cannot arrive after the reset and be fed to it.
+    this.generation += 1;
     this.videoDecoder?.reset();
     this.audioDecoder?.reset();
     const videoConfig = this.videoTrack ? videoConfigFor(this.videoTrack) : null;
     if (videoConfig) this.videoDecoder?.configure(videoConfig);
-    const audioConfig = this.audioTrack ? audioConfigFor(this.audioTrack) : null;
-    if (audioConfig) this.audioDecoder?.configure(audioConfig);
+    if (this.audioConfig) this.audioDecoder?.configure(this.audioConfig);
+    this.needsKeyframe = true;
 
     for (const frame of this.frames) frame.close();
     this.frames.length = 0;
@@ -351,6 +447,9 @@ export class PlaybackEngine {
     this.presentFromUs = targetUs;
 
     this.reader.seekTo(clusterOffsetForTime(this.file, targetUs) ?? this.file.firstClusterOffset ?? 0);
+    // The software path is a separate producer and doesn't go through the reader — it gets its
+    // own restart at the new position.
+    if (this.softwareAudio) void this.runSoftwareAudio(target);
     this.emit("waiting");
     await this.pump();
     this.emit("timeupdate", target);
@@ -389,11 +488,15 @@ export class PlaybackEngine {
   private async pump(): Promise<void> {
     if (this.demuxing || this.destroyed || !this.reader) return;
     this.demuxing = true;
+    const generation = this.generation;
     try {
       for (;;) {
         if (this.destroyed || this.endOfFile) return;
-        if (this.frames.length >= MAX_QUEUED_FRAMES) return;
-        if ((this.videoDecoder?.decodeQueueSize ?? 0) >= MAX_DECODE_QUEUE) return;
+        // A seek happened while this pass was awaiting a read; everything it would feed now
+        // belongs to the position the viewer just left.
+        if (generation !== this.generation) return;
+        if (this.frames.length >= this.depth.frames) return;
+        if ((this.videoDecoder?.decodeQueueSize ?? 0) >= this.depth.decode) return;
         if (this.audio && !this.audio.needsMore && this.frames.length > 2) return;
 
         const sample = await this.reader.next();
@@ -405,6 +508,10 @@ export class PlaybackEngine {
         }
 
         if (this.videoTrack && sample.trackNumber === this.videoTrack.number && this.videoDecoder?.state === "configured") {
+          if (this.needsKeyframe) {
+            if (!sample.isKey) continue;
+            this.needsKeyframe = false;
+          }
           this.videoDecoder.decode(
             new EncodedVideoChunk({
               type: sample.isKey ? "key" : "delta",
@@ -442,6 +549,19 @@ export class PlaybackEngine {
     }
   }
 
+  /**
+   * Draws a frame and releases it once the draw is genuinely finished.
+   *
+   * The HDR renderer is asynchronous — it has to copy the frame's planes out before it can upload
+   * them — so closing the frame right after calling draw() would pull the pixels out from under
+   * it. The SDR path is synchronous and closes immediately.
+   */
+  private present(frame: VideoFrame): void {
+    const drawing = this.renderer?.draw(frame);
+    if (drawing instanceof Promise) void drawing.finally(() => frame.close());
+    else frame.close();
+  }
+
   /** Emits only on change, so the overlay isn't re-rendered sixty times a second. */
   private updateSubtitle(seconds: number): void {
     if (this.subtitleTrackNumber === null) return;
@@ -464,26 +584,52 @@ export class PlaybackEngine {
     this.rafHandle = requestAnimationFrame(tick);
   }
 
+  /**
+   * Stops the clock when playback runs out of decoded frames, and restarts it when they come
+   * back.
+   *
+   * Without this the clock keeps advancing through a stall, so every frame that finally arrives
+   * is already late and gets dropped — and the player never catches up. What that looks like is
+   * a film running at a fraction of its real frame rate rather than a brief pause, which is
+   * exactly the wrong trade: a short freeze is forgivable, a permanently stuttering picture is
+   * not.
+   */
+  private freeze(): void {
+    if (this.starved) return;
+    this.starved = true;
+    this.wallClock.stop();
+    void this.audio?.suspend();
+    this.emit("waiting");
+  }
+
+  private thaw(): void {
+    if (!this.starved) return;
+    this.starved = false;
+    if (this.playing) {
+      this.wallClock.start(this.wallClock.currentMediaTime());
+      void this.audio?.resume();
+      this.emit("playing");
+    }
+  }
+
   private presentDueFrame(): void {
     if (this.frames.length === 0) {
       if (this.playing && this.endOfFile) {
         this.playing = false;
         this.emit("ended");
       } else if (this.playing) {
-        this.emit("waiting");
+        this.freeze();
       }
       return;
     }
+    this.thaw();
 
     const nowUs = this.currentTime * 1e6;
     // Paused still draws the first pending frame once — that is what makes a seek show its
     // destination instead of leaving the previous picture on screen.
     if (!this.playing) {
       const frame = this.frames.shift();
-      if (frame) {
-        void this.renderer?.draw(frame);
-        frame.close();
-      }
+      if (frame) this.present(frame);
       return;
     }
 
@@ -495,10 +641,7 @@ export class PlaybackEngine {
       drawn?.close();
       drawn = frame;
     }
-    if (drawn) {
-      void this.renderer?.draw(drawn);
-      drawn.close();
-    }
+    if (drawn) this.present(drawn);
 
     const seconds = this.currentTime;
     this.updateSubtitle(seconds);

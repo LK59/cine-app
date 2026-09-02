@@ -16,6 +16,7 @@ build/
 docker-compose.yml
 
 # Local data
+.next-dev/
 data/
 *.db
 *.db-shm

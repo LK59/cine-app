@@ -16,6 +16,15 @@ import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade"
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right text-slate-200">{value}</dd>
+    </div>
+  );
+}
+
 /** "Français — VFF", falling back to whatever the file actually gives us. */
 function trackLabel(track: EngineTrack): string {
   const parts = [track.language ?? undefined, track.name ?? undefined].filter(Boolean);
@@ -72,6 +81,7 @@ export function ExperimentalPlayerHost({
   const [tracks, setTracks] = useState<{ audio: EngineTrack[]; subtitles: EngineTrack[] }>({ audio: [], subtitles: [] });
   const [currentAudio, setCurrentAudio] = useState<number | null>(null);
   const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
   const error =
@@ -124,6 +134,14 @@ export function ExperimentalPlayerHost({
       engine.on("pause", () => setPlaying(false)),
       engine.on("ended", () => setPlaying(false)),
       engine.on("subtitle", (payload) => setSubtitle(typeof payload === "string" ? payload : null)),
+      // Controls appear as soon as the file is understood — duration, tracks — rather than
+      // waiting for the whole pipeline to fill. Anything that goes wrong afterwards replaces
+      // them with the error panel, so there is no window where a broken player looks usable.
+      engine.on("loadedmetadata", () => {
+        setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
+        setCurrentAudio(engine.currentAudioTrack);
+        setReady(true);
+      }),
     ];
 
     engine
@@ -235,6 +253,34 @@ export function ExperimentalPlayerHost({
         </div>
       )}
 
+      {/* The technical panel is this player's own: the stable one's reads Jellyfin's transcode
+          session, and there is no transcode session here — everything below is what the browser
+          is actually doing. */}
+      {showInfo && !isMini && (
+        <div className="absolute right-4 top-16 z-20 w-72 rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
+          <p className="mb-2 text-sm font-medium text-white">{t("player.experimental.badge")}</p>
+          <dl className="space-y-1.5">
+            <InfoRow label="Méthode" value="Décodage direct (WebCodecs)" />
+            <InfoRow label="Conteneur" value={info?.container?.toUpperCase() ?? "?"} />
+            <InfoRow
+              label="Vidéo"
+              value={`${info?.video?.codec ?? "?"} ${info?.video?.width ?? "?"}×${info?.video?.height ?? "?"} ${info?.video?.bitDepth ?? "?"} bits`}
+            />
+            <InfoRow label="Plage" value={info?.video?.rangeType ?? "SDR"} />
+            <InfoRow
+              label="Audio"
+              value={
+                currentAudio !== null
+                  ? tracks.audio.find((a) => a.number === currentAudio)?.codecId.replace("A_", "") ?? "?"
+                  : "aucune piste décodable"
+              }
+            />
+            <InfoRow label="Pistes" value={`${tracks.audio.length} audio, ${tracks.subtitles.length} sous-titres`} />
+            <InfoRow label="Transcodage serveur" value="aucun" />
+          </dl>
+        </div>
+      )}
+
       {isMini ? (
         <MiniPlayerChrome
           title={title}
@@ -272,7 +318,7 @@ export function ExperimentalPlayerHost({
               setCurrentSubtitle(id);
               engineRef.current?.setSubtitleTrack(id);
             }}
-            onTogglePlaybackInfo={() => {}}
+            onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}
             loading={!ready}
             // Intro/credits markers and episode chaining come from the stable player's own
@@ -287,7 +333,7 @@ export function ExperimentalPlayerHost({
       )}
 
       {!ready && !error && !isMini && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             <p className="text-sm text-slate-400">{t("player.experimental.loading")}</p>

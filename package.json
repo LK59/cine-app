@@ -12,9 +12,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mediabunny/ac3": "^1.55.5",
     "better-sqlite3": "12.11.1",
     "hls.js": "1.5.17",
     "lucide-react": "1.24.0",
+    "mediabunny": "^1.55.5",
     "next": "16.2.10",
     "react": "19.2.7",
     "react-dom": "19.2.7",

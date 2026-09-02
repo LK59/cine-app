@@ -125,6 +125,26 @@ export function videoConfigFor(track: MatroskaTrack): VideoConfig | null {
   }
 }
 
+/**
+ * Every configuration worth offering for a track, best first.
+ *
+ * Codec strings for AC3 and E-AC3 are not as settled as the video ones — the registry says
+ * "ac-3" and "ec-3", but implementations have shipped other spellings, and a platform that
+ * refuses one may accept another. Since the only cost of asking is one isConfigSupported call,
+ * the engine tries them in order rather than betting on a single string.
+ */
+export function audioConfigCandidates(track: MatroskaTrack): AudioConfig[] {
+  const primary = audioConfigFor(track);
+  if (!primary) return [];
+  const alternatives: Record<string, string[]> = {
+    A_AC3: ["ac-3", "ac3", "mp4a.a5"],
+    A_EAC3: ["ec-3", "eac3", "ec3", "mp4a.a6"],
+  };
+  const spellings = alternatives[track.codecId];
+  if (!spellings) return [primary];
+  return spellings.map((codec) => ({ ...primary, codec }));
+}
+
 export function audioConfigFor(track: MatroskaTrack): AudioConfig | null {
   if (track.type !== "audio" || !track.audio) return null;
   const base = { sampleRate: Math.round(track.audio.sampleRate), numberOfChannels: track.audio.channels };

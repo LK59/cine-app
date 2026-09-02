@@ -1,0 +1,50 @@
+# Development stack — for iterating on the code without rebuilding the image.
+#
+# `docker compose build` re-runs the whole Next.js production build and writes a new set of image
+# layers every time. Doing that on each edit is hundreds of megabytes of SSD writes per
+# iteration, and it is pure waste when all that changed is a source file.
+#
+# This runs `next dev` against the working tree, bind-mounted. Edits are picked up by hot reload,
+# nothing is rebuilt, and the only writes are Next's own incremental cache. Build the image again
+# only when actually deploying.
+#
+#   docker compose -f docker-compose.dev.yml up      # iterate, Ctrl-C to stop
+#   docker compose build && docker compose up -d     # deploy, as before
+#
+# It runs alongside production rather than replacing it: different container name, its own port,
+# and a separate build directory so the two never overwrite each other's compiled output.
+
+networks:
+  media_net:
+    external: true
+
+services:
+  cine-app-dev:
+    image: node:24-alpine
+    container_name: cine-app-dev
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Paris
+      - NODE_ENV=development
+      # Keeps `next dev` out of .next/, which the production image build also writes to — running
+      # both at once would otherwise have them fighting over the same directory.
+      - NEXT_DIST_DIR=.next-dev
+    command: sh -c "npm run dev -- --port 3000"
+    volumes:
+      # The working tree itself: this is what makes an edit visible without a rebuild.
+      - .:/app
+
+      # Same read-only media mounts as production, so the app sees the same library.
+      - /mnt/media/video:/mnt/media/video:ro
+      - /mnt/media/cloud/louis/clara:/app/gallery/clara:ro
+    ports:
+      # Reachable on the LAN at http://<server>:3001 — enough to test from a phone without
+      # touching the reverse proxy, which fronts about twenty other sites.
+      - "3001:3000"
+    # Same identity as production so the SQLite database and its WAL stay writable by both.
+    user: "1001:1000"
+    networks:
+      - media_net
+    restart: "no"

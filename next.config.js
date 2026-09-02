@@ -3,6 +3,10 @@ const { version } = require("./package.json");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // Lets the development stack compile into its own directory (see docker-compose.dev.yml), so a
+  // `next dev` running against the working tree and a production image build never overwrite each
+  // other's output.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   reactStrictMode: true,
   // sharp is externalized by Next.js by default; web-push needs to be added explicitly.
   serverExternalPackages: ["web-push"],
