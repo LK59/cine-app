@@ -86,9 +86,13 @@ describe("WatchlistButton", () => {
   });
 
   it("ignores a second click while a toggle is already in flight", async () => {
+    // The POST is held open for the whole test rather than resolving on a timer: with a timer,
+    // a slow machine can complete the first request before the second click lands, the guard is
+    // then legitimately inactive, and the test fails for a reason that has nothing to do with
+    // what it checks. A request that never settles makes "while already in flight" exact.
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/watchlist" && init?.method === "POST") {
-        return new Promise((resolve) => setTimeout(() => resolve({ ok: true, json: async () => ({}) }), 50));
+        return new Promise(() => {});
       }
       return Promise.resolve({ ok: true, json: async () => ({ item: null }) });
     });
