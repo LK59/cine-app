@@ -7,7 +7,8 @@ import useSWR from "swr";
 import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, ListVideo, RotateCcw } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
-import { CinemaSimilarRow, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -80,6 +81,11 @@ export function CinemaSeriesDetail({
 
   // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
   const { closing, requestClose } = useDelayedClose(onClose, 220);
+
+  // Drives both the second snap section and the chevron pointing at it: with nothing similar in
+  // the library there's no second screen, so neither should exist.
+  const similar = useCinemaSimilar(item, "series");
+  const hasSimilar = !!onSelectSimilar && similar.length > 0;
 
   const playerEnabled = usePlayerEnabled();
   // Re-runs once playerEnabled AND episodesData (Play only renders once nextEpisode is known —
@@ -204,7 +210,7 @@ export function CinemaSeriesDetail({
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
       <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
-        <div data-snap-section className="flex min-h-full snap-start flex-col justify-end py-16">
+        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end py-16">
         <div
           key={item.sonarrId}
           className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
@@ -322,14 +328,15 @@ export function CinemaSeriesDetail({
           </div>
 
         </div>
+        {hasSimilar && <CinemaScrollHint />}
         </div>
 
         {/* Its own full-height snap position — centred rather than pinned to the top, so landing
             on it reads as a deliberate second screen instead of one row stranded above a lot of
             empty backdrop. */}
-        {onSelectSimilar && (
+        {hasSimilar && (
           <div data-snap-section className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
-            <CinemaSimilarRow subject={item} mediaType="series" onSelect={(next) => onSelectSimilar(next as CinemaSeries)} />
+            <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar!(next as CinemaSeries)} />
           </div>
         )}
       </div>

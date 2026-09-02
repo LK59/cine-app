@@ -26,20 +26,16 @@ function idOf(item: CinemaMovie | CinemaSeries): number {
   return "radarrId" in item ? item.radarrId : item.sonarrId;
 }
 
-export function CinemaSimilarRow({
-  subject,
-  mediaType,
-  onSelect,
-}: {
-  subject: CinemaMovie | CinemaSeries;
-  mediaType: "movies" | "series";
-  onSelect: (item: CinemaMovie | CinemaSeries) => void;
-}) {
-  const t = useT();
+// Separate from the component because the sheets need the answer before they render: an empty
+// result means there is no second snap section at all, and no scroll hint pointing at one.
+export function useCinemaSimilar(
+  subject: CinemaMovie | CinemaSeries,
+  mediaType: "movies" | "series"
+): (CinemaMovie | CinemaSeries)[] {
   const { data: movies } = useSWR<CinemaMoviesPayload>(mediaType === "movies" ? "/api/cinema/movies" : null, fetcher);
   const { data: series } = useSWR<CinemaSeriesPayload>(mediaType === "series" ? "/api/cinema/series" : null, fetcher);
 
-  const items = useMemo(() => {
+  return useMemo(() => {
     const payload = mediaType === "movies" ? movies : series;
     if (!payload) return [];
     const all: (CinemaMovie | CinemaSeries)[] = uniqueById(
@@ -49,7 +45,16 @@ export function CinemaSimilarRow({
     const subjectId = idOf(subject);
     return similarInLibrary(subject, all, (candidate) => idOf(candidate) === subjectId);
   }, [movies, series, mediaType, subject]);
+}
 
+export function CinemaSimilarRow({
+  items,
+  onSelect,
+}: {
+  items: (CinemaMovie | CinemaSeries)[];
+  onSelect: (item: CinemaMovie | CinemaSeries) => void;
+}) {
+  const t = useT();
   if (items.length === 0) return null;
 
   return (

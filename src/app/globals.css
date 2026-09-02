@@ -16,6 +16,7 @@
 
   --animate-fade-in: fade-in 0.25s ease-out both;
   --animate-fade-in-up: fade-in-up 0.35s ease-out both;
+  --animate-scroll-hint: scroll-hint 2s ease-in-out infinite;
   --animate-fade-in-scale: fade-in-scale 0.3s ease-out both;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-slide-up: slide-up 0.4s ease-out both;
@@ -48,6 +49,20 @@
       opacity: 1;
     }
   }
+  /* The "there's more below" nudge under a detail sheet's menu — a slow, small vertical drift
+     rather than a bounce: it has to be noticeable while sitting still, without pulling the eye
+     away from the title it sits under. */
+  @keyframes scroll-hint {
+    0%, 100% {
+      opacity: 0.45;
+      transform: translateY(0);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(5px);
+    }
+  }
+
   @keyframes fade-in-up {
     0% {
       opacity: 0;

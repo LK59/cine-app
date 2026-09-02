@@ -14,7 +14,7 @@ import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { ImdbBadge } from "@/components/ImdbBadge";
-import { CinemaSimilarRow } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -54,6 +54,7 @@ export function CinemaMobileDetail({
   const playerEnabled = usePlayerEnabled();
   const [showTrailer, setShowTrailer] = useState(false);
   const { closing, requestClose } = useDelayedClose(onClose, 220);
+  const similar = useCinemaSimilar(item, mediaType);
 
   const isSeries = mediaType === "series";
   const infoUrl = isSeries
@@ -332,7 +333,7 @@ export function CinemaMobileDetail({
           </>
         )}
 
-        {onSelectSimilar && <CinemaSimilarRow subject={item} mediaType={mediaType} onSelect={onSelectSimilar} />}
+        {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} />}
       </div>
 
       {showTrailer && info?.trailerKey && (
