@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
+import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
+import { formatDurationShort } from "@/lib/format";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -175,6 +177,7 @@ export function CinemaEpisodeBrowser({
                       <Check size={12} className="text-white" />
                     </span>
                   )}
+                  <CinemaEpisodeProgress resumeTicks={ep.resumeTicks} runtimeTicks={ep.runtimeTicks} watched={ep.watched} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
@@ -186,7 +189,15 @@ export function CinemaEpisodeBrowser({
                         {t("cinema.nextUpBadge")}
                       </span>
                     )}
-                    {ep.runtimeMinutes && <span className="shrink-0 text-xs text-white/50">{ep.runtimeMinutes} min</span>}
+                    {/* A started episode says what's LEFT, not how long it is — the number you
+                        actually want before pressing play. Untouched ones keep the runtime. */}
+                    {ep.resumeTicks && ep.runtimeTicks && !ep.watched ? (
+                      <span className="shrink-0 text-xs text-accent-300">
+                        {t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks - ep.resumeTicks) })}
+                      </span>
+                    ) : (
+                      ep.runtimeMinutes && <span className="shrink-0 text-xs text-white/50">{ep.runtimeMinutes} min</span>
+                    )}
                   </div>
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-white/60">{ep.overview}</p>}
                 </div>

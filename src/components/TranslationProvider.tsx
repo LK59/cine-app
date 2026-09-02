@@ -98,6 +98,13 @@ export function TranslationProvider({
         applyLocale(target);
       }
     });
+    // A mount-only bootstrap, not a reaction to initialLocale: it reads the cookie, fetches the
+    // instance default and the user's saved language once, and can end in a full
+    // window.location.reload() when those disagree. Listing initialLocale would re-run all of
+    // that whenever the server handed down a different value — i.e. right after such a reload,
+    // which is how you get a reload loop. The prop is fixed for the life of a page anyway:
+    // changing language rewrites the cookie and reloads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setLocale = useCallback(async (l: Locale) => {

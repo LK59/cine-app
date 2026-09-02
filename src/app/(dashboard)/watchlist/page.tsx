@@ -255,6 +255,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
               <div key={r.tmdbId} className="flex gap-3 rounded-xl p-2 transition-colors hover:bg-white/5">
                 <div className="w-10 shrink-0 overflow-hidden rounded-lg bg-slate-800" style={{ aspectRatio: "2/3" }}>
                   {r.posterPath
+                    // eslint-disable-next-line @next/next/no-img-element -- deliberate: a 40px-wide thumbnail already requested from TMDB at w92. next/image would have this server re-encode it to serve fewer pixels than it started with.
                     ? <img src={`${TMDB_IMAGE_BASE}/w92${r.posterPath}`} alt="" className="h-full w-full object-cover" />
                     : <div className="flex h-full items-center justify-center">{type === "movie" ? <Film size={14} className="text-slate-700" /> : <Tv size={14} className="text-slate-700" />}</div>
                   }
@@ -423,6 +424,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
           }}
         >
           {poster
+            // eslint-disable-next-line @next/next/no-img-element -- deliberate: TMDB CDN poster at its display size, lazy-loaded — same reasoning as the thumbnail above.
             ? <img src={poster} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
             : <div className="flex h-full items-center justify-center">{item.mediaType === "movie" ? <Film size={28} className="text-slate-700" /> : <Tv size={28} className="text-slate-700" />}</div>
           }

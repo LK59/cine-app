@@ -431,6 +431,7 @@ export function GlobalSearch() {
                   >
                     <div className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-800 ${isVip ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-slate-900 shadow-[0_0_8px_rgba(250,204,21,0.4)]" : ""}`}>
                       {p.profilePath
+                        // eslint-disable-next-line @next/next/no-img-element -- deliberate: a 40px TMDB profile picture in a live-search dropdown. Optimizing it server-side would add a round-trip to a list that rerenders on every keystroke.
                         ? <img src={p.profilePath} alt={p.name} className="h-full w-full object-cover" />
                         : <div className="flex h-full items-center justify-center"><User size={14} className="text-slate-600" /></div>
                       }

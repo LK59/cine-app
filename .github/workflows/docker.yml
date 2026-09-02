@@ -5,8 +5,15 @@ on:
     branches: [main]
 
 jobs:
+  # The gate: type-check, lint and tests. `needs` can only point at a job in this same file, so
+  # the shared workflow is called here rather than relied on from its own trigger.
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   build-and-push:
     runs-on: ubuntu-latest
+    # Nothing is published unless the Verify workflow's checks pass on this same commit.
+    needs: verify
     permissions:
       contents: read
       packages: write

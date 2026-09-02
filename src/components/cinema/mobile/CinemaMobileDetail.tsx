@@ -14,6 +14,8 @@ import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
+import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
+import { formatDurationShort } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
 import { useT } from "@/components/TranslationProvider";
@@ -347,6 +349,11 @@ export function CinemaMobileDetail({
                         <Check size={10} className="text-white" />
                       </span>
                     )}
+                    <CinemaEpisodeProgress
+                      resumeTicks={episode.resumeTicks}
+                      runtimeTicks={episode.runtimeTicks}
+                      watched={episode.watched}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-white">
@@ -357,7 +364,15 @@ export function CinemaMobileDetail({
                         </span>
                       )}
                     </p>
-                    {episode.runtimeMinutes && <p className="mt-0.5 text-xs text-white/50">{episode.runtimeMinutes} min</p>}
+                    {/* Remaining time on a started episode, runtime otherwise — same rule as the
+                        desktop season browser. */}
+                    {episode.resumeTicks && episode.runtimeTicks && !episode.watched ? (
+                      <p className="mt-0.5 text-xs text-accent-300">
+                        {t("cinema.timeRemaining", { time: formatDurationShort(episode.runtimeTicks - episode.resumeTicks) })}
+                      </p>
+                    ) : (
+                      episode.runtimeMinutes && <p className="mt-0.5 text-xs text-white/50">{episode.runtimeMinutes} min</p>
+                    )}
                     {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-white/60">{episode.overview}</p>}
                   </div>
                 </button>

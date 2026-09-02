@@ -1,0 +1,53 @@
+name: Verify
+
+# The gate that runs before anything is published, and on every pull request.
+#
+# The tests themselves were already gating: the Dockerfile runs `npm test` before `npm run build`,
+# so a broken test has always failed the image build. Two checks were not covered by that, and
+# they are why this workflow exists:
+#
+#   * ESLint — `next build` stopped running it in Next 15+, so nothing was running it at all
+#     outside a developer's terminal.
+#   * `tsc --noEmit` over the WHOLE project — `next build` type-checks only what the app graph
+#     reaches, which excludes every test file. That is exactly where the 11 type errors this
+#     workflow was written alongside had been sitting unnoticed.
+#
+# `npm test` stays in the Dockerfile as well as here: it is what protects a manual
+# `docker compose build` on the server, which doesn't go through GitHub at all.
+
+on:
+  push:
+    # main is covered by the publish workflow, which calls this one as its first job — running it
+    # twice for the same commit would just burn minutes.
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile's runtime, so a syntax or API difference can't pass here and
+          # fail there.
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        # No warnings either: every one left in this project is now an explicit, commented
+        # decision, so a new one means something actually changed.
+        run: npm run lint -- --max-warnings=0
+
+      - name: Test
+        run: npm test

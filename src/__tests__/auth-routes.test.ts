@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 
-const mockCheckRateLimit = vi.fn(() => true);
+// Declared with a rest parameter it ignores: the factory below forwards whatever the real
+// module is called with, and a mock that takes no parameters can't be handed them.
+const mockCheckRateLimit = vi.fn((..._args: unknown[]) => true);
 vi.mock("@/lib/rateLimiter", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));

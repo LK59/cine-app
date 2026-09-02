@@ -8,7 +8,8 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "better-sqlite3": "12.11.1",

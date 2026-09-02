@@ -18,7 +18,9 @@ const mockTmdb = {
   movieRecommendations: vi.fn(),
   tvRecommendations: vi.fn(),
 };
-const mockCreateTmdbClient = vi.fn(() => mockTmdb);
+// Declared with a rest parameter it ignores: the factory below forwards whatever the real
+// module is called with, and a mock that takes no parameters can't be handed them.
+const mockCreateTmdbClient = vi.fn((..._args: unknown[]) => mockTmdb);
 vi.mock("@/lib/clients/tmdb", () => ({
   createTmdbClient: (...args: unknown[]) => mockCreateTmdbClient(...args),
 }));

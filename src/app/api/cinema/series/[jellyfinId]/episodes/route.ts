@@ -11,6 +11,9 @@ export interface CinemaEpisode {
   overview: string | null;
   thumbnailUrl: string | null;
   runtimeMinutes: number | null;
+  // Same duration as runtimeMinutes, unrounded: a progress bar and a "23 min restantes" label
+  // both need the real value, and rounding to whole minutes first visibly skews a short episode.
+  runtimeTicks: number | null;
   watched: boolean;
   resumeTicks: number | null;
 }
@@ -41,6 +44,7 @@ function toCinemaEpisode(item: import("@/lib/clients/jellyfin").JellyfinItem): C
     overview: item.Overview ?? null,
     thumbnailUrl: item.ImageTags?.Primary ? `/api/jellyfin/image?itemId=${item.Id}&tag=${item.ImageTags.Primary}` : null,
     runtimeMinutes: item.RunTimeTicks ? Math.round(item.RunTimeTicks / 10_000_000 / 60) : null,
+    runtimeTicks: item.RunTimeTicks ?? null,
     watched: item.UserData?.Played ?? false,
     resumeTicks: item.UserData?.PlaybackPositionTicks ?? null,
   };

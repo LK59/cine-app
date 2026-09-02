@@ -73,6 +73,12 @@ export async function POST(req: NextRequest) {
       invalidateLibrary();
       return NextResponse.json({ sonarrId: added.id });
     }
+
+    // Unreachable in practice — the guard above narrows `type` to "movie" | "series" — but the
+    // two ifs don't say so, and without this the function has a path that falls off the end and
+    // returns nothing at all. A route handler that resolves to undefined is a 500 with no
+    // message; an explicit 400 is both honest and typed.
+    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Erreur" },

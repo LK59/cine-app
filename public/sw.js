@@ -1,7 +1,6 @@
-// v7: flushes cached navigations/chunks from the several broken Cinema Mode iterations tested
-// live this session — a client that had cached one of those earlier responses (network-first
-// falls back to whatever's cached on any failure) could keep reproducing an already-fixed bug.
-const CACHE_NAME = "cine-app-v7";
+// v8: flushes any RSC payloads cached by earlier versions (see the fetch handler — they are no
+// longer intercepted at all, but ones already stored would otherwise linger).
+const CACHE_NAME = "cine-app-v8";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {
@@ -23,6 +22,16 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/api/")) return;
+
+  // Next's client-side navigations don't fetch the page — they fetch the target route's RSC
+  // payload, marked by an "RSC" request header and a ?_rsc= cache-buster. Left to the branch
+  // below, those were both cached (keyed by URL, so a payload from a previous build could be
+  // handed to a client running the new one) and, worse, wrapped on failure: a rejected fetch
+  // came back as this worker's synthetic 504, which the router can only read as "the server
+  // answered with an error" rather than "the network failed", so it had nothing to fall back on.
+  // Not intercepting them at all means they are never stale and a real failure stays a real
+  // failure, which the router already knows how to handle.
+  if (url.searchParams.has("_rsc") || event.request.headers.get("RSC")) return;
 
   // Cache-first: Next.js fingerprints these filenames by content hash (the
   // hash changes if the content does), so a cached copy is never stale —
