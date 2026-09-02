@@ -39,7 +39,7 @@ export function CinemaCard({
       onClick={() => onSelectItem(item)}
       className={`${widthClassName} shrink-0 overflow-hidden rounded-lg transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
-      <PosterImage src={item.posterUrl} alt={item.title} />
+      <PosterImage src={item.posterUrl} alt={item.title} subtle />
     </button>
   );
 }

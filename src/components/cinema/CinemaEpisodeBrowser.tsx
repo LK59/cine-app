@@ -17,11 +17,16 @@ import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jelly
 export function CinemaEpisodeBrowser({
   title,
   seasons,
+  nextEpisodeId,
   onClose,
   onPlayEpisode,
 }: {
   title: string;
   seasons: CinemaSeason[];
+  // The series' own "Lire"/"Reprendre" target (CinemaSeriesDetail's nextEpisode) — badged here
+  // too so it's obvious at a glance which episode picking "Plus d'épisodes" would have landed on
+  // anyway, without having to cross-reference against the detail sheet underneath.
+  nextEpisodeId?: string;
   onClose: () => void;
   onPlayEpisode: (episode: CinemaEpisode) => void;
 }) {
@@ -142,7 +147,7 @@ export function CinemaEpisodeBrowser({
                 className="flex items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
               >
                 <div className="relative w-40 shrink-0 sm:w-48">
-                  <PosterImage src={ep.thumbnailUrl} alt={ep.title} aspectRatio="aspect-video" unoptimized />
+                  <PosterImage src={ep.thumbnailUrl} alt={ep.title} aspectRatio="aspect-video" unoptimized subtle />
                   <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity hover:bg-black/30 hover:opacity-100">
                     <Play size={28} className="text-white drop-shadow-lg" fill="currentColor" />
                   </span>
@@ -157,6 +162,11 @@ export function CinemaEpisodeBrowser({
                     <span className="text-sm font-medium text-white">
                       {ep.episodeNumber}. {ep.title}
                     </span>
+                    {ep.jellyfinItemId === nextEpisodeId && (
+                      <span className="shrink-0 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-300 ring-1 ring-accent-500/40">
+                        {t("cinema.nextUpBadge")}
+                      </span>
+                    )}
                     {ep.runtimeMinutes && <span className="shrink-0 text-xs text-white/50">{ep.runtimeMinutes} min</span>}
                   </div>
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-white/60">{ep.overview}</p>}

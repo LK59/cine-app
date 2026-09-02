@@ -1184,6 +1184,9 @@
     "specials": "Épisodes spéciaux",
     "timeRemaining": "{time} restants",
     "episodeShort": "Ep{episode} S{season}",
-    "restartFromBeginning": "Recommencer depuis le début"
+    "restartFromBeginning": "Recommencer depuis le début",
+    "mutePreview": "Couper le son de l'aperçu",
+    "unmutePreview": "Activer le son de l'aperçu",
+    "nextUpBadge": "À suivre"
   }
 }

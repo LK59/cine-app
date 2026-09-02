@@ -41,6 +41,14 @@ const BACKDROP_MASK =
 // grids stay visually aligned.
 const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 
+// Same edge-fade mask as CinemaRow/CinemaSeriesRow (see their own doc comment) — the Continue
+// Watching row is hand-rolled here rather than going through either of those (it renders
+// ContinueCard, not CinemaCard/CinemaSeriesCard), so it needs its own copy of the same treatment.
+const EDGE_FADE = {
+  maskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
+  WebkitMaskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
+};
+
 // Continue-watching cards are noticeably wider than genre-row posters (landscape source image,
 // and there's a label chip to fit beneath) — a distinct width from CARD_WIDTH, not a smaller
 // version of the same one.
@@ -440,9 +448,9 @@ export function CinemaClient() {
           {mediaType === "movies" ? (
             <>
               {resumeMovies.length > 0 && (
-                <div className="mb-6 snap-start">
+                <div className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
+                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
                     {resumeMovies.map((item, i) => (
                       <ContinueCard
                         key={item.id}
@@ -460,11 +468,12 @@ export function CinemaClient() {
                 </div>
               )}
 
-              {movies?.genres.map((genre) => (
+              {movies?.genres.map((genre, i) => (
                 <CinemaRow
                   key={genre}
                   label={genre}
                   rowKey={`genre-${genre}`}
+                  rowIndex={i + (resumeMovies.length > 0 ? 1 : 0)}
                   items={movies.rows[genre] ?? []}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={setFocusedItem}
@@ -480,9 +489,9 @@ export function CinemaClient() {
                   the toggle is already up, so its own states have to render inside the same
                   chrome instead of hiding the toggle that got you here. */}
               {continueSeries.length > 0 && (
-                <div className="mb-6 snap-start">
+                <div className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12">
+                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
                     {continueSeries.map((item, i) => (
                       <ContinueCard
                         key={item.jellyfinItemId}
@@ -515,11 +524,12 @@ export function CinemaClient() {
               {series && series.spotlight.length === 0 && (
                 <p className="px-8 text-sm text-slate-400 sm:px-12">{t("cinema.empty")}</p>
               )}
-              {series?.genres.map((genre) => (
+              {series?.genres.map((genre, i) => (
                 <CinemaSeriesRow
                   key={genre}
                   label={genre}
                   rowKey={`genre-${genre}`}
+                  rowIndex={i + (continueSeries.length > 0 ? 1 : 0)}
                   items={series.rows[genre] ?? []}
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={setSeriesFocusedItem}

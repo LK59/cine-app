@@ -12,9 +12,21 @@ interface PosterImageProps {
   // doesn't forward cookies, so auth-gated routes (e.g. /api/jellyfin/image) 404/400
   // there. Skip optimization for those and let the browser fetch it directly.
   unoptimized?: boolean;
+  // A calm static placeholder instead of the shared shimmer animation — opt-in, default
+  // behavior everywhere else unchanged. Cinema Mode's rows can have a dozen+ small cards
+  // loading at once; that many shimmers moving in sync reads as busy at that scale, where a
+  // single flat tone doesn't.
+  subtle?: boolean;
 }
 
-export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-2/3", unoptimized = false }: PosterImageProps) {
+export function PosterImage({
+  src,
+  alt,
+  className = "",
+  aspectRatio = "aspect-2/3",
+  unoptimized = false,
+  subtle = false,
+}: PosterImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
 
@@ -28,7 +40,7 @@ export function PosterImage({ src, alt, className = "", aspectRatio = "aspect-2/
 
   return (
     <div className={`${aspectRatio} ${className} relative overflow-hidden`}>
-      {!loaded && <div className="absolute inset-0 skeleton" />}
+      {!loaded && <div className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />}
       <Image
         src={src}
         alt={alt}

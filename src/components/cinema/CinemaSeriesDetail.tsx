@@ -316,6 +316,7 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
         <CinemaEpisodeBrowser
           title={item.title}
           seasons={episodesData.seasons}
+          nextEpisodeId={nextEpisode?.itemId}
           onClose={() => {
             setShowEpisodes(false);
             // Same focus-restore fix — CinemaEpisodeBrowser unmounting otherwise leaves focus

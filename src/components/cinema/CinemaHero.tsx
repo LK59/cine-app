@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { CinemaTrailerPreview } from "@/components/cinema/CinemaTrailerPreview";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 interface RadarrCastMember {
@@ -55,34 +56,41 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
   }
 
   return (
-    <div key={item.radarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
-      {item.logoUrl && !logoErrored ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={item.logoUrl}
-          alt={item.title}
-          onError={() => setLogoErrored(true)}
-          className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
-        />
-      ) : (
-        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
-      )}
+    // Outer wrapper spans the FULL hero pane width now (not max-w-2xl) — the trailer preview
+    // below is absolutely positioned against IT (top-right corner of the whole pane), and needs
+    // the real pane width to anchor against, not the text column's own narrower box. The text
+    // column keeps its old max-w-2xl as an inner div instead.
+    <div key={item.radarrId} className="relative h-full">
+      <CinemaTrailerPreview itemKey={item.radarrId} trailerKey={info?.trailerKey} />
+      <div className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
+        {item.logoUrl && !logoErrored ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.logoUrl}
+            alt={item.title}
+            onError={() => setLogoErrored(true)}
+            className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
+          />
+        ) : (
+          <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
+        )}
 
-      <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
-        <span>{item.year}</span>
-        {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-        {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
-      </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+          <span>{item.year}</span>
+          {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+          {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
+        </div>
 
-      <p className="line-clamp-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
-        {info?.tmdb?.overview || item.overview}
-      </p>
-
-      {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-        <p className="max-w-xl truncate text-xs text-white/60">
-          {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
+        <p className="line-clamp-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+          {info?.tmdb?.overview || item.overview}
         </p>
-      )}
+
+        {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
+          <p className="max-w-xl truncate text-xs text-white/60">
+            {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

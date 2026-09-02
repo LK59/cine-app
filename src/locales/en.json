@@ -1184,6 +1184,9 @@
     "specials": "Specials",
     "timeRemaining": "{time} left",
     "episodeShort": "Ep{episode} S{season}",
-    "restartFromBeginning": "Start from the beginning"
+    "restartFromBeginning": "Start from the beginning",
+    "mutePreview": "Mute preview",
+    "unmutePreview": "Unmute preview",
+    "nextUpBadge": "Up next"
   }
 }
