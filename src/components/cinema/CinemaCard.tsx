@@ -39,10 +39,16 @@ export function CinemaCard({
       onClick={() => onSelectItem(item)}
       className={`${widthClassName} shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
+      {/* unoptimized: these URLs are already TMDB CDN images requested at the exact width this
+          card renders at (see the cinema payload routes). Routing them through Next's optimizer
+          instead meant this server transcoding hundreds of posters on demand while you scroll —
+          the single biggest source of the scroll lag on a phone. The CDN does that job better,
+          and for free. */}
       <PosterImage
         src={item.posterUrl}
         alt={item.title}
         subtle
+        unoptimized
         // Matches CARD_WIDTH's own breakpoints (96/112/128/144px) so Next serves a
         // poster sized for the slot rather than the shared grid default.
         sizes={"(max-width: 640px) 96px, (max-width: 768px) 112px, (max-width: 1024px) 128px, 144px"}

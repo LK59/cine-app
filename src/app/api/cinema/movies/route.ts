@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
-import { posterUrl, backdropUrl } from "@/lib/images";
+import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleLogo } from "@/lib/title-logo";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
@@ -37,8 +37,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
     tmdbId: m.tmdbId,
     title: m.title,
     year: m.year,
-    posterUrl: posterUrl(m.images, "full"),
-    backdropUrl: backdropUrl(m.images, "full"),
+    posterUrl: posterUrl(m.images, "thumb"),
+    backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
     logoUrl: await getTitleLogo(m.tmdbId, "movie"),
     overview: m.overview ?? null,
     // Radarr already resolves this itself at add/refresh time (Skyhook) — free, no

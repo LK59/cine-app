@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Play } from "lucide-react";
+import { ArrowLeft, Play, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -17,13 +17,26 @@ import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
 import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
 import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
+import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { CinemaTrailerBackdrop } from "@/components/cinema/CinemaTrailerBackdrop";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
-import type { DashboardPayload, ResumeItem } from "@/app/api/dashboard/route";
+
+// The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
+// sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
+// wait on just to draw one row.
+interface CinemaResumeItem {
+  id: string;
+  name: string;
+  type: string;
+  progress: number;
+  positionTicks: number;
+  runtimeTicks: number;
+  imageTag: string | null;
+}
 
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
@@ -205,8 +218,8 @@ export function CinemaClient() {
     mediaType === "series" ? "/api/cinema/series" : null,
     fetcher
   );
-  const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
-  const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
+  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>("/api/jellyfin/resume", fetcher);
+  const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
   const continueSeries = nextUp?.items ?? [];
@@ -301,15 +314,33 @@ export function CinemaClient() {
   // jumps straight to the first poster card in the (still fully mounted, just hidden) browse
   // grid — then Enter on THAT opened a completely different title's detail sheet.
   const playback = usePlayback();
+
+  const [searchOpen, setSearchOpen] = useState(false);
+
   // "full" specifically, not "closed" — a minimized (mini) player is a small floating widget;
   // browsing the grid underneath it should still work normally, only a full-screen player
   // actively capturing the keyboard needs this stepping aside. Both selectedItem and
   // seriesSelectedItem gate this now — either detail sheet owns the keyboard the same way.
-  useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full");
+  useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !searchOpen);
 
   // Same three conditions gate the trailer preview below — anything opaque covering the browse
   // screen means the preview has nothing to preview for.
-  const trailerSuspended = selectedItem !== null || seriesSelectedItem !== null || playback.mode === "full";
+  const trailerSuspended = selectedItem !== null || seriesSelectedItem !== null || playback.mode === "full" || searchOpen;
+
+  // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
+  // and the reason the button itself can stay a small icon rather than a full-width field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "/" || searchOpen) return;
+      const tag = (document.activeElement as HTMLElement | null)?.tagName ?? "";
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+      if (selectedItem || seriesSelectedItem || playback.mode === "full") return;
+      e.preventDefault();
+      setSearchOpen(true);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [searchOpen, selectedItem, seriesSelectedItem, playback.mode]);
 
   // All four are useCallback'd for one specific reason: the row components below are memo'd, and
   // a fresh function identity on every render would defeat that entirely — the rows (and every
@@ -427,8 +458,25 @@ export function CinemaClient() {
         <ArrowLeft size={16} />
       </button>
 
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="fixed right-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
+        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+        title={t("cinema.search")}
+      >
+        <Search size={16} />
+      </button>
+
       <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
       <CinemaShortcutsGuide />
+
+      {searchOpen && (
+        <CinemaSearchOverlay
+          onClose={() => setSearchOpen(false)}
+          onSelectMovie={(item) => { setSearchOpen(false); setMediaType("movies"); setFocusedItem(item); setSelectedItem(item); }}
+          onSelectSeries={(item) => { setSearchOpen(false); setMediaType("series"); setSeriesFocusedItem(item); setSeriesSelectedItem(item); }}
+        />
+      )}
 
       {/* One continuous ambient background for the WHOLE screen, not scoped to the hero pane —
           a sharp copy of the focused item's backdrop (masked, fading out by ~72% of the full

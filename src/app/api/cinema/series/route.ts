@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
-import { posterUrl, backdropUrl } from "@/lib/images";
+import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleLogo } from "@/lib/title-logo";
 import { getImdbRating } from "@/lib/imdb-rating";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
@@ -47,8 +47,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
     tmdbId: s.tmdbId ?? null,
     title: s.title,
     year: s.year,
-    posterUrl: posterUrl(s.images, "full"),
-    backdropUrl: backdropUrl(s.images, "full"),
+    posterUrl: posterUrl(s.images, "thumb"),
+    backdropUrl: tmdbResize(backdropUrl(s.images, "full"), "w1280"),
     logoUrl,
     overview: s.overview ?? null,
     imdbRating,

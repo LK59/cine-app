@@ -11,6 +11,12 @@ const nextConfig = {
     // Next.js 16 defaults local image patterns to an empty query string;
     // our Jellyfin image proxy passes itemId/tag as query params.
     localPatterns: [{ pathname: "/api/jellyfin/image" }],
+    // Every image the optimizer produces is written under .next/cache/images and re-served from
+    // there — but only until its TTL expires, which defaults to 60s. On a self-hosted box that
+    // means the server re-encodes the same posters all day long (and, on the Cinema grid, several
+    // hundred of them at once while scrolling). Poster/backdrop URLs are content-addressed
+    // upstream, so a new artwork is a new URL, never a stale cache entry: a year is safe.
+    minimumCacheTTL: 31536000,
   },
   env: {
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? "",

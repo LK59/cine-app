@@ -3,22 +3,39 @@
 import useSWR from "swr";
 import { useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Info, Play } from "lucide-react";
+import { ArrowLeft, Info, Play, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
+import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
-import type { DashboardPayload } from "@/app/api/dashboard/route";
 
 // Roughly a third of a phone's width, so a row always shows "two and a bit" posters — the visual
 // cue that it scrolls, without a card so small the artwork stops being readable.
+// The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
+// sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
+// wait on just to draw one row.
+interface CinemaResumeItem {
+  id: string;
+  name: string;
+  type: string;
+  progress: number;
+  positionTicks: number;
+  runtimeTicks: number;
+  imageTag: string | null;
+}
+
 const POSTER_WIDTH = "w-28 sm:w-32";
 const CONTINUE_WIDTH = "w-44 sm:w-48";
+// A phone row is flicked through, not traversed — past a couple of dozen cards nobody is
+// scrolling horizontally any further, and every extra card is DOM and decoded artwork the
+// browser carries for the whole session.
+const ROW_ITEM_LIMIT = 24;
 
 // The phone counterpart to CinemaClient. Deliberately a separate component rather than responsive
 // classes on that one: the desktop screen is a split-pane, keyboard-driven, hover-preview design
@@ -30,6 +47,7 @@ export function CinemaMobileClient() {
   const playback = usePlayback();
   const [mediaType, setMediaType] = useState<"movies" | "series">("movies");
   const [selected, setSelected] = useState<{ item: CinemaMovie | CinemaSeries; mediaType: "movies" | "series" } | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
@@ -42,9 +60,9 @@ export function CinemaMobileClient() {
     fetcher
   );
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
-  const { data: dashboard } = useSWR<DashboardPayload>("/api/dashboard", fetcher);
+  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>("/api/jellyfin/resume", fetcher);
 
-  const resumeMovies = (dashboard?.resume.data?.items ?? []).filter((r) => r.type === "Movie");
+  const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
   const continueSeries = nextUp?.items ?? [];
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
@@ -66,9 +84,14 @@ export function CinemaMobileClient() {
   return createPortal(
     <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={{ zIndex: 45 }}>
       {/* Sticky chrome: exit on the left, the two library tabs as Netflix-style filter pills. */}
+      {/* The safe-area inset alone puts this flush against the status bar, which iOS then dims
+          and blurs over in a standalone PWA — the pills came out half-hidden. An explicit gap on
+          top of the inset keeps them clear of it. No backdrop-blur either: a blurred layer that
+          content scrolls under is one of the most reliable ways to make scrolling stutter on
+          iOS, and a solid bar reads the same here. */}
       <header
-        className="flex shrink-0 items-center gap-3 bg-slate-950/85 px-4 pb-3 backdrop-blur-sm"
-        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+        className="flex shrink-0 items-center gap-3 bg-slate-950 px-4 pb-3"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.25rem)" }}
       >
         <button
           type="button"
@@ -94,7 +117,23 @@ export function CinemaMobileClient() {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          aria-label={t("cinema.search")}
+          className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white active:scale-95"
+        >
+          <Search size={18} />
+        </button>
       </header>
+
+      {searchOpen && (
+        <CinemaSearchOverlay
+          onClose={() => setSearchOpen(false)}
+          onSelectMovie={(item) => { setSearchOpen(false); setMediaType("movies"); setSelected({ item, mediaType: "movies" }); }}
+          onSelectSeries={(item) => { setSearchOpen(false); setMediaType("series"); setSelected({ item, mediaType: "series" }); }}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-12">
         {loading && (
@@ -119,7 +158,7 @@ export function CinemaMobileClient() {
         {hero && (
           <section className="px-4 pt-2">
             <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
-              <PosterImage src={hero.posterUrl} alt={hero.title} subtle sizes="100vw" />
+              <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
               <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950 via-slate-950/70 to-transparent p-4 pt-16">
                 {hero.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -237,7 +276,7 @@ export function CinemaMobileClient() {
         )}
 
         {payload?.genres.map((genre) => {
-          const items = payload.rows[genre] ?? [];
+          const items = (payload.rows[genre] ?? []).slice(0, ROW_ITEM_LIMIT);
           if (items.length === 0) return null;
           return (
             <MobileRow key={genre} label={genre}>
@@ -246,12 +285,13 @@ export function CinemaMobileClient() {
                   key={isSeries ? (item as CinemaSeries).sonarrId : (item as CinemaMovie).radarrId}
                   type="button"
                   onClick={() => openDetail(item, mediaType)}
-                  className={`${POSTER_WIDTH} shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-transform active:scale-95`}
+                  className={`${POSTER_WIDTH} shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
                 >
                   <PosterImage
                     src={item.posterUrl}
                     alt={item.title}
                     subtle
+                    unoptimized
                     sizes="(max-width: 640px) 112px, 128px"
                   />
                 </button>
@@ -274,11 +314,21 @@ export function CinemaMobileClient() {
 }
 
 // Full-bleed horizontal scroller: the label keeps the page's padding, the track itself runs to
-// both edges (negative margin + matching padding) so a row reads as continuing past the screen
-// rather than stopping inside a gutter.
+// both edges so a row reads as continuing past the screen rather than stopping inside a gutter.
+//
+// content-visibility lets the browser skip layout and paint entirely for rows that are off
+// screen — with a dozen-plus rows of artwork that's the difference between scrolling the whole
+// document and scrolling the two rows you can actually see. contain-intrinsic-size gives it a
+// placeholder height so the scrollbar doesn't jump around as rows render; `auto` there means it
+// remembers each row's real height once measured.
+const ROW_CONTAINMENT = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "auto 210px",
+} as React.CSSProperties;
+
 function MobileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section className="mt-6">
+    <section className="mt-6" style={ROW_CONTAINMENT}>
       <h2 className="mb-2 px-4 text-sm font-semibold text-white">{label}</h2>
       <div className="scrollbar-thin flex gap-3 overflow-x-auto px-4 pb-1">{children}</div>
     </section>

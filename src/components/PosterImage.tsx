@@ -22,6 +22,9 @@ interface PosterImageProps {
   // card there is at most 144px wide, so the default's 20vw makes Next serve a ~384px image for
   // it, several times more pixels than the slot can show, on hundreds of cards at once.
   sizes?: string;
+  // Opts a specific image out of lazy-loading — for the one image that's the point of the screen
+  // (a hero), where waiting for the intersection observer is a visible delay.
+  priority?: boolean;
 }
 
 export function PosterImage({
@@ -32,6 +35,7 @@ export function PosterImage({
   unoptimized = false,
   subtle = false,
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw",
+  priority = false,
 }: PosterImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -53,6 +57,7 @@ export function PosterImage({
         fill
         unoptimized={unoptimized}
         sizes={sizes}
+        priority={priority}
         className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         onLoad={() => setLoaded(true)}
         onError={() => setErrored(true)}

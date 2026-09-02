@@ -1189,6 +1189,11 @@
     "unmutePreview": "Activar el sonido de la vista previa",
     "nextUpBadge": "A continuación",
     "moreInfo": "Más información",
-    "seasonCount": "{n} temporada(s)"
+    "seasonCount": "{n} temporada(s)",
+    "searchPlaceholder": "Buscar una película o serie…",
+    "searchHint": "Busca en tu biblioteca: título, género, año…",
+    "searchEmpty": "Nada en tu biblioteca coincide con esta búsqueda.",
+    "searchResults": "{n} resultado(s)",
+    "search": "Buscar"
   }
 }

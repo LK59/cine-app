@@ -1189,6 +1189,11 @@
     "unmutePreview": "Unmute preview",
     "nextUpBadge": "Up next",
     "moreInfo": "More info",
-    "seasonCount": "{n} season(s)"
+    "seasonCount": "{n} season(s)",
+    "searchPlaceholder": "Search a movie or series…",
+    "searchHint": "Searches your library: title, genre, year…",
+    "searchEmpty": "Nothing in your library matches this search.",
+    "searchResults": "{n} result(s)",
+    "search": "Search"
   }
 }

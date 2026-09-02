@@ -1189,6 +1189,11 @@
     "unmutePreview": "Ton der Vorschau aktivieren",
     "nextUpBadge": "Als Nächstes",
     "moreInfo": "Mehr Infos",
-    "seasonCount": "{n} Staffel(n)"
+    "seasonCount": "{n} Staffel(n)",
+    "searchPlaceholder": "Film oder Serie suchen…",
+    "searchHint": "Durchsucht deine Bibliothek: Titel, Genre, Jahr…",
+    "searchEmpty": "Nichts in deiner Bibliothek passt zu dieser Suche.",
+    "searchResults": "{n} Ergebnis(se)",
+    "search": "Suchen"
   }
 }

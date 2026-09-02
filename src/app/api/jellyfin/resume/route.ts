@@ -62,6 +62,10 @@ export async function GET(req: NextRequest) {
           : null,
       type: item.Type,
       progress: Math.round(progress),
+      // Ticks as well as the percentage: Cinema Mode's Continue Watching cards resume playback
+      // from the exact position and label themselves with the time remaining.
+      positionTicks,
+      runtimeTicks,
       imageTag: item.ImageTags?.Primary ?? null,
       cinemaHref,
     };

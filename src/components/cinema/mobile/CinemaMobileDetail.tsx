@@ -156,7 +156,10 @@ export function CinemaMobileDetail({
   return createPortal(
     <div
       className={`fixed inset-0 overflow-y-auto overscroll-contain bg-slate-950 ${closing ? "animate-fade-out" : "animate-slide-up"}`}
-      style={{ zIndex: 46 }}
+      // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
+      // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
+      // button lands in the murk.
+      style={{ zIndex: 46, paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
       {/* 16:9 header image, bleeding into the page under a gradient rather than ending on a hard
           edge — the same treatment the desktop sheet uses, scaled to a phone. */}
@@ -172,8 +175,7 @@ export function CinemaMobileDetail({
           type="button"
           onClick={requestClose}
           aria-label={t("cinema.back")}
-          className="absolute right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-xs active:scale-95"
-          style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
         >
           <X size={18} />
         </button>

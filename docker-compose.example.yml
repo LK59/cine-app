@@ -29,6 +29,10 @@ services:
       # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
       - ./data:/app/data
 
+      # Optimized-image cache (posters, backdrops, logos). Without this mount every redeploy
+      # starts from an empty cache and the server re-encodes the whole library again.
+      - ./data/image-cache:/app/.next/cache/images
+
       # Optional media root, read-only.
       # Keep this enabled if you want disk/media-size stats based on your host path.
       # Replace the left side with your own media folder. The right side reads
