@@ -94,9 +94,16 @@ export function CinemaSearchOverlay({
   return createPortal(
     <div
       ref={containerRef}
-      className={`fixed inset-0 flex flex-col bg-slate-950/95 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`fixed inset-x-0 top-0 flex flex-col bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      // Above the browse screen (45) and the detail sheets (46/48), below the player (80). It was
+      // 44 — i.e. *under* the opaque browse screen: the field was really there and really focused
+      // (the keyboard came up) but every pixel of it was painted over, so the search looked dead.
+      //
+      // 100dvh rather than inset-0: on iOS the dynamic viewport unit is the one that tracks the
+      // browser chrome, so the results list ends where the screen does instead of running under it.
       style={{
-        zIndex: 44,
+        zIndex: 50,
+        height: "100dvh",
         paddingTop: "calc(env(safe-area-inset-top, 0px) + 1rem)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
@@ -134,7 +141,13 @@ export function CinemaSearchOverlay({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 sm:px-8">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 sm:px-8"
+        // Touching the results means you're done typing: dropping the keyboard here gives the grid
+        // the whole screen back, and stops the first tap on a poster from being swallowed by the
+        // keyboard dismissing itself.
+        onTouchStart={() => (document.activeElement as HTMLElement | null)?.blur()}
+      >
         {query.trim().length < 2 ? (
           <p className="mt-10 text-center text-sm text-slate-500">{t("cinema.searchHint")}</p>
         ) : results.length === 0 ? (
