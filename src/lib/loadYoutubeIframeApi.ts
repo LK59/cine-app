@@ -5,6 +5,9 @@ export interface YTPlayer {
   unMute(): void;
   destroy(): void;
   getIframe(): HTMLIFrameElement;
+  /** Seconds elapsed in the current playback — polled to time the backdrop's reveal past
+   *  YouTube's own startup overlay (see CinemaTrailerBackdrop). */
+  getCurrentTime(): number;
 }
 
 interface YTPlayerVars {

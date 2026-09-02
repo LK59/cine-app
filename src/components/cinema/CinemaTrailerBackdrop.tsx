@@ -5,13 +5,22 @@ import { Volume2, VolumeX } from "lucide-react";
 import { loadYoutubeIframeApi, type YTPlayer } from "@/lib/loadYoutubeIframeApi";
 import { useT } from "@/components/TranslationProvider";
 
-const DWELL_MS = 3000;
-// A settle window AFTER the real "now playing" event fires, not instead of it — YouTube's own
-// startup title/channel card can still be visible for a while even once playback has genuinely
-// started; onStateChange alone wasn't enough of a signal by itself. Combined with the top-crop
-// below (belt and suspenders): even if a sliver of that overlay is still fading out somewhere in
-// the frame, it's now cropped away rather than depending purely on timing.
-const SETTLE_MS = 1500;
+// This is now a PRE-WARM delay, not a "how long before you see anything" one: the player is
+// created (and starts playing, invisibly) this early so that the REVEAL_AT_SECONDS countdown
+// below is already running while the user is still looking at the still backdrop. Kept short
+// for that reason — the visible reveal is gated on playback position, not on this.
+const DWELL_MS = 1000;
+// The reveal is gated on the video being genuinely this many seconds in — NOT on the "playing"
+// state event, and not on a fixed delay after it. YouTube's own startup overlay (title/channel
+// card, and the centre prev/play/next controls) is drawn by the embed itself and can't be
+// removed: the iframe is cross-origin, so no CSS or JS of ours can reach inside it, and no
+// player param disables it. It does fade on its own after ~3s of playback though, so the one
+// reliable way to never show it is to keep the whole backdrop hidden until playback is already
+// past that point. Polling getCurrentTime() rather than trusting a timer also means buffering
+// stalls can't slip the overlay into view — and it doubles as the loop handler: when the video
+// loops back to 0, this drops below the threshold again, hiding the backdrop for exactly as
+// long as the overlay reappears on the restart.
+const REVEAL_AT_SECONDS = 3.5;
 // Crops this many pixels off the video's own top edge — YouTube's title/channel overlay is a
 // roughly fixed-height band regardless of how large the video itself is scaled, so a fixed pixel
 // offset tracks it more reliably than a percentage would.
@@ -48,10 +57,6 @@ export function CinemaTrailerBackdrop({
   const [dwelled, setDwelled] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
-  const [showCenterMask, setShowCenterMask] = useState(false);
-  // Tracks the last `playing` value the mask-arming logic below has reacted to, so it can tell
-  // "playing just turned true" apart from "playing is still true from last render".
-  const [maskArmedFor, setMaskArmedFor] = useState(false);
 
   // Resets synchronously during render (not in an effect — this project's react-hooks/
   // set-state-in-effect rule) on every title change, even before the debounce that gates
@@ -63,24 +68,24 @@ export function CinemaTrailerBackdrop({
     setDwelled(false);
     setPlaying(false);
     setMuted(true);
-    setShowCenterMask(false);
-    setMaskArmedFor(false);
   }
 
-  // YouTube's own center play/prev/next controls only flash for a few seconds after playback
-  // actually starts, not indefinitely — so the mask covering them shouldn't be either. Turned on
-  // synchronously during render (not in an effect — this project's react-hooks/set-state-in-effect
-  // rule) the moment `playing` itself flips true; the effect below only owns the timer that turns
-  // it back off a few seconds later.
-  if (playing !== maskArmedFor) {
-    setMaskArmedFor(playing);
-    if (playing) setShowCenterMask(true);
-  }
+  // Drives the reveal off actual elapsed playback (see REVEAL_AT_SECONDS' own note). Runs both
+  // ways on purpose — dropping back below the threshold (a loop restart) re-hides the backdrop,
+  // covering the overlay's reappearance without any separate loop handling.
   useEffect(() => {
-    if (!showCenterMask) return;
-    const timer = setTimeout(() => setShowCenterMask(false), 3000);
-    return () => clearTimeout(timer);
-  }, [showCenterMask, itemKey]);
+    if (!dwelled) return;
+    const poll = setInterval(() => {
+      const player = playerRef.current;
+      if (!player) return;
+      try {
+        setPlaying(player.getCurrentTime() >= REVEAL_AT_SECONDS);
+      } catch {
+        /* player not ready yet (or already torn down) — next tick will do */
+      }
+    }, 250);
+    return () => clearInterval(poll);
+  }, [dwelled, itemKey]);
 
   useEffect(() => {
     if (!trailerKey) return;
@@ -96,7 +101,6 @@ export function CinemaTrailerBackdrop({
   useEffect(() => {
     if (!dwelled || !trailerKey || !mountRef.current) return;
     let cancelled = false;
-    let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
     loadYoutubeIframeApi().then((YT) => {
       if (cancelled || !mountRef.current) return;
@@ -139,18 +143,12 @@ export function CinemaTrailerBackdrop({
               pointerEvents: "none",
             });
           },
-          onStateChange: (e) => {
-            if (e.data === YT.PlayerState.PLAYING) {
-              settleTimer = setTimeout(() => setPlaying(true), SETTLE_MS);
-            }
-          },
         },
       });
     });
 
     return () => {
       cancelled = true;
-      if (settleTimer) clearTimeout(settleTimer);
       playerRef.current?.destroy();
       playerRef.current = null;
     };
@@ -177,17 +175,6 @@ export function CinemaTrailerBackdrop({
           (left-side text legibility, bottom fade into the rows pane) still apply on top of this,
           same as they already do for the still-image backdrop. */}
       <div className="pointer-events-none absolute inset-0" style={{ background: VIGNETTE }} />
-
-      {/* Masks YouTube's own center play/prev/next controls, which flash for a few seconds after
-          playback starts regardless of controls=0 — a small, tightly-sized patch over just that
-          spot (the top-crop trick can't reach the middle of the frame without cropping the
-          actual picture), blurred + near-opaque rather than a flat black box so it reads as part
-          of the vignette instead of a hard cutout, and only shown for as long as that overlay
-          actually lingers (see showCenterMask's own effect above) — not permanently. */}
-      <div
-        className={`pointer-events-none absolute left-1/2 h-16 w-56 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-slate-950/90 backdrop-blur-md transition-opacity duration-500 ${showCenterMask ? "opacity-100" : "opacity-0"}`}
-        style={{ top: "63%" }}
-      />
 
       {/* Mouse-only, deliberately not part of the TV-remote grid nav chain (same reasoning as
           the back button / shortcuts guide floating outside it) — a discreet corner affordance,
