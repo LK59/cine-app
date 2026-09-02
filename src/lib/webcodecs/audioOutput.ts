@@ -23,9 +23,19 @@ export class AudioOutput {
   private anchorMediaSeconds = 0;
   private anchorContextTime = 0;
   private started = false;
+  /** Scratch for interleaved blocks: copied once per block, read by every channel. */
+  private interleaved: ArrayBuffer | null = null;
+  private interleavedFor: AudioData | null = null;
+  /** Set by the engine so a failure inside a decoder callback is reported rather than lost. */
+  onError: ((reason: string) => void) | null = null;
 
   constructor(options: AudioOutputOptions) {
-    this.context = new AudioContext({ sampleRate: options.sampleRate, latencyHint: "playback" });
+    void options;
+    // No sampleRate is requested, deliberately. Forcing one that the hardware doesn't run at is
+    // a documented source of trouble on iOS — the context is created, reports "running", and
+    // produces nothing — and it buys nothing here: an AudioBuffer may carry any rate, and the
+    // source node resamples it to the context's on playback.
+    this.context = new AudioContext({ latencyHint: "playback" });
     this.gain = this.context.createGain();
     this.gain.connect(this.context.destination);
   }
@@ -71,38 +81,94 @@ export class AudioOutput {
    * Queues one decoded chunk. `mediaSeconds` is its presentation time in the file, which is what
    * lets the clock report a real position rather than "time since play was pressed".
    */
-  enqueue(data: AudioData, mediaSeconds: number): void {
-    const channels = data.numberOfChannels;
-    const frames = data.numberOfFrames;
-    const buffer = this.context.createBuffer(channels, frames, data.sampleRate);
+  /**
+   * Reads one channel out of a decoded block as floats, whatever the decoder's own layout.
+   *
+   * Written the long way on purpose. The previous version asked copyTo to convert to
+   * "f32-planar" and assumed every browser would — an assumption never verified, and the kind
+   * that fails invisibly: copyTo throwing inside a decoder's output callback is swallowed by the
+   * browser, so the symptom is silence with a perfect picture and no error anywhere. Requesting
+   * the format the decoder actually produced can't fail that way, and the conversion is a few
+   * lines of arithmetic.
+   */
+  private channelFloats(data: AudioData, channel: number, frames: number): Float32Array {
+    const format = data.format ?? "f32-planar";
+    const planar = format.endsWith("-planar");
+    const planeIndex = planar ? channel : 0;
+    const size = data.allocationSize({ planeIndex, format });
 
-    // Planar float is what every browser decoder produces here; copyTo converts if it isn't.
-    const plane = new Float32Array(frames);
-    for (let channel = 0; channel < channels; channel++) {
-      data.copyTo(plane, { planeIndex: channel, format: "f32-planar" });
-      buffer.copyToChannel(plane, channel);
+    // An interleaved block is copied once and read by every channel; a planar one is copied per
+    // channel, which is what the format means.
+    if (!planar && this.interleavedFor !== data) {
+      this.interleavedFor = data;
+      this.interleaved = new ArrayBuffer(size);
+      data.copyTo(new Uint8Array(this.interleaved), { planeIndex: 0, format });
     }
+    const raw = planar ? new ArrayBuffer(size) : this.interleaved!;
+    if (planar) data.copyTo(new Uint8Array(raw), { planeIndex, format });
 
-    const now = this.context.currentTime;
-    // First chunk, or the queue ran dry: re-anchor to now plus a small cushion instead of
-    // scheduling in the past, which the Web Audio API silently turns into "play immediately"
-    // and would desynchronise the clock from what is actually audible.
-    if (!this.started || this.nextStartTime < now) {
-      this.nextStartTime = now + 0.05;
-      this.anchorContextTime = this.nextStartTime;
-      this.anchorMediaSeconds = mediaSeconds;
-      this.started = true;
+    const out = new Float32Array(frames);
+    const stride = planar ? 1 : data.numberOfChannels;
+    const offset = planar ? 0 : channel;
+
+    if (format.startsWith("f32")) {
+      const view = new Float32Array(raw);
+      for (let i = 0; i < frames; i++) out[i] = view[offset + i * stride];
+    } else if (format.startsWith("s16")) {
+      const view = new Int16Array(raw);
+      for (let i = 0; i < frames; i++) out[i] = view[offset + i * stride] / 32768;
+    } else if (format.startsWith("s32")) {
+      const view = new Int32Array(raw);
+      for (let i = 0; i < frames; i++) out[i] = view[offset + i * stride] / 2147483648;
+    } else {
+      // u8 is unsigned, centred on 128.
+      const view = new Uint8Array(raw);
+      for (let i = 0; i < frames; i++) out[i] = (view[offset + i * stride] - 128) / 128;
     }
+    return out;
+  }
 
-    const source = this.context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(this.gain);
-    source.start(this.nextStartTime);
-    source.onended = () => {
-      this.sources.delete(source);
-    };
-    this.sources.add(source);
-    this.nextStartTime += buffer.duration;
+  /**
+   * Queues one decoded chunk. `mediaSeconds` is its presentation time in the file, which is what
+   * lets the clock report a real position rather than "time since play was pressed".
+   *
+   * Returns false if the block could not be queued, with the reason handed to onError — this runs
+   * inside a decoder callback, where a thrown exception disappears without trace.
+   */
+  enqueue(data: AudioData, mediaSeconds: number): boolean {
+    try {
+      const channels = data.numberOfChannels;
+      const frames = data.numberOfFrames;
+      const buffer = this.context.createBuffer(channels, frames, data.sampleRate);
+      for (let channel = 0; channel < channels; channel++) {
+        buffer.copyToChannel(this.channelFloats(data, channel, frames), channel);
+      }
+
+      const now = this.context.currentTime;
+      // First chunk, or the queue ran dry: re-anchor to now plus a small cushion instead of
+      // scheduling in the past, which the Web Audio API silently turns into "play immediately"
+      // and would desynchronise the clock from what is actually audible.
+      if (!this.started || this.nextStartTime < now) {
+        this.nextStartTime = now + 0.05;
+        this.anchorContextTime = this.nextStartTime;
+        this.anchorMediaSeconds = mediaSeconds;
+        this.started = true;
+      }
+
+      const source = this.context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.gain);
+      source.start(this.nextStartTime);
+      source.onended = () => {
+        this.sources.delete(source);
+      };
+      this.sources.add(source);
+      this.nextStartTime += buffer.duration;
+      return true;
+    } catch (error) {
+      this.onError?.(error instanceof Error ? error.message : "mise en file audio impossible");
+      return false;
+    }
   }
 
   /** Current playback position in the file, in seconds. */

@@ -156,6 +156,8 @@ export class PlaybackEngine {
   /** Encoded blocks fed IN. The gap between the two is what exposes a decoder that lies. */
   private audioFed = 0;
   private demotingAudio = false;
+  private silenceReported = false;
+  private playStartedAt = 0;
   private softwareAudioGeneration = 0;
   private readonly frames: VideoFrame[] = [];
   /**
@@ -255,6 +257,13 @@ export class PlaybackEngine {
     this.audioFed = 0;
     this.softwareAudio = software;
     this.audio = new AudioOutput(software.format);
+    this.audio.onError = (reason) => {
+      this.audioDiagnostic = reason;
+      if (!this.silenceReported) {
+        this.silenceReported = true;
+        this.emit("warning", `Pas de son : ${reason}.`);
+      }
+    };
     this.audio.setVolume(this.volume, this.muted);
     void this.runSoftwareAudio(fromSeconds);
     return true;
@@ -498,6 +507,13 @@ export class PlaybackEngine {
       this.audioFed = 0;
       this.audioChunks = 0;
       this.audio = new AudioOutput({ sampleRate: config.sampleRate, numberOfChannels: config.numberOfChannels });
+      this.audio.onError = (reason) => {
+        this.audioDiagnostic = reason;
+        if (!this.silenceReported) {
+          this.silenceReported = true;
+          this.emit("warning", `Pas de son : ${reason}.`);
+        }
+      };
       this.audio.setVolume(this.volume, this.muted);
       this.audioDecoder = new AudioDecoder({
         output: (data) => this.onAudioData(data),
@@ -583,6 +599,7 @@ export class PlaybackEngine {
     if (this.destroyed || this.playing) return;
     this.playing = true;
     this.starved = false;
+    if (!this.playStartedAt) this.playStartedAt = performance.now();
     await this.audio?.resume();
     this.wallClock.start(this.wallClock.currentMediaTime());
     this.emit("playing");
@@ -614,10 +631,21 @@ export class PlaybackEngine {
     // Invalidates any demux pass already in flight before touching the decoders, so a sample
     // read for the old position cannot arrive after the reset and be fed to it.
     this.generation += 1;
-    this.videoDecoder?.reset();
-    this.audioDecoder?.reset();
+
+    // A brand new decoder rather than reset() + configure(). Resetting and reconfiguring in place
+    // is what the API documents, and it is what was dying with a flat "Decoder failure" on a 4K
+    // HEVC file on iOS after a seek. A decoder that has just been constructed has no state left
+    // over to be wrong about, and constructing one costs a fraction of a frame.
     const videoConfig = this.videoTrack ? videoConfigFor(this.videoTrack) : null;
-    if (videoConfig) this.videoDecoder?.configure(videoConfig);
+    if (videoConfig) {
+      try { this.videoDecoder?.close(); } catch { /* already closed */ }
+      this.videoDecoder = new VideoDecoder({
+        output: (frame) => this.onVideoFrame(frame),
+        error: (error) => this.fail(`Décodage vidéo interrompu : ${error.message}`),
+      });
+      this.videoDecoder.configure(videoConfig);
+    }
+    this.audioDecoder?.reset();
     if (this.audioConfig) this.audioDecoder?.configure(this.audioConfig);
     this.needsKeyframe = true;
 
@@ -775,6 +803,30 @@ export class PlaybackEngine {
    * the evidence — at which point the codec string is remembered as a liar for this device and
    * the software decoder takes over from the current position.
    */
+  /**
+   * Says out loud when the sound never arrives.
+   *
+   * Silence has too many possible causes to diagnose by reasoning — three rounds of it were spent
+   * doing exactly that. Reporting the counters on screen turns the next occurrence into a fact:
+   * blocks fed but none decoded is a decoder problem, none fed is a routing problem, both moving
+   * with no sound is an output problem.
+   */
+  private reportSilence(): void {
+    if (this.silenceReported || !this.playing || !this.playStartedAt) return;
+    if (performance.now() - this.playStartedAt < 5000) return;
+    this.silenceReported = true;
+    if (!this.audio) {
+      this.emit("warning", `Pas de son : aucune sortie audio créée${this.audioDiagnostic ? ` (${this.audioDiagnostic})` : ""}.`);
+      return;
+    }
+    if (this.audioChunks === 0) {
+      this.emit(
+        "warning",
+        `Pas de son : ${this.audioFed} blocs fournis, 0 décodé (${this.audioPath}, ${this.audio.state}).`
+      );
+    }
+  }
+
   private maybeDemoteNativeAudio(): void {
     if (this.demotingAudio || this.audioPath !== "native" || !this.audioTrack) return;
     if (this.audioFed < 12 || this.audioChunks > 0) return;
@@ -837,6 +889,7 @@ export class PlaybackEngine {
       this.rafHandle = requestAnimationFrame(tick);
       this.presentDueFrame();
       this.maybeDemoteNativeAudio();
+      this.reportSilence();
       void this.pump();
     };
     this.rafHandle = requestAnimationFrame(tick);
