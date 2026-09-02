@@ -22,7 +22,14 @@ export interface CinemaSeason {
 
 export interface CinemaEpisodesPayload {
   seasons: CinemaSeason[];
-  nextEpisode: { itemId: string; title: string; resumeTicks?: number; runtimeTicks?: number } | null;
+  nextEpisode: {
+    itemId: string;
+    title: string;
+    resumeTicks?: number;
+    runtimeTicks?: number;
+    seasonNumber: number;
+    episodeNumber: number;
+  } | null;
 }
 
 function toCinemaEpisode(item: import("@/lib/clients/jellyfin").JellyfinItem): CinemaEpisode {
@@ -77,6 +84,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
           title: nextUp.Name,
           resumeTicks: nextUp.UserData?.PlaybackPositionTicks,
           runtimeTicks: nextUp.RunTimeTicks,
+          seasonNumber: nextUp.ParentIndexNumber ?? 0,
+          episodeNumber: nextUp.IndexNumber ?? 0,
         }
       : null,
   };

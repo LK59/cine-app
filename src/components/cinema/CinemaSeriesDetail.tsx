@@ -12,6 +12,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -210,6 +211,18 @@ export function CinemaSeriesDetail({ item, onClose }: { item: CinemaSeries; onCl
                 runtimeTicks={nextEpisode.runtimeTicks}
                 getNextEpisode={getNextEpisode}
                 variant="row"
+                // PlayButton's own default label (elapsed time, no episode code) is meant for
+                // every Lire button in the app, not just Cinema Mode's — overridden here so this
+                // one reads exactly like the Continue Watching row's cards (same helper, "Lire
+                // EpX SX" / "Reprendre EpX SX - 30min restants"), since a user landing here from
+                // that row would otherwise see two different labels for the same episode.
+                label={formatContinueLabel(
+                  t,
+                  nextEpisode.resumeTicks,
+                  nextEpisode.runtimeTicks,
+                  nextEpisode.seasonNumber,
+                  nextEpisode.episodeNumber
+                )}
               />
             )}
 

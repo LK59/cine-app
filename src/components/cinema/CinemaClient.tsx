@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { formatDurationShort } from "@/lib/format";
+import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -45,33 +45,6 @@ const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 // and there's a label chip to fit beneath) — a distinct width from CARD_WIDTH, not a smaller
 // version of the same one.
 const CONTINUE_CARD_WIDTH = "w-32 sm:w-40 md:w-48 lg:w-56";
-
-// Netflix-style resume label: "Lire EpX SX" (a series with an unwatched next episode ready, no
-// progress yet), "Reprendre EpX SX - 30min restants" (an episode partway through), or
-// "Reprendre - 1h10 restants" (a movie partway through) — mirrors PlayButton's own Lire/Reprendre
-// wording (see its own doc comment) but shows REMAINING time, not elapsed: "how much is left" is
-// the more useful number for deciding whether to hit play right now, and it's what reads
-// naturally next to a progress bar that's already showing "how much is done".
-function continueLabel(
-  t: ReturnType<typeof useT>,
-  resumeTicks: number | null,
-  runtimeTicks: number | null,
-  seasonNumber?: number | null,
-  episodeNumber?: number | null
-): string {
-  const hasResume = !!resumeTicks && resumeTicks > 0;
-  const remaining = hasResume && runtimeTicks ? Math.max(runtimeTicks - resumeTicks!, 0) : null;
-  const timeLabel = remaining !== null ? t("cinema.timeRemaining", { time: formatDurationShort(remaining) }) : null;
-  const episodeCode =
-    seasonNumber != null && episodeNumber != null
-      ? t("cinema.episodeShort", { episode: episodeNumber, season: seasonNumber })
-      : null;
-
-  if (episodeCode) {
-    return hasResume && timeLabel ? `${t("common.resume")} ${episodeCode} - ${timeLabel}` : `${t("common.play")} ${episodeCode}`;
-  }
-  return hasResume && timeLabel ? `${t("common.resume")} - ${timeLabel}` : t("common.play");
-}
 
 // Continue-watching items come from Jellyfin's own resume/next-up feeds (via the dashboard resume
 // payload for movies, and /api/cinema/next-up for series — see that route's own doc comment), not
@@ -146,7 +119,7 @@ function ContinueCard({
           into this project's production CSS bundle (see CinemaClient's z-index note for the same
           pitfall hit before). */}
       <span className="mt-1 block w-fit max-w-full truncate rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/70">
-        {continueLabel(t, resumeTicks, runtimeTicks, seasonNumber, episodeNumber)}
+        {formatContinueLabel(t, resumeTicks, runtimeTicks, seasonNumber, episodeNumber)}
       </span>
     </button>
   );
