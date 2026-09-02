@@ -13,6 +13,7 @@ import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT } from "@/components/TranslationProvider";
 import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
+import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 
@@ -60,6 +61,8 @@ export function ExperimentalPlayerHost({
   const { itemId, title } = session;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoElRef = useRef<HTMLVideoElement>(null);
+  const remuxRef = useRef<RemuxPlayback | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
   const facadeRef = useRef<MediaElementFacade | null>(null);
@@ -83,6 +86,9 @@ export function ExperimentalPlayerHost({
   const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
+  // Which of the two pipelines is running. Null until the file has been examined — the element
+  // that shows the picture differs between them, so both are mounted and one is hidden.
+  const [path, setPath] = useState<"remux" | "webcodecs" | null>(null);
 
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
   const error =
@@ -115,7 +121,7 @@ export function ExperimentalPlayerHost({
     if (!showInfo) return;
     const read = () => {
       try {
-        setDiagnostics(engineRef.current?.diagnostics ?? { Moteur: "non démarré" });
+        setDiagnostics(remuxRef.current?.diagnostics ?? engineRef.current?.diagnostics ?? { Moteur: "non démarré" });
       } catch (error) {
         // A panel that silently shows nothing is worse than one that shows why.
         setDiagnostics({ "Diagnostic indisponible": error instanceof Error ? error.message : "erreur" });
@@ -146,48 +152,103 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     // Nothing is started for a file the server already refused — the reason is displayed
     // instead, derived above.
-    if (!info || info.refusedReason || !canvasRef.current) return;
+    if (!info || info.refusedReason || !canvasRef.current || !videoElRef.current) return;
 
     let cancelled = false;
-    const engine = new PlaybackEngine(canvasRef.current);
-    engineRef.current = engine;
+    let unsubscribes: (() => void)[] = [];
+    const startSeconds = session.resumeAt ?? info.resumeSeconds ?? 0;
 
-    const unsubscribes = [
-      // The engine now distinguishes the two itself, rather than the host guessing from the
-      // wording: a warning is degraded playback that continues, an error stops it.
-      engine.on("error", (payload) => setRuntimeError(typeof payload === "string" ? payload : "Lecture interrompue.")),
-      engine.on("warning", (payload) => setWarning(typeof payload === "string" ? payload : null)),
-      engine.on("timeupdate", () => {
-        positionRef.current = engine.currentTime;
-      }),
-      engine.on("playing", () => setPlaying(true)),
-      engine.on("pause", () => setPlaying(false)),
-      engine.on("ended", () => setPlaying(false)),
-      engine.on("subtitle", (payload) => setSubtitle(typeof payload === "string" ? payload : null)),
-      // Controls appear as soon as the file is understood — duration, tracks — rather than
-      // waiting for the whole pipeline to fill. Anything that goes wrong afterwards replaces
-      // them with the error panel, so there is no window where a broken player looks usable.
-      engine.on("loadedmetadata", () => {
-        setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
-        setCurrentAudio(engine.currentAudioTrack);
-        setReady(true);
-      }),
-    ];
+    // The file decides which pipeline runs, not a setting: repackaging it for the browser's own
+    // decoder is better on every axis when the codecs allow it, and decoding it ourselves is the
+    // fallback for when they do not. Whichever loses says why, in the technical panel.
+    const startRemux = async (element: HTMLVideoElement, begin: (video: HTMLVideoElement) => Promise<RemuxPlayback>) => {
+      const playback = await begin(element);
+      if (cancelled) return playback.destroy();
 
-    engine
-      .load(info.streamUrl, {
-        hdr: info.video?.isHdr ?? false,
-        startSeconds: session.resumeAt ?? info.resumeSeconds ?? 0,
-      })
-      .then(async () => {
+      remuxRef.current = playback;
+      setPath("remux");
+      setTracks({ audio: playback.audioTracks, subtitles: playback.subtitleTracks });
+      setCurrentAudio(playback.currentAudioTrack);
+      setCurrentSubtitle(null);
+      setReady(true);
+
+      const onTime = () => {
+        positionRef.current = element.currentTime;
+        setSubtitle(playback.subtitleAt(element.currentTime));
+      };
+      const onPlay = () => setPlaying(true);
+      const onPause = () => setPlaying(false);
+      element.addEventListener("timeupdate", onTime);
+      element.addEventListener("play", onPlay);
+      element.addEventListener("pause", onPause);
+      element.addEventListener("ended", onPause);
+      unsubscribes.push(() => {
+        element.removeEventListener("timeupdate", onTime);
+        element.removeEventListener("play", onPlay);
+        element.removeEventListener("pause", onPause);
+        element.removeEventListener("ended", onPause);
+      });
+
+      await element.play().catch(() => {});
+    };
+
+    const startEngine = async () => {
+      // Only now is this refusal real. The native path would have shown this file's HDR without
+      // converting anything; it is landing on the canvas that makes tone mapping — and therefore
+      // the viewer's consent to it — necessary.
+      if (info.canvasHdrRefusal) {
+        setPath("webcodecs");
+        setRuntimeError(info.canvasHdrRefusal);
+        return;
+      }
+
+      const engine = new PlaybackEngine(canvasRef.current!);
+      engineRef.current = engine;
+      setPath("webcodecs");
+
+      unsubscribes = [
+        // The engine distinguishes the two itself, rather than the host guessing from the
+        // wording: a warning is degraded playback that continues, an error stops it.
+        engine.on("error", (payload) => setRuntimeError(typeof payload === "string" ? payload : "Lecture interrompue.")),
+        engine.on("warning", (payload) => setWarning(typeof payload === "string" ? payload : null)),
+        engine.on("timeupdate", () => {
+          positionRef.current = engine.currentTime;
+        }),
+        engine.on("playing", () => setPlaying(true)),
+        engine.on("pause", () => setPlaying(false)),
+        engine.on("ended", () => setPlaying(false)),
+        engine.on("subtitle", (payload) => setSubtitle(typeof payload === "string" ? payload : null)),
+        // Controls appear as soon as the file is understood — duration, tracks — rather than
+        // waiting for the whole pipeline to fill. Anything that goes wrong afterwards replaces
+        // them with the error panel, so there is no window where a broken player looks usable.
+        engine.on("loadedmetadata", () => {
+          setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
+          setCurrentAudio(engine.currentAudioTrack);
+          setReady(true);
+        }),
+      ];
+
+      await engine.load(info.streamUrl, { hdr: info.video?.isHdr ?? false, startSeconds });
+      if (cancelled) return;
+
+      const built = new MediaElementFacade(engine);
+      facadeRef.current = built;
+      setFacade(built);
+      setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
+      setCurrentAudio(engine.currentAudioTrack);
+      setReady(true);
+      await engine.play().catch(() => {});
+    };
+
+    const element = videoElRef.current;
+    probePlaybackPath({
+      streamUrl: info.streamUrl,
+      startSeconds,
+      onError: (message) => setRuntimeError(message),
+    })
+      .then((probe) => {
         if (cancelled) return;
-        const built = new MediaElementFacade(engine);
-        facadeRef.current = built;
-        setFacade(built);
-        setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
-        setCurrentAudio(engine.currentAudioTrack);
-        setReady(true);
-        await engine.play().catch(() => {});
+        return probe.path === "remux" ? startRemux(element, probe.start) : startEngine();
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -197,10 +258,12 @@ export function ExperimentalPlayerHost({
     return () => {
       cancelled = true;
       for (const unsubscribe of unsubscribes) unsubscribe();
+      remuxRef.current?.destroy();
+      remuxRef.current = null;
       facadeRef.current?.destroy();
       facadeRef.current = null;
       setFacade(null);
-      engine.destroy();
+      engineRef.current?.destroy();
       engineRef.current = null;
     };
   }, [info, session.resumeAt]);
@@ -244,7 +307,20 @@ export function ExperimentalPlayerHost({
       onPointerDownCapture={() => void engineRef.current?.resumeAudio()}
       {...(isMini ? handlers : {})}
     >
-      <canvas ref={canvasRef} className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} />
+      {/* Both surfaces are mounted from the start, because the element that shows the picture is
+          only known once the file has been examined and the remux path needs a <video> to attach
+          to before it can begin. The unused one holds nothing and is hidden. */}
+      <video
+        ref={videoElRef}
+        playsInline
+        hidden={path !== "remux"}
+        className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}
+      />
+      <canvas
+        ref={canvasRef}
+        hidden={path === "remux"}
+        className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}
+      />
 
       {subtitle && !isMini && (
         <div className="pointer-events-none absolute inset-x-0 bottom-24 z-10 flex justify-center px-8">
@@ -294,7 +370,10 @@ export function ExperimentalPlayerHost({
         <div className="absolute right-4 top-16 z-20 w-72 rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
           <p className="mb-2 text-sm font-medium text-white">{t("player.experimental.badge")}</p>
           <dl className="space-y-1.5">
-            <InfoRow label="Méthode" value="Décodage direct (WebCodecs)" />
+            <InfoRow
+              label="Méthode"
+              value={path === "remux" ? "Remultiplexage → lecteur natif" : "Décodage direct (WebCodecs)"}
+            />
             <InfoRow label="Conteneur" value={info?.container?.toUpperCase() ?? "?"} />
             <InfoRow
               label="Vidéo"
@@ -323,6 +402,12 @@ export function ExperimentalPlayerHost({
           title={title}
           playing={playing}
           onTogglePlay={() => {
+            const element = videoElRef.current;
+            if (path === "remux" && element) {
+              if (element.paused) void element.play();
+              else element.pause();
+              return;
+            }
             const engine = engineRef.current;
             if (!engine) return;
             if (engine.paused) void engine.play();
@@ -332,10 +417,12 @@ export function ExperimentalPlayerHost({
         />
       ) : (
         ready &&
-        facade &&
+        (facade || path === "remux") &&
         !error && (
           <PlayerControls
-            videoRef={{ current: asVideoElement(facade) }}
+            // On the remux path this is a real media element, so seeking, volume and rate are the
+            // browser's own; the facade exists only to give the canvas pipeline the same shape.
+            videoRef={path === "remux" ? videoElRef : { current: facade ? asVideoElement(facade) : null }}
             containerRef={containerRef}
             itemId={itemId}
             title={title}
@@ -347,13 +434,16 @@ export function ExperimentalPlayerHost({
             currentAudioId={currentAudio}
             onChangeAudio={(id) => {
               setCurrentAudio(id);
-              void engineRef.current?.setAudioTrack(id);
+              if (path === "remux") void remuxRef.current?.selectAudioTrack(id);
+              else void engineRef.current?.setAudioTrack(id);
             }}
             subtitleTracks={tracks.subtitles.map((track) => ({ id: track.number, label: trackLabel(track) }))}
             currentSubtitleId={currentSubtitle}
             onChangeSubtitle={(id) => {
               setCurrentSubtitle(id);
-              engineRef.current?.setSubtitleTrack(id);
+              setSubtitle(null);
+              if (path === "remux") remuxRef.current?.selectSubtitleTrack(id);
+              else engineRef.current?.setSubtitleTrack(id);
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}

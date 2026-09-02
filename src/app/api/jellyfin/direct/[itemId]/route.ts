@@ -43,6 +43,11 @@ export interface DirectPlayInfo {
   audio: DirectPlayAudioTrack[];
   /** Null when the file can be attempted; a user-facing explanation when it cannot. */
   refusedReason: string | null;
+  /**
+   * Applies only if playback falls back to decoding on a canvas. The native path shows HDR
+   * without converting anything, so this is enforced by the client rather than here.
+   */
+  canvasHdrRefusal: string | null;
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -69,13 +74,21 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const rangeType = videoStream?.VideoRangeType ?? null;
   const isHdr = !!rangeType && rangeType !== "SDR";
 
-  let refusedReason: string | null = null;
-  if (!SUPPORTED_CONTAINERS.has(container)) {
-    refusedReason = `Le lecteur expérimental ne lit que les conteneurs Matroska pour l'instant (ce fichier est en « ${container || "inconnu"} »).`;
-  } else if (isHdr && !prefs.hdr) {
-    refusedReason = `Ce fichier est en ${rangeType}. Active « Lire le HDR avec le lecteur expérimental » dans les paramètres pour l'essayer.`;
+  // Refused outright: no pipeline here reads anything but Matroska, whichever one ends up running.
+  const refusedReason = SUPPORTED_CONTAINERS.has(container)
+    ? null
+    : `Le lecteur expérimental ne lit que les conteneurs Matroska pour l'instant (ce fichier est en « ${container || "inconnu"} »).`;
+
+  // HDR is a different matter now, and the server is the wrong place to decide it. Repackaging the
+  // file for the browser's own decoder carries the HDR signalling through untouched and the
+  // display handles it — there is nothing to tone map and nothing to warn about. It is only the
+  // canvas pipeline that has to convert the picture by hand, so this is passed down as a reason
+  // that *may* apply and is enforced by the client once it knows which path it is on.
+  let canvasHdrRefusal: string | null = null;
+  if (isHdr && !prefs.hdr) {
+    canvasHdrRefusal = `Ce fichier est en ${rangeType} et ce navigateur ne peut pas le lire nativement. Active « Lire le HDR avec le lecteur expérimental » dans les paramètres pour le convertir à la volée.`;
   } else if (isHdr && !TONE_MAPPABLE_RANGES.has(rangeType)) {
-    refusedReason = `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard à convertir — ce fichier ne peut être lu que par le lecteur stable.`;
+    canvasHdrRefusal = `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard à convertir, et ce navigateur ne le lit pas nativement.`;
   }
 
   const payload: DirectPlayInfo = {
@@ -107,6 +120,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
         isDefault: s.IsDefault ?? false,
       })),
     refusedReason,
+    canvasHdrRefusal,
   };
 
   return NextResponse.json(payload);

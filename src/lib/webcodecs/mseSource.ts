@@ -7,6 +7,7 @@
 // Anything that goes wrong is reported, never worked around silently. A player that quietly falls
 // back leaves you unable to tell a path that works from a path that was never used.
 
+import type { SubtitleCue } from "./engine";
 import type { Remuxer, RemuxPlan } from "./remuxer";
 
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
@@ -18,6 +19,8 @@ const KEEP_BEHIND_SECONDS = 30;
 export interface MseCallbacks {
   /** Fatal: playback cannot continue on this path. The caller decides what to say and offer. */
   onError: (message: string) => void;
+  /** Subtitle lines found in the stretch of file just read, already timed on the player's clock. */
+  onSubtitles?: (cues: SubtitleCue[]) => void;
 }
 
 type MediaSourceCtor = typeof MediaSource | typeof ManagedMediaSource;
@@ -170,6 +173,7 @@ export class MseSource {
           }
         }
 
+        if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
         if (segment.video && this.videoBuffer) await this.appendTo(this.videoBuffer, segment.video, generation);
         if (segment.audio && this.audioBuffer) await this.appendTo(this.audioBuffer, segment.audio, generation);
       }
