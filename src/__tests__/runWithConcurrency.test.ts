@@ -45,4 +45,21 @@ describe("runWithConcurrency", () => {
     await runWithConcurrency([], 3, worker);
     expect(worker).not.toHaveBeenCalled();
   });
+
+  it("stops scheduling new items once shouldStop() returns true, without aborting in-flight ones", async () => {
+    const seen: number[] = [];
+    let stop = false;
+    await runWithConcurrency(
+      [1, 2, 3, 4, 5],
+      1,
+      async (n) => {
+        seen.push(n);
+        if (n === 2) stop = true; // cancel requested partway through
+      },
+      () => stop
+    );
+    // Item 2's own worker call still completed (a cancel doesn't abort an in-flight item), but
+    // nothing after it was ever started.
+    expect(seen).toEqual([1, 2]);
+  });
 });

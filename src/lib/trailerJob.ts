@@ -1,7 +1,7 @@
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { tmdb } from "@/lib/clients/tmdb";
 import { resolveTrailerKey } from "@/lib/trailerKey";
-import { downloadTrailer, getLocalTrailerPath, DOWNLOAD_CONCURRENCY, type TrailerMediaType } from "@/lib/trailerDownload";
+import { downloadTrailer, getLocalTrailerPath, killActiveDownloads, DOWNLOAD_CONCURRENCY, type TrailerMediaType } from "@/lib/trailerDownload";
 import { trailerDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 
@@ -9,19 +9,37 @@ import { logError } from "@/lib/logger";
 // overlapping runs — the SQLite job row is for progress reporting across requests, this flag is
 // just for "don't start a second run while one's already going" within this process.
 let jobRunning = false;
+let cancelRequested = false;
 
 export function isTrailerJobRunning(): boolean {
   return jobRunning;
 }
 
+// Stops scheduling new downloads AND kills whatever yt-dlp/ffmpeg processes are currently in
+// flight — a plain "stop pulling new items" alone would still leave the batch waiting out
+// DOWNLOAD_CONCURRENCY in-progress downloads (each up to 180s) before actually finishing.
+export function cancelTrailerJob(): void {
+  if (!jobRunning) return;
+  cancelRequested = true;
+  killActiveDownloads();
+}
+
 // Runs `worker` over `items` with at most `limit` in flight at once. One item throwing doesn't
 // abort the rest — the caller decides what a thrown/rejected worker means (here: counted as a
 // failure, batch keeps going), same "don't let one bad title take down 800 others" reasoning as
-// downloadTrailer's own per-stage try/catch.
-export async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+// downloadTrailer's own per-stage try/catch. `shouldStop` is checked between items (not mid-item
+// — an item already running is left to finish/fail on its own, same as any other failure) so a
+// cancel request stops scheduling further work without needing its own item-level plumbing.
+export async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+  shouldStop: () => boolean = () => false
+): Promise<void> {
   let next = 0;
   async function runNext(): Promise<void> {
     while (next < items.length) {
+      if (shouldStop()) return;
       const item = items[next++];
       await worker(item);
     }
@@ -44,11 +62,22 @@ async function resolveTrailerKeyForTarget(target: Target): Promise<string | null
   }
 }
 
+// A container restart (redeploy, crash) kills whatever yt-dlp/ffmpeg children were running
+// without ever reaching runTrailerJob's own finally block — the in-memory `jobRunning` flag
+// correctly resets to false on its own (fresh process), but the SQLite row it started stays
+// stuck at status='running' forever, which would incorrectly keep the settings toggle disabled
+// and the UI showing "downloading" indefinitely. Called once at startup (see instrumentation.ts).
+export function reconcileStaleTrailerJobs(): void {
+  const job = trailerDb.getLatestJob();
+  if (job?.status === "running") trailerDb.finishJob(job.id, "error");
+}
+
 // "full": re-download everything (the manual "Télécharger maintenant" button). "missing-only":
 // only titles without a local file yet (the periodic top-up cron, for newly-added titles).
 export async function runTrailerJob(scope: "full" | "missing-only"): Promise<void> {
   if (jobRunning) return;
   jobRunning = true;
+  cancelRequested = false;
   let jobId: number | null = null;
 
   try {
@@ -65,19 +94,25 @@ export async function runTrailerJob(scope: "full" | "missing-only"): Promise<voi
     let completed = 0;
     let failed = 0;
 
-    await runWithConcurrency(targets, DOWNLOAD_CONCURRENCY, async (target) => {
-      const key = await resolveTrailerKeyForTarget(target);
-      const result = key ? await downloadTrailer(target.tmdbId, target.mediaType, key) : { ok: false as const };
-      if (result.ok) completed++;
-      else failed++;
-      trailerDb.updateJobProgress(jobId!, completed, failed);
-    });
+    await runWithConcurrency(
+      targets,
+      DOWNLOAD_CONCURRENCY,
+      async (target) => {
+        const key = await resolveTrailerKeyForTarget(target);
+        const result = key ? await downloadTrailer(target.tmdbId, target.mediaType, key) : { ok: false as const };
+        if (result.ok) completed++;
+        else failed++;
+        trailerDb.updateJobProgress(jobId!, completed, failed);
+      },
+      () => cancelRequested
+    );
 
-    trailerDb.finishJob(jobId, "done");
+    trailerDb.finishJob(jobId, cancelRequested ? "error" : "done");
   } catch (err) {
     logError("trailer.job", err);
     if (jobId !== null) trailerDb.finishJob(jobId, "error");
   } finally {
     jobRunning = false;
+    cancelRequested = false;
   }
 }

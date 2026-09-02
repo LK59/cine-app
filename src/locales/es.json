@@ -857,7 +857,9 @@
       "progress": "{completed} / {total} descargados",
       "failedCount": "{n} fallo(s)",
       "toggleLabel": "Activar vista previa automática",
-      "toggleDisabledHint": "Termina primero la descarga para activar esta opción."
+      "toggleDisabledHint": "Termina primero la descarga para activar esta opción.",
+      "cancel": "Cancelar",
+      "cookiesHint": "Si las descargas siguen fallando (YouTube pide confirmación anti-bot): exporta las cookies de YouTube desde un navegador con sesión iniciada (ej. la extensión «Get cookies.txt LOCALLY») y coloca el archivo en data/youtube-cookies.txt en el servidor, luego reintenta."
     }
   },
   "watchlist": {

@@ -12,6 +12,11 @@ export async function register() {
     const { startTrailerCron } = await import("./lib/trailerCron");
     startTrailerCron();
 
+    // A prior process getting killed mid-download (redeploy, crash) leaves its job row stuck at
+    // 'running' forever otherwise — see reconcileStaleTrailerJobs' own doc comment.
+    const { reconcileStaleTrailerJobs } = await import("./lib/trailerJob");
+    reconcileStaleTrailerJobs();
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(({ cachedMovies, cachedSeries }) => {

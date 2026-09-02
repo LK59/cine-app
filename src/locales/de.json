@@ -857,7 +857,9 @@
       "progress": "{completed} / {total} heruntergeladen",
       "failedCount": "{n} fehlgeschlagen",
       "toggleLabel": "Automatische Vorschau aktivieren",
-      "toggleDisabledHint": "Schließe zuerst den Download ab, um diese Option zu aktivieren."
+      "toggleDisabledHint": "Schließe zuerst den Download ab, um diese Option zu aktivieren.",
+      "cancel": "Abbrechen",
+      "cookiesHint": "Falls Downloads weiterhin fehlschlagen (YouTube verlangt eine Bot-Bestätigung): YouTube-Cookies aus einem angemeldeten Browser exportieren (z. B. Erweiterung „Get cookies.txt LOCALLY“) und die Datei als data/youtube-cookies.txt auf dem Server ablegen, dann erneut versuchen."
     }
   },
   "watchlist": {
