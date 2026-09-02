@@ -1,12 +1,14 @@
 "use client";
 
 import useSWR from "swr";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
+import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
+import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useTvGridNav } from "@/lib/useTvGridNav";
@@ -218,7 +220,14 @@ export function CinemaClient() {
   // series route does its own per-title logo+rating fetching on a cold cache, same cost as the
   // movies one, and movies must keep loading exactly as fast as before regardless of whether the
   // user ever touches the series tab.
-  const [mediaType, setMediaType] = useState<"movies" | "series">("movies");
+  // Every open layer lives in the URL hash instead of in local state, so the browser's Back and
+  // Forward (and a phone's edge-swipe, which is the same thing) walk the screens rather than
+  // leaving Cinema Mode — see lib/cinemaRoute for why the hash and not query params.
+  const route = useCinemaRoute();
+  const mediaType = route.tab;
+  // "replace": the tab is a filter on the screen you're already on, not a screen of its own —
+  // Back from a title should return to the grid, not undo a tab switch.
+  const setMediaType = useCallback((tab: "movies" | "series") => cinemaNavigate({ tab }, "replace"), []);
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
@@ -234,6 +243,23 @@ export function CinemaClient() {
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
   const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
+
+  // Id -> item, so a URL carrying a title id can be resolved back to the item the sheet needs.
+  // Every list in the payload is unioned: the rows map alone omits anything with no genre.
+  const moviesById = useMemo(() => {
+    const all = uniqueById(
+      [...(movies?.spotlight ?? []), ...Object.values(movies?.rows ?? {}).flat()],
+      (m) => m.radarrId
+    );
+    return new Map(all.map((m) => [m.radarrId, m]));
+  }, [movies]);
+  const seriesById = useMemo(() => {
+    const all = uniqueById(
+      [...(series?.spotlight ?? []), ...Object.values(series?.rows ?? {}).flat()],
+      (x) => x.sonarrId
+    );
+    return new Map(all.map((x) => [x.sonarrId, x]));
+  }, [series]);
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
   const continueSeries = nextUp?.items ?? [];
@@ -260,7 +286,10 @@ export function CinemaClient() {
   }, [series]);
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
-  const [selectedItem, setSelectedItem] = useState<CinemaMovie | null>(null);
+  // Which sheet is open is read back out of the URL, not held here: that's what makes Back close
+  // it. Until the payload has loaded (a cold deep link into a title) the lookup simply finds
+  // nothing and the sheet opens as soon as the data lands.
+  const selectedItem = route.film !== null ? moviesById.get(route.film) ?? null : null;
   // Before you touch anything, the hero cycles through the latest arrivals instead of sitting on
   // one fixed pick — the same carousel (and the same 8s cadence) as the dashboard's own hero.
   // The moment a card takes focus it wins and the rotation stops: this pane's job from then on
@@ -273,7 +302,7 @@ export function CinemaClient() {
   // above (not touched) so each tab remembers its own position independently when you switch
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
-  const [seriesSelectedItem, setSeriesSelectedItem] = useState<CinemaSeries | null>(null);
+  const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
   const seriesCarousel = (series?.recentlyAdded?.length ? series.recentlyAdded : series?.spotlight ?? []).slice(0, 8);
   const [seriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
@@ -338,7 +367,11 @@ export function CinemaClient() {
   const playback = usePlayback();
 
   const router = useRouter();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const searchOpen = route.search;
+  const setSearchOpen = useCallback(
+    (open: boolean) => (open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false })),
+    []
+  );
 
   // "full" specifically, not "closed" — a minimized (mini) player is a small floating widget;
   // browsing the grid underneath it should still work normally, only a full-screen player
@@ -363,7 +396,7 @@ export function CinemaClient() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [searchOpen, selectedItem, seriesSelectedItem, playback.mode]);
+  }, [searchOpen, selectedItem, seriesSelectedItem, playback.mode, setSearchOpen]);
 
   // All four are useCallback'd for one specific reason: the row components below are memo'd, and
   // a fresh function identity on every render would defeat that entirely — the rows (and every
@@ -371,11 +404,11 @@ export function CinemaClient() {
   // arrow keypress, since focus changes re-render this component by design.
   const openDetail = useCallback((item: CinemaMovie) => {
     lastFocusedCard.current = document.activeElement as HTMLElement;
-    setSelectedItem(item);
+    cinemaNavigate({ film: item.radarrId, serie: null });
   }, []);
 
   const closeDetail = useCallback(() => {
-    setSelectedItem(null);
+    cinemaClose({ film: null, episodes: false });
     // The card is still in the DOM (the browse screen never unmounts under the overlay) but
     // isn't focused yet the instant this runs — the overlay's own focused button is still
     // mid-unmount. One frame later it's safe to move focus back.
@@ -384,11 +417,11 @@ export function CinemaClient() {
 
   const openSeriesDetail = useCallback((item: CinemaSeries) => {
     lastFocusedCard.current = document.activeElement as HTMLElement;
-    setSeriesSelectedItem(item);
+    cinemaNavigate({ serie: item.sonarrId, film: null });
   }, []);
 
   const closeSeriesDetail = useCallback(() => {
-    setSeriesSelectedItem(null);
+    cinemaClose({ serie: null, episodes: false });
     requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
@@ -496,8 +529,17 @@ export function CinemaClient() {
       {searchOpen && (
         <CinemaSearchOverlay
           onClose={() => setSearchOpen(false)}
-          onSelectMovie={(item) => { setSearchOpen(false); setMediaType("movies"); setFocusedItem(item); setSelectedItem(item); }}
-          onSelectSeries={(item) => { setSearchOpen(false); setMediaType("series"); setSeriesFocusedItem(item); setSeriesSelectedItem(item); }}
+          // One history step, replacing the search entry rather than stacking on it: Back from
+          // the title lands on the grid. Coming back to a search overlay that had lost the query
+          // you typed would be worse than not coming back to it at all.
+          onSelectMovie={(item) => {
+            setFocusedItem(item);
+            cinemaNavigate({ search: false, tab: "movies", film: item.radarrId, serie: null }, "replace");
+          }}
+          onSelectSeries={(item) => {
+            setSeriesFocusedItem(item);
+            cinemaNavigate({ search: false, tab: "series", serie: item.sonarrId, film: null }, "replace");
+          }}
         />
       )}
 

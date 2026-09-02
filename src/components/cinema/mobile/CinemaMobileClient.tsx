@@ -1,12 +1,14 @@
 "use client";
 
 import useSWR from "swr";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Info, Play, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
+import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
+import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
@@ -53,10 +55,15 @@ const ROW_ITEM_LIMIT = 24;
 export function CinemaMobileClient() {
   const t = useT();
   const playback = usePlayback();
-  const [mediaType, setMediaType] = useState<"movies" | "series">("movies");
-  const [selected, setSelected] = useState<{ item: CinemaMovie | CinemaSeries; mediaType: "movies" | "series" } | null>(null);
+  // Same URL-backed layers as the desktop client, which is what makes the phone's back-swipe
+  // close a sheet instead of leaving Cinema Mode — see lib/cinemaRoute.
+  const route = useCinemaRoute();
+  const mediaType = route.tab;
+  const setMediaType = (tab: "movies" | "series") => cinemaNavigate({ tab }, "replace");
   const router = useRouter();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const searchOpen = route.search;
+  const setSearchOpen = (open: boolean) =>
+    open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false });
   const short = useIsShortViewport();
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
@@ -76,6 +83,20 @@ export function CinemaMobileClient() {
   const continueSeries = nextUp?.items ?? [];
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
+
+  // The open sheet is read back out of the URL rather than held in state — that's what lets the
+  // back-swipe close it. Nothing resolves until the payload is in, so a cold deep link simply
+  // opens the sheet the moment the data lands.
+  const selected = useMemo(() => {
+    const id = isSeries ? route.serie : route.film;
+    if (id === null || !payload) return null;
+    const all = uniqueById(
+      [...payload.spotlight, ...Object.values(payload.rows).flat()],
+      (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
+    );
+    const item = all.find((x) => ("radarrId" in x ? x.radarrId : x.sonarrId) === id);
+    return item ? { item, mediaType } : null;
+  }, [isSeries, route.serie, route.film, payload, mediaType]);
   // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
@@ -92,7 +113,11 @@ export function CinemaMobileClient() {
     "radarrId" in item ? item.radarrId : item.sonarrId;
 
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
-    setSelected({ item, mediaType: type });
+    cinemaNavigate(
+      type === "series"
+        ? { tab: "series", serie: (item as CinemaSeries).sonarrId, film: null }
+        : { tab: "movies", film: (item as CinemaMovie).radarrId, serie: null }
+    );
   }, []);
 
   const exit = () => leaveCinema(router);
@@ -198,8 +223,14 @@ export function CinemaMobileClient() {
       {searchOpen && (
         <CinemaSearchOverlay
           onClose={() => setSearchOpen(false)}
-          onSelectMovie={(item) => { setSearchOpen(false); setMediaType("movies"); setSelected({ item, mediaType: "movies" }); }}
-          onSelectSeries={(item) => { setSearchOpen(false); setMediaType("series"); setSelected({ item, mediaType: "series" }); }}
+          // Replaces the search entry rather than stacking on it — see the desktop client's own
+          // note on why coming back to a search that lost its query would be worse.
+          onSelectMovie={(item) =>
+            cinemaNavigate({ search: false, tab: "movies", film: item.radarrId, serie: null }, "replace")
+          }
+          onSelectSeries={(item) =>
+            cinemaNavigate({ search: false, tab: "series", serie: item.sonarrId, film: null }, "replace")
+          }
         />
       )}
 
@@ -388,8 +419,8 @@ export function CinemaMobileClient() {
         <CinemaMobileDetail
           item={selected.item}
           mediaType={selected.mediaType}
-          onClose={() => setSelected(null)}
-          onSelectSimilar={(item) => setSelected({ item, mediaType: selected.mediaType })}
+          onClose={() => cinemaClose({ film: null, serie: null })}
+          onSelectSimilar={(item) => openDetail(item, selected.mediaType)}
         />
       )}
     </div>,

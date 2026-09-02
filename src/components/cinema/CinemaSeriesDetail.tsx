@@ -9,6 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
+import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -66,7 +67,11 @@ export function CinemaSeriesDetail({
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showTrailer, setShowTrailer] = useState(false);
-  const [showEpisodes, setShowEpisodes] = useState(false);
+  // In the URL like every other Cinema layer, so Back closes the season browser and returns to
+  // this sheet instead of leaving the mode (see lib/cinemaRoute).
+  const showEpisodes = useCinemaRoute().episodes;
+  const setShowEpisodes = (open: boolean) =>
+    open ? cinemaNavigate({ episodes: true }) : cinemaClose({ episodes: false });
   const { data: info } = useSWR<SonarrInfo>(`/api/sonarr/series/${item.sonarrId}/info`, fetcher);
   const { data: episodesData } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
   // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
