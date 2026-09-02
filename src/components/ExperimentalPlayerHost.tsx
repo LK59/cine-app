@@ -120,13 +120,10 @@ export function ExperimentalPlayerHost({
     engineRef.current = engine;
 
     const unsubscribes = [
-      engine.on("error", (payload) => {
-        const message = typeof payload === "string" ? payload : "Lecture interrompue.";
-        // A missing audio codec is a degraded playback, not a dead one — the engine keeps going
-        // silently, so it is shown as a warning rather than replacing the picture with an error.
-        if (message.includes("audio")) setWarning(message);
-        else setRuntimeError(message);
-      }),
+      // The engine now distinguishes the two itself, rather than the host guessing from the
+      // wording: a warning is degraded playback that continues, an error stops it.
+      engine.on("error", (payload) => setRuntimeError(typeof payload === "string" ? payload : "Lecture interrompue.")),
+      engine.on("warning", (payload) => setWarning(typeof payload === "string" ? payload : null)),
       engine.on("timeupdate", () => {
         positionRef.current = engine.currentTime;
       }),

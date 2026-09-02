@@ -29,6 +29,7 @@ export type EngineEventName =
   | "waiting"
   | "ended"
   | "error"
+  | "warning"
   | "subtitle";
 
 export interface EngineTrack {
@@ -47,10 +48,31 @@ export interface SubtitleCue {
   text: string;
 }
 
+/** Non-fatal: playback continues, the viewer is told. Distinct from "error", which stops it. */
 // Text subtitle codecs the engine can render itself. ASS/SSA are deliberately absent for now:
 // they are styled, positioned and often font-embedded, and rendering them badly is worse than
 // not offering them — see the roadmap. SRT and plain UTF-8 text carry no styling to lose.
-const TEXT_SUBTITLE_CODECS = new Set(["S_TEXT/UTF8", "S_TEXT/ASCII"]);
+const TEXT_SUBTITLE_CODECS = new Set(["S_TEXT/UTF8", "S_TEXT/ASCII", "S_TEXT/ASS", "S_TEXT/SSA"]);
+
+/**
+ * The displayable text of a subtitle block.
+ *
+ * SRT blocks are the line itself. ASS blocks are the tail of a Dialogue row — nine
+ * comma-separated fields before the text — carrying inline override tags like {\i1}. Those are
+ * stripped rather than honoured: styled positioning is out of scope, but throwing the track away
+ * over its styling would leave 218 files in this library with no subtitles at all when the text
+ * is right there.
+ */
+export function subtitleText(raw: string, codecId: string): string {
+  if (codecId !== "S_TEXT/ASS" && codecId !== "S_TEXT/SSA") return raw.trim();
+  const fields = raw.split(",");
+  const text = fields.length > 8 ? fields.slice(8).join(",") : raw;
+  return text
+    .replace(/\{[^}]*\}/g, "")
+    .replace(/\\N/gi, "\n")
+    .replace(/\\h/gi, " ")
+    .trim();
+}
 
 export interface EngineOptions {
   hdr: boolean;
@@ -100,8 +122,15 @@ export class PlaybackEngine {
   private softwareAudio: SoftwareAudioTrack | null = null;
   private softwareAudioGeneration = 0;
   private readonly frames: VideoFrame[] = [];
-  /** Subtitle lines read ahead of the playhead, dropped as they expire. */
-  private pendingCues: SubtitleCue[] = [];
+  /**
+   * Subtitle lines per track, read ahead of the playhead and dropped as they expire.
+   *
+   * Every text track is collected, not just the selected one: cues only exist in the clusters
+   * being read, so collecting on selection meant switching subtitles showed nothing until
+   * playback reached the next cluster — which reads as a broken button. Parsing a few lines of
+   * text per cluster costs nothing.
+   */
+  private pendingCues = new Map<number, SubtitleCue[]>();
   private readonly listeners = new Map<EngineEventName, Set<(payload?: unknown) => void>>();
 
   private playing = false;
@@ -121,6 +150,8 @@ export class PlaybackEngine {
   private generation = 0;
   /** True while playback has run out of decoded frames — see freeze()/thaw(). */
   private starved = false;
+  /** Timestamp of the frame last shown while paused, so it is drawn once and not on every tick. */
+  private previewedTimestamp: number | null = null;
   private depth = { frames: 8, decode: 12 };
   private rafHandle: number | null = null;
   private lastReportedTime = -1;
@@ -133,6 +164,7 @@ export class PlaybackEngine {
   /** Subtitle track currently displayed, or null. */
   private subtitleTrackNumber: number | null = null;
   private activeCue: SubtitleCue | null = null;
+  private subtitleLookup: Map<number, MatroskaTrack> | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {}
 
@@ -255,7 +287,14 @@ export class PlaybackEngine {
       throw new Error(`Ce navigateur ne sait pas décoder ${videoConfig.codec} (${this.videoTrack.codecId}).`);
     }
 
-    this.renderer = createRenderer(this.canvas, { hdr: options.hdr, peakNits: options.peakNits });
+    this.renderer = createRenderer(this.canvas, {
+      hdr: options.hdr,
+      peakNits: options.peakNits,
+      // Surfaced rather than swallowed: the picture still plays, but flat, and knowing that is
+      // the difference between "HDR isn't working here" and "this player is broken".
+      onHdrFallback: (reason) =>
+        this.emit("warning", `Conversion HDR indisponible, image affichée sans (${reason}).`),
+    });
 
     this.videoDecoder = new VideoDecoder({
       output: (frame) => this.onVideoFrame(frame),
@@ -343,6 +382,41 @@ export class PlaybackEngine {
   }
 
   /**
+   * Sets up whatever can decode this track: the platform first, the software decoder second.
+   *
+   * Both paths end at the same AudioOutput, so everything downstream — the clock, the volume,
+   * seeking — is unaware of which one is running. Returns false only when neither can, which is
+   * a silent picture rather than a failure.
+   */
+  private async configureAudioFor(track: MatroskaTrack, fromSeconds: number): Promise<boolean> {
+    // Whatever was running has to go first: two decoders feeding one output would interleave
+    // two soundtracks.
+    this.softwareAudioGeneration += 1;
+    this.softwareAudio?.close();
+    this.softwareAudio = null;
+    try { this.audioDecoder?.close(); } catch { /* already closed */ }
+    this.audioDecoder = null;
+    await this.audio?.close();
+    this.audio = null;
+    this.audioConfig = null;
+
+    const config = await this.supportedAudioConfig(track);
+    if (config) {
+      this.audioConfig = config;
+      this.audio = new AudioOutput({ sampleRate: config.sampleRate, numberOfChannels: config.numberOfChannels });
+      this.audio.setVolume(this.volume, this.muted);
+      this.audioDecoder = new AudioDecoder({
+        output: (data) => this.onAudioData(data),
+        error: (error) => this.fail(`Décodage audio interrompu : ${error.message}`),
+      });
+      this.audioDecoder.configure(config);
+      return true;
+    }
+
+    return this.startSoftwareAudio(track, fromSeconds).catch(() => false);
+  }
+
+  /**
    * Switches audio track without interrupting the picture.
    *
    * Both tracks live in the same clusters, so this is a decoder change rather than a new stream:
@@ -354,25 +428,16 @@ export class PlaybackEngine {
     const track = this.file?.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     if (!track || track.number === this.audioTrack?.number) return;
 
-    const config = await this.supportedAudioConfig(track);
-    if (!config) {
-      this.emit("error", unsupportedReason(track) ?? `Ce navigateur ne sait pas décoder l'audio ${track.codecId.replace("A_", "")}.`);
-      return;
-    }
-
     const resumeAt = this.currentTime;
     this.audioTrack = track;
-    this.audioConfig = config;
-    try { this.audioDecoder?.close(); } catch { /* already closed */ }
-    await this.audio?.close();
-
-    this.audio = new AudioOutput({ sampleRate: config.sampleRate, numberOfChannels: config.numberOfChannels });
-    this.audio.setVolume(this.volume, this.muted);
-    this.audioDecoder = new AudioDecoder({
-      output: (data) => this.onAudioData(data),
-      error: (error) => this.fail(`Décodage audio interrompu : ${error.message}`),
-    });
-    this.audioDecoder.configure(config);
+    // Same two-step as the initial load, software decoder included — a track the platform
+    // refuses is exactly the case this player exists to handle, and refusing it here while the
+    // same codec plays fine at startup would be incoherent.
+    const configured = await this.configureAudioFor(track, resumeAt);
+    if (!configured) {
+      this.emit("warning", unsupportedReason(track) ?? `Aucun décodeur disponible pour l'audio ${track.codecId.replace("A_", "")}.`);
+      return;
+    }
     await this.seek(resumeAt);
   }
 
@@ -381,6 +446,18 @@ export class PlaybackEngine {
     this.subtitleTrackNumber = trackNumber;
     this.activeCue = null;
     this.emit("subtitle", null);
+  }
+
+  /** Lookup for the demux loop, built once from the track list. */
+  private get subtitleTracksByNumber(): Map<number, MatroskaTrack> {
+    if (!this.subtitleLookup) {
+      this.subtitleLookup = new Map(
+        (this.file?.tracks ?? [])
+          .filter((t) => t.type === "subtitle" && t.isEnabled && TEXT_SUBTITLE_CODECS.has(t.codecId))
+          .map((t) => [t.number, t])
+      );
+    }
+    return this.subtitleLookup;
   }
 
   // ── transport ─────────────────────────────────────────────────────────────
@@ -438,7 +515,7 @@ export class PlaybackEngine {
 
     for (const frame of this.frames) frame.close();
     this.frames.length = 0;
-    this.pendingCues = [];
+    this.pendingCues.clear();
     this.activeCue = null;
     this.emit("subtitle", null);
     this.audio?.flush(target);
@@ -520,16 +597,19 @@ export class PlaybackEngine {
               data: sample.data,
             })
           );
-        } else if (this.subtitleTrackNumber !== null && sample.trackNumber === this.subtitleTrackNumber) {
+        } else if (this.subtitleTracksByNumber.has(sample.trackNumber)) {
           // Text subtitles are not decoded, only timed: the block payload is the line itself, and
           // its duration is how long it stays up.
-          const text = new TextDecoder().decode(sample.data).trim();
+          const track = this.subtitleTracksByNumber.get(sample.trackNumber)!;
+          const text = subtitleText(new TextDecoder().decode(sample.data), track.codecId);
           if (text) {
-            this.pendingCues.push({
+            const queue = this.pendingCues.get(sample.trackNumber) ?? [];
+            queue.push({
               startSeconds: sample.timestampUs / 1e6,
               endSeconds: (sample.timestampUs + (sample.durationUs ?? 3_000_000)) / 1e6,
               text,
             });
+            this.pendingCues.set(sample.trackNumber, queue);
           }
         } else if (this.audioTrack && sample.trackNumber === this.audioTrack.number && this.audioDecoder?.state === "configured") {
           this.audioDecoder.decode(
@@ -564,8 +644,13 @@ export class PlaybackEngine {
 
   /** Emits only on change, so the overlay isn't re-rendered sixty times a second. */
   private updateSubtitle(seconds: number): void {
+    // Expired lines are dropped on every track, not just the selected one, or an unwatched track
+    // would accumulate a film's worth of text.
+    for (const queue of this.pendingCues.values()) {
+      while (queue.length > 0 && queue[0].endSeconds < seconds - 1) queue.shift();
+    }
     if (this.subtitleTrackNumber === null) return;
-    const due = selectCue(this.pendingCues, seconds);
+    const due = selectCue(this.pendingCues.get(this.subtitleTrackNumber) ?? [], seconds);
     if (due?.text !== this.activeCue?.text) {
       this.activeCue = due;
       this.emit("subtitle", due?.text ?? null);
@@ -628,10 +713,22 @@ export class PlaybackEngine {
     // Paused still draws the first pending frame once — that is what makes a seek show its
     // destination instead of leaving the previous picture on screen.
     if (!this.playing) {
-      const frame = this.frames.shift();
-      if (frame) this.present(frame);
+      // Shows the first pending frame — that is what makes a seek display its destination
+      // instead of leaving the previous picture up — but does NOT consume the queue.
+      //
+      // Consuming it was the cause of three separate symptoms: playback appeared not to start
+      // (the frames play() was about to need had already been drawn and closed at 60 per second
+      // before the clock ever ran), pausing looked like fast-forward (one frame per animation
+      // frame, with no timing), and resuming froze (every remaining frame was older than the
+      // clock and got dropped).
+      const frame = this.frames[0];
+      if (frame && this.previewedTimestamp !== frame.timestamp) {
+        this.previewedTimestamp = frame.timestamp;
+        void this.renderer?.draw(frame);
+      }
       return;
     }
+    this.previewedTimestamp = null;
 
     let drawn: VideoFrame | null = null;
     while (this.frames.length > 0 && this.frames[0].timestamp <= nowUs) {

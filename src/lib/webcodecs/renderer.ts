@@ -170,8 +170,30 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string): WebG
   return shader;
 }
 
-/** The planar 10-bit formats this renderer knows how to unpack. */
-const SUPPORTED_HDR_FORMATS = new Set(["I420P10", "I422P10", "I444P10"]);
+/**
+ * Plane sizes, derived from the layout copyTo returns rather than from `frame.format`.
+ *
+ * That field is null for a hardware-decoded frame on several platforms — iOS among them — and
+ * guessing the subsampling from it produced chroma planes of the wrong height, which is a black
+ * picture rather than a slightly wrong one. The layout always tells the truth: consecutive plane
+ * offsets give each plane's byte length, and its stride gives its height.
+ */
+function planeGeometry(
+  frame: VideoFrame,
+  layout: { offset: number; stride: number }[],
+  totalSize: number
+): { width: number; height: number; stride: number }[] {
+  return [0, 1, 2].map((index) => {
+    const stride = layout[index].stride;
+    const end = index < layout.length - 1 ? layout[index + 1].offset : totalSize;
+    const height = Math.max(1, Math.floor((end - layout[index].offset) / stride));
+    if (index === 0) return { width: frame.codedWidth, height, stride };
+    // 4:2:0 and 4:2:2 halve the chroma width, 4:4:4 keeps it. The stride says which: a padded
+    // full-width plane is still far closer to the luma width than a half-width one.
+    const full = stride / 2 >= frame.codedWidth * 0.75;
+    return { width: full ? frame.codedWidth : Math.ceil(frame.codedWidth / 2), height, stride };
+  });
+}
 
 class ToneMapRenderer implements FrameRenderer {
   private readonly gl: WebGL2RenderingContext;
@@ -223,10 +245,6 @@ class ToneMapRenderer implements FrameRenderer {
     gl.uniform1f(gl.getUniformLocation(program, "fullRange"), this.fullRange ? 1 : 0);
   }
 
-  static supports(format: string | null): boolean {
-    return !!format && SUPPORTED_HDR_FORMATS.has(format);
-  }
-
   async draw(frame: VideoFrame): Promise<void> {
     const gl = this.gl;
     fitCanvas(this.canvas, frame);
@@ -240,32 +258,21 @@ class ToneMapRenderer implements FrameRenderer {
     if (!this.buffer || this.buffer.byteLength < size) this.buffer = new ArrayBuffer(size);
     const bytes = new Uint8Array(this.buffer, 0, size);
     const layout = await frame.copyTo(bytes);
+    if (layout.length < 3) throw new Error(`Format d'image inattendu (${layout.length} plan(s)).`);
 
-    for (let i = 0; i < 3 && i < layout.length; i++) {
-      const { width, height } = this.planeSize(frame, i);
-      // The layout says where each plane starts and how wide its rows are; stride can exceed
-      // width, so rows are only contiguous when they happen to match.
-      const plane = new Uint16Array(this.buffer, layout[i].offset, (layout[i].stride / 2) * height);
+    const planes = planeGeometry(frame, layout, size);
+    for (let i = 0; i < 3; i++) {
+      const { width, height, stride } = planes[i];
+      const samples = new Uint16Array(this.buffer, layout[i].offset, (stride / 2) * height);
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.bindTexture(gl.TEXTURE_2D, this.textures[i]);
-      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, layout[i].stride / 2);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16UI, width, height, 0, gl.RED_INTEGER, gl.UNSIGNED_SHORT, plane);
+      // The stride can exceed the row's real width, so rows are only contiguous by accident.
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, stride / 2);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16UI, width, height, 0, gl.RED_INTEGER, gl.UNSIGNED_SHORT, samples);
     }
     gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-  }
-
-  // Chroma plane geometry depends only on the frame's subsampling.
-  private planeSize(frame: VideoFrame, index: number): { width: number; height: number } {
-    if (index === 0) return { width: frame.codedWidth, height: frame.codedHeight };
-    const format = frame.format as string | null;
-    const horizontal = format === "I444P10" ? 1 : 2;
-    const vertical = format === "I420P10" ? 2 : 1;
-    return {
-      width: Math.ceil(frame.codedWidth / horizontal),
-      height: Math.ceil(frame.codedHeight / vertical),
-    };
   }
 
   destroy(): void {
@@ -275,9 +282,70 @@ class ToneMapRenderer implements FrameRenderer {
   }
 }
 
-export function createRenderer(canvas: HTMLCanvasElement, options: { hdr: boolean; peakNits?: number; fullRange?: boolean }): FrameRenderer {
+/**
+ * Tries the HDR path and falls back to the plain canvas if it cannot run.
+ *
+ * The fallback matters: an HDR file drawn through the SDR path looks flat, but it looks. A
+ * tone-mapper that fails silently — an unbuildable WebGL context, a frame layout it cannot read —
+ * leaves a black screen with sound, which is indistinguishable from a broken player.
+ */
+class FallbackRenderer implements FrameRenderer {
+  private active: FrameRenderer;
+  private fellBack = false;
+
+  constructor(private readonly canvas: HTMLCanvasElement, hdr: () => FrameRenderer, private readonly onFallback: (reason: string) => void) {
+    try {
+      this.active = hdr();
+    } catch (error) {
+      this.active = new CanvasRenderer(canvas);
+      this.fellBack = true;
+      onFallback(error instanceof Error ? error.message : "conversion HDR indisponible");
+    }
+  }
+
+  draw(frame: VideoFrame): void | Promise<void> {
+    if (this.fellBack) return this.active.draw(frame);
+    try {
+      const result = this.active.draw(frame);
+      if (result instanceof Promise) {
+        return result.catch((error: unknown) => {
+          this.downgrade(error);
+          return this.active.draw(frame);
+        });
+      }
+      return result;
+    } catch (error) {
+      this.downgrade(error);
+      return this.active.draw(frame);
+    }
+  }
+
+  private downgrade(error: unknown): void {
+    if (this.fellBack) return;
+    this.fellBack = true;
+    this.active.destroy();
+    // A fresh canvas context: the element already holds a WebGL context, and a canvas cannot
+    // hand out a 2D one afterwards.
+    this.canvas.replaceWith(this.canvas.cloneNode() as HTMLCanvasElement);
+    this.active = new CanvasRenderer(this.canvas);
+    this.onFallback(error instanceof Error ? error.message : "conversion HDR interrompue");
+  }
+
+  destroy(): void {
+    this.active.destroy();
+  }
+}
+
+export function createRenderer(
+  canvas: HTMLCanvasElement,
+  options: { hdr: boolean; peakNits?: number; fullRange?: boolean; onHdrFallback?: (reason: string) => void }
+): FrameRenderer {
   if (!options.hdr) return new CanvasRenderer(canvas);
-  return new ToneMapRenderer(canvas, options.peakNits ?? 1000, options.fullRange ?? false);
+  return new FallbackRenderer(
+    canvas,
+    () => new ToneMapRenderer(canvas, options.peakNits ?? 1000, options.fullRange ?? false),
+    options.onHdrFallback ?? (() => {})
+  );
 }
 
 export const __testing = { ToneMapRenderer, CanvasRenderer };

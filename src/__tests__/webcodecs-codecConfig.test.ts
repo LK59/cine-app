@@ -7,7 +7,7 @@ import {
   audioConfigFor,
   unsupportedReason,
 } from "@/lib/webcodecs/codecConfig";
-import { selectCue } from "@/lib/webcodecs/engine";
+import { selectCue, subtitleText } from "@/lib/webcodecs/engine";
 import type { MatroskaTrack } from "@/lib/webcodecs/matroska";
 
 // A codec string is matched character for character against the browser's hardware capabilities.
@@ -158,5 +158,26 @@ describe("subtitle cue selection", () => {
     selectCue(queue, 11);
     expect(queue).toHaveLength(1);
     expect(queue[0].text).toBe("trois");
+  });
+});
+
+describe("subtitle text extraction", () => {
+  it("passes SRT through untouched", () => {
+    expect(subtitleText("Bonjour\nle monde", "S_TEXT/UTF8")).toBe("Bonjour\nle monde");
+  });
+
+  // An ASS block is the tail of a Dialogue row: nine fields, then the text. Throwing the track
+  // away over its styling would leave 218 files in this library with no subtitles at all when
+  // the words are right there.
+  it("takes the text out of an ASS dialogue row", () => {
+    expect(subtitleText("0,0,Default,,0,0,0,,Bonjour le monde", "S_TEXT/ASS")).toBe("Bonjour le monde");
+  });
+
+  it("keeps commas that belong to the line", () => {
+    expect(subtitleText("0,0,Default,,0,0,0,,Bonjour, le monde", "S_TEXT/ASS")).toBe("Bonjour, le monde");
+  });
+
+  it("strips inline override tags and honours ASS line breaks", () => {
+    expect(subtitleText("0,0,Default,,0,0,0,,{\\i1}Salut{\\i0}\\Nla suite", "S_TEXT/ASS")).toBe("Salut\nla suite");
   });
 });
