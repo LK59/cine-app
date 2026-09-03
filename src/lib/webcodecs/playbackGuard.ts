@@ -81,6 +81,9 @@ const SEEK_LANDING_SECONDS = 15;
 /** Including the one made at the pause itself. Past this, the element is left alone. */
 const MAX_PAUSE_ASSERTIONS = 3;
 
+/** How many times a start the element abandoned is attempted again before leaving it be. */
+const MAX_START_RETRIES = 2;
+
 export class PlaybackGuard {
   constructor(
     private readonly video: HTMLVideoElement,
@@ -101,6 +104,9 @@ export class PlaybackGuard {
 
   /** Where a seek was served, until the playhead is actually standing on media. */
   private seekLanding: number | null = null;
+  /** Set when the element abandoned a start rather than the viewer pausing one. */
+  private startAborted = false;
+  private startRetries = 0;
 
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
@@ -439,6 +445,9 @@ export class PlaybackGuard {
    */
   readonly paused = () => {
     if (this.host.destroyed) return;
+    // A pause that arrives before the first frame of a playback that was asked for is not the
+    // viewer pausing — it is the element giving up on a start it could not make.
+    if (this.startingFrom !== null) this.startAborted = true;
     this.startingFrom = null;
     this.stopWatchingForFirstFrame();
     this.setStarting(null, "mise en pause");
@@ -517,6 +526,50 @@ export class PlaybackGuard {
   /** A seek has been served: the landing licence lasts only while the playhead has not moved. */
   seekServed(playerSeconds: number): void {
     this.seekLanding = playerSeconds;
+  }
+
+  /**
+   * The film has just been opened at this position.
+   *
+   * Treated as a landing, because that is what it is: a request to be somewhere, about to be
+   * answered with media that begins a fraction of a second later. Without the licence the
+   * opening deadlocks — the element is paused because there is nothing under the playhead, and
+   * the playhead is not moved onto the media because the element is paused.
+   */
+  opened(playerSeconds: number): void {
+    this.seekLanding = playerSeconds;
+    this.startAborted = false;
+    this.startRetries = 0;
+  }
+
+  /**
+   * The first media has arrived. Starts the film if it was asked for and never began.
+   *
+   * Measured on an iPhone, opening an episode from the beginning: the media of a file with
+   * B-frames starts 210 ms in, `play()` was called before any of it existed, and the element
+   * aborted the attempt and went back to paused with the playhead short of everything. The film
+   * then sat at 0:00 with thirty seconds buffered, and only a seek or a press of play — both of
+   * which the viewer had to think of — got it going.
+   *
+   * Only for a start the *element* abandoned: a viewer who pressed pause while it was loading
+   * has asked for exactly this, and starting the film under them would be the player arguing.
+   */
+  mediaArrived(): void {
+    if (this.host.destroyed || !this.startAborted) return;
+    if (this.startRetries >= MAX_START_RETRIES) return;
+    this.startRetries += 1;
+    this.startAborted = false;
+
+    // Onto the media first: playing from a position that has nothing under it is what failed the
+    // first time. The licence is re-granted here rather than relied on — the failed start ran a
+    // nudge of its own, and a nudge that reaches its media spends the licence on the way.
+    this.seekLanding = this.video.currentTime;
+    this.nudgeIntoBuffer();
+    trace(`démarrage repris (${this.startRetries}) — tête à ${this.video.currentTime.toFixed(2)} s`);
+    void this.video.play().catch(() => {
+      // Nothing more to do: the controls are showing a play button, which is now the only thing
+      // that can carry the permission this needs.
+    });
   }
 
   /** A deliberate move elsewhere settles the question of where playback belongs. */

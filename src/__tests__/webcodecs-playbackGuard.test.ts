@@ -165,6 +165,50 @@ describe("PlaybackGuard", () => {
     expect(far.video.currentTime).toBe(100);
   });
 
+  it("starts a film the element gave up on, once there is something to play", async () => {
+    // Measured on an iPhone opening an episode from the beginning. A file with B-frames presents
+    // its first picture 210 ms in; play() was called before any of that existed, the element
+    // abandoned the attempt and went back to paused with the playhead short of everything, and
+    // the film then sat at 0:00 with thirty seconds buffered. Nothing could move it: the
+    // playhead was not stepped onto the media because the element was paused, and the element
+    // was paused because there was nothing under the playhead.
+    const { guard, video } = build({ at: 0, playable: ranges([0.21, 30]) });
+    guard.opened(0);
+
+    guard.playing(); // the element fires this as soon as play() is called
+    (video as unknown as { paused: boolean }).paused = true;
+    (video as unknown as { currentTime: number }).currentTime = 0;
+    guard.paused(); // and gives up a moment later, before any frame
+
+    guard.mediaArrived();
+    expect(video.currentTime).toBeCloseTo(0.21, 3);
+    expect(video.play).toHaveBeenCalled();
+  });
+
+  it("does not start a film the viewer paused", async () => {
+    // A viewer who pressed pause while it was loading asked for exactly this. Starting it under
+    // them would be the player arguing with them.
+    const { guard, video } = build({ at: 5, playable: ranges([5, 30]) });
+    guard.opened(5);
+    (video as unknown as { paused: boolean }).paused = true;
+    guard.paused(); // no start was in progress: this is the viewer
+
+    guard.mediaArrived();
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it("gives up asking rather than fighting an element that will not start", async () => {
+    const { guard, video } = build({ at: 0, playable: ranges([0.21, 30]) });
+    guard.opened(0);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      guard.playing();
+      (video as unknown as { paused: boolean }).paused = true;
+      guard.paused();
+      guard.mediaArrived();
+    }
+    expect((video.play as ReturnType<typeof vi.fn>).mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
   it("holds the picture only once it would run on without sound", async () => {
     // Chrome stalls by itself when a buffer has nothing at the playhead; Safari plays the picture
     // on in silence. Stopping the element up front cost the first a visible pause every time.

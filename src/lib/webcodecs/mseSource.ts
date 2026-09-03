@@ -244,6 +244,11 @@ export class MseSource {
       this.lastSeekTarget = startSeconds;
       this.video.currentTime = startSeconds;
     }
+    // Opening a film is a request to be somewhere, and it is about to be answered with media
+    // that begins a fraction of a second later — a file with B-frames presents its first picture
+    // 210 ms in. Declared as a landing so the playhead may be put onto that media even though
+    // the element, having nothing to play yet, is still paused.
+    this.guard.opened(this.video.currentTime);
 
     // The element's own verdict, recorded when it is delivered. Everything so far learned of it
     // second-hand, when some later operation tripped over the wreckage — so the report showed the
@@ -477,6 +482,9 @@ export class MseSource {
         const depth = this.bufferedEnd();
         if (this.appendsTraced <= TRACED_APPENDS && this.appendsTraced > 0) {
           trace(`après envoi : tampon jusqu'à ${depth.toFixed(1)} s, tête à ${this.video.currentTime.toFixed(1)} s`);
+          // There is something to play now, which there was not when the element was first asked
+          // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
+          this.guard.mediaArrived();
         }
         if (depth > deepestSoFar + 0.01) {
           deepestSoFar = depth;

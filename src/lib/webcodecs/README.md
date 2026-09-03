@@ -196,6 +196,16 @@ qui déplace du média. Elle lui tend une vue étroite d'elle-même
   reprises en boucle.
 - **Atterrissage** : un saut qui produit du média après sa cible pose la tête
   **sur ce média** plutôt que sur du vide — un élément média fait pareil.
+  **L'ouverture d'un film en est un** : un fichier à images B présente sa
+  première image 210 ms après zéro, donc lancer la lecture à 0 s la lance sur du
+  vide. Sans ça, blocage circulaire mesuré sur iPhone — la tête n'est pas posée
+  sur le média parce que l'élément est en pause, et l'élément est en pause parce
+  qu'il n'y a rien sous la tête. Le film restait à 0:00 avec 30 s en tampon.
+- **Démarrage repris** : une mise en pause qui arrive *avant la première image*
+  d'une lecture demandée n'est pas le spectateur qui met en pause, c'est
+  l'élément qui renonce. Quand le média arrive enfin, on repose la tête dessus
+  et on redemande la lecture — deux fois au plus. Une pause du spectateur, elle,
+  est respectée.
 - **Pause / reprise** : la position est ré-affirmée **à l'instant de la pause**,
   ce qui vide la file audio pendant que rien n'est visible. Sans ça, iOS garde
   ~0,5 s de son en avance du matériel et le restitue d'un coup à la reprise. Mais
