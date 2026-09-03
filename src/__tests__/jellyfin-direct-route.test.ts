@@ -24,7 +24,9 @@ function fakeReq(): NextRequest {
   } as unknown as NextRequest;
 }
 
-function mediaSource(over: { container?: string; rangeType?: string | null; codec?: string } = {}) {
+function mediaSource(
+  over: { container?: string; rangeType?: string | null; codec?: string; subtitles?: Record<string, unknown>[] } = {}
+) {
   return {
     MediaSources: [
       {
@@ -42,6 +44,7 @@ function mediaSource(over: { container?: string; rangeType?: string | null; code
             VideoRangeType: over.rangeType === undefined ? "SDR" : over.rangeType,
           },
           { Type: "Audio", Index: 1, Codec: "eac3", Language: "fre", Channels: 6, IsDefault: true },
+          ...(over.subtitles ?? []),
         ],
       },
     ],
@@ -73,10 +76,11 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
 
   // The demuxer reads Matroska and nothing else, on either pipeline, so this refusal is absolute.
   it("refuses a container no pipeline can read, naming it", async () => {
-    mockGetSources.mockResolvedValue(mediaSource({ container: "mp4" }));
+    // AVI, in this library, is MPEG-4 ASP and MP3 — undecodable in any browser, so the file is
+    // handed to the server rather than half-opened here.
+    mockGetSources.mockResolvedValue(mediaSource({ container: "avi" }));
     const body = await (await get()).json();
-    expect(body.refusedReason).toContain("mp4");
-    expect(body.refusedReason).toContain("Matroska");
+    expect(body.refusedReason).toContain("avi");
   });
 
   // The change that matters: repackaging carries HDR signalling through untouched and the display
@@ -146,5 +150,55 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", id: 7 });
     mockGetSources.mockResolvedValue({ MediaSources: [] });
     expect((await get()).status).toBe(404);
+  });
+});
+
+describe("sous-titres posés à côté du film", () => {
+  const external = (over: Record<string, unknown> = {}) => ({
+    Type: "Subtitle",
+    Index: 3,
+    Codec: "srt",
+    Language: "fre",
+    DisplayTitle: "Français (SRT)",
+    IsExternal: true,
+    ...over,
+  });
+
+  it("les annonce avec de quoi aller les chercher", async () => {
+    // Nothing in the container names them, so this route is the only place they can come from.
+    mockGetSources.mockResolvedValue(mediaSource({ subtitles: [external()] }));
+    const body = await (await get()).json();
+
+    expect(body.externalSubtitles).toHaveLength(1);
+    expect(body.externalSubtitles[0]).toMatchObject({ language: "fre", title: "Français (SRT)" });
+    // Numbered so it can never be mistaken for a track read out of the file itself.
+    expect(body.externalSubtitles[0].id).toBeLessThan(0);
+    expect(body.externalSubtitles[0].url).toContain(`/api/jellyfin/stream/subtitle/${validId}`);
+    expect(body.externalSubtitles[0].url).toContain("index=3");
+    expect(body.externalSubtitles[0].url).toContain("mediaSourceId=src-1");
+  });
+
+  it("laisse de côté celles qui sont dans le fichier, et celles qui sont des images", async () => {
+    // An embedded track is already found by whatever opens the file; an image subtitle has no
+    // text to fetch, and offering one would produce an empty line for the whole film.
+    mockGetSources.mockResolvedValue(
+      mediaSource({
+        subtitles: [
+          external({ Index: 2, IsExternal: false }),
+          external({ Index: 4, Codec: "pgssub" }),
+          external({ Index: 5, Codec: "ass" }),
+        ],
+      })
+    );
+    const body = await (await get()).json();
+    expect(body.externalSubtitles.map((s: { url: string }) => s.url.match(/index=(\d+)/)![1])).toEqual(["5"]);
+  });
+
+  it("accepte un MP4, que le navigateur ouvre lui-même", async () => {
+    // Refusing it sent the file to the slow server-side player, when it is already exactly the
+    // packaging the remuxer spends its time producing.
+    mockGetSources.mockResolvedValue(mediaSource({ container: "mp4" }));
+    const body = await (await get()).json();
+    expect(body.refusedReason).toBeNull();
   });
 });

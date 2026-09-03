@@ -20,6 +20,11 @@ import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabil
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
+import {
+  ExternalSubtitleTrack,
+  isExternalTrack,
+  toEngineTrack as externalToEngineTrack,
+} from "@/lib/webcodecs/externalSubtitles";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
@@ -272,6 +277,27 @@ export function ExperimentalPlayerHost({
    */
   const wantedAudioRef = useRef<number | null>(null);
   const wantedSubtitleRef = useRef<number | null>(null);
+  /**
+   * The subtitle file being shown, when it is one that came from beside the film rather than
+   * from inside it.
+   *
+   * Held here rather than in a pipeline because it belongs to neither: it is fetched from the
+   * media server, it is the same file whichever way the picture is being decoded, and it must
+   * survive a rebuild after a network cut exactly as the chosen language does.
+   */
+  const externalSubtitleRef = useRef<ExternalSubtitleTrack | null>(null);
+
+  /**
+   * What to write under the picture at this instant.
+   *
+   * An external file, once chosen, is the only source: the pipeline was told to show nothing, so
+   * asking it would only ever produce null, and letting it answer at all would mean two sources
+   * racing to set the same line.
+   */
+  const showSubtitleAt = useCallback((seconds: number, fromContainer: () => string | null) => {
+    const external = externalSubtitleRef.current;
+    setSubtitle(external ? external.textAt(seconds) : fromContainer());
+  }, []);
 
   // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
   // the mount the wait was instantly minutes long — so a rebuild that takes half a second
@@ -439,7 +465,9 @@ export function ExperimentalPlayerHost({
       // subtitles gone, has not really come back.
       const wantedAudio = wantedAudioRef.current;
       const wantedSubtitle = wantedSubtitleRef.current;
-      if (wantedSubtitle !== null) playback.selectSubtitleTrack(wantedSubtitle);
+      // A track number from a file beside the film means nothing to a pipeline reading the
+      // file itself; it is answered here instead, out of what was already fetched.
+      if (wantedSubtitle !== null && !isExternalTrack(wantedSubtitle)) playback.selectSubtitleTrack(wantedSubtitle);
       setCurrentSubtitle(wantedSubtitle);
       setCurrentAudio(playback.currentAudioTrack);
       declareReady();
@@ -452,7 +480,7 @@ export function ExperimentalPlayerHost({
 
       const onTime = () => {
         positionRef.current = element.currentTime;
-        setSubtitle(playback.subtitleAt(element.currentTime));
+        showSubtitleAt(element.currentTime, () => playback.subtitleAt(element.currentTime));
       };
       // A warning about not being able to reach a position is obsolete the instant pictures are
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
@@ -489,10 +517,12 @@ export function ExperimentalPlayerHost({
       setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
       setTracks({ audio: [], subtitles: [] });
       setCurrentAudio(null);
-      setCurrentSubtitle(null);
 
       const onTime = () => {
         positionRef.current = element.currentTime;
+        // The only subtitles this path can have are the ones beside the file: nothing here opens
+        // the container, so there is nothing else to read them out of.
+        showSubtitleAt(element.currentTime, () => null);
       };
       const onPlay = () => {
         setPlaying(true);
@@ -554,11 +584,16 @@ export function ExperimentalPlayerHost({
         engine.on("warning", (payload) => setWarning(typeof payload === "string" ? payload : null)),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
+          if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);
         }),
         engine.on("playing", () => setPlaying(true)),
         engine.on("pause", () => setPlaying(false)),
         engine.on("ended", () => setPlaying(false)),
-        engine.on("subtitle", (payload) => setSubtitle(typeof payload === "string" ? payload : null)),
+        engine.on("subtitle", (payload) => {
+          // Silenced while a file beside the film is showing, which the engine knows nothing of.
+          if (externalSubtitleRef.current) return;
+          setSubtitle(typeof payload === "string" ? payload : null);
+        }),
         // Controls appear as soon as the file is understood — duration, tracks — rather than
         // waiting for the whole pipeline to fill. Anything that goes wrong afterwards replaces
         // them with the error panel, so there is no window where a broken player looks usable.
@@ -650,7 +685,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount]);
+  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -1011,14 +1046,35 @@ export function ExperimentalPlayerHost({
                 void engineRef.current?.setAudioTrack(id);
               }
             }}
-            subtitleTracks={tracks.subtitles.map((track) => ({ id: track.number, label: trackLabel(track) }))}
+            subtitleTracks={[...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToEngineTrack)].map(
+              (track) => ({ id: track.number, label: trackLabel(track) })
+            )}
             currentSubtitleId={currentSubtitle}
             onChangeSubtitle={(id) => {
               wantedSubtitleRef.current = id;
               setCurrentSubtitle(id);
               setSubtitle(null);
-              if (path === "remux") remuxRef.current?.selectSubtitleTrack(id);
-              else engineRef.current?.setSubtitleTrack(id);
+
+              // Whichever is chosen, the other is turned off first: the pipeline showing a track
+              // from the container and a file showing its own would both write the same line.
+              const external = id !== null && isExternalTrack(id);
+              if (path === "remux") remuxRef.current?.selectSubtitleTrack(external ? null : id);
+              else if (path === "webcodecs") engineRef.current?.setSubtitleTrack(external ? null : id);
+
+              if (!external) {
+                externalSubtitleRef.current = null;
+                return;
+              }
+              const source = info?.externalSubtitles.find((candidate) => candidate.id === id);
+              if (!source) return;
+              // Fetched on being chosen rather than up front: a film may carry half a dozen of
+              // these and the viewer will read one of them.
+              void ExternalSubtitleTrack.load(source)
+                .then((loaded) => {
+                  // Unless the viewer has moved on while it was in flight.
+                  if (wantedSubtitleRef.current === id) externalSubtitleRef.current = loaded;
+                })
+                .catch(() => setWarning("Sous-titres externes indisponibles."));
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}

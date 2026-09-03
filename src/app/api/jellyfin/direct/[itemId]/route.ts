@@ -5,11 +5,16 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { userPrefsDb } from "@/lib/db";
 
+/** What Jellyfin can hand back as WebVTT. Anything else is a picture and has nothing to read. */
+const TEXT_SUBTITLE_FORMATS = new Set(["srt", "subrip", "ass", "ssa", "vtt", "webvtt", "mov_text"]);
+
 const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
 // Containers the experimental player's demuxer understands. Matroska is 99.7% of this library;
 // anything else is refused with a reason rather than half-played.
-const SUPPORTED_CONTAINERS = new Set(["mkv", "webm"]);
+// mkv and webm are read by the remuxer; mp4 and m4v need nothing read at all — the browser
+// opens them itself, which is the whole of what the remuxer spends its time producing.
+const SUPPORTED_CONTAINERS = new Set(["mkv", "webm", "mp4", "m4v"]);
 
 // HDR ranges the WebGL tone-mapping path can handle. Dolby Vision profile 5 is deliberately
 // absent: it has no HDR10 base layer, so there is nothing standard to tone-map from and the
@@ -23,6 +28,15 @@ export interface DirectPlayAudioTrack {
   displayTitle: string | null;
   channels: number | null;
   isDefault: boolean;
+}
+
+export interface ExternalSubtitle {
+  /** Negative in the player's menus, so it can never collide with a track number from the file. */
+  id: number;
+  language: string | null;
+  title: string | null;
+  /** Through this app's own proxy, which asks Jellyfin for it as WebVTT. */
+  url: string;
 }
 
 export interface DirectPlayInfo {
@@ -48,6 +62,15 @@ export interface DirectPlayInfo {
    * without converting anything, so this is enforced by the client rather than here.
    */
   canvasHdrRefusal: string | null;
+  /**
+   * Subtitle files sitting beside the film rather than inside it.
+   *
+   * Nothing in the container names them, so without this they simply do not exist for a player
+   * that reads the file directly — while Jellyfin, which lists them, shows them. On this library
+   * that is the difference between subtitles and none on the forty-six films whose only embedded
+   * tracks are images, which this player does not render.
+   */
+  externalSubtitles: ExternalSubtitle[];
   /** Where the opening titles run, when Jellyfin has analysed the episode. Null otherwise. */
   introSkip: { start: number; end: number } | null;
   /** Where the closing credits begin, which is when the next episode is offered. */
@@ -83,10 +106,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const rangeType = videoStream?.VideoRangeType ?? null;
   const isHdr = !!rangeType && rangeType !== "SDR";
 
-  // Refused outright: no pipeline here reads anything but Matroska, whichever one ends up running.
+  // Refused outright: either the remuxer reads the container, or the browser opens it unaided.
+  // Anything else — AVI above all, whose codecs no browser decodes — belongs to the server.
   const refusedReason = SUPPORTED_CONTAINERS.has(container)
     ? null
-    : `Le lecteur expérimental ne lit que les conteneurs Matroska pour l'instant (ce fichier est en « ${container || "inconnu"} »).`;
+    : `Le lecteur expérimental ne lit pas les fichiers « ${container || "inconnu"} » (Matroska et MP4 seulement).`;
 
   // HDR is a different matter now, and the server is the wrong place to decide it. Repackaging the
   // file for the browser's own decoder carries the HDR signalling through untouched and the
@@ -102,6 +126,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   if (isHdr && !TONE_MAPPABLE_RANGES.has(rangeType)) {
     canvasHdrRefusal = `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard à convertir, et ce navigateur ne le lit pas nativement.`;
   }
+
+  // Text only, and external only: an image subtitle has nothing to read, and an embedded text
+  // track is already found by whichever pipeline opens the file.
+  const externalSubtitles: ExternalSubtitle[] = streams
+    .filter((s) => s.Type === "Subtitle" && s.IsExternal && TEXT_SUBTITLE_FORMATS.has((s.Codec ?? "").toLowerCase()))
+    .map((s) => ({
+      id: -1 - s.Index,
+      language: s.Language ?? null,
+      title: s.DisplayTitle ?? null,
+      url: `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${encodeURIComponent(source.Id ?? itemId)}&index=${s.Index}`,
+    }));
 
   const payload: DirectPlayInfo = {
     // The same static endpoint DirectPlay already uses: the proxy forwards Range headers for it,
@@ -133,6 +168,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       })),
     refusedReason,
     canvasHdrRefusal,
+    externalSubtitles,
     introSkip: timestamps?.Introduction?.Valid
       ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End }
       : null,
