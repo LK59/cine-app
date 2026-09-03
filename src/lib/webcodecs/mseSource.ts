@@ -10,6 +10,13 @@
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { audioBufferRebuildable } from "./remuxer";
 import { trace } from "./trace";
+import { BufferQueue } from "./bufferQueue";
+import { PlaybackGuard } from "./playbackGuard";
+import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
+
+// Kept exported from here as well: every caller of these already reaches for this module, and
+// moving where they live should not mean touching a dozen call sites.
+export { containerAccepts, playabilityOf, canRebuildAudioBuffer } from "./mseSupport";
 
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
 const TARGET_BUFFER_SECONDS = 30;
@@ -31,40 +38,8 @@ const RECOVERY_WINDOW_MS = 5000;
 /** Refused appends in a row before playback is declared broken rather than merely interrupted. */
 const MAX_APPEND_FAILURES = 3;
 
-/** Past this, a silent picture is better than a still one — and the viewer is told nothing more. */
-const AUDIO_HOLD_TIMEOUT_MS = 10000;
-
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
-
-/**
- * How long after pressing play the position from the pause is still defended.
- *
- * The jump does not necessarily happen the instant playback resumes: the element can start, find
- * nothing where it was, and move on a moment later. Long enough to cover that, short enough that
- * it can never be mistaken for fighting a viewer who has moved on.
- */
-const RESUME_GUARD_MS = 1500;
-
-/**
- * How long the clock is watched after a pause has been flushed, in case the flush did not take.
- *
- * The flush itself is immediate; this only covers a platform that queues more sound after being
- * told to discard what it had. A clock advancing while nothing is playing is exactly that.
- */
-const PAUSE_SETTLE_MS = 1000;
-
-/**
- * How far ahead of the pause a resume may land before it counts as a discontinuity.
- *
- * Measured on the device: the picture freezes where the button was pressed, but the sound the
- * hardware already held plays on for about half a second, and the clock reports that at the
- * moment of resuming — half a second ahead. Nothing was skipped; it was heard while the picture
- * stood still. Pulling it back replays it and shows the wrong frame for a moment, which is the
- * flicker this once caused. Only a gap far larger than the drain is a real discontinuity: media
- * the system reclaimed while nothing was playing, which runs to seconds.
- */
-const RESUME_TOLERANCE_SECONDS = 1.5;
 
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
@@ -85,26 +60,6 @@ const MISPLACED_SECONDS = 10;
  * after the whole file has gone past.
  */
 const FRUITLESS_APPENDS = 8;
-
-/**
- * How far the clock may creep while paused before it is worth putting back.
- *
- * Below this the correction costs more than the drift: re-stating the position is a seek, and a
- * seek at a pause is heard.
- */
-const PAUSE_DRIFT_SECONDS = 0.25;
-
-/**
- * How far past a seek's target the playhead may be moved to reach the media it produced.
- *
- * Generously more than a segment, because a sparse index misses by that much, and far less than
- * any distance a viewer would notice as the wrong place in a film. Beyond it, the gap is a fault
- * worth reporting rather than stepping over.
- */
-const SEEK_LANDING_SECONDS = 15;
-
-/** Including the one made at the pause itself. Past this, the element is left alone. */
-const MAX_PAUSE_ASSERTIONS = 3;
 
 /** Only the opening handful of segments is recorded: after that the record says nothing new. */
 const TRACED_APPENDS = 4;
@@ -130,183 +85,8 @@ export interface MseCallbacks {
   onStarting?: (startedAt: number | null) => void;
 }
 
-type MediaSourceCtor = typeof MediaSource | typeof ManagedMediaSource;
-
-function sourceConstructor(): MediaSourceCtor | null {
-  if (typeof window === "undefined") return null;
-  // Preferred on iPhone: plain MediaSource is absent there, and the managed one lets the system
-  // evict buffered media under pressure instead of the tab being killed.
-  return window.ManagedMediaSource ?? (typeof MediaSource !== "undefined" ? MediaSource : null);
-}
-
-/** Whether the player will take this codec inside a MediaSource, which is not the same question
- * as whether it can decode the codec at all: Chrome plays AC-3 nowhere, Safari plays it in both. */
-export function containerAccepts(mimeType: string): boolean {
-  const Source = sourceConstructor();
-  if (!Source) return false;
-  try {
-    return Source.isTypeSupported(mimeType);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Whether this browser will let an audio buffer be taken out and a new one put in its place,
- * mid-playback, without losing the MediaSource.
- *
- * The third of three ways to change what the sound decodes by, and the only one not yet tried.
- * `changeType` is accepted here and then answered with a decode failure that closes the source;
- * rebuilding the whole MediaSource detaches the element, and Safari does not reliably come back.
- * Removing one source buffer and adding another keeps both the element and the picture's buffer.
- *
- * Asked of a throwaway source on a detached element — which never has to be in the document to
- * reach "open" — so the answer costs a few milliseconds once, and no guess is made on behalf of
- * a browser nobody has tested.
- */
-let rebuildAnswer: Promise<boolean> | null = null;
-
-/** Candidates for the probe below, in the order they are worth trying. */
-const AUDIO_PROBE_TYPES = [
-  'audio/mp4; codecs="mp4a.40.2"',
-  'audio/mp4; codecs="ac-3"',
-  'audio/mp4; codecs="opus"',
-  'audio/mp4; codecs="ec-3"',
-];
-
-export function canRebuildAudioBuffer(videoMime: string): Promise<boolean> {
-  rebuildAnswer ??= (async () => {
-    const Source = sourceConstructor();
-    // No document means no element to attach a source to, and a source that never opens cannot
-    // answer this. Nothing is guessed on its behalf.
-    if (!Source || typeof document === "undefined") return false;
-
-    // Two types this browser actually takes, chosen here rather than named in advance. Asking an
-    // iPhone to swap to Opus — which it does not accept in a MediaSource at all — made
-    // addSourceBuffer throw over the codec rather than over the swap, and the answer came back
-    // "no" to a question that was never put. With fewer than two, no file can change audio codec
-    // mid-playback anyway, so there is nothing to refuse.
-    const usable = AUDIO_PROBE_TYPES.filter((type) => containerAccepts(type));
-    if (usable.length < 2) return true;
-    const [first, second] = usable;
-    const video = document.createElement("video");
-    video.disableRemotePlayback = true;
-    const source = new Source();
-    try {
-      const opened = new Promise<boolean>((resolve) => {
-        source.addEventListener("sourceopen", () => resolve(true), { once: true });
-        setTimeout(() => resolve(false), PROBE_TIMEOUT_MS);
-      });
-      (video as unknown as { srcObject: unknown }).srcObject = source;
-      if (!(await opened)) return false;
-
-      // The picture's buffer is there for realism: an implementation may treat the last buffer
-      // leaving differently from one of two.
-      source.addSourceBuffer(videoMime);
-      const audio = source.addSourceBuffer(first);
-      source.removeSourceBuffer(audio);
-      source.addSourceBuffer(second);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      try {
-        (video as unknown as { srcObject: unknown }).srcObject = null;
-      } catch {
-        /* nothing left to detach */
-      }
-    }
-  })();
-  return rebuildAnswer;
-}
-
-/** Whether this browser can play what the remuxer would produce, checked before any work starts. */
-export function playabilityOf(plan: RemuxPlan): { ok: true } | { ok: false; reason: string } {
-  const Source = sourceConstructor();
-  if (!Source) return { ok: false, reason: "Ce navigateur ne propose pas MediaSource." };
-  if (!Source.isTypeSupported(plan.videoMimeType)) {
-    return { ok: false, reason: `Vidéo non prise en charge par ce navigateur : ${plan.videoMimeType}` };
-  }
-  if (plan.audioMimeType && !Source.isTypeSupported(plan.audioMimeType)) {
-    return { ok: false, reason: `Audio non pris en charge par ce navigateur : ${plan.audioMimeType}` };
-  }
-  return { ok: true };
-}
-
 /** How far before the end of the held picture the reader starts building segments in full again. */
 const VIDEO_SKIP_MARGIN = 6;
-
-/** A source that has not opened by now is not going to answer the rebuild question either. */
-const PROBE_TIMEOUT_MS = 300;
-
-/** How long one buffer operation may go unanswered before the queue moves on without it. */
-const BUFFER_OPERATION_TIMEOUT_MS = 4000;
-
-/**
- * Serialises everything done to one source buffer.
- *
- * MediaSource permits exactly one operation per buffer at a time: starting a second while the
- * first is still running throws, and that throw used to surface as a fatal playback error even
- * though nothing was actually broken. Appends, removals and codec changes all come through here
- * in order, so overlapping is impossible rather than merely unlikely — which matters because the
- * things that touch a buffer are driven by unrelated events (a seek, a language change, the
- * eviction of played media) that can land in the same instant.
- */
-class BufferQueue {
-  private chain: Promise<void> = Promise.resolve();
-
-  /**
-   * @param why Whatever the element and the source can say about a refusal. The `error` event
-   * carries no detail of its own, so without this the one failure that stops playback on iOS
-   * arrives as a sentence with nothing in it.
-   */
-  constructor(
-    readonly buffer: SourceBuffer,
-    private readonly why: () => string = () => ""
-  ) {}
-
-  enqueue(operation: () => void): Promise<void> {
-    const run = this.chain.then(() => this.runOne(operation));
-    // The queue outlives a failed operation: one refused append must not wedge every later one.
-    this.chain = run.then(
-      () => {},
-      () => {}
-    );
-    return run;
-  }
-
-  private runOne(operation: () => void): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      let settled = false;
-      // Passed through untouched rather than re-wrapped: a full buffer is signalled by the type
-      // of what is thrown, and coercing it to a plain Error loses exactly the distinction
-      // between "make room and carry on" and "this segment is bad".
-      const finish = (error?: unknown) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        this.buffer.removeEventListener("updateend", onEnd);
-        this.buffer.removeEventListener("error", onFail);
-        if (error !== undefined) reject(error);
-        else resolve();
-      };
-      const onEnd = () => finish();
-      const onFail = () => finish(new Error(`Le navigateur a refusé une opération sur le tampon. ${this.why()}`));
-      // A browser that answers neither must not hold the queue for the rest of the session.
-      const timer = setTimeout(() => finish(), BUFFER_OPERATION_TIMEOUT_MS);
-
-      this.buffer.addEventListener("updateend", onEnd);
-      this.buffer.addEventListener("error", onFail);
-      try {
-        operation();
-        // changeType, and a removal of nothing, finish without ever going busy.
-        if (!this.buffer.updating) finish();
-      } catch (error) {
-        finish(error);
-      }
-    });
-  }
-}
 
 export class MseSource {
   private readonly source: MediaSource | ManagedMediaSource;
@@ -316,8 +96,12 @@ export class MseSource {
   private audioOps: BufferQueue | null = null;
   /** Consecutive refused appends. A single one is worth retrying; a run of them is not. */
   private appendFailures = 0;
-  /** Set while the picture is deliberately held still for want of sound. See beginAudioHold. */
-  private audioHold: { wanted: boolean; engaged: boolean } | null = null;
+  /**
+   * Everything about the element's own clock — pausing, resuming, landing after a seek, holding a
+   * picture that would run on without sound. A different subject from moving bytes, with a
+   * different kind of evidence behind it, so it lives in its own file.
+   */
+  private readonly guard: PlaybackGuard;
   /** Answered by the probe above, before the file was opened. */
   rebuildAudioAllowed = false;
   private objectUrl: string | null = null;
@@ -338,57 +122,7 @@ export class MseSource {
   private lastAppendAt = 0;
   /** How far the reader has read, on the player's clock. See the video-skip margin. */
   private readUpTo = 0;
-  /** Where a seek was served, until the playhead is actually standing on media. */
-  private seekLanding: number | null = null;
-  /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
-  private pauseAnchor: number | null = null;
-  private resumeDeadline = 0;
-  private resumeStartedAt = 0;
-  private pauseStartedAt = 0;
-  /**
-   * Where the clock was when play was asked for, while it has not moved since.
-   *
-   * Kept apart from the pause trace on purpose: that trace only exists once something has been
-   * paused, and the very first play — the automatic one, before anyone has touched anything —
-   * would otherwise raise this and have nothing able to lower it again.
-   */
-  private startingFrom: number | null = null;
-  private frameCallback: number | null = null;
-  private pauseSettleTimer: ReturnType<typeof setInterval> | null = null;
-  /**
-   * The last pause and resume, in positions.
-   *
-   * Written down because the remaining flicker cannot be reasoned about any further from here:
-   * nothing in this file moves the playhead when the buffer covers it, and the device says it
-   * does. Four numbers settle what a description cannot — where it stopped, where it came back,
-   * and where it was one tick later.
-   */
-  private resumeTrace: {
-    paused: number;
-    settled: number;
-    asserted: number;
-    play: number;
-    tick: number | null;
-    /** Milliseconds between pressing play and the clock actually moving. */
-    latencyMs: number | null;
-    /**
-     * How long the pause lasted, which is the question that discriminates.
-     *
-     * If emptying the queue is what costs, then time spent paused is time the platform has
-     * already had to recover, and a long pause should start faster than a short one. If the cost
-     * is charged at the press regardless, it does not depend on this at all.
-     */
-    pausedForMs: number | null;
-  } | null = null;
 
-  /** Re-states the position, which runs the seek algorithm and so discards any queued sound. */
-  private assertPausePosition(): void {
-    const anchor = this.pauseAnchor;
-    if (this.destroyed || anchor === null || !this.video.paused) return;
-    this.lastSeekTarget = anchor;
-    this.video.currentTime = anchor;
-    if (this.resumeTrace) this.resumeTrace.asserted += 1;
-  }
 
   private seeksServed = 0;
   private recoveries = 0;
@@ -405,6 +139,32 @@ export class MseSource {
     Source: MediaSourceCtor
   ) {
     this.source = new Source();
+    // The getters below need the instance by reference: a property cannot be a getter over it.
+    const self = this;
+    // Handed a narrow view of the source rather than the source itself: the guard decides *when*
+    // the playhead should move, and this half remains the only thing that moves media.
+    this.guard = new PlaybackGuard(
+      video,
+      {
+        get destroyed() {
+          return self.destroyed;
+        },
+        get delaySeconds() {
+          return self.delaySeconds;
+        },
+        get playable() {
+          return self.playable;
+        },
+        get audioRanges() {
+          return self.audioBuffer?.buffered ?? null;
+        },
+        seek: (seconds, because) => this.seek(seconds, because),
+        noteSeekTarget: (seconds) => {
+          this.lastSeekTarget = seconds;
+        },
+      },
+      callbacks.onStarting
+    );
   }
 
   static async attach(
@@ -495,7 +255,7 @@ export class MseSource {
     // appended to, while the reader keeps grinding forward from wherever it was — which looks
     // exactly like the player decoding every frame up to the target before resuming.
     this.video.addEventListener("seeking", this.onSeeking);
-    this.video.addEventListener("pause", this.onPause);
+    this.video.addEventListener("pause", this.guard.paused);
     this.video.addEventListener("play", this.onPlay);
     this.video.addEventListener("playing", this.request);
     this.lastAppendAt = Date.now();
@@ -509,115 +269,19 @@ export class MseSource {
     void this.fill();
   }
 
-  /**
-   * The wait shown to the viewer, armed and cleared in one place.
-   *
-   * Six call sites used to set this directly, and a spinner that stayed up said nothing about
-   * which of them had armed it or which had failed to come. Named here, and written to the
-   * record, so the next report answers that instead of posing it.
-   */
-  private setStarting(startedAt: number | null, because: string): void {
-    // A clear is never skipped, however sure this is that the wait is already down: being sure
-    // and being wrong is the whole shape of the fault. Only a repeated *arming* is dropped, so
-    // the record does not fill with the same line.
-    if (startedAt !== null && this.startingWait !== null) return;
-    this.startingWait = startedAt;
-    trace(startedAt === null ? `attente levée (${because})` : `attente affichée (${because})`);
-    this.callbacks.onStarting?.(startedAt);
-  }
 
-  private startingWait: number | null = null;
 
+
+
+  /** The clock moved: the guard decides what that means, the source reads on. */
   private readonly request = () => {
-    // The first tick after resuming is where a jump would show, so it is recorded before
-    // anything here has a chance to act on it.
-    // Independent of the pause trace, so the first automatic play is answered too.
-    if (this.startingFrom !== null && this.video.currentTime > this.startingFrom + 0.01) {
-      this.startingFrom = null;
-      this.stopWatchingForFirstFrame();
-      this.setStarting(null, "l'horloge a avancé");
-    }
-
-    const trace = this.resumeTrace;
-    if (trace && !Number.isNaN(trace.play)) {
-      if (trace.tick === null) trace.tick = this.video.currentTime;
-      // Not the first event after play, but the first one where the clock has actually moved:
-      // that is when sound and picture are genuinely running again, and it is what a viewer
-      // feels as the button being slow.
-      if (trace.latencyMs === null && this.video.currentTime > trace.play + 0.01) {
-        trace.latencyMs = Date.now() - this.resumeStartedAt;
-        trace.pausedForMs = this.resumeStartedAt - this.pauseStartedAt;
-      }
-    }
-    // Playback advancing is also the first moment a jump on resume becomes visible.
-    if (this.pauseAnchor !== null) this.holdPausePosition();
+    this.guard.clockTicked();
     void this.fill();
   };
 
-  /**
-   * Remembers exactly where the picture stopped.
-   *
-   * The element's clock does not necessarily stop where the button was pressed: the audio the
-   * system has already handed to the hardware plays out over the next fraction of a second, and
-   * the clock follows the sound. Resuming then starts from wherever it drifted to, which reads
-   * as the film having quietly continued while paused and jumping to catch up.
-   */
-  private readonly onPause = () => {
-    if (this.destroyed) return;
-    this.startingFrom = null;
-    this.stopWatchingForFirstFrame();
-    this.setStarting(null, "mise en pause");
-    this.pauseAnchor = this.video.currentTime;
-    this.resumeTrace = {
-      paused: this.pauseAnchor,
-      settled: this.pauseAnchor,
-      asserted: 0,
-      play: NaN,
-      tick: null,
-      latencyMs: null,
-      pausedForMs: null,
-    };
-    this.pauseStartedAt = Date.now();
-
-    // Emptied at once, not a second later.
-    //
-    // The half second that turns up at the instant of resuming is the sound iOS still holds
-    // queued: it plays on past the frozen picture, and the clock — which follows the sound —
-    // reports it all in one go when playback restarts. Asking the element to be where it already
-    // is runs the seek algorithm, and that discards what is queued. Doing it immediately means
-    // there is never anything queued to drain, so a resume a fraction of a second later is as
-    // exact as one a minute later. Waiting first, as this did, left the fast pause-and-play
-    // untouched — the very case where the wait is most obvious.
-    this.assertPausePosition();
-
-    // Then watched, in case the flush did not take on the first attempt: the clock advancing
-    // while nothing is playing is the queue draining anyway, and it is re-stated each time.
-    if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
-    const deadline = Date.now() + PAUSE_SETTLE_MS;
-    this.pauseSettleTimer = setInterval(() => {
-      const stop = this.destroyed || this.pauseAnchor === null || !this.video.paused || Date.now() > deadline;
-      if (stop) {
-        if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
-        this.pauseSettleTimer = null;
-        return;
-      }
-      const settled = this.pauseAnchor;
-      // Each assertion runs the seek algorithm, and on iOS that re-renders the sound around the
-      // position — audible, as a tenth of a second replayed. Once was the fix; every eighty
-      // milliseconds for as long as the clock keeps creeping is a stuck record. So: only a drift
-      // large enough to be worth correcting, and only a couple of times before this leaves the
-      // element alone with whatever it has settled on.
-      if (settled !== null && this.video.currentTime > settled + PAUSE_DRIFT_SECONDS) {
-        this.pauseAnchor = this.video.currentTime;
-        if (this.resumeTrace) this.resumeTrace.settled = this.video.currentTime;
-        this.assertPausePosition();
-        if ((this.resumeTrace?.asserted ?? 0) >= MAX_PAUSE_ASSERTIONS) {
-          clearInterval(this.pauseSettleTimer!);
-          this.pauseSettleTimer = null;
-        }
-      }
-    }, 120);
-
+  private readonly onPlay = () => {
+    this.guard.playing();
+    void this.fill();
   };
 
   private readonly onElementError = () => {
@@ -628,102 +292,9 @@ export class MseSource {
     trace(`la MediaSource s'est fermée — ${this.elementState()}`);
   };
 
-  private readonly onPlay = () => {
-    if (this.destroyed) return;
-    // Held for a moment rather than settled on the spot: the element fires this as soon as play
-    // is called, which is before it has actually resumed and therefore before it can have
-    // jumped. Checked again as playback gets going, until the window closes.
-    this.resumeStartedAt = Date.now();
-    if (this.resumeTrace) this.resumeTrace.play = this.video.currentTime;
-    this.startingFrom = this.video.currentTime;
-    this.setStarting(this.resumeStartedAt, "lecture demandée");
-    this.watchForFirstFrame(this.startingFrom);
-    this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
-    const moved = this.holdPausePosition();
 
-    // Nothing moves the playhead while paused, so any settling owed is settled here — before the
-    // watchdog's own delay, which would otherwise be a visible wait at the moment of pressing
-    // play. Skipped when the position was just put back, which has already settled it.
-    if (!moved) this.nudgeIntoBuffer();
-    void this.fill();
-  };
 
-  /**
-   * Puts playback back where it was stopped, if resuming has moved it on.
-   *
-   * Two things move it. The element's clock follows the sound, and the sound already handed to
-   * the hardware plays out past the button press. And the system may reclaim buffered media while
-   * nothing is playing — it is allowed to, and on a phone it does — so the element can come back
-   * to find nothing where it was and carry on from the nearest media it still holds. Both look
-   * identical from here: the film quietly continued while it was stopped.
-   */
-  private holdPausePosition(): boolean {
-    const anchor = this.pauseAnchor;
-    if (anchor === null || this.destroyed) return false;
-    if (Date.now() > this.resumeDeadline) {
-      this.pauseAnchor = null;
-      return false;
-    }
 
-    // Measured against where playing could legitimately have got to, never against the anchor
-    // itself. Playback passes the anchor within a tenth of a second of resuming, and reading that
-    // as a jump is a yank backwards — and, when the media there has been reclaimed, a full
-    // re-read for nothing. Only a playhead further along than time can account for has jumped.
-    const rate = this.video.playbackRate || 1;
-    const reachable = anchor + ((Date.now() - this.resumeStartedAt) / 1000) * rate;
-    if (this.video.currentTime <= reachable + RESUME_TOLERANCE_SECONDS) return false;
-
-    this.pauseAnchor = null;
-    if (this.isBufferedAt(anchor)) {
-      this.lastSeekTarget = anchor;
-      this.video.currentTime = anchor;
-      return true;
-    }
-    // The media that was there is gone. Fetching it again is the whole point — this is the case
-    // the guard exists for, and the one where giving up leaves the jump in place.
-    void this.seek(anchor);
-    return true;
-  }
-
-  /**
-   * Playback has genuinely begun.
-   *
-   * Waiting instead for the clock to be seen moving means waiting for the next timeupdate, which
-   * a browser emits about four times a second — long enough for the picture to be running again
-   * before anyone here notices, and for a spinner to appear over media that is already playing
-   * and then vanish. This event is the moment itself.
-   */
-  /**
-   * Waits for a picture to actually be presented, and only then stops saying it is starting.
-   *
-   * The three candidate signals are not interchangeable. The playing event fires as soon as play
-   * is called, before the pipeline has begun — clearing on it means never showing anything at
-   * all. timeupdate arrives about four times a second, so the picture can be running again a
-   * fifth of a second before anyone here notices, which is long enough to show a spinner over
-   * media that is already moving and then take it away. This one is the frame itself.
-   */
-  private watchForFirstFrame(from: number): void {
-    const request = this.video.requestVideoFrameCallback?.bind(this.video);
-    if (!request) return; // fallback: the clock check below, a beat late but correct
-
-    const step = (_now: number, metadata: VideoFrameCallbackMetadata) => {
-      this.frameCallback = null;
-      if (this.destroyed || this.startingFrom === null) return;
-      if (metadata.mediaTime > from + 0.01) {
-        this.startingFrom = null;
-        this.setStarting(null, "première image affichée");
-        return;
-      }
-      this.frameCallback = request(step);
-    };
-    this.frameCallback = request(step);
-  }
-
-  private stopWatchingForFirstFrame(): void {
-    if (this.frameCallback === null) return;
-    this.video.cancelVideoFrameCallback?.(this.frameCallback);
-    this.frameCallback = null;
-  }
 
   private readonly onSeeking = () => {
     if (this.destroyed) return;
@@ -734,7 +305,7 @@ export class MseSource {
     // A step inside what is already buffered needs no work from the file at all.
     if (this.isBufferedAt(target)) return void this.fill();
     // A deliberate move settles the question of where playback belongs.
-    this.pauseAnchor = null;
+    this.guard.forgetPause();
     void this.seek(target);
   };
 
@@ -894,7 +465,7 @@ export class MseSource {
         if (this.generation !== generation || this.destroyed) break;
 
         this.readUpTo = segment.endSeconds;
-        this.nudgeIntoBuffer();
+        this.guard.nudgeIntoBuffer();
         this.lastAppendAt = Date.now();
 
         const depth = this.bufferedEnd();
@@ -965,66 +536,6 @@ export class MseSource {
     }
   }
 
-  /**
-   * Moves the playhead onto the media, when it has landed just short of it.
-   *
-   * A seek starts reading at the indexed cluster at or before the requested time, but everything
-   * this path produces is shifted later by the presentation delay. Land on an index point exactly
-   * and the media therefore begins a fifth of a second *after* the playhead — a gap the element
-   * will sit in front of indefinitely, waiting for data that is never coming. The step is far too
-   * small to see, and it is the difference between a seek that works and one that hangs.
-   */
-  private nudgeIntoBuffer(): void {
-    const ranges = this.playable;
-    // A seek just served is the one time this may move a stopped picture: the viewer asked to be
-    // somewhere, and landing them on nothing is worse than landing them a little further on.
-    //
-    // "Just served" has to mean exactly that. A flag set at the seek and cleared only on arrival
-    // stayed up for the rest of the session whenever playback found its own media, and then a
-    // pause half an hour later was free to step fifteen seconds — which is what it did. So the
-    // window is the playhead still standing precisely where the seek put it: the moment it moves
-    // at all, it is on media and the landing is over.
-    const landing = this.seekLanding !== null && Math.abs(this.video.currentTime - this.seekLanding) < 0.05;
-    // Otherwise never while paused. The frame on screen is already drawn and needs nothing;
-    // moving the playhead under a viewer who has stopped is a picture that jumps on its own, and
-    // then resumes somewhere other than where they left it.
-    if (ranges.length === 0 || this.destroyed || (this.video.paused && !landing)) return;
-
-    const now = this.video.currentTime;
-    let start: number | null = null;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= now && now < ranges.end(i)) {
-        this.seekLanding = null; // arrived
-        return;
-      }
-      if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) start = ranges.start(i);
-    }
-    if (start === null) return;
-
-    // Two tolerances, because two different things are being closed.
-    //
-    // In the ordinary case, only a gap the size of the presentation delay: anything larger is a
-    // real hole in the stream, and stepping over it silently would hide a genuine fault.
-    //
-    // Right after a seek it is far wider, and that is the whole point. An index is not exact:
-    // asking this file for 1568 s produced media that begins at 1570.6, and no amount of waiting
-    // or seeking again will ever make it cover 1568 — the recovery asked three times, each time
-    // was served, and each time the playhead stayed on nothing until the reader gave up and
-    // declared the browser to be keeping nothing. A media element seeking into a gap lands on
-    // the nearest media it has; so does this.
-    const tolerance = landing ? SEEK_LANDING_SECONDS : this.delaySeconds + 0.15;
-    if (start - now > tolerance) return;
-    if (landing) trace(`atterrissage : la tête passe de ${now.toFixed(1)} s au média qui commence à ${start.toFixed(1)} s`);
-    this.seekLanding = null;
-
-    this.lastSeekTarget = start;
-    // A move made on purpose, and the resume guard must not mistake it for one. Left standing,
-    // the anchor makes the next event read this step forward as a jump and pull it back — a
-    // frame from further on, briefly, then the right one. Settling the position here is what the
-    // anchor was for, so it has done its job.
-    this.pauseAnchor = null;
-    this.video.currentTime = start;
-  }
 
   private evict(): void {
     const until = this.video.currentTime - KEEP_BEHIND_SECONDS;
@@ -1074,93 +585,14 @@ export class MseSource {
     return this.pending;
   }
 
-  /**
-   * Keeps the picture from running on without sound — but only if it actually would.
-   *
-   * A media element is supposed to stall when a buffer has nothing at the playhead. Chrome does;
-   * Safari plays the picture on in silence, and a couple of seconds of film go by unheard while a
-   * newly chosen track is still being decoded. Stopping the element up front fixed that and cost
-   * something else: on Chrome, where nothing was wrong, every change of track came with a visible
-   * pause. So nothing is done until the thing being prevented is actually happening — the picture
-   * moving with no sound under it — and on a browser that stalls by itself, nothing is done at all.
-   */
-  beginAudioHold(): void {
-    if (this.destroyed || this.audioHold) return;
-    this.audioHold = { wanted: false, engaged: false };
-    this.video.addEventListener("play", this.onPlayDuringHold);
-    void this.guardAgainstSilentPicture();
-  }
 
-  private readonly onPlayDuringHold = () => {
-    // A press of play into a gap is remembered rather than obeyed.
-    if (this.audioHold && !this.audioCovers(this.video.currentTime)) this.engageHold();
-  };
 
-  private engageHold(): void {
-    const hold = this.audioHold;
-    if (!hold || this.destroyed) return;
-    hold.wanted = true;
-    if (!hold.engaged) {
-      hold.engaged = true;
-      // The same signal the opening wait uses, so the viewer gets the spinner they already know.
-      this.setStarting(Date.now(), "image retenue faute de son");
-    }
-    this.video.pause();
-  }
 
-  /** Whether the sound covers a point on the player's clock. */
-  private audioCovers(seconds: number): boolean {
-    const ranges = this.audioBuffer?.buffered;
-    for (let i = 0; ranges && i < ranges.length; i++) {
-      if (ranges.start(i) <= seconds + 0.05 && seconds < ranges.end(i)) return true;
-    }
-    return false;
-  }
 
-  /** Runs for as long as the hold lasts, and only ever stops the picture — never starts it. */
-  private async guardAgainstSilentPicture(): Promise<void> {
-    while (this.audioHold && !this.destroyed) {
-      if (!this.video.paused && !this.audioCovers(this.video.currentTime)) this.engageHold();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    }
-  }
 
-  /**
-   * Ends the hold once there is sound at the playhead — or once waiting for it has gone on long
-   * enough that a silent picture is better than a still one.
-   */
-  private async releaseWhenAudioArrives(): Promise<void> {
-    const deadline = Date.now() + AUDIO_HOLD_TIMEOUT_MS;
-    while (this.audioHold && !this.destroyed && Date.now() < deadline) {
-      if (this.audioCovers(this.video.currentTime)) break;
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    }
-    this.endAudioHold();
-  }
 
-  private endAudioHold(): void {
-    const hold = this.audioHold;
-    if (!hold) return;
-    this.audioHold = null;
-    this.video.removeEventListener("play", this.onPlayDuringHold);
-    if (hold.engaged) this.setStarting(null, "le son est revenu");
-    if (hold.wanted && !this.destroyed) void this.video.play().catch(() => {});
-  }
 
-  /**
-   * Starts watching for the sound to come back, so the picture can move again.
-   *
-   * Called once whatever is going to produce that sound has been set going — never before, or it
-   * would find the *old* track still covering the playhead and let go immediately.
-   */
-  armAudioRelease(): Promise<void> {
-    return this.releaseWhenAudioArrives();
-  }
 
-  /** Lets the picture go again — for a caller whose change of track came to nothing. */
-  releaseAudioHold(): void {
-    this.endAudioHold();
-  }
 
   /**
    * Points the audio buffer at a different track, in place.
@@ -1293,7 +725,7 @@ export class MseSource {
     // An ordinary seek replaces everything, so nothing is being spared.
     this.skipVideoUntil = null;
     this.readUpTo = playerSeconds;
-    this.seekLanding = playerSeconds;
+    this.guard.seekServed(playerSeconds);
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
@@ -1424,6 +856,21 @@ export class MseSource {
    * closed cannot be reopened — every buffer on it is gone with it. There is nothing to repair
    * here; the caller has to build the whole thing again.
    */
+  /** Keeps the picture from running on without sound — see PlaybackGuard. */
+  beginAudioHold(): void {
+    this.guard.beginAudioHold();
+  }
+
+  /** Watches for the sound to come back, so the picture can move again. */
+  armAudioRelease(): Promise<void> {
+    return this.guard.armAudioRelease();
+  }
+
+  /** Lets the picture go again — for a caller whose change of track came to nothing. */
+  releaseAudioHold(): void {
+    this.guard.releaseAudioHold();
+  }
+
   get lost(): boolean {
     return !this.destroyed && this.source.readyState === "closed";
   }
@@ -1451,49 +898,27 @@ export class MseSource {
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
       "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
-      ...(this.resumeTrace
-        ? {
-            "Dernière pause": `arrêt ${this.resumeTrace.paused.toFixed(3)} → repos ${this.resumeTrace.settled.toFixed(3)}${
-              this.resumeTrace.asserted > 0 ? ` → recalé ×${this.resumeTrace.asserted}` : ""
-            }`,
-            "Dernière reprise": Number.isNaN(this.resumeTrace.play)
-              ? "—"
-              : `départ ${this.resumeTrace.play.toFixed(3)} → 1er tick ${this.resumeTrace.tick?.toFixed(3) ?? "—"}`,
-            "Délai du bouton lecture":
-              this.resumeTrace.latencyMs === null
-                ? "—"
-                : `${this.resumeTrace.latencyMs} ms · après ${((this.resumeTrace.pausedForMs ?? 0) / 1000).toFixed(1)} s de pause`,
-          }
-        : {}),
+      ...this.guard.debug,
     };
   }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.startingFrom = null;
-    this.stopWatchingForFirstFrame();
-    // Whatever it was waiting for died with it, and a wait nobody will answer is a spinner for
-    // ever. Cleared unconditionally, before anything else can fail on the way out.
-    this.startingWait = Date.now();
-    this.setStarting(null, "lecteur détruit");
+    this.guard.destroy();
     this.generation += 1;
 
     this.source.removeEventListener("startstreaming", this.request);
     this.video.removeEventListener("timeupdate", this.request);
     this.video.removeEventListener("waiting", this.request);
     this.video.removeEventListener("seeking", this.onSeeking);
-    this.video.removeEventListener("pause", this.onPause);
+    this.video.removeEventListener("pause", this.guard.paused);
     this.video.removeEventListener("play", this.onPlay);
     this.video.removeEventListener("playing", this.request);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
-    if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
-    this.pauseSettleTimer = null;
-    this.video.removeEventListener("play", this.onPlayDuringHold);
     this.video.removeEventListener("error", this.onElementError);
     this.source.removeEventListener("sourceclose", this.onSourceClosed);
-    this.audioHold = null;
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();

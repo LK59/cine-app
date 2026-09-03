@@ -123,10 +123,22 @@ fragments, produit les segments et les sous-titres.
 > `isRandomAccessPoint` dans `codecConfig.ts`. Quand le point trouvé est après
 > la cible, le lecteur **recule dans l'index** plutôt que d'atterrir en retard.
 
-### `mseSource.ts` — nourrir l'élément
+### `mseSource.ts` et ses trois voisins — nourrir l'élément
 
-Le plus gros fichier, et le plus disputé : c'est là que vivent tous les
-comportements de navigateur.
+C'était un seul fichier de 1 513 lignes où vivaient tous les comportements de
+navigateur. Il en fait quatre :
+
+| Fichier | Sujet |
+|---|---|
+| `mseSupport.ts` | Ce que le navigateur **accepte** — demandé, jamais supposé |
+| `bufferQueue.ts` | **Une opération à la fois** par tampon |
+| `playbackGuard.ts` | **L'horloge de l'élément** : pause, reprise, atterrissage, maintien de l'image |
+| `mseSource.ts` | **Les octets** : tampons, remplissage, sauts, reprises |
+
+La coupure suit la nature des preuves. Le garde ne parle jamais d'octets : il
+décide *quand* la tête de lecture doit bouger, et la source reste la seule chose
+qui déplace du média. Elle lui tend une vue étroite d'elle-même
+(`GuardHost`) — quatre lectures et deux verbes.
 
 - **`BufferQueue`** : MediaSource n'autorise **qu'une opération à la fois par
   tampon**. Tout passe par une file — cinq points d'appel non sérialisés
