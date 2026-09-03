@@ -34,10 +34,19 @@ Décodage logiciel image par image, rendu sur un canvas, horloge audio tenue à 
 main, conversion HDR→SDR dans un shader. Sert quand le navigateur refuse un
 codec dans MediaSource mais sait le décoder autrement.
 
-### 3. Refus explicite
+### 3. Lecture directe *(le fichier est déjà au bon format)*
 
-Aucun des deux ne peut porter le fichier : on le dit, on nomme le codec, on
-s'arrête.
+Un MP4 n'a besoin d'aucune de ces machineries : c'est exactement l'emballage
+que le remultiplexeur passe son temps à produire. Détecté sur les octets du
+fichier (`ftyp`), pas sur ce que le serveur en dit — Jellyfin nomme un
+conteneur d'après le démultiplexeur ffmpeg qui le lit, et un MP4 ordinaire
+revient sous la forme `mov,mp4,m4a,3gp,3g2,mj2`.
+
+### 4. Refus explicite
+
+Aucun des trois ne peut porter le fichier : on le dit, on nomme le codec, on
+s'arrête. En pratique il ne reste que les `.avi` de la bibliothèque, en
+MPEG-4 ASP et MP3, qu'aucun navigateur ne décode.
 
 ---
 
@@ -314,7 +323,38 @@ fausses images-clés d'un fichier et ce que les refuser coûte.
   concerné (aucun sur les autres) : on relit alors quelques secondes d'images que
   personne ne voit.
 - **Sous-titres image** (PGS, VobSub) non rendus — ils ne sont pas proposés dans
-  le menu plutôt que d'y figurer sans rien faire.
+  le menu plutôt que d'y figurer sans rien faire. C'est sans conséquence ici :
+  les fichiers concernés ont tous un `.srt` posé à côté, et c'est lui qui est
+  proposé (voir plus bas).
+
+---
+
+## Les sous-titres posés à côté du film
+
+Rien dans un fichier Matroska ne nomme les `.srt` de son dossier : c'est le
+serveur, qui voit le dossier, qui sait qu'ils existent. Ce lecteur ouvre le
+fichier lui-même, donc sans un détour par Jellyfin il ne les verrait jamais.
+
+Mesuré sur la bibliothèque (672 films) : **272 portent au moins un sous-titre
+texte externe**, et **95 n'ont aucun sous-titre texte dans le conteneur — 88
+d'entre eux sont couverts par un fichier à côté**. C'est pour eux que ça
+existe.
+
+- La route `/api/jellyfin/direct/[itemId]` les liste (`IsExternal`, codec
+  texte seulement : une image n'a rien à lire).
+- Ils sont numérotés **négativement** (`-1 - index`), donc jamais confondus
+  avec une piste lue dans le fichier.
+- Ils sont récupérés **au moment d'être choisis**, en WebVTT — c'est Jellyfin
+  qui convertit, quel que soit le format sur le disque.
+- Ils sont tenus **au-dessus des pipelines**, comme la langue choisie : ils
+  survivent à une reconstruction après une coupure réseau.
+- La recherche est **dichotomique et non destructive**, contrairement à la
+  file du moteur : un saut en arrière retrouve sa réplique au lieu d'un écran
+  vide jusqu'à la suivante.
+
+Deux pièges que seule la vraie réponse du serveur a montrés : un **BOM** avant
+l'en-tête `WEBVTT`, et des **réglages de position** en fin de ligne de temps
+(`region:subtitle line:90%`) qui ne font pas partie du texte.
 
 ---
 
@@ -332,6 +372,7 @@ fausses images-clés d'un fichier et ce que les refuser coûte.
 | `remuxer.ts` | Le cœur : segments, fragments, sous-titres, pistes audio |
 | `mseSupport.ts` | Ce que le navigateur accepte, et la sonde de remplacement de tampon |
 | `bufferQueue.ts` | Une opération à la fois par tampon |
+| `externalSubtitles.ts` | Les `.srt` posés à côté du film : lecture, recherche par temps |
 | `playbackGuard.ts` | L'horloge de l'élément : pause, reprise, atterrissage, maintien de l'image |
 | `mseSource.ts` | MediaSource, tampons, remplissage, sauts, reprises |
 | `remuxPlayback.ts` | Assemblage : fichier en entrée, `<video>` qui joue en sortie |
