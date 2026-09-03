@@ -124,6 +124,17 @@ export function PlayerHost() {
   // to the viewer while it settles in. See useStableFallback.
   const { handedOver, negotiating, reason: fallbackReason, stepAside } = useStableFallback();
 
+  // Stable across renders on purpose. Handed down as an inline arrow, this was a different
+  // function every time this component drew — and minimising the player draws it — which the
+  // experimental player took for a reason to build its whole pipeline again.
+  const itemId = session?.itemId;
+  const handOver = useCallback(
+    (reason: string) => {
+      if (itemId) stepAside(itemId, reason);
+    },
+    [itemId, stepAside]
+  );
+
   if (!session) return null;
 
   const useExperimental = experimental.enabled && !handedOver.includes(session.itemId);
@@ -138,7 +149,7 @@ export function PlayerHost() {
         key={session.itemId}
         session={session}
         mode={mode === "mini" ? "mini" : "full"}
-        onFallback={(reason) => stepAside(session.itemId, reason)}
+        onFallback={handOver}
       />
     );
   }

@@ -49,6 +49,13 @@ const STUCK_AFTER_MS = 20000;
  */
 const GIVE_UP_AFTER_MS = 35000;
 
+/**
+ * How long a passing notice stays on screen.
+ *
+ * Long enough to read a sentence, short enough that it cannot be mistaken for a lasting state.
+ */
+const WARNING_MS = 6000;
+
 /** How many times a lost source is rebuilt before the loss is reported as a fault. */
 const MAX_REBUILDS = 3;
 
@@ -221,16 +228,29 @@ export function ExperimentalPlayerHost({
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
 
   const steppedAside = useRef(false);
-  const fallToStable = useCallback(
-    (reason: string) => {
-      if (steppedAside.current) return;
-      steppedAside.current = true;
-      trace(`repli : passage au lecteur stable — ${reason}`);
-      onFallback(reason);
-    },
-    [onFallback]
-  );
-  const [warning, setWarning] = useState<string | null>(null);
+  // Read through a ref so this function is stable for the life of the player. The pipeline is
+  // built by an effect that depends on it, and a caller passing an inline arrow — which the one
+  // above did — turned every one of its own renders into a teardown and a rebuild.
+  const onFallbackRef = useRef(onFallback);
+  useEffect(() => {
+    onFallbackRef.current = onFallback;
+  }, [onFallback]);
+  const fallToStable = useCallback((reason: string) => {
+    if (steppedAside.current) return;
+    steppedAside.current = true;
+    trace(`repli : passage au lecteur stable — ${reason}`);
+    onFallbackRef.current(reason);
+  }, []);
+  /**
+   * A passing notice, with the moment it was raised.
+   *
+   * The moment matters twice. It is what withdraws the notice on its own, and it is what makes a
+   * repeat of the same sentence a new notice rather than an unchanged value that re-arms nothing.
+   */
+  const [warning, setWarning] = useState<{ text: string; at: number } | null>(null);
+  const showWarning = useCallback((text: string | null) => {
+    setWarning(text ? { text, at: Date.now() } : null);
+  }, []);
   const [closing, setClosing] = useState(false);
   const [facade, setFacade] = useState<MediaElementFacade | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -471,7 +491,12 @@ export function ExperimentalPlayerHost({
       rebuildAtRef.current = null;
       setReady(true);
     };
-    const startSeconds = rebuildAtRef.current ?? session.resumeAt ?? info.resumeSeconds ?? 0;
+    // Where to open. A rebuild that asked for a position gets it; otherwise the film resumes
+    // where it actually is, and only a player that has never played anything falls back to where
+    // it was told to start. Without that last part, a rebuild nobody asked for — and there was
+    // one, every time the player was minimised — sent the film back to where it began.
+    const startSeconds =
+      rebuildAtRef.current ?? (positionRef.current > 0 ? positionRef.current : session.resumeAt ?? info.resumeSeconds ?? 0);
 
     // The file decides which pipeline runs, not a setting: repackaging it for the browser's own
     // decoder is better on every axis when the codecs allow it, and decoding it ourselves is the
@@ -510,7 +535,7 @@ export function ExperimentalPlayerHost({
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
       const onPlay = () => {
         setPlaying(true);
-        setWarning(null);
+        showWarning(null);
       };
       const onPause = () => setPlaying(false);
       element.addEventListener("timeupdate", onTime);
@@ -550,7 +575,7 @@ export function ExperimentalPlayerHost({
       };
       const onPlay = () => {
         setPlaying(true);
-        setWarning(null);
+        showWarning(null);
       };
       const onPause = () => setPlaying(false);
       // The element's own verdict, which is the only one there is on this path.
@@ -605,7 +630,7 @@ export function ExperimentalPlayerHost({
         // The engine distinguishes the two itself, rather than the host guessing from the
         // wording: a warning is degraded playback that continues, an error stops it.
         engine.on("error", (payload) => fallToStable(typeof payload === "string" ? payload : "Lecture interrompue.")),
-        engine.on("warning", (payload) => setWarning(typeof payload === "string" ? payload : null)),
+        engine.on("warning", (payload) => showWarning(typeof payload === "string" ? payload : null)),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
           if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);
@@ -670,7 +695,7 @@ export function ExperimentalPlayerHost({
             `la source a été perdue (${rebuildsRef.current})` +
               (again ? `, au-delà de ${where.toFixed(1)} s qui vient d'échouer` : "")
           );
-          setWarning(
+          showWarning(
             again
               ? "Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après."
               : "Reprise de la lecture après une interruption."
@@ -679,7 +704,7 @@ export function ExperimentalPlayerHost({
         }
         fallToStable(message);
       },
-      onWarning: (message) => setWarning(message),
+      onWarning: (message) => showWarning(message),
       onStarting: (at) => setStartingAt(at),
     })
       .then((probe) => {
@@ -709,7 +734,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt]);
+  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -752,6 +777,21 @@ export function ExperimentalPlayerHost({
     const id = setTimeout(() => restart(at, "le réseau est revenu"), 800);
     return () => clearTimeout(id);
   }, [networkLost, online, restart]);
+
+  /**
+   * A notice withdraws itself.
+   *
+   * Every one of these describes a moment, not a state: a segment refused and re-fetched, a
+   * position reached the second way round, a subtitle file that did not come. Left on screen
+   * they outlive what they were about — a warning that the film could not reach a position sat
+   * there for the rest of the film, while the film played. What raised it is kept in the
+   * technical panel and in the trace, which is where a lasting record belongs.
+   */
+  useEffect(() => {
+    if (!warning) return;
+    const id = setTimeout(() => setWarning(null), WARNING_MS);
+    return () => clearTimeout(id);
+  }, [warning]);
 
   // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
   // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
@@ -939,7 +979,9 @@ export function ExperimentalPlayerHost({
 
       {warning && !error && !isMini && (
         <div className="pointer-events-none absolute inset-x-0 top-16 z-10 flex justify-center">
-          <span className="rounded-full bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 ring-1 ring-amber-400/30">{warning}</span>
+          <span className="rounded-full bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 ring-1 ring-amber-400/30">
+            {warning.text}
+          </span>
         </div>
       )}
 
@@ -1099,7 +1141,7 @@ export function ExperimentalPlayerHost({
                 .catch(() => {
                   // An abandoned fetch is not a failure to report: the viewer asked for
                   // something else, or closed the film.
-                  if (!fetching.signal.aborted) setWarning("Sous-titres externes indisponibles.");
+                  if (!fetching.signal.aborted) showWarning("Sous-titres externes indisponibles.");
                 });
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}

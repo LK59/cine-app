@@ -146,8 +146,8 @@ import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
 const onFallback = vi.fn();
 
-function mount(over: Partial<{ resumeAt: number; itemId: string }> = {}) {
-  return render(
+function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini" }> = {}) {
+  return (
     <ExperimentalPlayerHost
       session={
         {
@@ -156,10 +156,15 @@ function mount(over: Partial<{ resumeAt: number; itemId: string }> = {}) {
           resumeAt: over.resumeAt ?? null,
         } as never
       }
-      mode="full"
-      onFallback={onFallback}
+      mode={over.mode ?? "full"}
+      // Deliberately a fresh function each time, as the parent used to hand down.
+      onFallback={(reason) => onFallback(reason)}
     />
   );
+}
+
+function mount(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini" }> = {}) {
+  return render(player(over));
 }
 
 /** The <video> the host mounts, with a clock it is allowed to have in jsdom. */
@@ -393,6 +398,40 @@ describe("ce que le spectateur avait choisi", () => {
   });
 });
 
+describe("réduire le lecteur", () => {
+  it("ne reconstruit rien, et ne renvoie pas le film à son point de départ", async () => {
+    // Minimising redraws the component above, which handed down a new callback every time it
+    // drew. The pipeline is built by an effect that depended on that callback, so the film was
+    // torn down and opened again — at the position it had been started from, since a rebuild
+    // nobody asked for carries no position of its own. Both halves are fixed; both are checked.
+    const { rerender } = render(player({ resumeAt: 300 }));
+    await waitFor(() => expect(probes).toHaveLength(1));
+
+    await act(async () => void fireEvent(videoElement(1500), new Event("timeupdate")));
+    await act(async () => void rerender(player({ resumeAt: 300, mode: "mini" })));
+    await act(async () => void rerender(player({ resumeAt: 300, mode: "full" })));
+
+    expect(probes).toHaveLength(1);
+    expect(remux.destroy).not.toHaveBeenCalled();
+  });
+
+  it("une source perdue qui ne sait plus où elle était reprend là où le film en est", async () => {
+    // The position of last resort, and the one the fix above leans on: what the element itself
+    // last reported, never the position the film was opened at.
+    mount({ resumeAt: 300 });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0].startSeconds).toBe(300);
+
+    await act(async () => void fireEvent(videoElement(1500), new Event("timeupdate")));
+    remux.lost = true;
+    remux.position = 0; // nothing to say about where it was
+    act(() => probes[0].onError("morte"));
+
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1].startSeconds).toBeCloseTo(1500, 1);
+  });
+});
+
 describe("un autre film", () => {
   it("repart de rien, sans traîner ce que le précédent avait choisi", async () => {
     // Advancing to the next episode remounts this player, so everything it accumulated is gone
@@ -492,6 +531,35 @@ describe("le chemin canvas", () => {
     emit("subtitle", "Du conteneur.");
     expect(screen.queryByText("Du conteneur.")).toBeNull();
     vi.unstubAllGlobals();
+  });
+
+  it("retire un avertissement tout seul, parce qu'il ne décrivait qu'un instant", async () => {
+    // Measured on a real file: a seek recovered by the second route left "cette position est
+    // impossible à atteindre" on screen for the rest of the film, while the film played.
+    vi.useFakeTimers();
+    mount();
+    await act(async () => {});
+    act(() => probes[0].onWarning("Impossible d'atteindre cette position dans le fichier."));
+    expect(screen.getByText(/Impossible d'atteindre/)).toBeTruthy();
+
+    await act(async () => void vi.advanceTimersByTime(6100));
+    expect(screen.queryByText(/Impossible d'atteindre/)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("réaffiche le même avertissement s'il se reproduit plus tard", async () => {
+    // Held as a bare string, a repeat of the same sentence changed nothing and re-armed nothing,
+    // so a problem that came back stayed invisible.
+    vi.useFakeTimers();
+    mount();
+    await act(async () => {});
+    act(() => probes[0].onWarning("Reprise après un segment refusé."));
+    await act(async () => void vi.advanceTimersByTime(6100));
+    expect(screen.queryByText(/segment refusé/)).toBeNull();
+
+    act(() => probes[0].onWarning("Reprise après un segment refusé."));
+    expect(screen.getByText(/segment refusé/)).toBeTruthy();
+    vi.useRealTimers();
   });
 
   it("distingue un avertissement, qui laisse jouer, d'une erreur, qui arrête", async () => {
