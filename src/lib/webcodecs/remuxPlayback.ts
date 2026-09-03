@@ -274,22 +274,24 @@ export class RemuxPlayback {
       return;
     }
     if (codecChanged) {
-      // A different codec is not a change of language, it is a change of what the buffer decodes
-      // by — and swapping that underneath a playing element is where this device stops trusting
-      // what it is given: "media failed to decode", and the MediaSource closes. An ordinary seek
-      // rebuilds both buffers from nothing, which is the one thing this player does reliably
-      // here. It costs re-reading a few seconds of picture, on an operation nobody does twice a
-      // minute, and it is paid while the picture is held anyway.
+      // Should no longer be reachable: a file whose tracks cannot all be delivered in one codec
+      // now delivers all of them re-encoded, decided when it was opened. Kept as the safety net
+      // for a file that defeats that — rebuilding both buffers from nothing is the one thing
+      // this device does reliably, where reinterpreting a live buffer is what it answers with
+      // "media failed to decode".
       await mse.seek(at);
     } else {
-      // Same codec, different language: only the sound is read again, and only from where the
-      // viewer is. A seek would clear the picture too and send it back over what has already
-      // been played, which the browser catches up on at speed.
+      // Only the sound is read again, and only from where the viewer is. A seek would clear the
+      // picture too and send it back over what has already been played, which the browser
+      // catches up on at speed.
       await mse.refillAudio(at);
     }
     // Now, and not before: armed any earlier it would find the old track still covering the
-    // playhead and let the picture go while there is nothing to hear.
-    mse.armAudioRelease();
+    // playhead and let the picture go while there is nothing to hear. Awaited, so that a caller
+    // showing a spinner keeps showing it until there is something to play — otherwise the veil
+    // lifts on a held, paused element and the controls offer the play button, which then turns
+    // into the pause button on its own a moment later.
+    await mse.armAudioRelease();
   }
 
   seek(seconds: number): Promise<void> {

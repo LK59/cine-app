@@ -122,14 +122,15 @@ function videoCodecString(track: MatroskaTrack): string | null {
  */
 export function plannedMimeTypes(
   videoTrack: MatroskaTrack,
-  audioTrack: MatroskaTrack | null
+  audioTrack: MatroskaTrack | null,
+  file?: MatroskaFile
 ): { video: string | null; audio: string | null } {
   const video = videoCodecString(videoTrack);
   // What will arrive in the container, which for a re-encoded track is not what is in the file.
   const audio = !audioTrack
     ? null
-    : audioDelivery(audioTrack) === "transcode"
-      ? "mp4a.40.2"
+    : audioDelivery(audioTrack, file) === "transcode"
+      ? TRANSCODED_CODEC
       : audioCodecString(audioTrack);
   return {
     video: video ? `video/mp4; codecs="${video}"` : null,
@@ -150,6 +151,48 @@ export function remuxableAudio(track: MatroskaTrack): boolean {
 /** What has to happen to a track's sound for this player to carry it. */
 export type AudioDelivery = "copy" | "transcode" | "none";
 
+function naturalDelivery(track: MatroskaTrack): AudioDelivery {
+  const natural = audioCodecString(track);
+  if (natural && containerAccepts(`audio/mp4; codecs="${natural}"`)) return "copy";
+  return transcodableAudio(track) ? "transcode" : "none";
+}
+
+/** What a re-encoded track is delivered as, and therefore what every track is unified to. */
+const TRANSCODED_CODEC = "mp4a.40.2";
+
+/**
+ * The one codec every audio track of this file will be delivered in — or null when they can all
+ * keep their own.
+ *
+ * This is the design that replaced changing a live buffer's codec, and the reason is worth
+ * writing down. A source buffer can be told to reinterpret itself mid-playback, and the
+ * specification says so, but this device answers a language change that crosses codecs with
+ * "media failed to decode" — sometimes at once, sometimes six seconds later at the next pause —
+ * and a decode failure closes the MediaSource and takes the picture with it. Every attempt to
+ * make that transition survivable was a guess about someone else's decoder.
+ *
+ * So the transition is removed instead. If a file's audio tracks cannot all be delivered as they
+ * are, they are all delivered re-encoded, decided once when the file is opened. The codec then
+ * never changes for the life of the MediaSource, and changing language is what it always should
+ * have been: empty the audio buffer, read it again.
+ *
+ * The cost is real and worth naming: on a file that mixes codecs, a track that could have ridden
+ * through untouched is decoded and encoded again. It buys a language change that cannot break
+ * playback. A file whose tracks already agree — most of the library — pays nothing.
+ */
+export function unifiedAudioCodec(file: MatroskaFile): string | null {
+  const audio = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
+  if (audio.length < 2) return null;
+  const delivered = new Set(
+    audio.map((t) => (naturalDelivery(t) === "copy" ? audioCodecString(t) : TRANSCODED_CODEC))
+  );
+  if (delivered.size < 2) return null;
+  // Unifying is only possible if everything can actually be carried that way.
+  return audio.every((t) => audioCodecString(t) === TRANSCODED_CODEC || transcodableAudio(t))
+    ? TRANSCODED_CODEC
+    : null;
+}
+
 /**
  * Asked of the browser, not answered from a list.
  *
@@ -157,11 +200,18 @@ export type AudioDelivery = "copy" | "transcode" | "none";
  * takes AC-3 there and should carry it through untouched, while Chrome ships no Dolby decoder at
  * all and would otherwise lose the hardware path for most of a library over it. So the question
  * is put to the browser, and only what it declines is decoded and encoded again.
+ *
+ * Given the file as well, the answer also accounts for the other tracks in it: see
+ * {@link unifiedAudioCodec}.
  */
-export function audioDelivery(track: MatroskaTrack): AudioDelivery {
-  const natural = audioCodecString(track);
-  if (natural && containerAccepts(`audio/mp4; codecs="${natural}"`)) return "copy";
-  return transcodableAudio(track) ? "transcode" : "none";
+export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile): AudioDelivery {
+  const natural = naturalDelivery(track);
+  if (!file || natural === "none") return natural;
+
+  const unified = unifiedAudioCodec(file);
+  if (!unified) return natural;
+  if (natural === "copy" && audioCodecString(track) === unified) return "copy";
+  return "transcode";
 }
 
 /** Carried through at all — either untouched, or by being decoded and encoded again. */
@@ -293,7 +343,7 @@ export class Remuxer {
     // A track that cannot ride in the container is decoded and encoded again on the way through,
     // and the encoder — not the file — is then what describes it.
     const transcoder =
-      audioTrack && audioDelivery(audioTrack) === "transcode" ? await AudioTranscoder.open(source, audioTrack) : null;
+      audioTrack && audioDelivery(audioTrack, file) === "transcode" ? await AudioTranscoder.open(source, audioTrack) : null;
     if (transcoder) assertContainerTakes(transcoder);
     const audioInfo = audioTrack
       ? transcoder
@@ -326,7 +376,7 @@ export class Remuxer {
         ? null
         : this.transcoder
           ? `audio/mp4; codecs="${this.transcoder.codecString}"`
-          : plannedMimeTypes(this.videoTrack, this.audioTrack).audio,
+          : plannedMimeTypes(this.videoTrack, this.audioTrack, this.file).audio,
       videoInit: initSegment(this.videoInfo, duration),
       audioInit: this.audioInfo ? initSegment(this.audioInfo, duration) : null,
       durationSeconds: duration,
@@ -352,7 +402,7 @@ export class Remuxer {
     const previous = this.transcoder;
     const at = this.videoDecodeTime / TIMESCALE;
 
-    if (audioDelivery(track) === "transcode") {
+    if (audioDelivery(track, this.file) === "transcode") {
       // Primed where the viewer is, not at the beginning of the film: two hours in, the opening
       // is long out of the byte source's cache, and fetching it back to read one header is
       // network traffic spent on nothing.

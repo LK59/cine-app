@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio } from "@/lib/webcodecs/remuxer";
+import { Remuxer, unifiedAudioCodec, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
@@ -137,6 +137,33 @@ describe("Remuxer track selection", () => {
     vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => t.includes("mp4a") } });
     expect(audioDelivery(eac3)).toBe("transcode");
     expect(plannedMimeTypes(VIDEO, eac3).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
+  it("delivers every track in one codec when they cannot all keep their own", () => {
+    // Utopia: DTS beside AC-3, on a player that takes AC-3 natively. Left alone, choosing the
+    // other language changes what the audio buffer decodes by mid-playback — which this device
+    // answers with "media failed to decode", closing the MediaSource and taking the picture with
+    // it. So both are delivered re-encoded and the codec never changes.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    const ac3 = track({ number: 8, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 2 } });
+    const file = { ...FILE, tracks: [VIDEO, dts, ac3] } as never;
+
+    expect(unifiedAudioCodec(file)).toBe("mp4a.40.2");
+    expect(audioDelivery(ac3)).toBe("copy");
+    expect(audioDelivery(ac3, file)).toBe("transcode");
+    expect(plannedMimeTypes(VIDEO, ac3, file).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+    // And the track that was already going to be re-encoded is unaffected.
+    expect(audioDelivery(dts, file)).toBe("transcode");
+  });
+
+  it("leaves a file whose tracks already agree completely alone", () => {
+    // Most of the library. Nothing is decoded that did not have to be.
+    const one = track({ number: 7, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 6 } });
+    const two = track({ number: 8, type: "audio", codecId: "A_AC3", language: "eng", audio: { sampleRate: 48000, channels: 6 } });
+    const file = { ...FILE, tracks: [VIDEO, one, two] } as never;
+
+    expect(unifiedAudioCodec(file)).toBeNull();
+    expect(audioDelivery(one, file)).toBe("copy");
   });
 
   it("refuses a re-encoded track this browser will not take back", async () => {

@@ -232,7 +232,7 @@ export class MseSource {
   /** Consecutive refused appends. A single one is worth retrying; a run of them is not. */
   private appendFailures = 0;
   /** Set while the picture is deliberately held still for want of sound. See beginAudioHold. */
-  private audioHold: { wanted: boolean } | null = null;
+  private audioHold: { wanted: boolean; engaged: boolean } | null = null;
   private objectUrl: string | null = null;
   /** The read loop in flight, if any. A seek has to let it finish before moving the reader. */
   private fillTask: Promise<void> | null = null;
@@ -896,27 +896,38 @@ export class MseSource {
   }
 
   /**
-   * Keeps the picture still while there is no sound to go with it.
+   * Keeps the picture from running on without sound — but only if it actually would.
    *
-   * A media element is supposed to stall when one of its buffers has nothing at the playhead.
-   * Safari does not: it plays the picture on in silence, and a couple of seconds of the film go
-   * by unheard while the new track is still being decoded. So the element is held here instead,
-   * and a press of play during the hold is remembered rather than obeyed.
+   * A media element is supposed to stall when a buffer has nothing at the playhead. Chrome does;
+   * Safari plays the picture on in silence, and a couple of seconds of film go by unheard while a
+   * newly chosen track is still being decoded. Stopping the element up front fixed that and cost
+   * something else: on Chrome, where nothing was wrong, every change of track came with a visible
+   * pause. So nothing is done until the thing being prevented is actually happening — the picture
+   * moving with no sound under it — and on a browser that stalls by itself, nothing is done at all.
    */
   beginAudioHold(): void {
     if (this.destroyed || this.audioHold) return;
-    this.audioHold = { wanted: !this.video.paused };
+    this.audioHold = { wanted: false, engaged: false };
     this.video.addEventListener("play", this.onPlayDuringHold);
-    if (!this.video.paused) this.video.pause();
-    // The same signal the opening wait uses, so the viewer gets the spinner they already know.
-    this.callbacks.onStarting?.(Date.now());
+    void this.guardAgainstSilentPicture();
   }
 
   private readonly onPlayDuringHold = () => {
-    if (!this.audioHold) return;
-    this.audioHold.wanted = true;
-    this.video.pause();
+    // A press of play into a gap is remembered rather than obeyed.
+    if (this.audioHold && !this.audioCovers(this.video.currentTime)) this.engageHold();
   };
+
+  private engageHold(): void {
+    const hold = this.audioHold;
+    if (!hold || this.destroyed) return;
+    hold.wanted = true;
+    if (!hold.engaged) {
+      hold.engaged = true;
+      // The same signal the opening wait uses, so the viewer gets the spinner they already know.
+      this.callbacks.onStarting?.(Date.now());
+    }
+    this.video.pause();
+  }
 
   /** Whether the sound covers a point on the player's clock. */
   private audioCovers(seconds: number): boolean {
@@ -927,9 +938,17 @@ export class MseSource {
     return false;
   }
 
+  /** Runs for as long as the hold lasts, and only ever stops the picture — never starts it. */
+  private async guardAgainstSilentPicture(): Promise<void> {
+    while (this.audioHold && !this.destroyed) {
+      if (!this.video.paused && !this.audioCovers(this.video.currentTime)) this.engageHold();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+  }
+
   /**
    * Ends the hold once there is sound at the playhead — or once waiting for it has gone on long
-   * enough that a silent film is better than a still one.
+   * enough that a silent picture is better than a still one.
    */
   private async releaseWhenAudioArrives(): Promise<void> {
     const deadline = Date.now() + AUDIO_HOLD_TIMEOUT_MS;
@@ -940,28 +959,28 @@ export class MseSource {
     this.endAudioHold();
   }
 
+  private endAudioHold(): void {
+    const hold = this.audioHold;
+    if (!hold) return;
+    this.audioHold = null;
+    this.video.removeEventListener("play", this.onPlayDuringHold);
+    if (hold.engaged) this.callbacks.onStarting?.(null);
+    if (hold.wanted && !this.destroyed) void this.video.play().catch(() => {});
+  }
+
   /**
    * Starts watching for the sound to come back, so the picture can move again.
    *
    * Called once whatever is going to produce that sound has been set going — never before, or it
    * would find the *old* track still covering the playhead and let go immediately.
    */
-  armAudioRelease(): void {
-    void this.releaseWhenAudioArrives();
+  armAudioRelease(): Promise<void> {
+    return this.releaseWhenAudioArrives();
   }
 
   /** Lets the picture go again — for a caller whose change of track came to nothing. */
   releaseAudioHold(): void {
     this.endAudioHold();
-  }
-
-  private endAudioHold(): void {
-    const hold = this.audioHold;
-    if (!hold) return;
-    this.audioHold = null;
-    this.video.removeEventListener("play", this.onPlayDuringHold);
-    this.callbacks.onStarting?.(null);
-    if (hold.wanted && !this.destroyed) void this.video.play().catch(() => {});
   }
 
   /**

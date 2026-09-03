@@ -1035,22 +1035,30 @@ describe("MseSource", () => {
     expect(audioBuffer.typeChangedAfter).toBeGreaterThan(0);
   });
 
-  it("holds the picture still while there is no sound to go with it", async () => {
-    // Safari plays a picture on in silence when the audio buffer has nothing at the playhead,
-    // instead of stalling: a second or two of the film goes by unheard while a newly chosen
-    // track is still being decoded.
+  it("stops the picture only once it would run on without sound", async () => {
+    // Chrome stalls by itself when a buffer has nothing at the playhead; Safari plays the
+    // picture on in silence. Stopping the element up front fixed the second and cost the first a
+    // visible pause on every change of track, so nothing happens until the picture is actually
+    // moving with no sound under it.
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500, 0.2);
     const onStarting = vi.fn();
     const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
     await flush();
+    const audioBuffer = FakeSource.instances[0].buffers[1];
 
     mse.beginAudioHold();
+    await new Promise((r) => setTimeout(r, 100));
+    // The outgoing track still covers the playhead: nothing to prevent, nothing done.
+    expect(video.paused).toBe(false);
+
+    // Now it does not.
+    (audioBuffer as unknown as { ranges: [number, number][] }).ranges = [];
+    await new Promise((r) => setTimeout(r, 120));
     expect(video.paused).toBe(true);
-    // And the viewer gets the spinner they already know from opening a file.
     expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
 
-    // A press of play during the hold is remembered, not obeyed.
+    // And a press of play into that gap is remembered, not obeyed.
     (video as unknown as { paused: boolean }).paused = false;
     video.dispatchEvent(new Event("play"));
     expect(video.paused).toBe(true);

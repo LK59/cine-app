@@ -69,7 +69,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   // Asked before a megabyte and a half of decoder is fetched. A track that has to be re-encoded
   // is only carried here if this browser will do the encoding, and finding that out afterwards
   // would mean paying for the download to learn it.
-  if (audioTrack && audioDelivery(audioTrack) === "transcode") {
+  if (audioTrack && audioDelivery(audioTrack, file) === "transcode") {
     const rate = audioTrack.audio?.sampleRate ?? 48000;
     const channels = audioTrack.audio?.channels ?? 2;
     trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on demande l'AAC en ${channels} canaux`);
@@ -80,7 +80,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
 
   // Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
   // file, and there is no reason to pay for that only to be told the browser wanted none of it.
-  const mime = plannedMimeTypes(videoTrack, audioTrack);
+  const mime = plannedMimeTypes(videoTrack, audioTrack, file);
   const playable = playabilityOf({
     videoMimeType: mime.video ?? "",
     audioMimeType: mime.audio,
