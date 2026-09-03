@@ -37,6 +37,24 @@ import {
   type RemuxPlan,
 } from "./remuxer";
 
+/**
+ * Whether a browser saying yes to replacing an audio buffer is believed.
+ *
+ * It is not, and the measurement is why. Safari accepts `removeSourceBuffer` followed by
+ * `addSourceBuffer`, accepts every segment appended to the new buffer, and grows its ranges
+ * exactly as it should — and plays no sound at all from it. The next seek then closes the
+ * MediaSource with "media failed to decode". The API works; what it produces does not.
+ *
+ * So the answer is measured and written into the record, and the player behaves as though it were
+ * no: a file whose tracks cannot all be delivered as they are has all of them re-encoded, decided
+ * once when it is opened, and the audio codec never changes for the life of the MediaSource. That
+ * costs a bit-exact AC-3 track on a file that mixes codecs, and buys a player that does not stop.
+ *
+ * Left switchable rather than deleted: the probe still says what the browser claims, so the day
+ * one of them means it, this is one line.
+ */
+const TRUST_BUFFER_REBUILD = false;
+
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
 const EMPTY = new Uint8Array(0);
 
@@ -78,14 +96,15 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     await chooseTranscodeCodec(audioTrack.audio?.sampleRate ?? 48000, audioTrack.audio?.channels ?? 2);
   }
 
-  // And this decides which of the two designs runs — see setAudioBufferRebuildable. Asked with
-  // this file's own video type, so a refusal is about replacing a buffer and not about a codec
-  // the browser was never going to take.
+  // Asked, recorded, and then not acted on — see TRUST_BUFFER_REBUILD.
   const video = plannedMimeTypes(videoTrack, null).video;
   if (video) {
     const rebuildable = await canRebuildAudioBuffer(video);
-    setAudioBufferRebuildable(rebuildable);
-    trace(`chemin : ce navigateur ${rebuildable ? "accepte" : "refuse"} de remplacer le tampon audio à chaud`);
+    setAudioBufferRebuildable(rebuildable && TRUST_BUFFER_REBUILD);
+    trace(
+      `chemin : ce navigateur ${rebuildable ? "accepte" : "refuse"} de remplacer le tampon audio à chaud` +
+        (rebuildable && !TRUST_BUFFER_REBUILD ? " (mesuré inexploitable, non utilisé)" : "")
+    );
   }
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
   if (audioTrack && !playableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;
