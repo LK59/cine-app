@@ -187,6 +187,7 @@ function fakeVideo() {
     configurable: true,
   });
   return Object.assign(target, {
+    paused: false,
     disableRemotePlayback: false,
     srcObject: null as unknown,
     src: "",
@@ -685,6 +686,58 @@ describe("MseSource", () => {
     expect(remuxer.seeks[0]).toBeLessThanOrEqual(PLAN.durationSeconds);
     expect(video.currentTime).toBeLessThanOrEqual(PLAN.durationSeconds + 0.2);
   });
+
+  it("resumes exactly where the picture froze, not where the sound drifted to", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    // The clock follows the sound, and the sound already handed to the hardware plays out past
+    // the button press — so the element does not necessarily stop where the picture did.
+    setTime(12.4);
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    await flush();
+
+    expect(video.currentTime).toBe(12);
+    expect(mse.presentationDelay).toBeGreaterThan(0);
+  });
+
+  it("leaves a playhead the viewer moved while paused exactly where they put it", async () => {
+    const video = fakeVideo();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    // Backwards, and far: a deliberate move, not a fraction of a second of drift.
+    setTime(5);
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    await flush();
+
+    expect(video.currentTime).toBe(5);
+  });
+
+  it("does not move the picture under a viewer who has paused", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+
+    (video as unknown as { currentTime: number }).currentTime = 1500;
+    (video as unknown as { paused: boolean }).paused = true;
+    await new Promise((r) => setTimeout(r, 1200));
+    // Stranded, but paused: the frame on screen is already drawn and needs nothing. Seeking here
+    // would move the picture on its own and land the resume somewhere else.
+    expect(remuxer.seeks).toEqual([]);
+  }, 10_000);
 
   it("detaches cleanly, leaving nothing listening", async () => {
     const video = fakeVideo();

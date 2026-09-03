@@ -9,7 +9,7 @@ import type { EngineTrack } from "./engine";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, type TrackedCue } from "./remuxer";
+import { Remuxer, remuxableAudio, type TrackedCue } from "./remuxer";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
@@ -45,9 +45,21 @@ function toEngineTrack(track: MatroskaTrack): EngineTrack {
   };
 }
 
+/**
+ * The audio track to open on.
+ *
+ * A track this path can carry comes before the file's own default, because those two disagree
+ * more often than one would think: a release marks its highest-quality track as default, and
+ * that is regularly DTS — which no browser decodes. Every DTS file in this library carries an
+ * AC-3 or AAC track beside it, so preferring the default would refuse, on a technicality, a file
+ * that plays perfectly on the track next to it. The default still decides among the ones that
+ * work, and if none do the default is returned anyway so the refusal names the real codec.
+ */
 function preferredAudio(file: MatroskaFile): MatroskaTrack | null {
   const audio = file.tracks.filter((t) => t.type === "audio");
-  return audio.find((t) => t.isDefault) ?? audio[0] ?? null;
+  const playable = audio.filter(remuxableAudio);
+  const pool = playable.length > 0 ? playable : audio;
+  return pool.find((t) => t.isDefault) ?? pool[0] ?? null;
 }
 
 /**

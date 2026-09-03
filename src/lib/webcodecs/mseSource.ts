@@ -160,6 +160,8 @@ export class MseSource {
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
   private lastAppendAt = 0;
+  /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
+  private pauseAnchor: number | null = null;
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -252,6 +254,8 @@ export class MseSource {
     // appended to, while the reader keeps grinding forward from wherever it was — which looks
     // exactly like the player decoding every frame up to the target before resuming.
     this.video.addEventListener("seeking", this.onSeeking);
+    this.video.addEventListener("pause", this.onPause);
+    this.video.addEventListener("play", this.onPlay);
     this.lastAppendAt = Date.now();
     this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -259,6 +263,36 @@ export class MseSource {
   }
 
   private readonly request = () => {
+    void this.fill();
+  };
+
+  /**
+   * Remembers exactly where the picture stopped.
+   *
+   * The element's clock does not necessarily stop where the button was pressed: the audio the
+   * system has already handed to the hardware plays out over the next fraction of a second, and
+   * the clock follows the sound. Resuming then starts from wherever it drifted to, which reads
+   * as the film having quietly continued while paused and jumping to catch up.
+   */
+  private readonly onPause = () => {
+    if (!this.destroyed) this.pauseAnchor = this.video.currentTime;
+  };
+
+  private readonly onPlay = () => {
+    if (this.destroyed) return;
+    const anchor = this.pauseAnchor;
+    this.pauseAnchor = null;
+
+    // Only ever backwards, and only past a threshold no one could see moving: this exists to undo
+    // a drift, never to fight a viewer who moved the playhead while it was paused.
+    if (anchor !== null && this.video.currentTime > anchor + 0.08 && this.isBufferedAt(anchor)) {
+      this.lastSeekTarget = anchor;
+      this.video.currentTime = anchor;
+    }
+
+    // Nothing moves the playhead while paused, so any settling owed is settled here — before the
+    // watchdog's own delay, which would otherwise be a visible wait at the moment of pressing play.
+    this.nudgeIntoBuffer();
     void this.fill();
   };
 
@@ -434,7 +468,10 @@ export class MseSource {
    */
   private nudgeIntoBuffer(): void {
     const ranges = this.playable;
-    if (ranges.length === 0 || this.destroyed) return;
+    // Never while paused. The frame on screen is already drawn and needs nothing; moving the
+    // playhead under a viewer who has stopped is a picture that jumps on its own, and then
+    // resumes somewhere other than where they left it.
+    if (ranges.length === 0 || this.destroyed || this.video.paused) return;
 
     const now = this.video.currentTime;
     let start: number | null = null;
@@ -607,7 +644,9 @@ export class MseSource {
    * failure mode is that no event comes.
    */
   private readonly watchdog = () => {
-    if (this.destroyed || this.ended || !this.videoBuffer) return;
+    // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
+    // underneath it would move the picture for no reason and land the resume elsewhere.
+    if (this.destroyed || this.ended || !this.videoBuffer || this.video.paused) return;
 
     const now = this.video.currentTime;
     // On media, or a seek already on its way to it: nothing to do.
@@ -679,6 +718,8 @@ export class MseSource {
     this.video.removeEventListener("timeupdate", this.request);
     this.video.removeEventListener("waiting", this.request);
     this.video.removeEventListener("seeking", this.onSeeking);
+    this.video.removeEventListener("pause", this.onPause);
+    this.video.removeEventListener("play", this.onPlay);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
 
