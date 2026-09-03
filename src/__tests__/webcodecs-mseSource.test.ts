@@ -707,6 +707,52 @@ describe("MseSource", () => {
     expect(mse.presentationDelay).toBeGreaterThan(0);
   });
 
+  it("fetches the position back when the system reclaimed it during the pause", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+    const buffers = FakeSource.instances[0].buffers;
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+
+    // ManagedMediaSource is allowed to reclaim buffered media while nothing is playing, and on a
+    // phone it does. The element then comes back to find nothing where it was and carries on
+    // from the nearest media it still holds — which is the jump forward, not a drift.
+    for (const b of buffers) b.setBuffered(40, 70);
+    setTime(40);
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    await flush();
+
+    // Restoring is impossible without reading again, and giving up would leave the jump in place.
+    expect(remuxer.seeks).toEqual([11.8]);
+  });
+
+  it("still puts it back when the jump happens a moment after playback resumes", async () => {
+    const video = fakeVideo();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    (video as unknown as { paused: boolean }).paused = false;
+    // The play event fires before the element has actually resumed, so nothing has moved yet.
+    video.dispatchEvent(new Event("play"));
+    await flush();
+    expect(video.currentTime).toBe(12);
+
+    setTime(12.6);
+    video.dispatchEvent(new Event("playing"));
+    await flush();
+    expect(video.currentTime).toBe(12);
+  });
+
   it("leaves a playhead the viewer moved while paused exactly where they put it", async () => {
     const video = fakeVideo();
     await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });

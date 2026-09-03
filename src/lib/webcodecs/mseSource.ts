@@ -32,6 +32,15 @@ const MAX_APPEND_FAILURES = 3;
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
 
+/**
+ * How long after pressing play the position from the pause is still defended.
+ *
+ * The jump does not necessarily happen the instant playback resumes: the element can start, find
+ * nothing where it was, and move on a moment later. Long enough to cover that, short enough that
+ * it can never be mistaken for fighting a viewer who has moved on.
+ */
+const RESUME_GUARD_MS = 1500;
+
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
 
@@ -162,6 +171,7 @@ export class MseSource {
   private lastAppendAt = 0;
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
+  private resumeDeadline = 0;
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -256,6 +266,7 @@ export class MseSource {
     this.video.addEventListener("seeking", this.onSeeking);
     this.video.addEventListener("pause", this.onPause);
     this.video.addEventListener("play", this.onPlay);
+    this.video.addEventListener("playing", this.request);
     this.lastAppendAt = Date.now();
     this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -263,6 +274,8 @@ export class MseSource {
   }
 
   private readonly request = () => {
+    // Playback advancing is also the first moment a jump on resume becomes visible.
+    if (this.pauseAnchor !== null) this.holdPausePosition();
     void this.fill();
   };
 
@@ -280,21 +293,48 @@ export class MseSource {
 
   private readonly onPlay = () => {
     if (this.destroyed) return;
-    const anchor = this.pauseAnchor;
-    this.pauseAnchor = null;
-
-    // Only ever backwards, and only past a threshold no one could see moving: this exists to undo
-    // a drift, never to fight a viewer who moved the playhead while it was paused.
-    if (anchor !== null && this.video.currentTime > anchor + 0.08 && this.isBufferedAt(anchor)) {
-      this.lastSeekTarget = anchor;
-      this.video.currentTime = anchor;
-    }
+    // Held for a moment rather than settled on the spot: the element fires this as soon as play
+    // is called, which is before it has actually resumed and therefore before it can have
+    // jumped. Checked again as playback gets going, until the window closes.
+    this.resumeDeadline = Date.now() + RESUME_GUARD_MS;
+    this.holdPausePosition();
 
     // Nothing moves the playhead while paused, so any settling owed is settled here — before the
     // watchdog's own delay, which would otherwise be a visible wait at the moment of pressing play.
     this.nudgeIntoBuffer();
     void this.fill();
   };
+
+  /**
+   * Puts playback back where it was stopped, if resuming has moved it on.
+   *
+   * Two things move it. The element's clock follows the sound, and the sound already handed to
+   * the hardware plays out past the button press. And the system may reclaim buffered media while
+   * nothing is playing — it is allowed to, and on a phone it does — so the element can come back
+   * to find nothing where it was and carry on from the nearest media it still holds. Both look
+   * identical from here: the film quietly continued while it was stopped.
+   */
+  private holdPausePosition(): void {
+    const anchor = this.pauseAnchor;
+    if (anchor === null || this.destroyed) return;
+    if (Date.now() > this.resumeDeadline) {
+      this.pauseAnchor = null;
+      return;
+    }
+    // Only ever backwards, and only past a threshold no one could see moving: this undoes a
+    // drift, it never fights a viewer who has moved the playhead themselves.
+    if (this.video.currentTime <= anchor + 0.08) return;
+
+    this.pauseAnchor = null;
+    if (this.isBufferedAt(anchor)) {
+      this.lastSeekTarget = anchor;
+      this.video.currentTime = anchor;
+      return;
+    }
+    // The media that was there is gone. Fetching it again is the whole point — this is the case
+    // the guard exists for, and the one where giving up leaves the jump in place.
+    void this.seek(anchor);
+  }
 
   private readonly onSeeking = () => {
     if (this.destroyed) return;
@@ -304,6 +344,8 @@ export class MseSource {
     if (Math.abs(target - this.lastSeekTarget) < 0.25) return void this.fill();
     // A step inside what is already buffered needs no work from the file at all.
     if (this.isBufferedAt(target)) return void this.fill();
+    // A deliberate move settles the question of where playback belongs.
+    this.pauseAnchor = null;
     void this.seek(target);
   };
 
@@ -720,6 +762,7 @@ export class MseSource {
     this.video.removeEventListener("seeking", this.onSeeking);
     this.video.removeEventListener("pause", this.onPause);
     this.video.removeEventListener("play", this.onPlay);
+    this.video.removeEventListener("playing", this.request);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
 
