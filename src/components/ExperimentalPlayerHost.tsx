@@ -35,6 +35,19 @@ const STUCK_AFTER_MS = 20000;
 const MAX_REBUILDS = 3;
 
 /**
+ * How far past a position that has already killed the source a rebuild resumes.
+ *
+ * Reading the identical bytes again is a guaranteed way to die again, and the record proves it:
+ * three rebuilds each re-read the same 5.5 MB segment and each lost the source ten milliseconds
+ * after appending it. More than the longest gap between keyframes in this library, so the
+ * resumed read starts on a different segment rather than the same one.
+ */
+const REBUILD_STEP_SECONDS = 12;
+
+/** Two rebuild positions this close together are the same place. */
+const SAME_PLACE_SECONDS = 3;
+
+/**
  * Milliseconds since a moment, or null when there is no moment.
  *
  * Ticks only while something is actually pending: an idle player runs no timer at all, which is
@@ -148,6 +161,7 @@ export function ExperimentalPlayerHost({
   const rebuildAtRef = useRef<number | null>(null);
   // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
   const rebuildsRef = useRef(0);
+  const lastRebuildAtRef = useRef<number | null>(null);
   const [openedAt] = useState(() => Date.now());
 
   // Fetched once and then left alone. The description of a file does not change while it is
@@ -365,11 +379,24 @@ export function ExperimentalPlayerHost({
         // it is used here too, and only a loss that keeps happening is finally reported.
         if (remuxRef.current?.lost && rebuildsRef.current < MAX_REBUILDS) {
           rebuildsRef.current += 1;
-          const at = remuxRef.current.position || positionRef.current;
-          trace(`reprise : la source a été perdue, reconstruction ${rebuildsRef.current} à ${at.toFixed(1)} s`);
+          const where = remuxRef.current.position || positionRef.current;
+          // The same place twice means the media there is what the platform cannot take. Reading
+          // it again would fail again, identically — the record shows three rebuilds doing
+          // exactly that — so the film resumes past it instead.
+          const again = lastRebuildAtRef.current !== null && Math.abs(where - lastRebuildAtRef.current) < SAME_PLACE_SECONDS;
+          const at = again ? where + REBUILD_STEP_SECONDS : where;
+          lastRebuildAtRef.current = where;
+          trace(
+            `reprise : la source a été perdue, reconstruction ${rebuildsRef.current} à ${at.toFixed(1)} s` +
+              (again ? ` (au-delà de ${where.toFixed(1)} s, qui vient d'échouer)` : "")
+          );
           traceKeepAcrossReset();
           rebuildAtRef.current = at;
-          setWarning("Reprise de la lecture après une interruption.");
+          setWarning(
+            again
+              ? "Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après."
+              : "Reprise de la lecture après une interruption."
+          );
           setReady(false);
           setRebuildCount((count) => count + 1);
           return;
