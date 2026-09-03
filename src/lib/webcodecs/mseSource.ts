@@ -50,6 +50,18 @@ const RESUME_GUARD_MS = 1500;
  */
 const PAUSE_SETTLE_MS = 1000;
 
+/**
+ * How far ahead of the pause a resume may land before it counts as a discontinuity.
+ *
+ * Measured on the device: the picture freezes where the button was pressed, but the sound the
+ * hardware already held plays on for about half a second, and the clock reports that at the
+ * moment of resuming — half a second ahead. Nothing was skipped; it was heard while the picture
+ * stood still. Pulling it back replays it and shows the wrong frame for a moment, which is the
+ * flicker this once caused. Only a gap far larger than the drain is a real discontinuity: media
+ * the system reclaimed while nothing was playing, which runs to seconds.
+ */
+const RESUME_TOLERANCE_SECONDS = 1.5;
+
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
 
@@ -376,7 +388,7 @@ export class MseSource {
     // re-read for nothing. Only a playhead further along than time can account for has jumped.
     const rate = this.video.playbackRate || 1;
     const reachable = anchor + ((Date.now() - this.resumeStartedAt) / 1000) * rate;
-    if (this.video.currentTime <= reachable + 0.25) return false;
+    if (this.video.currentTime <= reachable + RESUME_TOLERANCE_SECONDS) return false;
 
     this.pauseAnchor = null;
     if (this.isBufferedAt(anchor)) {

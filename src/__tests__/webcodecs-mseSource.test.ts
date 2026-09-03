@@ -687,24 +687,28 @@ describe("MseSource", () => {
     expect(video.currentTime).toBeLessThanOrEqual(PLAN.durationSeconds + 0.2);
   });
 
-  it("resumes exactly where the picture froze, not where the sound drifted to", async () => {
+  it("lets a resume land where the sound actually stopped, half a second on", async () => {
     const video = fakeVideo();
-    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
     await flush();
     const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
 
     setTime(12);
     (video as unknown as { paused: boolean }).paused = true;
     video.dispatchEvent(new Event("pause"));
-    // The clock follows the sound, and the sound already handed to the hardware plays out past
-    // the button press — so the element does not necessarily stop where the picture did.
-    setTime(12.4);
+
+    // Measured on a device: the picture freezes at the button, the sound the hardware already
+    // held plays on, and the clock reports that half-second at the moment of resuming. Nothing
+    // was skipped — it was heard while the picture stood still — so pulling it back would replay
+    // it and show the wrong frame for a moment.
+    setTime(12.49);
     (video as unknown as { paused: boolean }).paused = false;
     video.dispatchEvent(new Event("play"));
     await flush();
 
-    expect(video.currentTime).toBe(12);
-    expect(mse.presentationDelay).toBeGreaterThan(0);
+    expect(video.currentTime).toBe(12.49);
+    expect(remuxer.seeks).toEqual([]);
   });
 
   it("fetches the position back when the system reclaimed it during the pause", async () => {
@@ -723,7 +727,7 @@ describe("MseSource", () => {
     // phone it does. The element then comes back to find nothing where it was and carries on
     // from the nearest media it still holds — which is the jump forward, not a drift.
     for (const b of buffers) b.setBuffered(40, 70);
-    setTime(40);
+    setTime(40); // seconds ahead: a real discontinuity, not the sound playing on
     (video as unknown as { paused: boolean }).paused = false;
     video.dispatchEvent(new Event("play"));
     await flush();
@@ -747,7 +751,9 @@ describe("MseSource", () => {
     await flush();
     expect(video.currentTime).toBe(12);
 
-    setTime(12.6);
+    // Far beyond the half-second the sound plays on for: a real discontinuity, arriving after the
+    // play event rather than at it, which is why the guard has to keep looking for a moment.
+    setTime(19);
     video.dispatchEvent(new Event("playing"));
     await flush();
     expect(video.currentTime).toBe(12);
