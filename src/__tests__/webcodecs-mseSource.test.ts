@@ -907,14 +907,16 @@ describe("MseSource", () => {
     const video = fakeVideo();
     const onStarting = vi.fn();
     // Frame-accurate notification, as Safari and Chromium both provide.
-    let frameCallback: ((now: number, meta: { mediaTime: number }) => void) | null = null;
+    // Held in an object rather than a bare variable: assigning only from inside the callbacks
+    // lets TypeScript narrow the variable to never, and the calls below stop compiling.
+    const frame: { next: ((now: number, meta: { mediaTime: number }) => void) | null } = { next: null };
     Object.assign(video, {
       requestVideoFrameCallback: (cb: (now: number, meta: { mediaTime: number }) => void) => {
-        frameCallback = cb;
+        frame.next = cb;
         return 1;
       },
       cancelVideoFrameCallback: () => {
-        frameCallback = null;
+        frame.next = null;
       },
     });
     await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
@@ -930,11 +932,11 @@ describe("MseSource", () => {
     expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
 
     // A frame still at the old position: the picture has not moved.
-    frameCallback?.(0, { mediaTime: 12 });
+    frame.next?.(0, { mediaTime: 12 });
     expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
 
     // And one that has.
-    frameCallback?.(0, { mediaTime: 12.04 });
+    frame.next?.(0, { mediaTime: 12.04 });
     expect(onStarting).toHaveBeenLastCalledWith(null);
   });
 
