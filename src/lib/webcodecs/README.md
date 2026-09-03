@@ -366,6 +366,35 @@ l'en-tête `WEBVTT`, et des **réglages de position** en fin de ligne de temps
 
 ---
 
+## Les préférences du compte
+
+Jellyfin retient, par compte, une langue audio, une langue de sous-titres et un
+mode (`Default`, `Always`, `OnlyForced`, `Smart`, `None`). Les honorer n'est
+**pas** une comparaison de chaînes :
+
+- le conteneur écrit `fre`, le compte écrit `fra` — les moitiés bibliographique
+  et terminologique d'ISO 639-2. Comparées telles quelles, elles ne
+  correspondent jamais. **Vingt langues** ont cette double écriture.
+- les noms de piste sont du texte libre et le prouvent : `FR VFF : AC3 5.1`,
+  `VFQ`, `French (France)`, `Espagnol [VO]`.
+
+Donc : les langues sont ramenées à une forme comparable ; **le code prime sur le
+nom** et le nom n'est lu que faute de code (3 pistes audio sur 1425 ici) ; une
+piste n'est **jamais** retenue au motif qu'elle est la seule qui reste — sans la
+langue demandée, on ne touche à rien ; les **audiodescriptions** et les
+**commentaires** sont écartés, `French (France) AD` étant une vraie piste de
+cette bibliothèque.
+
+> Piège trouvé en écrivant les tests : `VO` ne veut pas dire anglais. Ça veut
+> dire que la piste n'est pas doublée, ce qui ne dit rien de sa langue — et
+> `Espagnol [VO]` le prouve.
+
+Le choix du spectateur l'emporte toujours sur celui du compte, y compris après
+une reconstruction : revenir d'une coupure réseau doit rendre ce que *lui* avait
+choisi.
+
+---
+
 ## Ce que le serveur apprend quand même
 
 Rien du fichier ne passe par Jellyfin, mais la progression, si — sinon les
@@ -399,6 +428,42 @@ Le saut d'intro et l'épisode suivant viennent du greffon **Intro Skipper**
 trois chemins ; sur le chemin canvas, la barre de contrôle cherche à travers le
 `currentTime` de la façade. Mesuré sur la bibliothèque : 54 épisodes sur 60
 tirés au hasard portent un marqueur valide.
+
+---
+
+## La bannière jaune : ce qui s'y affiche, et ce qui n'y a rien à faire
+
+La règle : **la bannière est pour le spectateur, le journal est pour nous.** Un
+message n'y a sa place que s'il décrit quelque chose que le spectateur *voit* ou
+sur quoi il peut *agir*. Tout ce qui s'est réparé tout seul va dans la trace du
+panneau technique. Et chaque message se retire au bout de **6 secondes** : ils
+décrivent tous un instant, pas un état.
+
+**Affichés** (neuf) :
+
+| Message | Levé quand |
+|---|---|
+| `Pas de son : …` | la piste audio n'est décodable par rien, ou la sortie audio n'a pas pu être créée |
+| `Aucun décodeur disponible pour l'audio X` | changement vers une piste que rien ne sait décoder |
+| `Décodage audio logiciel interrompu : …` | le décodeur DTS/AC-3 en WASM s'est arrêté en cours de route |
+| `Conversion HDR indisponible, image affichée sans (…)` | chemin canvas, le shader de conversion n'a pas pu être créé |
+| `Cette piste audio n'a pas pu être ouverte : …` | changement de piste refusé ; **l'ancienne continue de jouer** |
+| `Sous-titres externes indisponibles.` | le `.srt` demandé n'est pas revenu du serveur |
+| `Ce fichier n'a pas d'index de recherche : la navigation n'est pas possible.` | Matroska sans Cues : on lit, on ne saute pas |
+| `Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après.` | deuxième perte de source au même endroit — un morceau de film est sauté |
+| `Reprise après une interruption` *(remplacé)* | → passé à la trace, voir ci-dessous |
+
+**Passés au journal**, parce que le spectateur n'a rien vu et n'a rien à faire :
+
+- `segment refusé, repris` — le segment est renvoyé, le film ne s'arrête pas.
+- `saut refusé, repris` — idem sur un saut.
+- `reprise abandonnée après N tentatives` — et surtout : **abandonner ici ne veut
+  pas dire que la position est inatteignable**. L'index de secours du
+  remultiplexeur y arrive régulièrement juste après (mesuré sur le fichier aux
+  fausses images-clés), donc la bannière annonçait un échec à quelqu'un dont le
+  film allait continuer — et restait affichée pendant qu'il continuait.
+- `reconstruction du pipeline` — la source a été perdue et rebâtie sur place.
+- `son rétabli par le décodeur logiciel` — bonne nouvelle, et rien à en faire.
 
 ---
 
