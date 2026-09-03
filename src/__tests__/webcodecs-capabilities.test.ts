@@ -31,6 +31,19 @@ describe("probeCapabilities", () => {
     expect(out["Encodage opus 6 canaux"]).toBe("oui");
   });
 
+  it("does not take a refused bitrate for a refused codec", async () => {
+    // A browser can decline one bitrate and accept the codec. Reporting "no" for what was really
+    // "not at that rate" would send the whole plan down the wrong path for a platform that could
+    // have carried it.
+    vi.stubGlobal("MediaSource", { isTypeSupported: () => false });
+    vi.stubGlobal("AudioEncoder", {
+      isConfigSupported: async (c: { bitrate?: number }) => ({ supported: c.bitrate === undefined }),
+    });
+
+    const out = await probe();
+    expect(out["Encodage AAC stéréo"]).toBe("oui");
+  });
+
   it("says so plainly where WebCodecs has no encoder at all", async () => {
     // Safari before 26 shipped WebCodecs video-only: AudioEncoder was simply undefined. Reporting
     // that as "not supported" would read as a codec answer rather than a missing API.

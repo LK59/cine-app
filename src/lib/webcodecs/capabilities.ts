@@ -21,13 +21,24 @@ async function encoderSupport(codec: string, numberOfChannels: number): Promise<
   // Absent entirely on Safari before 26, where WebCodecs was video-only.
   if (!Encoder?.isConfigSupported) return { label, supported: null, detail: "AudioEncoder absent" };
 
-  try {
-    const result = await Encoder.isConfigSupported({ codec, sampleRate: 48000, numberOfChannels, bitrate: 256_000 });
-    return { label, supported: !!result.supported };
-  } catch (error) {
-    // A configuration the browser considers malformed rather than unsupported.
-    return { label, supported: false, detail: error instanceof Error ? error.name : "refusé" };
+  // Asked twice before being believed. A browser may refuse one bitrate and accept the codec, and
+  // reporting "no" for what was really "not at that rate" would send the whole plan down the
+  // wrong path for a platform that could in fact have carried it.
+  const attempts: { config: AudioEncoderConfig; note?: string }[] = [
+    { config: { codec, sampleRate: 48000, numberOfChannels, bitrate: 256_000 } },
+    { config: { codec, sampleRate: 48000, numberOfChannels }, note: "sans débit imposé" },
+  ];
+  let lastError: string | undefined;
+  for (const attempt of attempts) {
+    try {
+      const result = await Encoder.isConfigSupported(attempt.config);
+      if (result.supported) return { label, supported: true, detail: attempt.note };
+    } catch (error) {
+      // A configuration the browser considers malformed rather than unsupported.
+      lastError = error instanceof Error ? error.name : "refusé";
+    }
   }
+  return { label, supported: false, detail: lastError };
 }
 
 function sourceSupport(mimeType: string, label: string): Capability {

@@ -183,6 +183,15 @@ export class MseSource {
   private resumeDeadline = 0;
   private resumeStartedAt = 0;
   private pauseSettleTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * The last pause and resume, in positions.
+   *
+   * Written down because the remaining flicker cannot be reasoned about any further from here:
+   * nothing in this file moves the playhead when the buffer covers it, and the device says it
+   * does. Four numbers settle what a description cannot — where it stopped, where it came back,
+   * and where it was one tick later.
+   */
+  private resumeTrace: { paused: number; settled: number; play: number; tick: number | null } | null = null;
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -285,6 +294,11 @@ export class MseSource {
   }
 
   private readonly request = () => {
+    // The first tick after resuming is where a jump would show, so it is recorded before
+    // anything here has a chance to act on it.
+    if (this.resumeTrace && !Number.isNaN(this.resumeTrace.play) && this.resumeTrace.tick === null) {
+      this.resumeTrace.tick = this.video.currentTime;
+    }
     // Playback advancing is also the first moment a jump on resume becomes visible.
     if (this.pauseAnchor !== null) this.holdPausePosition();
     void this.fill();
@@ -301,6 +315,7 @@ export class MseSource {
   private readonly onPause = () => {
     if (this.destroyed) return;
     this.pauseAnchor = this.video.currentTime;
+    this.resumeTrace = { paused: this.pauseAnchor, settled: this.pauseAnchor, play: NaN, tick: null };
     // Followed until it comes to rest, so the anchor is where the film actually stopped being
     // heard rather than where the button was pressed. On a platform that stops dead — every
     // desktop browser — the first sample is already the last, and this costs nothing.
@@ -314,7 +329,10 @@ export class MseSource {
         return;
       }
       const settled = this.pauseAnchor;
-      if (settled !== null && this.video.currentTime > settled) this.pauseAnchor = this.video.currentTime;
+      if (settled !== null && this.video.currentTime > settled) {
+        this.pauseAnchor = this.video.currentTime;
+        if (this.resumeTrace) this.resumeTrace.settled = this.video.currentTime;
+      }
     }, 80);
   };
 
@@ -324,6 +342,7 @@ export class MseSource {
     // is called, which is before it has actually resumed and therefore before it can have
     // jumped. Checked again as playback gets going, until the window closes.
     this.resumeStartedAt = Date.now();
+    if (this.resumeTrace) this.resumeTrace.play = this.video.currentTime;
     this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
     const moved = this.holdPausePosition();
 
@@ -790,6 +809,14 @@ export class MseSource {
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
       "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
+      ...(this.resumeTrace
+        ? {
+            "Dernière pause": `arrêt ${this.resumeTrace.paused.toFixed(3)} → repos ${this.resumeTrace.settled.toFixed(3)}`,
+            "Dernière reprise": Number.isNaN(this.resumeTrace.play)
+              ? "—"
+              : `départ ${this.resumeTrace.play.toFixed(3)} → 1er tick ${this.resumeTrace.tick?.toFixed(3) ?? "—"}`,
+          }
+        : {}),
     };
   }
 
