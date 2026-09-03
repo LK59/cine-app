@@ -208,6 +208,8 @@ export class MseSource {
     asserted: number;
     play: number;
     tick: number | null;
+    /** Milliseconds between pressing play and the clock actually moving. */
+    latencyMs: number | null;
   } | null = null;
 
   /** Re-states the position, which runs the seek algorithm and so discards any queued sound. */
@@ -323,8 +325,15 @@ export class MseSource {
   private readonly request = () => {
     // The first tick after resuming is where a jump would show, so it is recorded before
     // anything here has a chance to act on it.
-    if (this.resumeTrace && !Number.isNaN(this.resumeTrace.play) && this.resumeTrace.tick === null) {
-      this.resumeTrace.tick = this.video.currentTime;
+    const trace = this.resumeTrace;
+    if (trace && !Number.isNaN(trace.play)) {
+      if (trace.tick === null) trace.tick = this.video.currentTime;
+      // Not the first event after play, but the first one where the clock has actually moved:
+      // that is when sound and picture are genuinely running again, and it is what a viewer
+      // feels as the button being slow.
+      if (trace.latencyMs === null && this.video.currentTime > trace.play + 0.01) {
+        trace.latencyMs = Date.now() - this.resumeStartedAt;
+      }
     }
     // Playback advancing is also the first moment a jump on resume becomes visible.
     if (this.pauseAnchor !== null) this.holdPausePosition();
@@ -342,7 +351,14 @@ export class MseSource {
   private readonly onPause = () => {
     if (this.destroyed) return;
     this.pauseAnchor = this.video.currentTime;
-    this.resumeTrace = { paused: this.pauseAnchor, settled: this.pauseAnchor, asserted: 0, play: NaN, tick: null };
+    this.resumeTrace = {
+      paused: this.pauseAnchor,
+      settled: this.pauseAnchor,
+      asserted: 0,
+      play: NaN,
+      tick: null,
+      latencyMs: null,
+    };
 
     // Emptied at once, not a second later.
     //
@@ -857,6 +873,8 @@ export class MseSource {
             "Dernière reprise": Number.isNaN(this.resumeTrace.play)
               ? "—"
               : `départ ${this.resumeTrace.play.toFixed(3)} → 1er tick ${this.resumeTrace.tick?.toFixed(3) ?? "—"}`,
+            "Délai du bouton lecture":
+              this.resumeTrace.latencyMs === null ? "—" : `${this.resumeTrace.latencyMs} ms`,
           }
         : {}),
     };
