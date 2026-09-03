@@ -9,7 +9,7 @@
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
-import { avcCodecString, hevcCodecString } from "./codecConfig";
+import { avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
@@ -378,6 +378,16 @@ export class Remuxer {
    * megabytes of picture into segments that were then dropped.
    */
   private videoWanted = true;
+  /** Read once from the codec's configuration record; see nalLengthSize. */
+  private readonly nalLength: number;
+
+  /**
+   * Whether a decoder may start on this picture — which is not the same question as whether the
+   * container called it a keyframe. See isRandomAccessPoint.
+   */
+  private startsHere(sample: MediaSample): boolean {
+    return sample.isKey && isRandomAccessPoint(sample.data, this.videoTrack.codecId, this.nalLength);
+  }
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
   private subtitleNumbersCache: Map<number, MatroskaTrack> | null = null;
@@ -407,7 +417,9 @@ export class Remuxer {
     private readonly source: ByteSource,
     /** Present only when the chosen track has to be re-encoded to be carried at all. */
     private transcoder: AudioTranscoder | null
-  ) {}
+  ) {
+    this.nalLength = nalLengthSize(videoTrack.codecId, videoTrack.codecPrivate);
+  }
 
   static async open(
     source: ByteSource,
@@ -592,15 +604,15 @@ export class Remuxer {
         break;
       }
       if (sample.trackNumber === this.videoTrack.number) {
-        // A cluster does not have to begin on a keyframe, and a decoder cannot start anywhere
-        // else. Handing over the pictures that precede one produces a segment the browser holds
-        // but can never show — which looks exactly like a seek that froze.
+        // A cluster does not have to begin on a picture a decoder can start on, and handing over
+        // the ones that precede it produces a segment the browser holds but can never show —
+        // which looks exactly like a seek that froze.
         if (this.needKeyframe) {
-          if (!sample.isKey) continue;
+          if (!this.startsHere(sample)) continue;
           this.needKeyframe = false;
         }
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
-        if (sample.isKey && span >= SEGMENT_US) {
+        if (this.startsHere(sample) && span >= SEGMENT_US) {
           boundary = sample;
           break;
         }
@@ -778,7 +790,9 @@ export class Remuxer {
         decodeTime: ordered.samples[i].decode,
         duration: ordered.samples[i].duration,
         compositionOffset: Math.max(0, offset),
-        isKeyframe: sample.isKey,
+        // The container's word is not enough here either: telling a player that a trailing
+        // picture is a sync sample invites it to start decoding there.
+        isKeyframe: this.startsHere(sample),
       };
     });
 

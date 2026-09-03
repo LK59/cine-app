@@ -192,3 +192,58 @@ export function unsupportedReason(track: MatroskaTrack): string | null {
   }
   return null;
 }
+
+/**
+ * How many bytes each NAL unit's length prefix takes, from the codec's own configuration record.
+ *
+ * Four in practice, and the field exists because it is not guaranteed. Reading it wrong turns
+ * the walk below into nonsense, which is worse than not walking at all — hence the default only
+ * when the record is too short to say.
+ */
+export function nalLengthSize(codecId: string, codecPrivate: Uint8Array | null): number {
+  if (!codecPrivate) return 4;
+  if (codecId === "V_MPEGH/ISO/HEVC") return codecPrivate.length > 21 ? (codecPrivate[21] & 0x03) + 1 : 4;
+  if (codecId === "V_MPEG4/ISO/AVC") return codecPrivate.length > 4 ? (codecPrivate[4] & 0x03) + 1 : 4;
+  return 4;
+}
+
+/**
+ * Whether a decoder may actually start on this picture.
+ *
+ * Matroska marks a block as a keyframe when it carries no reference to another block, and an
+ * encoder is free to emit an intra picture that satisfies that while the pictures decoded after
+ * it still reference frames from before. One real file marks four such pictures every two
+ * minutes — 19% of what it calls its keyframes — and they are not random access points at all.
+ *
+ * Starting there produces a decode that cannot complete. ffmpeg says "Could not find ref with
+ * POC -35" and carries on without those frames; Safari answers "media failed to decode" and
+ * closes the MediaSource, taking the picture with it. Measured on the device: a segment opening
+ * at 1944.240 s killed it every time, and one opening at the genuine CRA a second earlier played
+ * through the identical stretch.
+ *
+ * So the picture is asked what it is. The first NAL unit is often a prefix SEI, so the slice has
+ * to be looked for rather than assumed to be at the front.
+ */
+export function isRandomAccessPoint(data: Uint8Array, codecId: string, lengthSize: number): boolean {
+  const hevc = codecId === "V_MPEGH/ISO/HEVC";
+  if (!hevc && codecId !== "V_MPEG4/ISO/AVC") return true; // nothing to read; trust the container
+
+  for (let at = 0; at + lengthSize + 1 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) break;
+
+    const header = data[at + lengthSize];
+    if (hevc) {
+      const type = (header >> 1) & 0x3f;
+      // 32 and above are parameter sets and SEI; the first below that is the picture itself.
+      if (type <= 31) return type >= 16 && type <= 23; // BLA, IDR and CRA
+    } else {
+      const type = header & 0x1f;
+      if (type === 1 || type === 5) return type === 5; // a slice: IDR or not
+    }
+    at += lengthSize + length;
+  }
+  // Nothing legible. The container's own word is all there is, and it said keyframe to get here.
+  return true;
+}

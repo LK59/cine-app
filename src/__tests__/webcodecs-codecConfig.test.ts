@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
+import { isRandomAccessPoint, nalLengthSize,
   hevcCodecString,
   avcCodecString,
   av1CodecString,
@@ -179,5 +179,59 @@ describe("subtitle text extraction", () => {
 
   it("strips inline override tags and honours ASS line breaks", () => {
     expect(subtitleText("0,0,Default,,0,0,0,,{\\i1}Salut{\\i0}\\Nla suite", "S_TEXT/ASS")).toBe("Salut\nla suite");
+  });
+});
+
+describe("isRandomAccessPoint", () => {
+  /** Length-prefixed NAL units, as a sample carries them. */
+  const sample = (...nals: number[][]) => {
+    const out: number[] = [];
+    for (const nal of nals) {
+      out.push(0, 0, 0, nal.length, ...nal);
+    }
+    return new Uint8Array(out);
+  };
+  const hevcNal = (type: number, ...rest: number[]) => [(type << 1) & 0xfe, 1, ...rest];
+
+  it("reads past a prefix SEI to find the picture itself", () => {
+    // Real samples open with a prefix SEI more often than not, and taking the first NAL unit for
+    // the picture reads type 39 and answers nonsense.
+    const withSei = sample(hevcNal(39, 0, 0), hevcNal(21, 0, 0));
+    expect(isRandomAccessPoint(withSei, "V_MPEGH/ISO/HEVC", 4)).toBe(true);
+  });
+
+  it("refuses a trailing picture the container calls a keyframe", () => {
+    // Measured on a real file: 4 of every 21 blocks it marks as keyframes are TRAIL_R, and a
+    // segment opening on one of them closed the MediaSource on Safari every single time.
+    expect(isRandomAccessPoint(sample(hevcNal(1, 0, 0)), "V_MPEGH/ISO/HEVC", 4)).toBe(false);
+    expect(isRandomAccessPoint(sample(hevcNal(0, 0, 0)), "V_MPEGH/ISO/HEVC", 4)).toBe(false);
+  });
+
+  it("accepts every flavour of intra random access point", () => {
+    for (const type of [16, 19, 20, 21, 23]) {
+      expect(isRandomAccessPoint(sample(hevcNal(type, 0, 0)), "V_MPEGH/ISO/HEVC", 4)).toBe(true);
+    }
+  });
+
+  it("tells an AVC IDR slice from an ordinary one", () => {
+    expect(isRandomAccessPoint(sample([0x65, 0, 0]), "V_MPEG4/ISO/AVC", 4)).toBe(true);
+    expect(isRandomAccessPoint(sample([0x41, 0, 0]), "V_MPEG4/ISO/AVC", 4)).toBe(false);
+  });
+
+  it("takes the container's word where it cannot read the picture", () => {
+    // A codec with no NAL units, and bytes that are not a length-prefixed stream at all.
+    expect(isRandomAccessPoint(sample([1, 2, 3]), "V_VP9", 4)).toBe(true);
+    expect(isRandomAccessPoint(new Uint8Array([0xff, 0xff]), "V_MPEGH/ISO/HEVC", 4)).toBe(true);
+  });
+
+  it("reads the length prefix size from the codec's own configuration", () => {
+    // hvcC: the field is the low two bits of byte 21, plus one.
+    const hvcC = new Uint8Array(23);
+    hvcC[21] = 0x01;
+    expect(nalLengthSize("V_MPEGH/ISO/HEVC", hvcC)).toBe(2);
+    hvcC[21] = 0x03;
+    expect(nalLengthSize("V_MPEGH/ISO/HEVC", hvcC)).toBe(4);
+    // Nothing to read from: four, which is what every file in practice uses.
+    expect(nalLengthSize("V_MPEGH/ISO/HEVC", null)).toBe(4);
   });
 });
