@@ -70,9 +70,6 @@ describe("other codec strings", () => {
     expect(avcCodecString(new Uint8Array([1, 0x42, 0xc0, 0x1e]))).toBe("avc1.42c01e");
   });
 
-  it("builds av01 from the sequence profile, level and tier", () => {
-    expect(av1CodecString(new Uint8Array([0x81, 0x00 | 8, 0x00]))).toBe("av01.0.08M.08");
-  });
 });
 
 describe("track configuration", () => {
@@ -244,5 +241,34 @@ describe("isRandomAccessPoint", () => {
     expect(nalLengthSize("V_MPEGH/ISO/HEVC", hvcC)).toBe(4);
     // Nothing to read from: four, which is what every file in practice uses.
     expect(nalLengthSize("V_MPEGH/ISO/HEVC", null)).toBe(4);
+  });
+});
+
+describe("av1CodecString", () => {
+  /** An AV1CodecConfigurationRecord: marker and version, profile and level, then the flags. */
+  const record = (profile: number, level: number, tier: number, high: number, twelve: number) =>
+    new Uint8Array([0x81, (profile << 5) | level, (tier << 7) | (high << 6) | (twelve << 5), 0]);
+
+  it("reads the bit depth instead of assuming eight", () => {
+    // Written as .08 whatever the stream was, this described a ten-bit file to a decoder as
+    // eight — a claim the browser is entitled to act on.
+    expect(av1CodecString(record(0, 8, 0, 0, 0))).toBe("av01.0.08M.08");
+    expect(av1CodecString(record(0, 8, 0, 1, 0))).toBe("av01.0.08M.10");
+    // Twelve bits exist only in profile 2; elsewhere the flag means ten.
+    expect(av1CodecString(record(2, 8, 0, 1, 1))).toBe("av01.2.08M.12");
+    expect(av1CodecString(record(0, 8, 0, 1, 1))).toBe("av01.0.08M.10");
+  });
+
+  it("names the tier and pads the level", () => {
+    expect(av1CodecString(record(0, 5, 1, 1, 0))).toBe("av01.0.05H.10");
+    expect(av1CodecString(record(1, 13, 0, 1, 0))).toBe("av01.1.13M.10");
+  });
+
+  it("refuses a record it cannot read rather than inventing one", () => {
+    expect(av1CodecString(new Uint8Array([0x81, 0x00]))).toBeNull();
+    // Three bytes is what it reads, and three is enough.
+    expect(av1CodecString(new Uint8Array([0x81, 0x08, 0x40]))).toBe("av01.0.08M.10");
+    // A record whose version byte is not the one the specification defines.
+    expect(av1CodecString(new Uint8Array([0x00, 0x00, 0x00, 0x00]))).toBeNull();
   });
 });

@@ -63,6 +63,13 @@ export function probeCapabilities(): Promise<Capability[]> {
   cached ??= (async () => [
     // Could a DTS track be handed straight to the player? The answer is expected to be no
     // everywhere, and this is where that stops being an assumption.
+    // What the picture can be handed over as. HEVC decides whether most of this library takes
+    // the native path at all; AV1 decides it for the format that is replacing it, and the answer
+    // differs by device rather than by browser — Apple's own hardware only learned it recently.
+    sourceSupport('video/mp4; codecs="hvc1.1.6.L120.90"', "HEVC 8 bits dans MediaSource"),
+    sourceSupport('video/mp4; codecs="hvc1.2.4.L150.90"', "HEVC 10 bits dans MediaSource"),
+    sourceSupport('video/mp4; codecs="av01.0.08M.08"', "AV1 dans MediaSource"),
+    sourceSupport('video/mp4; codecs="av01.0.12M.10"', "AV1 10 bits dans MediaSource"),
     sourceSupport('audio/mp4; codecs="dtsc"', "DTS dans MediaSource"),
     sourceSupport('audio/mp4; codecs="dtse"', "DTS Express dans MediaSource"),
     // If not, the way through is to re-encode what we decode. These say whether that is possible.

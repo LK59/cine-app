@@ -127,3 +127,44 @@ describe("le cache d'en-tête", () => {
     expect(b.reads()).toBeGreaterThan(0);
   });
 });
+
+describe("la luminance de mastering", () => {
+  /**
+   * A file whose Colour element says it was graded on a 4000-nit display.
+   *
+   * Built rather than fetched: the point is the parsing, and a real file would tie the test to
+   * one particular grade in one particular library.
+   */
+  const graded = (nits: number) => {
+    const luminance = new Uint8Array(8);
+    new DataView(luminance.buffer).setFloat64(0, nits);
+    const el = (id: number[], payload: number[]) => [...id, 0x80 | payload.length, ...payload];
+    const mastering = el([0x55, 0xd0], el([0x55, 0xd9], [...luminance]));
+    const colour = el([0x55, 0xb0], [...el([0x55, 0xba], [16]), ...mastering]);
+    const video = el([0xe0], [...el([0xb0], [0x07, 0x80]), ...el([0xba], [0x04, 0x38]), ...colour]);
+    const entry = el([0xae], [...el([0xd7], [1]), ...el([0x83], [1]), ...el([0x86], [0x56, 0x5f, 0x54]), ...video]);
+    const tracks = el([0x16, 0x54, 0xae, 0x6b], entry);
+    const info = el([0x15, 0x49, 0xa9, 0x66], el([0x2a, 0xd7, 0xb1], [0x0f, 0x42, 0x40]));
+    const segment = el([0x18, 0x53, 0x80, 0x67], [...info, ...tracks]);
+    const ebml = el([0x1a, 0x45, 0xdf, 0xa3], el([0x42, 0x86], [1]));
+    return new Uint8Array([...ebml, ...segment]);
+  };
+
+  const sourceOf = (bytes: Uint8Array) => ({
+    size: bytes.length,
+    read: async (offset: number, length: number) => bytes.subarray(offset, Math.min(offset + length, bytes.length)),
+    close: () => {},
+  });
+
+  it("lit le pic du fichier au lieu de le supposer", async () => {
+    // This library holds masters graded at 1000 nits and others at 4000. Treating a 4000 as a
+    // 1000 throws away everything above a quarter of its range — every highlight of the grade.
+    const file = await parseMatroska(sourceOf(graded(4000)));
+    expect(file.tracks[0].video?.colour?.masteringMaxNits).toBe(4000);
+  });
+
+  it("ne retient pas un zéro, qui veut dire « je ne sais pas »", async () => {
+    const file = await parseMatroska(sourceOf(graded(0)));
+    expect(file.tracks[0].video?.colour?.masteringMaxNits).toBeUndefined();
+  });
+});

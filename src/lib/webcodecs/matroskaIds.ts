@@ -38,6 +38,13 @@ export const ID = {
   TransferCharacteristics: 0x55ba,
   Primaries: 0x55bb,
   ColourRange: 0x55b9,
+  /** The brightest and dimmest the content itself ever gets, in nits. Often absent. */
+  MaxCll: 0x55bc,
+  MaxFall: 0x55bd,
+  /** How bright the display it was graded on could go. This is what a tone map normalises to. */
+  MasteringMetadata: 0x55d0,
+  LuminanceMax: 0x55d9,
+  LuminanceMin: 0x55da,
   BitsPerChannel: 0x55b2,
 
   Audio: 0xe1,

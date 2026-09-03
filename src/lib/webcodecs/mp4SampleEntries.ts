@@ -83,6 +83,10 @@ export function videoSampleEntry(codecId: string, codecPrivate: Uint8Array, widt
       return visualSampleEntry("hvc1", width, height, box("hvcC", codecPrivate));
     case "V_MPEG4/ISO/AVC":
       return visualSampleEntry("avc1", width, height, box("avcC", codecPrivate));
+    case "V_AV1":
+      // The easiest of the three: Matroska keeps an AV1 track's configuration as the very box an
+      // MP4 wants, so it is carried across untouched rather than parsed and rebuilt.
+      return visualSampleEntry("av01", width, height, box("av1C", codecPrivate));
     default:
       throw new Error(`Codec vidéo non remultiplexable : ${codecId}`);
   }

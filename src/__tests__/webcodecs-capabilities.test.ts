@@ -88,7 +88,11 @@ describe("probeCapabilities", () => {
     const mod = await import("@/lib/webcodecs/capabilities");
     await mod.probeCapabilities();
     await mod.probeCapabilities();
-    // Four questions asked, not eight: none of these answers change while a page is open.
-    expect(isTypeSupported).toHaveBeenCalledTimes(4);
+    // Asked once each and not twice: none of these answers change while a page is open. The
+    // count is the number of container questions, whatever that number happens to be today.
+    const asked = isTypeSupported.mock.calls.length;
+    await mod.probeCapabilities();
+    expect(isTypeSupported).toHaveBeenCalledTimes(asked);
+    expect(asked).toBeGreaterThanOrEqual(4);
   });
 });

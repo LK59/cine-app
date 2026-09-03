@@ -96,15 +96,6 @@ export function avcCodecString(avcC: Uint8Array): string | null {
   return `avc1.${hex(avcC[1])}${hex(avcC[2])}${hex(avcC[3])}`.toLowerCase();
 }
 
-/** Builds an `av01.*` string from the av1C record. */
-export function av1CodecString(av1C: Uint8Array): string | null {
-  if (av1C.length < 2) return null;
-  const profile = (av1C[1] >> 5) & 0x07;
-  const level = av1C[1] & 0x1f;
-  const tier = (av1C[2] >> 7) & 0x01;
-  return `av01.${profile}.${String(level).padStart(2, "0")}${tier ? "H" : "M"}.08`;
-}
-
 export function videoConfigFor(track: MatroskaTrack): VideoConfig | null {
   if (track.type !== "video" || !track.video) return null;
   const size = { codedWidth: track.video.width, codedHeight: track.video.height };
@@ -259,4 +250,35 @@ export function isRandomAccessPoint(data: Uint8Array, codecId: string, lengthSiz
   }
   // Nothing legible. The container's own word is all there is, and it said keyframe to get here.
   return true;
+}
+
+/**
+ * The codec string for an AV1 track, from the configuration record Matroska already holds.
+ *
+ * `av01.P.LLT.DD` — profile, level, tier and bit depth. The specification allows a longer form
+ * naming the colour description as well; the short one is what it calls the minimum and what
+ * every player is required to understand, and saying less about colour is safer than saying it
+ * wrongly, since the stream carries its own description regardless.
+ *
+ * Returns null for a record too short to read, so an unreadable one refuses the path rather than
+ * producing a string that describes nothing.
+ *
+ * The bit depth is read rather than assumed. It used to be written as `.08` whatever the stream
+ * was, which on the one ten-bit AV1 file here described it to a decoder as eight — a claim the
+ * browser is entitled to act on.
+ */
+export function av1CodecString(av1C: Uint8Array): string | null {
+  // marker and version, then profile and level, then tier and the bit-depth flags. Three bytes
+  // is all that is read, so three is all that is required.
+  if (av1C.length < 3 || (av1C[0] & 0x7f) !== 1) return null;
+
+  const profile = (av1C[1] >> 5) & 0x07;
+  const level = av1C[1] & 0x1f;
+  const tier = (av1C[2] >> 7) & 0x01 ? "H" : "M";
+  const highBitDepth = (av1C[2] >> 6) & 0x01;
+  const twelveBit = (av1C[2] >> 5) & 0x01;
+  // Profile 2 is the only one that can be twelve-bit; elsewhere the flag means ten.
+  const depth = twelveBit && profile === 2 ? 12 : highBitDepth ? 10 : 8;
+
+  return `av01.${profile}.${String(level).padStart(2, "0")}${tier}.${String(depth).padStart(2, "0")}`;
 }

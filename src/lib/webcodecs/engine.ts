@@ -364,7 +364,10 @@ export class PlaybackEngine {
 
     this.renderer = createRenderer(this.canvas, {
       hdr: options.hdr,
-      peakNits: options.peakNits,
+      // Read from the file rather than assumed. The caller may still name one — nothing does
+      // today — and the thousand at the end is the grade most masters were made at, which is
+      // what a file that says nothing is most likely to be.
+      peakNits: options.peakNits ?? this.videoTrack.video?.colour?.masteringMaxNits ?? 1000,
       // Surfaced rather than swallowed: the picture still plays, but flat, and knowing that is
       // the difference between "HDR isn't working here" and "this player is broken".
       onHdrFallback: (reason) =>

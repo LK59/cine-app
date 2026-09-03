@@ -9,7 +9,7 @@
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
-import { avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize } from "./codecConfig";
+import { av1CodecString, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
@@ -161,6 +161,7 @@ function videoCodecString(track: MatroskaTrack): string | null {
   if (!track.codecPrivate) return null;
   if (track.codecId === "V_MPEGH/ISO/HEVC") return hevcCodecString(track.codecPrivate);
   if (track.codecId === "V_MPEG4/ISO/AVC") return avcCodecString(track.codecPrivate);
+  if (track.codecId === "V_AV1") return av1CodecString(track.codecPrivate);
   return null;
 }
 

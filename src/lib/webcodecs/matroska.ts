@@ -17,6 +17,17 @@ export interface TrackColour {
   /** 1 = limited/TV, 2 = full/PC. */
   range?: number;
   bitsPerChannel?: number;
+  /**
+   * How bright, in nits, the display this was graded on could go.
+   *
+   * What a tone map normalises to, and the difference between a picture that is right and one
+   * that is merely plausible: this library holds masters graded at 1000 nits and others at 4000,
+   * and treating a 4000 as a 1000 throws away everything above a quarter of its range — which is
+   * every highlight the grade was made for.
+   */
+  masteringMaxNits?: number;
+  /** The brightest the content itself ever gets. Frequently written as zero, meaning unknown. */
+  maxContentLightNits?: number;
 }
 
 export interface MatroskaTrack {
@@ -151,6 +162,21 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
                   case ID.Primaries: colour.primaries = readUint(await payload(source, c)); break;
                   case ID.ColourRange: colour.range = readUint(await payload(source, c)); break;
                   case ID.BitsPerChannel: colour.bitsPerChannel = readUint(await payload(source, c)); break;
+                  case ID.MaxCll: {
+                    const nits = readUint(await payload(source, c));
+                    if (nits > 0) colour.maxContentLightNits = nits;
+                    break;
+                  }
+                  case ID.MasteringMetadata:
+                    await forEachChild(source, c.offset, c.offset + (c.size ?? 0), async (m) => {
+                      // A float, in nits, and zero when the writer had nothing to say.
+                      if (m.id === ID.LuminanceMax) {
+                        const nits = readFloat(await payload(source, m));
+                        if (nits > 0) colour.masteringMaxNits = nits;
+                      }
+                      return "continue";
+                    });
+                    break;
                 }
                 return "continue";
               });
