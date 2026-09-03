@@ -1,9 +1,12 @@
 # Le lecteur expérimental
 
 Un lecteur vidéo qui lit les fichiers de la bibliothèque **sans rien demander au
-serveur** : pas de transcodage, pas de session Jellyfin, pas de HLS. Le
+serveur** : pas de transcodage, pas de négociation de flux, pas de HLS. Le
 navigateur télécharge le `.mkv` par plages d'octets et tout le reste se passe
 dans l'onglet.
+
+Il ouvre quand même une **session Jellyfin**, mais pour la seule chose que le
+serveur doit savoir : ce qui est regardé et jusqu'où (voir plus bas).
 
 Il existe parce que le transcodage serveur coûte cher, démarre lentement et
 dégrade l'image. Ici le fichier part du disque tel qu'il est.
@@ -322,6 +325,11 @@ fausses images-clés d'un fichier et ce que les refuser coûte.
 - **Les fausses images-clés coûtent un saut sur quatre-vingts** sur le fichier
   concerné (aucun sur les autres) : on relit alors quelques secondes d'images que
   personne ne voit.
+- **ASS/SSA rendus sans leur style.** Seules les répliques sont affichées : la
+  mise en forme, le positionnement et les polices embarquées sont jetés. Sur du
+  dialogue ordinaire ça ne se voit pas ; sur un panneau positionné, ça donne une
+  ligne en bas comme une autre. Choix assumé — les proposer dépouillés vaut mieux
+  que priver 218 fichiers de sous-titres à cause de leur mise en forme.
 - **Sous-titres image** (PGS, VobSub) non rendus — ils ne sont pas proposés dans
   le menu plutôt que d'y figurer sans rien faire. C'est sans conséquence ici :
   les fichiers concernés ont tous un `.srt` posé à côté, et c'est lui qui est
@@ -358,6 +366,42 @@ l'en-tête `WEBVTT`, et des **réglages de position** en fin de ligne de temps
 
 ---
 
+## Ce que le serveur apprend quand même
+
+Rien du fichier ne passe par Jellyfin, mais la progression, si — sinon les
+reprises cesseraient d'être justes pour ce lecteur, et lui seul.
+
+- **Le démarrage est annoncé** (`/api/jellyfin/playback/playing`). Le lecteur
+  stable n'en a pas besoin : négocier son flux le dit déjà. Celui-ci ne négocie
+  rien, et sans cette annonce il envoyait de la progression pour une session
+  dont le serveur n'avait jamais entendu parler — absente de « en cours de
+  lecture » comme de l'historique du greffon PlaybackReporting.
+- **Un battement toutes les dix secondes**, à la position que le lecteur donne
+  lui-même (jamais `video.currentTime`, qui retombe à zéro pendant un
+  rechargement de piste et écraserait le point de reprise par 0).
+- **La fin est dite** au démontage, sur `beforeunload` **et sur `pagehide`** —
+  iOS n'envoie jamais le premier : fermer un onglet, balayer l'application ou
+  suivre un lien sortant finissent tous sur le second, et c'était toute la
+  position finale perdue sur un téléphone. Passer en arrière-plan enregistre la
+  position par une **progression**, pas par un arrêt : ranger une application
+  n'est pas fermer un film.
+- **La pause est dite honnêtement.** Un film en pause une heure à l'écran
+  n'est pas une heure de visionnage.
+- **Chaque lecteur joue sous son nom.** Jellyfin nomme un client d'après
+  l'en-tête d'autorisation de chaque requête et non d'après le jeton, donc un
+  même compte peut montrer lequel des deux tourne : `CineApp` pour celui qui
+  confie le fichier à Jellyfin, `CineEngine By CineApp` pour celui qui le lit
+  ici. Le nom vient du navigateur : il est **comparé à ces deux-là**, jamais
+  transmis tel quel — il finit dans la liste des sessions du serveur.
+
+Le saut d'intro et l'épisode suivant viennent du greffon **Intro Skipper**
+(`/Episode/{id}/Timestamps`), servis aux deux lecteurs et fonctionnels sur les
+trois chemins ; sur le chemin canvas, la barre de contrôle cherche à travers le
+`currentTime` de la façade. Mesuré sur la bibliothèque : 54 épisodes sur 60
+tirés au hasard portent un marqueur valide.
+
+---
+
 ## Carte des fichiers
 
 | Fichier | Rôle |
@@ -373,6 +417,8 @@ l'en-tête `WEBVTT`, et des **réglages de position** en fin de ligne de temps
 | `mseSupport.ts` | Ce que le navigateur accepte, et la sonde de remplacement de tampon |
 | `bufferQueue.ts` | Une opération à la fois par tampon |
 | `externalSubtitles.ts` | Les `.srt` posés à côté du film : lecture, recherche par temps |
+| `../usePlaybackSession.ts` | Ce que le serveur apprend : démarrage, battement, fin |
+| `../playbackClients.ts` | Les deux noms sous lesquels l'app joue |
 | `playbackGuard.ts` | L'horloge de l'élément : pause, reprise, atterrissage, maintien de l'image |
 | `mseSource.ts` | MediaSource, tampons, remplissage, sauts, reprises |
 | `remuxPlayback.ts` | Assemblage : fichier en entrée, `<video>` qui joue en sortie |

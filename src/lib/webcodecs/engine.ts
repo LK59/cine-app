@@ -49,9 +49,10 @@ export interface SubtitleCue {
 }
 
 /** Non-fatal: playback continues, the viewer is told. Distinct from "error", which stops it. */
-// Text subtitle codecs the engine can render itself. ASS/SSA are deliberately absent for now:
-// they are styled, positioned and often font-embedded, and rendering them badly is worse than
-// not offering them — see the roadmap. SRT and plain UTF-8 text carry no styling to lose.
+// Text subtitle codecs the engine can render itself. ASS and SSA are here for their words only:
+// the styling, the positioning and any embedded fonts are dropped, which for ordinary dialogue
+// is invisible and for a positioned sign is a line at the bottom like any other. Offering them
+// stripped beats withholding 218 files' subtitles over their styling — see subtitleText below.
 export const TEXT_SUBTITLE_CODECS = new Set(["S_TEXT/UTF8", "S_TEXT/ASCII", "S_TEXT/ASS", "S_TEXT/SSA"]);
 
 /**
