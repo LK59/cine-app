@@ -203,7 +203,14 @@ export class MseSource {
    * does. Four numbers settle what a description cannot — where it stopped, where it came back,
    * and where it was one tick later.
    */
-  private resumeTrace: { paused: number; settled: number; play: number; tick: number | null } | null = null;
+  private resumeTrace: {
+    paused: number;
+    settled: number;
+    asserted: number | null;
+    play: number;
+    tick: number | null;
+  } | null = null;
+  private pauseAssertTimer: ReturnType<typeof setTimeout> | null = null;
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -327,7 +334,26 @@ export class MseSource {
   private readonly onPause = () => {
     if (this.destroyed) return;
     this.pauseAnchor = this.video.currentTime;
-    this.resumeTrace = { paused: this.pauseAnchor, settled: this.pauseAnchor, play: NaN, tick: null };
+    this.resumeTrace = { paused: this.pauseAnchor, settled: this.pauseAnchor, asserted: null, play: NaN, tick: null };
+
+    // Re-stated while the picture is standing still, which is the only moment it costs nothing.
+    //
+    // The half second that appears at the instant of resuming is the sound the hardware still
+    // held: it plays on past the frozen picture, and the clock reports it all at once when
+    // playback restarts. By then there is no good answer — pulling it back shows the wrong frame
+    // while the seek settles, and leaving it skips half a second of picture. Asking the element
+    // to be where it already is, while paused, empties that queue instead, so there is nothing
+    // left to arrive late. Whether it works is visible in the trace: the resume then departs from
+    // exactly where the pause stopped.
+    if (this.pauseAssertTimer) clearTimeout(this.pauseAssertTimer);
+    this.pauseAssertTimer = setTimeout(() => {
+      this.pauseAssertTimer = null;
+      const anchor = this.pauseAnchor;
+      if (this.destroyed || anchor === null || !this.video.paused) return;
+      this.lastSeekTarget = anchor;
+      this.video.currentTime = anchor;
+      if (this.resumeTrace) this.resumeTrace.asserted = anchor;
+    }, PAUSE_SETTLE_MS);
     // Followed until it comes to rest, so the anchor is where the film actually stopped being
     // heard rather than where the button was pressed. On a platform that stops dead — every
     // desktop browser — the first sample is already the last, and this costs nothing.
@@ -823,7 +849,9 @@ export class MseSource {
       "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
       ...(this.resumeTrace
         ? {
-            "Dernière pause": `arrêt ${this.resumeTrace.paused.toFixed(3)} → repos ${this.resumeTrace.settled.toFixed(3)}`,
+            "Dernière pause": `arrêt ${this.resumeTrace.paused.toFixed(3)} → repos ${this.resumeTrace.settled.toFixed(3)}${
+              this.resumeTrace.asserted !== null ? " → recalé" : ""
+            }`,
             "Dernière reprise": Number.isNaN(this.resumeTrace.play)
               ? "—"
               : `départ ${this.resumeTrace.play.toFixed(3)} → 1er tick ${this.resumeTrace.tick?.toFixed(3) ?? "—"}`,
@@ -848,6 +876,8 @@ export class MseSource {
     this.watchdogTimer = null;
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
     this.pauseSettleTimer = null;
+    if (this.pauseAssertTimer) clearTimeout(this.pauseAssertTimer);
+    this.pauseAssertTimer = null;
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();
