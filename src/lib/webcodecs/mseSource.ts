@@ -30,6 +30,9 @@ const RECOVERY_WINDOW_MS = 5000;
 /** Refused appends in a row before playback is declared broken rather than merely interrupted. */
 const MAX_APPEND_FAILURES = 3;
 
+/** Past this, a silent picture is better than a still one — and the viewer is told nothing more. */
+const AUDIO_HOLD_TIMEOUT_MS = 10000;
+
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
 
@@ -228,6 +231,8 @@ export class MseSource {
   private audioOps: BufferQueue | null = null;
   /** Consecutive refused appends. A single one is worth retrying; a run of them is not. */
   private appendFailures = 0;
+  /** Set while the picture is deliberately held still for want of sound. See beginAudioHold. */
+  private audioHold: { wanted: boolean } | null = null;
   private objectUrl: string | null = null;
   /** The read loop in flight, if any. A seek has to let it finish before moving the reader. */
   private fillTask: Promise<void> | null = null;
@@ -785,7 +790,8 @@ export class MseSource {
         this.callbacks.onWarning?.("Reprise après un segment refusé.");
         return;
       }
-      this.callbacks.onError(error instanceof Error ? error.message : String(error));
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      this.callbacks.onError(`${detail} ${this.elementState()}`);
     }
   }
 
@@ -873,9 +879,79 @@ export class MseSource {
         return this.performSeek(target);
       })
       .catch((error) => {
-        if (!this.destroyed) this.callbacks.onError(error instanceof Error ? error.message : String(error));
+        if (this.destroyed) return;
+        // Given the same second chance as a refused append, and for the same reason: a seek that
+        // lands on a buffer operation the browser declines has lost nothing that cannot be read
+        // again. Declaring playback over on the first one is what turned "one seek too many"
+        // into a dead player.
+        this.appendFailures += 1;
+        const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.video.currentTime)) {
+          this.callbacks.onWarning?.("Reprise après un saut refusé.");
+          return;
+        }
+        this.callbacks.onError(`${detail} ${this.elementState()}`);
       });
     return this.pending;
+  }
+
+  /**
+   * Keeps the picture still while there is no sound to go with it.
+   *
+   * A media element is supposed to stall when one of its buffers has nothing at the playhead.
+   * Safari does not: it plays the picture on in silence, and a couple of seconds of the film go
+   * by unheard while the new track is still being decoded. So the element is held here instead,
+   * and a press of play during the hold is remembered rather than obeyed.
+   */
+  beginAudioHold(): void {
+    if (this.destroyed || this.audioHold) return;
+    this.audioHold = { wanted: !this.video.paused };
+    this.video.addEventListener("play", this.onPlayDuringHold);
+    if (!this.video.paused) this.video.pause();
+    // The same signal the opening wait uses, so the viewer gets the spinner they already know.
+    this.callbacks.onStarting?.(Date.now());
+  }
+
+  private readonly onPlayDuringHold = () => {
+    if (!this.audioHold) return;
+    this.audioHold.wanted = true;
+    this.video.pause();
+  };
+
+  /** Whether the sound covers a point on the player's clock. */
+  private audioCovers(seconds: number): boolean {
+    const ranges = this.audioBuffer?.buffered;
+    for (let i = 0; ranges && i < ranges.length; i++) {
+      if (ranges.start(i) <= seconds + 0.05 && seconds < ranges.end(i)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Ends the hold once there is sound at the playhead — or once waiting for it has gone on long
+   * enough that a silent film is better than a still one.
+   */
+  private async releaseWhenAudioArrives(): Promise<void> {
+    const deadline = Date.now() + AUDIO_HOLD_TIMEOUT_MS;
+    while (this.audioHold && !this.destroyed && Date.now() < deadline) {
+      if (this.audioCovers(this.video.currentTime)) break;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    this.endAudioHold();
+  }
+
+  /** Lets the picture go again — for a caller whose change of track came to nothing. */
+  releaseAudioHold(): void {
+    this.endAudioHold();
+  }
+
+  private endAudioHold(): void {
+    const hold = this.audioHold;
+    if (!hold) return;
+    this.audioHold = null;
+    this.video.removeEventListener("play", this.onPlayDuringHold);
+    this.callbacks.onStarting?.(null);
+    if (hold.wanted && !this.destroyed) void this.video.play().catch(() => {});
   }
 
   /**
@@ -925,6 +1001,7 @@ export class MseSource {
     await this.clear(this.audioOps);
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     void this.fill();
+    void this.releaseWhenAudioArrives();
   }
 
   /**
@@ -1090,10 +1167,16 @@ export class MseSource {
   }
 
   get debug(): Record<string, string> {
-    const ranges = this.videoBuffer?.buffered;
+    // Reading a buffer whose source has closed throws, and the whole panel used to come back as
+    // one "invalid state" line — at exactly the moment there was most to learn from it.
     const spans: string[] = [];
-    for (let i = 0; ranges && i < ranges.length; i++) {
-      spans.push(`${ranges.start(i).toFixed(0)}–${ranges.end(i).toFixed(0)}`);
+    try {
+      const ranges = this.videoBuffer?.buffered;
+      for (let i = 0; ranges && i < ranges.length; i++) {
+        spans.push(`${ranges.start(i).toFixed(0)}–${ranges.end(i).toFixed(0)}`);
+      }
+    } catch {
+      spans.push("illisible (source fermée)");
     }
     return {
       "Tampon vidéo": spans.join(" · ") || "vide",
@@ -1137,6 +1220,8 @@ export class MseSource {
     this.watchdogTimer = null;
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
     this.pauseSettleTimer = null;
+    this.video.removeEventListener("play", this.onPlayDuringHold);
+    this.audioHold = null;
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();

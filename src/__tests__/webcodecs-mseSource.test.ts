@@ -190,6 +190,15 @@ function fakeVideo() {
   });
   return Object.assign(target, {
     paused: false,
+    // The two the hold uses. Recorded rather than simulated: what matters is whether the element
+    // was told to stop and whether it was told to start again.
+    pause: vi.fn(function (this: { paused: boolean }) {
+      this.paused = true;
+    }),
+    play: vi.fn(function (this: { paused: boolean }) {
+      this.paused = false;
+      return Promise.resolve();
+    }),
     disableRemotePlayback: false,
     srcObject: null as unknown,
     src: "",
@@ -1006,6 +1015,61 @@ describe("MseSource", () => {
 
     expect(videoBuffer.removed).toEqual([]);
     expect(videoBuffer.appended.length).toBe(videoAppends);
+  });
+
+  it("holds the picture still while there is no sound to go with it", async () => {
+    // Safari plays a picture on in silence when the audio buffer has nothing at the playhead,
+    // instead of stalling: a second or two of the film goes by unheard while a newly chosen
+    // track is still being decoded.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const onStarting = vi.fn();
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
+    await flush();
+
+    mse.beginAudioHold();
+    expect(video.paused).toBe(true);
+    // And the viewer gets the spinner they already know from opening a file.
+    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
+
+    // A press of play during the hold is remembered, not obeyed.
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    expect(video.paused).toBe(true);
+
+    mse.releaseAudioHold();
+    expect(video.paused).toBe(false);
+    expect(onStarting).toHaveBeenLastCalledWith(null);
+  });
+
+  it("gives a refused seek the same second chance as a refused append", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const onError = vi.fn();
+    const onWarning = vi.fn();
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onWarning });
+    await flush();
+
+    // Reading the ranges of a buffer whose source has closed throws, and a seek reads them before
+    // it can clear anything. Declaring playback over on the first of these is what turned "one
+    // seek too many" into a dead player.
+    const [videoBuffer] = FakeSource.instances[0].buffers;
+    const own = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(videoBuffer), "buffered");
+    let refused = false;
+    Object.defineProperty(videoBuffer, "buffered", {
+      configurable: true,
+      get() {
+        if (!refused) {
+          refused = true;
+          throw Object.assign(new Error("The object is in an invalid state."), { name: "InvalidStateError" });
+        }
+        return own?.get?.call(this) ?? { length: 0 };
+      },
+    });
+
+    await mse.seek(40);
+    await flush();
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("is ready without waiting for the buffer to fill", async () => {

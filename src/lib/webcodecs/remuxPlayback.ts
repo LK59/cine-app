@@ -33,9 +33,10 @@ export interface RemuxPlaybackOptions {
   onStarting?: (startedAt: number | null) => void;
 }
 
-export type PathProbe =
+export type PathProbe = { discard: () => void } & (
   | { path: "remux"; start: (video: HTMLVideoElement) => Promise<RemuxPlayback> }
-  | { path: "webcodecs"; chosen: ChosenPath };
+  | { path: "webcodecs"; chosen: ChosenPath }
+);
 
 function toEngineTrack(track: MatroskaTrack): EngineTrack {
   return {
@@ -110,13 +111,18 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
   trace(`chemin choisi : ${describePath(chosen)}`);
   if (chosen.path !== "remux" || !chosen.remuxer || !chosen.plan) {
     source.close();
-    return { path: "webcodecs", chosen };
+    return { path: "webcodecs", chosen, discard: () => {} };
   }
-
 
   return {
     path: "remux",
     start: (video) => RemuxPlayback.start(video, source, file, videoTrack, audioTrack, chosen, options),
+    // For a caller that asked and then changed its mind: the remuxer holds the software decoder
+    // and the encoder, and the source holds the connection.
+    discard: () => {
+      chosen.remuxer?.close();
+      source.close();
+    },
   };
 }
 
@@ -238,6 +244,10 @@ export class RemuxPlayback {
     const at = this.video.currentTime;
     const mse = this.mse;
     const previous = this.audioTrack;
+    // Before anything is awaited: from here until there is sound again, the picture is held. A
+    // press of play in that window is remembered and obeyed once the sound arrives, rather than
+    // running the film on in silence for the second or two the new track takes to decode.
+    mse.beginAudioHold();
     // One indivisible step. Describing the new track, re-pointing the buffer and refilling are
     // three operations on the same buffers, and a seek landing between any two of them reaches
     // those buffers from the other side — which is the freeze seen when changing language just
@@ -256,6 +266,8 @@ export class RemuxPlayback {
       this.options.onWarning?.(
         `Cette piste audio n'a pas pu être ouverte : ${error instanceof Error ? error.message : "raison inconnue"}`
       );
+      // The old track never stopped working, so the picture has no reason to stay still.
+      mse.releaseAudioHold();
       return;
     }
     // Only the sound is read again, and only from where the viewer is. An ordinary seek would

@@ -135,7 +135,16 @@ export function ExperimentalPlayerHost({
   const [pathReason, setPathReason] = useState<string | null>(null);
   const [openedAt] = useState(() => Date.now());
 
-  const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
+  // Fetched once and then left alone. The description of a file does not change while it is
+  // being watched, and every revalidation handed back a fresh object — which the effect below
+  // depends on, so the whole pipeline was torn down and rebuilt behind the viewer's back: a
+  // second decoder, a second encoder, a second MediaSource, and the first one's read loop still
+  // running against buffers its source had already released.
+  const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+  });
   const error =
     runtimeError ??
     info?.refusedReason ??
@@ -338,7 +347,12 @@ export function ExperimentalPlayerHost({
       onStarting: (at) => setStartingAt(at),
     })
       .then((probe) => {
-        if (cancelled) return;
+        if (cancelled) {
+          // Abandoned before it could be used, and it is holding a decoder, an encoder and an
+          // open stream. Nothing else will ever come back for them.
+          probe.discard();
+          return;
+        }
         return probe.path === "remux" ? startRemux(element, probe.start) : startEngine(describePath(probe.chosen));
       })
       .catch((cause: unknown) => {
