@@ -275,6 +275,22 @@ afterEach(() => vi.unstubAllGlobals());
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+/**
+ * Waits for something to become true rather than for a fixed stretch of time.
+ *
+ * A read loop under load takes as long as it takes: a sleep long enough on an idle machine is a
+ * coin toss on a busy one, and a flaky test here blocks the image build. Fails loudly on the
+ * deadline so a real regression still reads as a failure and not as a hang.
+ */
+async function until(condition: () => boolean, what: string, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error(`Toujours faux après ${timeoutMs} ms : ${what}`);
+}
+
 describe("playabilityOf", () => {
   it("accepts a plan whose codecs the browser declares", () => {
     expect(playabilityOf(PLAN)).toEqual({ ok: true });
@@ -1009,7 +1025,7 @@ describe("MseSource", () => {
     const audioAppends = audioBuffer.appended.length;
 
     await mse.refillAudio(10);
-    await new Promise((r) => setTimeout(r, 60));
+    await until(() => audioBuffer.appended.length > audioAppends, "le son est relu");
 
     // Re-appending video over media the browser has already played is what it catches up on at
     // speed: several seconds replayed in one or two, reported after every language change.
@@ -1030,12 +1046,13 @@ describe("MseSource", () => {
     const remuxer = fakeRemuxer(500, 0.2);
     const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
     await flush();
-    const [videoBuffer] = FakeSource.instances[0].buffers;
+    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
     const videoAppends = videoBuffer.appended.length;
+    const audioAppends = audioBuffer.appended.length;
 
     await mse.replaceAudio('audio/mp4; codecs="mp4a.40.2"', new Uint8Array([7]));
     await mse.refillAudio(10);
-    await new Promise((r) => setTimeout(r, 60));
+    await until(() => audioBuffer.appended.length > audioAppends, "le son est relu");
 
     expect(videoBuffer.removed).toEqual([]);
     expect(videoBuffer.appended.length).toBe(videoAppends);
@@ -1075,15 +1092,14 @@ describe("MseSource", () => {
     await flush();
     remuxer.videoWantedCalls.length = 0;
 
-    await mse.refillAudio(10);
-    await new Promise((r) => setTimeout(r, 60));
-
     // Asked for at least once while re-reading what is already held.
-    expect(remuxer.videoWantedCalls).toContain(false);
+    await mse.refillAudio(10);
+    await until(() => remuxer.videoWantedCalls.includes(false), "les images cessent d'être construites");
+
     // And an ordinary seek, which replaces everything, wants them all again.
     remuxer.videoWantedCalls.length = 0;
     await mse.seek(300);
-    await new Promise((r) => setTimeout(r, 60));
+    await until(() => remuxer.videoWantedCalls.length > 0, "le lecteur repart après le saut");
     expect(remuxer.videoWantedCalls).not.toContain(false);
   });
 
@@ -1099,10 +1115,8 @@ describe("MseSource", () => {
     onSubtitles.mockClear();
 
     await mse.refillAudio(10);
-    await new Promise((r) => setTimeout(r, 60));
-
-    expect(remuxer.videoWantedCalls).toContain(false);
-    expect(onSubtitles).toHaveBeenCalled();
+    await until(() => remuxer.videoWantedCalls.includes(false), "les images cessent d'être construites");
+    await until(() => onSubtitles.mock.calls.length > 0, "des sous-titres sont trouvés");
   });
 
   it("empties the audio buffer before asking it to change codec", async () => {
@@ -1139,8 +1153,7 @@ describe("MseSource", () => {
 
     // Now it does not.
     (audioBuffer as unknown as { ranges: [number, number][] }).ranges = [];
-    await new Promise((r) => setTimeout(r, 120));
-    expect(video.paused).toBe(true);
+    await until(() => video.paused, "l'image est retenue");
     expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
 
     // And a press of play into that gap is remembered, not obeyed.
