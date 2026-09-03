@@ -14,6 +14,7 @@ import { useT } from "@/components/TranslationProvider";
 import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
+import { describePath } from "@/lib/webcodecs/pathSelector";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -125,6 +126,9 @@ export function ExperimentalPlayerHost({
   // fact rather than guessed from the platform: on a desktop it clears within a frame, so none
   // of what follows ever appears there.
   const [startingAt, setStartingAt] = useState<number | null>(null);
+  // Why this file is being played the way it is. Kept for the panel on *both* paths: a fallback
+  // whose reason is only visible on the path that was not taken explains nothing at all.
+  const [pathReason, setPathReason] = useState<string | null>(null);
   const [openedAt] = useState(() => Date.now());
 
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
@@ -263,7 +267,8 @@ export function ExperimentalPlayerHost({
       await element.play().catch(() => {});
     };
 
-    const startEngine = async () => {
+    const startEngine = async (reason: string | null) => {
+      setPathReason(reason);
       // Only now is this refusal real. The native path would have shown this file's HDR without
       // converting anything; it is landing on the canvas that makes tone mapping — and therefore
       // the viewer's consent to it — necessary.
@@ -321,7 +326,7 @@ export function ExperimentalPlayerHost({
     })
       .then((probe) => {
         if (cancelled) return;
-        return probe.path === "remux" ? startRemux(element, probe.start) : startEngine();
+        return probe.path === "remux" ? startRemux(element, probe.start) : startEngine(describePath(probe.chosen));
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -499,6 +504,9 @@ export function ExperimentalPlayerHost({
             />
             <InfoRow label="Pistes" value={`${tracks.audio.length} audio, ${tracks.subtitles.length} sous-titres`} />
             <InfoRow label="Transcodage serveur" value="aucun" />
+            {/* Shown here too, not only on the path that succeeded: a step down whose reason is
+                invisible is the same as one that happened silently. */}
+            {pathReason && <InfoRow label="Chemin" value={pathReason} />}
             {Object.entries(diagnostics).map(([label, value]) => (
               <InfoRow key={label} label={label} value={value} />
             ))}

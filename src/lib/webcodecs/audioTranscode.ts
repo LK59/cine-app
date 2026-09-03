@@ -136,25 +136,50 @@ export class AudioTranscoder {
     // encoder that accepts a configuration and then never answers is a real possibility — and a
     // player that waits for ever on it is worse than one that says what went wrong.
     const primer = decoder.samples(0);
-    const deadline = Date.now() + PRIMING_TIMEOUT_MS;
-    try {
-      while (!description && !encoderError && Date.now() < deadline) {
+    const prime = async () => {
+      while (!description && !encoderError) {
         const next = await primer.next();
-        if (next.done) break;
+        if (next.done) return;
         encode(encoder, next.value);
         await encoder.flush();
       }
+    };
+
+    // Raced, not merely bounded by a loop condition. The wait that has to be survived is one
+    // *inside* a call — a decoder that never yields, an encoder that never answers a flush — and
+    // a deadline checked between iterations never gets its turn to look.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    try {
+      await Promise.race([
+        prime(),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve();
+          }, PRIMING_TIMEOUT_MS);
+        }),
+      ]);
     } finally {
-      await primer.return?.(undefined);
+      clearTimeout(timer);
+      void primer.return?.(undefined);
     }
 
-    if (encoderError) throw new Error(`Encodage audio refusé : ${encoderError}`);
-    if (!description) {
+    if (encoderError) {
       encoder.close();
       decoder.close();
+      throw new Error(`Encodage audio refusé : ${encoderError}`);
+    }
+    if (!description) {
+      try {
+        encoder.close();
+      } catch {
+        // Already closed by whatever went wrong.
+      }
+      decoder.close();
       throw new Error(
-        Date.now() >= deadline
-          ? "L'encodeur audio de ce navigateur n'a pas répondu."
+        timedOut
+          ? `L'encodeur audio n'a pas répondu en ${PRIMING_TIMEOUT_MS / 1000} s.`
           : "L'encodeur audio n'a pas décrit le flux qu'il produit."
       );
     }

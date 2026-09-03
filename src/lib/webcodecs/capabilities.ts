@@ -73,6 +73,12 @@ export function probeCapabilities(): Promise<Capability[]> {
     // Encoding to something the player will not take is no use: these close the loop.
     sourceSupport('audio/mp4; codecs="mp4a.40.2"', "AAC dans MediaSource"),
     sourceSupport('audio/mp4; codecs="opus"', "Opus dans MediaSource"),
+    // Encoding needs somewhere to put the samples, and this is the class that holds them. It
+    // travels with the encoder, but that is an assumption until it is asked.
+    {
+      label: "AudioData",
+      supported: typeof (globalThis as { AudioData?: unknown }).AudioData === "function",
+    },
   ])();
   return cached;
 }
