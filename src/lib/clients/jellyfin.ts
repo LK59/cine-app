@@ -1,4 +1,5 @@
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
+import type { NamedItem } from "@/lib/displayTitle";
 
 export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/playbackClients";
 
@@ -217,6 +218,34 @@ export const jellyfin = {
       }),
     }),
 
+
+  /**
+   * The viewer's own playback preferences, read with their own token.
+   *
+   * Their account, their settings: the admin key would answer for whoever it belongs to, which
+   * on a shared server is somebody else's languages.
+   */
+  getUserConfiguration: (userId: string, token: string) =>
+    fetchJson<{
+      Configuration?: {
+        AudioLanguagePreference?: string | null;
+        SubtitleLanguagePreference?: string | null;
+        SubtitleMode?: string | null;
+        PlayDefaultAudioTrack?: boolean;
+      };
+    }>(`${url}/Users/${userId}`, { headers: { "X-Emby-Token": token } }),
+
+  /**
+   * Just enough of an item to name it on screen: the series, the season, the number, the title.
+   *
+   * Asked of the server rather than taken from whoever opened the player — eight places do, and
+   * each passes whatever title it had to hand.
+   */
+  getItemNaming: (userId: string, itemId: string) =>
+    fetchJson<{ Items?: NamedItem[] }>(
+      `${url}/Items?ids=${itemId}&userId=${userId}&fields=ParentIndexNumber,IndexNumber`,
+      { headers }
+    ).then((page) => page.Items?.[0] ?? null),
 
   getSystemInfo: () =>
     fetchJson<{ ServerName: string; Version: string }>(`${url}/System/Info`, { headers }),

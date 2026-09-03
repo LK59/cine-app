@@ -518,7 +518,10 @@ export class MseSource {
       // append is retried from where the playhead is; only a run of them is a real fault.
       this.appendFailures += 1;
       if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.video.currentTime)) {
-        this.callbacks.onWarning?.("Reprise après un segment refusé.");
+        // Traced, not shown. The viewer saw nothing: the segment was fetched again and the film
+        // did not stop. A banner here interrupts somebody to tell them about a problem that has
+        // already been solved — the record is the right place for it.
+        trace(`segment refusé, repris — ${this.elementState()}`);
         return;
       }
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
@@ -583,7 +586,7 @@ export class MseSource {
         this.appendFailures += 1;
         const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
         if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.video.currentTime)) {
-          this.callbacks.onWarning?.("Reprise après un saut refusé.");
+          trace(`saut refusé, repris — ${detail}`);
           return;
         }
         this.callbacks.onError(`${detail} ${this.elementState()}`, isNetworkFailure(error) ? "network" : "playback");
@@ -830,7 +833,11 @@ export class MseSource {
     if (Math.abs(target - this.recoveryTarget) < 1) {
       this.recoveryStreak += 1;
       if (this.recoveryStreak > 3) {
-        this.callbacks.onWarning?.("Impossible d'atteindre cette position dans le fichier.");
+        // Also traced rather than shown, and for a sharper reason: giving up here does not mean
+        // the position is unreachable. The remuxer's own index back-up regularly lands it a
+        // moment later — measured on the file with the false keyframes — so the banner announced
+        // a failure to a viewer whose film was about to carry on, and stayed up while it did.
+        trace(`reprise abandonnée après ${this.recoveryStreak} tentatives vers ${target.toFixed(1)} s`);
         return false;
       }
     } else {

@@ -3,6 +3,8 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
+import type { TrackPreferences } from "@/lib/trackPreferences";
+import { displayTitle } from "@/lib/displayTitle";
 import { userPrefsDb } from "@/lib/db";
 
 /** What Jellyfin can hand back as WebVTT. Anything else is a picture and has nothing to read. */
@@ -71,6 +73,13 @@ export interface DirectPlayInfo {
    * tracks are images, which this player does not render.
    */
   externalSubtitles: ExternalSubtitle[];
+  /**
+   * What the viewer's Jellyfin account asks for, so this player opens on the same track their
+   * other clients would. Null when the server would not say.
+   */
+  preferences: TrackPreferences | null;
+  /** How to name this on screen — "Série — S02E05 · Titre" for an episode. Null if unknown. */
+  title: string | null;
   /** Where the opening titles run, when Jellyfin has analysed the episode. Null otherwise. */
   introSkip: { start: number; end: number } | null;
   /** Where the closing credits begin, which is when the next episode is offered. */
@@ -93,9 +102,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
 
   // Fetched together: the timestamps 404 for films and for episodes nobody has analysed, which
   // simply means no skip-intro and no next-up prompt for this one.
-  const [item, timestamps] = await Promise.all([
+  const [item, timestamps, naming] = await Promise.all([
     jellyfin.getItemMediaSources(session.jfId, itemId).catch(() => null),
     jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
+    // Alongside the others rather than after them: naming the film must not delay showing it.
+    jellyfin.getItemNaming(session.jfId, itemId).catch(() => null),
   ]);
   const source = item?.MediaSources?.[0];
   if (!source) return NextResponse.json({ error: "Fichier introuvable côté Jellyfin" }, { status: 404 });
@@ -142,6 +153,23 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       url: `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${encodeURIComponent(source.Id ?? itemId)}&index=${s.Index}`,
     }));
 
+  // Best effort, and deliberately so: a server that will not answer about someone's languages
+  // is a reason to open the file on its own defaults, not a reason to refuse to play it.
+  const configuration = session.jfToken
+    ? await jellyfin
+        .getUserConfiguration(session.jfId, session.jfToken)
+        .then((user) => user.Configuration ?? null)
+        .catch(() => null)
+    : null;
+  const preferences: TrackPreferences | null = configuration
+    ? {
+        audioLanguage: configuration.AudioLanguagePreference ?? null,
+        subtitleLanguage: configuration.SubtitleLanguagePreference ?? null,
+        subtitleMode: (configuration.SubtitleMode as TrackPreferences["subtitleMode"]) ?? null,
+        playDefaultAudioTrack: configuration.PlayDefaultAudioTrack === true,
+      }
+    : null;
+
   const payload: DirectPlayInfo = {
     // The same static endpoint DirectPlay already uses: the proxy forwards Range headers for it,
     // which is exactly what a demuxer jumping around a 40 GB file needs.
@@ -173,6 +201,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     refusedReason,
     canvasHdrRefusal,
     externalSubtitles,
+    preferences,
+    title: naming ? displayTitle(naming, "") || null : null,
     introSkip: timestamps?.Introduction?.Valid
       ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End }
       : null,

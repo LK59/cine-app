@@ -1180,7 +1180,8 @@
       "noAudio": "Playing without sound: {reason}",
       "preparing": "Preparing the video…",
       "stillWorking": "Still working…"
-    }
+    },
+    "volume": "Volume"
   },
   "cinema": {
     "standardMode": "Standard mode",

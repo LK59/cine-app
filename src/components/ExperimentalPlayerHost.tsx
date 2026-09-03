@@ -25,7 +25,9 @@ import {
   ExternalSubtitleTrack,
   isExternalTrack,
   toEngineTrack as externalToEngineTrack,
+  type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
+import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
@@ -184,7 +186,7 @@ export function ExperimentalPlayerHost({
 }) {
   const t = useT();
   const playback = usePlayback();
-  const { itemId, title } = session;
+  const { itemId, title: openedAs } = session;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
@@ -311,6 +313,50 @@ export function ExperimentalPlayerHost({
   const subtitleFetchRef = useRef<AbortController | null>(null);
 
   /**
+   * Chooses a subtitle, from the menu or from the viewer's account.
+   *
+   * Both pipelines are told, and neither branches on which one is running: only one of the two
+   * refs is ever set, and on the direct path neither is — where the only subtitles there can be
+   * are the ones beside the film anyway.
+   */
+  const chooseSubtitle = useCallback(
+    (id: number | null, sources: ExternalSubtitleSource[]) => {
+      wantedSubtitleRef.current = id;
+      setCurrentSubtitle(id);
+      setSubtitle(null);
+
+      // Whichever is chosen, the other is turned off first: the pipeline showing a track from
+      // the container and a file showing its own would both write the same line.
+      const external = id !== null && isExternalTrack(id);
+      remuxRef.current?.selectSubtitleTrack(external ? null : id);
+      engineRef.current?.setSubtitleTrack(external ? null : id);
+
+      if (!external) {
+        externalSubtitleRef.current = null;
+        return;
+      }
+      const source = sources.find((candidate) => candidate.id === id);
+      if (!source) return;
+      // Fetched on being chosen rather than up front: a film may carry half a dozen of these
+      // and the viewer will read one of them.
+      subtitleFetchRef.current?.abort();
+      const fetching = new AbortController();
+      subtitleFetchRef.current = fetching;
+      void ExternalSubtitleTrack.load(source, fetching.signal)
+        .then((loaded) => {
+          // Unless the viewer has moved on while it was in flight.
+          if (wantedSubtitleRef.current === id) externalSubtitleRef.current = loaded;
+        })
+        .catch(() => {
+          // An abandoned fetch is not a failure to report: the viewer asked for something else,
+          // or closed the film.
+          if (!fetching.signal.aborted) showWarning("Sous-titres externes indisponibles.");
+        });
+    },
+    [showWarning]
+  );
+
+  /**
    * What to write under the picture at this instant.
    *
    * An external file, once chosen, is the only source: the pipeline was told to show nothing, so
@@ -353,6 +399,9 @@ export function ExperimentalPlayerHost({
     runtimeError ??
     info?.refusedReason ??
     (infoError ? "Impossible de récupérer les informations du fichier." : null);
+  // The server's own name for it, which is the only one that knows an episode is an episode.
+  // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
+  const title = info?.title ?? openedAs;
   const resizing = useViewportResizing();
   const isMini = mode === "mini";
 
@@ -479,6 +528,43 @@ export function ExperimentalPlayerHost({
     // previous one was waiting for died with it, and a wait nobody will ever answer is a spinner
     // that never stops. Cleared where readiness is declared rather than in an effect watching
     // for it, so nothing is left hanging for a render.
+    /**
+     * Opens the film on the tracks the viewer's Jellyfin account asks for.
+     *
+     * Only when they have not chosen anything themselves: a rebuild after a network cut must
+     * give back what *they* picked, not what their account would have picked. Which is also why
+     * the outcome is written into those same refs — from here on it is their choice.
+     *
+     * Deliberately does nothing when the preference cannot be honoured. A viewer who asked for
+     * French and is handed the only other track has been given a film in a language they did not
+     * ask for, and told nothing about it.
+     */
+    const applyPreferences = (audio: EngineTrack[], subtitles: EngineTrack[]): number | null => {
+      const preferences = info.preferences;
+      if (!preferences || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
+
+      const wantedAudio = chooseAudioTrack(audio, preferences);
+      const spoken = trackLanguage(wantedAudio ?? audio.find((track) => track.isDefault) ?? audio[0] ?? {
+        language: null,
+        name: null,
+        isDefault: false,
+        isForced: false,
+      });
+      const wantedSubtitle = chooseSubtitleTrack(
+        [...subtitles, ...(info.externalSubtitles ?? []).map(externalToEngineTrack)],
+        preferences,
+        spoken
+      );
+      trace(
+        `préférences du compte : audio ${preferences.audioLanguage ?? "—"}, sous-titres ` +
+          `${preferences.subtitleLanguage ?? "—"} (${preferences.subtitleMode ?? "Default"}) → ` +
+          `piste ${wantedAudio?.number ?? "inchangée"}, sous-titres ${wantedSubtitle?.number ?? "aucun"}`
+      );
+
+      if (wantedSubtitle) chooseSubtitle(wantedSubtitle.number, info.externalSubtitles ?? []);
+      return wantedAudio?.number ?? null;
+    };
+
     const declareReady = () => {
       setStartingAt(null);
       setSwitchingAudio(false);
@@ -512,7 +598,10 @@ export function ExperimentalPlayerHost({
       // Given back what the viewer had chosen, if this pipeline is a replacement for one that
       // had it. A film that comes back after a network cut in the wrong language, with the
       // subtitles gone, has not really come back.
-      const wantedAudio = wantedAudioRef.current;
+      // What the viewer chose, if this pipeline replaces one that had it — and otherwise what
+      // their account asks for, which is what a first opening gets.
+      const preferred = applyPreferences(playback.audioTracks, playback.subtitleTracks);
+      const wantedAudio = wantedAudioRef.current ?? preferred;
       const wantedSubtitle = wantedSubtitleRef.current;
       // A track number from a file beside the film means nothing to a pipeline reading the
       // file itself; it is answered here instead, out of what was already fetched.
@@ -521,10 +610,13 @@ export function ExperimentalPlayerHost({
       setCurrentAudio(playback.currentAudioTrack);
       declareReady();
       if (wantedAudio !== null && wantedAudio !== playback.currentAudioTrack) {
+        wantedAudioRef.current = wantedAudio;
+        setSwitchingAudio(true);
         void playback
           .selectAudioTrack(wantedAudio)
           .then(() => setCurrentAudio(playback.currentAudioTrack))
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => setSwitchingAudio(false));
       }
 
       const onTime = () => {
@@ -566,6 +658,9 @@ export function ExperimentalPlayerHost({
       setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
       setTracks({ audio: [], subtitles: [] });
       setCurrentAudio(null);
+      // Nothing here opens the container, so the only tracks to choose between are the subtitle
+      // files beside the film — which is exactly what this path would otherwise have none of.
+      applyPreferences([], []);
 
       const onTime = () => {
         positionRef.current = element.currentTime;
@@ -660,6 +755,11 @@ export function ExperimentalPlayerHost({
       facadeRef.current = built;
       setFacade(built);
       setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
+      const preferred = applyPreferences(engine.audioTracks, engine.subtitleTracks);
+      if (preferred !== null && preferred !== engine.currentAudioTrack) {
+        wantedAudioRef.current = preferred;
+        await engine.setAudioTrack(preferred).catch(() => {});
+      }
       setCurrentAudio(engine.currentAudioTrack);
       declareReady();
       await engine.play().catch(() => {});
@@ -695,11 +795,10 @@ export function ExperimentalPlayerHost({
             `la source a été perdue (${rebuildsRef.current})` +
               (again ? `, au-delà de ${where.toFixed(1)} s qui vient d'échouer` : "")
           );
-          showWarning(
-            again
-              ? "Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après."
-              : "Reprise de la lecture après une interruption."
-          );
+          // Only the first of these is the viewer's business: a passage of the film is being
+          // skipped, and a jump nobody explained looks like a fault. Rebuilding in place and
+          // carrying on is not something they need to be told about — it is in the record.
+          if (again) showWarning("Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après.");
           return;
         }
         fallToStable(message);
@@ -734,7 +833,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning]);
+  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -1111,39 +1210,7 @@ export function ExperimentalPlayerHost({
               (track) => ({ id: track.number, label: trackLabel(track) })
             )}
             currentSubtitleId={currentSubtitle}
-            onChangeSubtitle={(id) => {
-              wantedSubtitleRef.current = id;
-              setCurrentSubtitle(id);
-              setSubtitle(null);
-
-              // Whichever is chosen, the other is turned off first: the pipeline showing a track
-              // from the container and a file showing its own would both write the same line.
-              const external = id !== null && isExternalTrack(id);
-              if (path === "remux") remuxRef.current?.selectSubtitleTrack(external ? null : id);
-              else if (path === "webcodecs") engineRef.current?.setSubtitleTrack(external ? null : id);
-
-              if (!external) {
-                externalSubtitleRef.current = null;
-                return;
-              }
-              const source = info?.externalSubtitles.find((candidate) => candidate.id === id);
-              if (!source) return;
-              // Fetched on being chosen rather than up front: a film may carry half a dozen of
-              // these and the viewer will read one of them.
-              subtitleFetchRef.current?.abort();
-              const fetching = new AbortController();
-              subtitleFetchRef.current = fetching;
-              void ExternalSubtitleTrack.load(source, fetching.signal)
-                .then((loaded) => {
-                  // Unless the viewer has moved on while it was in flight.
-                  if (wantedSubtitleRef.current === id) externalSubtitleRef.current = loaded;
-                })
-                .catch(() => {
-                  // An abandoned fetch is not a failure to report: the viewer asked for
-                  // something else, or closed the film.
-                  if (!fetching.signal.aborted) showWarning("Sous-titres externes indisponibles.");
-                });
-            }}
+            onChangeSubtitle={(id) => chooseSubtitle(id, info?.externalSubtitles ?? [])}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}
             // The controls already answer this by swapping the button for a spinner, so restarting

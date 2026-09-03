@@ -6,6 +6,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { buildDeviceProfile } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
+import { displayTitle } from "@/lib/displayTitle";
 
 const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
@@ -205,11 +206,13 @@ export async function POST(req: NextRequest) {
     // Best-effort: a failed "now playing" report shouldn't block playback itself.
     // Same for intro/credits timestamps — 404s for movies and unanalyzed
     // episodes, which just means no skip-intro / next-up prompt for this item.
-    const [, timestamps] = await Promise.all([
+    const [, timestamps, naming] = await Promise.all([
       jellyfin
         .reportPlaybackStart(session.jfId, itemId, session.jfToken, info.PlaySessionId, source.Id, playMethod)
         .catch(() => {}),
       jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
+      // Alongside the others, so naming the film costs nothing on the way to its first frame.
+      jellyfin.getItemNaming(session.jfId, itemId).catch(() => null),
     ]);
 
     const introSkip =
@@ -225,6 +228,8 @@ export async function POST(req: NextRequest) {
       audioTracks,
       introSkip,
       creditsStart,
+      /** "Série — S02E05 · Titre", from the server rather than from whoever opened the player. */
+      title: naming ? displayTitle(naming, "") || null : null,
       // Everything below is purely for the Playback Info panel (Phase 4) — no extra request,
       // all derived from the PlaybackInfo response already fetched above.
       playbackInfo: {

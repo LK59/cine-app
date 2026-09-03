@@ -7,10 +7,14 @@ vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVe
 vi.mock("@/lib/config", () => ({ config: { player: { enabled: true } } }));
 const mockGetSources = vi.fn();
 const mockTimestamps = vi.fn();
+const mockNaming = vi.fn();
+const mockUserConfig = vi.fn();
 vi.mock("@/lib/clients/jellyfin", () => ({
   jellyfin: {
     getItemMediaSources: (...a: unknown[]) => mockGetSources(...a),
     getEpisodeTimestamps: (...a: unknown[]) => mockTimestamps(...a),
+    getItemNaming: (...a: unknown[]) => mockNaming(...a),
+    getUserConfiguration: (...a: unknown[]) => mockUserConfig(...a),
   },
 }));
 const mockPrefs = vi.fn();
@@ -58,10 +62,12 @@ async function get() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", id: 7 });
+  mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok", id: 7 });
   mockPrefs.mockReturnValue({ enabled: true });
   mockGetSources.mockResolvedValue(mediaSource());
   mockTimestamps.mockResolvedValue(null);
+  mockNaming.mockResolvedValue(null);
+  mockUserConfig.mockResolvedValue({ Configuration: {} });
 });
 
 describe("GET /api/jellyfin/direct/[itemId]", () => {
@@ -208,6 +214,60 @@ describe("sous-titres posés à côté du film", () => {
     // packaging the remuxer spends its time producing.
     mockGetSources.mockResolvedValue(mediaSource({ container: "mp4" }));
     const body = await (await get()).json();
+    expect(body.refusedReason).toBeNull();
+  });
+});
+
+describe("nommer et régler ce qui est lu", () => {
+  it("nomme un épisode par sa série, sa saison et son titre", async () => {
+    // Eight places open the player and each passes whatever title it had to hand. The server is
+    // the only one that knows an episode is an episode.
+    mockNaming.mockResolvedValue({
+      Name: "La Genèse",
+      Type: "Episode",
+      SeriesName: "La Petite Maison dans la prairie",
+      ParentIndexNumber: 0,
+      IndexNumber: 1,
+    });
+    const body = await (await get()).json();
+    expect(body.title).toBe("La Petite Maison dans la prairie — S00E01 · La Genèse");
+  });
+
+  it("transmet les préférences de langue du compte", async () => {
+    mockUserConfig.mockResolvedValue({
+      Configuration: {
+        AudioLanguagePreference: "fra",
+        SubtitleLanguagePreference: "fra",
+        SubtitleMode: "OnlyForced",
+        PlayDefaultAudioTrack: false,
+      },
+    });
+    const body = await (await get()).json();
+    expect(body.preferences).toEqual({
+      audioLanguage: "fra",
+      subtitleLanguage: "fra",
+      subtitleMode: "OnlyForced",
+      playDefaultAudioTrack: false,
+    });
+  });
+
+  it("ne demande pas les préférences d'un compte sans jeton Jellyfin", async () => {
+    // Their settings are read with their own token; without one there is nobody to ask about.
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", id: 7 });
+    const body = await (await get()).json();
+    expect(mockUserConfig).not.toHaveBeenCalled();
+    expect(body.preferences).toBeNull();
+    expect(body.refusedReason).toBeNull();
+  });
+
+  it("joue quand même quand le serveur ne dit ni l'un ni l'autre", async () => {
+    // A server that will not answer about someone's languages is a reason to open the file on
+    // its own defaults, not a reason to refuse to play it.
+    mockUserConfig.mockRejectedValue(new Error("indisponible"));
+    mockNaming.mockRejectedValue(new Error("indisponible"));
+    const body = await (await get()).json();
+    expect(body.preferences).toBeNull();
+    expect(body.title).toBeNull();
     expect(body.refusedReason).toBeNull();
   });
 });

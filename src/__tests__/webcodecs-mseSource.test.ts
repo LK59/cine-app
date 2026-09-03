@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MseSource, playabilityOf } from "@/lib/webcodecs/mseSource";
 import type { Remuxer, RemuxPlan, RemuxSegment } from "@/lib/webcodecs/remuxer";
+import { traceText } from "@/lib/webcodecs/trace";
 
 // MediaSource does not exist in jsdom, and the parts of it that matter here — when a buffer
 // signals it is done, when the system asks for data, what happens when it is full — are exactly
@@ -467,8 +468,12 @@ describe("MseSource", () => {
     // Reported from a device as a freeze that a second seek undid — so nothing was lost, and
     // ending playback was the wrong answer to a segment that simply needed sending again.
     expect(onError).not.toHaveBeenCalled();
-    expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("Reprise"));
     expect(remuxer.seeks.length).toBeGreaterThan(0);
+    // And the viewer is not told: they saw nothing, because it was fixed before they could. A
+    // banner here interrupts somebody about a problem that no longer exists — it goes to the
+    // record instead, which is where the technical panel reads it from.
+    expect(onWarning).not.toHaveBeenCalled();
+    expect(traceText()).toContain("segment refusé, repris");
   });
 
   it("stops pretending when the refusals do not let up", async () => {

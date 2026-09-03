@@ -5,6 +5,7 @@ const mockJellyfin = {
   getPlaybackInfo: vi.fn(),
   reportPlaybackStart: vi.fn(),
   getEpisodeTimestamps: vi.fn(),
+  getItemNaming: vi.fn(),
 };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
@@ -37,6 +38,7 @@ beforeEach(() => {
   playerEnabled = true;
   mockJellyfin.reportPlaybackStart.mockResolvedValue(undefined);
   mockJellyfin.getEpisodeTimestamps.mockResolvedValue(null);
+  mockJellyfin.getItemNaming.mockResolvedValue(null);
 });
 
 describe("POST /api/jellyfin/playback/start", () => {

@@ -183,7 +183,14 @@ function ActivePlayer({
 }) {
   const playback = usePlayback();
   const t = useT();
-  const { itemId, title, resumeAt: initialResumeAt, initialAudioStreamIndex, fromReload, reloadAttempt } = session;
+  const {
+    itemId,
+    title: openedAs,
+    resumeAt: initialResumeAt,
+    initialAudioStreamIndex,
+    fromReload,
+    reloadAttempt,
+  } = session;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -262,6 +269,10 @@ function ActivePlayer({
   const [currentAudioId, setCurrentAudioId] = useState<number | null>(null);
   const [subtitleTracks, setSubtitleTracks] = useState<Track[]>([]);
   const [currentSubtitleId, setCurrentSubtitleId] = useState<number | null>(null);
+  // The server's own name for the item — the only one that knows an episode is an episode. What
+  // the caller passed stands until it arrives, so the title never blinks in empty.
+  const [serverTitle, setServerTitle] = useState<string | null>(null);
+  const title = serverTitle ?? openedAs;
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -409,6 +420,7 @@ function ActivePlayer({
         }))
       );
       setCurrentAudioId(opts?.audioStreamIndex ?? data.audioTracks?.find((t: { isDefault: boolean }) => t.isDefault)?.index ?? null);
+      setServerTitle(data.title ?? null);
       setIntroSkip(data.introSkip ?? null);
       setCreditsStart(data.creditsStart ?? null);
       setPlaybackInfo(data.playbackInfo ?? null);

@@ -20,6 +20,7 @@ import { createRenderer, type FrameRenderer } from "./renderer";
 import type { AudioConfig } from "./codecConfig";
 import { AudioOutput, WallClock } from "./audioOutput";
 import { SoftwareAudioTrack } from "./softwareAudio";
+import { trace } from "./trace";
 
 export type EngineEventName =
   | "loadedmetadata"
@@ -889,7 +890,9 @@ export class PlaybackEngine {
           this.audioTrack = null;
           return;
         }
-        this.emit("warning", `Son rétabli par le décodeur logiciel (${codec ?? "codec natif"} ne produisait rien).`);
+        // Good news, and news the viewer cannot act on: the sound is playing. It belongs in the
+        // record, next to the failure that made it necessary.
+        trace(`son rétabli par le décodeur logiciel (${codec ?? "codec natif"} ne produisait rien)`);
         await this.seek(resumeAt);
       })
       .finally(() => {

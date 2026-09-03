@@ -89,6 +89,17 @@ export function PlayerControls({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  /**
+   * Whether this platform lets a page set the volume at all.
+   *
+   * iOS does not: `volume` on a media element is read-only there, silently, and the hardware
+   * buttons are the only control. So the slider did nothing except through the one line that
+   * *did* work — muting at zero — which is exactly what it looked like from the outside: a bar
+   * that turned the sound off and on and had no middle. Probed rather than sniffed from the user
+   * agent, and answered per element: the canvas pipeline drives a gain node through the façade,
+   * which works everywhere, including on the phone where the element does not.
+   */
+  const [volumeSettable, setVolumeSettable] = useState(true);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
@@ -176,6 +187,19 @@ export function PlayerControls({
     setVolume(video.volume);
     setMuted(video.muted);
     setSpeed(video.playbackRate || 1);
+
+    // Asked by trying, and put back immediately: a platform that ignores the write is a platform
+    // where this control is furniture.
+    const before = video.volume;
+    let settable = false;
+    try {
+      video.volume = before > 0.5 ? before - 0.1 : before + 0.1;
+      settable = video.volume !== before;
+      video.volume = before;
+    } catch {
+      settable = false;
+    }
+    setVolumeSettable(settable);
   }, [videoRef]);
 
   // Chapters — fetched once per item, same shape/lifecycle as the trickplay metadata below.
@@ -1335,16 +1359,23 @@ export function PlayerControls({
               <button onClick={toggleMute} className="rounded-lg p-1.5 hover:bg-white/10">
                 {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
-              <input
-                data-player-nav="volume"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={muted ? 0 : volume}
-                onChange={(e) => changeVolume(Number(e.target.value))}
-                className="h-1 w-16 cursor-pointer accent-accent-500"
-              />
+              {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
+                  touch became a tap, and a tap on a range input jumps straight to the end it
+                  landed nearest. Twenty is the same bar with room to hold on to. */}
+              {volumeSettable && (
+                <input
+                  data-player-nav="volume"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => changeVolume(Number(e.target.value))}
+                  aria-label={t("player.volume")}
+                  className="h-5 w-20 cursor-pointer accent-accent-500"
+                  style={{ WebkitTouchCallout: "none", touchAction: "none" }}
+                />
+              )}
               {fullscreenSupported && (
                 <button data-player-nav="fullscreen" onClick={toggleFullscreen} className="rounded-lg p-1.5 hover:bg-white/10">
                   {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}

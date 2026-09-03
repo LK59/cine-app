@@ -69,6 +69,7 @@ function info(over: Info = {}): Info {
     refusedReason: null,
     canvasHdrRefusal: null,
     externalSubtitles: [],
+    preferences: null,
     resumeSeconds: 0,
     video: { codec: "hevc", width: 1920, height: 1080, bitDepth: 10, isHdr: false, rangeType: "SDR" },
     introSkip: null,
@@ -429,6 +430,71 @@ describe("réduire le lecteur", () => {
 
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1].startSeconds).toBeCloseTo(1500, 1);
+  });
+});
+
+describe("les préférences du compte Jellyfin", () => {
+  const preferences = {
+    audioLanguage: "fra",
+    subtitleLanguage: "fra",
+    subtitleMode: "OnlyForced",
+    playDefaultAudioTrack: false,
+  };
+
+  it("ouvre sur la piste que le compte demande, malgré deux écritures différentes", async () => {
+    // The container says `fre`, the account says `fra`. Compared as strings they never match,
+    // and this whole feature would silently do nothing.
+    swr = { data: info({ preferences }), error: undefined };
+    remux = fakeRemux({ currentAudioTrack: 2 }); // opens on English
+    mount();
+    await waitFor(() => expect(remux.selectAudioTrack).toHaveBeenCalledWith(1));
+  });
+
+  it("ne touche à rien quand la langue demandée n'est pas là", async () => {
+    // Being handed the only other track is being given a film in a language nobody asked for.
+    swr = { data: info({ preferences: { ...preferences, audioLanguage: "jpn" } }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
+  });
+
+  it("laisse le choix du spectateur l'emporter sur une reconstruction", async () => {
+    // Coming back from a network cut must give back what *they* picked, not what their account
+    // would have picked.
+    swr = { data: info({ preferences }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText("audio:eng")));
+
+    const rebuilt = fakeRemux({ currentAudioTrack: 1 });
+    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(rebuilt.selectAudioTrack).toHaveBeenCalledWith(2));
+  });
+
+  it("peut satisfaire une préférence de sous-titres avec un fichier posé à côté", async () => {
+    // The direct path has no tracks of its own at all, so this is the only way it has any.
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => "" })));
+    swr = {
+      data: info({
+        container: "mp4",
+        preferences: { ...preferences, subtitleMode: "Default" },
+        externalSubtitles: [{ id: -1, language: "fra", title: "Français", url: "/sub.vtt" }],
+      }),
+      error: undefined,
+    };
+    nextProbe = () => ({ path: "direct", discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/sub.vtt", expect.anything()));
+    vi.unstubAllGlobals();
+  });
+
+  it("se passe très bien de préférences quand le serveur n'en donne pas", async () => {
+    swr = { data: info({ preferences: null }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
   });
 });
 

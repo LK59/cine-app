@@ -1180,7 +1180,8 @@
       "noAudio": "Lecture sans son : {reason}",
       "preparing": "Préparation de la vidéo…",
       "stillWorking": "Toujours en cours…"
-    }
+    },
+    "volume": "Volume"
   },
   "cinema": {
     "standardMode": "Mode standard",

@@ -1180,7 +1180,8 @@
       "noAudio": "Wiedergabe ohne Ton: {reason}",
       "preparing": "Video wird vorbereitet…",
       "stillWorking": "Läuft noch…"
-    }
+    },
+    "volume": "Lautstärke"
   },
   "cinema": {
     "standardMode": "Standardmodus",
