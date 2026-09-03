@@ -1119,6 +1119,23 @@ describe("MseSource", () => {
     await until(() => onSubtitles.mock.calls.length > 0, "des sous-titres sont trouvés");
   });
 
+  it("says a source has been lost, rather than only failing on it later", async () => {
+    // Everything a report ever showed of a closed source was the consequence: some later
+    // operation tripping over the wreckage. The caller needs to be able to ask directly, because
+    // a source the platform closed is not a fault to report — it is a pipeline to build again.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    expect(mse.lost).toBe(false);
+
+    FakeSource.instances[0].readyState = "closed";
+    expect(mse.lost).toBe(true);
+    // And where to come back to.
+    (video as unknown as { currentTime: number }).currentTime = 42;
+    expect(mse.position).toBe(42);
+  });
+
   it("empties the audio buffer before asking it to change codec", async () => {
     // Asking a buffer to reinterpret itself while it still holds coded frames of the codec it is
     // leaving is more than the specification requires of an implementation — and this device

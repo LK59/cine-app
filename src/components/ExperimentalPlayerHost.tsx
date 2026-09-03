@@ -31,6 +31,9 @@ const STILL_WORKING_AFTER_MS = 3000;
 /** And before a wait stops being slow and starts being a fault worth reporting. */
 const STUCK_AFTER_MS = 20000;
 
+/** How many times a lost source is rebuilt before the loss is reported as a fault. */
+const MAX_REBUILDS = 3;
+
 /**
  * Milliseconds since a moment, or null when there is no moment.
  *
@@ -143,6 +146,8 @@ export function ExperimentalPlayerHost({
   // back from a locked screen means starting over, at the position the viewer left.
   const [rebuildCount, setRebuildCount] = useState(0);
   const rebuildAtRef = useRef<number | null>(null);
+  // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
+  const rebuildsRef = useRef(0);
   const [openedAt] = useState(() => Date.now());
 
   // Fetched once and then left alone. The description of a file does not change while it is
@@ -352,7 +357,25 @@ export function ExperimentalPlayerHost({
     probePlaybackPath({
       streamUrl: info.streamUrl,
       startSeconds,
-      onError: (message) => setRuntimeError(message),
+      onError: (message) => {
+        // A closed source is not a fault to report, it is a pipeline to build again. Safari
+        // closes one from time to time — a decode failure it will not explain, sometimes on a
+        // seek, sometimes at a change of track — and everything that follows is wreckage. The
+        // machinery for the sleep case already knows how to come back at the right position, so
+        // it is used here too, and only a loss that keeps happening is finally reported.
+        if (remuxRef.current?.lost && rebuildsRef.current < MAX_REBUILDS) {
+          rebuildsRef.current += 1;
+          const at = remuxRef.current.position || positionRef.current;
+          trace(`reprise : la source a été perdue, reconstruction ${rebuildsRef.current} à ${at.toFixed(1)} s`);
+          traceKeepAcrossReset();
+          rebuildAtRef.current = at;
+          setWarning("Reprise de la lecture après une interruption.");
+          setReady(false);
+          setRebuildCount((count) => count + 1);
+          return;
+        }
+        setRuntimeError(message);
+      },
       onWarning: (message) => setWarning(message),
       onStarting: (at) => setStartingAt(at),
     })
@@ -391,6 +414,8 @@ export function ExperimentalPlayerHost({
     const check = () => {
       const playback = remuxRef.current;
       if (!playback?.lost || rebuildAtRef.current !== null) return;
+      if (rebuildsRef.current >= MAX_REBUILDS) return;
+      rebuildsRef.current += 1;
       const at = playback.position || positionRef.current;
       // Written into the record, and the record carried across the rebuild: without both, the
       // fault and its aftermath land in different accounts and the report shows the innocent one.

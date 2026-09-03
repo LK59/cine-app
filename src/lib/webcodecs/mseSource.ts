@@ -468,6 +468,12 @@ export class MseSource {
       this.video.currentTime = startSeconds;
     }
 
+    // The element's own verdict, recorded when it is delivered. Everything so far learned of it
+    // second-hand, when some later operation tripped over the wreckage — so the report showed the
+    // consequence and never the moment.
+    this.video.addEventListener("error", this.onElementError);
+    this.source.addEventListener("sourceclose", this.onSourceClosed);
+
     // The system says when it wants data; a page that fetches regardless gets throttled.
     this.source.addEventListener("startstreaming", this.request);
     this.video.addEventListener("timeupdate", this.request);
@@ -582,6 +588,14 @@ export class MseSource {
       }
     }, 120);
 
+  };
+
+  private readonly onElementError = () => {
+    trace(`l'élément a échoué : ${this.elementState()}`);
+  };
+
+  private readonly onSourceClosed = () => {
+    trace(`la MediaSource s'est fermée — ${this.elementState()}`);
   };
 
   private readonly onPlay = () => {
@@ -865,6 +879,10 @@ export class MseSource {
         // seek looks like when it appears to recalculate the whole film. The watchdog cannot
         // catch this on its own: media *is* arriving, just nowhere useful.
         if (this.distanceToMedia(this.video.currentTime) > MISPLACED_SECONDS) {
+          trace(
+            `reprise : le lecteur lit à ${this.readUpTo.toFixed(1)} s, ` +
+              `loin de la tête à ${this.video.currentTime.toFixed(1)} s`
+          );
           if (this.recover(this.video.currentTime)) break;
         }
       }
@@ -952,7 +970,8 @@ export class MseSource {
    * Moves playback to a point on the *player's* clock. The remuxer works on the file's clock, so
    * the presentation delay is taken off here and nowhere else.
    */
-  seek(playerSeconds: number): Promise<void> {
+  seek(playerSeconds: number, because = "le viseur"): Promise<void> {
+    trace(`saut demandé vers ${playerSeconds.toFixed(1)} s (${because}) — tête à ${this.video.currentTime.toFixed(1)} s`);
     // Coalesced, not queued. Dragging a scrub bar across a film asks to be in dozens of places;
     // serving each in turn means every one of them is stale before its media arrives, and the
     // picture never catches up with the finger.
@@ -1276,6 +1295,10 @@ export class MseSource {
     // Nothing is being read and the playhead is on nothing: whatever failed to say so, the
     // viewer is somewhere this player is not serving.
     if (Date.now() - this.lastAppendAt < STALL_TIMEOUT_MS) return;
+    trace(
+      `reprise : rien sous la tête à ${now.toFixed(1)} s, ` +
+        `dernier envoi il y a ${Date.now() - this.lastAppendAt} ms, ${this.elementState()}`
+    );
     this.recover(now);
   };
 
@@ -1304,7 +1327,7 @@ export class MseSource {
       this.recoveryStreak = 1;
     }
     this.recoveries += 1;
-    void this.seek(target);
+    void this.seek(target, `reprise ${this.recoveryStreak}`);
     return true;
   }
 
@@ -1392,6 +1415,8 @@ export class MseSource {
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
     this.pauseSettleTimer = null;
     this.video.removeEventListener("play", this.onPlayDuringHold);
+    this.video.removeEventListener("error", this.onElementError);
+    this.source.removeEventListener("sourceclose", this.onSourceClosed);
     this.audioHold = null;
 
     try {
