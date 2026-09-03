@@ -804,6 +804,34 @@ describe("MseSource", () => {
     expect(remuxer.seeks).toEqual([]);
   }, 10_000);
 
+  it("does not undo its own step onto the media when resuming", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+    const buffers = FakeSource.instances[0].buffers;
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+
+    // Resuming just short of the media: the step onto it is deliberate and small. Reading that
+    // step as a jump and undoing it shows a frame from further on and then the right one, which
+    // is the flicker reported — and which way round it looks depends on when the eye catches it.
+    for (const b of buffers) b.setBuffered(12.2, 40);
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    await flush();
+    expect(video.currentTime).toBe(12.2);
+
+    setTime(12.3);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+    expect(video.currentTime).toBe(12.3);
+    expect(remuxer.seeks).toEqual([]);
+  });
+
   it("leaves a playhead the viewer moved while paused exactly where they put it", async () => {
     const video = fakeVideo();
     await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });

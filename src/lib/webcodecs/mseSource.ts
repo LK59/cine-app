@@ -563,6 +563,11 @@ export class MseSource {
     if (start === null || start - now > this.delaySeconds + 0.15) return;
 
     this.lastSeekTarget = start;
+    // A move made on purpose, and the resume guard must not mistake it for one. Left standing,
+    // the anchor makes the next event read this step forward as a jump and pull it back — a
+    // frame from further on, briefly, then the right one. Settling the position here is what the
+    // anchor was for, so it has done its job.
+    this.pauseAnchor = null;
     this.video.currentTime = start;
   }
 
