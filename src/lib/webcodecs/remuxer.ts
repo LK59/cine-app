@@ -550,8 +550,15 @@ export class Remuxer {
       // is long out of the byte source's cache, and fetching it back to read one header is
       // network traffic spent on nothing.
       const next = await AudioTranscoder.open(this.source, track, at);
-      // Before anything is released: a refusal here has to leave the working track working.
-      assertContainerTakes(next);
+      // Before anything is released: a refusal here has to leave the working track working — and
+      // has to hand back the decoder and the encoder the refused track had already opened, which
+      // nothing else will ever come back for.
+      try {
+        assertContainerTakes(next);
+      } catch (refusal) {
+        next.close();
+        throw refusal;
+      }
       previous?.close();
       this.transcoder = next;
       this.audioInfo = transcodedAudioInfo(next, track);

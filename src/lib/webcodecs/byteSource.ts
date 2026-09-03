@@ -127,17 +127,22 @@ export function isNetworkFailure(error: unknown): boolean {
  * Waiting for the event costs neither requests nor battery, and a viewer walking between two
  * networks is back within a second or two.
  */
-async function waitForNetwork(): Promise<void> {
+async function waitForNetwork(signal?: AbortSignal): Promise<void> {
   if (typeof navigator === "undefined" || navigator.onLine !== false) return;
+  if (signal?.aborted) return;
   trace("réseau : hors ligne, la lecture attend le retour");
   await new Promise<void>((resolve) => {
     const done = () => {
       clearTimeout(timer);
       window.removeEventListener("online", done);
+      signal?.removeEventListener("abort", done);
       resolve();
     };
     const timer = setTimeout(done, OFFLINE_PATIENCE_MS);
     window.addEventListener("online", done, { once: true });
+    // A player closed while waiting is a player nobody is waiting for. Without this the minute
+    // ran out on its own, holding a timer and a listener for a film already gone from the screen.
+    signal?.addEventListener("abort", done, { once: true });
   });
   trace("réseau : de retour");
 }
@@ -206,7 +211,7 @@ export class HttpByteSource implements ByteSource {
     let last: unknown;
     for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
       if (attempt > 0) {
-        await waitForNetwork();
+        await waitForNetwork(this.controller.signal);
         await new Promise((resolve) => setTimeout(resolve, FETCH_BACKOFF_MS[attempt - 1] ?? 1500));
         if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
       }

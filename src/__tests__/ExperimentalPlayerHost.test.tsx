@@ -146,12 +146,12 @@ import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
 const onFallback = vi.fn();
 
-function mount(over: Partial<{ resumeAt: number }> = {}) {
+function mount(over: Partial<{ resumeAt: number; itemId: string }> = {}) {
   return render(
     <ExperimentalPlayerHost
       session={
         {
-          itemId: "item-1",
+          itemId: over.itemId ?? "item-1",
           title: "Un film",
           resumeAt: over.resumeAt ?? null,
         } as never
@@ -390,6 +390,29 @@ describe("ce que le spectateur avait choisi", () => {
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(rebuilt.selectSubtitleTrack).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("un autre film", () => {
+  it("repart de rien, sans traîner ce que le précédent avait choisi", async () => {
+    // Advancing to the next episode remounts this player, so everything it accumulated is gone
+    // with it. That only holds while none of that state lives outside the component: a module
+    // level variable would survive the remount and carry a track number — which on another file
+    // may well be another language — straight into the next episode.
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText("audio:eng")));
+    cleanup();
+
+    const next = fakeRemux({ currentAudioTrack: 1 });
+    nextProbe = () => ({ path: "remux", start: async () => next, discard: vi.fn() });
+    mount({ itemId: "item-2" });
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+
+    expect(next.selectAudioTrack).not.toHaveBeenCalled();
+    expect(next.selectSubtitleTrack).not.toHaveBeenCalled();
+    // And it opens where the new film asks to be opened, not where the last one stopped.
+    expect(probes[probes.length - 1].startSeconds).toBe(0);
   });
 });
 

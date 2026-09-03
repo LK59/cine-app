@@ -144,7 +144,7 @@ describe("POST /api/jellyfin/playback/stop", () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     const { POST } = await import("@/app/api/jellyfin/playback/stop/route");
     await POST(fakeReq({ itemId: "abc", playSessionId: "s", mediaSourceId: "m" }));
-    expect(mockJellyfin.reportPlaybackStopped).toHaveBeenCalledWith("jf-1", "abc", "tok", "s", "m", 0);
+    expect(mockJellyfin.reportPlaybackStopped).toHaveBeenCalledWith("jf-1", "abc", "tok", "s", "m", 0, "CineApp");
   });
 });
 

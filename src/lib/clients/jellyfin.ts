@@ -1,3 +1,7 @@
+import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
+
+export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/playbackClients";
+
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
 import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
@@ -97,6 +101,24 @@ export interface PlaybackInfoOptions {
   deviceProfile: JellyfinDeviceProfile;
 }
 
+/**
+ * Identifies the client for one playback report.
+ *
+ * The device id is stable per user and per client, so the two players are two devices and
+ * neither multiplies sessions as films are opened and closed. It is deliberately *not* the id
+ * minted at login: that one belongs to an authentication, and re-registering a device id through
+ * AuthenticateByName is what used to evict other people's tokens (see the auth route). Nothing
+ * here authenticates, so nothing here can evict anything.
+ */
+function playbackHeaders(token: string, client: PlaybackClient, userId: string) {
+  const deviceId = `${client === PLAYBACK_CLIENTS.engine ? "cine-engine" : "cine-app"}-${userId}`;
+  return {
+    "X-Emby-Token": token,
+    "Content-Type": "application/json",
+    Authorization: `MediaBrowser Client="${client}", Device="Navigateur", DeviceId="${deviceId}", Version="1.0.0", Token="${token}"`,
+  };
+}
+
 export const jellyfin = {
   // DeviceProfile is built by the caller (see deviceProfile.ts) from the browser's actually
   // detected codec support, and handed to Jellyfin's own StreamBuilder to negotiate
@@ -130,11 +152,12 @@ export const jellyfin = {
     token: string,
     playSessionId: string,
     mediaSourceId: string,
-    playMethod: "DirectPlay" | "DirectStream" | "Transcode"
+    playMethod: "DirectPlay" | "DirectStream" | "Transcode",
+    client: PlaybackClient = PLAYBACK_CLIENTS.stable
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing`, {
       method: "POST",
-      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      headers: playbackHeaders(token, client, userId),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -152,11 +175,13 @@ export const jellyfin = {
     playSessionId: string,
     mediaSourceId: string,
     positionTicks: number,
-    playMethod: "DirectPlay" | "DirectStream" | "Transcode"
+    playMethod: "DirectPlay" | "DirectStream" | "Transcode",
+    client: PlaybackClient = PLAYBACK_CLIENTS.stable,
+    isPaused = false
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Progress`, {
       method: "POST",
-      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      headers: playbackHeaders(token, client, userId),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -165,7 +190,9 @@ export const jellyfin = {
         PositionTicks: positionTicks,
         PlayMethod: playMethod,
         CanSeek: true,
-        IsPaused: false,
+        // Truthfully: a paused film left on screen for an hour is not an hour of watching, and
+        // Jellyfin's dashboard says "playing" for all of it when this is hardcoded.
+        IsPaused: isPaused,
       }),
     }),
 
@@ -175,11 +202,12 @@ export const jellyfin = {
     token: string,
     playSessionId: string,
     mediaSourceId: string,
-    positionTicks: number
+    positionTicks: number,
+    client: PlaybackClient = PLAYBACK_CLIENTS.stable
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Stopped`, {
       method: "POST",
-      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      headers: playbackHeaders(token, client, userId),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,

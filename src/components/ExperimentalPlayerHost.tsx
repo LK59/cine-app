@@ -9,6 +9,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT } from "@/components/TranslationProvider";
 import { PlaybackEngine } from "@/lib/webcodecs/engine";
@@ -286,6 +287,8 @@ export function ExperimentalPlayerHost({
    * survive a rebuild after a network cut exactly as the chosen language does.
    */
   const externalSubtitleRef = useRef<ExternalSubtitleTrack | null>(null);
+  /** Abandons a subtitle file still in flight when the player closes, or another is chosen. */
+  const subtitleFetchRef = useRef<AbortController | null>(null);
 
   /**
    * What to write under the picture at this instant.
@@ -346,8 +349,22 @@ export function ExperimentalPlayerHost({
     useCallback(() => positionRef.current, []),
     // The engine talks to the file directly, so there is no Jellyfin transcode session — but
     // progress still has to be reported, or resume points would stop updating for this player.
-    ready ? { itemId, playSessionId: `webcodecs-${itemId}`, mediaSourceId: itemId, playMethod: "DirectPlay" } : null
+    // It announces its own start for the same reason: nothing else tells the server this film is
+    // being watched, so without it the reports described a session Jellyfin had never heard of.
+    ready
+      ? {
+          itemId,
+          playSessionId: `cine-engine-${itemId}`,
+          mediaSourceId: itemId,
+          playMethod: "DirectPlay",
+          client: PLAYBACK_CLIENTS.engine,
+          announce: true,
+        }
+      : null,
+    useCallback(() => !playing, [playing])
   );
+
+  useEffect(() => () => subtitleFetchRef.current?.abort(), []);
 
   const handleClose = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -1071,12 +1088,19 @@ export function ExperimentalPlayerHost({
               if (!source) return;
               // Fetched on being chosen rather than up front: a film may carry half a dozen of
               // these and the viewer will read one of them.
-              void ExternalSubtitleTrack.load(source)
+              subtitleFetchRef.current?.abort();
+              const fetching = new AbortController();
+              subtitleFetchRef.current = fetching;
+              void ExternalSubtitleTrack.load(source, fetching.signal)
                 .then((loaded) => {
                   // Unless the viewer has moved on while it was in flight.
                   if (wantedSubtitleRef.current === id) externalSubtitleRef.current = loaded;
                 })
-                .catch(() => setWarning("Sous-titres externes indisponibles."));
+                .catch(() => {
+                  // An abandoned fetch is not a failure to report: the viewer asked for
+                  // something else, or closed the film.
+                  if (!fetching.signal.aborted) setWarning("Sous-titres externes indisponibles.");
+                });
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -129,6 +130,12 @@ export function PlayerHost() {
   if (useExperimental) {
     return (
       <ExperimentalPlayerHost
+        // A different film is a different player. Without this, advancing to the next episode
+        // kept everything the previous one had accumulated: the audio track number the viewer
+        // had chosen — which on another file may well be another language — the subtitle file
+        // fetched for the episode before, the position, the count of rebuilds already spent, and
+        // a readiness left true while the new one was still opening.
+        key={session.itemId}
         session={session}
         mode={mode === "mini" ? "mini" : "full"}
         onFallback={(reason) => stepAside(session.itemId, reason)}
@@ -254,7 +261,10 @@ function ActivePlayer({
 
   const stopPlaybackNow = usePlaybackSession(
     useCallback(() => lastKnownTime.current, []),
-    playSession && { ...playSession, playMethod }
+    // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
+    // is what the server's own dashboard should show.
+    playSession && { ...playSession, playMethod, client: PLAYBACK_CLIENTS.stable },
+    useCallback(() => videoRef.current?.paused ?? false, [])
   );
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
