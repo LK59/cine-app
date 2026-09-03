@@ -8,6 +8,7 @@
 // back leaves you unable to tell a path that works from a path that was never used.
 
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
+import { trace } from "./trace";
 
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
 const TARGET_BUFFER_SECONDS = 30;
@@ -81,6 +82,9 @@ const MISPLACED_SECONDS = 10;
  */
 const FRUITLESS_APPENDS = 8;
 
+/** Only the opening handful of segments is recorded: after that the record says nothing new. */
+const TRACED_APPENDS = 4;
+
 /** How much already-played media to keep before evicting, so a short step back does not re-fetch. */
 const KEEP_BEHIND_SECONDS = 30;
 
@@ -152,7 +156,15 @@ const BUFFER_OPERATION_TIMEOUT_MS = 4000;
 class BufferQueue {
   private chain: Promise<void> = Promise.resolve();
 
-  constructor(readonly buffer: SourceBuffer) {}
+  /**
+   * @param why Whatever the element and the source can say about a refusal. The `error` event
+   * carries no detail of its own, so without this the one failure that stops playback on iOS
+   * arrives as a sentence with nothing in it.
+   */
+  constructor(
+    readonly buffer: SourceBuffer,
+    private readonly why: () => string = () => ""
+  ) {}
 
   enqueue(operation: () => void): Promise<void> {
     const run = this.chain.then(() => this.runOne(operation));
@@ -180,7 +192,7 @@ class BufferQueue {
         else resolve();
       };
       const onEnd = () => finish();
-      const onFail = () => finish(new Error("Le navigateur a refusé une opération sur le tampon."));
+      const onFail = () => finish(new Error(`Le navigateur a refusé une opération sur le tampon. ${this.why()}`));
       // A browser that answers neither must not hold the queue for the rest of the session.
       const timer = setTimeout(() => finish(), BUFFER_OPERATION_TIMEOUT_MS);
 
@@ -308,10 +320,13 @@ export class MseSource {
     return this.delaySeconds;
   }
 
+  private appendsTraced = 0;
+
   private async open(startSeconds: number): Promise<void> {
     // AirPlay cannot carry a managed stream, and Safari refuses to attach one until this is set.
     this.video.disableRemotePlayback = true;
 
+    trace("attente de sourceopen");
     const opened = new Promise<void>((resolve) => {
       this.source.addEventListener("sourceopen", () => resolve(), { once: true });
     });
@@ -331,18 +346,21 @@ export class MseSource {
     await opened;
     if (this.destroyed) return;
 
+    trace("MediaSource ouverte, création des tampons");
     this.videoBuffer = this.source.addSourceBuffer(this.plan.videoMimeType);
     this.videoBuffer.mode = "segments";
-    this.videoOps = new BufferQueue(this.videoBuffer);
+    this.videoOps = new BufferQueue(this.videoBuffer, () => this.elementState());
     if (this.plan.audioMimeType) {
       this.audioBuffer = this.source.addSourceBuffer(this.plan.audioMimeType);
       this.audioBuffer.mode = "segments";
-      this.audioOps = new BufferQueue(this.audioBuffer);
+      this.audioOps = new BufferQueue(this.audioBuffer, () => this.elementState());
     }
 
     await this.appendTo(this.videoOps, this.plan.videoInit, this.generation);
+    trace("segment d'initialisation vidéo accepté");
     if (this.audioOps && this.plan.audioInit) {
       await this.appendTo(this.audioOps, this.plan.audioInit, this.generation);
+      trace("segment d'initialisation audio accepté");
     }
 
     // Positioned before the first read, not after it. Filling thirty seconds from the beginning
@@ -660,6 +678,15 @@ export class MseSource {
 
         const segment = await this.remuxer.nextSegment();
         if (this.generation !== generation || this.destroyed) break;
+        if (this.appendsTraced < TRACED_APPENDS) {
+          this.appendsTraced++;
+          trace(
+            segment
+              ? `segment ${this.appendsTraced} construit — jusqu'à ${segment.endSeconds.toFixed(1)} s, ` +
+                  `${segment.video?.byteLength ?? 0} o vidéo, ${segment.audio?.byteLength ?? 0} o audio`
+              : "le remultiplexeur ne produit plus de segment (fin du fichier)"
+          );
+        }
 
         if (!segment) {
           this.ended = true;
@@ -697,11 +724,16 @@ export class MseSource {
         this.lastAppendAt = Date.now();
 
         const depth = this.bufferedEnd();
+        if (this.appendsTraced <= TRACED_APPENDS && this.appendsTraced > 0) {
+          trace(`après envoi : tampon jusqu'à ${depth.toFixed(1)} s, tête à ${this.video.currentTime.toFixed(1)} s`);
+        }
         if (depth > deepestSoFar + 0.01) {
           deepestSoFar = depth;
           fruitless = 0;
         } else if (++fruitless >= FRUITLESS_APPENDS) {
-          throw new Error("Le navigateur n'a rien retenu des segments qui lui ont été envoyés.");
+          throw new Error(
+            `Le navigateur n'a rien retenu des ${FRUITLESS_APPENDS} segments qui lui ont été envoyés. ${this.elementState()}`
+          );
         }
 
         // The reader is filling a place the viewer is not. Something failed to tell us they
@@ -1009,6 +1041,18 @@ export class MseSource {
   }
 
   /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
+  /**
+   * What the element and the source have to say — the two things that know why an append was
+   * refused, when the event itself carries nothing.
+   */
+  private elementState(): string {
+    const parts = [`MediaSource ${this.source.readyState}`];
+    const failure = this.video.error;
+    if (failure) parts.push(`élément code ${failure.code}${failure.message ? ` « ${failure.message} »` : ""}`);
+    parts.push(`readyState ${this.video.readyState}`, `réseau ${this.video.networkState}`);
+    return `(${parts.join(", ")})`;
+  }
+
   get debug(): Record<string, string> {
     const ranges = this.videoBuffer?.buffered;
     const spans: string[] = [];

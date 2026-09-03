@@ -10,6 +10,7 @@ import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
+import { trace, traceReset } from "./trace";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
@@ -83,12 +84,20 @@ function preferredAudio(file: MatroskaFile): MatroskaTrack | null {
  * thousand lines of working code this has no business destabilising.
  */
 export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<PathProbe> {
+  traceReset();
+  trace("ouverture du flux");
   const source = await HttpByteSource.open(options.streamUrl);
+  trace(`flux ouvert — ${source.size} octets`);
   const file = await parseMatroska(source);
+  trace(
+    `en-tête lu — ${file.tracks.length} pistes, ${file.cues.length} points d'index, ` +
+      file.tracks.map((t) => `${t.number}:${t.type}:${t.codecId}${t.language ? `/${t.language}` : ""}`).join(" ")
+  );
 
   const videoTrack = file.tracks.find((t) => t.type === "video");
   if (!videoTrack) throw new Error("Ce fichier ne contient aucune piste vidéo.");
   const audioTrack = preferredAudio(file);
+  trace(`piste audio retenue : ${audioTrack ? `${audioTrack.codecId} ${audioTrack.audio?.channels ?? "?"}ch ${audioTrack.language ?? "?"}` : "aucune"}`);
 
   const chosen = await choosePlaybackPath({
     source,
@@ -98,6 +107,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
     dimensions: { width: videoTrack.video?.width ?? 1920, height: videoTrack.video?.height ?? 1080 },
   });
 
+  trace(`chemin choisi : ${describePath(chosen)}`);
   if (chosen.path !== "remux" || !chosen.remuxer || !chosen.plan) {
     source.close();
     return { path: "webcodecs", chosen };
@@ -142,6 +152,7 @@ export class RemuxPlayback {
   }
 
   private async attach(plan: Parameters<typeof MseSource.attach>[2], startSeconds: number): Promise<void> {
+    trace(`attachement de MediaSource — ${plan.videoMimeType} + ${plan.audioMimeType ?? "aucun audio"}`);
     this.mse = await MseSource.attach(
       this.video,
       this.remuxer,

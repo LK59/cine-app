@@ -13,6 +13,7 @@ import { audioSampleEntryFor } from "./mp4SampleEntries";
 import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaTrack } from "./matroska";
+import { trace } from "./trace";
 
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
 const TARGET_CODEC = "mp4a.40.2";
@@ -114,8 +115,10 @@ export class AudioTranscoder {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
 
+    trace(`transcodage audio : chargement du décodeur ${track.codecId}`);
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId);
     const { sampleRate, numberOfChannels } = decoder.format;
+    trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
     if (!(await canEncodeAac(sampleRate, numberOfChannels))) {
       decoder.close();
       throw new Error(`Ce navigateur ne sait pas encoder de l'AAC en ${numberOfChannels} canaux.`);
@@ -144,6 +147,7 @@ export class AudioTranscoder {
     });
     const config: AudioEncoderConfig = { codec: TARGET_CODEC, sampleRate, numberOfChannels };
     encoder.configure(config);
+    trace(`transcodage audio : encodeur configuré (${TARGET_CODEC}), amorçage à ${fromSeconds.toFixed(1)} s`);
 
     // Enough to make the encoder describe itself, and no more: this runs before the first frame
     // of video is shown, so it is time the viewer is waiting through. Bounded, because an
@@ -210,6 +214,7 @@ export class AudioTranscoder {
       );
     }
 
+    trace("transcodage audio : encodeur amorcé, description obtenue");
     const sampleEntry = audioSampleEntryFor({
       codecId: "A_AAC",
       codecPrivate: description,

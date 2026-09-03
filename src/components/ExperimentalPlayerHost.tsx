@@ -16,6 +16,7 @@ import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade"
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { describePath } from "@/lib/webcodecs/pathSelector";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
+import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 
@@ -25,6 +26,9 @@ const SPINNER_AFTER_MS = 120;
 /** And before the wait is worth a sentence, then before it is worth admitting it is long. */
 const WORD_AFTER_MS = 1000;
 const STILL_WORKING_AFTER_MS = 3000;
+
+/** And before a wait stops being slow and starts being a fault worth reporting. */
+const STUCK_AFTER_MS = 20000;
 
 /**
  * Milliseconds since a moment, or null when there is no moment.
@@ -139,6 +143,15 @@ export function ExperimentalPlayerHost({
   const resizing = useViewportResizing();
   const isMini = mode === "mini";
 
+  // The two waits this player has, measured the same way: opening a file, and restarting after a
+  // pause. Both are usually too short to be worth saying anything about, and occasionally are not.
+  const startingFor = useElapsedSince(startingAt);
+  const openingFor = useElapsedSince(ready || error ? null : openedAt);
+  const waitingFor = openingFor ?? startingFor;
+  // Nothing has failed, so there is no error screen — and this is exactly the case that leaves
+  // nothing at all behind: a spinner that never stops, on a device with no console.
+  const stuck = openingFor !== null && openingFor >= STUCK_AFTER_MS;
+
   const stopPlaybackNow = usePlaybackSession(
     useCallback(() => positionRef.current, []),
     // The engine talks to the file directly, so there is no Jellyfin transcode session — but
@@ -170,7 +183,7 @@ export function ExperimentalPlayerHost({
   // Polled only while the panel is open: it is a debugging surface, not something to run twice a
   // second behind a closed drawer.
   useEffect(() => {
-    if (!showInfo) return;
+    if (!showInfo && !error && !stuck) return;
     const read = () => {
       try {
         setDiagnostics(remuxRef.current?.diagnostics ?? engineRef.current?.diagnostics ?? { Moteur: "non démarré" });
@@ -182,7 +195,7 @@ export function ExperimentalPlayerHost({
     read(); // straight away, not after the first tick
     const id = setInterval(read, 500);
     return () => clearInterval(id);
-  }, [showInfo]);
+  }, [showInfo, error, stuck]);
 
   // What this device actually accepts, asked of the platform rather than assumed. It is the only
   // way to know whether a codec the browser cannot decode could still be played by decoding it
@@ -346,11 +359,6 @@ export function ExperimentalPlayerHost({
     };
   }, [info, session.resumeAt]);
 
-  // The two waits this player has, measured the same way: opening a file, and restarting after a
-  // pause. Both are usually too short to be worth saying anything about, and occasionally are not.
-  const startingFor = useElapsedSince(startingAt);
-  const openingFor = useElapsedSince(ready || error ? null : openedAt);
-  const waitingFor = openingFor ?? startingFor;
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
   // rather than as a flash of spinner drawing attention to itself.
@@ -369,6 +377,16 @@ export function ExperimentalPlayerHost({
         : openingFor !== null
           ? t("player.experimental.loading")
           : t("player.experimental.preparing");
+
+  const report: ReportInput = {
+    error,
+    elapsedMs: openingFor,
+    title,
+    itemId,
+    file: (info as unknown as Record<string, unknown>) ?? null,
+    pathReason,
+    diagnostics,
+  };
 
   if (typeof document === "undefined") return null;
 
@@ -448,6 +466,7 @@ export function ExperimentalPlayerHost({
           <AlertTriangle className="text-amber-400" size={32} />
           <p className="text-base font-medium text-white">{t("player.experimental.title")}</p>
           <p className="max-w-lg text-sm leading-6 text-slate-300">{error}</p>
+          <ExperimentalPlayerReport input={report} />
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             <button type="button" onClick={onFallback} className="btn-primary">
               {t("player.experimental.switchToStable")}
@@ -601,6 +620,14 @@ export function ExperimentalPlayerHost({
                 it can be finished is noise, not company. */}
             {waitingWord && <p className="text-sm text-slate-400">{waitingWord}</p>}
           </div>
+        </div>
+      )}
+
+      {/* The wait has gone past explaining itself. The report is pointer-enabled where the
+          spinner above is not: it exists to be selected and copied. */}
+      {stuck && !error && !isMini && (
+        <div className="absolute inset-x-0 bottom-0 z-20 flex justify-center bg-gradient-to-t from-black/95 to-transparent px-6 pb-6 pt-16">
+          <ExperimentalPlayerReport input={report} />
         </div>
       )}
 

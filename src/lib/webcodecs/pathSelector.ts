@@ -25,6 +25,7 @@ import type { ByteSource } from "./byteSource";
 import { unsupportedReason } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
+import { trace } from "./trace";
 import { canEncodeAac } from "./audioTranscode";
 import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
 
@@ -61,6 +62,7 @@ export interface PathInput {
 async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: RemuxPlan } | string> {
   const { file, videoTrack, audioTrack, dimensions, source } = input;
 
+  trace(`chemin : examen du remultiplexage — vidéo ${videoTrack.codecId}, audio ${audioTrack?.codecId ?? "aucune"}`);
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
   if (audioTrack && !playableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;
 
@@ -70,6 +72,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   if (audioTrack && audioDelivery(audioTrack) === "transcode") {
     const rate = audioTrack.audio?.sampleRate ?? 48000;
     const channels = audioTrack.audio?.channels ?? 2;
+    trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on demande l'AAC en ${channels} canaux`);
     if (!(await canEncodeAac(rate, channels))) {
       return `ce navigateur n'accepte pas ${audioTrack.codecId} et n'encode pas l'AAC en ${channels} canaux`;
     }
@@ -85,10 +88,12 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     audioInit: null,
     durationSeconds: 0,
   });
+  trace(`chemin : le navigateur accepte-t-il ${mime.video ?? "?"} + ${mime.audio ?? "aucun"} → ${playable.ok ? "oui" : "non"}`);
   if (!playable.ok) return playable.reason;
 
   try {
     const remuxer = await Remuxer.open(source, file, videoTrack, audioTrack, dimensions);
+    trace("chemin : remultiplexeur ouvert");
     return { remuxer, plan: remuxer.plan() };
   } catch (error) {
     return error instanceof Error ? error.message : "ouverture impossible";
@@ -99,6 +104,7 @@ export async function choosePlaybackPath(input: PathInput): Promise<ChosenPath> 
   const attempts: PathAttempt[] = [];
 
   const remux = await tryRemux(input);
+  if (typeof remux === "string") trace(`chemin : remultiplexage refusé — ${remux}`);
   if (typeof remux !== "string") {
     attempts.push({ path: "remux", ok: true });
     return { path: "remux", remuxer: remux.remuxer, plan: remux.plan, attempts };
