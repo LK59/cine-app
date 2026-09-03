@@ -51,10 +51,28 @@ byteSource ──▶ ebml/matroska ──▶ sampleReader ──▶ remuxer ─�
 
 ### `byteSource.ts` — lire un fichier de 40 Go par le petit bout
 
-Lectures par plages HTTP, avec cache. Analyser un conteneur champ par champ,
-c'est une lecture par champ — **129 000 pour un film à 15 000 points d'index**,
-mesuré. Les éléments qu'on sait petits (Tracks, Cues) sont donc lus d'un coup et
-adressés en mémoire par leurs offsets absolus.
+Lectures par plages HTTP, en morceaux de 1 Mio, avec cache. Analyser un conteneur
+champ par champ, c'est une lecture par champ — **129 000 pour un film à 15 000
+points d'index**, mesuré. Les éléments qu'on sait petits (Tracks, Cues) sont donc
+lus d'un coup et adressés en mémoire par leurs offsets absolus.
+
+**Presque toute l'attente avant la première image est la forme des requêtes, pas
+le travail.** Mesuré sur téléphone : 4,45 s jusqu'à la première image, dont
+2,6 s à lire le premier groupe d'images — pour 15 à 56 ms de remultiplexage.
+Trois conséquences :
+
+- **Lecture anticipée de 6 morceaux**, pas 1. Un seul, c'est un relais et non un
+  pipeline : chaque mégaoctet payait son propre aller-retour avant son premier
+  octet. Jamais spéculatif : la boucle de remplissage veut 30 s d'avance, soit
+  ~20 Mo.
+- **Les morceaux d'une même lecture sont demandés ensemble.** Les attendre l'un
+  après l'autre rendait une lecture à cheval sur quatre morceaux profonde de
+  quatre allers-retours.
+- **Les deux bouts du fichier sont demandés à l'ouverture**, en parallèle :
+  l'en-tête au début, l'index là où les Cues ont été écrits — la toute fin pour
+  un fichier fait pour le streaming. Et le résultat de l'analyse est **retenu
+  sous le nom du fichier**, donc rouvrir le même — ou reconstruire après que la
+  plateforme a fermé la source — ne le repaie pas.
 
 ### `ebml.ts` / `matroska.ts` — l'en-tête, jamais les clusters
 
@@ -301,7 +319,10 @@ fausses images-clés d'un fichier et ce que les refuser coûte.
 | `mp4Boxes.ts`, `mp4Muxer.ts`, `mp4SampleEntries.ts` | Écriture du fMP4 |
 | `codecConfig.ts` | Chaînes de codec, et **ce qu'une image est réellement** |
 | `remuxer.ts` | Le cœur : segments, fragments, sous-titres, pistes audio |
-| `mseSource.ts` | MediaSource, tampons, sauts, pause/reprise, reprises |
+| `mseSupport.ts` | Ce que le navigateur accepte, et la sonde de remplacement de tampon |
+| `bufferQueue.ts` | Une opération à la fois par tampon |
+| `playbackGuard.ts` | L'horloge de l'élément : pause, reprise, atterrissage, maintien de l'image |
+| `mseSource.ts` | MediaSource, tampons, remplissage, sauts, reprises |
 | `remuxPlayback.ts` | Assemblage : fichier en entrée, `<video>` qui joue en sortie |
 | `pathSelector.ts` | Quel chemin, et **pourquoi** |
 | `audioTranscode.ts`, `softwareAudio.ts` | Décodage et ré-encodage audio |
