@@ -3,6 +3,36 @@ import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
+// A stand-in transcoder, so the one property that matters here can be checked: what is released,
+// and when. The real one needs a decoder and an encoder that exist only in a browser.
+const opened: { closed: boolean }[] = [];
+let openFails = false;
+vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
+  return {
+    ...original,
+    AudioTranscoder: {
+      open: async () => {
+        if (openFails) throw new Error("l'encodeur a refusé");
+        const instance = {
+          closed: false,
+          sampleEntry: new Uint8Array([0, 0, 0, 8, 0x6d, 0x70, 0x34, 0x61]),
+          codecString: "mp4a.40.2",
+          sampleRate: 48000,
+          channels: 6,
+          seekTo: () => {},
+          framesUpTo: async () => [],
+          close() {
+            this.closed = true;
+          },
+        };
+        opened.push(instance);
+        return instance;
+      },
+    },
+  };
+});
+
 const HVCC = new Uint8Array([1, 1, 0x60, 0, 0, 0, 0x90, 0, 0, 0, 0, 0x78, 0xf0, 0, 0xfc, 0xfd, 0xf8, 0xf8, 0, 0, 0x0f, 0]);
 const AVCC = new Uint8Array([1, 0x64, 0, 0x28, 0xff, 0xe1, 0, 4, 0x67, 0x64, 0, 0x28, 1, 0, 4, 0x68, 0xee, 0x3c, 0xb0]);
 const AAC_CONFIG = new Uint8Array([0x11, 0x90]);
@@ -106,6 +136,32 @@ describe("Remuxer track selection", () => {
     vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => t.includes("mp4a") } });
     expect(audioDelivery(eac3)).toBe("transcode");
     expect(plannedMimeTypes(VIDEO, eac3).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
+  it("keeps the track it has, and the machinery for it, when a change fails", async () => {
+    // Start on a track that is being re-encoded, so there is something to lose.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
+    const otherDts = track({ ...dts, number: 8, language: "eng" });
+    FILE.tracks.push(dts, otherDts);
+    opened.length = 0;
+    openFails = false;
+
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      expect(opened).toHaveLength(1);
+      const before = remuxer.plan().audioMimeType;
+
+      // Releasing the working one first and then failing to open its replacement leaves nothing
+      // able to produce sound: no segments, a buffer that never advances, and a player loading
+      // for ever with nothing to say for itself.
+      openFails = true;
+      await expect(remuxer.setAudioTrack(otherDts.number)).rejects.toThrow();
+      expect(opened[0].closed).toBe(false);
+      expect(remuxer.plan().audioMimeType).toBe(before);
+    } finally {
+      FILE.tracks.splice(-2, 2);
+      openFails = false;
+    }
   });
 
   it("says an AC-3 track cannot be described when the file yields no frame to read", async () => {

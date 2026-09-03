@@ -324,34 +324,38 @@ export class Remuxer {
     if (!track) throw new Error(`Piste audio ${trackNumber} introuvable.`);
     if (!playableAudio(track)) throw new Error(`Audio non remultiplexable : ${track.codecId}`);
 
-    // A language change can cross between the two kinds of track — a DTS one that has to be
-    // re-encoded, and one that rides through untouched — so whichever machinery the previous
-    // choice needed is released before the new one is set up.
-    this.transcoder?.close();
-    this.transcoder = null;
+    // Nothing the current track depends on is released until the new one is ready to take over.
+    // Closing first and then failing to open leaves no way to produce sound at all — no segments,
+    // a buffer that never advances, and a player that loads for ever with nothing to say.
+    const previous = this.transcoder;
+    const at = this.videoDecodeTime / TIMESCALE;
 
     if (audioDelivery(track) === "transcode") {
-      this.transcoder = await AudioTranscoder.open(this.source, track);
-      this.audioInfo = transcodedAudioInfo(this.transcoder, track);
-      this.audioTrack = track;
-      this.pendingAudio = [];
-      this.audioFrameUs = null;
-      return;
+      // Primed where the viewer is, not at the beginning of the film: two hours in, the opening
+      // is long out of the byte source's cache, and fetching it back to read one header is
+      // network traffic spent on nothing.
+      const next = await AudioTranscoder.open(this.source, track, at);
+      previous?.close();
+      this.transcoder = next;
+      this.audioInfo = transcodedAudioInfo(next, track);
+    } else {
+      // Same reasoning for a track that rides through untouched: any frame of it describes it
+      // equally well, so the nearest one is read rather than the first.
+      const here = clusterOffsetForTime(this.file, this.videoDecodeTime, this.videoTrack.number);
+      const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
+      const info =
+        (here !== null && here !== start
+          ? await describeAudio(this.source, this.file, here, track).catch(() => null)
+          : null) ?? (await describeAudio(this.source, this.file, start, track));
+      previous?.close();
+      this.transcoder = null;
+      this.audioInfo = info;
     }
 
-    // Probed from where the reader already is, not from the beginning of the file. Any frame of
-    // the track describes it equally well, and on a two-hour film the opening is long out of the
-    // byte source's cache — fetching it again to read one header would be network traffic spent
-    // on nothing. The start of the file remains the fallback if nothing turns up here.
-    const here = clusterOffsetForTime(this.file, this.videoDecodeTime, this.videoTrack.number);
-    const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
-    this.audioInfo =
-      (here !== null && here !== start
-        ? await describeAudio(this.source, this.file, here, track).catch(() => null)
-        : null) ?? (await describeAudio(this.source, this.file, start, track));
     this.audioTrack = track;
     this.pendingAudio = [];
     this.audioFrameUs = null;
+    this.transcoderSeekPending = this.transcoder !== null;
   }
 
   /** Whether the file carries an index. Without one there is no way to reach a time directly. */

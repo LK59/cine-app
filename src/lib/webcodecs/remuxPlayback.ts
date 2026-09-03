@@ -226,16 +226,27 @@ export class RemuxPlayback {
 
     const at = this.video.currentTime;
     const mse = this.mse;
+    const previous = this.audioTrack;
     // One indivisible step. Describing the new track, re-pointing the buffer and refilling are
     // three operations on the same buffers, and a seek landing between any two of them reaches
     // those buffers from the other side — which is the freeze seen when changing language just
     // as a seek was settling.
-    await mse.runExclusive(async () => {
-      await this.remuxer.setAudioTrack(trackNumber);
-      this.audioTrack = track;
-      const plan = this.remuxer.plan();
-      await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
-    });
+    try {
+      await mse.runExclusive(async () => {
+        await this.remuxer.setAudioTrack(trackNumber);
+        this.audioTrack = track;
+        const plan = this.remuxer.plan();
+        await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
+      });
+    } catch (error) {
+      // Nothing was released that could not be replaced, so the previous track is still playable.
+      // Saying so beats a player that quietly stops producing sound and loads for ever.
+      this.audioTrack = previous;
+      this.options.onWarning?.(
+        `Cette piste audio n'a pas pu être ouverte : ${error instanceof Error ? error.message : "raison inconnue"}`
+      );
+      return;
+    }
     // Only the sound is read again, and only from where the viewer is. An ordinary seek would
     // clear the picture too and send it back over what has already been played, which the
     // browser catches up on at speed.

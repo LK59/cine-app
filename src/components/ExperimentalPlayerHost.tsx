@@ -559,8 +559,15 @@ export function ExperimentalPlayerHost({
             currentAudioId={currentAudio}
             onChangeAudio={(id) => {
               setCurrentAudio(id);
-              if (path === "remux") void remuxRef.current?.selectAudioTrack(id);
-              else void engineRef.current?.setAudioTrack(id);
+              if (path === "remux") {
+                // The menu follows what actually happened rather than what was asked for: a track
+                // the browser turns out not to be able to open leaves the previous one playing.
+                void remuxRef.current
+                  ?.selectAudioTrack(id)
+                  .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id));
+              } else {
+                void engineRef.current?.setAudioTrack(id);
+              }
             }}
             subtitleTracks={tracks.subtitles.map((track) => ({ id: track.number, label: trackLabel(track) }))}
             currentSubtitleId={currentSubtitle}

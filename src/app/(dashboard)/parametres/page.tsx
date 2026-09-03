@@ -311,7 +311,10 @@ export default function ParametresPage() {
           </section>
         )}
 
-        {role === "admin" && <ExperimentalPlayerSection />}
+        {/* Open to everyone: the remux path is the ordinary way this player reads a file now,
+            not an experiment to keep behind the admin account. Still off until each person
+            turns it on, and still refused server-side for anyone who hasn't. */}
+        <ExperimentalPlayerSection />
 
       </div>
     </div>

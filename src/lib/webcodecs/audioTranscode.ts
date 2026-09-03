@@ -110,7 +110,7 @@ export class AudioTranscoder {
    * once it has encoded something. So a little sound is pushed through here and kept, which is
    * also the earliest point at which a browser that cannot do this at all will say so.
    */
-  static async open(source: ByteSource, track: MatroskaTrack): Promise<AudioTranscoder> {
+  static async open(source: ByteSource, track: MatroskaTrack, fromSeconds = 0): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
 
@@ -149,7 +149,9 @@ export class AudioTranscoder {
     // of video is shown, so it is time the viewer is waiting through. Bounded, because an
     // encoder that accepts a configuration and then never answers is a real possibility — and a
     // player that waits for ever on it is worse than one that says what went wrong.
-    const primer = decoder.samples(0);
+    // Primed where playback is, not at the start of the film: this also runs on a language
+    // change, and reading the opening back two hours in is network traffic spent on nothing.
+    const primer = decoder.samples(Math.max(0, fromSeconds));
     const prime = async () => {
       // Fed, then waited on — never flushed. A flush asks a frame-based encoder to produce a
       // frame from whatever it happens to hold, and doing that after a single 512-sample block,
@@ -219,9 +221,9 @@ export class AudioTranscoder {
     const transcoder = new AudioTranscoder(decoder, encoder, sampleEntry, sampleRate, numberOfChannels);
     sink.frame = (frame) => transcoder.collect(frame);
     sink.failed = (message) => transcoder.fail(message);
-    // The priming output is thrown away rather than kept: it starts at zero, and the first
-    // segment asked for may be anywhere. Reading it again costs nothing — the bytes are cached.
-    transcoder.seekTo(0);
+    // The priming output is thrown away rather than kept: the first segment asked for may be
+    // anywhere. Reading it again costs nothing — those bytes are cached now.
+    transcoder.seekTo(fromSeconds);
     return transcoder;
   }
 
