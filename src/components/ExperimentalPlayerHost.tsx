@@ -445,6 +445,13 @@ export function ExperimentalPlayerHost({
     const declareReady = () => {
       setStartingAt(null);
       setSwitchingAudio(false);
+      // The position this pipeline was built to resume at has now been used, and is cleared here
+      // rather than from an effect watching readiness. That effect could land *after* a newer
+      // failure had already written the next position — and it did: a source lost in the same
+      // tick as the start had its position wiped, so the film began again from zero instead of
+      // resuming. Cleared at the exact moment the pipeline that consumed it is running, nothing
+      // written afterwards can be undone by it.
+      rebuildAtRef.current = null;
       setReady(true);
     };
     const startSeconds = rebuildAtRef.current ?? session.resumeAt ?? info.resumeSeconds ?? 0;
@@ -707,11 +714,6 @@ export function ExperimentalPlayerHost({
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [path, restart]);
-
-  // Cleared once the rebuilt pipeline is running, so an ordinary later seek is not undone by it.
-  useEffect(() => {
-    if (ready) rebuildAtRef.current = null;
-  }, [ready]);
 
   // Watched only while something is waiting on it: an idle player has no use for the news.
   useEffect(() => {
