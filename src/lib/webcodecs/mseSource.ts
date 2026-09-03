@@ -341,7 +341,7 @@ export class MseSource {
     this.video.addEventListener("seeking", this.onSeeking);
     this.video.addEventListener("pause", this.onPause);
     this.video.addEventListener("play", this.onPlay);
-    this.video.addEventListener("playing", this.request);
+    this.video.addEventListener("playing", this.onPlaying);
     this.lastAppendAt = Date.now();
     this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -484,6 +484,25 @@ export class MseSource {
     void this.seek(anchor);
     return true;
   }
+
+  /**
+   * Playback has genuinely begun.
+   *
+   * Waiting instead for the clock to be seen moving means waiting for the next timeupdate, which
+   * a browser emits about four times a second — long enough for the picture to be running again
+   * before anyone here notices, and for a spinner to appear over media that is already playing
+   * and then vanish. This event is the moment itself.
+   */
+  private readonly onPlaying = () => {
+    if (this.destroyed) return;
+    if (this.startingFrom !== null) {
+      this.startingFrom = null;
+      this.callbacks.onStarting?.(null);
+    }
+    // Then the ordinary handling: this is also one of the moments a jump on resume becomes
+    // visible, and the guard has to keep its chance at it.
+    this.request();
+  };
 
   private readonly onSeeking = () => {
     if (this.destroyed) return;
@@ -934,7 +953,7 @@ export class MseSource {
     this.video.removeEventListener("seeking", this.onSeeking);
     this.video.removeEventListener("pause", this.onPause);
     this.video.removeEventListener("play", this.onPlay);
-    this.video.removeEventListener("playing", this.request);
+    this.video.removeEventListener("playing", this.onPlaying);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);

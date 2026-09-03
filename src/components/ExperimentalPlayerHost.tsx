@@ -22,8 +22,8 @@ import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 const SPINNER_AFTER_MS = 120;
 
 /** And before the wait is worth a sentence, then before it is worth admitting it is long. */
-const WORD_AFTER_MS = 700;
-const STILL_WORKING_AFTER_MS = 2000;
+const WORD_AFTER_MS = 1000;
+const STILL_WORKING_AFTER_MS = 3000;
 
 /**
  * Milliseconds since a moment, or null when there is no moment.

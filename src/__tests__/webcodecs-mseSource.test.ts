@@ -903,6 +903,22 @@ describe("MseSource", () => {
     expect(onStarting).toHaveBeenLastCalledWith(null);
   });
 
+  it("stops saying it is starting the moment playback starts, not at the next clock tick", async () => {
+    const video = fakeVideo();
+    const onStarting = vi.fn();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
+    await flush();
+
+    video.dispatchEvent(new Event("play"));
+    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
+
+    // A browser reports the clock about four times a second. Waiting for it to be seen moving
+    // means the picture can be running again well before anyone here notices — long enough for a
+    // spinner to appear over media that is already playing, and then go.
+    video.dispatchEvent(new Event("playing"));
+    expect(onStarting).toHaveBeenLastCalledWith(null);
+  });
+
   it("says when it has been asked to start and has not yet, and when it has", async () => {
     const video = fakeVideo();
     const onStarting = vi.fn();
