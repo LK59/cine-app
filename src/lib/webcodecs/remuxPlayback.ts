@@ -36,7 +36,24 @@ export interface RemuxPlaybackOptions {
 export type PathProbe = { discard: () => void } & (
   | { path: "remux"; start: (video: HTMLVideoElement) => Promise<RemuxPlayback> }
   | { path: "webcodecs"; chosen: ChosenPath }
+  /** Nothing to repackage: the browser can be handed the URL and left alone. See below. */
+  | { path: "direct" }
 );
+
+/**
+ * Whether a file is already in a container the browser opens by itself.
+ *
+ * An ISO base media file — an .mp4 or .m4v — needs none of this machinery. There is no
+ * repackaging to do, because it is already the packaging; a `<video>` given the URL fetches its
+ * own ranges, decodes in hardware, seeks, and shows HDR, which is the whole of what the remux
+ * path exists to achieve by a longer road.
+ *
+ * Read from the bytes rather than the file name: a name is a guess and the first twelve bytes are
+ * not. Every ISOBMFF file names its brand in a `ftyp` box at the very front.
+ */
+function isoBaseMedia(head: Uint8Array): boolean {
+  return head.length >= 8 && head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
+}
 
 function toEngineTrack(track: MatroskaTrack): EngineTrack {
   return {
@@ -89,6 +106,14 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
   trace("ouverture du flux");
   const source = await HttpByteSource.open(options.streamUrl);
   trace(`flux ouvert — ${source.size} octets`);
+
+  // Asked before anything is parsed, because for one kind of file the answer is that there is
+  // nothing to do at all.
+  if (isoBaseMedia(await source.read(0, 12))) {
+    trace("conteneur ISO : rien à remultiplexer, le navigateur le lit tel quel");
+    source.close();
+    return { path: "direct", discard: () => {} };
+  }
   // Named by its URL, so opening the same file again — or rebuilding after the platform closed
   // the source — does not pay for its header and index a second time.
   const headerAt = Date.now();

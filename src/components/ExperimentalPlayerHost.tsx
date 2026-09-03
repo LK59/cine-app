@@ -142,7 +142,7 @@ export function ExperimentalPlayerHost({
   const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
   // Which of the two pipelines is running. Null until the file has been examined — the element
   // that shows the picture differs between them, so both are mounted and one is hidden.
-  const [path, setPath] = useState<"remux" | "webcodecs" | null>(null);
+  const [path, setPath] = useState<"remux" | "webcodecs" | "direct" | null>(null);
   // When playback was asked to start, and has not yet. Reported by the pipeline as a measured
   // fact rather than guessed from the platform: on a desktop it clears within a frame, so none
   // of what follows ever appears there.
@@ -154,6 +154,9 @@ export function ExperimentalPlayerHost({
   // this the controls read the held element as simply paused and offer the play button, which is
   // both wrong and an invitation to make it worse.
   const [switchingAudio, setSwitchingAudio] = useState(false);
+  // Two of the three paths put a real <video> on screen and are driven through it; only the
+  // WebCodecs one paints a canvas and needs the façade in front of it.
+  const onElement = path === "remux" || path === "direct";
   // Bumped to build the pipeline again from scratch. iOS takes the media resources back when the
   // page goes to the background, and a MediaSource it has closed cannot be reopened — so coming
   // back from a locked screen means starting over, at the position the viewer left.
@@ -331,6 +334,63 @@ export function ExperimentalPlayerHost({
       await element.play().catch(() => {});
     };
 
+    /**
+     * The shortest path there is: hand the element the URL and get out of the way.
+     *
+     * An ISO base media file needs none of this machinery — it is already the packaging the
+     * remux path spends its time producing. The browser fetches its own ranges, decodes in
+     * hardware, seeks and shows HDR, and does all of it better than anything that could be put
+     * in front of it. What is given up is the track and subtitle menus, which are read out of a
+     * Matroska container this player never opens here; those files carry one audio track.
+     */
+    const startDirect = async (element: HTMLVideoElement) => {
+      setPath("direct");
+      setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
+      setTracks({ audio: [], subtitles: [] });
+      setCurrentAudio(null);
+      setCurrentSubtitle(null);
+
+      const onTime = () => {
+        positionRef.current = element.currentTime;
+      };
+      const onPlay = () => {
+        setPlaying(true);
+        setWarning(null);
+      };
+      const onPause = () => setPlaying(false);
+      // The element's own verdict, which is the only one there is on this path.
+      const onFailure = () => {
+        const failure = element.error;
+        setRuntimeError(
+          `Ce navigateur n'a pas pu lire ce fichier${failure?.message ? ` : ${failure.message}` : ` (code ${failure?.code ?? "?"})`}.`
+        );
+      };
+      // Set once the element knows how long the film is: asking earlier is ignored.
+      const onMetadata = () => {
+        if (startSeconds > 1) element.currentTime = startSeconds;
+        declareReady();
+      };
+      element.addEventListener("timeupdate", onTime);
+      element.addEventListener("play", onPlay);
+      element.addEventListener("pause", onPause);
+      element.addEventListener("ended", onPause);
+      element.addEventListener("error", onFailure);
+      element.addEventListener("loadedmetadata", onMetadata, { once: true });
+      unsubscribes.push(() => {
+        element.removeEventListener("timeupdate", onTime);
+        element.removeEventListener("play", onPlay);
+        element.removeEventListener("pause", onPause);
+        element.removeEventListener("ended", onPause);
+        element.removeEventListener("error", onFailure);
+        element.removeEventListener("loadedmetadata", onMetadata);
+        element.removeAttribute("src");
+        element.load();
+      });
+
+      element.src = info.streamUrl;
+      await element.play().catch(() => {});
+    };
+
     const startEngine = async (reason: string | null) => {
       setPathReason(reason);
       // Only now is this refusal real. The native path would have shown this file's HDR without
@@ -427,7 +487,9 @@ export function ExperimentalPlayerHost({
           probe.discard();
           return;
         }
-        return probe.path === "remux" ? startRemux(element, probe.start) : startEngine(describePath(probe.chosen));
+        if (probe.path === "remux") return startRemux(element, probe.start);
+        if (probe.path === "direct") return startDirect(element);
+        return startEngine(describePath(probe.chosen));
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -568,12 +630,12 @@ export function ExperimentalPlayerHost({
       <video
         ref={videoElRef}
         playsInline
-        hidden={path !== "remux"}
+        hidden={!onElement}
         className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}
       />
       <canvas
         ref={canvasRef}
-        hidden={path === "remux"}
+        hidden={onElement}
         className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}
       />
 
@@ -640,7 +702,13 @@ export function ExperimentalPlayerHost({
           <dl className="space-y-1.5">
             <InfoRow
               label="Méthode"
-              value={path === "remux" ? "Remultiplexage → lecteur natif" : "Décodage direct (WebCodecs)"}
+              value={
+                path === "direct"
+                  ? "Lecture directe (aucun remultiplexage)"
+                  : path === "remux"
+                    ? "Remultiplexage → lecteur natif"
+                    : "Décodage direct (WebCodecs)"
+              }
             />
             <InfoRow label="Conteneur" value={info?.container?.toUpperCase() ?? "?"} />
             <InfoRow
@@ -685,7 +753,7 @@ export function ExperimentalPlayerHost({
           playing={playing}
           onTogglePlay={() => {
             const element = videoElRef.current;
-            if (path === "remux" && element) {
+            if (onElement && element) {
               if (element.paused) void element.play();
               else element.pause();
               return;
@@ -699,12 +767,12 @@ export function ExperimentalPlayerHost({
         />
       ) : (
         ready &&
-        (facade || path === "remux") &&
+        (facade || onElement) &&
         !error && (
           <PlayerControls
             // On the remux path this is a real media element, so seeking, volume and rate are the
             // browser's own; the facade exists only to give the canvas pipeline the same shape.
-            videoRef={path === "remux" ? videoElRef : { current: facade ? asVideoElement(facade) : null }}
+            videoRef={onElement ? videoElRef : { current: facade ? asVideoElement(facade) : null }}
             containerRef={containerRef}
             itemId={itemId}
             title={title}

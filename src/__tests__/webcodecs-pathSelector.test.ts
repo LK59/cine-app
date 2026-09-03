@@ -152,3 +152,42 @@ describe("describePath", () => {
     expect(described).toContain("A_EAC3");
   });
 });
+
+describe("le conteneur du navigateur", () => {
+  /** A source holding only a header, which is all the detection reads. */
+  const sourceOf = (head: number[]) => ({
+    size: head.length,
+    read: async (offset: number, length: number) =>
+      new Uint8Array(head.slice(offset, Math.min(offset + length, head.length))),
+    close: vi.fn(),
+  });
+
+  const ftyp = [0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d];
+  const ebml = [0x1a, 0x45, 0xdf, 0xa3, 0x84, 0x42, 0x86, 0x81, 0x01, 0, 0, 0];
+
+  it("reconnaît un fichier que le navigateur ouvre tout seul", async () => {
+    // An .mp4 needs none of this machinery: it is already the packaging the remux path spends
+    // its time producing.
+    vi.doMock("@/lib/webcodecs/byteSource", () => ({
+      HttpByteSource: { open: async () => sourceOf(ftyp) },
+    }));
+    const { probePlaybackPath } = await import("@/lib/webcodecs/remuxPlayback");
+    const probe = await probePlaybackPath({ streamUrl: "/film.mp4", startSeconds: 0, onError: vi.fn() });
+    expect(probe.path).toBe("direct");
+    vi.doUnmock("@/lib/webcodecs/byteSource");
+  });
+
+  it("ne prend pas un Matroska pour l'un d'eux", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/webcodecs/byteSource", () => ({
+      HttpByteSource: { open: async () => sourceOf(ebml) },
+    }));
+    const { probePlaybackPath } = await import("@/lib/webcodecs/remuxPlayback");
+    // It goes on to parse, and this stub has nothing to parse — which is a different failure
+    // from being taken for an MP4.
+    await expect(
+      probePlaybackPath({ streamUrl: "/film.mkv", startSeconds: 0, onError: vi.fn() })
+    ).rejects.toThrow();
+    vi.doUnmock("@/lib/webcodecs/byteSource");
+  });
+});
