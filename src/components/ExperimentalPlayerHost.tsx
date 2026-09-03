@@ -18,6 +18,35 @@ import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabil
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 
+/** How long a threshold has to be crossed before anything is shown at all. */
+const SPINNER_AFTER_MS = 120;
+
+/** And before the wait is worth a sentence, then before it is worth admitting it is long. */
+const WORD_AFTER_MS = 700;
+const STILL_WORKING_AFTER_MS = 2000;
+
+/**
+ * Milliseconds since a moment, or null when there is no moment.
+ *
+ * Ticks only while something is actually pending: an idle player runs no timer at all, which is
+ * the point of taking a start time rather than a boolean.
+ */
+function useElapsedSince(startedAt: number | null): number | null {
+  // The clock is sampled by the timer and kept in state, never read while rendering: a render
+  // that reads the time is not a pure function of its inputs, and writing the state from inside
+  // the effect instead is the other way to get this wrong. Between the start and the first tick
+  // the answer is simply zero, which is well inside the threshold below which nothing is shown.
+  const [sampledAt, setSampledAt] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (startedAt === null) return;
+    const id = setInterval(() => setSampledAt(Date.now()), 100);
+    return () => clearInterval(id);
+  }, [startedAt]);
+
+  return startedAt === null ? null : Math.max(0, sampledAt - startedAt);
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
@@ -92,6 +121,11 @@ export function ExperimentalPlayerHost({
   // Which of the two pipelines is running. Null until the file has been examined — the element
   // that shows the picture differs between them, so both are mounted and one is hidden.
   const [path, setPath] = useState<"remux" | "webcodecs" | null>(null);
+  // When playback was asked to start, and has not yet. Reported by the pipeline as a measured
+  // fact rather than guessed from the platform: on a desktop it clears within a frame, so none
+  // of what follows ever appears there.
+  const [startingAt, setStartingAt] = useState<number | null>(null);
+  const [openedAt] = useState(() => Date.now());
 
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher);
   const error =
@@ -283,6 +317,7 @@ export function ExperimentalPlayerHost({
       startSeconds,
       onError: (message) => setRuntimeError(message),
       onWarning: (message) => setWarning(message),
+      onStarting: (at) => setStartingAt(at),
     })
       .then((probe) => {
         if (cancelled) return;
@@ -305,6 +340,24 @@ export function ExperimentalPlayerHost({
       engineRef.current = null;
     };
   }, [info, session.resumeAt]);
+
+  // The two waits this player has, measured the same way: opening a file, and restarting after a
+  // pause. Both are usually too short to be worth saying anything about, and occasionally are not.
+  const startingFor = useElapsedSince(startingAt);
+  const openingFor = useElapsedSince(ready || error ? null : openedAt);
+  const waitingFor = openingFor ?? startingFor;
+
+  // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
+  // rather than as a flash of spinner drawing attention to itself.
+  const showSpinner = waitingFor !== null && waitingFor >= SPINNER_AFTER_MS;
+  const waitingWord =
+    waitingFor === null || waitingFor < WORD_AFTER_MS
+      ? null
+      : waitingFor >= STILL_WORKING_AFTER_MS
+        ? t("player.experimental.stillWorking")
+        : openingFor !== null
+          ? t("player.experimental.loading")
+          : t("player.experimental.preparing");
 
   if (typeof document === "undefined") return null;
 
@@ -505,7 +558,9 @@ export function ExperimentalPlayerHost({
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}
-            loading={!ready}
+            // The controls already answer this by swapping the button for a spinner, so restarting
+            // after a pause borrows the same treatment rather than growing a second indicator.
+            loading={!ready || showSpinner}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.
@@ -517,11 +572,13 @@ export function ExperimentalPlayerHost({
         )
       )}
 
-      {!ready && !error && !isMini && (
+      {showSpinner && !error && !isMini && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-            <p className="text-sm text-slate-400">{t("player.experimental.loading")}</p>
+            {/* Silent while the wait is too short to read. A sentence that appears and goes before
+                it can be finished is noise, not company. */}
+            {waitingWord && <p className="text-sm text-slate-400">{waitingWord}</p>}
           </div>
         </div>
       )}

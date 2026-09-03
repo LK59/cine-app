@@ -1179,7 +1179,9 @@
       "switchToStable": "Switch to the stable player",
       "loading": "Reading the file…",
       "badge": "Experimental",
-      "noAudio": "Playing without sound: {reason}"
+      "noAudio": "Playing without sound: {reason}",
+      "preparing": "Preparing the video…",
+      "stillWorking": "Still working…"
     }
   },
   "cinema": {

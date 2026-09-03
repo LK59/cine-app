@@ -885,6 +885,30 @@ describe("MseSource", () => {
     expect(remuxer.seeks).toEqual([]);
   }, 10_000);
 
+  it("says when it has been asked to start and has not yet, and when it has", async () => {
+    const video = fakeVideo();
+    const onStarting = vi.fn();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    onStarting.mockClear();
+
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    // Reported as a fact, not as a platform: a caller can show that something is happening
+    // without asking which browser it is in, and a desktop clears this within a frame.
+    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
+
+    setTime(12.1);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+    expect(onStarting).toHaveBeenLastCalledWith(null);
+  });
+
   it("detaches cleanly, leaving nothing listening", async () => {
     const video = fakeVideo();
     const mse = await MseSource.attach(video, fakeRemuxer(50), PLAN, { onError: vi.fn() });

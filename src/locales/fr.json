@@ -1179,7 +1179,9 @@
       "switchToStable": "Passer au lecteur stable",
       "loading": "Analyse du fichier…",
       "badge": "Expérimental",
-      "noAudio": "Lecture sans son : {reason}"
+      "noAudio": "Lecture sans son : {reason}",
+      "preparing": "Préparation de la vidéo…",
+      "stillWorking": "Toujours en cours…"
     }
   },
   "cinema": {

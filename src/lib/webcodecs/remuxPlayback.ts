@@ -28,6 +28,8 @@ export interface RemuxPlaybackOptions {
   startSeconds: number;
   onError: (message: string) => void;
   onWarning?: (message: string) => void;
+  /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
+  onStarting?: (startedAt: number | null) => void;
 }
 
 export type PathProbe =
@@ -146,6 +148,7 @@ export class RemuxPlayback {
       {
         onError: this.options.onError,
         onWarning: this.options.onWarning,
+        onStarting: this.options.onStarting,
         onSubtitles: (cues) => this.collect(cues),
       },
       // Handed in rather than seeked to afterwards, so the first read happens where the viewer

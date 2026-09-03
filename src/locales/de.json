@@ -1179,7 +1179,9 @@
       "switchToStable": "Zum stabilen Player wechseln",
       "loading": "Datei wird gelesen…",
       "badge": "Experimentell",
-      "noAudio": "Wiedergabe ohne Ton: {reason}"
+      "noAudio": "Wiedergabe ohne Ton: {reason}",
+      "preparing": "Video wird vorbereitet…",
+      "stillWorking": "Läuft noch…"
     }
   },
   "cinema": {

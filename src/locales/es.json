@@ -1179,7 +1179,9 @@
       "switchToStable": "Cambiar al reproductor estable",
       "loading": "Analizando el archivo…",
       "badge": "Experimental",
-      "noAudio": "Reproducción sin sonido: {reason}"
+      "noAudio": "Reproducción sin sonido: {reason}",
+      "preparing": "Preparando el vídeo…",
+      "stillWorking": "Todavía en curso…"
     }
   },
   "cinema": {

@@ -82,6 +82,15 @@ export interface MseCallbacks {
   onSubtitles?: (cues: TrackedCue[]) => void;
   /** Something was refused but playback continues — a seek the file cannot serve, typically. */
   onWarning?: (message: string) => void;
+  /**
+   * Play has been pressed and the clock has not moved yet, or null once it has.
+   *
+   * Reported as a fact rather than as a platform: on iOS the pipeline needs a moment to refill
+   * the sound it was told to discard, and on a desktop the same condition clears within a frame.
+   * A caller can therefore show that something is happening without ever asking which browser it
+   * is in, and without inventing a delay where there is none.
+   */
+  onStarting?: (startedAt: number | null) => void;
 }
 
 type MediaSourceCtor = typeof MediaSource | typeof ManagedMediaSource;
@@ -343,6 +352,8 @@ export class MseSource {
       if (trace.latencyMs === null && this.video.currentTime > trace.play + 0.01) {
         trace.latencyMs = Date.now() - this.resumeStartedAt;
         trace.pausedForMs = this.resumeStartedAt - this.pauseStartedAt;
+        // The clock is moving: sound and picture are genuinely running again.
+        this.callbacks.onStarting?.(null);
       }
     }
     // Playback advancing is also the first moment a jump on resume becomes visible.
@@ -360,6 +371,7 @@ export class MseSource {
    */
   private readonly onPause = () => {
     if (this.destroyed) return;
+    this.callbacks.onStarting?.(null);
     this.pauseAnchor = this.video.currentTime;
     this.resumeTrace = {
       paused: this.pauseAnchor,
@@ -411,6 +423,7 @@ export class MseSource {
     // jumped. Checked again as playback gets going, until the window closes.
     this.resumeStartedAt = Date.now();
     if (this.resumeTrace) this.resumeTrace.play = this.video.currentTime;
+    this.callbacks.onStarting?.(this.resumeStartedAt);
     this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
     const moved = this.holdPausePosition();
 
@@ -897,6 +910,7 @@ export class MseSource {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.callbacks.onStarting?.(null);
     this.generation += 1;
 
     this.source.removeEventListener("startstreaming", this.request);
