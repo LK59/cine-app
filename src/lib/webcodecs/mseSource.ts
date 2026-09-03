@@ -509,6 +509,25 @@ export class MseSource {
     void this.fill();
   }
 
+  /**
+   * The wait shown to the viewer, armed and cleared in one place.
+   *
+   * Six call sites used to set this directly, and a spinner that stayed up said nothing about
+   * which of them had armed it or which had failed to come. Named here, and written to the
+   * record, so the next report answers that instead of posing it.
+   */
+  private setStarting(startedAt: number | null, because: string): void {
+    // A clear is never skipped, however sure this is that the wait is already down: being sure
+    // and being wrong is the whole shape of the fault. Only a repeated *arming* is dropped, so
+    // the record does not fill with the same line.
+    if (startedAt !== null && this.startingWait !== null) return;
+    this.startingWait = startedAt;
+    trace(startedAt === null ? `attente levée (${because})` : `attente affichée (${because})`);
+    this.callbacks.onStarting?.(startedAt);
+  }
+
+  private startingWait: number | null = null;
+
   private readonly request = () => {
     // The first tick after resuming is where a jump would show, so it is recorded before
     // anything here has a chance to act on it.
@@ -516,7 +535,7 @@ export class MseSource {
     if (this.startingFrom !== null && this.video.currentTime > this.startingFrom + 0.01) {
       this.startingFrom = null;
       this.stopWatchingForFirstFrame();
-      this.callbacks.onStarting?.(null);
+      this.setStarting(null, "l'horloge a avancé");
     }
 
     const trace = this.resumeTrace;
@@ -547,7 +566,7 @@ export class MseSource {
     if (this.destroyed) return;
     this.startingFrom = null;
     this.stopWatchingForFirstFrame();
-    this.callbacks.onStarting?.(null);
+    this.setStarting(null, "mise en pause");
     this.pauseAnchor = this.video.currentTime;
     this.resumeTrace = {
       paused: this.pauseAnchor,
@@ -617,7 +636,7 @@ export class MseSource {
     this.resumeStartedAt = Date.now();
     if (this.resumeTrace) this.resumeTrace.play = this.video.currentTime;
     this.startingFrom = this.video.currentTime;
-    this.callbacks.onStarting?.(this.resumeStartedAt);
+    this.setStarting(this.resumeStartedAt, "lecture demandée");
     this.watchForFirstFrame(this.startingFrom);
     this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
     const moved = this.holdPausePosition();
@@ -692,7 +711,7 @@ export class MseSource {
       if (this.destroyed || this.startingFrom === null) return;
       if (metadata.mediaTime > from + 0.01) {
         this.startingFrom = null;
-        this.callbacks.onStarting?.(null);
+        this.setStarting(null, "première image affichée");
         return;
       }
       this.frameCallback = request(step);
@@ -1084,7 +1103,7 @@ export class MseSource {
     if (!hold.engaged) {
       hold.engaged = true;
       // The same signal the opening wait uses, so the viewer gets the spinner they already know.
-      this.callbacks.onStarting?.(Date.now());
+      this.setStarting(Date.now(), "image retenue faute de son");
     }
     this.video.pause();
   }
@@ -1124,7 +1143,7 @@ export class MseSource {
     if (!hold) return;
     this.audioHold = null;
     this.video.removeEventListener("play", this.onPlayDuringHold);
-    if (hold.engaged) this.callbacks.onStarting?.(null);
+    if (hold.engaged) this.setStarting(null, "le son est revenu");
     if (hold.wanted && !this.destroyed) void this.video.play().catch(() => {});
   }
 
@@ -1454,7 +1473,10 @@ export class MseSource {
     this.destroyed = true;
     this.startingFrom = null;
     this.stopWatchingForFirstFrame();
-    this.callbacks.onStarting?.(null);
+    // Whatever it was waiting for died with it, and a wait nobody will answer is a spinner for
+    // ever. Cleared unconditionally, before anything else can fail on the way out.
+    this.startingWait = Date.now();
+    this.setStarting(null, "lecteur détruit");
     this.generation += 1;
 
     this.source.removeEventListener("startstreaming", this.request);

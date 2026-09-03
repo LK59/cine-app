@@ -162,7 +162,10 @@ export function ExperimentalPlayerHost({
   // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
   const rebuildsRef = useRef(0);
   const lastRebuildAtRef = useRef<number | null>(null);
-  const [openedAt] = useState(() => Date.now());
+  // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
+  // the mount the wait was instantly minutes long — so a rebuild that takes half a second
+  // announced itself as "still working", which is a spinner lying about what it knows.
+  const [openedAt, setOpenedAt] = useState(() => Date.now());
 
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below
@@ -277,6 +280,16 @@ export function ExperimentalPlayerHost({
 
     let cancelled = false;
     let unsubscribes: (() => void)[] = [];
+
+    // A pipeline that has just become ready cannot owe a resume or a track change: whatever the
+    // previous one was waiting for died with it, and a wait nobody will ever answer is a spinner
+    // that never stops. Cleared where readiness is declared rather than in an effect watching
+    // for it, so nothing is left hanging for a render.
+    const declareReady = () => {
+      setStartingAt(null);
+      setSwitchingAudio(false);
+      setReady(true);
+    };
     const startSeconds = rebuildAtRef.current ?? session.resumeAt ?? info.resumeSeconds ?? 0;
 
     // The file decides which pipeline runs, not a setting: repackaging it for the browser's own
@@ -291,7 +304,7 @@ export function ExperimentalPlayerHost({
       setTracks({ audio: playback.audioTracks, subtitles: playback.subtitleTracks });
       setCurrentAudio(playback.currentAudioTrack);
       setCurrentSubtitle(null);
-      setReady(true);
+      declareReady();
 
       const onTime = () => {
         positionRef.current = element.currentTime;
@@ -351,7 +364,7 @@ export function ExperimentalPlayerHost({
         engine.on("loadedmetadata", () => {
           setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
           setCurrentAudio(engine.currentAudioTrack);
-          setReady(true);
+          declareReady();
         }),
       ];
 
@@ -363,7 +376,7 @@ export function ExperimentalPlayerHost({
       setFacade(built);
       setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
       setCurrentAudio(engine.currentAudioTrack);
-      setReady(true);
+      declareReady();
       await engine.play().catch(() => {});
     };
 
@@ -392,6 +405,7 @@ export function ExperimentalPlayerHost({
           );
           traceKeepAcrossReset();
           rebuildAtRef.current = at;
+          setOpenedAt(Date.now());
           setWarning(
             again
               ? "Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après."
@@ -449,6 +463,7 @@ export function ExperimentalPlayerHost({
       trace(`reprise : la plateforme a fermé la source, reconstruction à ${at.toFixed(1)} s`);
       traceKeepAcrossReset();
       rebuildAtRef.current = at;
+      setOpenedAt(Date.now());
       setReady(false);
       setRuntimeError(null);
       setRebuildCount((count) => count + 1);
@@ -493,7 +508,18 @@ export function ExperimentalPlayerHost({
     itemId,
     file: (info as unknown as Record<string, unknown>) ?? null,
     pathReason,
-    diagnostics,
+    diagnostics: {
+      ...diagnostics,
+      // The spinner's own state. It has told the viewer it was working when it was not, and
+      // nothing in the report said which of the three reasons was holding it up.
+      Attente: [
+        ready ? null : "démarrage",
+        startingAt !== null ? "reprise" : null,
+        switchingAudio ? "changement de piste" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "aucune",
+    },
     running: ready && !error,
   };
 
