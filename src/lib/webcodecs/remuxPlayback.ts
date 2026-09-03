@@ -58,8 +58,18 @@ function toEngineTrack(track: MatroskaTrack): EngineTrack {
 function preferredAudio(file: MatroskaFile): MatroskaTrack | null {
   const audio = file.tracks.filter((t) => t.type === "audio");
   const playable = audio.filter(remuxableAudio);
-  const pool = playable.length > 0 ? playable : audio;
-  return pool.find((t) => t.isDefault) ?? pool[0] ?? null;
+  // Nothing here works: the file's own default is returned so the refusal names its real codec.
+  if (playable.length === 0) return audio.find((t) => t.isDefault) ?? audio[0] ?? null;
+
+  const preferred = audio.find((t) => t.isDefault) ?? audio[0];
+  const language = preferred?.language ?? null;
+  // Language first, then channel count. On this library the default track is regularly DTS in one
+  // language with only a stereo track beside it in another — silently switching language is a
+  // worse surprise than dropping from surround to stereo, so the language is held onto and the
+  // richest track in it wins. The menu still offers everything.
+  const sameLanguage = playable.filter((t) => t.language === language);
+  const pool = sameLanguage.length > 0 ? sameLanguage : playable;
+  return pool.reduce((best, t) => ((t.audio?.channels ?? 0) > (best.audio?.channels ?? 0) ? t : best), pool[0]);
 }
 
 /**
