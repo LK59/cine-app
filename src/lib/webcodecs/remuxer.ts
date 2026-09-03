@@ -632,7 +632,14 @@ export class Remuxer {
    */
   seekTo(seconds: number): void {
     const offset = clusterOffsetForTime(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
-    this.reader.seekTo(offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart);
+    const from = offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart;
+    this.reader.seekTo(from);
+    // Asked for now rather than when the parser gets there. The index has just said where this
+    // seek lands, and everything below — clearing the queues, resetting the timeline — takes a
+    // few milliseconds during which the link would otherwise carry nothing. Measured on a dense
+    // 4K file: four megabytes have to arrive before the first picture can be built, and the
+    // fetching of them used to begin with one lone request on an idle connection.
+    this.source.warm?.(from);
     // Deferred, not done here. Reading restarts at the indexed keyframe at or before the
     // requested time, which is regularly the best part of a second earlier — pointing the
     // transcoder at the request instead leaves that much of the segment with pictures and no
@@ -867,7 +874,11 @@ export class Remuxer {
     if (earlier < 0) return false;
 
     const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
-    this.reader.seekTo(clusterOffsetForTime(this.file, earlier, this.videoTrack.number) ?? start);
+    const from = clusterOffsetForTime(this.file, earlier, this.videoTrack.number) ?? start;
+    this.reader.seekTo(from);
+    // Same reason as a seek, and this one lands somewhere colder still: twelve seconds earlier
+    // in the film is a region nothing has read and nothing has fetched ahead into.
+    this.source.warm?.(from);
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];

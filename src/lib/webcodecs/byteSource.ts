@@ -15,6 +15,14 @@ export interface ByteSource {
   readonly size: number;
   /** Reads exactly [offset, offset+length), clamped at EOF. */
   read(offset: number, length: number): Promise<Uint8Array>;
+  /**
+   * Starts fetching around an offset nothing has asked for yet.
+   *
+   * Optional: a source already holding the whole file has nothing to warm. For one reading over
+   * the network it is the difference between a seek that begins with a single request on an idle
+   * link and one that begins with the link full.
+   */
+  warm?(offset: number): void;
   /** Releases any pending work. Safe to call twice. */
   close(): void;
 }
@@ -283,6 +291,29 @@ export class HttpByteSource implements ByteSource {
         // A failed read-ahead is not an error: the real read will try again and report properly.
       });
     }
+  }
+
+  /**
+   * Fetches around an offset before anything reads there.
+   *
+   * A seek knows which cluster it is going to land in the moment the index is consulted, and
+   * that is several milliseconds before the parser asks for its first byte. Until now those
+   * milliseconds were spent idle and the one after them was spent waiting on a single request:
+   * the read-ahead only started once that first chunk had already arrived, so the beginning of
+   * every seek was one round trip during which the link carried one megabyte and nothing else —
+   * on a file needing four before it can show a picture.
+   *
+   * Cheap to be wrong about: these are chunks the reader was about to ask for anyway, and a
+   * fetch already in flight or already cached is left alone.
+   */
+  warm(offset: number): void {
+    const first = Math.floor(Math.max(0, Math.min(offset, this.size - 1)) / CHUNK_SIZE);
+    if (!this.chunks.has(first) && !this.inflight.has(first)) {
+      void this.fetchChunk(first).catch(() => {
+        // Speculative: the real read asks again and reports properly if it fails.
+      });
+    }
+    this.prefetchAfter(first);
   }
 
   async read(offset: number, length: number): Promise<Uint8Array> {

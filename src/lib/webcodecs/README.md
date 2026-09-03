@@ -86,6 +86,17 @@ Trois conséquences :
   sous le nom du fichier**, donc rouvrir le même — ou reconstruire après que la
   plateforme a fermé la source — ne le repaie pas.
 
+**Préchauffage au saut.** L'index dit dans quel cluster un saut atterrit
+*plusieurs millisecondes* avant que l'analyseur ne réclame son premier octet, et
+ces millisecondes étaient perdues : la lecture anticipée ne démarrait qu'une fois
+le premier mégaoctet arrivé, donc chaque saut commençait par **une requête seule
+sur un lien vide**. Mesuré sur un fichier 4K dense (Ted Lasso, 3 pistes E-AC3 5.1
+Atmos entrelacées) : **4 Mo doivent arriver avant la première image**, pour 12 ms
+de travail de remultiplexage. `warm(offset)` demande donc la zone visée dès que
+l'index a parlé — même mécanisme qu'à l'ouverture, où le début et la fin du
+fichier sont cherchés ensemble. Le retour arrière sur index en profite aussi : il
+vise une zone plus froide encore.
+
 ### `ebml.ts` / `matroska.ts` — l'en-tête, jamais les clusters
 
 On lit l'en-tête, les pistes et l'index. **On ne parcourt jamais les clusters** :

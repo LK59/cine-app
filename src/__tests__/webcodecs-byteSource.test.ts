@@ -150,6 +150,54 @@ describe("HttpByteSource", () => {
     source.close();
   });
 
+  it("fills the link at a seek, before anything has asked to read there", async () => {
+    // The index says where a seek lands several milliseconds before the parser asks for its
+    // first byte, and until now those were spent idle: the read-ahead only started once the
+    // first chunk had already arrived, so a seek began with one lone request on an empty link —
+    // on a file needing four megabytes before it can show a picture.
+    stubFetch();
+    const source = await HttpByteSource.open("/film.mkv");
+    await settle();
+    asked = [];
+
+    source.warm(2 * CHUNK + 512);
+    await settle();
+
+    // The chunk it lands in, and the ones after it, all in flight without a read.
+    expect(chunksAsked()).toContain(2);
+    expect(chunksAsked().length).toBeGreaterThanOrEqual(5);
+    source.close();
+  });
+
+  it("does not ask twice for what it already has, or is already fetching", async () => {
+    stubFetch();
+    const source = await HttpByteSource.open("/film.mkv");
+    await settle();
+
+    source.warm(3 * CHUNK);
+    await settle();
+    const first = asked.length;
+
+    source.warm(3 * CHUNK);
+    await settle();
+    expect(asked.length).toBe(first);
+    source.close();
+  });
+
+  it("serves a read at a warmed offset without a fresh request", async () => {
+    // The point of it: by the time the parser gets there, the bytes are already on their way.
+    stubFetch();
+    const source = await HttpByteSource.open("/film.mkv");
+    await settle();
+    source.warm(7 * CHUNK);
+    await settle();
+    asked = [];
+
+    await source.read(7 * CHUNK, 64);
+    expect(chunksAsked()).not.toContain(7);
+    source.close();
+  });
+
   it("takes the size from Content-Range when HEAD does not give it", async () => {
     stubFetch({ contentLength: null });
     const source = await HttpByteSource.open("/film.mkv");

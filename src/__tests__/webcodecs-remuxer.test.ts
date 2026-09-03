@@ -77,6 +77,34 @@ afterEach(() => vi.unstubAllGlobals());
 const open = (audio: MatroskaTrack | null = AUDIO_FR) =>
   Remuxer.open(SOURCE, FILE, VIDEO, audio, { width: 1920, height: 1080 });
 
+describe("un saut", () => {
+  it("met la source en route sur sa cible avant de lire quoi que ce soit", async () => {
+    // The index says where the seek lands several milliseconds before the parser asks for its
+    // first byte, and those used to be spent idle — followed by one lone request on an empty
+    // link. On a dense file four megabytes have to arrive before the first picture exists.
+    const warm = vi.fn();
+    const read = vi.fn(async () => new Uint8Array(0));
+    const source: ByteSource = { size: 1000, read, close: () => {}, warm };
+    const remuxer = await Remuxer.open(source, FILE, VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+
+    read.mockClear();
+    remuxer.seekTo(120);
+
+    expect(warm).toHaveBeenCalledTimes(1);
+    expect(typeof warm.mock.calls[0][0]).toBe("number");
+    // And nothing was read to get there: the offset came from the index.
+    expect(read).not.toHaveBeenCalled();
+    remuxer.close();
+  });
+
+  it("se passe très bien d'une source qui ne sait pas se préchauffer", async () => {
+    // A source already holding the whole file has nothing to warm, and must not be asked to.
+    const remuxer = await open();
+    expect(() => remuxer.seekTo(120)).not.toThrow();
+    remuxer.close();
+  });
+});
+
 describe("Remuxer track selection", () => {
   it("offers only the subtitle tracks it can actually render as text", async () => {
     const remuxer = await open();
