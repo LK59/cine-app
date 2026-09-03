@@ -89,9 +89,14 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
   trace("ouverture du flux");
   const source = await HttpByteSource.open(options.streamUrl);
   trace(`flux ouvert — ${source.size} octets`);
-  const file = await parseMatroska(source);
+  // Named by its URL, so opening the same file again — or rebuilding after the platform closed
+  // the source — does not pay for its header and index a second time.
+  const headerAt = Date.now();
+  const file = await parseMatroska(source, options.streamUrl);
+  const headerMs = Date.now() - headerAt;
   trace(
-    `en-tête lu — ${file.tracks.length} pistes, ${file.cues.length} points d'index, ` +
+    `en-tête ${headerMs < 15 ? "déjà connu" : "lu"} en ${headerMs} ms — ` +
+      `${file.tracks.length} pistes, ${file.cues.length} points d'index, ` +
       file.tracks.map((t) => `${t.number}:${t.type}:${t.codecId}${t.language ? `/${t.language}` : ""}`).join(" ")
   );
 

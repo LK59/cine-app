@@ -187,11 +187,49 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
 }
 
 /**
+ * What a file's header said, last time anyone asked.
+ *
+ * The header and the index of a file do not change while it is being watched, and reading them
+ * costs two round trips to opposite ends of it — most of the second between opening a file and
+ * knowing what is in it. That was being paid on every open, and again on every rebuild after the
+ * platform took the source away, which is precisely when the viewer is least willing to wait.
+ *
+ * Small: a few tracks and their configuration records, plus the cue index, which runs to a couple
+ * of hundred kilobytes on a long film. Four files, oldest evicted first.
+ */
+const parsed = new Map<string, MatroskaFile>();
+const MAX_REMEMBERED_HEADERS = 4;
+
+/** Forgets a file's header — for a caller that has reason to believe it changed. */
+export function forgetMatroskaHeader(key: string): void {
+  parsed.delete(key);
+}
+
+/**
  * Reads everything needed before playback can start. Deliberately does not scan clusters: on a
  * 40 GB file that would mean reading the whole thing, when the cue index at the end already says
  * where every keyframe lives.
+ *
+ * @param key names the file, so a second open of the same one costs nothing. Omitted, nothing is
+ * remembered — which is what a caller reading a file it has just written wants.
  */
-export async function parseMatroska(source: ByteSource): Promise<MatroskaFile> {
+export async function parseMatroska(source: ByteSource, key?: string): Promise<MatroskaFile> {
+  const remembered = key === undefined ? undefined : parsed.get(key);
+  if (remembered && remembered.segmentEnd <= source.size) return remembered;
+
+  const file = await readMatroska(source);
+  if (key !== undefined) {
+    parsed.set(key, file);
+    while (parsed.size > MAX_REMEMBERED_HEADERS) {
+      const oldest = parsed.keys().next().value;
+      if (oldest === undefined) break;
+      parsed.delete(oldest);
+    }
+  }
+  return file;
+}
+
+async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
   const first = await readElementAt(source, 0);
   if (!first || first.id !== ID.EBML) throw new Error("Ce fichier n'est pas un conteneur Matroska.");
 

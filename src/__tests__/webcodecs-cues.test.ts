@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clusterOffsetForTime, type MatroskaFile, type CuePoint } from "@/lib/webcodecs/matroska";
+import { parseMatroska, forgetMatroskaHeader, clusterOffsetForTime, type MatroskaFile, type CuePoint } from "@/lib/webcodecs/matroska";
 
 // A cue point carries one set of positions per indexed track. They are not interchangeable: an
 // audio entry marks where the sound can be picked up, which on a real 4K file turned out to be
@@ -64,5 +64,66 @@ describe("clusterOffsetForTime", () => {
   it("uses the earliest entry for a time before the first one", () => {
     const cues = file([cue(VIDEO_TRACK, 12, 400), cue(VIDEO_TRACK, 24, 800)]);
     expect(clusterOffsetForTime(cues, 3_000_000, VIDEO_TRACK)).toBe(400);
+  });
+});
+
+describe("le cache d'en-tête", () => {
+  /** A source that counts how often it is read, so a second parse cannot hide. */
+  function countingSource(bytes: Uint8Array) {
+    let reads = 0;
+    return {
+      reads: () => reads,
+      source: {
+        size: bytes.length,
+        read: async (offset: number, length: number) => {
+          reads += 1;
+          return bytes.subarray(offset, Math.min(offset + length, bytes.length));
+        },
+        close: () => {},
+      },
+    };
+  }
+
+  /** The smallest file parseMatroska accepts: an EBML header, a timestamp scale, one track. */
+  const minimal = () =>
+    new Uint8Array([
+      0x1a, 0x45, 0xdf, 0xa3, 0x84, 0x42, 0x86, 0x81, 0x01, 0x18, 0x53, 0x80,
+      0x67, 0xa1, 0x15, 0x49, 0xa9, 0x66, 0x87, 0x2a, 0xd7, 0xb1, 0x83, 0x0f,
+      0x42, 0x40, 0x16, 0x54, 0xae, 0x6b, 0x90, 0xae, 0x8e, 0xd7, 0x81, 0x01,
+      0x83, 0x81, 0x01, 0x86, 0x86, 0x56, 0x5f, 0x54, 0x45, 0x53, 0x54,
+    ]);
+
+  it("ne relit pas un fichier déjà connu", async () => {
+    // The header and the index cost two round trips to opposite ends of the file, and they do not
+    // change while it is being watched. That was paid again on every rebuild, which is exactly
+    // when the viewer is least willing to wait.
+    forgetMatroskaHeader("/film.mkv");
+    const first = countingSource(minimal());
+    await parseMatroska(first.source, "/film.mkv");
+    expect(first.reads()).toBeGreaterThan(0);
+
+    const second = countingSource(minimal());
+    await parseMatroska(second.source, "/film.mkv");
+    expect(second.reads()).toBe(0);
+
+    forgetMatroskaHeader("/film.mkv");
+  });
+
+  it("n'invente rien quand on ne lui donne pas de nom", async () => {
+    const a = countingSource(minimal());
+    await parseMatroska(a.source);
+    const b = countingSource(minimal());
+    await parseMatroska(b.source);
+    expect(b.reads()).toBeGreaterThan(0);
+  });
+
+  it("oublie ce qu'on lui dit d'oublier", async () => {
+    forgetMatroskaHeader("/autre.mkv");
+    const a = countingSource(minimal());
+    await parseMatroska(a.source, "/autre.mkv");
+    forgetMatroskaHeader("/autre.mkv");
+    const b = countingSource(minimal());
+    await parseMatroska(b.source, "/autre.mkv");
+    expect(b.reads()).toBeGreaterThan(0);
   });
 });

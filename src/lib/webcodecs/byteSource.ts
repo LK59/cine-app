@@ -62,7 +62,26 @@ export class MemoryByteSource implements ByteSource {
 // header, then a 3-byte size, then a payload — issuing an HTTP request per call would be
 // thousands of round-trips. One chunk fetch answers hundreds of those.
 const CHUNK_SIZE = 1 << 20; // 1 MiB
-const MAX_CACHED_CHUNKS = 32; // ~32 MiB ceiling, enough to cover a seek's working set
+
+/**
+ * How many chunks to keep. Enough to cover a seek's working set, and a ceiling on the memory a
+ * long film can quietly accumulate.
+ */
+const MAX_CACHED_CHUNKS = 48; // ~48 MiB
+
+/**
+ * How far ahead to fetch, in chunks.
+ *
+ * One was not a pipeline, it was a relay: chunk N being consumed while N+1 was in flight, and
+ * every megabyte after that paying a fresh round trip before its first byte arrived. Reading one
+ * keyframe group means five or six of these, and on the phone that came to 2.6 seconds against
+ * 40 ms of actual muxing — the wait was almost entirely the shape of the fetching.
+ *
+ * Six is chosen against what the reader is for: the fill loop wants thirty seconds of media, which
+ * on this library is twenty megabytes, so six ahead is never speculative in the sense of being
+ * thrown away. It is only ever bytes that were going to be asked for a moment later.
+ */
+const PREFETCH_CHUNKS = 6;
 
 export class HttpByteSource implements ByteSource {
   readonly size: number;
@@ -83,7 +102,7 @@ export class HttpByteSource implements ByteSource {
     const head = await fetch(url, { method: "HEAD" });
     const headLength = Number(head.headers.get("Content-Length"));
     if (head.ok && Number.isFinite(headLength) && headLength > 0) {
-      return new HttpByteSource(url, headLength);
+      return HttpByteSource.warmed(url, headLength);
     }
 
     const probe = await fetch(url, { headers: { Range: "bytes=0-0" } });
@@ -92,7 +111,30 @@ export class HttpByteSource implements ByteSource {
     if (!Number.isFinite(total) || total <= 0) {
       throw new Error("Le serveur ne fournit pas la taille du fichier (Content-Range absent).");
     }
-    return new HttpByteSource(url, total);
+    return HttpByteSource.warmed(url, total);
+  }
+
+  /**
+   * Starts the two fetches every Matroska file begins with, before anyone asks for them.
+   *
+   * Reading the header means the front of the file; reading the index means wherever the Cues
+   * were written, which for a file made for streaming is the very end. Those two were fetched one
+   * after the other, each paying its own round trip, and together they were most of the second
+   * that passed between opening a file and knowing what was in it. Asked for together they cost
+   * one round trip instead of two.
+   *
+   * Neither is awaited: a file whose Cues are at the front simply leaves the tail chunk unused,
+   * which costs a megabyte and no time at all.
+   */
+  private static warmed(url: string, size: number): HttpByteSource {
+    const source = new HttpByteSource(url, size);
+    const last = Math.floor((size - 1) / CHUNK_SIZE);
+    for (const index of last > 0 ? [0, last] : [0]) {
+      void source.fetchChunk(index).catch(() => {
+        // Speculative. The real read will ask again and report properly if it fails.
+      });
+    }
+    return source;
   }
 
   private async fetchChunk(index: number): Promise<Uint8Array> {
@@ -136,12 +178,14 @@ export class HttpByteSource implements ByteSource {
    * That stall is what turns a decoder that can keep up into one that visibly cannot.
    */
   private prefetchAfter(index: number): void {
-    const next = index + 1;
-    if (next * CHUNK_SIZE >= this.size) return;
-    if (this.chunks.has(next) || this.inflight.has(next)) return;
-    void this.fetchChunk(next).catch(() => {
-      // A failed read-ahead is not an error: the real read will try again and report properly.
-    });
+    for (let ahead = 1; ahead <= PREFETCH_CHUNKS; ahead++) {
+      const next = index + ahead;
+      if (next * CHUNK_SIZE >= this.size) return;
+      if (this.chunks.has(next) || this.inflight.has(next)) continue;
+      void this.fetchChunk(next).catch(() => {
+        // A failed read-ahead is not an error: the real read will try again and report properly.
+      });
+    }
   }
 
   async read(offset: number, length: number): Promise<Uint8Array> {
@@ -160,10 +204,16 @@ export class HttpByteSource implements ByteSource {
       return chunk.subarray(from, from + (end - start));
     }
 
+    // Asked for together, not one after the other. Awaiting each in turn made a read spanning
+    // four chunks four round trips deep, which is exactly the shape this cache exists to avoid.
+    const pending: Promise<Uint8Array>[] = [];
+    for (let index = firstChunk; index <= lastChunk; index++) pending.push(this.fetchChunk(index));
+    const fetched = await Promise.all(pending);
+
     const out = new Uint8Array(end - start);
     let written = 0;
     for (let index = firstChunk; index <= lastChunk; index++) {
-      const chunk = await this.fetchChunk(index);
+      const chunk = fetched[index - firstChunk];
       const chunkStart = index * CHUNK_SIZE;
       const from = Math.max(0, start - chunkStart);
       const to = Math.min(chunk.length, end - chunkStart);
