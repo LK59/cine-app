@@ -13,6 +13,10 @@ class FakeBuffer extends EventTarget {
   appended: Uint8Array[] = [];
   removed: [number, number][] = [];
   aborted = 0;
+  /** Set to make appends land without ever covering the playhead. */
+  coversNothing = false;
+  /** How far past the point it was pointed at this buffer's media actually begins. */
+  landsLate = 0;
   /** Set to make the next append throw as a full buffer does. */
   quotaOnNextAppend = false;
   /** Set to make the next append fail the way a segment the decoder rejects does. */
@@ -81,13 +85,23 @@ class FakeBuffer extends EventTarget {
     }
     this.appended.push(data);
     this.updating = true;
+    // A real buffer does not always cover the playhead the instant it is fed: the sound of a
+    // newly chosen track arrives a little ahead of where the viewer is, and until it lands the
+    // element's ranges — the intersection of the two buffers — hold nothing at all.
+    if (this.coversNothing) {
+      queueMicrotask(() => {
+        this.updating = false;
+        this.dispatchEvent(new Event("updateend"));
+      });
+      return;
+    }
     // A buffer that always reports itself empty would let the fill loop run away; growing it is
     // what makes "stop once far enough ahead" testable at all. A fresh range begins wherever the
     // reader was pointed, exactly as a real one does — starting every range at zero would mean
     // media never reached a seeked-to playhead, and the model would loop rather than the code.
     if (this.initSeen) {
-      const start = this.ranges.length > 0 ? this.ranges[0][0] : playhead;
-      const end = (this.ranges.length > 0 ? this.ranges[0][1] : playhead) + this.secondsPerAppend;
+      const start = this.ranges.length > 0 ? this.ranges[0][0] : playhead + this.landsLate;
+      const end = (this.ranges.length > 0 ? this.ranges[0][1] : playhead + this.landsLate) + this.secondsPerAppend;
       this.ranges = [[start, end]];
     }
     this.initSeen = true;
@@ -1117,6 +1131,27 @@ describe("MseSource", () => {
     await mse.refillAudio(10);
     await until(() => remuxer.videoWantedCalls.includes(false), "les images cessent d'être construites");
     await until(() => onSubtitles.mock.calls.length > 0, "des sous-titres sont trouvés");
+  });
+
+  it("lands the playhead on the media a seek actually produced", async () => {
+    // An index is not exact. Asking a real file for 1568 s produced media beginning at 1570.6,
+    // and no amount of waiting or asking again could ever make it cover 1568: the recovery asked
+    // three times, was served three times, and the playhead stood on nothing until the reader
+    // concluded the browser was keeping nothing and declared playback over. A media element
+    // seeking into a gap lands on the nearest media it has, and so does this.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const onError = vi.fn();
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onWarning: vi.fn() });
+    await flush();
+    for (const buffer of FakeSource.instances[0].buffers) buffer.landsLate = 2.6;
+
+    await mse.seek(100);
+    await until(() => video.currentTime > 100, "la tête rejoint le média");
+
+    expect(video.currentTime).toBeGreaterThanOrEqual(102.6);
+    expect(video.currentTime).toBeLessThan(104);
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("says a source has been lost, rather than only failing on it later", async () => {

@@ -94,6 +94,15 @@ const FRUITLESS_APPENDS = 8;
  */
 const PAUSE_DRIFT_SECONDS = 0.25;
 
+/**
+ * How far past a seek's target the playhead may be moved to reach the media it produced.
+ *
+ * Generously more than a segment, because a sparse index misses by that much, and far less than
+ * any distance a viewer would notice as the wrong place in a film. Beyond it, the gap is a fault
+ * worth reporting rather than stepping over.
+ */
+const SEEK_LANDING_SECONDS = 15;
+
 /** Including the one made at the pause itself. Past this, the element is left alone. */
 const MAX_PAUSE_ASSERTIONS = 3;
 
@@ -329,6 +338,8 @@ export class MseSource {
   private lastAppendAt = 0;
   /** How far the reader has read, on the player's clock. See the video-skip margin. */
   private readUpTo = 0;
+  /** Where a seek was served, until the playhead is actually standing on media. */
+  private seekLanding: number | null = null;
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
   private resumeDeadline = 0;
@@ -878,10 +889,21 @@ export class MseSource {
         // would otherwise read its way there one segment at a time, which is exactly what a
         // seek looks like when it appears to recalculate the whole film. The watchdog cannot
         // catch this on its own: media *is* arriving, just nowhere useful.
-        if (this.distanceToMedia(this.video.currentTime) > MISPLACED_SECONDS) {
+        // An empty buffer is not a misplaced reader.
+        //
+        // `distanceToMedia` answers Infinity when nothing is buffered, and nothing is buffered
+        // for a moment after every seek and every audio refill — the element's ranges are the
+        // *intersection* of the two buffers, so emptying the audio one empties them entirely.
+        // Read as a distance, that is "infinitely far from the media", and this fired a recovery
+        // at the exact moment the loop was already fetching what was missing. Each recovery is a
+        // fresh seek, which empties the buffers again, which fires another: three recoveries in
+        // nine seconds, and Safari closes the source. Only media that exists and is genuinely
+        // far away means the reader is in the wrong place.
+        const distance = this.distanceToMedia(this.video.currentTime);
+        if (Number.isFinite(distance) && distance > MISPLACED_SECONDS) {
           trace(
-            `reprise : le lecteur lit à ${this.readUpTo.toFixed(1)} s, ` +
-              `loin de la tête à ${this.video.currentTime.toFixed(1)} s`
+            `reprise : média à ${distance.toFixed(1)} s de la tête (${this.video.currentTime.toFixed(1)} s), ` +
+              `lecteur à ${this.readUpTo.toFixed(1)} s`
           );
           if (this.recover(this.video.currentTime)) break;
         }
@@ -928,22 +950,40 @@ export class MseSource {
    */
   private nudgeIntoBuffer(): void {
     const ranges = this.playable;
-    // Never while paused. The frame on screen is already drawn and needs nothing; moving the
-    // playhead under a viewer who has stopped is a picture that jumps on its own, and then
-    // resumes somewhere other than where they left it.
-    if (ranges.length === 0 || this.destroyed || this.video.paused) return;
+    // A seek just served is the one time this may move a stopped picture: the viewer asked to be
+    // somewhere, and landing them on nothing is worse than landing them a little further on.
+    const landing = this.seekLanding !== null;
+    // Otherwise never while paused. The frame on screen is already drawn and needs nothing;
+    // moving the playhead under a viewer who has stopped is a picture that jumps on its own, and
+    // then resumes somewhere other than where they left it.
+    if (ranges.length === 0 || this.destroyed || (this.video.paused && !landing)) return;
 
     const now = this.video.currentTime;
     let start: number | null = null;
     for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= now && now < ranges.end(i)) return; // already on media
+      if (ranges.start(i) <= now && now < ranges.end(i)) {
+        this.seekLanding = null; // arrived
+        return;
+      }
       if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) start = ranges.start(i);
     }
-    // Only a gap the size of the presentation delay is closed this way — that is the one this
-    // exists for. A whole second was far too generous: on resume it could step a noticeable
-    // distance forward, which is its own kind of jump. Anything larger is a real hole in the
-    // stream, and stepping over it silently would hide a genuine fault.
-    if (start === null || start - now > this.delaySeconds + 0.15) return;
+    if (start === null) return;
+
+    // Two tolerances, because two different things are being closed.
+    //
+    // In the ordinary case, only a gap the size of the presentation delay: anything larger is a
+    // real hole in the stream, and stepping over it silently would hide a genuine fault.
+    //
+    // Right after a seek it is far wider, and that is the whole point. An index is not exact:
+    // asking this file for 1568 s produced media that begins at 1570.6, and no amount of waiting
+    // or seeking again will ever make it cover 1568 — the recovery asked three times, each time
+    // was served, and each time the playhead stayed on nothing until the reader gave up and
+    // declared the browser to be keeping nothing. A media element seeking into a gap lands on
+    // the nearest media it has; so does this.
+    const tolerance = landing ? SEEK_LANDING_SECONDS : this.delaySeconds + 0.15;
+    if (start - now > tolerance) return;
+    if (landing) trace(`atterrissage : la tête passe de ${now.toFixed(1)} s au média qui commence à ${start.toFixed(1)} s`);
+    this.seekLanding = null;
 
     this.lastSeekTarget = start;
     // A move made on purpose, and the resume guard must not mistake it for one. Left standing,
@@ -1221,6 +1261,7 @@ export class MseSource {
     // An ordinary seek replaces everything, so nothing is being spared.
     this.skipVideoUntil = null;
     this.readUpTo = playerSeconds;
+    this.seekLanding = playerSeconds;
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
