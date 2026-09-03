@@ -9,6 +9,14 @@ interface Props {
   networkBitrate: number | null;
   open: boolean;
   onClose: () => void;
+  /**
+   * Why the experimental player handed this file over, when it did.
+   *
+   * The viewer is no longer asked to decide, and is told only "negotiating with the server" for
+   * a few seconds. This is where the actual reason stays reachable — a step down that leaves no
+   * account of itself is how a player that stopped using its best path goes unnoticed for months.
+   */
+  fallbackReason?: string | null;
 }
 
 // Every one of these is a real Jellyfin TranscodeReason string — translated via
@@ -36,7 +44,7 @@ function formatBitrate(bitRate: number | null): string | null {
   return `${(bitRate / 1_000_000).toFixed(1)} Mb/s`;
 }
 
-export function PlaybackInfoPanel({ info, networkBitrate, open, onClose }: Props) {
+export function PlaybackInfoPanel({ info, networkBitrate, open, onClose, fallbackReason }: Props) {
   const t = useT();
   if (!open || !info) return null;
 
@@ -135,6 +143,14 @@ export function PlaybackInfoPanel({ info, networkBitrate, open, onClose }: Props
               <dt className="text-slate-500">{t('player.info.language')}</dt>
               <dd>{info.audio.language ?? "—"}</dd>
             </dl>
+          </div>
+        )}
+
+        {/* Kept where someone can find it later, because nobody was asked at the time. */}
+        {fallbackReason && (
+          <div className="border-t border-white/5 pt-3">
+            <p className="mb-1 font-medium text-slate-300">Lecteur expérimental</p>
+            <p className="leading-5 text-slate-400">A cédé la main : {fallbackReason}</p>
           </div>
         )}
       </div>

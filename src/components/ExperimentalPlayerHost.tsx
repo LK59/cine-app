@@ -21,6 +21,9 @@ import { ExperimentalPlayerReport, type ReportInput } from "@/components/Experim
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 
+/** Which of the pipeline's own readings belong under the sound rather than under the stream. */
+const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
+
 /** How long a threshold has to be crossed before anything is shown at all. */
 const SPINNER_AFTER_MS = 120;
 
@@ -30,6 +33,15 @@ const STILL_WORKING_AFTER_MS = 3000;
 
 /** And before a wait stops being slow and starts being a fault worth reporting. */
 const STUCK_AFTER_MS = 20000;
+
+/**
+ * And before waiting stops being worth it at all.
+ *
+ * A first picture arrives in four seconds on an ordinary file over an ordinary link. Half a
+ * minute is not a slow start, it is something that is not going to finish — and it is the one
+ * failure a viewer cannot wait out, because nothing on screen ever changes.
+ */
+const GIVE_UP_AFTER_MS = 35000;
 
 /** How many times a lost source is rebuilt before the loss is reported as a fault. */
 const MAX_REBUILDS = 3;
@@ -71,9 +83,49 @@ function useElapsedSince(startedAt: number | null): number | null {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right text-slate-200">{value}</dd>
+    <div className="flex items-baseline justify-between gap-3 py-[3px]">
+      <dt className="shrink-0 text-slate-500">{label}</dt>
+      {/* Leaders, so an eye can travel from a label to a value twenty rows down without losing
+          the line — the same reason a table of contents has them. */}
+      <span aria-hidden className="mx-1 min-w-3 flex-1 translate-y-[-3px] border-b border-dotted border-white/10" />
+      <dd className="text-right font-mono text-[11px] leading-4 text-slate-200">{value}</dd>
+    </div>
+  );
+}
+
+/** A titled group of rows. Twenty of them in one list is a list; in five groups it is an answer. */
+function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-t border-white/5 pt-2.5 first:border-0 first:pt-0">
+      <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</h3>
+      <dl>{children}</dl>
+    </section>
+  );
+}
+
+/**
+ * The one line worth seeing before any other: which of the four paths is running.
+ *
+ * Coloured by how much of the work the device is doing rather than by whether anything failed —
+ * the two are not the same, and the panel exists to tell them apart.
+ */
+function PathBadge({ path }: { path: "remux" | "webcodecs" | "direct" | null }) {
+  const known = {
+    direct: ["Lecture directe", "aucun remultiplexage", "emerald"],
+    remux: ["Remultiplexage", "décodage matériel, HDR natif", "emerald"],
+    webcodecs: ["WebCodecs → canvas", "décodage logiciel", "amber"],
+  }[path ?? "webcodecs"];
+  const [name, detail, tone] = path === null ? ["En cours d'examen", "le fichier n'a pas encore parlé", "slate"] : known;
+  const colours =
+    tone === "emerald"
+      ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20"
+      : tone === "amber"
+        ? "bg-amber-500/10 text-amber-200 ring-amber-400/20"
+        : "bg-slate-500/10 text-slate-300 ring-slate-400/20";
+  return (
+    <div className={`rounded-lg px-3 py-2 ring-1 ring-inset ${colours}`}>
+      <p className="text-[13px] font-medium leading-tight">{name}</p>
+      <p className="mt-0.5 text-[11px] opacity-70">{detail}</p>
     </div>
   );
 }
@@ -106,7 +158,7 @@ export function ExperimentalPlayerHost({
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   mode: "full" | "mini";
-  onFallback: () => void;
+  onFallback: (reason: string) => void;
 }) {
   const t = useT();
   const playback = usePlayback();
@@ -126,6 +178,27 @@ export function ExperimentalPlayerHost({
   // because pushing them into state from an effect is both a cascading render and a second
   // source of truth for the same fact.
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  /**
+   * Steps aside for the stable player, once, without asking.
+   *
+   * A viewer cannot act on "the browser refused an operation on the buffer", and a button that
+   * says so is a dead end wearing the costume of a choice. The stable player negotiates with the
+   * server and will play this file; that is what a viewer wants and it is not a decision.
+   *
+   * The record is not softened with it. The reason travels to the player that takes over and is
+   * written into the trace, so a step down still leaves an account of itself — which was always
+   * the point of refusing silent fallbacks, rather than making anybody click.
+   */
+  const steppedAside = useRef(false);
+  const fallToStable = useCallback(
+    (reason: string) => {
+      if (steppedAside.current) return;
+      steppedAside.current = true;
+      trace(`repli : passage au lecteur stable — ${reason}`);
+      onFallback(reason);
+    },
+    [onFallback]
+  );
   const [warning, setWarning] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [facade, setFacade] = useState<MediaElementFacade | null>(null);
@@ -277,9 +350,17 @@ export function ExperimentalPlayerHost({
   // Sets up the whole pipeline once the file's description has arrived. Everything it can refuse
   // is refused here, with the reason, rather than deeper down where the message would be opaque.
   useEffect(() => {
-    // Nothing is started for a file the server already refused — the reason is displayed
-    // instead, derived above.
-    if (!info || info.refusedReason || !canvasRef.current || !videoElRef.current) return;
+    if (!info && infoError) {
+      fallToStable("les informations du fichier n'ont pas pu être récupérées");
+      return;
+    }
+    // Nothing is started for a file the server already refused: it named the reason, and the
+    // stable player is the one that can negotiate around it.
+    if (info?.refusedReason) {
+      fallToStable(info.refusedReason);
+      return;
+    }
+    if (!info || !canvasRef.current || !videoElRef.current) return;
 
     let cancelled = false;
     let unsubscribes: (() => void)[] = [];
@@ -398,7 +479,7 @@ export function ExperimentalPlayerHost({
       // the viewer's consent to it — necessary.
       if (info.canvasHdrRefusal) {
         setPath("webcodecs");
-        setRuntimeError(info.canvasHdrRefusal);
+        fallToStable(info.canvasHdrRefusal);
         return;
       }
 
@@ -409,7 +490,7 @@ export function ExperimentalPlayerHost({
       unsubscribes = [
         // The engine distinguishes the two itself, rather than the host guessing from the
         // wording: a warning is degraded playback that continues, an error stops it.
-        engine.on("error", (payload) => setRuntimeError(typeof payload === "string" ? payload : "Lecture interrompue.")),
+        engine.on("error", (payload) => fallToStable(typeof payload === "string" ? payload : "Lecture interrompue.")),
         engine.on("warning", (payload) => setWarning(typeof payload === "string" ? payload : null)),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
@@ -475,7 +556,7 @@ export function ExperimentalPlayerHost({
           setRebuildCount((count) => count + 1);
           return;
         }
-        setRuntimeError(message);
+        fallToStable(message);
       },
       onWarning: (message) => setWarning(message),
       onStarting: (at) => setStartingAt(at),
@@ -493,7 +574,7 @@ export function ExperimentalPlayerHost({
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        setRuntimeError(cause instanceof Error ? cause.message : "Le fichier n'a pas pu être ouvert.");
+        fallToStable(cause instanceof Error ? cause.message : "Le fichier n'a pas pu être ouvert.");
       });
 
     return () => {
@@ -507,7 +588,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, session.resumeAt, rebuildCount]);
+  }, [info, infoError, fallToStable, session.resumeAt, rebuildCount]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -543,6 +624,18 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     if (ready) rebuildAtRef.current = null;
   }, [ready]);
+
+  // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
+  // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
+  // stepping aside happens on its own account and not in the middle of a render.
+  useEffect(() => {
+    if (ready || runtimeError) return;
+    const id = setTimeout(
+      () => fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`),
+      Math.max(0, openedAt + GIVE_UP_AFTER_MS - Date.now())
+    );
+    return () => clearTimeout(id);
+  }, [ready, runtimeError, openedAt, fallToStable]);
 
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
@@ -665,7 +758,7 @@ export function ExperimentalPlayerHost({
           <p className="max-w-lg text-sm leading-6 text-slate-300">{error}</p>
           <ExperimentalPlayerReport input={report} />
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-            <button type="button" onClick={onFallback} className="btn-primary">
+            <button type="button" onClick={() => onFallback(error ?? "demandé par le spectateur")} className="btn-primary">
               {t("player.experimental.switchToStable")}
             </button>
             <button type="button" onClick={handleClose} className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20">
@@ -699,48 +792,54 @@ export function ExperimentalPlayerHost({
               <X size={16} />
             </button>
           </div>
-          <dl className="space-y-1.5">
-            <InfoRow
-              label="Méthode"
-              value={
-                path === "direct"
-                  ? "Lecture directe (aucun remultiplexage)"
-                  : path === "remux"
-                    ? "Remultiplexage → lecteur natif"
-                    : "Décodage direct (WebCodecs)"
-              }
-            />
-            <InfoRow label="Conteneur" value={info?.container?.toUpperCase() ?? "?"} />
-            <InfoRow
-              label="Vidéo"
-              value={`${info?.video?.codec ?? "?"} ${info?.video?.width ?? "?"}×${info?.video?.height ?? "?"} ${info?.video?.bitDepth ?? "?"} bits`}
-            />
-            <InfoRow label="Plage" value={info?.video?.rangeType ?? "SDR"} />
-            <InfoRow
-              label="Audio"
-              value={
-                currentAudio !== null
-                  ? tracks.audio.find((a) => a.number === currentAudio)?.codecId.replace("A_", "") ?? "?"
-                  : "aucune piste décodable"
-              }
-            />
-            <InfoRow label="Pistes" value={`${tracks.audio.length} audio, ${tracks.subtitles.length} sous-titres`} />
-            <InfoRow label="Transcodage serveur" value="aucun" />
-            {/* Shown here too, not only on the path that succeeded: a step down whose reason is
-                invisible is the same as one that happened silently. */}
-            {pathReason && <InfoRow label="Chemin" value={pathReason} />}
-            {Object.entries(diagnostics).map(([label, value]) => (
-              <InfoRow key={label} label={label} value={value} />
-            ))}
+          <PathBadge path={path} />
+          {/* Shown whether or not the path succeeded: a step down whose reason is invisible is
+              the same as one that happened silently. */}
+          {pathReason && <p className="mt-2 text-[11px] leading-4 text-slate-400">{pathReason}</p>}
+
+          <div className="mt-3 space-y-2.5">
+            <InfoSection title="Le fichier">
+              <InfoRow label="Conteneur" value={info?.container?.toUpperCase() ?? "?"} />
+              <InfoRow
+                label="Vidéo"
+                value={`${info?.video?.codec ?? "?"} · ${info?.video?.width ?? "?"}×${info?.video?.height ?? "?"} · ${info?.video?.bitDepth ?? "?"} bits`}
+              />
+              <InfoRow label="Plage" value={info?.video?.rangeType ?? "SDR"} />
+              <InfoRow label="Pistes" value={`${tracks.audio.length} audio · ${tracks.subtitles.length} sous-titres`} />
+            </InfoSection>
+
+            <InfoSection title="Le son">
+              <InfoRow
+                label="Piste"
+                value={
+                  currentAudio !== null
+                    ? tracks.audio.find((a) => a.number === currentAudio)?.codecId.replace("A_", "") ?? "?"
+                    : "aucune piste décodable"
+                }
+              />
+              {AUDIO_ROWS.filter((k) => k in diagnostics).map((k) => (
+                <InfoRow key={k} label={k} value={diagnostics[k]} />
+              ))}
+            </InfoSection>
+
+            <InfoSection title="Le flux">
+              <InfoRow label="Transcodage serveur" value="aucun" />
+              {Object.entries(diagnostics)
+                .filter(([label]) => !AUDIO_ROWS.includes(label))
+                .map(([label, value]) => (
+                  <InfoRow key={label} label={label} value={value} />
+                ))}
+            </InfoSection>
+
             {capabilities && (
-              <>
-                <dt className="pt-2 text-[11px] uppercase tracking-wide text-slate-500">Capacités de l&apos;appareil</dt>
+              <InfoSection title="Ce que l'appareil accepte">
                 {Object.entries(capabilities).map(([label, value]) => (
                   <InfoRow key={label} label={label} value={value} />
                 ))}
-              </>
+              </InfoSection>
             )}
-          </dl>
+          </div>
+
           {/* The record of how this file was opened, kept where it can be reached while playing:
               the faults left to chase are the ones that happen *after* a successful start. */}
           <ExperimentalPlayerReport input={report} />

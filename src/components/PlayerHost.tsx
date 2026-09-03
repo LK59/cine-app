@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { useStableFallback } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -118,30 +119,49 @@ export function PlayerHost() {
   // persisted: it applies to this session only, so the option in settings stays the source of
   // truth and the next playback tries the experimental path again — which is what makes it
   // useful for finding out which files it actually cannot handle.
-  const [fallbackItemIds, setFallbackItemIds] = useState<string[]>([]);
+  // The handover to the stable player: which files it has taken over, why, and the word shown
+  // to the viewer while it settles in. See useStableFallback.
+  const { handedOver, negotiating, reason: fallbackReason, stepAside } = useStableFallback();
 
   if (!session) return null;
 
-  const useExperimental = experimental.enabled && !fallbackItemIds.includes(session.itemId);
+  const useExperimental = experimental.enabled && !handedOver.includes(session.itemId);
   if (useExperimental) {
     return (
       <ExperimentalPlayerHost
         session={session}
         mode={mode === "mini" ? "mini" : "full"}
-        onFallback={() => setFallbackItemIds((ids) => [...ids, session.itemId])}
+        onFallback={(reason) => stepAside(session.itemId, reason)}
       />
     );
   }
 
-  return <ActivePlayer session={session} mode={mode === "mini" ? "mini" : "full"} />;
+  return (
+    <>
+      <ActivePlayer session={session} mode={mode === "mini" ? "mini" : "full"} fallbackReason={fallbackReason} />
+      {/* Shown over the stable player while it makes its own arrangements, and gone on its own.
+          Nothing to dismiss and nothing to decide: by the time a viewer has read it, the film is
+          usually already playing. */}
+      {negotiating && (
+        <div className="pointer-events-none fixed inset-x-0 top-6 z-[70] flex justify-center">
+          <span className="animate-fade-in rounded-full bg-slate-900/85 px-4 py-2 text-sm text-slate-200 shadow-lg ring-1 ring-white/10 backdrop-blur-sm">
+            Négociation avec le serveur…
+          </span>
+        </div>
+      )}
+    </>
+  );
 }
 
 function ActivePlayer({
   session,
   mode,
+  fallbackReason,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   mode: "full" | "mini";
+  /** Set when this player took over from the experimental one, and why. Shown in its panel. */
+  fallbackReason?: string | null;
 }) {
   const playback = usePlayback();
   const t = useT();
@@ -1036,6 +1056,7 @@ function ActivePlayer({
           networkBitrate={networkBitrate}
           open={showPlaybackInfo}
           onClose={() => setShowPlaybackInfo(false)}
+          fallbackReason={fallbackReason}
         />
       )}
       {isMini && !error && !needsReauth && (
