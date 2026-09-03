@@ -22,6 +22,15 @@ export { containerAccepts, playabilityOf, canRebuildAudioBuffer } from "./mseSup
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
 const TARGET_BUFFER_SECONDS = 30;
 
+/** How long a clock may stand still, while playing with media ahead of it, before it is pushed. */
+const FROZEN_CLOCK_MS = 1500;
+
+/** How far it is pushed — inside the media rather than onto its edge, which is what froze it. */
+const FROZEN_STEP = 0.05;
+
+/** And how many times, before leaving an element alone with whatever it is doing. */
+const MAX_FROZEN_NUDGES = 3;
+
 /**
  * The depth that is fetched no matter what the system says.
  *
@@ -136,6 +145,10 @@ export class MseSource {
   private recoveryStreak = 0;
   private lastRecoveryAt = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  /** For the frozen-clock check: where the clock was, since when, and how often it was pushed. */
+  private lastClockAt = -1;
+  private frozenSince: number | null = null;
+  private frozenNudges = 0;
 
   private constructor(
     private readonly video: HTMLVideoElement,
@@ -343,6 +356,14 @@ export class MseSource {
       best = Math.min(best, Math.abs(ranges.start(i) - seconds), Math.abs(ranges.end(i) - seconds));
     }
     return best;
+  }
+
+  /** The element's own playable ranges, written out. */
+  private playableSpans(): string {
+    const ranges = this.video.buffered;
+    const spans: string[] = [];
+    for (let i = 0; i < ranges.length; i++) spans.push(`${ranges.start(i).toFixed(2)}–${ranges.end(i).toFixed(1)}`);
+    return spans.join(" · ") || "vide";
   }
 
   private isBufferedAt(seconds: number): boolean {
@@ -806,7 +827,7 @@ export class MseSource {
 
     const now = this.video.currentTime;
     // On media, or a seek already on its way to it: nothing to do.
-    if (this.isBufferedAt(now) || this.requestedSeek !== null) return;
+    if (this.isBufferedAt(now) || this.requestedSeek !== null) return this.watchForFrozenClock(now);
 
     // A read is in progress, so media is on its way; whether it is on its way to the right place
     // is the read loop's own business, and it checks. Waiting on a clock instead would mean
@@ -823,6 +844,39 @@ export class MseSource {
     );
     this.recover(now);
   };
+
+  /**
+   * The other kind of stall: playing, media under the playhead, and a clock that does not move.
+   *
+   * Everything above watches for a playhead standing on nothing, because that was every stall
+   * there had been. This one is the opposite shape and nothing could see it: an episode opened
+   * from the beginning reported itself as playing, with the playhead on the media and twenty
+   * seconds buffered ahead of it, and stayed at 0:00. The element was waiting on a seek to the
+   * exact first instant of the buffered range that never completed — so from here it looked
+   * perfectly healthy, which is why it went unnoticed until it was reported from a phone.
+   *
+   * Answered the same way as the other, and just as bluntly: ask for the position again, a
+   * fraction of a second further in, which is what completes a seek that never resolved.
+   */
+  private watchForFrozenClock(now: number): void {
+    const moved = Math.abs(now - this.lastClockAt) > 0.05;
+    if (moved || this.frozenSince === null) {
+      this.lastClockAt = now;
+      this.frozenSince = moved || this.frozenSince === null ? Date.now() : this.frozenSince;
+      if (moved) this.frozenNudges = 0;
+      return;
+    }
+    if (Date.now() - this.frozenSince < FROZEN_CLOCK_MS) return;
+    // Only when there is plainly something to play: a clock that is not moving because the
+    // buffer ran dry is an ordinary wait, and the fill loop is already on it.
+    if (this.lead < 1 || this.frozenNudges >= MAX_FROZEN_NUDGES) return;
+
+    this.frozenNudges += 1;
+    this.frozenSince = Date.now();
+    trace(`horloge figée à ${now.toFixed(2)} s avec ${this.lead.toFixed(1)} s en avance — on redemande la position`);
+    this.guard.forgetPause();
+    this.video.currentTime = now + FROZEN_STEP;
+  }
 
   /**
    * Seeks to where the viewer is, unless that has already been tried and did not help.
@@ -916,6 +970,11 @@ export class MseSource {
     return {
       "Tampon vidéo": spans.join(" · ") || "vide",
       "Avance sur la tête": `${this.lead.toFixed(1)} s`,
+      // The two facts that would have named the frozen-clock stall in one glance instead of
+      // three reports: what the *element* can play — the intersection of the buffers, not the
+      // video buffer alone — and whether it is waiting on a seek that never resolved.
+      "Lisible par l'élément": this.playableSpans(),
+      "En cours de saut": this.video.seeking ? "oui" : "non",
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
       "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,

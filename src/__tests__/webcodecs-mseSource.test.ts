@@ -476,6 +476,30 @@ describe("MseSource", () => {
     expect(traceText()).toContain("segment refusé, repris");
   });
 
+  it("pousses a clock that has stopped while media sits in front of it", async () => {
+    // The stall nothing could see: the element reports itself as playing, the playhead is on the
+    // media, twenty seconds are buffered ahead — and the clock does not move. Reported from a
+    // phone, on an episode opened from the beginning, frozen at 0:00. Every other check here
+    // watches for a playhead standing on nothing, which this is the opposite of.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(200);
+    const source = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+
+    (video as unknown as { currentTime: number }).currentTime = 0.25;
+    const before = video.currentTime;
+    const frozen = source as unknown as { watchForFrozenClock: (at: number) => void; frozenSince: number | null };
+
+    // Seen once: noted, not acted on. A clock that has just stopped is not a stall.
+    frozen.watchForFrozenClock(before);
+    expect(video.currentTime).toBe(before);
+
+    // Still there a second and a half later, with media in front of it: pushed.
+    frozen.frozenSince = Date.now() - 5000;
+    frozen.watchForFrozenClock(before);
+    expect(video.currentTime).toBeGreaterThan(before);
+  });
+
   it("stops pretending when the refusals do not let up", async () => {
     const video = fakeVideo();
     const onError = vi.fn();
@@ -616,7 +640,8 @@ describe("MseSource", () => {
     FakeSource.instances[0].buffers[1].setBuffered(600.2, 620);
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
-    expect(video.currentTime).toBe(600.2);
+    // Landed a frame inside the media rather than on its first instant — see LANDING_INSET.
+    expect(video.currentTime).toBeCloseTo(600.24, 3);
   });
 
   it("leaves a real hole in the stream alone rather than skipping over it", async () => {
@@ -921,7 +946,7 @@ describe("MseSource", () => {
     (video as unknown as { paused: boolean }).paused = false;
     video.dispatchEvent(new Event("play"));
     await flush();
-    expect(video.currentTime).toBe(12.2);
+    expect(video.currentTime).toBeCloseTo(12.24, 3);
 
     setTime(12.3);
     video.dispatchEvent(new Event("timeupdate"));

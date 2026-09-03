@@ -84,6 +84,20 @@ const MAX_PAUSE_ASSERTIONS = 3;
 /** How many times a start the element abandoned is attempted again before leaving it be. */
 const MAX_START_RETRIES = 2;
 
+/**
+ * How far the playhead may have moved and still count as never having started.
+ *
+ * Wider than the presentation delay, which the opening steps over, and far narrower than any
+ * amount of film somebody could have watched before pressing pause.
+ */
+const STILL_AT_THE_START = 1;
+
+/** How long after opening a film this may still insist on starting it. */
+const START_WINDOW_MS = 15000;
+
+/** How far inside the media a landing aims. One frame, and never past the range's own end. */
+const LANDING_INSET = 0.04;
+
 export class PlaybackGuard {
   constructor(
     private readonly video: HTMLVideoElement,
@@ -107,6 +121,9 @@ export class PlaybackGuard {
   /** Set when the element abandoned a start rather than the viewer pausing one. */
   private startAborted = false;
   private startRetries = 0;
+  /** Where the film was opened, so a playhead still standing there has plainly never started. */
+  private openedFrom: number | null = null;
+  private openedAt = 0;
 
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
@@ -288,12 +305,16 @@ export class PlaybackGuard {
 
     const now = this.video.currentTime;
     let start: number | null = null;
+    let end = 0;
     for (let i = 0; i < ranges.length; i++) {
       if (ranges.start(i) <= now && now < ranges.end(i)) {
         this.seekLanding = null; // arrived
         return;
       }
-      if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) start = ranges.start(i);
+      if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) {
+        start = ranges.start(i);
+        end = ranges.end(i);
+      }
     }
     if (start === null) return;
 
@@ -313,13 +334,19 @@ export class PlaybackGuard {
     if (landing) trace(`atterrissage : la tête passe de ${now.toFixed(1)} s au média qui commence à ${start.toFixed(1)} s`);
     this.seekLanding = null;
 
-    this.host.noteSeekTarget(start);
+    // A hair inside the media rather than exactly on its first instant. Seeking to the precise
+    // boundary of a buffered range regularly leaves the seek unresolved on this platform: the
+    // element reports itself as playing, the playhead sits on the boundary, and the clock never
+    // moves — which is what an episode opened from the beginning looked like, frozen at 0:00
+    // with twenty seconds buffered. One frame in is imperceptible and is unambiguously covered.
+    const target = Math.min(start + LANDING_INSET, Math.max(start, end - 0.05));
+    this.host.noteSeekTarget(target);
     // A move made on purpose, and the resume guard must not mistake it for one. Left standing,
     // the anchor makes the next event read this step forward as a jump and pull it back — a
     // frame from further on, briefly, then the right one. Settling the position here is what the
     // anchor was for, so it has done its job.
     this.pauseAnchor = null;
-    this.video.currentTime = start;
+    this.video.currentTime = target;
   }
 
   /**
@@ -538,8 +565,16 @@ export class PlaybackGuard {
    */
   opened(playerSeconds: number): void {
     this.seekLanding = playerSeconds;
-    this.startAborted = false;
+    // A start is owed from here. Not conditional on having seen the element refuse one: when the
+    // refusal is immediate — the promise rejected before the element ever announced it was
+    // playing — there is no `play` event and therefore no `pause` event either, and waiting for
+    // that pair to arrive is waiting for something that already did not happen. Measured: the
+    // first fix caught the episodes where the element announced the start and gave up, and left
+    // the ones where it never announced anything sitting at 0:00.
+    this.startAborted = true;
     this.startRetries = 0;
+    this.openedFrom = playerSeconds;
+    this.openedAt = Date.now();
   }
 
   /**
@@ -556,6 +591,24 @@ export class PlaybackGuard {
    */
   mediaArrived(): void {
     if (this.host.destroyed || !this.startAborted) return;
+    // Already going: nothing is owed, and nothing more will be.
+    if (!this.video.paused) {
+      this.startAborted = false;
+      return;
+    }
+    // The film played and was then stopped — by the viewer, since it got as far as moving. Only
+    // a start that never produced a second of playback is one this may still make.
+    if (this.openedFrom === null || Math.abs(this.video.currentTime - this.openedFrom) > STILL_AT_THE_START) {
+      this.startAborted = false;
+      return;
+    }
+    // And only for as long as opening is still what is happening. A viewer who opens a film and
+    // stops it before it starts has asked for something this cannot tell apart from a start that
+    // failed — so the window in which it may insist is kept to the length of an opening.
+    if (Date.now() - this.openedAt > START_WINDOW_MS) {
+      this.startAborted = false;
+      return;
+    }
     if (this.startRetries >= MAX_START_RETRIES) return;
     this.startRetries += 1;
     this.startAborted = false;

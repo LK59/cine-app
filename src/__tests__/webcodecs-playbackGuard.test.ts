@@ -147,7 +147,8 @@ describe("PlaybackGuard", () => {
 
     guard.seekServed(100);
     guard.nudgeIntoBuffer();
-    expect(video.currentTime).toBeCloseTo(102.6, 3);
+    // A hair inside the media, never exactly on its first instant — see LANDING_INSET.
+    expect(video.currentTime).toBeCloseTo(102.64, 3);
 
     // The licence expires with the landing: a pause much later may not step eight seconds.
     (video as unknown as { currentTime: number }).currentTime = 110;
@@ -158,7 +159,7 @@ describe("PlaybackGuard", () => {
   it("closes a gap the size of the presentation delay while playing, and no more", () => {
     const near = build({ at: 100, playable: ranges([100.25, 130]) });
     near.guard.nudgeIntoBuffer();
-    expect(near.video.currentTime).toBeCloseTo(100.25, 3);
+    expect(near.video.currentTime).toBeCloseTo(100.29, 3);
 
     const far = build({ at: 100, playable: ranges([101.5, 130]) });
     far.guard.nudgeIntoBuffer();
@@ -181,20 +182,46 @@ describe("PlaybackGuard", () => {
     guard.paused(); // and gives up a moment later, before any frame
 
     guard.mediaArrived();
-    expect(video.currentTime).toBeCloseTo(0.21, 3);
+    expect(video.currentTime).toBeCloseTo(0.25, 3);
     expect(video.play).toHaveBeenCalled();
   });
 
-  it("does not start a film the viewer paused", async () => {
-    // A viewer who pressed pause while it was loading asked for exactly this. Starting it under
-    // them would be the player arguing with them.
+  it("does not start a film that played and was then stopped", async () => {
+    // The film got as far as moving, so whoever stopped it meant to. Starting it again under
+    // them would be the player arguing.
     const { guard, video } = build({ at: 5, playable: ranges([5, 30]) });
     guard.opened(5);
+    (video as unknown as { currentTime: number }).currentTime = 12;
     (video as unknown as { paused: boolean }).paused = true;
-    guard.paused(); // no start was in progress: this is the viewer
+    guard.paused();
 
     guard.mediaArrived();
     expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it("stops insisting once opening is plainly over", async () => {
+    // A viewer stopping a film that never started cannot be told apart from a start that failed,
+    // so the window in which this may insist is the length of an opening and no longer.
+    const { guard, video } = build({ at: 0, playable: ranges([0.21, 30]) });
+    guard.opened(0);
+    (video as unknown as { paused: boolean }).paused = true;
+    (guard as unknown as { openedAt: number }).openedAt = Date.now() - 60_000;
+
+    guard.mediaArrived();
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it("starts a film whose element never even announced the attempt", async () => {
+    // The case the first fix missed, and the one that kept turning up: when the refusal is
+    // immediate there is no play event and therefore no pause event either, so waiting for that
+    // pair to arrive is waiting for something that already did not happen.
+    const { guard, video } = build({ at: 0, playable: ranges([0.21, 30]) });
+    guard.opened(0);
+    (video as unknown as { paused: boolean }).paused = true;
+
+    guard.mediaArrived();
+    expect(video.currentTime).toBeCloseTo(0.25, 3);
+    expect(video.play).toHaveBeenCalled();
   });
 
   it("gives up asking rather than fighting an element that will not start", async () => {
