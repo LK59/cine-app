@@ -93,10 +93,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   // display handles it — there is nothing to tone map and nothing to warn about. It is only the
   // canvas pipeline that has to convert the picture by hand, so this is passed down as a reason
   // that *may* apply and is enforced by the client once it knows which path it is on.
+  //
+  // There is no longer anything to consent to, either. Converting HDR on the GPU was once a
+  // setting because it was the only way HDR played at all and it costs the picture something;
+  // now the native path shows it untouched and the conversion is what happens on the fallback
+  // instead of nothing. A file that cannot be converted is still refused, and says why.
   let canvasHdrRefusal: string | null = null;
-  if (isHdr && !prefs.hdr) {
-    canvasHdrRefusal = `Ce fichier est en ${rangeType} et ce navigateur ne peut pas le lire nativement. Active « Lire le HDR avec le lecteur expérimental » dans les paramètres pour le convertir à la volée.`;
-  } else if (isHdr && !TONE_MAPPABLE_RANGES.has(rangeType)) {
+  if (isHdr && !TONE_MAPPABLE_RANGES.has(rangeType)) {
     canvasHdrRefusal = `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard à convertir, et ce navigateur ne le lit pas nativement.`;
   }
 

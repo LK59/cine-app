@@ -4,7 +4,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 
 interface PreferencesPayload {
-  experimentalPlayer?: { enabled: boolean; hdr: boolean };
+  experimentalPlayer?: { enabled: boolean };
 }
 
 /**
@@ -14,7 +14,7 @@ interface PreferencesPayload {
  * the next playback without a reload. The server enforces both independently — this only decides
  * which player the UI mounts.
  */
-export function useExperimentalPlayer(): { enabled: boolean; hdr: boolean } {
+export function useExperimentalPlayer(): { enabled: boolean } {
   const { data } = useSWR<PreferencesPayload>("/api/user/preferences", fetcher);
-  return { enabled: data?.experimentalPlayer?.enabled ?? false, hdr: data?.experimentalPlayer?.hdr ?? false };
+  return { enabled: data?.experimentalPlayer?.enabled ?? false };
 }

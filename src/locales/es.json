@@ -853,8 +853,6 @@
       "subtitle": "Cadena de reproducción de nueva generación, en desarrollo",
       "enable": "Reproductor experimental",
       "enableDesc": "Decodifica el vídeo directamente en el navegador (WebCodecs), sin transcodificación ni remultiplexado en el servidor. Arranque más rápido, pero sin calidad adaptativa: úsalo en tu red local. Si falla, el reproductor explica el motivo y ofrece volver al estable.",
-      "hdr": "Reproducir HDR con el reproductor experimental",
-      "hdrDesc": "Convierte HDR10 / HLG / Dolby Vision con capa HDR10 a SDR en la GPU. Sin esta opción, los archivos HDR se rechazan.",
       "adminOnly": "Solo administradores, desactivado por defecto."
     }
   },

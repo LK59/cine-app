@@ -282,3 +282,35 @@ describe("Remuxer encoder recovery", () => {
     }
   });
 });
+
+describe("Remuxer fragments", () => {
+  it("cuts a keyframe group into fragments bounded by bytes and by count", async () => {
+    // This library's keyframes sit anywhere from nothing to ten seconds apart, so one group can
+    // be eight megabytes of pictures. Safari answers a nine-second, 228-sample, 5.5 MB append by
+    // closing the MediaSource, the same bytes every time.
+    const { __testing } = await import("@/lib/webcodecs/remuxer");
+    // 200 samples of 5 kB: the count cap bites long before the byte cap.
+    const many = __testing.planFragments(200, () => 5_000);
+    expect(many.length).toBe(Math.ceil(200 / 60));
+    expect(Math.max(...many.map((f) => f.length))).toBe(60);
+
+    // 200 samples of 30 kB: now it is the bytes, at forty samples a fragment.
+    const bulky = __testing.planFragments(200, () => 30_000);
+    expect(Math.max(...bulky.map((f) => f.length))).toBe(40);
+
+    // 20 samples of 300 kB: over the byte cap long before the sample cap.
+    const heavy = __testing.planFragments(20, () => 300_000);
+    expect(heavy.length).toBeGreaterThan(1);
+    for (const fragment of heavy) {
+      // Every fragment but a one-sample one stays under the cap.
+      if (fragment.length > 1) expect(fragment.length * 300_000).toBeLessThanOrEqual(1_200_000 + 300_000);
+    }
+
+    // A single sample larger than the cap is still a fragment: a fragment of nothing is a loop.
+    expect(__testing.planFragments(1, () => 9_000_000)).toEqual([[0]]);
+
+    // Every sample lands in exactly one fragment, in order.
+    const all = __testing.planFragments(137, (i) => (i % 7) * 40_000).flat();
+    expect(all).toEqual(Array.from({ length: 137 }, (_, i) => i));
+  });
+});

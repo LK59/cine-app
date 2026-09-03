@@ -56,7 +56,7 @@ async function get() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", id: 7 });
-  mockPrefs.mockReturnValue({ enabled: true, hdr: false });
+  mockPrefs.mockReturnValue({ enabled: true });
   mockGetSources.mockResolvedValue(mediaSource());
   mockTimestamps.mockResolvedValue(null);
 });
@@ -81,24 +81,19 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
 
   // The change that matters: repackaging carries HDR signalling through untouched and the display
   // handles it. Refusing the file outright here would block the one path that plays it properly.
-  it("lets an HDR file through even with tone mapping switched off", async () => {
+  it("raises no objection to an HDR file it can convert", async () => {
+    // There is nothing to consent to any more. Converting on the GPU was a setting because it
+    // was once the only way HDR played at all; the native path shows it untouched, and on the
+    // fallback the conversion is what happens instead of nothing.
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "HDR10" }));
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull();
     expect(body.video.isHdr).toBe(true);
-    // Carried down, not applied: it only holds if playback ends up on the canvas.
-    expect(body.canvasHdrRefusal).toContain("HDR10");
-  });
-
-  it("raises no canvas objection once the viewer has allowed tone mapping", async () => {
-    mockPrefs.mockReturnValue({ enabled: true, hdr: true });
-    mockGetSources.mockResolvedValue(mediaSource({ rangeType: "HDR10" }));
-    const body = await (await get()).json();
     expect(body.canvasHdrRefusal).toBeNull();
   });
 
   it("still objects to Dolby Vision without an HDR10 base, which has nothing to convert from", async () => {
-    mockPrefs.mockReturnValue({ enabled: true, hdr: true });
+    mockPrefs.mockReturnValue({ enabled: true });
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "DOVI" }));
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull(); // the native path may still manage it
@@ -137,7 +132,7 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
   });
 
   it("turns away a caller who has not switched the experimental player on", async () => {
-    mockPrefs.mockReturnValue({ enabled: false, hdr: false });
+    mockPrefs.mockReturnValue({ enabled: false });
     expect((await get()).status).toBe(403);
   });
 

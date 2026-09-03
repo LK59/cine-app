@@ -137,29 +137,22 @@ describe("/api/user/preferences", () => {
   // The experimental player's opt-in shares this route. It is admin-only, and the two flags are
   // coupled: an HDR switch on a disabled player is a setting that reads as active and does
   // nothing.
-  it("PUT refuses to enable the experimental player for a non-admin", async () => {
+  it("PUT lets any account turn the experimental player on for itself", async () => {
+    // It used to be admin-only. Opening the setting to everyone and leaving the check here meant
+    // the toggle appeared for every account and answered 403 to all but one of them.
     mockVerifySessionFull.mockResolvedValue({ u: "someone", jfId: "jf-2", role: "user" });
     const { PUT } = await import("@/app/api/user/preferences/route");
     const res = await PUT(fakeReq({ body: { experimentalPlayer: true } }));
-    expect(res.status).toBe(403);
-    expect(mockUserPrefsDb.setExperimentalPlayer).not.toHaveBeenCalled();
-  });
-
-  it("PUT lets an admin enable it", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
-    mockUserPrefsDb.getExperimentalPlayer.mockReturnValue({ enabled: false, hdr: false });
-    const { PUT } = await import("@/app/api/user/preferences/route");
-    const res = await PUT(fakeReq({ body: { experimentalPlayer: true } }));
     expect(res.status).toBe(200);
-    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-1", true, false);
+    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-2", true);
   });
 
-  it("PUT turns HDR off with the player rather than leaving it dangling", async () => {
+  it("PUT turns the experimental player off again", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
-    mockUserPrefsDb.getExperimentalPlayer.mockReturnValue({ enabled: true, hdr: true });
     const { PUT } = await import("@/app/api/user/preferences/route");
-    await PUT(fakeReq({ body: { experimentalPlayer: false } }));
-    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-1", false, false);
+    const res = await PUT(fakeReq({ body: { experimentalPlayer: false } }));
+    expect(res.status).toBe(200);
+    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-1", false);
   });
 
   it("PUT keeps handling a plain language change", async () => {

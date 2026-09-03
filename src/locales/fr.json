@@ -853,8 +853,6 @@
       "subtitle": "Chaîne de lecture nouvelle génération, en cours de développement",
       "enable": "Lecteur expérimental",
       "enableDesc": "Décode la vidéo directement dans le navigateur (WebCodecs), sans transcodage ni remultiplexage côté serveur. Démarrage plus rapide, mais pas de qualité adaptative : à réserver au réseau local. En cas d'échec, le lecteur affiche la cause et propose de repasser au lecteur stable.",
-      "hdr": "Lire le HDR avec le lecteur expérimental",
-      "hdrDesc": "Convertit le HDR10 / HLG / Dolby Vision à couche HDR10 vers SDR sur le GPU. Sans cette option, les fichiers HDR sont refusés par le lecteur expérimental.",
       "adminOnly": "Réservé aux administrateurs, désactivé par défaut."
     }
   },

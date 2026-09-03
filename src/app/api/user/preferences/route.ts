@@ -23,18 +23,15 @@ export async function PUT(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const userId = session.jfId ?? session.u;
 
-  // The experimental player is its own update: it has no locale to write, and it is
-  // admin-only — a body carrying it is rejected outright for anyone else rather than silently
-  // ignored, so the caller learns the setting did not take.
-  if (typeof body?.experimentalPlayer === "boolean" || typeof body?.experimentalPlayerHdr === "boolean") {
-    if (session.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    const current = userPrefsDb.getExperimentalPlayer(userId);
-    const enabled = typeof body.experimentalPlayer === "boolean" ? body.experimentalPlayer : current.enabled;
-    // Turning the player off turns HDR off with it: an HDR flag on a disabled player is a
-    // setting that reads as active and does nothing.
-    const hdr = enabled && (typeof body.experimentalPlayerHdr === "boolean" ? body.experimentalPlayerHdr : current.hdr);
-    userPrefsDb.setExperimentalPlayer(userId, enabled, hdr);
-    return NextResponse.json({ ok: true, experimentalPlayer: { enabled, hdr } });
+  // The experimental player is its own update: it has no locale to write, and it is one flag
+  // rather than two now — converting HDR on the GPU was a consent gate for the fallback, and the
+  // native path carries HDR through untouched.
+  //
+  // No longer admin-only, either. The setting was opened to every account, and leaving this
+  // check behind meant the toggle appeared for everyone and answered 403 to all but one of them.
+  if (typeof body?.experimentalPlayer === "boolean") {
+    userPrefsDb.setExperimentalPlayer(userId, body.experimentalPlayer);
+    return NextResponse.json({ ok: true, experimentalPlayer: { enabled: body.experimentalPlayer } });
   }
 
   const lang = body?.lang as string | undefined;

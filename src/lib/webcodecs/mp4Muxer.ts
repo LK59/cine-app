@@ -151,7 +151,17 @@ function sampleFlags(isKeyframe: boolean): Uint8Array {
     : u32(0x01010000); // depends on others, is not a sync sample
 }
 
-export function mediaSegment(track: MuxTrackInfo, sequenceNumber: number, samples: MuxSample[]): Uint8Array {
+/**
+ * @param nextDecodeTime where the *next* fragment's first sample is decoded, when this fragment is
+ * not the last of its group. See below: the final sample's written duration is a gap, not a frame
+ * length, and at a fragment boundary the gap it has to state crosses into the next fragment.
+ */
+export function mediaSegment(
+  track: MuxTrackInfo,
+  sequenceNumber: number,
+  samples: MuxSample[],
+  nextDecodeTime?: number
+): Uint8Array {
   if (samples.length === 0) throw new Error("Segment média vide.");
 
   // A trun does not store decode times. Only the first one is written, in tfdt; every later one
@@ -163,7 +173,11 @@ export function mediaSegment(track: MuxTrackInfo, sequenceNumber: number, sample
   const perSample = concat(
     ...samples.flatMap((sample, index) => {
       const next = samples[index + 1];
-      const duration = next ? Math.max(1, next.decodeTime - sample.decodeTime) : sample.duration;
+      const duration = next
+        ? Math.max(1, next.decodeTime - sample.decodeTime)
+        : nextDecodeTime !== undefined
+          ? Math.max(1, nextDecodeTime - sample.decodeTime)
+          : sample.duration;
       return [
         u32(duration),
         u32(sample.data.length),

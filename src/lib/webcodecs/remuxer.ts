@@ -34,6 +34,17 @@ const SEGMENT_US = 2_000_000;
  */
 const MAX_ENCODER_RESTARTS = 3;
 
+/**
+ * How much a single fragment may carry, and how many samples.
+ *
+ * Both bounds matter. The bytes are what a player has to swallow in one call, and the sample
+ * count is what its parser has to walk; a stretch of tiny pictures can be many of one and little
+ * of the other. Two seconds of this library's video is about a megabyte, so these are that, with
+ * room for a hard scene.
+ */
+const FRAGMENT_BYTES = 1_200_000;
+const FRAGMENT_SAMPLES = 60;
+
 /** A frame's duration when nothing in the file says what it is: 24 fps, close enough for one frame. */
 const FALLBACK_FRAME_US = 41_667;
 
@@ -55,7 +66,11 @@ export interface TrackedCue extends SubtitleCue {
 }
 
 export interface RemuxSegment {
-  video: Uint8Array | null;
+  /**
+   * The pictures, in one or more fragments — see Remuxer.fragmentise. Empty when this stretch's
+   * pictures were not wanted, which is what a change of audio language asks for.
+   */
+  video: Uint8Array[];
   audio: Uint8Array | null;
   /**
    * Subtitle lines found while reading this stretch of the file, already timed on the player's
@@ -308,6 +323,30 @@ function assertContainerTakes(transcoder: AudioTranscoder): void {
   if (containerAccepts(mime)) return;
   transcoder.close();
   throw new Error(`Ce navigateur produit un AAC qu'il n'accepte pas lui-même : ${mime}`);
+}
+
+/**
+ * Which samples go in which fragment, given how big each one is.
+ *
+ * Separate from the muxing so it can be exercised on shapes real files rarely produce: a run of
+ * tiny pictures, one picture larger than the whole budget, a group that divides evenly.
+ */
+function planFragments(count: number, byteLengthOf: (index: number) => number): number[][] {
+  const fragments: number[][] = [];
+  let from = 0;
+  while (from < count) {
+    let to = from;
+    let bytes = 0;
+    // At least one sample, however large it is on its own: a fragment of nothing is not a
+    // smaller fragment, it is an infinite loop.
+    do {
+      bytes += byteLengthOf(to);
+      to += 1;
+    } while (to < count && to - from < FRAGMENT_SAMPLES && bytes < FRAGMENT_BYTES);
+    fragments.push(Array.from({ length: to - from }, (_, i) => from + i));
+    from = to;
+  }
+  return fragments;
 }
 
 function transcodedAudioInfo(transcoder: AudioTranscoder, track: MatroskaTrack): MuxTrackInfo {
@@ -702,8 +741,8 @@ export class Remuxer {
     this.videoWanted = wanted;
   }
 
-  private buildVideo(): Uint8Array | null {
-    if (this.pendingVideo.length === 0) return null;
+  private buildVideo(): Uint8Array[] {
+    if (this.pendingVideo.length === 0) return [];
 
     const presentations = this.pendingVideo.map((s) => s.timestampUs);
     const durations = deriveDurations(presentations, FALLBACK_FRAME_US);
@@ -748,8 +787,37 @@ export class Remuxer {
     // this segment ends are what the sound is cut against, and a reader that stopped keeping
     // track of them would put the next real segment in the wrong place. Only the copying is
     // skipped — which is all of the cost.
-    if (!this.videoWanted) return null;
-    return mediaSegment(this.videoInfo, this.sequence, samples);
+    if (!this.videoWanted) return [];
+    return this.fragmentise(samples);
+  }
+
+  /**
+   * Cuts one keyframe group's samples into several fragments.
+   *
+   * A fragment does not have to be a whole keyframe group — that is what a CMAF chunk is, and
+   * what every low-latency packager produces. The group has to be *computed* whole, though, and
+   * that is why this happens here and not in the reader: the decode timeline is recovered by
+   * sorting a group's presentation times, which only works for a group reordering cannot cross.
+   * Cut the samples before that and a B-picture's decode time comes out wrong, which is drift.
+   *
+   * What it buys: this library's keyframes sit anywhere from nothing to ten seconds apart, so a
+   * group can be eight megabytes of pictures handed over in one call. Safari answers one of those
+   * — nine seconds, 228 samples, 5.5 MB, at 1951 s of a real file — by closing the MediaSource
+   * with "media failed to decode", the same bytes every time.
+   */
+  private fragmentise(samples: MuxSample[]): Uint8Array[] {
+    return planFragments(samples.length, (i) => samples[i].data.byteLength).map((indices) => {
+      const from = indices[0];
+      const to = indices[indices.length - 1] + 1;
+      // The final sample of a fragment states the gap to the next sample's decode time, and at a
+      // boundary that sample lives in the next fragment. Reading its own duration there instead
+      // leaves the buffered range short of where the next fragment begins — invisible at a
+      // constant frame rate, which is exactly how the same mistake hid for a day last time.
+      const next = to < samples.length ? samples[to].decodeTime : undefined;
+      const segment = mediaSegment(this.videoInfo, this.sequence, samples.slice(from, to), next);
+      this.sequence += 1;
+      return segment;
+    });
   }
 
   private buildAudio(): Uint8Array | null {
@@ -797,3 +865,5 @@ export class Remuxer {
     return mediaSegment(this.audioInfo, this.sequence, samples);
   }
 }
+
+export const __testing = { planFragments };

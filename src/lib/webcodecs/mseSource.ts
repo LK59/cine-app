@@ -830,7 +830,8 @@ export class MseSource {
           trace(
             segment
               ? `segment ${this.appendsTraced} construit — jusqu'à ${segment.endSeconds.toFixed(1)} s, ` +
-                  `${segment.video?.byteLength ?? 0} o vidéo, ${segment.audio?.byteLength ?? 0} o audio`
+                  `${segment.video.reduce((n, f) => n + f.byteLength, 0)} o vidéo en ` +
+                  `${segment.video.length} fragment(s), ${segment.audio?.byteLength ?? 0} o audio`
               : "le remultiplexeur ne produit plus de segment (fin du fichier)"
           );
         }
@@ -859,8 +860,14 @@ export class MseSource {
           this.skipVideoUntil = null;
         }
         const sendVideo = this.skipVideoUntil === null;
-        if (segment.video && this.videoOps && sendVideo) {
-          await this.appendTo(this.videoOps, segment.video, generation);
+        if (this.videoOps && sendVideo) {
+          // One call per fragment. Handing over a whole keyframe group at once is what this
+          // splitting exists to stop — see Remuxer.fragmentise — so joining them back together
+          // here would undo all of it.
+          for (const fragment of segment.video) {
+            await this.appendTo(this.videoOps, fragment, generation);
+            if (this.generation !== generation || this.destroyed) break;
+          }
         }
         if (segment.audio && this.audioOps) await this.appendTo(this.audioOps, segment.audio, generation);
         // A seek arrived while those were in flight: this loop's appends were discarded, so its

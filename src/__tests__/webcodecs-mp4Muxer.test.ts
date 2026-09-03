@@ -210,3 +210,41 @@ describe("mediaSegment", () => {
     expect(() => mediaSegment(videoTrack, 1, [])).toThrow(/vide/);
   });
 });
+
+describe("mediaSegment across a fragment boundary", () => {
+  it("states the gap to the next fragment, not the last sample's own length", () => {
+    // A trun stores no decode times beyond the first: every later one is the running sum of the
+    // durations before it, so a duration is a gap and not a frame length. At the end of a whole
+    // keyframe group there is no next sample and the frame length is all there is; at a fragment
+    // boundary the next sample lives in the next fragment, and its own length would leave the
+    // buffered range short of where the next fragment begins.
+    const samples = [
+      { data: new Uint8Array([1]), decodeTime: 0, duration: 40_000, compositionOffset: 0, isKeyframe: true },
+      { data: new Uint8Array([2]), decodeTime: 40_000, duration: 40_000, compositionOffset: 0, isKeyframe: false },
+    ];
+    const alone = mediaSegment(videoTrack, 1, samples);
+    const joined = mediaSegment(videoTrack, 1, samples, 130_000);
+
+    // Only the final duration differs, and by exactly the gap it now has to state.
+    expect(joined.byteLength).toBe(alone.byteLength);
+    const differing = [...alone].reduce((n, byte, i) => (byte === joined[i] ? n : n + 1), 0);
+    expect(differing).toBeGreaterThan(0);
+    expect(lastDurationOf(joined)).toBe(90_000);
+    expect(lastDurationOf(alone)).toBe(40_000);
+  });
+});
+
+/** The last sample's duration, read back out of the trun. */
+function lastDurationOf(segment: Uint8Array): number {
+  const view = new DataView(segment.buffer, segment.byteOffset, segment.byteLength);
+  // trun: size, "trun", version+flags, sample_count, data_offset, then 16 bytes per sample with
+  // the duration first. Found by scanning for the box type rather than by arithmetic on offsets.
+  for (let i = 0; i + 8 <= segment.byteLength; i++) {
+    if (segment[i + 4] === 0x74 && segment[i + 5] === 0x72 && segment[i + 6] === 0x75 && segment[i + 7] === 0x6e) {
+      const count = view.getUint32(i + 12);
+      const first = i + 20;
+      return view.getUint32(first + (count - 1) * 16);
+    }
+  }
+  throw new Error("trun introuvable");
+}

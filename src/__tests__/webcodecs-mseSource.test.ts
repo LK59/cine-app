@@ -267,7 +267,7 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
         { track: 4, startSeconds: index * 2, endSeconds: index * 2 + 1.5, text: `ligne ${index}` },
       ];
       return {
-        video: remuxer.videoWantedCalls.at(-1) === false ? null : new Uint8Array([10 + index]),
+        video: remuxer.videoWantedCalls.at(-1) === false ? [] : [new Uint8Array([10 + index])],
         audio: new Uint8Array([20 + index]),
         subtitles,
         endSeconds: index * 2,
@@ -773,6 +773,10 @@ describe("MseSource", () => {
     await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
     await flush();
     const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+    // Waited for rather than assumed: how far the reader has got by now depends on the machine,
+    // and this case is about a playhead standing on media. On a loaded machine it was sometimes
+    // standing on nothing instead, which is a different test and an occasional red build.
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 13, "le tampon couvre 13 s");
 
     setTime(12);
     (video as unknown as { paused: boolean }).paused = true;
