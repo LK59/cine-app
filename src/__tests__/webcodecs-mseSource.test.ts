@@ -903,19 +903,38 @@ describe("MseSource", () => {
     expect(onStarting).toHaveBeenLastCalledWith(null);
   });
 
-  it("stops saying it is starting the moment playback starts, not at the next clock tick", async () => {
+  it("waits for a picture to be presented, not for the event that precedes one", async () => {
     const video = fakeVideo();
     const onStarting = vi.fn();
+    // Frame-accurate notification, as Safari and Chromium both provide.
+    let frameCallback: ((now: number, meta: { mediaTime: number }) => void) | null = null;
+    Object.assign(video, {
+      requestVideoFrameCallback: (cb: (now: number, meta: { mediaTime: number }) => void) => {
+        frameCallback = cb;
+        return 1;
+      },
+      cancelVideoFrameCallback: () => {
+        frameCallback = null;
+      },
+    });
     await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
     await flush();
 
+    (video as unknown as { currentTime: number }).currentTime = 12;
     video.dispatchEvent(new Event("play"));
     expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
 
-    // A browser reports the clock about four times a second. Waiting for it to be seen moving
-    // means the picture can be running again well before anyone here notices — long enough for a
-    // spinner to appear over media that is already playing, and then go.
+    // This one fires as soon as play is called, before the pipeline has begun. Treating it as
+    // the answer means nothing is ever shown at all.
     video.dispatchEvent(new Event("playing"));
+    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
+
+    // A frame still at the old position: the picture has not moved.
+    frameCallback?.(0, { mediaTime: 12 });
+    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
+
+    // And one that has.
+    frameCallback?.(0, { mediaTime: 12.04 });
     expect(onStarting).toHaveBeenLastCalledWith(null);
   });
 

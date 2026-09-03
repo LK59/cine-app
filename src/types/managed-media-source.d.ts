@@ -33,3 +33,25 @@ interface HTMLMediaElement {
   /** Required before a ManagedMediaSource will attach: AirPlay cannot carry a managed stream. */
   disableRemotePlayback: boolean;
 }
+
+/**
+ * Frame-accurate notification that a picture has been presented — in Safari since 15.4 and in
+ * Chromium, but not yet in the DOM lib. It is the only signal that says "the image moved": the
+ * playing event fires before playback has actually begun, and timeupdate arrives about four
+ * times a second, long after.
+ */
+interface VideoFrameCallbackMetadata {
+  presentationTime: number;
+  expectedDisplayTime: number;
+  width: number;
+  height: number;
+  mediaTime: number;
+  presentedFrames: number;
+}
+
+interface HTMLVideoElement {
+  requestVideoFrameCallback?(
+    callback: (now: number, metadata: VideoFrameCallbackMetadata) => void
+  ): number;
+  cancelVideoFrameCallback?(handle: number): void;
+}

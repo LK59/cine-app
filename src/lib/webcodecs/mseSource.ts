@@ -211,6 +211,7 @@ export class MseSource {
    * would otherwise raise this and have nothing able to lower it again.
    */
   private startingFrom: number | null = null;
+  private frameCallback: number | null = null;
   private pauseSettleTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * The last pause and resume, in positions.
@@ -341,7 +342,7 @@ export class MseSource {
     this.video.addEventListener("seeking", this.onSeeking);
     this.video.addEventListener("pause", this.onPause);
     this.video.addEventListener("play", this.onPlay);
-    this.video.addEventListener("playing", this.onPlaying);
+    this.video.addEventListener("playing", this.request);
     this.lastAppendAt = Date.now();
     this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -354,6 +355,7 @@ export class MseSource {
     // Independent of the pause trace, so the first automatic play is answered too.
     if (this.startingFrom !== null && this.video.currentTime > this.startingFrom + 0.01) {
       this.startingFrom = null;
+      this.stopWatchingForFirstFrame();
       this.callbacks.onStarting?.(null);
     }
 
@@ -384,6 +386,7 @@ export class MseSource {
   private readonly onPause = () => {
     if (this.destroyed) return;
     this.startingFrom = null;
+    this.stopWatchingForFirstFrame();
     this.callbacks.onStarting?.(null);
     this.pauseAnchor = this.video.currentTime;
     this.resumeTrace = {
@@ -438,6 +441,7 @@ export class MseSource {
     if (this.resumeTrace) this.resumeTrace.play = this.video.currentTime;
     this.startingFrom = this.video.currentTime;
     this.callbacks.onStarting?.(this.resumeStartedAt);
+    this.watchForFirstFrame(this.startingFrom);
     this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
     const moved = this.holdPausePosition();
 
@@ -493,16 +497,37 @@ export class MseSource {
    * before anyone here notices, and for a spinner to appear over media that is already playing
    * and then vanish. This event is the moment itself.
    */
-  private readonly onPlaying = () => {
-    if (this.destroyed) return;
-    if (this.startingFrom !== null) {
-      this.startingFrom = null;
-      this.callbacks.onStarting?.(null);
-    }
-    // Then the ordinary handling: this is also one of the moments a jump on resume becomes
-    // visible, and the guard has to keep its chance at it.
-    this.request();
-  };
+  /**
+   * Waits for a picture to actually be presented, and only then stops saying it is starting.
+   *
+   * The three candidate signals are not interchangeable. The playing event fires as soon as play
+   * is called, before the pipeline has begun — clearing on it means never showing anything at
+   * all. timeupdate arrives about four times a second, so the picture can be running again a
+   * fifth of a second before anyone here notices, which is long enough to show a spinner over
+   * media that is already moving and then take it away. This one is the frame itself.
+   */
+  private watchForFirstFrame(from: number): void {
+    const request = this.video.requestVideoFrameCallback?.bind(this.video);
+    if (!request) return; // fallback: the clock check below, a beat late but correct
+
+    const step = (_now: number, metadata: VideoFrameCallbackMetadata) => {
+      this.frameCallback = null;
+      if (this.destroyed || this.startingFrom === null) return;
+      if (metadata.mediaTime > from + 0.01) {
+        this.startingFrom = null;
+        this.callbacks.onStarting?.(null);
+        return;
+      }
+      this.frameCallback = request(step);
+    };
+    this.frameCallback = request(step);
+  }
+
+  private stopWatchingForFirstFrame(): void {
+    if (this.frameCallback === null) return;
+    this.video.cancelVideoFrameCallback?.(this.frameCallback);
+    this.frameCallback = null;
+  }
 
   private readonly onSeeking = () => {
     if (this.destroyed) return;
@@ -944,6 +969,7 @@ export class MseSource {
     if (this.destroyed) return;
     this.destroyed = true;
     this.startingFrom = null;
+    this.stopWatchingForFirstFrame();
     this.callbacks.onStarting?.(null);
     this.generation += 1;
 
@@ -953,7 +979,7 @@ export class MseSource {
     this.video.removeEventListener("seeking", this.onSeeking);
     this.video.removeEventListener("pause", this.onPause);
     this.video.removeEventListener("play", this.onPlay);
-    this.video.removeEventListener("playing", this.onPlaying);
+    this.video.removeEventListener("playing", this.request);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
