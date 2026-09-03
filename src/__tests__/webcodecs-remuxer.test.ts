@@ -114,6 +114,7 @@ describe("Remuxer track selection", () => {
       clampedSamples: 0,
       transcodedAudio: false,
       transcodedCodec: null,
+      segmentStartSeconds: 0,
     });
   });
 

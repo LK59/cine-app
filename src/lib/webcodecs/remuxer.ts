@@ -35,6 +35,16 @@ const SEGMENT_US = 2_000_000;
 const MAX_ENCODER_RESTARTS = 3;
 
 /**
+ * How far back to read from when the index points at a picture a decoder cannot start on.
+ *
+ * More than the widest gap between genuine random access points measured across this library —
+ * ten seconds — so one step is normally enough. Tried a few times, further each time, because a
+ * file could in principle have a long stretch with none at all.
+ */
+const INDEX_BACKUP_US = 12_000_000;
+const MAX_INDEX_BACKUPS = 3;
+
+/**
  * How much a single fragment may carry, and how many samples.
  *
  * Both bounds matter. The bytes are what a player has to swallow in one call, and the sample
@@ -114,6 +124,8 @@ export interface RemuxDiagnostics {
   transcodedAudio: boolean;
   /** What it was re-encoded as, when it was. Not always AAC — see chooseTranscodeCodec. */
   transcodedCodec: string | null;
+  /** Where the last segment built began, on the file's clock. What a seek actually landed on. */
+  segmentStartSeconds: number;
 }
 
 function aacCodecString(codecPrivate: Uint8Array | null): string {
@@ -378,6 +390,9 @@ export class Remuxer {
    * megabytes of picture into segments that were then dropped.
    */
   private videoWanted = true;
+  /** Where a seek asked to be, while the reader is still looking for somewhere to start. */
+  private seekTargetUs: number | null = null;
+  private backupsLeft = 0;
   /** Read once from the codec's configuration record; see nalLengthSize. */
   private readonly nalLength: number;
 
@@ -562,6 +577,7 @@ export class Remuxer {
       clampedSamples: this.clampedSamples,
       transcodedAudio: this.transcoder !== null,
       transcodedCodec: this.transcoder?.codecString ?? null,
+      segmentStartSeconds: this.segmentStartUs / TIMESCALE,
     };
   }
 
@@ -583,6 +599,8 @@ export class Remuxer {
     this.pendingAudio = [];
     this.pendingSubtitles = [];
     this.needKeyframe = true;
+    this.seekTargetUs = Math.round(seconds * 1e6);
+    this.backupsLeft = MAX_INDEX_BACKUPS;
     this.done = false;
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
@@ -608,8 +626,17 @@ export class Remuxer {
         // the ones that precede it produces a segment the browser holds but can never show —
         // which looks exactly like a seek that froze.
         if (this.needKeyframe) {
-          if (!this.startsHere(sample)) continue;
+          if (!this.startsHere(sample)) {
+            // Past where the viewer asked to be, still with nowhere to start: the index pointed
+            // at a picture a decoder cannot begin on, and reading on would land them wherever
+            // the next genuine one happens to be — up to ten seconds late. Reading from earlier
+            // instead costs a few seconds of pictures nobody sees, and lands them where they
+            // asked. Only ever on the file that lies: elsewhere this never runs.
+            if (this.seekTargetUs !== null && sample.timestampUs > this.seekTargetUs && this.backUp()) continue;
+            continue;
+          }
           this.needKeyframe = false;
+          this.seekTargetUs = null;
         }
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (this.startsHere(sample) && span >= SEGMENT_US) {
@@ -751,6 +778,26 @@ export class Remuxer {
   /** Whether the pictures read are also written into the segments handed back. */
   setVideoWanted(wanted: boolean): void {
     this.videoWanted = wanted;
+  }
+
+  /** Points the reader further back, one step at a time, and says whether it moved. */
+  private backUp(): boolean {
+    if (this.seekTargetUs === null || this.backupsLeft <= 0) return false;
+    const step = MAX_INDEX_BACKUPS - this.backupsLeft + 1;
+    this.backupsLeft -= 1;
+    const earlier = this.seekTargetUs - INDEX_BACKUP_US * step;
+    if (earlier < 0) return false;
+
+    const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
+    this.reader.seekTo(clusterOffsetForTime(this.file, earlier, this.videoTrack.number) ?? start);
+    this.pendingVideo = [];
+    this.pendingAudio = [];
+    this.pendingSubtitles = [];
+    trace(
+      `index : rien où démarrer avant ${(this.seekTargetUs / 1e6).toFixed(1)} s, ` +
+        `relecture depuis ${(earlier / 1e6).toFixed(1)} s`
+    );
+    return true;
   }
 
   private buildVideo(): Uint8Array[] {

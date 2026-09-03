@@ -47,7 +47,7 @@ const from = Number(process.env.BENCH_FROM ?? 0);
 const count = Number(process.env.BENCH_COUNT ?? 8);
 const outPath = process.env.BENCH_OUT!;
 
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 // Kept in the repository because it is the only thing that ever found the bugs synthetic tests
 // could not, and skipped unless asked for: it needs a real file and writes real output.
@@ -85,16 +85,22 @@ describe.skipIf(!process.env.BENCH_FILE)("banc", () => {
     
     const parts: Uint8Array[] = [plan.videoInit];
     const audioParts: Uint8Array[] = plan.audioInit ? [plan.audioInit] : [];
-    const sizes: { index: number; endSeconds: number; videoBytes: number; audioBytes: number; fragments: number }[] = [];
+    const sizes: { index: number; startSeconds: number; endSeconds: number; videoBytes: number; audioBytes: number; fragments: number }[] = [];
+    let firstStart: number | null = null;
     
+    const timings: number[] = [];
     for (let i = 0; i < count; i++) {
+      const began = performance.now();
       const segment = await remuxer.nextSegment();
+      timings.push(performance.now() - began);
       if (!segment) break;
       const fragments: Uint8Array[] = segment.video;
       for (const fragment of fragments) parts.push(fragment);
       if (segment.audio) audioParts.push(segment.audio);
+      firstStart ??= remuxer.diagnostics().segmentStartSeconds;
       sizes.push({
         index: i + 1,
+        startSeconds: firstStart,
         endSeconds: segment.endSeconds,
         videoBytes: fragments.reduce((n, f) => n + f.byteLength, 0),
         audioBytes: segment.audio?.byteLength ?? 0,
@@ -126,6 +132,16 @@ describe.skipIf(!process.env.BENCH_FILE)("banc", () => {
         `segment ${s.index} : jusqu'à ${s.endSeconds.toFixed(2)} s, ` +
           `${s.videoBytes} o vidéo en ${s.fragments} fragment(s), ${s.audioBytes} o audio`
       );
+    }
+    console.log(
+      `construction d'un groupe : ${timings.map((t) => t.toFixed(0) + " ms").join(", ")}`
+    );
+    // Given an expectation, this stops being a report and becomes a check. Utopia at 1951 s is
+    // the one that matters: the index there points at a picture no decoder can start on, and the
+    // reader has to notice it has overshot and read from the genuine one before it.
+    //   BENCH_FROM=1951 BENCH_EXPECT_START=1943.5
+    if (process.env.BENCH_EXPECT_START) {
+      expect(sizes[0].startSeconds).toBeCloseTo(Number(process.env.BENCH_EXPECT_START), 1);
     }
     const biggest = Math.max(...parts.slice(1).map((p) => p.byteLength));
     console.log(`\nplus gros envoi vidéo : ${biggest} octets`);
