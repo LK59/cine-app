@@ -120,6 +120,19 @@ décalent l'image P d'une image. C'est pourquoi le découpage en fragments a lie
 Lit les échantillons, calcule la ligne de temps par groupe, découpe en
 fragments, produit les segments et les sous-titres.
 
+**Le média est livré au fur et à mesure, pas quand le groupe est fini.** Un
+groupe d'images se lit en entier avant qu'on puisse en donner quoi que ce soit,
+puisque le temps de décodage d'une image est son rang parmi les présentations du
+groupe. C'est vrai, et ça n'exige pas le groupe entier : une image lue plus tard
+ne peut déplacer une image déjà tenue que dans la limite de la **profondeur de
+réordonnancement** — une poignée d'images. Au-delà, ce qui précède ne bouge
+plus. La profondeur est mesurée sur le premier groupe du flux et sert pour tous
+les suivants, donc pour chaque saut ; avant d'avoir de quoi la mesurer, une
+estimation généreuse (64 images) en tient lieu.
+
+Concrètement, sur le fichier qui a lancé tout ça : un saut livrait 6,5 Mo d'un
+bloc, il en livre 2,1 puis ~1 Mo toutes les 2,4 s de média.
+
 - **Segments** coupés sur un point d'accès aléatoire, au moins 2 s après le
   début du précédent.
 - **Fragments** bornés à **1,2 Mo / 60 échantillons** (des *chunks* CMAF).
@@ -293,12 +306,10 @@ fausses images-clés d'un fichier et ce que les refuser coûte.
 
 - **Pas de qualité adaptative.** Le fichier est lu tel quel : à réserver au
   réseau local.
-- **Le démarrage attend le groupe d'images entier** (~5 Mo, ~2,5 s sur un lien
-  ordinaire) parce que le temps de décodage du premier échantillon est la plus
-  petite présentation de tout le groupe. *Idée à faire* : livrer chaque fragment
-  dès qu'il est construit, en s'appuyant sur la profondeur de réordonnancement
-  bornée qu'on mesure déjà. Gain estimé ~1,5 à 2 s par saut ; risque : ça rouvre
-  le calcul de la ligne de temps, et l'audio est découpé contre la fin du groupe.
+- **TrueHD n'est pas porté et ne le sera pas.** Aucun navigateur ne le décode, et
+  rien dans cet écosystème non plus. Sur 2000 fichiers audités : 35 portent du
+  TrueHD, **33 portent une piste Dolby ou DTS à côté** — c'est elle qui joue.
+  Seuls 3 fichiers sur 2000 n'ont aucune piste que ce lecteur sache livrer.
 - **Les fausses images-clés coûtent un saut sur quatre-vingts** sur le fichier
   concerné (aucun sur les autres) : on relit alors quelques secondes d'images que
   personne ne voit.
