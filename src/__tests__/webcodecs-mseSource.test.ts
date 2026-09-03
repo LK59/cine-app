@@ -778,6 +778,32 @@ describe("MseSource", () => {
     expect(remuxer.seeks).toEqual([]);
   });
 
+  it("anchors where the sound actually stopped, not where the button was pressed", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    // The clock keeps going for a fraction of a second: the sound already handed to the hardware
+    // plays out, and it was heard. Anchoring before it makes resuming replay it.
+    for (const t of [12.2, 12.4, 12.5]) {
+      setTime(t);
+      await new Promise((r) => setTimeout(r, 90));
+    }
+
+    // Resuming from where it truly stopped: nothing to undo, and nothing replayed.
+    setTime(12.5);
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    await flush();
+    expect(video.currentTime).toBe(12.5);
+    expect(remuxer.seeks).toEqual([]);
+  }, 10_000);
+
   it("leaves a playhead the viewer moved while paused exactly where they put it", async () => {
     const video = fakeVideo();
     await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });

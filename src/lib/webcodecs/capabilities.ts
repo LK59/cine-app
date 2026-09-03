@@ -59,6 +59,9 @@ export function probeCapabilities(): Promise<Capability[]> {
     await encoderSupport("mp4a.40.2", 6),
     await encoderSupport("opus", 2),
     await encoderSupport("opus", 6),
+    // Encoding to something the player will not take is no use: these close the loop.
+    sourceSupport('audio/mp4; codecs="mp4a.40.2"', "AAC dans MediaSource"),
+    sourceSupport('audio/mp4; codecs="opus"', "Opus dans MediaSource"),
   ])();
   return cached;
 }

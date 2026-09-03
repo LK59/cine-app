@@ -75,7 +75,7 @@ describe("probeCapabilities", () => {
     const mod = await import("@/lib/webcodecs/capabilities");
     await mod.probeCapabilities();
     await mod.probeCapabilities();
-    // Two questions asked, not four: none of these answers change while a page is open.
-    expect(isTypeSupported).toHaveBeenCalledTimes(2);
+    // Four questions asked, not eight: none of these answers change while a page is open.
+    expect(isTypeSupported).toHaveBeenCalledTimes(4);
   });
 });

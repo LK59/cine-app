@@ -41,6 +41,15 @@ const STALL_TIMEOUT_MS = 700;
  */
 const RESUME_GUARD_MS = 1500;
 
+/**
+ * How long the clock is watched after pressing pause, waiting for it to come to rest.
+ *
+ * It does not stop where the button was pressed: the sound already handed to the hardware plays
+ * out over the next fraction of a second and the clock follows it. That fraction was heard, so it
+ * is part of what has been watched — anchoring before it and returning there on resume replays it.
+ */
+const PAUSE_SETTLE_MS = 1000;
+
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
 
@@ -173,6 +182,7 @@ export class MseSource {
   private pauseAnchor: number | null = null;
   private resumeDeadline = 0;
   private resumeStartedAt = 0;
+  private pauseSettleTimer: ReturnType<typeof setInterval> | null = null;
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -289,7 +299,23 @@ export class MseSource {
    * as the film having quietly continued while paused and jumping to catch up.
    */
   private readonly onPause = () => {
-    if (!this.destroyed) this.pauseAnchor = this.video.currentTime;
+    if (this.destroyed) return;
+    this.pauseAnchor = this.video.currentTime;
+    // Followed until it comes to rest, so the anchor is where the film actually stopped being
+    // heard rather than where the button was pressed. On a platform that stops dead — every
+    // desktop browser — the first sample is already the last, and this costs nothing.
+    if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
+    const deadline = Date.now() + PAUSE_SETTLE_MS;
+    this.pauseSettleTimer = setInterval(() => {
+      const stop = this.destroyed || this.pauseAnchor === null || !this.video.paused || Date.now() > deadline;
+      if (stop) {
+        if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
+        this.pauseSettleTimer = null;
+        return;
+      }
+      const settled = this.pauseAnchor;
+      if (settled !== null && this.video.currentTime > settled) this.pauseAnchor = this.video.currentTime;
+    }, 80);
   };
 
   private readonly onPlay = () => {
@@ -776,6 +802,8 @@ export class MseSource {
     this.video.removeEventListener("playing", this.request);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
+    if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
+    this.pauseSettleTimer = null;
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();
