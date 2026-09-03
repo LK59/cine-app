@@ -172,6 +172,7 @@ export class MseSource {
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
   private resumeDeadline = 0;
+  private resumeStartedAt = 0;
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -296,12 +297,14 @@ export class MseSource {
     // Held for a moment rather than settled on the spot: the element fires this as soon as play
     // is called, which is before it has actually resumed and therefore before it can have
     // jumped. Checked again as playback gets going, until the window closes.
-    this.resumeDeadline = Date.now() + RESUME_GUARD_MS;
-    this.holdPausePosition();
+    this.resumeStartedAt = Date.now();
+    this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
+    const moved = this.holdPausePosition();
 
     // Nothing moves the playhead while paused, so any settling owed is settled here — before the
-    // watchdog's own delay, which would otherwise be a visible wait at the moment of pressing play.
-    this.nudgeIntoBuffer();
+    // watchdog's own delay, which would otherwise be a visible wait at the moment of pressing
+    // play. Skipped when the position was just put back, which has already settled it.
+    if (!moved) this.nudgeIntoBuffer();
     void this.fill();
   };
 
@@ -314,26 +317,32 @@ export class MseSource {
    * to find nothing where it was and carry on from the nearest media it still holds. Both look
    * identical from here: the film quietly continued while it was stopped.
    */
-  private holdPausePosition(): void {
+  private holdPausePosition(): boolean {
     const anchor = this.pauseAnchor;
-    if (anchor === null || this.destroyed) return;
+    if (anchor === null || this.destroyed) return false;
     if (Date.now() > this.resumeDeadline) {
       this.pauseAnchor = null;
-      return;
+      return false;
     }
-    // Only ever backwards, and only past a threshold no one could see moving: this undoes a
-    // drift, it never fights a viewer who has moved the playhead themselves.
-    if (this.video.currentTime <= anchor + 0.08) return;
+
+    // Measured against where playing could legitimately have got to, never against the anchor
+    // itself. Playback passes the anchor within a tenth of a second of resuming, and reading that
+    // as a jump is a yank backwards — and, when the media there has been reclaimed, a full
+    // re-read for nothing. Only a playhead further along than time can account for has jumped.
+    const rate = this.video.playbackRate || 1;
+    const reachable = anchor + ((Date.now() - this.resumeStartedAt) / 1000) * rate;
+    if (this.video.currentTime <= reachable + 0.25) return false;
 
     this.pauseAnchor = null;
     if (this.isBufferedAt(anchor)) {
       this.lastSeekTarget = anchor;
       this.video.currentTime = anchor;
-      return;
+      return true;
     }
     // The media that was there is gone. Fetching it again is the whole point — this is the case
     // the guard exists for, and the one where giving up leaves the jump in place.
     void this.seek(anchor);
+    return true;
   }
 
   private readonly onSeeking = () => {
@@ -521,9 +530,11 @@ export class MseSource {
       if (ranges.start(i) <= now && now < ranges.end(i)) return; // already on media
       if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) start = ranges.start(i);
     }
-    // Only a gap the size of the delay is closed this way. A larger one is a real hole in the
+    // Only a gap the size of the presentation delay is closed this way — that is the one this
+    // exists for. A whole second was far too generous: on resume it could step a noticeable
+    // distance forward, which is its own kind of jump. Anything larger is a real hole in the
     // stream, and stepping over it silently would hide a genuine fault.
-    if (start === null || start - now > 1) return;
+    if (start === null || start - now > this.delaySeconds + 0.15) return;
 
     this.lastSeekTarget = start;
     this.video.currentTime = start;

@@ -753,6 +753,31 @@ describe("MseSource", () => {
     expect(video.currentTime).toBe(12);
   });
 
+  it("lets playback simply carry on after resuming, without pulling it back", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+
+    // Playback passes the pause position within a tenth of a second of resuming. Reading that as
+    // a jump is a yank backwards, and — where the media there has been reclaimed — a full re-read
+    // for nothing: a resume that lands a second out with a stutter, which is what was reported.
+    await new Promise((r) => setTimeout(r, 120));
+    setTime(12.1);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+
+    expect(video.currentTime).toBe(12.1);
+    expect(remuxer.seeks).toEqual([]);
+  });
+
   it("leaves a playhead the viewer moved while paused exactly where they put it", async () => {
     const video = fakeVideo();
     await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });

@@ -14,6 +14,7 @@ import { useT } from "@/components/TranslationProvider";
 import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
+import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 
@@ -86,6 +87,8 @@ export function ExperimentalPlayerHost({
   const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
+  // Answered once and kept: none of it changes while the page is open.
+  const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
   // Which of the two pipelines is running. Null until the file has been examined — the element
   // that shows the picture differs between them, so both are mounted and one is hidden.
   const [path, setPath] = useState<"remux" | "webcodecs" | null>(null);
@@ -142,6 +145,24 @@ export function ExperimentalPlayerHost({
     const id = setInterval(read, 500);
     return () => clearInterval(id);
   }, [showInfo]);
+
+  // What this device actually accepts, asked of the platform rather than assumed. It is the only
+  // way to know whether a codec the browser cannot decode could still be played by decoding it
+  // here and handing back something the browser will take.
+  useEffect(() => {
+    if (!showInfo || capabilities) return;
+    let cancelled = false;
+    void probeCapabilities()
+      .then((found) => {
+        if (!cancelled) setCapabilities(describeCapabilities(found));
+      })
+      .catch(() => {
+        if (!cancelled) setCapabilities({ "Sonde des capacités": "échec" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showInfo, capabilities]);
 
   // iOS starts every AudioContext suspended and only lets it resume from the task of a real
   // interaction. The player's own container already tries on each pointer down, but a tap can
@@ -422,6 +443,14 @@ export function ExperimentalPlayerHost({
             {Object.entries(diagnostics).map(([label, value]) => (
               <InfoRow key={label} label={label} value={value} />
             ))}
+            {capabilities && (
+              <>
+                <dt className="pt-2 text-[11px] uppercase tracking-wide text-slate-500">Capacités de l&apos;appareil</dt>
+                {Object.entries(capabilities).map(([label, value]) => (
+                  <InfoRow key={label} label={label} value={value} />
+                ))}
+              </>
+            )}
           </dl>
         </div>
       )}
