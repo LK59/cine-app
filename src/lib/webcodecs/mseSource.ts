@@ -8,6 +8,7 @@
 // back leaves you unable to tell a path that works from a path that was never used.
 
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
+import { audioBufferRebuildable } from "./remuxer";
 import { trace } from "./trace";
 
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
@@ -141,6 +142,58 @@ export function containerAccepts(mimeType: string): boolean {
   }
 }
 
+/**
+ * Whether this browser will let an audio buffer be taken out and a new one put in its place,
+ * mid-playback, without losing the MediaSource.
+ *
+ * The third of three ways to change what the sound decodes by, and the only one not yet tried.
+ * `changeType` is accepted here and then answered with a decode failure that closes the source;
+ * rebuilding the whole MediaSource detaches the element, and Safari does not reliably come back.
+ * Removing one source buffer and adding another keeps both the element and the picture's buffer.
+ *
+ * Asked of a throwaway source on a detached element — which never has to be in the document to
+ * reach "open" — so the answer costs a few milliseconds once, and no guess is made on behalf of
+ * a browser nobody has tested.
+ */
+let rebuildAnswer: Promise<boolean> | null = null;
+
+export function canRebuildAudioBuffer(videoMime: string, first: string, second: string): Promise<boolean> {
+  rebuildAnswer ??= (async () => {
+    const Source = sourceConstructor();
+    // No document means no element to attach a source to, and a source that never opens cannot
+    // answer this. Nothing is guessed on its behalf.
+    if (!Source || typeof document === "undefined") return false;
+    const video = document.createElement("video");
+    video.disableRemotePlayback = true;
+    const source = new Source();
+    try {
+      const opened = new Promise<boolean>((resolve) => {
+        source.addEventListener("sourceopen", () => resolve(true), { once: true });
+        setTimeout(() => resolve(false), PROBE_TIMEOUT_MS);
+      });
+      (video as unknown as { srcObject: unknown }).srcObject = source;
+      if (!(await opened)) return false;
+
+      // The picture's buffer is there for realism: an implementation may treat the last buffer
+      // leaving differently from one of two.
+      source.addSourceBuffer(videoMime);
+      const audio = source.addSourceBuffer(first);
+      source.removeSourceBuffer(audio);
+      source.addSourceBuffer(second);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      try {
+        (video as unknown as { srcObject: unknown }).srcObject = null;
+      } catch {
+        /* nothing left to detach */
+      }
+    }
+  })();
+  return rebuildAnswer;
+}
+
 /** Whether this browser can play what the remuxer would produce, checked before any work starts. */
 export function playabilityOf(plan: RemuxPlan): { ok: true } | { ok: false; reason: string } {
   const Source = sourceConstructor();
@@ -153,6 +206,9 @@ export function playabilityOf(plan: RemuxPlan): { ok: true } | { ok: false; reas
   }
   return { ok: true };
 }
+
+/** A source that has not opened by now is not going to answer the rebuild question either. */
+const PROBE_TIMEOUT_MS = 300;
 
 /** How long one buffer operation may go unanswered before the queue moves on without it. */
 const BUFFER_OPERATION_TIMEOUT_MS = 4000;
@@ -233,6 +289,8 @@ export class MseSource {
   private appendFailures = 0;
   /** Set while the picture is deliberately held still for want of sound. See beginAudioHold. */
   private audioHold: { wanted: boolean; engaged: boolean } | null = null;
+  /** Answered by the probe above, before the file was opened. */
+  rebuildAudioAllowed = false;
   private objectUrl: string | null = null;
   /** The read loop in flight, if any. A seek has to let it finish before moving the reader. */
   private fillTask: Promise<void> | null = null;
@@ -327,6 +385,7 @@ export class MseSource {
     if (!Source) throw new Error("Ce navigateur ne propose pas MediaSource.");
 
     const instance = new MseSource(video, remuxer, plan, callbacks, Source);
+    instance.rebuildAudioAllowed = audioBufferRebuildable();
     await instance.open(startSeconds);
     return instance;
   }
@@ -994,6 +1053,14 @@ export class MseSource {
     if (!queue || !mimeType || !init || this.destroyed) return;
     this.generation += 1;
 
+    // A different codec is not something to ask a buffer to absorb. Where the browser allows it,
+    // the buffer is replaced rather than reinterpreted: the MediaSource, the element and the
+    // picture's own buffer are all left standing, and only the sound is rebuilt from nothing.
+    if (mimeType !== this.plan.audioMimeType && this.rebuildAudioAllowed) {
+      await this.rebuildAudioBuffer(mimeType, init);
+      return;
+    }
+
     // Emptied before the codec changes, not after. Asking a buffer to reinterpret itself while
     // it still holds coded frames of the codec it is leaving is more than the specification
     // requires of an implementation, and Safari answered it with a decode failure — which closes
@@ -1009,6 +1076,30 @@ export class MseSource {
     this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
 
     await queue.enqueue(() => queue.buffer.appendBuffer(init as BufferSource));
+  }
+
+  /**
+   * Takes the audio buffer out and puts a new one in its place.
+   *
+   * Everything the viewer can see survives it: the MediaSource stays open, the element stays
+   * attached, and the picture's buffer keeps every frame it holds. Only the sound starts again
+   * from nothing — which is what a change of codec is.
+   */
+  private async rebuildAudioBuffer(mimeType: string, init: Uint8Array): Promise<void> {
+    const outgoing = this.audioBuffer;
+    // Nothing in flight: removing a buffer mid-operation is the one way to make this worse.
+    await this.audioOps?.enqueue(() => {}).catch(() => {});
+    if (this.destroyed || this.source.readyState !== "open") {
+      throw new Error(`La source ne peut plus recevoir de piste audio. ${this.elementState()}`);
+    }
+
+    if (outgoing) this.source.removeSourceBuffer(outgoing);
+    trace(`piste audio : tampon reconstruit en ${mimeType}`);
+    this.audioBuffer = this.source.addSourceBuffer(mimeType);
+    this.audioBuffer.mode = "segments";
+    this.audioOps = new BufferQueue(this.audioBuffer, () => this.elementState());
+    this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
+    await this.appendTo(this.audioOps, init, this.generation);
   }
 
   /**

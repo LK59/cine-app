@@ -144,10 +144,14 @@ class FakeSource extends EventTarget {
       this.dispatchEvent(new Event("sourceopen"));
     });
   }
+  removed: FakeBuffer[] = [];
   addSourceBuffer(type: string) {
     const buffer = new FakeBuffer(type);
     this.buffers.push(buffer);
     return buffer as unknown as SourceBuffer;
+  }
+  removeSourceBuffer(buffer: SourceBuffer) {
+    this.removed.push(buffer as unknown as FakeBuffer);
   }
   endOfStream() {
     this.endedTimes += 1;
@@ -1018,6 +1022,29 @@ describe("MseSource", () => {
 
     expect(videoBuffer.removed).toEqual([]);
     expect(videoBuffer.appended.length).toBe(videoAppends);
+  });
+
+  it("replaces the audio buffer rather than reinterpreting it, where the browser allows", async () => {
+    // The third of three ways to change what the sound decodes by, and the only one that leaves
+    // the element attached and the picture's buffer untouched. changeType is accepted on Safari
+    // and then answered with a decode failure that closes the source.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const source = FakeSource.instances[0];
+    const outgoing = source.buffers[1];
+    mse.rebuildAudioAllowed = true;
+
+    await mse.replaceAudio('audio/mp4; codecs="opus"', new Uint8Array([7]));
+
+    expect(source.removed).toContain(outgoing);
+    expect(outgoing.typeChangedAfter).toBe(-1); // never asked to reinterpret itself
+    const incoming = source.buffers[source.buffers.length - 1];
+    expect(incoming.type).toBe('audio/mp4; codecs="opus"');
+    expect(incoming.appended.length).toBe(1); // its initialisation segment, and nothing else yet
+    // The picture is untouched by any of it.
+    expect(source.removed).not.toContain(source.buffers[0]);
   });
 
   it("empties the audio buffer before asking it to change codec", async () => {

@@ -24,10 +24,18 @@
 import type { ByteSource } from "./byteSource";
 import { unsupportedReason } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
-import { playabilityOf } from "./mseSource";
+import { canRebuildAudioBuffer, playabilityOf } from "./mseSource";
 import { trace } from "./trace";
 import { canEncodeAac, chooseTranscodeCodec } from "./audioTranscode";
-import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
+import {
+  Remuxer,
+  audioDelivery,
+  plannedMimeTypes,
+  playableAudio,
+  remuxableVideo,
+  setAudioBufferRebuildable,
+  type RemuxPlan,
+} from "./remuxer";
 
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
 const EMPTY = new Uint8Array(0);
@@ -68,6 +76,16 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   // as, and only the browser knows what it can both produce and take back.
   if (audioTrack) {
     await chooseTranscodeCodec(audioTrack.audio?.sampleRate ?? 48000, audioTrack.audio?.channels ?? 2);
+  }
+
+  // And this decides which of the two designs runs — see setAudioBufferRebuildable. Asked with
+  // this file's own video type, so a refusal is about replacing a buffer and not about a codec
+  // the browser was never going to take.
+  const video = plannedMimeTypes(videoTrack, null).video;
+  if (video) {
+    const rebuildable = await canRebuildAudioBuffer(video, 'audio/mp4; codecs="mp4a.40.2"', 'audio/mp4; codecs="opus"');
+    setAudioBufferRebuildable(rebuildable);
+    trace(`chemin : ce navigateur ${rebuildable ? "accepte" : "refuse"} de remplacer le tampon audio à chaud`);
   }
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
   if (audioTrack && !playableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;

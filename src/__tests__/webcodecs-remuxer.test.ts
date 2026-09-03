@@ -106,6 +106,7 @@ describe("Remuxer track selection", () => {
       presentationDelaySeconds: 0,
       clampedSamples: 0,
       transcodedAudio: false,
+      transcodedCodec: null,
     });
   });
 

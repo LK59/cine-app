@@ -88,6 +88,8 @@ export interface RemuxDiagnostics {
   clampedSamples: number;
   /** The sound is being decoded and encoded again on the way through, rather than copied. */
   transcodedAudio: boolean;
+  /** What it was re-encoded as, when it was. Not always AAC — see chooseTranscodeCodec. */
+  transcodedCodec: string | null;
 }
 
 function aacCodecString(codecPrivate: Uint8Array | null): string {
@@ -157,6 +159,23 @@ function naturalDelivery(track: MatroskaTrack): AudioDelivery {
   return transcodableAudio(track) ? "transcode" : "none";
 }
 
+/**
+ * Whether this browser lets the audio buffer be replaced rather than reinterpreted.
+ *
+ * Settled by a probe before any file is opened, and it decides which of two designs runs: unify
+ * every track onto one codec so no transition can happen, or keep each track's own codec and
+ * rebuild the buffer when it changes. The first is what a browser that cannot do the second gets.
+ */
+let rebuildable = false;
+
+export function setAudioBufferRebuildable(value: boolean): void {
+  rebuildable = value;
+}
+
+export function audioBufferRebuildable(): boolean {
+  return rebuildable;
+}
+
 /** What a re-encoded track is delivered as, and therefore what every track is unified to. */
 const TRANSCODED_CODEC = () => transcodeTargetCodec();
 
@@ -181,6 +200,10 @@ const TRANSCODED_CODEC = () => transcodeTargetCodec();
  * playback. A file whose tracks already agree — most of the library — pays nothing.
  */
 export function unifiedAudioCodec(file: MatroskaFile): string | null {
+  // Not needed where the audio buffer can simply be replaced when the codec changes: there, a
+  // track that can ride through untouched does, and only what has to be re-encoded is.
+  if (rebuildable) return null;
+
   const audio = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
   if (audio.length < 2) return null;
   const delivered = new Set(
@@ -469,6 +492,7 @@ export class Remuxer {
       presentationDelaySeconds: (this.presentationDelayUs ?? 0) / TIMESCALE,
       clampedSamples: this.clampedSamples,
       transcodedAudio: this.transcoder !== null,
+      transcodedCodec: this.transcoder?.codecString ?? null,
     };
   }
 

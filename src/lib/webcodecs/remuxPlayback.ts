@@ -307,7 +307,7 @@ export class RemuxPlayback {
       Audio: this.audioTrack ? `${this.audioTrack.codecId} ${this.audioTrack.audio?.channels ?? "?"} canaux` : "aucune",
       // Worth stating plainly: on this path the sound is the one thing that may not be the
       // file's own bytes, and knowing which of the two is happening explains everything else.
-      "Traitement audio": remux.transcodedAudio ? "décodé puis ré-encodé en AAC" : "copié tel quel",
+      "Traitement audio": remux.transcodedCodec ? `décodé puis ré-encodé en ${remux.transcodedCodec}` : "copié tel quel",
       "Décalage de présentation": `${(remux.presentationDelaySeconds * 1000).toFixed(0)} ms`,
       "Images recalées": String(remux.clampedSamples),
       Index: `${this.remuxer.videoCuePoints} points vidéo / ${this.file.cues.length}`,

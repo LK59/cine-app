@@ -300,12 +300,19 @@ export class AudioTranscoder {
     // built below describes a description.
     const asc = target === TARGET_CODEC ? (extractAudioSpecificConfig(description) ?? description) : description;
     const actual = target === TARGET_CODEC ? parseAacConfig(asc) : null;
+    const read =
+      target === TARGET_CODEC
+        ? actual
+          ? `AOT ${actual.objectType}, ${actual.sampleRate} Hz, ${actual.channels} canaux`
+          : "illisible"
+        : // Opus says the same things in its own header: channels at byte 9, rate little-endian
+          // at 12. Worth reading back for the same reason as the AAC one — the container is
+          // about to state both, and it has to state what actually came out.
+          `${asc[9]} canaux, ${new DataView(asc.buffer, asc.byteOffset, asc.byteLength).getUint32(12, true)} Hz`;
     trace(
       `transcodage audio : encodeur amorcé — description ${[...(description as Uint8Array)]
         .map((b) => b.toString(16).padStart(2, "0"))
-        .join(" ")}${asc === description ? "" : ` (config extraite : ${[...asc].map((b) => b.toString(16).padStart(2, "0")).join(" ")})`} → ${
-        actual ? `AOT ${actual.objectType}, ${actual.sampleRate} Hz, ${actual.channels} canaux` : "illisible"
-      }`
+        .join(" ")}${asc === description ? "" : ` (config extraite : ${[...asc].map((b) => b.toString(16).padStart(2, "0")).join(" ")})`} → ${read}`
     );
 
     const entryRate = actual?.sampleRate ?? sampleRate;
