@@ -349,7 +349,13 @@ export function ExperimentalPlayerHost({
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
   // rather than as a flash of spinner drawing attention to itself.
-  const showSpinner = waitingFor !== null && waitingFor >= SPINNER_AFTER_MS;
+  //
+  // The two waits are answered in different places, and deliberately never both at once: opening
+  // has no controls on screen yet, so it gets this component's own overlay, while a resume
+  // borrows the spinner the controls already put in place of the button. Driving both from one
+  // flag stacked one spinner on top of the other.
+  const openingSpinner = openingFor !== null && openingFor >= SPINNER_AFTER_MS;
+  const resumeSpinner = startingFor !== null && startingFor >= SPINNER_AFTER_MS;
   const waitingWord =
     waitingFor === null || waitingFor < WORD_AFTER_MS
       ? null
@@ -560,7 +566,7 @@ export function ExperimentalPlayerHost({
             hidden={false}
             // The controls already answer this by swapping the button for a spinner, so restarting
             // after a pause borrows the same treatment rather than growing a second indicator.
-            loading={!ready || showSpinner}
+            loading={!ready || resumeSpinner}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.
@@ -572,7 +578,7 @@ export function ExperimentalPlayerHost({
         )
       )}
 
-      {showSpinner && !error && !isMini && (
+      {openingSpinner && !error && !isMini && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
@@ -580,6 +586,14 @@ export function ExperimentalPlayerHost({
                 it can be finished is noise, not company. */}
             {waitingWord && <p className="text-sm text-slate-400">{waitingWord}</p>}
           </div>
+        </div>
+      )}
+
+      {/* A resume long enough to deserve a word gets the word only: the controls are already
+          showing the spinner, and a second one beside it is what this looked like at first. */}
+      {!openingSpinner && resumeSpinner && waitingWord && !error && !isMini && (
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-10 flex justify-center">
+          <p className="text-sm text-slate-400">{waitingWord}</p>
         </div>
       )}
     </div>,

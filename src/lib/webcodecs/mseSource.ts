@@ -203,6 +203,14 @@ export class MseSource {
   private resumeDeadline = 0;
   private resumeStartedAt = 0;
   private pauseStartedAt = 0;
+  /**
+   * Where the clock was when play was asked for, while it has not moved since.
+   *
+   * Kept apart from the pause trace on purpose: that trace only exists once something has been
+   * paused, and the very first play — the automatic one, before anyone has touched anything —
+   * would otherwise raise this and have nothing able to lower it again.
+   */
+  private startingFrom: number | null = null;
   private pauseSettleTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * The last pause and resume, in positions.
@@ -343,6 +351,12 @@ export class MseSource {
   private readonly request = () => {
     // The first tick after resuming is where a jump would show, so it is recorded before
     // anything here has a chance to act on it.
+    // Independent of the pause trace, so the first automatic play is answered too.
+    if (this.startingFrom !== null && this.video.currentTime > this.startingFrom + 0.01) {
+      this.startingFrom = null;
+      this.callbacks.onStarting?.(null);
+    }
+
     const trace = this.resumeTrace;
     if (trace && !Number.isNaN(trace.play)) {
       if (trace.tick === null) trace.tick = this.video.currentTime;
@@ -352,8 +366,6 @@ export class MseSource {
       if (trace.latencyMs === null && this.video.currentTime > trace.play + 0.01) {
         trace.latencyMs = Date.now() - this.resumeStartedAt;
         trace.pausedForMs = this.resumeStartedAt - this.pauseStartedAt;
-        // The clock is moving: sound and picture are genuinely running again.
-        this.callbacks.onStarting?.(null);
       }
     }
     // Playback advancing is also the first moment a jump on resume becomes visible.
@@ -371,6 +383,7 @@ export class MseSource {
    */
   private readonly onPause = () => {
     if (this.destroyed) return;
+    this.startingFrom = null;
     this.callbacks.onStarting?.(null);
     this.pauseAnchor = this.video.currentTime;
     this.resumeTrace = {
@@ -423,6 +436,7 @@ export class MseSource {
     // jumped. Checked again as playback gets going, until the window closes.
     this.resumeStartedAt = Date.now();
     if (this.resumeTrace) this.resumeTrace.play = this.video.currentTime;
+    this.startingFrom = this.video.currentTime;
     this.callbacks.onStarting?.(this.resumeStartedAt);
     this.resumeDeadline = this.resumeStartedAt + RESUME_GUARD_MS;
     const moved = this.holdPausePosition();
@@ -910,6 +924,7 @@ export class MseSource {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.startingFrom = null;
     this.callbacks.onStarting?.(null);
     this.generation += 1;
 

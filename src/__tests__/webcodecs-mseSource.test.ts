@@ -885,6 +885,24 @@ describe("MseSource", () => {
     expect(remuxer.seeks).toEqual([]);
   }, 10_000);
 
+  it("clears the starting state on the very first play, before anything has been paused", async () => {
+    const video = fakeVideo();
+    const onStarting = vi.fn();
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
+    await flush();
+
+    // The automatic play at the start, with no pause ever having happened. Tying the clearing to
+    // the pause trace left this raised for ever: a spinner that never went away, and controls
+    // that hide the button behind it — so playback could not even be paused to recover.
+    video.dispatchEvent(new Event("play"));
+    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
+
+    (video as unknown as { currentTime: number }).currentTime = 0.5;
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+    expect(onStarting).toHaveBeenLastCalledWith(null);
+  });
+
   it("says when it has been asked to start and has not yet, and when it has", async () => {
     const video = fakeVideo();
     const onStarting = vi.fn();
