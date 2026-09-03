@@ -1,3 +1,4 @@
+import { trace } from "./trace";
 // Random access over a media file, for the experimental WebCodecs player.
 //
 // The demuxer needs to jump around a file that can be 40 GB: read the header, jump to the end
@@ -83,6 +84,43 @@ const MAX_CACHED_CHUNKS = 48; // ~48 MiB
  */
 const PREFETCH_CHUNKS = 6;
 
+/**
+ * How a chunk that fails to arrive is retried.
+ *
+ * A range request is not a stream: nothing resumes it, and one refused fetch used to travel all
+ * the way up as a read failure — through the fill loop, through the recovery, and out the other
+ * side as the player giving up. A phone changing from Wi-Fi to mobile drops every connection it
+ * has, which is a perfectly ordinary thing to do while watching a film and no reason at all to
+ * abandon hardware decoding for the rest of it.
+ */
+const FETCH_ATTEMPTS = 4;
+const FETCH_BACKOFF_MS = [200, 600, 1500];
+
+/** How long a read waits for the network to come back before admitting it is not going to. */
+const OFFLINE_PATIENCE_MS = 60_000;
+
+/**
+ * Waits for the browser to say it is connected again, up to a point.
+ *
+ * Retrying while the machine knows it has no network is a way of spending attempts on nothing.
+ * Waiting for the event costs neither requests nor battery, and a viewer walking between two
+ * networks is back within a second or two.
+ */
+async function waitForNetwork(): Promise<void> {
+  if (typeof navigator === "undefined" || navigator.onLine !== false) return;
+  trace("réseau : hors ligne, la lecture attend le retour");
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener("online", done);
+      resolve();
+    };
+    const timer = setTimeout(done, OFFLINE_PATIENCE_MS);
+    window.addEventListener("online", done, { once: true });
+  });
+  trace("réseau : de retour");
+}
+
 export class HttpByteSource implements ByteSource {
   readonly size: number;
   private readonly url: string;
@@ -137,6 +175,44 @@ export class HttpByteSource implements ByteSource {
     return source;
   }
 
+  /**
+   * One range, fetched until it arrives or until there is reason to believe it never will.
+   *
+   * A server that answers 200 to a Range header is not having a bad moment — it does not honour
+   * ranges at all, and asking again would only download a forty-gigabyte film four times.
+   */
+  private async fetchWithRetries(start: number, end: number): Promise<Uint8Array> {
+    let last: unknown;
+    for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        await waitForNetwork();
+        await new Promise((resolve) => setTimeout(resolve, FETCH_BACKOFF_MS[attempt - 1] ?? 1500));
+        if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
+      }
+      try {
+        const res = await fetch(this.url, {
+          headers: { Range: `bytes=${start}-${end}` },
+          signal: this.controller.signal,
+        });
+        // 206 is the expected answer; a 200 means the server ignored the Range and sent the whole
+        // file, which for a 40 GB movie must not be treated as a successful chunk read.
+        if (res.status === 200) {
+          throw new Error("Le serveur n'honore pas les requêtes de plage (statut 200).");
+        }
+        if (res.status !== 206) throw new Error(`Le serveur a refusé la plage demandée (statut ${res.status}).`);
+        return new Uint8Array(await res.arrayBuffer());
+      } catch (error) {
+        // Cancelled by the player itself, and a server that ignores ranges: neither improves by
+        // being asked again.
+        if (this.controller.signal.aborted) throw error;
+        if (error instanceof Error && error.message.includes("statut 200")) throw error;
+        last = error;
+        if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
+      }
+    }
+    throw last ?? new Error("Plage inaccessible.");
+  }
+
   private async fetchChunk(index: number): Promise<Uint8Array> {
     const cached = this.chunks.get(index);
     if (cached) return cached;
@@ -145,15 +221,8 @@ export class HttpByteSource implements ByteSource {
 
     const start = index * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, this.size) - 1;
-    const promise = fetch(this.url, {
-      headers: { Range: `bytes=${start}-${end}` },
-      signal: this.controller.signal,
-    })
-      .then(async (res) => {
-        // 206 is the expected answer; a 200 means the server ignored the Range and sent the whole
-        // file, which for a 40 GB movie must not be treated as a successful chunk read.
-        if (res.status !== 206) throw new Error(`Le serveur n'honore pas les requêtes de plage (statut ${res.status}).`);
-        const bytes = new Uint8Array(await res.arrayBuffer());
+    const promise = this.fetchWithRetries(start, end)
+      .then((bytes) => {
         this.chunks.set(index, bytes);
         // Oldest-first eviction: Map preserves insertion order, and a demuxer's access pattern is
         // overwhelmingly forward, so the oldest chunk is reliably the least useful one.

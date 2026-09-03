@@ -111,6 +111,37 @@ describe("HttpByteSource", () => {
     source.close();
   });
 
+  it("asks again for a range that failed to arrive", async () => {
+    // A range request is not a stream: nothing resumes it, and one refused fetch used to travel
+    // all the way up as the player giving up. A phone moving from Wi-Fi to mobile drops every
+    // connection it has, which is an ordinary thing to do while watching a film.
+    let refusals = 2;
+    stubFetch();
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if ((init as { method?: string } | undefined)?.method !== "HEAD" && refusals-- > 0) {
+        throw new TypeError("Failed to fetch");
+      }
+      return (real as typeof fetch)(url as unknown as RequestInfo, init);
+    });
+
+    const source = await HttpByteSource.open("/film.mkv");
+    const bytes = await source.read(3 * CHUNK, 32);
+    expect(bytes.length).toBe(32);
+    expect(refusals).toBeLessThanOrEqual(0);
+    source.close();
+  }, 15000);
+
+  it("gives up at once on a server that does not do ranges at all", async () => {
+    // 200 is not a bad moment: asking again would only download a forty-gigabyte film four times.
+    stubFetch({ rangeStatus: 200 });
+    const source = await HttpByteSource.open("/film.mkv");
+    await expect(source.read(0, 16)).rejects.toThrow(/plage/);
+    // Asked once for that chunk and never again — a retry here downloads the film a second time.
+    expect(asked.filter(([from]) => from === 0).length).toBe(1);
+    source.close();
+  });
+
   it("refuses a server that ignores the range and sends the whole file", async () => {
     // 200 on a 40 GB film is not a successful chunk read, it is a download nobody asked for.
     stubFetch({ rangeStatus: 200 });
