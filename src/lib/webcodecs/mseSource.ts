@@ -82,6 +82,17 @@ const MISPLACED_SECONDS = 10;
  */
 const FRUITLESS_APPENDS = 8;
 
+/**
+ * How far the clock may creep while paused before it is worth putting back.
+ *
+ * Below this the correction costs more than the drift: re-stating the position is a seek, and a
+ * seek at a pause is heard.
+ */
+const PAUSE_DRIFT_SECONDS = 0.25;
+
+/** Including the one made at the pause itself. Past this, the element is left alone. */
+const MAX_PAUSE_ASSERTIONS = 3;
+
 /** Only the opening handful of segments is recorded: after that the record says nothing new. */
 const TRACED_APPENDS = 4;
 
@@ -469,12 +480,21 @@ export class MseSource {
         return;
       }
       const settled = this.pauseAnchor;
-      if (settled !== null && this.video.currentTime > settled + 0.02) {
+      // Each assertion runs the seek algorithm, and on iOS that re-renders the sound around the
+      // position — audible, as a tenth of a second replayed. Once was the fix; every eighty
+      // milliseconds for as long as the clock keeps creeping is a stuck record. So: only a drift
+      // large enough to be worth correcting, and only a couple of times before this leaves the
+      // element alone with whatever it has settled on.
+      if (settled !== null && this.video.currentTime > settled + PAUSE_DRIFT_SECONDS) {
         this.pauseAnchor = this.video.currentTime;
         if (this.resumeTrace) this.resumeTrace.settled = this.video.currentTime;
         this.assertPausePosition();
+        if ((this.resumeTrace?.asserted ?? 0) >= MAX_PAUSE_ASSERTIONS) {
+          clearInterval(this.pauseSettleTimer!);
+          this.pauseSettleTimer = null;
+        }
       }
-    }, 80);
+    }, 120);
 
   };
 
@@ -635,6 +655,16 @@ export class MseSource {
    * be a later range left over, and measuring against that would report a deep buffer while the
    * playhead sits in front of nothing at all — the player would then quietly stop fetching.
    */
+  /** How far the picture is held from the playhead, ignoring what the sound is doing. */
+  private videoBufferedEnd(): number {
+    const ranges = this.videoBuffer?.buffered;
+    const now = this.video.currentTime;
+    for (let i = 0; ranges && i < ranges.length; i++) {
+      if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
+    }
+    return now;
+  }
+
   private bufferedEnd(): number {
     const ranges = this.playable;
     const now = this.video.currentTime;
@@ -884,8 +914,14 @@ export class MseSource {
     this.generation += 1;
     await this.fillTask?.catch(() => {});
 
-    // Everything already held stays held; only what comes after it is worth reading again.
-    this.skipVideoUntil = this.bufferedEnd();
+    // Measured on the video buffer alone, and this matters: `bufferedEnd` reads the element's
+    // ranges, which are the *intersection* of the two buffers — and the audio one was just
+    // emptied by the codec change, so the intersection at the playhead is nothing at all. Read
+    // that way, this said "we hold no video", and the reader appended the picture again from the
+    // keyframe before the playhead: replacing, under a decoder mid-frame, the very samples it
+    // was working on. The sound carried on from its own fresh buffer while the picture stopped,
+    // and a seek — which re-primes the decoder — showed the right frame again.
+    this.skipVideoUntil = this.videoBufferedEnd();
     await this.clear(this.audioOps);
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     void this.fill();

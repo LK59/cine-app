@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
+import { extractAudioSpecificConfig, parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
 
 const { BitWriter } = __testing;
 
@@ -212,5 +212,28 @@ describe("parseAacConfig", () => {
   it("returns null rather than a guess when it cannot read the description", () => {
     expect(parseAacConfig(new Uint8Array([0x11]))).toBeNull();
     expect(parseAacConfig(new Uint8Array())).toBeNull();
+  });
+});
+
+describe("extractAudioSpecificConfig", () => {
+  it("digs the configuration out of an esds payload", () => {
+    // What Safari hands back: ES_Descriptor → DecoderConfigDescriptor → DecoderSpecificInfo.
+    const esdsPayload = new Uint8Array([
+      0x03, 0x19, 0x00, 0x01, 0x00,
+      0x04, 0x11, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x01, 0xf4, 0x00, 0x00, 0x01, 0xf4, 0x00,
+      0x05, 0x02, 0x11, 0x90,
+      0x06, 0x01, 0x02,
+    ]);
+    expect(Array.from(extractAudioSpecificConfig(esdsPayload) ?? [])).toEqual([0x11, 0x90]);
+  });
+
+  it("leaves a bare configuration alone", () => {
+    // Chrome hands back exactly this, and wrapping it a second time is what produced mp4a.40.0.
+    expect(extractAudioSpecificConfig(new Uint8Array([0x11, 0x90]))).toBeNull();
+  });
+
+  it("refuses to read an object type of zero as a profile", () => {
+    // The leading descriptor tag, misread as a configuration: five zero bits.
+    expect(parseAacConfig(new Uint8Array([0x03, 0x19, 0x00, 0x01]))).toBeNull();
   });
 });

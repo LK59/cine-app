@@ -14,7 +14,7 @@ import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
-import { parseAacConfig } from "./mp4SampleEntries";
+import { extractAudioSpecificConfig, parseAacConfig } from "./mp4SampleEntries";
 
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
 const TARGET_CODEC = "mp4a.40.2";
@@ -251,11 +251,15 @@ export class AudioTranscoder {
     // string, the sample rate, the channel count — has to agree with it or the init segment
     // contradicts itself. Safari does not merely refuse such a segment: it closes the
     // MediaSource, and every buffer on it, including the video's, becomes invalid.
-    const actual = parseAacConfig(description);
+    // Chrome hands back the bare configuration; Safari hands back the whole descriptor tree with
+    // the configuration inside it. Both have to end up as the same bytes here, or the `esds`
+    // built below describes a description.
+    const asc = extractAudioSpecificConfig(description) ?? description;
+    const actual = parseAacConfig(asc);
     trace(
       `transcodage audio : encodeur amorcé — description ${[...(description as Uint8Array)]
         .map((b) => b.toString(16).padStart(2, "0"))
-        .join(" ")} → ${
+        .join(" ")}${asc === description ? "" : ` (config extraite : ${[...asc].map((b) => b.toString(16).padStart(2, "0")).join(" ")})`} → ${
         actual ? `AOT ${actual.objectType}, ${actual.sampleRate} Hz, ${actual.channels} canaux` : "illisible"
       }`
     );
@@ -266,7 +270,7 @@ export class AudioTranscoder {
 
     const sampleEntry = audioSampleEntryFor({
       codecId: "A_AAC",
-      codecPrivate: description,
+      codecPrivate: asc,
       channels: entryChannels,
       sampleRate: entryRate,
       firstFrame: null,

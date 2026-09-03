@@ -488,7 +488,7 @@ export function ExperimentalPlayerHost({
           session, and there is no transcode session here — everything below is what the browser
           is actually doing. */}
       {showInfo && !isMini && (
-        <div className="absolute right-4 top-16 z-20 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
+        <div className="absolute right-4 top-16 z-20 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-white">{t("player.experimental.badge")}</p>
             {/* The panel sits over the controls, so without this the only way out was to close
@@ -538,6 +538,9 @@ export function ExperimentalPlayerHost({
               </>
             )}
           </dl>
+          {/* The record of how this file was opened, kept where it can be reached while playing:
+              the faults left to chase are the ones that happen *after* a successful start. */}
+          <ExperimentalPlayerReport input={report} />
         </div>
       )}
 

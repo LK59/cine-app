@@ -987,6 +987,27 @@ describe("MseSource", () => {
     expect(audioBuffer.appended.length).toBeGreaterThan(audioAppends);
   });
 
+  it("still holds on to the picture when the codec changed first", async () => {
+    // The real sequence of a language change: the audio buffer is emptied for the new codec, and
+    // only then is the sound read again. Between the two, the element's own ranges — which are
+    // the intersection of the buffers — are empty at the playhead, and reading "how much do we
+    // hold" from them says none. The picture was then appended again from the keyframe before
+    // the playhead, under a decoder mid-frame: the picture froze while the sound played on.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const [videoBuffer] = FakeSource.instances[0].buffers;
+    const videoAppends = videoBuffer.appended.length;
+
+    await mse.replaceAudio('audio/mp4; codecs="mp4a.40.2"', new Uint8Array([7]));
+    await mse.refillAudio(10);
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(videoBuffer.removed).toEqual([]);
+    expect(videoBuffer.appended.length).toBe(videoAppends);
+  });
+
   it("is ready without waiting for the buffer to fill", async () => {
     const video = fakeVideo();
     // A remuxer that never returns: attaching must still complete, or a slow or unhelpful

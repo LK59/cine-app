@@ -268,7 +268,9 @@ export function parseAacConfig(config: Uint8Array): AacConfig | null {
   let objectType = readObjectType();
   let sampleRate = readRate();
   let channels = reader.read(4);
-  if (sampleRate === 0) return null;
+  // Zero is "null object type" — not a profile a browser could ever have produced, and the sign
+  // that these bytes are something other than the configuration they were taken for.
+  if (objectType === 0 || sampleRate === 0) return null;
 
   // Explicit hierarchical signalling: the core is described first, then the extension. The rate
   // that matters to a player is the extension's, and the object type is the extension's too.
@@ -281,6 +283,59 @@ export function parseAacConfig(config: Uint8Array): AacConfig | null {
   }
 
   return { objectType, sampleRate, channels };
+}
+
+/**
+ * Digs the AudioSpecificConfig out of whatever the browser handed back.
+ *
+ * `decoderConfig.description` is specified as the bare config, and Chrome gives exactly that.
+ * Safari gives the whole `esds` payload — the descriptor tree, with the config buried three
+ * levels down. Wrapping that in another `esds` produces a box describing a description, which is
+ * why the codec string came out as `mp4a.40.0`: the first five bits being read were the leading
+ * descriptor tag, not an object type.
+ *
+ * Returns null when the bytes are not a descriptor tree, so a bare config is left alone.
+ */
+export function extractAudioSpecificConfig(bytes: Uint8Array): Uint8Array | null {
+  let position = 0;
+
+  /** Descriptor lengths are base-128, seven bits per byte, high bit meaning "another follows". */
+  const readLength = (): number => {
+    let length = 0;
+    for (let i = 0; i < 4 && position < bytes.length; i++) {
+      const byte = bytes[position++];
+      length = (length << 7) | (byte & 0x7f);
+      if ((byte & 0x80) === 0) break;
+    }
+    return length;
+  };
+
+  const walk = (end: number): Uint8Array | null => {
+    while (position + 2 <= end) {
+      const tag = bytes[position++];
+      const length = readLength();
+      const payloadEnd = Math.min(position + length, end);
+      if (payloadEnd > bytes.length) return null;
+
+      switch (tag) {
+        case 0x05: // DecoderSpecificInfo — the configuration itself
+          return bytes.subarray(position, payloadEnd);
+        case 0x03: // ES_Descriptor: an id, a flags byte, then children
+          position += 3;
+          return walk(payloadEnd);
+        case 0x04: // DecoderConfigDescriptor: thirteen fixed bytes, then children
+          position += 13;
+          return walk(payloadEnd);
+        default:
+          position = payloadEnd;
+      }
+    }
+    return null;
+  };
+
+  // Only a tree that starts where one is expected. Anything else is left as it came.
+  if (bytes.length < 4 || (bytes[0] !== 0x03 && bytes[0] !== 0x04 && bytes[0] !== 0x05)) return null;
+  return walk(bytes.length);
 }
 
 export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
