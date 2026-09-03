@@ -246,7 +246,18 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
       if (readMs) await new Promise((r) => setTimeout(r, readMs));
       if (index >= segments) return null;
       index += 1;
-      return { video: new Uint8Array([10 + index]), audio: new Uint8Array([20 + index]), subtitles: [], endSeconds: index * 2 };
+      // Every segment carries a line. Subtitles are read out of the same stretch of file as the
+      // pictures, so a bench whose segments carry none cannot show them going missing when the
+      // pictures stop being built.
+      const subtitles = [
+        { track: 4, startSeconds: index * 2, endSeconds: index * 2 + 1.5, text: `ligne ${index}` },
+      ];
+      return {
+        video: remuxer.videoWantedCalls.at(-1) === false ? null : new Uint8Array([10 + index]),
+        audio: new Uint8Array([20 + index]),
+        subtitles,
+        endSeconds: index * 2,
+      };
     },
   };
   return remuxer as unknown as Remuxer & { seeks: number[]; videoWantedCalls: boolean[] };
@@ -1074,6 +1085,24 @@ describe("MseSource", () => {
     await mse.seek(300);
     await new Promise((r) => setTimeout(r, 60));
     expect(remuxer.videoWantedCalls).not.toContain(false);
+  });
+
+  it("still finds the subtitles while the pictures are not being built", async () => {
+    // The lines are read out of the same stretch of file as the pictures. Skipping the picture is
+    // an optimisation about copying, not about reading, and a change of language must not cost
+    // the viewer their subtitles for the thirty seconds it re-reads.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const onSubtitles = vi.fn();
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn(), onSubtitles });
+    await flush();
+    onSubtitles.mockClear();
+
+    await mse.refillAudio(10);
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(remuxer.videoWantedCalls).toContain(false);
+    expect(onSubtitles).toHaveBeenCalled();
   });
 
   it("empties the audio buffer before asking it to change codec", async () => {

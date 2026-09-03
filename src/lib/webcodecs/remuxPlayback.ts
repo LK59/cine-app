@@ -273,12 +273,11 @@ export class RemuxPlayback {
       mse.releaseAudioHold();
       return;
     }
-    if (codecChanged) {
-      // Should no longer be reachable: a file whose tracks cannot all be delivered in one codec
-      // now delivers all of them re-encoded, decided when it was opened. Kept as the safety net
-      // for a file that defeats that — rebuilding both buffers from nothing is the one thing
-      // this device does reliably, where reinterpreting a live buffer is what it answers with
-      // "media failed to decode".
+    // A full seek only where the codec changed *and* the buffer had to be reinterpreted rather
+    // than replaced. Where it was replaced, the picture's buffer never moved: clearing it and
+    // reading thirty seconds of 4K back over itself buys nothing, and it is the whole of why an
+    // inter-codec change felt slower than any other.
+    if (codecChanged && !mse.rebuildAudioAllowed) {
       await mse.seek(at);
     } else {
       // Only the sound is read again, and only from where the viewer is. A seek would clear the

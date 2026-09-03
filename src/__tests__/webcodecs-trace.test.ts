@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { trace, traceReset, traceSteps, traceText } from "@/lib/webcodecs/trace";
+import { trace, traceKeepAcrossReset, traceReset, traceSteps, traceText } from "@/lib/webcodecs/trace";
 import { buildReport } from "@/components/ExperimentalPlayerReport";
 
 describe("trace", () => {
@@ -54,5 +54,22 @@ describe("buildReport", () => {
 
   it("says so plainly when nothing failed and the wait simply never ended", () => {
     expect(buildReport({ ...input, error: null }, null)).toContain("le chargement n'aboutit pas");
+  });
+});
+
+describe("traceKeepAcrossReset", () => {
+  it("carries the record through the rebuild that follows a lost source", () => {
+    // The player rebuilds itself when the platform takes the source away, and rebuilding runs the
+    // probe again, which starts a new record. Without this the fault and its aftermath land in
+    // different accounts and the report shows the innocent one.
+    traceReset();
+    trace("la source a été fermée");
+    traceKeepAcrossReset();
+    traceReset();
+    expect(traceText()).toContain("la source a été fermée");
+
+    // And only the once: the next fresh start is a fresh start.
+    traceReset();
+    expect(traceText()).toBe("(aucune étape enregistrée)");
   });
 });

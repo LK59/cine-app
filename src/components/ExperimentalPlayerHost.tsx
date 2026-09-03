@@ -15,6 +15,7 @@ import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { describePath } from "@/lib/webcodecs/pathSelector";
+import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -390,7 +391,12 @@ export function ExperimentalPlayerHost({
     const check = () => {
       const playback = remuxRef.current;
       if (!playback?.lost || rebuildAtRef.current !== null) return;
-      rebuildAtRef.current = playback.position || positionRef.current;
+      const at = playback.position || positionRef.current;
+      // Written into the record, and the record carried across the rebuild: without both, the
+      // fault and its aftermath land in different accounts and the report shows the innocent one.
+      trace(`reprise : la plateforme a fermé la source, reconstruction à ${at.toFixed(1)} s`);
+      traceKeepAcrossReset();
+      rebuildAtRef.current = at;
       setReady(false);
       setRuntimeError(null);
       setRebuildCount((count) => count + 1);

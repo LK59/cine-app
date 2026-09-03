@@ -16,9 +16,25 @@ export interface TraceStep {
 
 let startedAt = 0;
 let steps: TraceStep[] = [];
+let keepAcrossNextReset = false;
+
+/**
+ * Carries the record through the next fresh start.
+ *
+ * The player rebuilds itself when the platform takes the source away, and rebuilding runs the
+ * probe again, which starts a new record. That erased the only account of what went wrong — the
+ * fault and its aftermath ended up in different records, and the report showed the innocent one.
+ */
+export function traceKeepAcrossReset(): void {
+  keepAcrossNextReset = true;
+}
 
 /** Starts a fresh record. Called once per attempt to open a file. */
 export function traceReset(): void {
+  if (keepAcrossNextReset) {
+    keepAcrossNextReset = false;
+    return;
+  }
   startedAt = Date.now();
   steps = [];
 }
