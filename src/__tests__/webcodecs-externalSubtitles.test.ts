@@ -49,6 +49,19 @@ describe("parseSubtitles", () => {
     const cues = parseSubtitles("00:00:09.000 --> 00:00:10.000\ntard\n\n00:00:01.000 --> 00:00:02.000\ntôt\n\n00:00:04.000 --> 00:00:05.000\n{\\an8}");
     expect(cues.map((c) => c.text)).toEqual(["tôt", "tard"]);
   });
+
+
+  it("lit ce que ce serveur renvoie vraiment, marque d'ordre et réglages de position compris", () => {
+    // Copied from Jellyfin 10.11: a byte order mark before the header, a Region block with no
+    // timing at all, and cue settings after the timestamps that are not part of the line.
+    const cues = parseSubtitles(
+      "\ufeffWEBVTT\n\nRegion: id:subtitle width:80% lines:3 regionanchor:50%,100%\n\n" +
+        "00:01:27.174 --> 00:01:28.349 region:subtitle line:90%\nOh, oh.\n"
+    );
+    expect(cues).toHaveLength(1);
+    expect(cues[0].text).toBe("Oh, oh.");
+    expect(cues[0].startSeconds).toBeCloseTo(87.174, 3);
+  });
 });
 
 describe("ExternalSubtitleTrack", () => {

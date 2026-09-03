@@ -194,6 +194,15 @@ describe("sous-titres posés à côté du film", () => {
     expect(body.externalSubtitles.map((s: { url: string }) => s.url.match(/index=(\d+)/)![1])).toEqual(["5"]);
   });
 
+  it("reconnaît un MP4 sous le nom du démultiplexeur ffmpeg", async () => {
+    // What Jellyfin actually answers for an ordinary MP4 — one demuxer, six container names.
+    // Read as its first name alone it is a "mov", which nothing here claims to support.
+    mockGetSources.mockResolvedValue(mediaSource({ container: "mov,mp4,m4a,3gp,3g2,mj2" }));
+    const body = await (await get()).json();
+    expect(body.refusedReason).toBeNull();
+    expect(body.container).toBe("mp4");
+  });
+
   it("accepte un MP4, que le navigateur ouvre lui-même", async () => {
     // Refusing it sent the file to the slow server-side player, when it is already exactly the
     // packaging the remuxer spends its time producing.

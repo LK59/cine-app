@@ -102,7 +102,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
 
   const streams = source.MediaStreams ?? [];
   const videoStream = streams.find((s) => s.Type === "Video") ?? null;
-  const container = (source.Container ?? "").split(",")[0].toLowerCase();
+  // Jellyfin reports whatever ffmpeg's demuxer is called, and one demuxer covers several
+  // containers: an ordinary MP4 comes back as "mov,mp4,m4a,3gp,3g2,mj2". Reading only the first
+  // name called every MP4 in the library a "mov" and refused it.
+  const containers = (source.Container ?? "").toLowerCase().split(",").filter(Boolean);
+  const container = containers.find((name) => SUPPORTED_CONTAINERS.has(name)) ?? containers[0] ?? "";
   const rangeType = videoStream?.VideoRangeType ?? null;
   const isHdr = !!rangeType && rangeType !== "SDR";
 
