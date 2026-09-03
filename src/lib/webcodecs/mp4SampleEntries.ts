@@ -373,12 +373,40 @@ export function opusSampleEntry(opusHead: Uint8Array, channels: number, sampleRa
   return audioSampleEntry("Opus", channels, sampleRate, dOps(opusHead));
 }
 
+/**
+ * FLAC: the STREAMINFO block, lifted out of what Matroska keeps as the codec's private data.
+ *
+ * Matroska stores a FLAC track's configuration as the file's own header — the four magic bytes
+ * `fLaC` followed by the metadata blocks — while MP4 wants a `dfLa` box holding those same blocks
+ * without the magic. So the magic is dropped and the rest is carried across as it is; a
+ * decoder needs STREAMINFO and is content to ignore the seek tables and comments beside it.
+ *
+ * Returns null when the bytes are not a FLAC header, rather than producing a box describing
+ * nothing.
+ */
+export function dfLa(codecPrivate: Uint8Array): Uint8Array | null {
+  const hasMagic =
+    codecPrivate.length > 8 &&
+    codecPrivate[0] === 0x66 && codecPrivate[1] === 0x4c && codecPrivate[2] === 0x61 && codecPrivate[3] === 0x43;
+  const blocks = hasMagic ? codecPrivate.subarray(4) : codecPrivate;
+  // The first block must be STREAMINFO — type 0 in the low seven bits of its header byte — and
+  // it is thirty-four bytes long, so anything shorter cannot describe a stream.
+  if (blocks.length < 38 || (blocks[0] & 0x7f) !== 0) return null;
+  return box("dfLa", u32(0), blocks); // version and flags, then the blocks
+}
+
 export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
   const { codecId, codecPrivate, channels, sampleRate, firstFrame } = input;
   switch (codecId) {
     case "A_AAC":
       if (!codecPrivate) throw new Error("Piste AAC sans configuration de décodeur.");
       return audioSampleEntry("mp4a", channels, sampleRate, esds(codecPrivate));
+    case "A_FLAC": {
+      if (!codecPrivate) throw new Error("Piste FLAC sans configuration de décodeur.");
+      const configuration = dfLa(codecPrivate);
+      if (!configuration) throw new Error("Configuration FLAC illisible.");
+      return audioSampleEntry("fLaC", channels, sampleRate, configuration);
+    }
     case "A_AC3":
       if (!firstFrame) throw new Error("Piste AC-3 sans trame à analyser.");
       return audioSampleEntry("ac-3", channels, sampleRate, dac3(firstFrame));

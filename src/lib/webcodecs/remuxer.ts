@@ -150,6 +150,7 @@ function aacCodecString(codecPrivate: Uint8Array | null): string {
 function audioCodecString(track: MatroskaTrack): string | null {
   switch (track.codecId) {
     case "A_AAC": return aacCodecString(track.codecPrivate);
+    case "A_FLAC": return "flac";
     case "A_AC3": return "ac-3";
     case "A_EAC3": return "ec-3";
     default: return null;

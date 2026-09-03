@@ -32,7 +32,17 @@ export interface AudioConfig extends DecoderConfig {
 //
 // DTS and TrueHD have no platform decoder anywhere and no codec string in the registry, so they
 // are refused up front instead of being asked about.
-export const SOFTWARE_AUDIO_CODECS = new Set(["A_DTS", "A_TRUEHD", "A_MLP", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]);
+/**
+ * Codecs no browser decodes, split by whether there is a decoder for them here.
+ *
+ * The distinction is what the viewer is told. Saying "it would need the software decoder" about
+ * TrueHD implies one exists and could be reached for; there is none, in this ecosystem or any
+ * other that ships to a browser — mediabunny publishes decoders for DTS and Dolby Digital and
+ * nothing for MLP. Measured on this library: 35 files carry TrueHD and 33 of them carry a Dolby
+ * or DTS track beside it, which is what plays.
+ */
+export const SOFTWARE_AUDIO_CODECS = new Set(["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]);
+export const UNDECODABLE_ANYWHERE = new Set(["A_TRUEHD", "A_MLP"]);
 
 function hex(value: number, digits = 2): string {
   return value.toString(16).toUpperCase().padStart(digits, "0");
@@ -187,6 +197,9 @@ export function unsupportedReason(track: MatroskaTrack): string | null {
     if (audioConfigFor(track)) return null;
     if (SOFTWARE_AUDIO_CODECS.has(track.codecId)) {
       return `L'audio ${track.codecId.replace("A_", "")} n'a de décodeur sur aucune plateforme — il faudrait le décodeur logiciel.`;
+    }
+    if (UNDECODABLE_ANYWHERE.has(track.codecId)) {
+      return `L'audio ${track.codecId.replace("A_", "")} n'a de décodeur nulle part, pas même logiciel. Choisis une autre piste.`;
     }
     return `Codec audio non pris en charge : ${track.codecId}.`;
   }

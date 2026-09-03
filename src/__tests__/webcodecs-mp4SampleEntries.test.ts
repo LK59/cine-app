@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dOps, extractAudioSpecificConfig, parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
+import { dfLa, dOps, extractAudioSpecificConfig, parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
 
 const { BitWriter } = __testing;
 
@@ -266,5 +266,40 @@ describe("dOps", () => {
       0x01, 0x02, 0x38, 0x01, 0x80, 0xbb, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]);
     expect(dOps(stereo).subarray(8).length).toBe(11);
+  });
+});
+
+describe("dfLa", () => {
+  /** A FLAC header as Matroska keeps it: the magic, then a STREAMINFO block. */
+  const streamInfo = new Uint8Array([0x00, 0x00, 0x00, 0x22, ...new Array(34).fill(0)]);
+  const withMagic = new Uint8Array([0x66, 0x4c, 0x61, 0x43, ...streamInfo]);
+
+  it("drops the magic Matroska keeps and MP4 does not want", () => {
+    const box = dfLa(withMagic)!;
+    expect(Array.from(box.subarray(4, 8))).toEqual([0x64, 0x66, 0x4c, 0x61]); // "dfLa"
+    // version and flags, then the blocks themselves, magic gone.
+    expect(Array.from(box.subarray(8, 12))).toEqual([0, 0, 0, 0]);
+    expect(Array.from(box.subarray(12, 16))).toEqual([0x00, 0x00, 0x00, 0x22]);
+  });
+
+  it("takes the blocks as they are when the magic is already gone", () => {
+    expect(dfLa(streamInfo)).not.toBeNull();
+  });
+
+  it("refuses bytes that do not describe a stream", () => {
+    // Anything that cannot hold a STREAMINFO block, and anything whose first block is not one.
+    expect(dfLa(new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0x00]))).toBeNull();
+    expect(dfLa(new Uint8Array([0x04, ...new Array(40).fill(0)]))).toBeNull();
+  });
+
+  it("builds a sample entry a player can read the stream from", () => {
+    const entry = audioSampleEntryFor({
+      codecId: "A_FLAC",
+      codecPrivate: withMagic,
+      channels: 2,
+      sampleRate: 48000,
+      firstFrame: null,
+    });
+    expect(Array.from(entry.subarray(4, 8))).toEqual([0x66, 0x4c, 0x61, 0x43]); // "fLaC"
   });
 });

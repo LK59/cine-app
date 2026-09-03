@@ -111,11 +111,22 @@ describe("track configuration", () => {
 
   // DTS and TrueHD have no decoder on any platform and no registered codec string, so asking
   // would be theatre.
-  it("refuses DTS and TrueHD up front, naming what is missing", () => {
-    for (const codecId of ["A_DTS", "A_TRUEHD", "A_MLP"]) {
+  it("refuses DTS up front, and says a software decoder is what is missing", () => {
+    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]) {
       const t = track({ type: "audio", codecId, audio: { sampleRate: 48000, channels: 6 } });
       expect(audioConfigFor(t)).toBeNull();
       expect(unsupportedReason(t)).toContain("décodeur logiciel");
+    }
+  });
+
+  it("does not pretend a decoder exists for TrueHD", () => {
+    // Saying "it would need the software decoder" implies one could be reached for. There is
+    // none — not in this ecosystem and not in any that ships to a browser.
+    for (const codecId of ["A_TRUEHD", "A_MLP"]) {
+      const t = track({ type: "audio", codecId, audio: { sampleRate: 48000, channels: 8 } });
+      expect(audioConfigFor(t)).toBeNull();
+      expect(unsupportedReason(t)).toContain("nulle part");
+      expect(unsupportedReason(t)).toContain("autre piste");
     }
   });
 
