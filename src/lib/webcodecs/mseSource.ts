@@ -10,6 +10,7 @@
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { audioBufferRebuildable } from "./remuxer";
 import { trace } from "./trace";
+import { isNetworkFailure } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
@@ -68,8 +69,13 @@ const TRACED_APPENDS = 4;
 const KEEP_BEHIND_SECONDS = 30;
 
 export interface MseCallbacks {
-  /** Fatal: playback cannot continue on this path. The caller decides what to say and offer. */
-  onError: (message: string) => void;
+  /**
+   * Fatal: playback cannot continue on this path. The caller decides what to say and offer.
+   *
+   * `kind` is what makes that decision possible. A network failure is not a reason to give up on
+   * this path — it is a reason to wait, because every other path needs the same network.
+   */
+  onError: (message: string, kind?: "network" | "playback") => void;
   /** Subtitle lines found in the stretch of file just read, already timed on the player's clock. */
   onSubtitles?: (cues: TrackedCue[]) => void;
   /** Something was refused but playback continues — a seek the file cannot serve, typically. */
@@ -516,7 +522,7 @@ export class MseSource {
         return;
       }
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      this.callbacks.onError(`${detail} ${this.elementState()}`);
+      this.callbacks.onError(`${detail} ${this.elementState()}`, isNetworkFailure(error) ? "network" : "playback");
     }
   }
 
@@ -580,7 +586,7 @@ export class MseSource {
           this.callbacks.onWarning?.("Reprise après un saut refusé.");
           return;
         }
-        this.callbacks.onError(`${detail} ${this.elementState()}`);
+        this.callbacks.onError(`${detail} ${this.elementState()}`, isNetworkFailure(error) ? "network" : "playback");
       });
     return this.pending;
   }

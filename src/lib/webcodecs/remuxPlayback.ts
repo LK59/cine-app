@@ -27,7 +27,7 @@ const CUE_FUTURE_SECONDS = 120;
 export interface RemuxPlaybackOptions {
   streamUrl: string;
   startSeconds: number;
-  onError: (message: string) => void;
+  onError: (message: string, kind?: "network" | "playback") => void;
   onWarning?: (message: string) => void;
   /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
   onStarting?: (startedAt: number | null) => void;

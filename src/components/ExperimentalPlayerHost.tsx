@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
@@ -130,6 +130,15 @@ function PathBadge({ path }: { path: "remux" | "webcodecs" | "direct" | null }) 
   );
 }
 
+/** "1 h 12" — where the film will pick up, said the way a viewer thinks of it. */
+function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  return h > 0 ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min ${String(sec).padStart(2, "0")}`;
+}
+
 /** "Français — VFF", falling back to whatever the file actually gives us. */
 function trackLabel(track: EngineTrack): string {
   const parts = [track.language ?? undefined, track.name ?? undefined].filter(Boolean);
@@ -189,6 +198,22 @@ export function ExperimentalPlayerHost({
    * written into the trace, so a step down still leaves an account of itself — which was always
    * the point of refusing silent fallbacks, rather than making anybody click.
    */
+  /**
+   * The network is gone, and the film is waiting for it rather than for anything else.
+   *
+   * Kept apart from every other failure because the answer is the opposite one: nothing about
+   * this file or this browser is wrong, so stepping aside would abandon hardware decoding for a
+   * reason that has nothing to do with it — and hand the file to a player needing the very same
+   * network. There is nothing to do but wait, and say so.
+   */
+  const [networkLost, setNetworkLost] = useState<{
+    message: string;
+    /** Where the film stopped, and what the viewer was listening to — captured at the cut. */
+    at: number;
+    audio: number | null;
+  } | null>(null);
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
+
   const steppedAside = useRef(false);
   const fallToStable = useCallback(
     (reason: string) => {
@@ -238,10 +263,32 @@ export function ExperimentalPlayerHost({
   // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
   const rebuildsRef = useRef(0);
   const lastRebuildAtRef = useRef<number | null>(null);
+  /**
+   * What the viewer chose, so a restart gives it back to them.
+   *
+   * A pipeline built again is a pipeline that knows nothing: it opens on the file's own default
+   * track with no subtitles, which after a network cut means coming back to a film in the wrong
+   * language. These outlive the pipeline because they belong to the viewer, not to it.
+   */
+  const wantedAudioRef = useRef<number | null>(null);
+  const wantedSubtitleRef = useRef<number | null>(null);
+
   // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
   // the mount the wait was instantly minutes long — so a rebuild that takes half a second
   // announced itself as "still working", which is a spinner lying about what it knows.
   const [openedAt, setOpenedAt] = useState(() => Date.now());
+
+  /** Builds the pipeline again from where the viewer is, keeping what they had chosen. */
+  const restart = useCallback((at: number, why: string) => {
+    trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
+    traceKeepAcrossReset();
+    rebuildAtRef.current = at;
+    setOpenedAt(Date.now());
+    setNetworkLost(null);
+    setReady(false);
+    setRuntimeError(null);
+    setRebuildCount((count) => count + 1);
+  }, []);
 
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below
@@ -386,9 +433,22 @@ export function ExperimentalPlayerHost({
       remuxRef.current = playback;
       setPath("remux");
       setTracks({ audio: playback.audioTracks, subtitles: playback.subtitleTracks });
+
+      // Given back what the viewer had chosen, if this pipeline is a replacement for one that
+      // had it. A film that comes back after a network cut in the wrong language, with the
+      // subtitles gone, has not really come back.
+      const wantedAudio = wantedAudioRef.current;
+      const wantedSubtitle = wantedSubtitleRef.current;
+      if (wantedSubtitle !== null) playback.selectSubtitleTrack(wantedSubtitle);
+      setCurrentSubtitle(wantedSubtitle);
       setCurrentAudio(playback.currentAudioTrack);
-      setCurrentSubtitle(null);
       declareReady();
+      if (wantedAudio !== null && wantedAudio !== playback.currentAudioTrack) {
+        void playback
+          .selectAudioTrack(wantedAudio)
+          .then(() => setCurrentAudio(playback.currentAudioTrack))
+          .catch(() => {});
+      }
 
       const onTime = () => {
         positionRef.current = element.currentTime;
@@ -525,7 +585,13 @@ export function ExperimentalPlayerHost({
     probePlaybackPath({
       streamUrl: info.streamUrl,
       startSeconds,
-      onError: (message) => {
+      onError: (message, kind) => {
+        // A network failure is not this path's fault and not this path's to fix.
+        if (kind === "network") {
+          trace(`réseau : lecture interrompue — ${message}`);
+          setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
+          return;
+        }
         // A closed source is not a fault to report, it is a pipeline to build again. Safari
         // closes one from time to time — a decode failure it will not explain, sometimes on a
         // seek, sometimes at a change of track — and everything that follows is wreckage. The
@@ -540,20 +606,16 @@ export function ExperimentalPlayerHost({
           const again = lastRebuildAtRef.current !== null && Math.abs(where - lastRebuildAtRef.current) < SAME_PLACE_SECONDS;
           const at = again ? where + REBUILD_STEP_SECONDS : where;
           lastRebuildAtRef.current = where;
-          trace(
-            `reprise : la source a été perdue, reconstruction ${rebuildsRef.current} à ${at.toFixed(1)} s` +
-              (again ? ` (au-delà de ${where.toFixed(1)} s, qui vient d'échouer)` : "")
+          restart(
+            at,
+            `la source a été perdue (${rebuildsRef.current})` +
+              (again ? `, au-delà de ${where.toFixed(1)} s qui vient d'échouer` : "")
           );
-          traceKeepAcrossReset();
-          rebuildAtRef.current = at;
-          setOpenedAt(Date.now());
           setWarning(
             again
               ? "Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après."
               : "Reprise de la lecture après une interruption."
           );
-          setReady(false);
-          setRebuildCount((count) => count + 1);
           return;
         }
         fallToStable(message);
@@ -588,7 +650,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, fallToStable, session.resumeAt, rebuildCount]);
+  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -600,16 +662,7 @@ export function ExperimentalPlayerHost({
       if (!playback?.lost || rebuildAtRef.current !== null) return;
       if (rebuildsRef.current >= MAX_REBUILDS) return;
       rebuildsRef.current += 1;
-      const at = playback.position || positionRef.current;
-      // Written into the record, and the record carried across the rebuild: without both, the
-      // fault and its aftermath land in different accounts and the report shows the innocent one.
-      trace(`reprise : la plateforme a fermé la source, reconstruction à ${at.toFixed(1)} s`);
-      traceKeepAcrossReset();
-      rebuildAtRef.current = at;
-      setOpenedAt(Date.now());
-      setReady(false);
-      setRuntimeError(null);
-      setRebuildCount((count) => count + 1);
+      restart(playback.position || positionRef.current, "la plateforme a fermé la source");
     };
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
@@ -618,12 +671,33 @@ export function ExperimentalPlayerHost({
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [path]);
+  }, [path, restart]);
 
   // Cleared once the rebuilt pipeline is running, so an ordinary later seek is not undone by it.
   useEffect(() => {
     if (ready) rebuildAtRef.current = null;
   }, [ready]);
+
+  // Watched only while something is waiting on it: an idle player has no use for the news.
+  useEffect(() => {
+    if (!networkLost) return;
+    const update = () => setOnline(navigator.onLine !== false);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, [networkLost]);
+
+  // Back on its own, so the viewer does not have to notice before the film can.
+  useEffect(() => {
+    if (!networkLost || !online) return;
+    const at = networkLost.at;
+    const id = setTimeout(() => restart(at, "le réseau est revenu"), 800);
+    return () => clearTimeout(id);
+  }, [networkLost, online, restart]);
 
   // A player that never starts is the one failure a viewer cannot wait out: nothing on screen
   // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
@@ -751,7 +825,48 @@ export function ExperimentalPlayerHost({
         </span>
       )}
 
-      {error && !isMini && (
+      {/* A network cut is not a fault to report, it is a wait to sit through — so it gets its own
+          screen rather than the error one. The film is not lost: the position, the language and
+          the subtitles are all still here, and pressing the button gives them back. */}
+      {networkLost && !isMini && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
+          <WifiOff className={online ? "text-slate-500" : "text-amber-400"} size={32} />
+          <div>
+            <p className="text-base font-medium text-white">
+              {online ? "La connexion est revenue" : "Connexion perdue"}
+            </p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-slate-400">
+              {online
+                ? "La lecture reprend là où elle s'était arrêtée."
+                : "La lecture reprendra exactement ici, dans la même langue, dès que le réseau sera de retour."}
+            </p>
+          </div>
+          <p className="text-xs text-slate-500">
+            {`Reprise à ${formatClock(networkLost.at)}`}
+            {networkLost.audio !== null &&
+              ` · ${tracks.audio.find((a) => a.number === networkLost.audio)?.language ?? "piste choisie"}`}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => restart(networkLost.at, "réessai demandé")}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <RotateCw size={16} />
+              Réessayer
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+            >
+              {t("common.close")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && !networkLost && !isMini && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
           <AlertTriangle className="text-amber-400" size={32} />
           <p className="text-base font-medium text-white">{t("player.experimental.title")}</p>
@@ -886,6 +1001,7 @@ export function ExperimentalPlayerHost({
               if (path === "remux") {
                 // The menu follows what actually happened rather than what was asked for: a track
                 // the browser turns out not to be able to open leaves the previous one playing.
+                wantedAudioRef.current = id;
                 setSwitchingAudio(true);
                 void remuxRef.current
                   ?.selectAudioTrack(id)
@@ -898,6 +1014,7 @@ export function ExperimentalPlayerHost({
             subtitleTracks={tracks.subtitles.map((track) => ({ id: track.number, label: trackLabel(track) }))}
             currentSubtitleId={currentSubtitle}
             onChangeSubtitle={(id) => {
+              wantedSubtitleRef.current = id;
               setCurrentSubtitle(id);
               setSubtitle(null);
               if (path === "remux") remuxRef.current?.selectSubtitleTrack(id);

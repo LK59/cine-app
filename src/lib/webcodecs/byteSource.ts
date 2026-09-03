@@ -100,6 +100,27 @@ const FETCH_BACKOFF_MS = [200, 600, 1500];
 const OFFLINE_PATIENCE_MS = 60_000;
 
 /**
+ * A read that failed for want of a network, told apart from one that failed for want of sense.
+ *
+ * The difference decides what happens next, and getting it wrong is worse than either: handing
+ * the file to the stable player because the Wi-Fi dropped abandons hardware decoding for a
+ * reason that has nothing to do with it — and hands the file to a player that needs the very
+ * same network to do anything at all.
+ */
+export class NetworkUnavailable extends Error {
+  readonly network = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "NetworkUnavailable";
+  }
+}
+
+/** Whether a failure was the network's rather than the media's. */
+export function isNetworkFailure(error: unknown): boolean {
+  return error instanceof Error && "network" in error && error.network === true;
+}
+
+/**
  * Waits for the browser to say it is connected again, up to a point.
  *
  * Retrying while the machine knows it has no network is a way of spending attempts on nothing.
@@ -210,7 +231,9 @@ export class HttpByteSource implements ByteSource {
         if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
       }
     }
-    throw last ?? new Error("Plage inaccessible.");
+    throw new NetworkUnavailable(
+      last instanceof Error ? `Plage inaccessible : ${last.message}` : "Plage inaccessible."
+    );
   }
 
   private async fetchChunk(index: number): Promise<Uint8Array> {
