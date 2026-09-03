@@ -14,7 +14,7 @@ import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
-import { AudioTranscoder, transcodableAudio } from "./audioTranscode";
+import { transcodeTargetCodec, AudioTranscoder, transcodableAudio } from "./audioTranscode";
 import { containerAccepts } from "./mseSource";
 import { SampleReader } from "./sampleReader";
 import type { ByteSource } from "./byteSource";
@@ -130,7 +130,7 @@ export function plannedMimeTypes(
   const audio = !audioTrack
     ? null
     : audioDelivery(audioTrack, file) === "transcode"
-      ? TRANSCODED_CODEC
+      ? TRANSCODED_CODEC()
       : audioCodecString(audioTrack);
   return {
     video: video ? `video/mp4; codecs="${video}"` : null,
@@ -158,7 +158,7 @@ function naturalDelivery(track: MatroskaTrack): AudioDelivery {
 }
 
 /** What a re-encoded track is delivered as, and therefore what every track is unified to. */
-const TRANSCODED_CODEC = "mp4a.40.2";
+const TRANSCODED_CODEC = () => transcodeTargetCodec();
 
 /**
  * The one codec every audio track of this file will be delivered in — or null when they can all
@@ -184,12 +184,12 @@ export function unifiedAudioCodec(file: MatroskaFile): string | null {
   const audio = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
   if (audio.length < 2) return null;
   const delivered = new Set(
-    audio.map((t) => (naturalDelivery(t) === "copy" ? audioCodecString(t) : TRANSCODED_CODEC))
+    audio.map((t) => (naturalDelivery(t) === "copy" ? audioCodecString(t) : TRANSCODED_CODEC()))
   );
   if (delivered.size < 2) return null;
   // Unifying is only possible if everything can actually be carried that way.
-  return audio.every((t) => audioCodecString(t) === TRANSCODED_CODEC || transcodableAudio(t))
-    ? TRANSCODED_CODEC
+  return audio.every((t) => audioCodecString(t) === TRANSCODED_CODEC() || transcodableAudio(t))
+    ? TRANSCODED_CODEC()
     : null;
 }
 

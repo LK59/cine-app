@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+// Choosing what to re-encode to now asks the browser what it will accept back in a MediaSource,
+// so there has to be one to ask. This stands in for a player that takes anything.
+beforeEach(() => {
+  vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: () => true } });
+});
+afterEach(() => vi.unstubAllGlobals());
+
 // The sound path for codecs that cannot ride in the container at all. What matters here is the
 // plumbing — what is asked of the browser, what is done with a refusal, and how frames are cut
 // into segments — since the encoding itself is the browser's and cannot be exercised in a test.

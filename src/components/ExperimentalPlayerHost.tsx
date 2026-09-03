@@ -404,6 +404,7 @@ export function ExperimentalPlayerHost({
     file: (info as unknown as Record<string, unknown>) ?? null,
     pathReason,
     diagnostics,
+    running: ready && !error,
   };
 
   if (typeof document === "undefined") return null;

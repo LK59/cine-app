@@ -26,7 +26,7 @@ import { unsupportedReason } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
 import { trace } from "./trace";
-import { canEncodeAac } from "./audioTranscode";
+import { canEncodeAac, chooseTranscodeCodec } from "./audioTranscode";
 import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
 
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
@@ -63,6 +63,12 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   const { file, videoTrack, audioTrack, dimensions, source } = input;
 
   trace(`chemin : examen du remultiplexage — vidéo ${videoTrack.codecId}, audio ${audioTrack?.codecId ?? "aucune"}`);
+
+  // Asked first, because everything below names the codec a re-encoded track will be delivered
+  // as, and only the browser knows what it can both produce and take back.
+  if (audioTrack) {
+    await chooseTranscodeCodec(audioTrack.audio?.sampleRate ?? 48000, audioTrack.audio?.channels ?? 2);
+  }
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
   if (audioTrack && !playableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;
 
@@ -74,7 +80,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     const channels = audioTrack.audio?.channels ?? 2;
     trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on demande l'AAC en ${channels} canaux`);
     if (!(await canEncodeAac(rate, channels))) {
-      return `ce navigateur n'accepte pas ${audioTrack.codecId} et n'encode pas l'AAC en ${channels} canaux`;
+      return `ce navigateur n'accepte pas ${audioTrack.codecId} et ne sait produire aucun codec de remplacement en ${channels} canaux`;
     }
   }
 

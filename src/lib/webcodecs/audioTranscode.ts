@@ -14,10 +14,22 @@ import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
-import { extractAudioSpecificConfig, parseAacConfig } from "./mp4SampleEntries";
+import { containerAccepts } from "./mseSource";
+import { extractAudioSpecificConfig, opusSampleEntry, parseAacConfig } from "./mp4SampleEntries";
 
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
 const TARGET_CODEC = "mp4a.40.2";
+
+/**
+ * The fallback for a browser with no AAC encoder.
+ *
+ * Firefox is one: it plays AAC perfectly well and cannot produce it, while it both encodes Opus
+ * — in stereo and in 5.1 — and accepts it in a MediaSource. Measured, not assumed; the panel's
+ * probe says so on the machine in front of the viewer. Without this, every file whose sound has
+ * to be re-encoded loses the hardware path there, and on 10-bit HEVC the software path has no
+ * decoder either, so it loses playback altogether.
+ */
+const FALLBACK_CODEC = "opus";
 
 /**
  * How far past a segment's end the encoder is fed before its output is taken.
@@ -77,22 +89,67 @@ export interface TranscodedFrame {
  * reading that as a refusal would send a file down a slower path for no reason. Measured on a
  * desktop Chrome, which says no at 256 kbit/s and yes with nothing specified.
  */
-export async function canEncodeAac(sampleRate: number, numberOfChannels: number): Promise<boolean> {
-  const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
-  if (!Encoder?.isConfigSupported) return false;
+/** Every shape worth asking about for one codec, best first. */
+function candidateConfigs(codec: string, sampleRate: number, numberOfChannels: number): AudioEncoderConfig[] {
+  const bitrate = preferredBitrate(numberOfChannels);
+  return codec === TARGET_CODEC
+    ? [
+        { codec, sampleRate, numberOfChannels, bitrate, aac: { format: "aac" } },
+        { codec, sampleRate, numberOfChannels, aac: { format: "aac" } },
+        { codec, sampleRate, numberOfChannels },
+      ]
+    : [
+        { codec, sampleRate, numberOfChannels, bitrate },
+        { codec, sampleRate, numberOfChannels },
+      ];
+}
 
-  const configs: AudioEncoderConfig[] = [
-    { codec: TARGET_CODEC, sampleRate, numberOfChannels, bitrate: preferredBitrate(numberOfChannels), aac: { format: "aac" } },
-    { codec: TARGET_CODEC, sampleRate, numberOfChannels },
-  ];
-  for (const config of configs) {
+async function firstSupported(codec: string, sampleRate: number, channels: number): Promise<AudioEncoderConfig | null> {
+  const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
+  if (!Encoder?.isConfigSupported) return null;
+  for (const config of candidateConfigs(codec, sampleRate, channels)) {
     try {
-      if ((await Encoder.isConfigSupported(config)).supported) return true;
+      if ((await Encoder.isConfigSupported(config)).supported) return config;
     } catch {
       // A configuration the browser considers malformed rather than unsupported.
     }
   }
-  return false;
+  return null;
+}
+
+/**
+ * What this browser can be handed instead of a codec it will not take — or null if nothing.
+ *
+ * Both halves have to hold: the browser has to be able to *produce* it and to *accept* it back
+ * in a MediaSource. Firefox encodes Opus and takes it; Safari encodes Opus and does not.
+ */
+export async function chooseTranscodeCodec(sampleRate: number, channels: number): Promise<string | null> {
+  for (const codec of [TARGET_CODEC, FALLBACK_CODEC]) {
+    if (!containerAccepts(`audio/mp4; codecs="${codec}"`)) continue;
+    if (await firstSupported(codec, sampleRate, channels)) {
+      chosenTarget = codec;
+      return codec;
+    }
+  }
+  return null;
+}
+
+/**
+ * The answer to the question above, kept for the places that cannot wait for it.
+ *
+ * Deciding what a re-encoded track will be delivered as means asking the browser, which is
+ * asynchronous; naming that codec in a MIME type happens in the middle of building a plan, which
+ * is not. The question is always put first — the path selector asks it before anything else is
+ * opened — so by the time this is read it is the measured answer and not the default.
+ */
+export function transcodeTargetCodec(): string {
+  return chosenTarget;
+}
+
+let chosenTarget = TARGET_CODEC;
+
+export async function canEncodeAac(sampleRate: number, numberOfChannels: number): Promise<boolean> {
+  return (await chooseTranscodeCodec(sampleRate, numberOfChannels)) !== null;
 }
 
 export class AudioTranscoder {
@@ -112,7 +169,7 @@ export class AudioTranscoder {
   ) {}
 
   private get config(): AudioEncoderConfig {
-    return { codec: TARGET_CODEC, sampleRate: this.sampleRate, numberOfChannels: this.channels };
+    return { codec: this.actualCodec, sampleRate: this.sampleRate, numberOfChannels: this.channels };
   }
 
   /** What the encoder actually produced, not what it was asked for. */
@@ -135,9 +192,10 @@ export class AudioTranscoder {
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId);
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
-    if (!(await canEncodeAac(sampleRate, numberOfChannels))) {
+    const target = await chooseTranscodeCodec(sampleRate, numberOfChannels);
+    if (!target) {
       decoder.close();
-      throw new Error(`Ce navigateur ne sait pas encoder de l'AAC en ${numberOfChannels} canaux.`);
+      throw new Error(`Ce navigateur ne sait produire aucun codec audio en ${numberOfChannels} canaux.`);
     }
 
     let description: Uint8Array | null = null;
@@ -161,25 +219,11 @@ export class AudioTranscoder {
       },
       error: (error) => sink.failed(error.message),
     });
-    // The first configuration the browser accepts, bitrate included when it will take one.
-    const candidates: AudioEncoderConfig[] = [
-      { codec: TARGET_CODEC, sampleRate, numberOfChannels, bitrate: preferredBitrate(numberOfChannels), aac: { format: "aac" } },
-      { codec: TARGET_CODEC, sampleRate, numberOfChannels, aac: { format: "aac" } },
-      { codec: TARGET_CODEC, sampleRate, numberOfChannels },
-    ];
-    let config = candidates[candidates.length - 1];
-    for (const candidate of candidates) {
-      try {
-        if ((await Encoder.isConfigSupported?.(candidate))?.supported) {
-          config = candidate;
-          break;
-        }
-      } catch {
-        // Malformed as far as this browser is concerned; the next shape is simpler.
-      }
-    }
+    // The shape this browser accepted when it was asked, a moment ago.
+    const config =
+      (await firstSupported(target, sampleRate, numberOfChannels)) ?? { codec: target, sampleRate, numberOfChannels };
     encoder.configure(config);
-    trace(`transcodage audio : encodeur configuré (${TARGET_CODEC}), amorçage à ${fromSeconds.toFixed(1)} s`);
+    trace(`transcodage audio : encodeur configuré (${target}), amorçage à ${fromSeconds.toFixed(1)} s`);
 
     // Enough to make the encoder describe itself, and no more: this runs before the first frame
     // of video is shown, so it is time the viewer is waiting through. Bounded, because an
@@ -254,8 +298,8 @@ export class AudioTranscoder {
     // Chrome hands back the bare configuration; Safari hands back the whole descriptor tree with
     // the configuration inside it. Both have to end up as the same bytes here, or the `esds`
     // built below describes a description.
-    const asc = extractAudioSpecificConfig(description) ?? description;
-    const actual = parseAacConfig(asc);
+    const asc = target === TARGET_CODEC ? (extractAudioSpecificConfig(description) ?? description) : description;
+    const actual = target === TARGET_CODEC ? parseAacConfig(asc) : null;
     trace(
       `transcodage audio : encodeur amorcé — description ${[...(description as Uint8Array)]
         .map((b) => b.toString(16).padStart(2, "0"))
@@ -266,15 +310,20 @@ export class AudioTranscoder {
 
     const entryRate = actual?.sampleRate ?? sampleRate;
     const entryChannels = actual?.channels ?? numberOfChannels;
-    const codecString = actual ? `mp4a.40.${actual.objectType}` : TARGET_CODEC;
+    const codecString = target === TARGET_CODEC ? (actual ? `mp4a.40.${actual.objectType}` : TARGET_CODEC) : target;
 
-    const sampleEntry = audioSampleEntryFor({
-      codecId: "A_AAC",
-      codecPrivate: asc,
-      channels: entryChannels,
-      sampleRate: entryRate,
-      firstFrame: null,
-    });
+    const sampleEntry =
+      target === TARGET_CODEC
+        ? audioSampleEntryFor({
+            codecId: "A_AAC",
+            codecPrivate: asc,
+            channels: entryChannels,
+            sampleRate: entryRate,
+            firstFrame: null,
+          })
+        : // Opus describes itself with the identification header, which is not shaped like the
+          // box an MP4 wants — see dOps.
+          opusSampleEntry(asc, entryChannels, entryRate);
 
     const transcoder = new AudioTranscoder(
       decoder,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractAudioSpecificConfig, parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
+import { dOps, extractAudioSpecificConfig, parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
 
 const { BitWriter } = __testing;
 
@@ -235,5 +235,36 @@ describe("extractAudioSpecificConfig", () => {
   it("refuses to read an object type of zero as a profile", () => {
     // The leading descriptor tag, misread as a configuration: five zero bits.
     expect(parseAacConfig(new Uint8Array([0x03, 0x19, 0x00, 0x01]))).toBeNull();
+  });
+});
+
+describe("dOps", () => {
+  it("rewrites the Ogg identification header as the box an MP4 wants", () => {
+    // "OpusHead", version 1, 6 channels, pre-skip 312, 48000 Hz, gain 0, mapping family 1,
+    // with its stream table — little-endian throughout, as Ogg writes it.
+    const head = new Uint8Array([
+      0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64,
+      0x01, 0x06, 0x38, 0x01, 0x80, 0xbb, 0x00, 0x00, 0x00, 0x00, 0x01,
+      0x04, 0x02, 0x00, 0x04, 0x01, 0x02, 0x03, 0x05,
+    ]);
+    const box = dOps(head);
+    // size, "dOps", then the fields big-endian and with no magic and no Ogg version byte.
+    expect(Array.from(box.subarray(4, 8))).toEqual([0x64, 0x4f, 0x70, 0x73]);
+    const body = box.subarray(8);
+    expect(body[0]).toBe(0); // the box's own version, not the header's
+    expect(body[1]).toBe(6); // channels
+    expect((body[2] << 8) | body[3]).toBe(312); // pre-skip, now big-endian
+    expect((body[4] << 24) | (body[5] << 16) | (body[6] << 8) | body[7]).toBe(48000);
+    expect(body[10]).toBe(1); // mapping family
+    // Family 1 names its streams, and the table comes across unchanged.
+    expect(Array.from(body.subarray(11))).toEqual([0x04, 0x02, 0x00, 0x04, 0x01, 0x02, 0x03, 0x05]);
+  });
+
+  it("carries no stream table for the family that has none", () => {
+    const stereo = new Uint8Array([
+      0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64,
+      0x01, 0x02, 0x38, 0x01, 0x80, 0xbb, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    expect(dOps(stereo).subarray(8).length).toBe(11);
   });
 });

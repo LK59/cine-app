@@ -338,6 +338,41 @@ export function extractAudioSpecificConfig(bytes: Uint8Array): Uint8Array | null
   return walk(bytes.length);
 }
 
+/**
+ * Opus: the identification header the encoder hands back, rewritten as an `OpusSpecificBox`.
+ *
+ * The two carry the same fields and disagree on almost everything else. The header is Ogg's — it
+ * opens with the magic "OpusHead", a version byte, and stores its multi-byte numbers
+ * little-endian. The box has neither magic nor that version, and MP4 is big-endian throughout.
+ * Copying one into the other, which is the obvious thing to try, produces a channel count read
+ * from the version byte and a sample rate off by several orders of magnitude.
+ */
+export function dOps(opusHead: Uint8Array): Uint8Array {
+  if (opusHead.length < 19) throw new Error("En-tête Opus trop court.");
+  const view = new DataView(opusHead.buffer, opusHead.byteOffset, opusHead.byteLength);
+  const channels = opusHead[9];
+  const preSkip = view.getUint16(10, true);
+  const inputRate = view.getUint32(12, true);
+  const outputGain = view.getInt16(16, true);
+  const mappingFamily = opusHead[18];
+
+  const head = concat(
+    u8(0), // version of the box, which is not the version in the header
+    u8(channels),
+    u16(preSkip),
+    u32(inputRate),
+    u16(outputGain & 0xffff),
+    u8(mappingFamily)
+  );
+  // Family 0 is mono or plain stereo and carries no table; anything else names its streams.
+  const table = mappingFamily === 0 ? new Uint8Array(0) : opusHead.subarray(19, 19 + 2 + channels);
+  return box("dOps", head, table);
+}
+
+export function opusSampleEntry(opusHead: Uint8Array, channels: number, sampleRate: number): Uint8Array {
+  return audioSampleEntry("Opus", channels, sampleRate, dOps(opusHead));
+}
+
 export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
   const { codecId, codecPrivate, channels, sampleRate, firstFrame } = input;
   switch (codecId) {

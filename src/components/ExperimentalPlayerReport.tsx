@@ -24,6 +24,8 @@ export interface ReportInput {
   pathReason: string | null;
   /** Whatever the running pipeline can say about itself, empty before there is one. */
   diagnostics: Record<string, string>;
+  /** Playing normally: the same report, read from the panel rather than from a failure. */
+  running?: boolean;
 }
 
 /**
@@ -41,7 +43,7 @@ export function buildReport(input: ReportInput, capabilities: Record<string, str
   add("Titre", `${input.title} (${input.itemId})`);
   add("Navigateur", typeof navigator === "undefined" ? "?" : navigator.userAgent);
   add("Écran", typeof window === "undefined" ? "?" : `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio}`);
-  add("Échec", input.error ?? "aucun message — le chargement n'aboutit pas");
+  add("Échec", input.error ?? (input.running ? "aucun — lecture en cours" : "aucun message, et le chargement n'aboutit pas"));
   add("Temps écoulé", input.elapsedMs === null ? "—" : `${(input.elapsedMs / 1000).toFixed(1)} s`);
   add("Chemin", input.pathReason ?? "non encore décidé");
 
