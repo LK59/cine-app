@@ -55,6 +55,18 @@ const MAX_INDEX_BACKUPS = 3;
 const FRAGMENT_BYTES = 1_200_000;
 const FRAGMENT_SAMPLES = 60;
 
+/**
+ * How many pictures beyond a fragment must be read before its timeline is final.
+ *
+ * A picture's decode time is its rank among the group's presentation times, so one read later can
+ * still displace one already held — but only within the reordering depth of the codec, which is a
+ * handful of pictures and never the whole group. The depth is measured once per stream; until
+ * there is anything to measure, this generous guess stands in for it. Sixty-four is far past any
+ * reordering a real encoder produces, and still a fraction of a twenty-five-second group.
+ */
+const REORDER_LOOKAHEAD_GUESS = 64;
+const REORDER_LOOKAHEAD_MARGIN = 4;
+
 /** A frame's duration when nothing in the file says what it is: 24 fps, close enough for one frame. */
 const FALLBACK_FRAME_US = 41_667;
 
@@ -343,6 +355,18 @@ function assertContainerTakes(transcoder: AudioTranscoder): void {
  * Separate from the muxing so it can be exercised on shapes real files rarely produce: a run of
  * tiny pictures, one picture larger than the whole budget, a group that divides evenly.
  */
+/**
+ * How many pictures beyond a fragment settle its timeline.
+ *
+ * Separate from the remuxer so the rule can be read and exercised on its own: it is the one thing
+ * standing between handing media over early and handing over a timeline that later moves.
+ */
+function reorderLookahead(delayUs: number | null, frameUs: number | null): number {
+  if (delayUs === null || frameUs === null) return REORDER_LOOKAHEAD_GUESS;
+  const depth = Math.ceil(delayUs / Math.max(1, frameUs));
+  return Math.min(REORDER_LOOKAHEAD_GUESS, depth + REORDER_LOOKAHEAD_MARGIN);
+}
+
 function planFragments(count: number, byteLengthOf: (index: number) => number): number[][] {
   const fragments: number[][] = [];
   let from = 0;
@@ -382,6 +406,16 @@ export class Remuxer {
    */
   private videoDecodeTime = 0;
   private encoderRestarts = 0;
+  /** How many of the current group's pictures have already been handed over. */
+  private emitted = 0;
+  /** The picture that closes the current group and opens the next one. */
+  private boundary: MediaSample | null = null;
+  /** Whether the current group's last picture has been read. */
+  private groupClosed = false;
+  /** The group's own earliest presentation, fixed once enough of it has been read. */
+  private groupAnchorUs: number | null = null;
+  /** The typical gap between pictures, for turning a reordering delay into a count of them. */
+  private frameDurationUs: number | null = null;
   /**
    * Whether segments should carry their pictures.
    *
@@ -598,6 +632,11 @@ export class Remuxer {
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
+    // The group being handed over piece by piece is abandoned with everything else.
+    this.emitted = 0;
+    this.boundary = null;
+    this.groupClosed = false;
+    this.groupAnchorUs = null;
     this.needKeyframe = true;
     this.seekTargetUs = Math.round(seconds * 1e6);
     this.backupsLeft = MAX_INDEX_BACKUPS;
@@ -608,17 +647,47 @@ export class Remuxer {
   }
 
   /** The next pair of segments, or null once the file is exhausted. */
+  /**
+   * The next piece of media, handed over as soon as it is settled rather than when the keyframe
+   * group it belongs to has finished arriving.
+   *
+   * A picture's decode time is its rank among the group's presentation times, so nothing can be
+   * emitted until the pictures that might hold a smaller presentation have been read. But that is
+   * a handful of pictures — the reordering depth — and not the whole group. Waiting for the group
+   * meant waiting for all of it: five megabytes on an ordinary file, fifteen on the two dozen in
+   * this library whose keyframes sit twenty-five seconds apart, against forty milliseconds of
+   * actual muxing.
+   */
   async nextSegment(): Promise<RemuxSegment | null> {
-    if (this.done) return null;
+    if (!(await this.readUntilSettled())) return null;
 
-    // Read until a keyframe closes a segment of at least the target length. The keyframe that
-    // ends this segment starts the next one, and knowing its time is what lets the previous
-    // sample be given its true duration rather than an estimate.
-    let boundary: MediaSample | null = null;
-    for (;;) {
+    const video = this.buildVideo();
+    // Built after the video, because the stretch it has to cover is what the video just settled.
+    const audio = this.transcoder ? await this.buildTranscodedAudio() : this.buildAudio();
+    const subtitles = this.buildSubtitles();
+    const endUs = this.videoDecodeTime;
+
+    this.pendingAudio = [];
+    this.pendingSubtitles = [];
+    return { video, audio, subtitles, endSeconds: endUs / TIMESCALE };
+  }
+
+  /** Reads until a fragment's worth of pictures is settled, or the group ends. */
+  private async readUntilSettled(): Promise<boolean> {
+    // A group handed over to its end starts the next one, on the keyframe that closed it.
+    if (this.groupClosed && this.emitted >= this.pendingVideo.length && !this.done) {
+      this.pendingVideo = this.boundary ? [this.boundary] : [];
+      this.boundary = null;
+      this.emitted = 0;
+      this.groupClosed = false;
+      this.groupAnchorUs = null;
+    }
+
+    while (!this.groupClosed && !this.settled()) {
       const sample = await this.reader.next();
       if (!sample) {
         this.done = true;
+        this.groupClosed = true;
         break;
       }
       if (sample.trackNumber === this.videoTrack.number) {
@@ -640,7 +709,8 @@ export class Remuxer {
         }
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (this.startsHere(sample) && span >= SEGMENT_US) {
-          boundary = sample;
+          this.boundary = sample;
+          this.groupClosed = true;
           break;
         }
         this.pendingVideo.push(sample);
@@ -651,24 +721,23 @@ export class Remuxer {
       }
     }
 
-    if (this.pendingVideo.length === 0 && this.pendingAudio.length === 0 && !this.transcoder) return null;
+    const spent = this.emitted >= this.pendingVideo.length && this.pendingAudio.length === 0 && !this.transcoder;
+    return !(this.done && spent);
+  }
 
-    // The pictures still have to be *read*: Matroska interleaves them with the sound in the same
-    // clusters, so there is no way to fetch one without the other. Building a segment out of
-    // them, though, is megabytes copied for nothing when the caller has already said it holds
-    // this stretch — which is every language change.
-    const video = this.buildVideo();
-    // Built after the video, because the stretch it has to cover is what the video just settled.
-    const audio = this.transcoder ? await this.buildTranscodedAudio() : this.buildAudio();
-    const subtitles = this.buildSubtitles();
-    const endUs = this.videoDecodeTime;
+  /**
+   * Whether enough has been read for the next fragment's timeline to be final.
+   *
+   * Past the reordering depth, what came before cannot move. The depth is measured on the first
+   * group of the stream and used for every one after it — which is every seek; the first group is
+   * given a generous guess instead, because there is nothing yet to measure it from.
+   */
+  private settled(): boolean {
+    return this.pendingVideo.length - this.emitted >= FRAGMENT_SAMPLES + this.reorderLookahead() + 1;
+  }
 
-    this.pendingVideo = boundary ? [boundary] : [];
-    this.pendingAudio = [];
-    this.pendingSubtitles = [];
-    this.sequence += 1;
-
-    return { video, audio, subtitles, endSeconds: endUs / TIMESCALE };
+  private reorderLookahead(): number {
+    return reorderLookahead(this.presentationDelayUs, this.frameDurationUs);
   }
 
   /** The text tracks worth collecting, worked out once and kept by number for the cue builder. */
@@ -801,38 +870,57 @@ export class Remuxer {
   }
 
   private buildVideo(): Uint8Array[] {
-    if (this.pendingVideo.length === 0) return [];
+    if (this.pendingVideo.length === 0 || this.emitted >= this.pendingVideo.length) return [];
 
+    // The whole of the group read so far, not only the part about to be handed over: a picture's
+    // decode time is its rank among these presentations, so the rank has to be taken against
+    // everything known. What settles it is that the pictures beyond the fragment have been read.
     const presentations = this.pendingVideo.map((s) => s.timestampUs);
     const durations = deriveDurations(presentations, FALLBACK_FRAME_US);
 
-    // Anchored on this segment's own earliest picture, not on where the previous segment's decode
+    // Anchored on this group's own earliest picture, not on where the previous one's decode
     // timeline happened to stop. Chaining them looks natural and is wrong: the keyframe that
-    // opens a segment is first in *decode* order, and several pictures decoded after it are shown
-    // before it, so it is not the segment's earliest presentation. Anchoring on the keyframe
+    // opens a group is first in *decode* order, and several pictures decoded after it are shown
+    // before it, so it is not the group's earliest presentation. Anchoring on the keyframe
     // therefore pushed every segment after the first later by that gap — a fifth of a second on a
     // real 4K file, which is the picture drifting away from the sound.
-    this.segmentStartUs = Math.min(...presentations);
+    //
+    // Fixed the first time this group is built, and kept. The reordering depth guarantees no
+    // picture read later can be shown earlier than one already handed over, so re-deriving it
+    // would give the same answer — and if it ever did not, the timeline would move underneath
+    // media the browser is already holding.
+    this.groupAnchorUs ??= Math.min(...presentations);
+    this.segmentStartUs = this.groupAnchorUs;
     const ordered = assignDecodeTimes(
       presentations.map((presentation, i) => ({ presentation, duration: durations[i] })),
       this.segmentStartUs
     );
 
-    // Measured once, on the opening segment, then fixed for the whole stream. The audio timeline
-    // is moved by the same amount at the same moment, which is the only thing keeping the picture
-    // on the sound: shifting the video alone is the classic lip-sync error in a remux.
+    // Measured once, on the opening group, then fixed for the whole stream. The audio timeline is
+    // moved by the same amount at the same moment, which is the only thing keeping the picture on
+    // the sound: shifting the video alone is the classic lip-sync error in a remux.
     if (this.presentationDelayUs === null) {
-      this.presentationDelayUs = ordered.presentationDelay + DELAY_MARGIN_FRAMES * (durations[0] || FALLBACK_FRAME_US);
+      this.frameDurationUs = durations[0] || FALLBACK_FRAME_US;
+      this.presentationDelayUs = ordered.presentationDelay + DELAY_MARGIN_FRAMES * this.frameDurationUs;
     }
     const delay = this.presentationDelayUs;
 
-    const samples: MuxSample[] = this.pendingVideo.map((sample, i) => {
+    // Only what the reading has settled, and only a fragment of it at a time.
+    const from = this.emitted;
+    const until = this.groupClosed
+      ? this.pendingVideo.length
+      : Math.min(this.pendingVideo.length - this.reorderLookahead() - 1, from + FRAGMENT_SAMPLES);
+    if (until <= from) return [];
+
+    const samples: MuxSample[] = [];
+    for (let i = from; i < until; i++) {
+      const sample = this.pendingVideo[i];
       const offset = ordered.samples[i].compositionOffset + delay;
-      // A negative offset here would mean this segment reorders more deeply than the opening one
+      // A negative offset here would mean this group reorders more deeply than the opening one
       // did. Clamping costs one picture shown a frame early; widening the delay instead would
       // break the timeline everywhere before this point.
       if (offset < 0) this.clampedSamples += 1;
-      return {
+      samples.push({
         data: sample.data,
         decodeTime: ordered.samples[i].decode,
         duration: ordered.samples[i].duration,
@@ -840,14 +928,19 @@ export class Remuxer {
         // The container's word is not enough here either: telling a player that a trailing
         // picture is a sync sample invites it to start decoding there.
         isKeyframe: this.startsHere(sample),
-      };
-    });
+      });
+    }
+    this.emitted = until;
 
-    this.videoDecodeTime = ordered.endDecodeTime;
+    // Where the sound is cut: the end of what has just been handed over, not the end of a group
+    // that may still be arriving.
+    this.videoDecodeTime =
+      until >= this.pendingVideo.length ? ordered.endDecodeTime : ordered.samples[until].decode;
+
     // Everything above still had to happen: the decode times, the presentation delay and where
-    // this segment ends are what the sound is cut against, and a reader that stopped keeping
-    // track of them would put the next real segment in the wrong place. Only the copying is
-    // skipped — which is all of the cost.
+    // this piece ends are what the sound is cut against, and a reader that stopped keeping track
+    // of them would put the next real segment in the wrong place. Only the copying is skipped —
+    // which is all of the cost.
     if (!this.videoWanted) return [];
     return this.fragmentise(samples);
   }
@@ -927,4 +1020,9 @@ export class Remuxer {
   }
 }
 
-export const __testing = { planFragments };
+export const __testing = {
+  planFragments,
+  /** Pictures that must be read before the next fragment can be handed over. */
+  settledAfter: (delayUs: number | null, frameUs: number | null) =>
+    FRAGMENT_SAMPLES + reorderLookahead(delayUs, frameUs) + 1,
+};

@@ -315,3 +315,18 @@ describe("Remuxer fragments", () => {
     expect(all).toEqual(Array.from({ length: 137 }, (_, i) => i));
   });
 });
+
+
+describe("Remuxer streaming", () => {
+  it("waits for the reordering depth, and no longer", async () => {
+    const { __testing } = await import("@/lib/webcodecs/remuxer");
+    // A fragment is 60 pictures. Before the depth is known, a generous guess stands in for it;
+    // once measured, the wait is the depth plus a small margin. Either way it is a handful of
+    // pictures, never the group — which on this library runs to twenty-five seconds.
+    expect(__testing.settledAfter(null, null)).toBe(60 + 64 + 1);
+    // 200 ms of reordering at 40 ms a picture: five, plus four of margin.
+    expect(__testing.settledAfter(200_000, 40_000)).toBe(60 + 9 + 1);
+    // A depth beyond anything a real encoder produces is capped at the guess rather than trusted.
+    expect(__testing.settledAfter(100_000_000, 40_000)).toBe(60 + 64 + 1);
+  });
+});
