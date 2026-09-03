@@ -128,11 +128,13 @@ describe("canEncodeAac", () => {
     });
     const { canEncodeAac } = await load();
 
-    // A desktop Chrome says no at 256 kbit/s and yes with nothing specified; reading the first
-    // answer as final sends a file down a slower path for no reason.
+    // A desktop Chrome says no to an imposed bitrate and yes with nothing specified; reading the
+    // first answer as final sends a file down a slower path for no reason. The bitrate is asked
+    // for first all the same: an encoder left to choose reaches for HE-AAC, whose description
+    // does not match the profile written beside it.
     expect(await canEncodeAac(48000, 6)).toBe(true);
     expect(asked).toHaveLength(2);
-    expect(asked[0].bitrate).toBe(256_000);
+    expect(asked[0].bitrate).toBe(320_000);
     expect(asked[1].bitrate).toBeUndefined();
   });
 

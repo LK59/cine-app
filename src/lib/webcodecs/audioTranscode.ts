@@ -14,6 +14,7 @@ import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
+import { parseAacConfig } from "./mp4SampleEntries";
 
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
 const TARGET_CODEC = "mp4a.40.2";
@@ -29,6 +30,18 @@ const ENCODER_LOOKAHEAD_SECONDS = 0.3;
 
 /** How long the encoder is given to describe itself before this is called a refusal. */
 const PRIMING_TIMEOUT_MS = 8000;
+
+/**
+ * A bitrate generous enough that an encoder has no reason to reach for HE-AAC.
+ *
+ * Left to choose, Safari answers a low default with SBR — a different object type, twice the
+ * sample rate, and a description that contradicts the `mp4a.40.2` written beside it. Asking for
+ * enough bits is the polite way to get the plain profile; reading back what actually came out,
+ * below, is the way that does not depend on being obeyed.
+ */
+function preferredBitrate(channels: number): number {
+  return Math.min(320_000, Math.max(128_000, 64_000 * channels));
+}
 
 /**
  * Codecs there is a decoder for here, whether or not the browser has one.
@@ -68,10 +81,11 @@ export async function canEncodeAac(sampleRate: number, numberOfChannels: number)
   const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
   if (!Encoder?.isConfigSupported) return false;
 
-  for (const config of [
-    { codec: TARGET_CODEC, sampleRate, numberOfChannels, bitrate: 256_000 },
+  const configs: AudioEncoderConfig[] = [
+    { codec: TARGET_CODEC, sampleRate, numberOfChannels, bitrate: preferredBitrate(numberOfChannels), aac: { format: "aac" } },
     { codec: TARGET_CODEC, sampleRate, numberOfChannels },
-  ]) {
+  ];
+  for (const config of configs) {
     try {
       if ((await Encoder.isConfigSupported(config)).supported) return true;
     } catch {
@@ -93,15 +107,17 @@ export class AudioTranscoder {
     private readonly encoder: AudioEncoder,
     readonly sampleEntry: Uint8Array,
     readonly sampleRate: number,
-    readonly channels: number
+    readonly channels: number,
+    private readonly actualCodec: string = "mp4a.40.2"
   ) {}
 
   private get config(): AudioEncoderConfig {
     return { codec: TARGET_CODEC, sampleRate: this.sampleRate, numberOfChannels: this.channels };
   }
 
+  /** What the encoder actually produced, not what it was asked for. */
   get codecString(): string {
-    return TARGET_CODEC;
+    return this.actualCodec;
   }
 
   /**
@@ -145,7 +161,23 @@ export class AudioTranscoder {
       },
       error: (error) => sink.failed(error.message),
     });
-    const config: AudioEncoderConfig = { codec: TARGET_CODEC, sampleRate, numberOfChannels };
+    // The first configuration the browser accepts, bitrate included when it will take one.
+    const candidates: AudioEncoderConfig[] = [
+      { codec: TARGET_CODEC, sampleRate, numberOfChannels, bitrate: preferredBitrate(numberOfChannels), aac: { format: "aac" } },
+      { codec: TARGET_CODEC, sampleRate, numberOfChannels, aac: { format: "aac" } },
+      { codec: TARGET_CODEC, sampleRate, numberOfChannels },
+    ];
+    let config = candidates[candidates.length - 1];
+    for (const candidate of candidates) {
+      try {
+        if ((await Encoder.isConfigSupported?.(candidate))?.supported) {
+          config = candidate;
+          break;
+        }
+      } catch {
+        // Malformed as far as this browser is concerned; the next shape is simpler.
+      }
+    }
     encoder.configure(config);
     trace(`transcodage audio : encodeur configuré (${TARGET_CODEC}), amorçage à ${fromSeconds.toFixed(1)} s`);
 
@@ -214,16 +246,40 @@ export class AudioTranscoder {
       );
     }
 
-    trace("transcodage audio : encodeur amorcé, description obtenue");
+    // Asking for a profile is not the same as being given it. The description is the only
+    // statement of what came out, and everything written beside it in the container — the codec
+    // string, the sample rate, the channel count — has to agree with it or the init segment
+    // contradicts itself. Safari does not merely refuse such a segment: it closes the
+    // MediaSource, and every buffer on it, including the video's, becomes invalid.
+    const actual = parseAacConfig(description);
+    trace(
+      `transcodage audio : encodeur amorcé — description ${[...(description as Uint8Array)]
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join(" ")} → ${
+        actual ? `AOT ${actual.objectType}, ${actual.sampleRate} Hz, ${actual.channels} canaux` : "illisible"
+      }`
+    );
+
+    const entryRate = actual?.sampleRate ?? sampleRate;
+    const entryChannels = actual?.channels ?? numberOfChannels;
+    const codecString = actual ? `mp4a.40.${actual.objectType}` : TARGET_CODEC;
+
     const sampleEntry = audioSampleEntryFor({
       codecId: "A_AAC",
       codecPrivate: description,
-      channels: numberOfChannels,
-      sampleRate,
+      channels: entryChannels,
+      sampleRate: entryRate,
       firstFrame: null,
     });
 
-    const transcoder = new AudioTranscoder(decoder, encoder, sampleEntry, sampleRate, numberOfChannels);
+    const transcoder = new AudioTranscoder(
+      decoder,
+      encoder,
+      sampleEntry,
+      sampleRate,
+      numberOfChannels,
+      codecString
+    );
     sink.frame = (frame) => transcoder.collect(frame);
     sink.failed = (message) => transcoder.fail(message);
     // The priming output is thrown away rather than kept: the first segment asked for may be

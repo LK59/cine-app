@@ -95,6 +95,8 @@ interface AudioEncoderConfig {
   sampleRate: number;
   numberOfChannels: number;
   bitrate?: number;
+  /** AAC framing. "aac" is raw frames, which is what an MP4 carries; "adts" adds a header. */
+  aac?: { format?: "aac" | "adts" };
 }
 
 interface AudioEncoderSupport {

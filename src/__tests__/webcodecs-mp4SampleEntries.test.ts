@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
+import { parseAacConfig, audioSampleEntryFor, dac3, dec3, videoSampleEntry, __testing } from "@/lib/webcodecs/mp4SampleEntries";
 
 const { BitWriter } = __testing;
 
@@ -174,5 +174,43 @@ describe("sample entries", () => {
     expect(() =>
       audioSampleEntryFor({ codecId: "A_AAC", codecPrivate: null, channels: 2, sampleRate: 48000, firstFrame: null })
     ).toThrow(/configuration/);
+  });
+});
+
+describe("parseAacConfig", () => {
+  it("reads plain AAC-LC", () => {
+    expect(parseAacConfig(new Uint8Array([0x11, 0x90]))).toEqual({ objectType: 2, sampleRate: 48000, channels: 2 });
+  });
+
+  it("reports the extension's rate for HE-AAC, not the core's", () => {
+    // What an encoder left to choose its own bitrate may hand back: a 24 kHz core with SBR on
+    // top. Writing "mp4a.40.2" and the core's rate beside this is the contradiction that closes
+    // a MediaSource on Safari.
+    expect(parseAacConfig(new Uint8Array([0x2a, 0x11, 0x88]))).toEqual({
+      objectType: 5,
+      sampleRate: 48000,
+      channels: 2,
+    });
+  });
+
+  it("counts the two channels parametric stereo produces from one", () => {
+    expect(parseAacConfig(new Uint8Array([0xea, 0x09, 0x88]))).toEqual({
+      objectType: 29,
+      sampleRate: 48000,
+      channels: 2,
+    });
+  });
+
+  it("reads a rate written out in full rather than named by index", () => {
+    expect(parseAacConfig(new Uint8Array([0x17, 0x80, 0x56, 0x22, 0x10]))).toEqual({
+      objectType: 2,
+      sampleRate: 44100,
+      channels: 2,
+    });
+  });
+
+  it("returns null rather than a guess when it cannot read the description", () => {
+    expect(parseAacConfig(new Uint8Array([0x11]))).toBeNull();
+    expect(parseAacConfig(new Uint8Array())).toBeNull();
   });
 });

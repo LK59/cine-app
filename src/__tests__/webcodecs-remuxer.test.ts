@@ -7,6 +7,7 @@ import type { ByteSource } from "@/lib/webcodecs/byteSource";
 // and when. The real one needs a decoder and an encoder that exist only in a browser.
 const opened: { closed: boolean }[] = [];
 let openFails = false;
+let transcoderCodec = "mp4a.40.2";
 vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
   return {
@@ -16,8 +17,8 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
         if (openFails) throw new Error("l'encodeur a refusé");
         const instance = {
           closed: false,
+          codecString: transcoderCodec,
           sampleEntry: new Uint8Array([0, 0, 0, 8, 0x6d, 0x70, 0x34, 0x61]),
-          codecString: "mp4a.40.2",
           sampleRate: 48000,
           channels: 6,
           seekTo: () => {},
@@ -136,6 +137,42 @@ describe("Remuxer track selection", () => {
     vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => t.includes("mp4a") } });
     expect(audioDelivery(eac3)).toBe("transcode");
     expect(plannedMimeTypes(VIDEO, eac3).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
+  it("refuses a re-encoded track this browser will not take back", async () => {
+    // Safari, asked for AAC-LC, may answer with HE-AAC. Writing the profile that was asked for
+    // over the description that came out produces an init segment that contradicts itself — and
+    // Safari answers that by closing the MediaSource, taking the video buffer with it. Better to
+    // find out here, where the old track is still playing.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
+    FILE.tracks.push(dts);
+    opened.length = 0;
+    transcoderCodec = "mp4a.40.5";
+    vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => !t.includes("mp4a.40.5") } });
+
+    try {
+      await expect(Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 })).rejects.toThrow(
+        /n'accepte pas lui-même/
+      );
+      // And nothing is left running behind the refusal.
+      expect(opened[0].closed).toBe(true);
+    } finally {
+      FILE.tracks.pop();
+      transcoderCodec = "mp4a.40.2";
+    }
+  });
+
+  it("names what the encoder produced, not what it was asked for", async () => {
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
+    FILE.tracks.push(dts);
+    transcoderCodec = "mp4a.40.5";
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      expect(remuxer.plan().audioMimeType).toBe('audio/mp4; codecs="mp4a.40.5"');
+    } finally {
+      FILE.tracks.pop();
+      transcoderCodec = "mp4a.40.2";
+    }
   });
 
   it("keeps the track it has, and the machinery for it, when a change fails", async () => {

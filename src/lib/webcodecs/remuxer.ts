@@ -214,6 +214,20 @@ async function describeAudio(
 }
 
 /** The track description for sound the encoder produces rather than the file supplying. */
+/**
+ * Refuses a re-encoded track whose result this browser will not take.
+ *
+ * Checked here, before the description is put anywhere, because the alternative is discovering it
+ * by appending: an init segment the browser rejects does not merely fail on Safari, it closes the
+ * MediaSource, and the video buffer playing perfectly beside it dies with it.
+ */
+function assertContainerTakes(transcoder: AudioTranscoder): void {
+  const mime = `audio/mp4; codecs="${transcoder.codecString}"`;
+  if (containerAccepts(mime)) return;
+  transcoder.close();
+  throw new Error(`Ce navigateur produit un AAC qu'il n'accepte pas lui-même : ${mime}`);
+}
+
 function transcodedAudioInfo(transcoder: AudioTranscoder, track: MatroskaTrack): MuxTrackInfo {
   return {
     id: 2,
@@ -280,6 +294,7 @@ export class Remuxer {
     // and the encoder — not the file — is then what describes it.
     const transcoder =
       audioTrack && audioDelivery(audioTrack) === "transcode" ? await AudioTranscoder.open(source, audioTrack) : null;
+    if (transcoder) assertContainerTakes(transcoder);
     const audioInfo = audioTrack
       ? transcoder
         ? transcodedAudioInfo(transcoder, audioTrack)
@@ -304,7 +319,14 @@ export class Remuxer {
     const duration = this.file.durationSeconds ?? 0;
     return {
       videoMimeType: `video/mp4; codecs="${videoCodecString(this.videoTrack)}"`,
-      audioMimeType: this.audioTrack ? plannedMimeTypes(this.videoTrack, this.audioTrack).audio : null,
+      // Once there is a transcoder, it is the authority on what the audio buffer will carry:
+      // `plannedMimeTypes` has to guess before one exists, and an encoder is free to answer with
+      // a different profile than the one asked for.
+      audioMimeType: !this.audioTrack
+        ? null
+        : this.transcoder
+          ? `audio/mp4; codecs="${this.transcoder.codecString}"`
+          : plannedMimeTypes(this.videoTrack, this.audioTrack).audio,
       videoInit: initSegment(this.videoInfo, duration),
       audioInit: this.audioInfo ? initSegment(this.audioInfo, duration) : null,
       durationSeconds: duration,
@@ -335,6 +357,8 @@ export class Remuxer {
       // is long out of the byte source's cache, and fetching it back to read one header is
       // network traffic spent on nothing.
       const next = await AudioTranscoder.open(this.source, track, at);
+      // Before anything is released: a refusal here has to leave the working track working.
+      assertContainerTakes(next);
       previous?.close();
       this.transcoder = next;
       this.audioInfo = transcodedAudioInfo(next, track);

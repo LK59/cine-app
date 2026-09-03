@@ -226,6 +226,63 @@ export interface AudioEntryInput {
   firstFrame: Uint8Array | null;
 }
 
+/** The sampling frequencies an AudioSpecificConfig can name by index, in order. */
+const ASC_SAMPLE_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+
+export interface AacConfig {
+  /** The AAC object type: 2 is LC, 5 is HE (SBR), 29 is HE v2 (SBR + parametric stereo). */
+  objectType: number;
+  /** The rate the decoder outputs — twice the core rate when SBR is signalled. */
+  sampleRate: number;
+  channels: number;
+}
+
+/**
+ * Reads back what an AAC decoder configuration actually says.
+ *
+ * These bytes come from the browser's own encoder, and asking for one profile is not the same as
+ * being given it: an encoder left to choose its own bitrate may answer with HE-AAC, whose config
+ * declares a different object type, twice the sample rate and — for the v2 flavour — a different
+ * channel count than the one it was handed. Writing `mp4a.40.2` over that produces an init
+ * segment that contradicts itself, which Safari does not merely refuse: it tears down the whole
+ * MediaSource, and every buffer on it becomes invalid.
+ *
+ * Returns null for anything it cannot read, so a description it does not understand is passed
+ * through untouched rather than replaced with a guess.
+ */
+export function parseAacConfig(config: Uint8Array): AacConfig | null {
+  if (config.length < 2) return null;
+  const reader = new BitReader(config);
+
+  const readObjectType = (): number => {
+    const value = reader.read(5);
+    // 31 is the escape: the real type is six more bits, offset by 32.
+    return value === 31 ? 32 + reader.read(6) : value;
+  };
+  const readRate = (): number => {
+    const index = reader.read(4);
+    // 15 is the escape: the rate is written out in full rather than named by index.
+    return index === 15 ? reader.read(24) : (ASC_SAMPLE_RATES[index] ?? 0);
+  };
+
+  let objectType = readObjectType();
+  let sampleRate = readRate();
+  let channels = reader.read(4);
+  if (sampleRate === 0) return null;
+
+  // Explicit hierarchical signalling: the core is described first, then the extension. The rate
+  // that matters to a player is the extension's, and the object type is the extension's too.
+  if (objectType === 5 || objectType === 29) {
+    sampleRate = readRate();
+    const core = readObjectType();
+    // Parametric stereo turns one core channel into two on output.
+    if (objectType === 29 && channels === 1) channels = 2;
+    if (core === 22) reader.skip(4); // ER BSAC: a layer count sits here
+  }
+
+  return { objectType, sampleRate, channels };
+}
+
 export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
   const { codecId, codecPrivate, channels, sampleRate, firstFrame } = input;
   switch (codecId) {
