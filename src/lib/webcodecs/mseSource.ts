@@ -193,6 +193,7 @@ export class MseSource {
   private pauseAnchor: number | null = null;
   private resumeDeadline = 0;
   private resumeStartedAt = 0;
+  private pauseStartedAt = 0;
   private pauseSettleTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * The last pause and resume, in positions.
@@ -210,6 +211,14 @@ export class MseSource {
     tick: number | null;
     /** Milliseconds between pressing play and the clock actually moving. */
     latencyMs: number | null;
+    /**
+     * How long the pause lasted, which is the question that discriminates.
+     *
+     * If emptying the queue is what costs, then time spent paused is time the platform has
+     * already had to recover, and a long pause should start faster than a short one. If the cost
+     * is charged at the press regardless, it does not depend on this at all.
+     */
+    pausedForMs: number | null;
   } | null = null;
 
   /** Re-states the position, which runs the seek algorithm and so discards any queued sound. */
@@ -333,6 +342,7 @@ export class MseSource {
       // feels as the button being slow.
       if (trace.latencyMs === null && this.video.currentTime > trace.play + 0.01) {
         trace.latencyMs = Date.now() - this.resumeStartedAt;
+        trace.pausedForMs = this.resumeStartedAt - this.pauseStartedAt;
       }
     }
     // Playback advancing is also the first moment a jump on resume becomes visible.
@@ -358,7 +368,9 @@ export class MseSource {
       play: NaN,
       tick: null,
       latencyMs: null,
+      pausedForMs: null,
     };
+    this.pauseStartedAt = Date.now();
 
     // Emptied at once, not a second later.
     //
@@ -874,7 +886,9 @@ export class MseSource {
               ? "—"
               : `départ ${this.resumeTrace.play.toFixed(3)} → 1er tick ${this.resumeTrace.tick?.toFixed(3) ?? "—"}`,
             "Délai du bouton lecture":
-              this.resumeTrace.latencyMs === null ? "—" : `${this.resumeTrace.latencyMs} ms`,
+              this.resumeTrace.latencyMs === null
+                ? "—"
+                : `${this.resumeTrace.latencyMs} ms · après ${((this.resumeTrace.pausedForMs ?? 0) / 1000).toFixed(1)} s de pause`,
           }
         : {}),
     };
