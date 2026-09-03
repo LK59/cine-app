@@ -137,11 +137,21 @@ export class AudioTranscoder {
     // player that waits for ever on it is worse than one that says what went wrong.
     const primer = decoder.samples(0);
     const prime = async () => {
+      // Fed, then waited on — never flushed. A flush asks a frame-based encoder to produce a
+      // frame from whatever it happens to hold, and doing that after a single 512-sample block,
+      // over and over, is what a desktop Chrome answered with "Flushing error". Enough blocks to
+      // fill several frames come first, and the description arrives with the first of them.
       while (!description && !encoderError) {
-        const next = await primer.next();
-        if (next.done) return;
-        encode(encoder, next.value);
-        await encoder.flush();
+        for (let i = 0; i < 8; i++) {
+          const next = await primer.next();
+          if (next.done) return;
+          encode(encoder, next.value);
+        }
+        for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        // One turn of the event loop for the outputs the encoder has finished to be delivered.
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
     };
 

@@ -72,6 +72,15 @@ const WATCHDOG_MS = 250;
  */
 const MISPLACED_SECONDS = 10;
 
+/**
+ * Segments that change nothing before the reading is called pointless.
+ *
+ * Enough that an ordinary stretch of eviction or an odd boundary is never mistaken for it, few
+ * enough that a browser silently dropping everything is caught in a second or two rather than
+ * after the whole file has gone past.
+ */
+const FRUITLESS_APPENDS = 8;
+
 /** How much already-played media to keep before evicting, so a short step back does not re-fetch. */
 const KEEP_BEHIND_SECONDS = 30;
 
@@ -348,7 +357,12 @@ export class MseSource {
     this.lastAppendAt = Date.now();
     this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
-    await this.fill();
+    // Started, not waited for. Filling runs until there is a comfortable amount of media, and
+    // waiting for that before declaring the player ready makes the whole session hostage to it:
+    // a browser that accepts segments and keeps nothing from them leaves the depth at zero, the
+    // loop reading the film from end to end, and the viewer looking at a spinner that has no
+    // reason to ever stop. The element reports its own readiness, and the controls show the wait.
+    void this.fill();
   }
 
   private readonly request = () => {
@@ -615,6 +629,11 @@ export class MseSource {
   private async runFill(): Promise<void> {
     if (this.destroyed || this.ended) return;
     const generation = this.generation;
+    // Media accepted but not retained leaves the depth where it was. A handful of segments that
+    // change nothing is a browser quietly discarding what it is given, and reading the rest of
+    // the film to find that out is the worst possible answer.
+    let deepestSoFar = this.bufferedEnd();
+    let fruitless = 0;
 
     try {
       while (!this.destroyed && this.generation === generation) {
@@ -664,6 +683,14 @@ export class MseSource {
 
         this.nudgeIntoBuffer();
         this.lastAppendAt = Date.now();
+
+        const depth = this.bufferedEnd();
+        if (depth > deepestSoFar + 0.01) {
+          deepestSoFar = depth;
+          fruitless = 0;
+        } else if (++fruitless >= FRUITLESS_APPENDS) {
+          throw new Error("Le navigateur n'a rien retenu des segments qui lui ont été envoyés.");
+        }
 
         // The reader is filling a place the viewer is not. Something failed to tell us they
         // moved — an event that did not fire, a seek that did not reach here — and the reader

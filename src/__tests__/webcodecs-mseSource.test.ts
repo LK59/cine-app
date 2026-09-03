@@ -987,6 +987,35 @@ describe("MseSource", () => {
     expect(audioBuffer.appended.length).toBeGreaterThan(audioAppends);
   });
 
+  it("is ready without waiting for the buffer to fill", async () => {
+    const video = fakeVideo();
+    // A remuxer that never returns: attaching must still complete, or a slow or unhelpful
+    // browser holds the whole session hostage behind a spinner with no reason to stop.
+    const stuck = { plan: () => PLAN, seekable: true, seeks: [], diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }), seekTo: () => {}, setAudioTrack: async () => {}, nextSegment: () => new Promise(() => {}) };
+    await expect(
+      MseSource.attach(video, stuck as never, PLAN, { onError: vi.fn(), onWarning: vi.fn() })
+    ).resolves.toBeDefined();
+  });
+
+  it("stops reading a film the browser is keeping nothing from", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    await MseSource.attach(video, fakeRemuxer(5000), PLAN, { onError, onWarning: vi.fn() });
+    await flush();
+
+    const buffers = FakeSource.instances[0].buffers;
+    // Accepted and discarded: every append succeeds, and the depth never moves. Reading the rest
+    // of the film to discover that is the worst possible answer.
+    for (const b of buffers) b.secondsPerAppend = 0;
+    (video as unknown as { currentTime: number }).currentTime = 5;
+    video.dispatchEvent(new Event("timeupdate"));
+    await new Promise((r) => setTimeout(r, 100));
+
+    const appendsWhileFruitless = buffers[0].appended.length;
+    await new Promise((r) => setTimeout(r, 100));
+    expect(buffers[0].appended.length).toBe(appendsWhileFruitless);
+  }, 10_000);
+
   it("detaches cleanly, leaving nothing listening", async () => {
     const video = fakeVideo();
     const mse = await MseSource.attach(video, fakeRemuxer(50), PLAN, { onError: vi.fn() });
