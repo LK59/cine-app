@@ -118,7 +118,10 @@ class FakeBuffer extends EventTarget {
 
   changeType() {
     this.refuseIfBusy("changeType");
+    this.typeChangedAfter = this.removed.length;
   }
+  /** How many removals had happened by the time the codec was changed. */
+  typeChangedAfter = -1;
 }
 
 class FakeSource extends EventTarget {
@@ -1015,6 +1018,21 @@ describe("MseSource", () => {
 
     expect(videoBuffer.removed).toEqual([]);
     expect(videoBuffer.appended.length).toBe(videoAppends);
+  });
+
+  it("empties the audio buffer before asking it to change codec", async () => {
+    // Asking a buffer to reinterpret itself while it still holds coded frames of the codec it is
+    // leaving is more than the specification requires of an implementation — and this device
+    // answered it with "media failed to decode", which closes the MediaSource and takes the
+    // picture with it.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const audioBuffer = FakeSource.instances[0].buffers[1];
+
+    await mse.replaceAudio('audio/mp4; codecs="mp4a.40.2"', new Uint8Array([7]));
+    expect(audioBuffer.typeChangedAfter).toBeGreaterThan(0);
   });
 
   it("holds the picture still while there is no sound to go with it", async () => {

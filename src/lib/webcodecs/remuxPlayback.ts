@@ -252,11 +252,14 @@ export class RemuxPlayback {
     // three operations on the same buffers, and a seek landing between any two of them reaches
     // those buffers from the other side — which is the freeze seen when changing language just
     // as a seek was settling.
+    const before = this.remuxer.plan().audioMimeType;
+    let codecChanged = false;
     try {
       await mse.runExclusive(async () => {
         await this.remuxer.setAudioTrack(trackNumber);
         this.audioTrack = track;
         const plan = this.remuxer.plan();
+        codecChanged = plan.audioMimeType !== before;
         await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
       });
     } catch (error) {
@@ -270,10 +273,23 @@ export class RemuxPlayback {
       mse.releaseAudioHold();
       return;
     }
-    // Only the sound is read again, and only from where the viewer is. An ordinary seek would
-    // clear the picture too and send it back over what has already been played, which the
-    // browser catches up on at speed.
-    await mse.refillAudio(at);
+    if (codecChanged) {
+      // A different codec is not a change of language, it is a change of what the buffer decodes
+      // by — and swapping that underneath a playing element is where this device stops trusting
+      // what it is given: "media failed to decode", and the MediaSource closes. An ordinary seek
+      // rebuilds both buffers from nothing, which is the one thing this player does reliably
+      // here. It costs re-reading a few seconds of picture, on an operation nobody does twice a
+      // minute, and it is paid while the picture is held anyway.
+      await mse.seek(at);
+    } else {
+      // Same codec, different language: only the sound is read again, and only from where the
+      // viewer is. A seek would clear the picture too and send it back over what has already
+      // been played, which the browser catches up on at speed.
+      await mse.refillAudio(at);
+    }
+    // Now, and not before: armed any earlier it would find the old track still covering the
+    // playhead and let the picture go while there is nothing to hear.
+    mse.armAudioRelease();
   }
 
   seek(seconds: number): Promise<void> {

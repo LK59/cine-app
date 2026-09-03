@@ -940,6 +940,16 @@ export class MseSource {
     this.endAudioHold();
   }
 
+  /**
+   * Starts watching for the sound to come back, so the picture can move again.
+   *
+   * Called once whatever is going to produce that sound has been set going — never before, or it
+   * would find the *old* track still covering the playhead and let go immediately.
+   */
+  armAudioRelease(): void {
+    void this.releaseWhenAudioArrives();
+  }
+
   /** Lets the picture go again — for a caller whose change of track came to nothing. */
   releaseAudioHold(): void {
     this.endAudioHold();
@@ -965,6 +975,12 @@ export class MseSource {
     if (!queue || !mimeType || !init || this.destroyed) return;
     this.generation += 1;
 
+    // Emptied before the codec changes, not after. Asking a buffer to reinterpret itself while
+    // it still holds coded frames of the codec it is leaving is more than the specification
+    // requires of an implementation, and Safari answered it with a decode failure — which closes
+    // the MediaSource and takes the picture with it.
+    await this.clear(queue);
+
     if (mimeType !== this.plan.audioMimeType) {
       if (typeof queue.buffer.changeType !== "function") {
         throw new Error("Ce navigateur ne sait pas changer de codec audio en cours de lecture.");
@@ -973,7 +989,6 @@ export class MseSource {
     }
     this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
 
-    await this.clear(queue);
     await queue.enqueue(() => queue.buffer.appendBuffer(init as BufferSource));
   }
 
@@ -1001,7 +1016,6 @@ export class MseSource {
     await this.clear(this.audioOps);
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     void this.fill();
-    void this.releaseWhenAudioArrives();
   }
 
   /**

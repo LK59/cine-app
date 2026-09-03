@@ -133,6 +133,10 @@ export function ExperimentalPlayerHost({
   // Why this file is being played the way it is. Kept for the panel on *both* paths: a fallback
   // whose reason is only visible on the path that was not taken explains nothing at all.
   const [pathReason, setPathReason] = useState<string | null>(null);
+  // A change of audio track holds the picture still until there is sound to go with it. Without
+  // this the controls read the held element as simply paused and offer the play button, which is
+  // both wrong and an invitation to make it worse.
+  const [switchingAudio, setSwitchingAudio] = useState(false);
   const [openedAt] = useState(() => Date.now());
 
   // Fetched once and then left alone. The description of a file does not change while it is
@@ -598,9 +602,11 @@ export function ExperimentalPlayerHost({
               if (path === "remux") {
                 // The menu follows what actually happened rather than what was asked for: a track
                 // the browser turns out not to be able to open leaves the previous one playing.
+                setSwitchingAudio(true);
                 void remuxRef.current
                   ?.selectAudioTrack(id)
-                  .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id));
+                  .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id))
+                  .finally(() => setSwitchingAudio(false));
               } else {
                 void engineRef.current?.setAudioTrack(id);
               }
@@ -617,7 +623,7 @@ export function ExperimentalPlayerHost({
             hidden={false}
             // The controls already answer this by swapping the button for a spinner, so restarting
             // after a pause borrows the same treatment rather than growing a second indicator.
-            loading={!ready || resumeSpinner}
+            loading={!ready || resumeSpinner || switchingAudio}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.
