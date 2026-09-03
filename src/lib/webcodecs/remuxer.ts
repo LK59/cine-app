@@ -38,16 +38,25 @@ const DELAY_MARGIN_FRAMES = 3;
 /** An audio frame's duration when the file gives nothing to measure it from: 1536 samples at 48 kHz. */
 const FALLBACK_AUDIO_FRAME_US = 32_000;
 
+/** A subtitle line, carrying the track it belongs to so a change of language costs nothing. */
+export interface TrackedCue extends SubtitleCue {
+  track: number;
+}
+
 export interface RemuxSegment {
   video: Uint8Array | null;
   audio: Uint8Array | null;
   /**
    * Subtitle lines found while reading this stretch of the file, already timed on the player's
-   * clock. They come free: every sample in the file passes through here anyway, so picking the
-   * subtitle ones out costs no extra reading. A separate reader over the same clusters would
-   * have doubled the I/O to fetch bytes that had already gone by.
+   * clock — for *every* text track, not only the one on screen.
+   *
+   * They come free: every sample in the file passes through here anyway, so picking the subtitle
+   * ones out costs no extra reading, and text weighs nothing next to the pictures. Collecting
+   * only the selected track would mean re-reading the file whenever the viewer changes language,
+   * and re-reading means re-appending media the browser has already played — which it catches up
+   * on at speed, so a change of subtitles came with a second of fast-forward.
    */
-  subtitles: SubtitleCue[];
+  subtitles: TrackedCue[];
   /** Presentation time of the end of this segment, in seconds. */
   endSeconds: number;
 }
@@ -179,8 +188,8 @@ export class Remuxer {
   private audioDecodeTime = 0;
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
+  private subtitleNumbersCache: Set<number> | null = null;
   private needKeyframe = false;
-  private subtitleTrackNumber: number | null = null;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
   private sequence = 1;
@@ -269,13 +278,6 @@ export class Remuxer {
     return this.file.cues.filter((cue) => cue.track === this.videoTrack.number).length;
   }
 
-  /** Which subtitle track to pick out of the stream, or null for none. Takes effect immediately. */
-  setSubtitleTrack(trackNumber: number | null): void {
-    const track = this.file.tracks.find((t) => t.number === trackNumber);
-    this.subtitleTrackNumber = track && TEXT_SUBTITLE_CODECS.has(track.codecId) ? track.number : null;
-    this.pendingSubtitles = [];
-  }
-
   /** The subtitle tracks this path can render — the text ones; styled formats are not handled. */
   subtitleTracks(): MatroskaTrack[] {
     return this.file.tracks.filter(
@@ -344,7 +346,7 @@ export class Remuxer {
         this.pendingVideo.push(sample);
       } else if (this.audioTrack && sample.trackNumber === this.audioTrack.number) {
         this.pendingAudio.push(sample);
-      } else if (this.subtitleTrackNumber !== null && sample.trackNumber === this.subtitleTrackNumber) {
+      } else if (this.subtitleNumbers.has(sample.trackNumber)) {
         this.pendingSubtitles.push(sample);
       }
     }
@@ -364,20 +366,29 @@ export class Remuxer {
     return { video, audio, subtitles, endSeconds: endUs / TIMESCALE };
   }
 
-  private buildSubtitles(): SubtitleCue[] {
+  /** The text tracks worth collecting, worked out once. */
+  private get subtitleNumbers(): Set<number> {
+    if (!this.subtitleNumbersCache) {
+      this.subtitleNumbersCache = new Set(this.subtitleTracks().map((t) => t.number));
+    }
+    return this.subtitleNumbersCache;
+  }
+
+  private buildSubtitles(): TrackedCue[] {
     if (this.pendingSubtitles.length === 0) return [];
-    const track = this.file.tracks.find((t) => t.number === this.subtitleTrackNumber);
-    if (!track) return [];
 
     // Timed on the player's clock like everything else, so a line appears with the picture it
     // belongs to rather than a fifth of a second before it.
     const delay = (this.presentationDelayUs ?? 0) / TIMESCALE;
-    const cues: SubtitleCue[] = [];
+    const cues: TrackedCue[] = [];
     for (const sample of this.pendingSubtitles) {
+      const track = this.file.tracks.find((t) => t.number === sample.trackNumber);
+      if (!track) continue;
       const text = subtitleText(new TextDecoder().decode(sample.data), track.codecId);
       if (!text) continue;
       const startSeconds = sample.timestampUs / TIMESCALE + delay;
       cues.push({
+        track: sample.trackNumber,
         startSeconds,
         endSeconds:
           startSeconds + (sample.durationUs !== null ? sample.durationUs / TIMESCALE : SUBTITLE_FALLBACK_SECONDS),

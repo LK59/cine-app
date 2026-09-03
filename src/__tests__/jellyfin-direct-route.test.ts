@@ -6,8 +6,12 @@ const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerifySessionFull(...a) }));
 vi.mock("@/lib/config", () => ({ config: { player: { enabled: true } } }));
 const mockGetSources = vi.fn();
+const mockTimestamps = vi.fn();
 vi.mock("@/lib/clients/jellyfin", () => ({
-  jellyfin: { getItemMediaSources: (...a: unknown[]) => mockGetSources(...a) },
+  jellyfin: {
+    getItemMediaSources: (...a: unknown[]) => mockGetSources(...a),
+    getEpisodeTimestamps: (...a: unknown[]) => mockTimestamps(...a),
+  },
 }));
 const mockPrefs = vi.fn();
 vi.mock("@/lib/db", () => ({ userPrefsDb: { getExperimentalPlayer: (...a: unknown[]) => mockPrefs(...a) } }));
@@ -54,6 +58,7 @@ beforeEach(() => {
   mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", id: 7 });
   mockPrefs.mockReturnValue({ enabled: true, hdr: false });
   mockGetSources.mockResolvedValue(mediaSource());
+  mockTimestamps.mockResolvedValue(null);
 });
 
 describe("GET /api/jellyfin/direct/[itemId]", () => {
@@ -98,6 +103,37 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull(); // the native path may still manage it
     expect(body.canvasHdrRefusal).toContain("Dolby Vision");
+  });
+
+  it("passes on Jellyfin's intro and credits markers when it has analysed the episode", async () => {
+    mockTimestamps.mockResolvedValue({
+      Introduction: { Valid: true, Start: 62, End: 95 },
+      Credits: { Valid: true, Start: 2500 },
+    });
+    const body = await (await get()).json();
+    expect(body.introSkip).toEqual({ start: 62, end: 95 });
+    expect(body.creditsStart).toBe(2500);
+  });
+
+  it("carries on without them for a film, or an episode nobody has analysed", async () => {
+    // The timestamps endpoint 404s in both cases, which is not a reason to refuse playback —
+    // it only means no skip-intro button and no next-up prompt for this one.
+    mockTimestamps.mockRejectedValue(new Error("404"));
+    const res = await get();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.introSkip).toBeNull();
+    expect(body.creditsStart).toBeNull();
+  });
+
+  it("ignores markers Jellyfin itself marks as unreliable", async () => {
+    mockTimestamps.mockResolvedValue({
+      Introduction: { Valid: false, Start: 10, End: 40 },
+      Credits: { Valid: false, Start: 100 },
+    });
+    const body = await (await get()).json();
+    expect(body.introSkip).toBeNull();
+    expect(body.creditsStart).toBeNull();
   });
 
   it("turns away a caller who has not switched the experimental player on", async () => {

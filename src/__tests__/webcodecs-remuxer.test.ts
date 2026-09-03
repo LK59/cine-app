@@ -42,13 +42,12 @@ describe("Remuxer track selection", () => {
     expect(numbers).not.toContain(PGS.number);
   });
 
-  it("ignores a request for a subtitle track it cannot render", async () => {
+  it("offers the styled formats it can strip to text, alongside plain ones", async () => {
     const remuxer = await open();
-    remuxer.setSubtitleTrack(PGS.number);
-    // Nothing to assert on directly beyond it not throwing: the point is that an unsupported
-    // choice leaves the previous state rather than half-selecting something.
-    expect(() => remuxer.setSubtitleTrack(999)).not.toThrow();
-    expect(() => remuxer.setSubtitleTrack(null)).not.toThrow();
+    const numbers = remuxer.subtitleTracks().map((t) => t.number);
+    // ASS carries positioning and fonts this cannot honour, but its dialogue lines are text and
+    // showing them plainly beats showing nothing.
+    expect(numbers).toContain(ASS.number);
   });
 
   it("lists every audio track, so the language menu is complete", async () => {

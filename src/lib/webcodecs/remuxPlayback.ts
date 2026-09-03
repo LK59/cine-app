@@ -5,11 +5,11 @@
 // chosen and not again on every operation.
 
 import { HttpByteSource, type ByteSource } from "./byteSource";
-import { selectCue, type EngineTrack, type SubtitleCue } from "./engine";
+import { selectCue, type EngineTrack } from "./engine";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer } from "./remuxer";
+import { Remuxer, type TrackedCue } from "./remuxer";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
@@ -78,7 +78,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
 
 export class RemuxPlayback {
   private mse: MseSource | null = null;
-  private cues: SubtitleCue[] = [];
+  private cues: TrackedCue[] = [];
   private currentSubtitle: number | null = null;
   private destroyed = false;
 
@@ -123,7 +123,7 @@ export class RemuxPlayback {
     );
   }
 
-  private collect(cues: SubtitleCue[]): void {
+  private collect(cues: TrackedCue[]): void {
     this.cues.push(...cues);
     const oldest = this.video.currentTime - CUE_HISTORY_SECONDS;
     if (this.cues.length > 400) this.cues = this.cues.filter((cue) => cue.endSeconds >= oldest);
@@ -146,18 +146,21 @@ export class RemuxPlayback {
   }
 
   subtitleAt(seconds: number): string | null {
-    if (this.currentSubtitle === null) return null;
-    return selectCue(this.cues, seconds)?.text ?? null;
+    const track = this.currentSubtitle;
+    if (track === null) return null;
+    return selectCue(this.cues.filter((cue) => cue.track === track), seconds)?.text ?? null;
   }
 
+  /**
+   * Changing subtitles is a change of filter and nothing else.
+   *
+   * Every text track's lines are already in hand, so there is nothing to fetch and nothing to
+   * disturb. Re-reading the file for the newly chosen track — which is what this did first —
+   * meant re-appending media the browser had already played, and it catches that up at speed:
+   * choosing a subtitle came with a second of fast-forward before playback settled.
+   */
   selectSubtitleTrack(trackNumber: number | null): void {
     this.currentSubtitle = trackNumber;
-    this.cues = [];
-    this.remuxer.setSubtitleTrack(trackNumber);
-    // Cues arrive with the segments, so the ones for the stretch already buffered have gone by.
-    // Re-reading from where we are is what makes the change take effect now rather than in two
-    // seconds' time.
-    void this.mse?.seek(this.video.currentTime);
   }
 
   /**

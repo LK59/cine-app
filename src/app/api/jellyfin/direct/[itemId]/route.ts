@@ -48,6 +48,10 @@ export interface DirectPlayInfo {
    * without converting anything, so this is enforced by the client rather than here.
    */
   canvasHdrRefusal: string | null;
+  /** Where the opening titles run, when Jellyfin has analysed the episode. Null otherwise. */
+  introSkip: { start: number; end: number } | null;
+  /** Where the closing credits begin, which is when the next episode is offered. */
+  creditsStart: number | null;
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -64,7 +68,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const prefs = userPrefsDb.getExperimentalPlayer(session.jfId ?? session.u);
   if (!prefs.enabled) return NextResponse.json({ error: "Lecteur expérimental désactivé" }, { status: 403 });
 
-  const item = await jellyfin.getItemMediaSources(session.jfId, itemId).catch(() => null);
+  // Fetched together: the timestamps 404 for films and for episodes nobody has analysed, which
+  // simply means no skip-intro and no next-up prompt for this one.
+  const [item, timestamps] = await Promise.all([
+    jellyfin.getItemMediaSources(session.jfId, itemId).catch(() => null),
+    jellyfin.getEpisodeTimestamps(itemId).catch(() => null),
+  ]);
   const source = item?.MediaSources?.[0];
   if (!source) return NextResponse.json({ error: "Fichier introuvable côté Jellyfin" }, { status: 404 });
 
@@ -121,6 +130,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       })),
     refusedReason,
     canvasHdrRefusal,
+    introSkip: timestamps?.Introduction?.Valid
+      ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End }
+      : null,
+    creditsStart: timestamps?.Credits?.Valid ? timestamps.Credits.Start : null,
   };
 
   return NextResponse.json(payload);

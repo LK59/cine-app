@@ -112,6 +112,17 @@ export function ExperimentalPlayerHost({
     setTimeout(() => playback.close(), 200);
   }, [playback, stopPlaybackNow]);
 
+  const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
+
+  // Swaps to the next episode in place: the current one's final position is reported first, as
+  // on a manual close, but the player stays open so there is no close/reopen flicker between
+  // episodes.
+  const handleAdvance = useCallback(() => {
+    if (!nextEpisode) return;
+    stopPlaybackNow();
+    playback.advance(nextEpisode);
+  }, [nextEpisode, playback, stopPlaybackNow]);
+
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
 
@@ -466,13 +477,13 @@ export function ExperimentalPlayerHost({
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}
             loading={!ready}
-            // Intro/credits markers and episode chaining come from the stable player's own
-            // Jellyfin negotiation; wiring them here is a later step rather than a half-working
-            // approximation now.
-            introSkip={null}
-            creditsStart={null}
-            nextEpisode={null}
-            onAdvance={() => {}}
+            // Jellyfin's own analysis of the episode, fetched alongside the file's description.
+            // Playback speed needs nothing here: on the native path these controls hold a real
+            // media element, so it is the browser's own.
+            introSkip={info?.introSkip ?? null}
+            creditsStart={info?.creditsStart ?? null}
+            nextEpisode={nextEpisode}
+            onAdvance={handleAdvance}
           />
         )
       )}
