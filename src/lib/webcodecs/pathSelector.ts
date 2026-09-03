@@ -83,7 +83,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   // the browser was never going to take.
   const video = plannedMimeTypes(videoTrack, null).video;
   if (video) {
-    const rebuildable = await canRebuildAudioBuffer(video, 'audio/mp4; codecs="mp4a.40.2"', 'audio/mp4; codecs="opus"');
+    const rebuildable = await canRebuildAudioBuffer(video);
     setAudioBufferRebuildable(rebuildable);
     trace(`chemin : ce navigateur ${rebuildable ? "accepte" : "refuse"} de remplacer le tampon audio à chaud`);
   }

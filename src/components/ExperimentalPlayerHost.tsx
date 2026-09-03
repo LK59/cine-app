@@ -137,6 +137,11 @@ export function ExperimentalPlayerHost({
   // this the controls read the held element as simply paused and offer the play button, which is
   // both wrong and an invitation to make it worse.
   const [switchingAudio, setSwitchingAudio] = useState(false);
+  // Bumped to build the pipeline again from scratch. iOS takes the media resources back when the
+  // page goes to the background, and a MediaSource it has closed cannot be reopened — so coming
+  // back from a locked screen means starting over, at the position the viewer left.
+  const [rebuildCount, setRebuildCount] = useState(0);
+  const rebuildAtRef = useRef<number | null>(null);
   const [openedAt] = useState(() => Date.now());
 
   // Fetched once and then left alone. The description of a file does not change while it is
@@ -252,7 +257,7 @@ export function ExperimentalPlayerHost({
 
     let cancelled = false;
     let unsubscribes: (() => void)[] = [];
-    const startSeconds = session.resumeAt ?? info.resumeSeconds ?? 0;
+    const startSeconds = rebuildAtRef.current ?? session.resumeAt ?? info.resumeSeconds ?? 0;
 
     // The file decides which pipeline runs, not a setting: repackaging it for the browser's own
     // decoder is better on every axis when the codecs allow it, and decoding it ourselves is the
@@ -375,7 +380,34 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, session.resumeAt]);
+  }, [info, session.resumeAt, rebuildCount]);
+
+  // Watches for the platform having taken the source away while the page was not on screen. The
+  // check runs on returning to the foreground, and once more a moment later: on iOS the closure
+  // is not always visible in the same task as the visibility change.
+  useEffect(() => {
+    if (path !== "remux") return;
+    const check = () => {
+      const playback = remuxRef.current;
+      if (!playback?.lost || rebuildAtRef.current !== null) return;
+      rebuildAtRef.current = playback.position || positionRef.current;
+      setReady(false);
+      setRuntimeError(null);
+      setRebuildCount((count) => count + 1);
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      check();
+      setTimeout(check, 400);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [path]);
+
+  // Cleared once the rebuilt pipeline is running, so an ordinary later seek is not undone by it.
+  useEffect(() => {
+    if (ready) rebuildAtRef.current = null;
+  }, [ready]);
 
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant

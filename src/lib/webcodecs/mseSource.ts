@@ -157,12 +157,29 @@ export function containerAccepts(mimeType: string): boolean {
  */
 let rebuildAnswer: Promise<boolean> | null = null;
 
-export function canRebuildAudioBuffer(videoMime: string, first: string, second: string): Promise<boolean> {
+/** Candidates for the probe below, in the order they are worth trying. */
+const AUDIO_PROBE_TYPES = [
+  'audio/mp4; codecs="mp4a.40.2"',
+  'audio/mp4; codecs="ac-3"',
+  'audio/mp4; codecs="opus"',
+  'audio/mp4; codecs="ec-3"',
+];
+
+export function canRebuildAudioBuffer(videoMime: string): Promise<boolean> {
   rebuildAnswer ??= (async () => {
     const Source = sourceConstructor();
     // No document means no element to attach a source to, and a source that never opens cannot
     // answer this. Nothing is guessed on its behalf.
     if (!Source || typeof document === "undefined") return false;
+
+    // Two types this browser actually takes, chosen here rather than named in advance. Asking an
+    // iPhone to swap to Opus — which it does not accept in a MediaSource at all — made
+    // addSourceBuffer throw over the codec rather than over the swap, and the answer came back
+    // "no" to a question that was never put. With fewer than two, no file can change audio codec
+    // mid-playback anyway, so there is nothing to refuse.
+    const usable = AUDIO_PROBE_TYPES.filter((type) => containerAccepts(type));
+    if (usable.length < 2) return true;
+    const [first, second] = usable;
     const video = document.createElement("video");
     video.disableRemotePlayback = true;
     const source = new Source();
@@ -206,6 +223,9 @@ export function playabilityOf(plan: RemuxPlan): { ok: true } | { ok: false; reas
   }
   return { ok: true };
 }
+
+/** How far before the end of the held picture the reader starts building segments in full again. */
+const VIDEO_SKIP_MARGIN = 6;
 
 /** A source that has not opened by now is not going to answer the rebuild question either. */
 const PROBE_TIMEOUT_MS = 300;
@@ -307,6 +327,8 @@ export class MseSource {
   /** While set, video already held is not sent again — see refillAudio. */
   private skipVideoUntil: number | null = null;
   private lastAppendAt = 0;
+  /** How far the reader has read, on the player's clock. See the video-skip margin. */
+  private readUpTo = 0;
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
   private resumeDeadline = 0;
@@ -770,6 +792,12 @@ export class MseSource {
         // is what makes a second seek feel like it does nothing for several seconds.
         if (this.requestedSeek !== null) break;
 
+        // Nothing asks for the pictures of a stretch the browser already holds — which is every
+        // language change. The file still has to be read for them (Matroska interleaves the sound
+        // with them), but copying megabytes into segments that are then dropped does not. The
+        // margin means the segment that crosses back over the line is built in full.
+        this.remuxer.setVideoWanted(this.skipVideoUntil === null || this.readUpTo >= this.skipVideoUntil - VIDEO_SKIP_MARGIN);
+
         const segment = await this.remuxer.nextSegment();
         if (this.generation !== generation || this.destroyed) break;
         if (this.appendsTraced < TRACED_APPENDS) {
@@ -814,6 +842,7 @@ export class MseSource {
         // reading of where the media is would be about a position no longer being served.
         if (this.generation !== generation || this.destroyed) break;
 
+        this.readUpTo = segment.endSeconds;
         this.nudgeIntoBuffer();
         this.lastAppendAt = Date.now();
 
@@ -1123,6 +1152,7 @@ export class MseSource {
     // was working on. The sound carried on from its own fresh buffer while the picture stopped,
     // and a seek — which re-primes the decoder — showed the right frame again.
     this.skipVideoUntil = this.videoBufferedEnd();
+    this.readUpTo = playerSeconds;
     await this.clear(this.audioOps);
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     void this.fill();
@@ -1171,6 +1201,7 @@ export class MseSource {
     this.lastSeekTarget = playerSeconds;
     // An ordinary seek replaces everything, so nothing is being spared.
     this.skipVideoUntil = null;
+    this.readUpTo = playerSeconds;
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
@@ -1288,6 +1319,22 @@ export class MseSource {
     if (failure) parts.push(`élément code ${failure.code}${failure.message ? ` « ${failure.message} »` : ""}`);
     parts.push(`readyState ${this.video.readyState}`, `réseau ${this.video.networkState}`);
     return `(${parts.join(", ")})`;
+  }
+
+  /**
+   * Whether the platform has taken the source away.
+   *
+   * iOS reclaims media resources when a page goes to the background, and a MediaSource it has
+   * closed cannot be reopened — every buffer on it is gone with it. There is nothing to repair
+   * here; the caller has to build the whole thing again.
+   */
+  get lost(): boolean {
+    return !this.destroyed && this.source.readyState === "closed";
+  }
+
+  /** Where the viewer was, for a caller that has to rebuild and wants to come back to it. */
+  get position(): number {
+    return this.video.currentTime;
   }
 
   get debug(): Record<string, string> {

@@ -294,6 +294,15 @@ export class RemuxPlayback {
     await mse.armAudioRelease();
   }
 
+  /** See MseSource.lost: the platform took the source, and only a rebuild brings it back. */
+  get lost(): boolean {
+    return this.mse?.lost ?? false;
+  }
+
+  get position(): number {
+    return this.mse?.position ?? 0;
+  }
+
   seek(seconds: number): Promise<void> {
     return this.mse?.seek(seconds) ?? Promise.resolve();
   }
@@ -307,7 +316,10 @@ export class RemuxPlayback {
       Audio: this.audioTrack ? `${this.audioTrack.codecId} ${this.audioTrack.audio?.channels ?? "?"} canaux` : "aucune",
       // Worth stating plainly: on this path the sound is the one thing that may not be the
       // file's own bytes, and knowing which of the two is happening explains everything else.
-      "Traitement audio": remux.transcodedCodec ? `décodé puis ré-encodé en ${remux.transcodedCodec}` : "copié tel quel",
+      // A codec string is what the container says; a name is what a reader needs.
+      "Traitement audio": remux.transcodedCodec
+        ? `décodé puis ré-encodé en ${remux.transcodedCodec.startsWith("mp4a") ? "AAC" : remux.transcodedCodec === "opus" ? "Opus" : remux.transcodedCodec}`
+        : "copié tel quel",
       "Décalage de présentation": `${(remux.presentationDelaySeconds * 1000).toFixed(0)} ms`,
       "Images recalées": String(remux.clampedSamples),
       Index: `${this.remuxer.videoCuePoints} points vidéo / ${this.file.cues.length}`,

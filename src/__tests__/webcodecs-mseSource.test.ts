@@ -229,6 +229,12 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
     seekable,
     plan: () => PLAN,
     setAudioTrack: async () => {},
+    // Recorded, not merely tolerated: whether the pictures are built at all is a real decision
+    // the caller makes, and a bench that ignores it cannot show it being made wrongly.
+    videoWantedCalls: [] as boolean[],
+    setVideoWanted(wanted: boolean) {
+      remuxer.videoWantedCalls.push(wanted);
+    },
     diagnostics: () => ({ presentationDelaySeconds: delay, clampedSamples: 0 }),
     seekTo: (s: number) => {
       seeks.push(s);
@@ -243,7 +249,7 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
       return { video: new Uint8Array([10 + index]), audio: new Uint8Array([20 + index]), subtitles: [], endSeconds: index * 2 };
     },
   };
-  return remuxer as unknown as Remuxer & { seeks: number[] };
+  return remuxer as unknown as Remuxer & { seeks: number[]; videoWantedCalls: boolean[] };
 }
 
 beforeEach(() => {
@@ -1047,6 +1053,29 @@ describe("MseSource", () => {
     expect(source.removed).not.toContain(source.buffers[0]);
   });
 
+  it("does not build the pictures of a stretch the browser already holds", async () => {
+    // A language change re-reads the file from the playhead. The bytes cannot be avoided — the
+    // sound is interleaved with the pictures in the same clusters — but copying megabytes of
+    // picture into segments that are then dropped can be, and on a 4K file that was five and
+    // eight megabytes per segment for nothing.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    remuxer.videoWantedCalls.length = 0;
+
+    await mse.refillAudio(10);
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Asked for at least once while re-reading what is already held.
+    expect(remuxer.videoWantedCalls).toContain(false);
+    // And an ordinary seek, which replaces everything, wants them all again.
+    remuxer.videoWantedCalls.length = 0;
+    await mse.seek(300);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(remuxer.videoWantedCalls).not.toContain(false);
+  });
+
   it("empties the audio buffer before asking it to change codec", async () => {
     // Asking a buffer to reinterpret itself while it still holds coded frames of the codec it is
     // leaving is more than the specification requires of an implementation — and this device
@@ -1129,7 +1158,7 @@ describe("MseSource", () => {
     const video = fakeVideo();
     // A remuxer that never returns: attaching must still complete, or a slow or unhelpful
     // browser holds the whole session hostage behind a spinner with no reason to stop.
-    const stuck = { plan: () => PLAN, seekable: true, seeks: [], diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }), seekTo: () => {}, setAudioTrack: async () => {}, nextSegment: () => new Promise(() => {}) };
+    const stuck = { plan: () => PLAN, seekable: true, seeks: [], diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }), seekTo: () => {}, setAudioTrack: async () => {}, setVideoWanted: () => {}, nextSegment: () => new Promise(() => {}) };
     await expect(
       MseSource.attach(video, stuck as never, PLAN, { onError: vi.fn(), onWarning: vi.fn() })
     ).resolves.toBeDefined();

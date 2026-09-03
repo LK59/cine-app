@@ -8,6 +8,7 @@ import type { ByteSource } from "@/lib/webcodecs/byteSource";
 const opened: { closed: boolean }[] = [];
 let openFails = false;
 let transcoderCodec = "mp4a.40.2";
+let failNextFrames = false;
 vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
   return {
@@ -22,7 +23,13 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
           sampleRate: 48000,
           channels: 6,
           seekTo: () => {},
-          framesUpTo: async () => [],
+          framesUpTo: async () => {
+            if (failNextFrames) {
+              failNextFrames = false;
+              throw new Error("InternalAudioEncoderCocoa encoding failed");
+            }
+            return [];
+          },
           close() {
             this.closed = true;
           },
@@ -250,5 +257,28 @@ describe("plannedMimeTypes", () => {
   it("returns nothing for a codec it cannot describe, rather than an invalid string", () => {
     expect(plannedMimeTypes(track({ number: 1, type: "video", codecId: "V_VP9" }), null).video).toBeNull();
     expect(plannedMimeTypes(VIDEO, track({ number: 2, type: "audio", codecId: "A_TRUEHD" })).audio).toBeNull();
+  });
+});
+
+describe("Remuxer encoder recovery", () => {
+  it("rebuilds an encoder that fails rather than ending playback", async () => {
+    // Safari's own AAC encoder gives up from time to time — "InternalAudioEncoderCocoa encoding
+    // failed" — always after a change of track, never reproducibly. Nothing about the file or the
+    // configuration is wrong, so a session must not end over someone else's hiccup.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    opened.length = 0;
+    failNextFrames = true;
+
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      await expect(remuxer.nextSegment()).resolves.not.toThrow();
+      // A second transcoder was built, and the failed one released.
+      expect(opened.length).toBe(2);
+      expect(opened[0].closed).toBe(true);
+    } finally {
+      FILE.tracks.pop();
+      failNextFrames = false;
+    }
   });
 });

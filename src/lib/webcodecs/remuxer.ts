@@ -14,7 +14,8 @@ import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
-import { transcodeTargetCodec, AudioTranscoder, transcodableAudio } from "./audioTranscode";
+import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
+import { trace } from "./trace";
 import { containerAccepts } from "./mseSource";
 import { SampleReader } from "./sampleReader";
 import type { ByteSource } from "./byteSource";
@@ -24,6 +25,14 @@ const TIMESCALE = 1_000_000;
 
 /** Roughly how much media each segment carries. Cut at keyframes, so it is a floor, not a target. */
 const SEGMENT_US = 2_000_000;
+
+/**
+ * How many times a failing encoder is rebuilt before its failure is reported.
+ *
+ * One is usually enough — the hiccup is transient — and an encoder that refuses every time must
+ * not turn into a player that reads a whole film in silence.
+ */
+const MAX_ENCODER_RESTARTS = 3;
 
 /** A frame's duration when nothing in the file says what it is: 24 fps, close enough for one frame. */
 const FALLBACK_FRAME_US = 41_667;
@@ -321,6 +330,15 @@ export class Remuxer {
    * anchored per segment on its own earliest picture, so nothing is chained off this.
    */
   private videoDecodeTime = 0;
+  private encoderRestarts = 0;
+  /**
+   * Whether segments should carry their pictures.
+   *
+   * Lowered while the caller re-reads a stretch it already holds — a change of audio language
+   * reads the file again from the playhead, and on a 4K file that meant copying five and eight
+   * megabytes of picture into segments that were then dropped.
+   */
+  private videoWanted = true;
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
   private subtitleNumbersCache: Map<number, MatroskaTrack> | null = null;
@@ -557,6 +575,10 @@ export class Remuxer {
 
     if (this.pendingVideo.length === 0 && this.pendingAudio.length === 0 && !this.transcoder) return null;
 
+    // The pictures still have to be *read*: Matroska interleaves them with the sound in the same
+    // clusters, so there is no way to fetch one without the other. Building a segment out of
+    // them, though, is megabytes copied for nothing when the caller has already said it holds
+    // this stretch — which is every language change.
     const video = this.buildVideo();
     // Built after the video, because the stretch it has to cover is what the video just settled.
     const audio = this.transcoder ? await this.buildTranscodedAudio() : this.buildAudio();
@@ -619,7 +641,17 @@ export class Remuxer {
       this.transcoder.seekTo(this.segmentStartUs / TIMESCALE);
     }
 
-    const frames = await this.transcoder.framesUpTo(this.videoDecodeTime / TIMESCALE);
+    let frames: TranscodedFrame[];
+    try {
+      frames = await this.transcoder.framesUpTo(this.videoDecodeTime / TIMESCALE);
+    } catch (error) {
+      // Safari's own AAC encoder gives up from time to time — "InternalAudioEncoderCocoa encoding
+      // failed" — always after a change of track, never at the start, and not reproducibly: the
+      // same change succeeds on the next attempt. Nothing about the file or the configuration is
+      // wrong, so ending playback over it throws away a session for someone else's hiccup. The
+      // encoder is a service; it is closed and opened again where the reader stands.
+      frames = await this.retryTranscoder(error);
+    }
     if (frames.length === 0) return null;
 
     const delay = this.presentationDelayUs ?? 0;
@@ -633,6 +665,41 @@ export class Remuxer {
     }));
 
     return mediaSegment(this.audioInfo, this.sequence, samples);
+  }
+
+  /**
+   * Builds a fresh transcoder in place of one that failed, and asks it again.
+   *
+   * Bounded, because an encoder that refuses every time is a real possibility and retrying it for
+   * ever would be a player that reads the whole film without ever producing a sound. Past the
+   * limit the original failure is raised, which is the one worth reporting.
+   */
+  private async retryTranscoder(cause: unknown): Promise<TranscodedFrame[]> {
+    const track = this.audioTrack;
+    if (!track || this.encoderRestarts >= MAX_ENCODER_RESTARTS) throw cause;
+    this.encoderRestarts += 1;
+
+    const at = this.segmentStartUs / TIMESCALE;
+    trace(`transcodage audio : encodeur en échec, reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
+    const previous = this.transcoder;
+    const next = await AudioTranscoder.open(this.source, track, at);
+    assertContainerTakes(next);
+    if (previous && next.codecString !== previous.codecString) {
+      // The buffer decodes by an initialisation segment already sent; a replacement that
+      // describes itself differently cannot take over behind its back.
+      next.close();
+      throw cause;
+    }
+    previous?.close();
+    this.transcoder = next;
+    this.audioInfo = transcodedAudioInfo(next, track);
+    next.seekTo(at);
+    return next.framesUpTo(this.videoDecodeTime / TIMESCALE);
+  }
+
+  /** Whether the pictures read are also written into the segments handed back. */
+  setVideoWanted(wanted: boolean): void {
+    this.videoWanted = wanted;
   }
 
   private buildVideo(): Uint8Array | null {
@@ -677,6 +744,11 @@ export class Remuxer {
     });
 
     this.videoDecodeTime = ordered.endDecodeTime;
+    // Everything above still had to happen: the decode times, the presentation delay and where
+    // this segment ends are what the sound is cut against, and a reader that stopped keeping
+    // track of them would put the next real segment in the wrong place. Only the copying is
+    // skipped — which is all of the cost.
+    if (!this.videoWanted) return null;
     return mediaSegment(this.videoInfo, this.sequence, samples);
   }
 
