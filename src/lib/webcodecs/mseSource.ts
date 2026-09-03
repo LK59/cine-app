@@ -42,11 +42,10 @@ const STALL_TIMEOUT_MS = 700;
 const RESUME_GUARD_MS = 1500;
 
 /**
- * How long the clock is watched after pressing pause, waiting for it to come to rest.
+ * How long the clock is watched after a pause has been flushed, in case the flush did not take.
  *
- * It does not stop where the button was pressed: the sound already handed to the hardware plays
- * out over the next fraction of a second and the clock follows it. That fraction was heard, so it
- * is part of what has been watched — anchoring before it and returning there on resume replays it.
+ * The flush itself is immediate; this only covers a platform that queues more sound after being
+ * told to discard what it had. A clock advancing while nothing is playing is exactly that.
  */
 const PAUSE_SETTLE_MS = 1000;
 
@@ -206,11 +205,20 @@ export class MseSource {
   private resumeTrace: {
     paused: number;
     settled: number;
-    asserted: number | null;
+    asserted: number;
     play: number;
     tick: number | null;
   } | null = null;
-  private pauseAssertTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Re-states the position, which runs the seek algorithm and so discards any queued sound. */
+  private assertPausePosition(): void {
+    const anchor = this.pauseAnchor;
+    if (this.destroyed || anchor === null || !this.video.paused) return;
+    this.lastSeekTarget = anchor;
+    this.video.currentTime = anchor;
+    if (this.resumeTrace) this.resumeTrace.asserted += 1;
+  }
+
   private seeksServed = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
@@ -334,29 +342,21 @@ export class MseSource {
   private readonly onPause = () => {
     if (this.destroyed) return;
     this.pauseAnchor = this.video.currentTime;
-    this.resumeTrace = { paused: this.pauseAnchor, settled: this.pauseAnchor, asserted: null, play: NaN, tick: null };
+    this.resumeTrace = { paused: this.pauseAnchor, settled: this.pauseAnchor, asserted: 0, play: NaN, tick: null };
 
-    // Re-stated while the picture is standing still, which is the only moment it costs nothing.
+    // Emptied at once, not a second later.
     //
-    // The half second that appears at the instant of resuming is the sound the hardware still
-    // held: it plays on past the frozen picture, and the clock reports it all at once when
-    // playback restarts. By then there is no good answer — pulling it back shows the wrong frame
-    // while the seek settles, and leaving it skips half a second of picture. Asking the element
-    // to be where it already is, while paused, empties that queue instead, so there is nothing
-    // left to arrive late. Whether it works is visible in the trace: the resume then departs from
-    // exactly where the pause stopped.
-    if (this.pauseAssertTimer) clearTimeout(this.pauseAssertTimer);
-    this.pauseAssertTimer = setTimeout(() => {
-      this.pauseAssertTimer = null;
-      const anchor = this.pauseAnchor;
-      if (this.destroyed || anchor === null || !this.video.paused) return;
-      this.lastSeekTarget = anchor;
-      this.video.currentTime = anchor;
-      if (this.resumeTrace) this.resumeTrace.asserted = anchor;
-    }, PAUSE_SETTLE_MS);
-    // Followed until it comes to rest, so the anchor is where the film actually stopped being
-    // heard rather than where the button was pressed. On a platform that stops dead — every
-    // desktop browser — the first sample is already the last, and this costs nothing.
+    // The half second that turns up at the instant of resuming is the sound iOS still holds
+    // queued: it plays on past the frozen picture, and the clock — which follows the sound —
+    // reports it all in one go when playback restarts. Asking the element to be where it already
+    // is runs the seek algorithm, and that discards what is queued. Doing it immediately means
+    // there is never anything queued to drain, so a resume a fraction of a second later is as
+    // exact as one a minute later. Waiting first, as this did, left the fast pause-and-play
+    // untouched — the very case where the wait is most obvious.
+    this.assertPausePosition();
+
+    // Then watched, in case the flush did not take on the first attempt: the clock advancing
+    // while nothing is playing is the queue draining anyway, and it is re-stated each time.
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
     const deadline = Date.now() + PAUSE_SETTLE_MS;
     this.pauseSettleTimer = setInterval(() => {
@@ -367,11 +367,13 @@ export class MseSource {
         return;
       }
       const settled = this.pauseAnchor;
-      if (settled !== null && this.video.currentTime > settled) {
+      if (settled !== null && this.video.currentTime > settled + 0.02) {
         this.pauseAnchor = this.video.currentTime;
         if (this.resumeTrace) this.resumeTrace.settled = this.video.currentTime;
+        this.assertPausePosition();
       }
     }, 80);
+
   };
 
   private readonly onPlay = () => {
@@ -850,7 +852,7 @@ export class MseSource {
       ...(this.resumeTrace
         ? {
             "Dernière pause": `arrêt ${this.resumeTrace.paused.toFixed(3)} → repos ${this.resumeTrace.settled.toFixed(3)}${
-              this.resumeTrace.asserted !== null ? " → recalé" : ""
+              this.resumeTrace.asserted > 0 ? ` → recalé ×${this.resumeTrace.asserted}` : ""
             }`,
             "Dernière reprise": Number.isNaN(this.resumeTrace.play)
               ? "—"
@@ -876,8 +878,6 @@ export class MseSource {
     this.watchdogTimer = null;
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
     this.pauseSettleTimer = null;
-    if (this.pauseAssertTimer) clearTimeout(this.pauseAssertTimer);
-    this.pauseAssertTimer = null;
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();

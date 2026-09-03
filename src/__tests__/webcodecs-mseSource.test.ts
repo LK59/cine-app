@@ -687,25 +687,20 @@ describe("MseSource", () => {
     expect(video.currentTime).toBeLessThanOrEqual(PLAN.durationSeconds + 0.2);
   });
 
-  it("re-states the position while paused, where doing so costs nothing", async () => {
+  it("empties the queued sound the instant pause is pressed, not a second later", async () => {
     const video = fakeVideo();
-    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
     await flush();
-    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
-    let seeksOnElement = 0;
-    video.addEventListener("seeking", () => (seeksOnElement += 1));
-
-    setTime(12);
+    (video as unknown as { currentTime: number }).currentTime = 12;
     (video as unknown as { paused: boolean }).paused = true;
-    video.dispatchEvent(new Event("pause"));
-    await new Promise((r) => setTimeout(r, 1200));
 
-    // The picture is standing still, so asking the element to be where it already is is free —
-    // and it is the only moment that is true. Left until the resume, the same correction shows a
-    // wrong frame while it settles.
+    video.dispatchEvent(new Event("pause"));
+
+    // No waiting: a pause followed straight away by a play is precisely the case a delay leaves
+    // untouched, and it is the one where the delay is most obvious.
+    expect(mse.debug["Dernière pause"]).toContain("recalé");
     expect(video.currentTime).toBe(12);
-    expect(seeksOnElement).toBe(0);
-  }, 10_000);
+  });
 
   it("lets a resume land where the sound actually stopped, half a second on", async () => {
     const video = fakeVideo();
