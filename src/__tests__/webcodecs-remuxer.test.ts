@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { Remuxer, plannedMimeTypes, playableAudio, remuxableAudio } from "@/lib/webcodecs/remuxer";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
@@ -28,6 +28,13 @@ const FILE: MatroskaFile = {
 };
 
 const SOURCE: ByteSource = { size: 1000, read: async () => new Uint8Array(0), close: () => {} };
+
+// What a track becomes is now asked of the browser, so these need one to ask. This stands in for
+// a player that takes every codec in a container — the iPhone case, where nothing is re-encoded.
+beforeEach(() => {
+  vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: () => true } });
+});
+afterEach(() => vi.unstubAllGlobals());
 
 const open = (audio: MatroskaTrack | null = AUDIO_FR) =>
   Remuxer.open(SOURCE, FILE, VIDEO, audio, { width: 1920, height: 1080 });
@@ -82,11 +89,23 @@ describe("Remuxer track selection", () => {
 
   it("counts a track that has to be re-encoded as playable, and says what will arrive", () => {
     const dts = track({ number: 2, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
-    // No browser accepts DTS in a container, so what reaches the player is what comes out of the
-    // encoder — and that is what the MIME type has to describe.
+    // Even a player that takes everything else has no DTS, so what reaches it is what comes out
+    // of the encoder — and that is what the MIME type has to describe.
     expect(playableAudio(dts)).toBe(true);
     expect(remuxableAudio(dts)).toBe(false);
     expect(plannedMimeTypes(VIDEO, dts).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
+  it("carries a codec the player takes, and re-encodes the same codec where it does not", () => {
+    const eac3 = track({ number: 2, type: "audio", codecId: "A_EAC3", audio: { sampleRate: 48000, channels: 6 } });
+    expect(audioDelivery(eac3)).toBe("copy");
+    expect(plannedMimeTypes(VIDEO, eac3).audio).toBe('audio/mp4; codecs="ec-3"');
+
+    // The same track on a player with no Dolby decoder — Chrome, which would otherwise lose the
+    // hardware path over most of a library.
+    vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => t.includes("mp4a") } });
+    expect(audioDelivery(eac3)).toBe("transcode");
+    expect(plannedMimeTypes(VIDEO, eac3).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
   it("says an AC-3 track cannot be described when the file yields no frame to read", async () => {

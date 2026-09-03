@@ -111,6 +111,18 @@ function sourceConstructor(): MediaSourceCtor | null {
   return window.ManagedMediaSource ?? (typeof MediaSource !== "undefined" ? MediaSource : null);
 }
 
+/** Whether the player will take this codec inside a MediaSource, which is not the same question
+ * as whether it can decode the codec at all: Chrome plays AC-3 nowhere, Safari plays it in both. */
+export function containerAccepts(mimeType: string): boolean {
+  const Source = sourceConstructor();
+  if (!Source) return false;
+  try {
+    return Source.isTypeSupported(mimeType);
+  } catch {
+    return false;
+  }
+}
+
 /** Whether this browser can play what the remuxer would produce, checked before any work starts. */
 export function playabilityOf(plan: RemuxPlan): { ok: true } | { ok: false; reason: string } {
   const Source = sourceConstructor();

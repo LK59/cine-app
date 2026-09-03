@@ -39,6 +39,27 @@ function mimeFor(video: MatroskaTrack, audio: MatroskaTrack | null) {
   return { video: mime.video!, audio: mime.audio };
 }
 
+// The transcoder itself needs a decoder and an encoder that only exist in a browser. What is
+// being checked here is the decision — whether a track the player will not take is re-encoded
+// rather than costing the hardware path — so the machinery behind it is stood in for.
+vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
+  return {
+    ...original,
+    AudioTranscoder: {
+      open: async () => ({
+        sampleEntry: new Uint8Array([0, 0, 0, 8, 0x6d, 0x70, 0x34, 0x61]),
+        codecString: "mp4a.40.2",
+        sampleRate: 48000,
+        channels: 6,
+        seekTo: () => {},
+        framesUpTo: async () => [],
+        close: () => {},
+      }),
+    },
+  };
+});
+
 let supported = new Set<string>();
 beforeEach(() => {
   supported = new Set();
@@ -60,16 +81,27 @@ describe("choosePlaybackPath", () => {
     expect(chosen.attempts).toEqual([{ path: "remux", ok: true }]);
   });
 
-  it("steps down to WebCodecs when the browser will not take the audio, and records why", async () => {
-    // An iPhone that plays E-AC-3 from a file will still refuse it inside a MediaSource. That is
-    // precisely the case the second path exists for: it decodes that audio in software.
+  it("re-encodes audio the browser will not take, rather than giving up the hardware path", async () => {
+    // Chrome ships no Dolby decoder, so it takes neither AC-3 nor E-AC-3 in a container — and
+    // that is most of this library. Losing hardware video over the sound would be the wrong
+    // trade when the sound can simply be handed over as something else.
+    supported = new Set([mimeFor(VIDEO, null).video, 'audio/mp4; codecs="mp4a.40.2"']);
+    vi.stubGlobal("AudioEncoder", { isConfigSupported: async () => ({ supported: true }) });
+
+    const chosen = await choosePlaybackPath(input(VIDEO, EAC3));
+    expect(chosen.path).toBe("remux");
+    expect(chosen.plan?.audioMimeType).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
+  it("steps down to WebCodecs when it can neither carry nor re-encode the audio", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
+    vi.stubGlobal("AudioEncoder", undefined);
     const chosen = await choosePlaybackPath(input(VIDEO, EAC3));
 
     expect(chosen.path).toBe("webcodecs");
     expect(chosen.remuxer).toBeNull();
     expect(chosen.attempts[0]).toMatchObject({ path: "remux", ok: false });
-    expect(chosen.attempts[0].reason).toContain("ec-3");
+    expect(chosen.attempts[0].reason).toContain("A_EAC3");
     expect(chosen.attempts[1]).toEqual({ path: "webcodecs", ok: true });
   });
 
@@ -84,9 +116,10 @@ describe("choosePlaybackPath", () => {
   });
 
   it("steps down when the browser accepts nothing at all", async () => {
+    vi.stubGlobal("AudioEncoder", undefined);
     const chosen = await choosePlaybackPath(input());
     expect(chosen.path).toBe("webcodecs");
-    expect(chosen.attempts[0].reason).toContain("hvc1");
+    expect(chosen.attempts[0]).toMatchObject({ path: "remux", ok: false });
     expect(chosen.attempts[1]).toEqual({ path: "webcodecs", ok: true });
   });
 
@@ -111,10 +144,11 @@ describe("describePath", () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
     expect(describePath(await choosePlaybackPath(input(VIDEO, null)))).toBe("remultiplexage → lecteur natif");
 
+    vi.stubGlobal("AudioEncoder", undefined);
     const stepped = await choosePlaybackPath(input(VIDEO, EAC3));
     const described = describePath(stepped);
     expect(described).toContain("WebCodecs → canvas");
     expect(described).toContain("remux refusé");
-    expect(described).toContain("ec-3");
+    expect(described).toContain("A_EAC3");
   });
 });

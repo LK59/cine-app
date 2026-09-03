@@ -102,13 +102,16 @@ async function load() {
 }
 
 describe("transcodableAudio", () => {
-  it("recognises the DTS family and nothing else", async () => {
+  it("names what there is a decoder for here, which is not the same as what needs one", async () => {
     const { transcodableAudio } = await load();
-    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]) {
+    // Being on this list does not mean a track will be re-encoded — only that it could be, if
+    // the browser turns out not to take it. Dolby is here because Chrome ships no decoder for it
+    // and would otherwise lose the hardware path over most of a library.
+    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_AC3", "A_EAC3"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(true);
     }
-    // These ride in the container untouched, and TrueHD has no decoder here at all.
-    for (const codecId of ["A_AC3", "A_EAC3", "A_AAC", "A_TRUEHD"]) {
+    // AAC every browser takes, and TrueHD has no decoder here at all.
+    for (const codecId of ["A_AAC", "A_TRUEHD", "A_MPEG/L2"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(false);
     }
   });

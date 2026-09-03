@@ -15,6 +15,7 @@ import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
 import { AudioTranscoder, transcodableAudio } from "./audioTranscode";
+import { containerAccepts } from "./mseSource";
 import { SampleReader } from "./sampleReader";
 import type { ByteSource } from "./byteSource";
 
@@ -101,9 +102,7 @@ function audioCodecString(track: MatroskaTrack): string | null {
     case "A_AAC": return aacCodecString(track.codecPrivate);
     case "A_AC3": return "ac-3";
     case "A_EAC3": return "ec-3";
-    // What will arrive in the container, not what is in the file: a codec no browser accepts is
-    // decoded and encoded again on the way through, and AAC is what comes out.
-    default: return transcodableAudio(track) ? "mp4a.40.2" : null;
+    default: return null;
   }
 }
 
@@ -126,7 +125,12 @@ export function plannedMimeTypes(
   audioTrack: MatroskaTrack | null
 ): { video: string | null; audio: string | null } {
   const video = videoCodecString(videoTrack);
-  const audio = audioTrack ? audioCodecString(audioTrack) : null;
+  // What will arrive in the container, which for a re-encoded track is not what is in the file.
+  const audio = !audioTrack
+    ? null
+    : audioDelivery(audioTrack) === "transcode"
+      ? "mp4a.40.2"
+      : audioCodecString(audioTrack);
   return {
     video: video ? `video/mp4; codecs="${video}"` : null,
     audio: audio ? `audio/mp4; codecs="${audio}"` : null,
@@ -138,21 +142,31 @@ export function remuxableVideo(track: MatroskaTrack): boolean {
   return videoCodecString(track) !== null;
 }
 
-/** Carried through untouched. */
+/** What this codec can be described as in an MP4, or null if it cannot. */
 export function remuxableAudio(track: MatroskaTrack): boolean {
-  switch (track.codecId) {
-    case "A_AAC":
-    case "A_AC3":
-    case "A_EAC3":
-      return true;
-    default:
-      return false;
-  }
+  return audioCodecString(track) !== null;
+}
+
+/** What has to happen to a track's sound for this player to carry it. */
+export type AudioDelivery = "copy" | "transcode" | "none";
+
+/**
+ * Asked of the browser, not answered from a list.
+ *
+ * Which codecs a player takes inside a MediaSource is not a property of the codec: an iPhone
+ * takes AC-3 there and should carry it through untouched, while Chrome ships no Dolby decoder at
+ * all and would otherwise lose the hardware path for most of a library over it. So the question
+ * is put to the browser, and only what it declines is decoded and encoded again.
+ */
+export function audioDelivery(track: MatroskaTrack): AudioDelivery {
+  const natural = audioCodecString(track);
+  if (natural && containerAccepts(`audio/mp4; codecs="${natural}"`)) return "copy";
+  return transcodableAudio(track) ? "transcode" : "none";
 }
 
 /** Carried through at all — either untouched, or by being decoded and encoded again. */
 export function playableAudio(track: MatroskaTrack): boolean {
-  return remuxableAudio(track) || transcodableAudio(track);
+  return audioDelivery(track) !== "none";
 }
 
 /**
@@ -264,7 +278,8 @@ export class Remuxer {
     const start = file.firstClusterOffset ?? file.segmentDataStart;
     // A track that cannot ride in the container is decoded and encoded again on the way through,
     // and the encoder — not the file — is then what describes it.
-    const transcoder = audioTrack && transcodableAudio(audioTrack) ? await AudioTranscoder.open(source, audioTrack) : null;
+    const transcoder =
+      audioTrack && audioDelivery(audioTrack) === "transcode" ? await AudioTranscoder.open(source, audioTrack) : null;
     const audioInfo = audioTrack
       ? transcoder
         ? transcodedAudioInfo(transcoder, audioTrack)
@@ -289,7 +304,7 @@ export class Remuxer {
     const duration = this.file.durationSeconds ?? 0;
     return {
       videoMimeType: `video/mp4; codecs="${videoCodecString(this.videoTrack)}"`,
-      audioMimeType: this.audioTrack ? `audio/mp4; codecs="${audioCodecString(this.audioTrack)}"` : null,
+      audioMimeType: this.audioTrack ? plannedMimeTypes(this.videoTrack, this.audioTrack).audio : null,
       videoInit: initSegment(this.videoInfo, duration),
       audioInit: this.audioInfo ? initSegment(this.audioInfo, duration) : null,
       durationSeconds: duration,
@@ -315,7 +330,7 @@ export class Remuxer {
     this.transcoder?.close();
     this.transcoder = null;
 
-    if (transcodableAudio(track)) {
+    if (audioDelivery(track) === "transcode") {
       this.transcoder = await AudioTranscoder.open(this.source, track);
       this.audioInfo = transcodedAudioInfo(this.transcoder, track);
       this.audioTrack = track;

@@ -25,8 +25,8 @@ import type { ByteSource } from "./byteSource";
 import { unsupportedReason } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
-import { canEncodeAac, transcodableAudio } from "./audioTranscode";
-import { Remuxer, plannedMimeTypes, playableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
+import { canEncodeAac } from "./audioTranscode";
+import { Remuxer, audioDelivery, plannedMimeTypes, playableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
 
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
 const EMPTY = new Uint8Array(0);
@@ -67,11 +67,11 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   // Asked before a megabyte and a half of decoder is fetched. A track that has to be re-encoded
   // is only carried here if this browser will do the encoding, and finding that out afterwards
   // would mean paying for the download to learn it.
-  if (audioTrack && transcodableAudio(audioTrack)) {
+  if (audioTrack && audioDelivery(audioTrack) === "transcode") {
     const rate = audioTrack.audio?.sampleRate ?? 48000;
     const channels = audioTrack.audio?.channels ?? 2;
     if (!(await canEncodeAac(rate, channels))) {
-      return `ce navigateur n'encode pas l'AAC en ${channels} canaux, nécessaire pour ${audioTrack.codecId}`;
+      return `ce navigateur n'accepte pas ${audioTrack.codecId} et n'encode pas l'AAC en ${channels} canaux`;
     }
   }
 

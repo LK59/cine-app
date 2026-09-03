@@ -29,11 +29,25 @@ const ENCODER_LOOKAHEAD_SECONDS = 0.3;
 /** How long the encoder is given to describe itself before this is called a refusal. */
 const PRIMING_TIMEOUT_MS = 8000;
 
-/** Codecs that cannot ride in the container but can be turned into one that can. */
-const TRANSCODABLE = new Set(["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]);
+/**
+ * Codecs there is a decoder for here, whether or not the browser has one.
+ *
+ * Being on this list does not mean a track will be re-encoded — only that it *can* be, if the
+ * browser turns out not to accept it. Which of the two happens is a question for the browser, not
+ * a property of the codec: an iPhone takes AC-3 in a container untouched and should never pay for
+ * a decode, while Chrome ships no Dolby decoder at all and would otherwise be shut out of the
+ * hardware path for most of a library.
+ */
+const DECODABLE_HERE = new Set([
+  "A_DTS",
+  "A_DTS/EXPRESS",
+  "A_DTS/LOSSLESS",
+  "A_AC3",
+  "A_EAC3",
+]);
 
 export function transcodableAudio(track: MatroskaTrack): boolean {
-  return TRANSCODABLE.has(track.codecId);
+  return DECODABLE_HERE.has(track.codecId);
 }
 
 export interface TranscodedFrame {
