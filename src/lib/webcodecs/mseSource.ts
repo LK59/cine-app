@@ -952,7 +952,13 @@ export class MseSource {
     const ranges = this.playable;
     // A seek just served is the one time this may move a stopped picture: the viewer asked to be
     // somewhere, and landing them on nothing is worse than landing them a little further on.
-    const landing = this.seekLanding !== null;
+    //
+    // "Just served" has to mean exactly that. A flag set at the seek and cleared only on arrival
+    // stayed up for the rest of the session whenever playback found its own media, and then a
+    // pause half an hour later was free to step fifteen seconds — which is what it did. So the
+    // window is the playhead still standing precisely where the seek put it: the moment it moves
+    // at all, it is on media and the landing is over.
+    const landing = this.seekLanding !== null && Math.abs(this.video.currentTime - this.seekLanding) < 0.05;
     // Otherwise never while paused. The frame on screen is already drawn and needs nothing;
     // moving the playhead under a viewer who has stopped is a picture that jumps on its own, and
     // then resumes somewhere other than where they left it.

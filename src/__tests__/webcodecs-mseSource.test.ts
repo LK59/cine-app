@@ -1152,6 +1152,16 @@ describe("MseSource", () => {
     expect(video.currentTime).toBeGreaterThanOrEqual(102.6);
     expect(video.currentTime).toBeLessThan(104);
     expect(onError).not.toHaveBeenCalled();
+
+    // And the licence expires with the landing. Left standing, it let a pause much later step
+    // fifteen seconds forward on its own — which is exactly what it did.
+    const settled = video.currentTime;
+    (video as unknown as { paused: boolean }).paused = true;
+    for (const buffer of FakeSource.instances[0].buffers) buffer.landsLate = 8;
+    (video as unknown as { currentTime: number }).currentTime = settled + 1;
+    video.dispatchEvent(new Event("timeupdate"));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(video.currentTime).toBeCloseTo(settled + 1, 1);
   });
 
   it("says a source has been lost, rather than only failing on it later", async () => {
