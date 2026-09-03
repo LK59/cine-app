@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Remuxer, plannedMimeTypes } from "@/lib/webcodecs/remuxer";
+import { Remuxer, plannedMimeTypes, playableAudio, remuxableAudio } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
@@ -64,15 +64,29 @@ describe("Remuxer track selection", () => {
   });
 
   it("reports no delay before anything has been read", async () => {
-    expect((await open()).diagnostics()).toEqual({ presentationDelaySeconds: 0, clampedSamples: 0 });
+    expect((await open()).diagnostics()).toEqual({
+      presentationDelaySeconds: 0,
+      clampedSamples: 0,
+      transcodedAudio: false,
+    });
   });
 
-  it("refuses a codec it cannot repackage rather than producing a file that will not play", async () => {
-    const dts = track({ number: 2, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
-    await expect(Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 })).rejects.toThrow(/A_DTS/);
+  it("refuses a codec it can neither repackage nor re-encode", async () => {
+    // TrueHD has no decoder here at all, so there is nothing to turn it into.
+    const trueHd = track({ number: 2, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 6 } });
+    await expect(Remuxer.open(SOURCE, FILE, VIDEO, trueHd, { width: 1920, height: 1080 })).rejects.toThrow(/A_TRUEHD/);
 
     const vp9 = track({ number: 1, type: "video", codecId: "V_VP9" });
     await expect(Remuxer.open(SOURCE, FILE, vp9, null, { width: 1920, height: 1080 })).rejects.toThrow(/V_VP9/);
+  });
+
+  it("counts a track that has to be re-encoded as playable, and says what will arrive", () => {
+    const dts = track({ number: 2, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
+    // No browser accepts DTS in a container, so what reaches the player is what comes out of the
+    // encoder — and that is what the MIME type has to describe.
+    expect(playableAudio(dts)).toBe(true);
+    expect(remuxableAudio(dts)).toBe(false);
+    expect(plannedMimeTypes(VIDEO, dts).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
   it("says an AC-3 track cannot be described when the file yields no frame to read", async () => {
@@ -95,6 +109,6 @@ describe("plannedMimeTypes", () => {
 
   it("returns nothing for a codec it cannot describe, rather than an invalid string", () => {
     expect(plannedMimeTypes(track({ number: 1, type: "video", codecId: "V_VP9" }), null).video).toBeNull();
-    expect(plannedMimeTypes(VIDEO, track({ number: 2, type: "audio", codecId: "A_DTS" })).audio).toBeNull();
+    expect(plannedMimeTypes(VIDEO, track({ number: 2, type: "audio", codecId: "A_TRUEHD" })).audio).toBeNull();
   });
 });

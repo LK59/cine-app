@@ -9,7 +9,7 @@ import type { EngineTrack } from "./engine";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, remuxableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
@@ -59,7 +59,7 @@ function toEngineTrack(track: MatroskaTrack): EngineTrack {
  */
 function preferredAudio(file: MatroskaFile): MatroskaTrack | null {
   const audio = file.tracks.filter((t) => t.type === "audio");
-  const playable = audio.filter(remuxableAudio);
+  const playable = audio.filter(playableAudio);
   // Nothing here works: the file's own default is returned so the refusal names its real codec.
   if (playable.length === 0) return audio.find((t) => t.isDefault) ?? audio[0] ?? null;
 
@@ -251,6 +251,9 @@ export class RemuxPlayback {
       Décodage: "matériel, par le navigateur",
       Vidéo: `${this.videoTrack.codecId} ${this.videoTrack.video?.width ?? "?"}×${this.videoTrack.video?.height ?? "?"}`,
       Audio: this.audioTrack ? `${this.audioTrack.codecId} ${this.audioTrack.audio?.channels ?? "?"} canaux` : "aucune",
+      // Worth stating plainly: on this path the sound is the one thing that may not be the
+      // file's own bytes, and knowing which of the two is happening explains everything else.
+      "Traitement audio": remux.transcodedAudio ? "décodé puis ré-encodé en AAC" : "copié tel quel",
       "Décalage de présentation": `${(remux.presentationDelaySeconds * 1000).toFixed(0)} ms`,
       "Images recalées": String(remux.clampedSamples),
       Index: `${this.remuxer.videoCuePoints} points vidéo / ${this.file.cues.length}`,
@@ -267,6 +270,8 @@ export class RemuxPlayback {
     this.destroyed = true;
     this.mse?.destroy();
     this.mse = null;
+    // Releases the software decoder and the encoder, when the sound was going through both.
+    this.remuxer.close();
     this.source.close();
   }
 }

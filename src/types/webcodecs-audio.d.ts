@@ -82,3 +82,49 @@ declare class EncodedAudioChunk {
   readonly byteLength: number;
   copyTo(destination: BufferSource): void;
 }
+
+/**
+ * The encoding half, absent from this project's DOM lib for the same reason as the decoding half.
+ *
+ * It is what makes a codec no browser decodes playable at all: the sound is decoded here in
+ * software and handed back as something the browser does accept, so the picture never has to
+ * leave the hardware path.
+ */
+interface AudioEncoderConfig {
+  codec: string;
+  sampleRate: number;
+  numberOfChannels: number;
+  bitrate?: number;
+}
+
+interface AudioEncoderSupport {
+  supported: boolean;
+  config: AudioEncoderConfig;
+}
+
+/** Carried on the first output, and the only place the decoder configuration comes from. */
+interface EncodedAudioChunkMetadata {
+  decoderConfig?: {
+    codec: string;
+    sampleRate: number;
+    numberOfChannels: number;
+    description?: BufferSource;
+  };
+}
+
+interface AudioEncoderInit {
+  output: (chunk: EncodedAudioChunk, metadata?: EncodedAudioChunkMetadata) => void;
+  error: (error: DOMException) => void;
+}
+
+declare class AudioEncoder {
+  constructor(init: AudioEncoderInit);
+  readonly state: "unconfigured" | "configured" | "closed";
+  readonly encodeQueueSize: number;
+  static isConfigSupported(config: AudioEncoderConfig): Promise<AudioEncoderSupport>;
+  configure(config: AudioEncoderConfig): void;
+  encode(data: AudioData): void;
+  flush(): Promise<void>;
+  reset(): void;
+  close(): void;
+}

@@ -14,6 +14,7 @@ import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
+import { AudioTranscoder, transcodableAudio } from "./audioTranscode";
 import { SampleReader } from "./sampleReader";
 import type { ByteSource } from "./byteSource";
 
@@ -84,6 +85,8 @@ export interface RemuxDiagnostics {
   presentationDelaySeconds: number;
   /** Pictures whose offset had to be clamped because the fixed delay was too small. Should be 0. */
   clampedSamples: number;
+  /** The sound is being decoded and encoded again on the way through, rather than copied. */
+  transcodedAudio: boolean;
 }
 
 function aacCodecString(codecPrivate: Uint8Array | null): string {
@@ -98,7 +101,9 @@ function audioCodecString(track: MatroskaTrack): string | null {
     case "A_AAC": return aacCodecString(track.codecPrivate);
     case "A_AC3": return "ac-3";
     case "A_EAC3": return "ec-3";
-    default: return null;
+    // What will arrive in the container, not what is in the file: a codec no browser accepts is
+    // decoded and encoded again on the way through, and AAC is what comes out.
+    default: return transcodableAudio(track) ? "mp4a.40.2" : null;
   }
 }
 
@@ -133,8 +138,21 @@ export function remuxableVideo(track: MatroskaTrack): boolean {
   return videoCodecString(track) !== null;
 }
 
+/** Carried through untouched. */
 export function remuxableAudio(track: MatroskaTrack): boolean {
-  return audioCodecString(track) !== null;
+  switch (track.codecId) {
+    case "A_AAC":
+    case "A_AC3":
+    case "A_EAC3":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Carried through at all — either untouched, or by being decoded and encoded again. */
+export function playableAudio(track: MatroskaTrack): boolean {
+  return remuxableAudio(track) || transcodableAudio(track);
 }
 
 /**
@@ -181,6 +199,19 @@ async function describeAudio(
   };
 }
 
+/** The track description for sound the encoder produces rather than the file supplying. */
+function transcodedAudioInfo(transcoder: AudioTranscoder, track: MatroskaTrack): MuxTrackInfo {
+  return {
+    id: 2,
+    kind: "audio",
+    timescale: TIMESCALE,
+    sampleEntry: transcoder.sampleEntry,
+    width: 0,
+    height: 0,
+    language: track.language ?? "und",
+  };
+}
+
 export class Remuxer {
   private pendingVideo: MediaSample[] = [];
   private pendingAudio: MediaSample[] = [];
@@ -192,6 +223,10 @@ export class Remuxer {
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
   private subtitleNumbersCache: Map<number, MatroskaTrack> | null = null;
+  /** Where the segment being built actually starts, on the file's clock. */
+  private segmentStartUs = 0;
+  /** A seek the transcoder still owes, deferred until that start is known. */
+  private transcoderSeekPending = false;
   private videoCuePointsCache: number | null = null;
   private needKeyframe = false;
   private pendingSubtitles: MediaSample[] = [];
@@ -211,7 +246,9 @@ export class Remuxer {
      * duplicates the opening keyframe and shifts the entire presentation timeline.
      */
     private readonly reader: SampleReader,
-    private readonly source: ByteSource
+    private readonly source: ByteSource,
+    /** Present only when the chosen track has to be re-encoded to be carried at all. */
+    private transcoder: AudioTranscoder | null
   ) {}
 
   static async open(
@@ -222,10 +259,17 @@ export class Remuxer {
     dimensions: { width: number; height: number }
   ): Promise<Remuxer> {
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
-    if (audioTrack && !remuxableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
+    if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
     const start = file.firstClusterOffset ?? file.segmentDataStart;
-    const audioInfo = audioTrack ? await describeAudio(source, file, start, audioTrack) : null;
+    // A track that cannot ride in the container is decoded and encoded again on the way through,
+    // and the encoder — not the file — is then what describes it.
+    const transcoder = audioTrack && transcodableAudio(audioTrack) ? await AudioTranscoder.open(source, audioTrack) : null;
+    const audioInfo = audioTrack
+      ? transcoder
+        ? transcodedAudioInfo(transcoder, audioTrack)
+        : await describeAudio(source, file, start, audioTrack)
+      : null;
     const reader = new SampleReader(source, file, start);
 
     const videoInfo: MuxTrackInfo = {
@@ -238,7 +282,7 @@ export class Remuxer {
       language: videoTrack.language ?? "und",
     };
 
-    return new Remuxer(file, videoTrack, audioTrack, videoInfo, audioInfo, reader, source);
+    return new Remuxer(file, videoTrack, audioTrack, videoInfo, audioInfo, reader, source, transcoder);
   }
 
   plan(): RemuxPlan {
@@ -263,7 +307,22 @@ export class Remuxer {
   async setAudioTrack(trackNumber: number): Promise<void> {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     if (!track) throw new Error(`Piste audio ${trackNumber} introuvable.`);
-    if (!remuxableAudio(track)) throw new Error(`Audio non remultiplexable : ${track.codecId}`);
+    if (!playableAudio(track)) throw new Error(`Audio non remultiplexable : ${track.codecId}`);
+
+    // A language change can cross between the two kinds of track — a DTS one that has to be
+    // re-encoded, and one that rides through untouched — so whichever machinery the previous
+    // choice needed is released before the new one is set up.
+    this.transcoder?.close();
+    this.transcoder = null;
+
+    if (transcodableAudio(track)) {
+      this.transcoder = await AudioTranscoder.open(this.source, track);
+      this.audioInfo = transcodedAudioInfo(this.transcoder, track);
+      this.audioTrack = track;
+      this.pendingAudio = [];
+      this.audioFrameUs = null;
+      return;
+    }
 
     // Probed from where the reader already is, not from the beginning of the file. Any frame of
     // the track describes it equally well, and on a two-hour film the opening is long out of the
@@ -306,10 +365,17 @@ export class Remuxer {
     return this.file.tracks.filter((t) => t.type === "audio");
   }
 
+  /** Releases the decoder and encoder a transcoded track holds. */
+  close(): void {
+    this.transcoder?.close();
+    this.transcoder = null;
+  }
+
   diagnostics(): RemuxDiagnostics {
     return {
       presentationDelaySeconds: (this.presentationDelayUs ?? 0) / TIMESCALE,
       clampedSamples: this.clampedSamples,
+      transcodedAudio: this.transcoder !== null,
     };
   }
 
@@ -322,6 +388,11 @@ export class Remuxer {
   seekTo(seconds: number): void {
     const offset = clusterOffsetForTime(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
     this.reader.seekTo(offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart);
+    // Deferred, not done here. Reading restarts at the indexed keyframe at or before the
+    // requested time, which is regularly the best part of a second earlier — pointing the
+    // transcoder at the request instead leaves that much of the segment with pictures and no
+    // sound. The segment's real start is known a moment later, and that is what it is given.
+    this.transcoderSeekPending = this.transcoder !== null;
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
@@ -360,17 +431,18 @@ export class Remuxer {
           break;
         }
         this.pendingVideo.push(sample);
-      } else if (this.audioTrack && sample.trackNumber === this.audioTrack.number) {
+      } else if (this.audioTrack && !this.transcoder && sample.trackNumber === this.audioTrack.number) {
         this.pendingAudio.push(sample);
       } else if (this.subtitleNumbers.has(sample.trackNumber)) {
         this.pendingSubtitles.push(sample);
       }
     }
 
-    if (this.pendingVideo.length === 0 && this.pendingAudio.length === 0) return null;
+    if (this.pendingVideo.length === 0 && this.pendingAudio.length === 0 && !this.transcoder) return null;
 
     const video = this.buildVideo();
-    const audio = this.buildAudio();
+    // Built after the video, because the stretch it has to cover is what the video just settled.
+    const audio = this.transcoder ? await this.buildTranscodedAudio() : this.buildAudio();
     const subtitles = this.buildSubtitles();
     const endUs = this.videoDecodeTime;
 
@@ -414,6 +486,38 @@ export class Remuxer {
     return cues;
   }
 
+  /**
+   * Sound that had to be decoded and encoded again, cut to this segment.
+   *
+   * Asked for by time rather than handed packets: the transcoder reads the file itself, through
+   * the same cache, and runs its own decode and encode pipeline. Cutting at the video segment's
+   * own end is what keeps the two tracks tiling together — each segment holds exactly the sound
+   * belonging to the pictures beside it.
+   */
+  private async buildTranscodedAudio(): Promise<Uint8Array | null> {
+    if (!this.transcoder || !this.audioInfo) return null;
+
+    if (this.transcoderSeekPending) {
+      this.transcoderSeekPending = false;
+      this.transcoder.seekTo(this.segmentStartUs / TIMESCALE);
+    }
+
+    const frames = await this.transcoder.framesUpTo(this.videoDecodeTime / TIMESCALE);
+    if (frames.length === 0) return null;
+
+    const delay = this.presentationDelayUs ?? 0;
+    const fallback = Math.round((1024 / this.transcoder.sampleRate) * TIMESCALE);
+    const samples: MuxSample[] = frames.map((frame) => ({
+      data: frame.data,
+      decodeTime: frame.timestampUs + delay,
+      duration: Math.max(1, frame.durationUs || fallback),
+      compositionOffset: 0,
+      isKeyframe: true,
+    }));
+
+    return mediaSegment(this.audioInfo, this.sequence, samples);
+  }
+
   private buildVideo(): Uint8Array | null {
     if (this.pendingVideo.length === 0) return null;
 
@@ -426,9 +530,10 @@ export class Remuxer {
     // before it, so it is not the segment's earliest presentation. Anchoring on the keyframe
     // therefore pushed every segment after the first later by that gap — a fifth of a second on a
     // real 4K file, which is the picture drifting away from the sound.
+    this.segmentStartUs = Math.min(...presentations);
     const ordered = assignDecodeTimes(
       presentations.map((presentation, i) => ({ presentation, duration: durations[i] })),
-      Math.min(...presentations)
+      this.segmentStartUs
     );
 
     // Measured once, on the opening segment, then fixed for the whole stream. The audio timeline

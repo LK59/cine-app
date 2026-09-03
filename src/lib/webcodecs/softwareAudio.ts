@@ -34,16 +34,21 @@ export class SoftwareAudioTrack {
    * for a different reason — the module not loading, the worker not starting, the track not being
    * found, the decoder declining it.
    */
-  static async open(source: ByteSource, trackNumber: number): Promise<SoftwareAudioTrack> {
-    // Dynamic: a file whose audio the browser already decodes never pays for this.
-    let modules;
+  static async open(source: ByteSource, trackNumber: number, codecId?: string): Promise<SoftwareAudioTrack> {
+    // Dynamic, and only the extension this file actually needs: the two are a megabyte and a
+    // half each, and a file whose audio the browser already decodes never pays for either.
+    let core;
     try {
-      modules = await Promise.all([import("mediabunny"), import("@mediabunny/ac3")]);
+      core = await import("mediabunny");
+      if (codecId === "A_DTS" || codecId?.startsWith("A_DTS/")) {
+        (await import("@mediabunny/dts")).registerDtsDecoder();
+      } else {
+        (await import("@mediabunny/ac3")).registerAc3Decoder();
+      }
     } catch (error) {
       throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
     }
-    const [{ Input, CustomSource, MatroskaInputFormat, AudioSampleSink }, { registerAc3Decoder }] = modules;
-    registerAc3Decoder();
+    const { Input, CustomSource, MatroskaInputFormat, AudioSampleSink } = core;
 
     const input = new Input({
       // The class is the format; mediabunny wants an instance.

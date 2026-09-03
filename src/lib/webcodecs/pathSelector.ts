@@ -25,7 +25,8 @@ import type { ByteSource } from "./byteSource";
 import { unsupportedReason } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
-import { Remuxer, plannedMimeTypes, remuxableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
+import { canEncodeAac, transcodableAudio } from "./audioTranscode";
+import { Remuxer, plannedMimeTypes, playableAudio, remuxableVideo, type RemuxPlan } from "./remuxer";
 
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
 const EMPTY = new Uint8Array(0);
@@ -61,7 +62,18 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   const { file, videoTrack, audioTrack, dimensions, source } = input;
 
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
-  if (audioTrack && !remuxableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;
+  if (audioTrack && !playableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;
+
+  // Asked before a megabyte and a half of decoder is fetched. A track that has to be re-encoded
+  // is only carried here if this browser will do the encoding, and finding that out afterwards
+  // would mean paying for the download to learn it.
+  if (audioTrack && transcodableAudio(audioTrack)) {
+    const rate = audioTrack.audio?.sampleRate ?? 48000;
+    const channels = audioTrack.audio?.channels ?? 2;
+    if (!(await canEncodeAac(rate, channels))) {
+      return `ce navigateur n'encode pas l'AAC en ${channels} canaux, nécessaire pour ${audioTrack.codecId}`;
+    }
+  }
 
   // Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
   // file, and there is no reason to pay for that only to be told the browser wanted none of it.
