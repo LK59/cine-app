@@ -158,8 +158,10 @@ let playhead = 0;
 /** The intersection of every buffer's ranges, which is what a media element reports. */
 function intersectionOfBuffers(): TimeRanges {
   const buffers = FakeSource.instances[0]?.buffers ?? [];
-  const lists = buffers.map((b) => b.buffered).filter((r) => r.length > 0);
-  if (lists.length === 0) return { length: 0 } as unknown as TimeRanges;
+  const lists = buffers.map((b) => b.buffered);
+  // A track with nothing in it empties the intersection rather than being left out of it: an
+  // element plays nowhere if any of its tracks has no media there.
+  if (lists.length === 0 || lists.some((r) => r.length === 0)) return { length: 0 } as unknown as TimeRanges;
   let ranges: [number, number][] = [];
   for (let i = 0; i < lists[0].length; i++) ranges.push([lists[0].start(i), lists[0].end(i)]);
   for (const other of lists.slice(1)) {
@@ -962,6 +964,27 @@ describe("MseSource", () => {
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
     expect(onStarting).toHaveBeenLastCalledWith(null);
+  });
+
+  it("changes the sound without sending the picture again", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
+    const videoAppends = videoBuffer.appended.length;
+    const audioAppends = audioBuffer.appended.length;
+
+    await mse.refillAudio(10);
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Re-appending video over media the browser has already played is what it catches up on at
+    // speed: several seconds replayed in one or two, reported after every language change.
+    expect(videoBuffer.removed).toEqual([]);
+    expect(videoBuffer.appended.length).toBe(videoAppends);
+    // The sound, meanwhile, really is replaced.
+    expect(audioBuffer.removed.length).toBeGreaterThan(0);
+    expect(audioBuffer.appended.length).toBeGreaterThan(audioAppends);
   });
 
   it("detaches cleanly, leaving nothing listening", async () => {

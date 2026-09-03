@@ -44,7 +44,6 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string }
     }
     state = "unconfigured";
     encodeQueueSize = 0;
-    private queue: { timestamp: number; duration: number }[] = [];
     private held = 0;
     private heldFrom = 0;
     private emitted = 0;
@@ -55,27 +54,33 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string }
       this.state = "configured";
     }
     encode(data: FakeAudioData) {
+      // Whole frames go out as they are completed, as a real encoder hands them back; only the
+      // remainder waits, and only a flush can make it come out early.
       if (this.held === 0) this.heldFrom = data.init.timestamp;
       this.held += data.init.numberOfFrames;
       while (this.held >= 1024) {
-        this.queue.push({ timestamp: this.heldFrom, duration: Math.round((1024 / 48000) * 1e6) });
+        this.emit({ timestamp: this.heldFrom, duration: Math.round((1024 / 48000) * 1e6) });
         this.heldFrom += Math.round((1024 / 48000) * 1e6);
         this.held -= 1024;
       }
     }
+    private emit(q: { timestamp: number; duration: number }) {
+      const describe = this.emitted >= (options.describeAfter ?? 0);
+      this.emitted += 1;
+      this.init.output(
+        { ...q, byteLength: 8, copyTo: (d: Uint8Array) => d.fill(7) },
+        describe ? { decoderConfig: { description: new Uint8Array([0x11, 0xb0]) } } : undefined
+      );
+    }
     async flush() {
-      for (const q of this.queue) {
-        const describe = this.emitted >= (options.describeAfter ?? 0);
-        this.emitted += 1;
-        this.init.output(
-          { ...q, byteLength: 8, copyTo: (d: Uint8Array) => d.fill(7) },
-          describe ? { decoderConfig: { description: new Uint8Array([0x11, 0xb0]) } } : undefined
-        );
+      // Padding out what did not fill a frame — the very thing this is no longer asked to do
+      // between segments.
+      if (this.held > 0) {
+        this.emit({ timestamp: this.heldFrom, duration: Math.round((1024 / 48000) * 1e6) });
+        this.held = 0;
       }
-      this.queue = [];
     }
     reset() {
-      this.queue = [];
       this.held = 0;
       this.state = "unconfigured";
     }

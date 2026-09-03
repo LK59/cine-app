@@ -197,6 +197,8 @@ export class MseSource {
   private delaySeconds = 0;
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
+  /** While set, video already held is not sent again — see refillAudio. */
+  private skipVideoUntil: number | null = null;
   private lastAppendAt = 0;
   /** Where the picture froze when the viewer pressed pause. Resume lands exactly there. */
   private pauseAnchor: number | null = null;
@@ -644,7 +646,17 @@ export class MseSource {
         }
 
         if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
-        if (segment.video && this.videoOps) await this.appendTo(this.videoOps, segment.video, generation);
+
+        // Video the browser already holds is not sent again. Re-appending over media that has
+        // been played is what it catches up on at speed — the burst of fast-forward reported
+        // after changing audio language, and before that after choosing a subtitle.
+        if (this.skipVideoUntil !== null && segment.endSeconds > this.skipVideoUntil) {
+          this.skipVideoUntil = null;
+        }
+        const sendVideo = this.skipVideoUntil === null;
+        if (segment.video && this.videoOps && sendVideo) {
+          await this.appendTo(this.videoOps, segment.video, generation);
+        }
         if (segment.audio && this.audioOps) await this.appendTo(this.audioOps, segment.audio, generation);
         // A seek arrived while those were in flight: this loop's appends were discarded, so its
         // reading of where the media is would be about a position no longer being served.
@@ -789,6 +801,26 @@ export class MseSource {
   }
 
   /**
+   * Replaces the sound from a point on the player's clock, leaving the picture alone.
+   *
+   * A change of audio language needs the sound re-read, and nothing else. Doing it with an
+   * ordinary seek clears the video too and sends it again over media the browser has already
+   * played — which it then catches up on at speed, replaying several seconds in one or two.
+   * Here the video buffer is untouched and the segments that would overlap it are not sent.
+   */
+  async refillAudio(playerSeconds: number): Promise<void> {
+    if (this.destroyed || !this.audioOps) return;
+    this.generation += 1;
+    await this.fillTask?.catch(() => {});
+
+    // Everything already held stays held; only what comes after it is worth reading again.
+    this.skipVideoUntil = this.bufferedEnd();
+    await this.clear(this.audioOps);
+    this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
+    void this.fill();
+  }
+
+  /**
    * Runs something with the read loop stopped and no seek able to slip in beside it.
    *
    * Changing audio language is several steps — describe the new track, re-point the buffer,
@@ -829,6 +861,8 @@ export class MseSource {
     this.generation += 1;
     this.ended = false;
     this.lastSeekTarget = playerSeconds;
+    // An ordinary seek replaces everything, so nothing is being spared.
+    this.skipVideoUntil = null;
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to

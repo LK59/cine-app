@@ -235,9 +235,10 @@ export class RemuxPlayback {
       const plan = this.remuxer.plan();
       await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
     });
-    // Refills from where the viewer is, so the new language starts at the picture on screen
-    // rather than wherever the reader happened to have got to.
-    await mse.seek(at);
+    // Only the sound is read again, and only from where the viewer is. An ordinary seek would
+    // clear the picture too and send it back over what has already been played, which the
+    // browser catches up on at speed.
+    await mse.refillAudio(at);
   }
 
   seek(seconds: number): Promise<void> {

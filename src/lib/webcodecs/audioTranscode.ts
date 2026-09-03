@@ -17,6 +17,18 @@ import type { MatroskaTrack } from "./matroska";
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
 const TARGET_CODEC = "mp4a.40.2";
 
+/**
+ * How far past a segment's end the encoder is fed before its output is taken.
+ *
+ * An encoder holds a frame or two before it hands anything back. Feeding a little beyond the
+ * boundary is what lets it emit everything belonging below it — without being flushed, which for
+ * a frame-based codec means padding or discarding whatever did not fill the current frame.
+ */
+const ENCODER_LOOKAHEAD_SECONDS = 0.3;
+
+/** How long the encoder is given to describe itself before this is called a refusal. */
+const PRIMING_TIMEOUT_MS = 8000;
+
 /** Codecs that cannot ride in the container but can be turned into one that can. */
 const TRANSCODABLE = new Set(["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]);
 
@@ -120,18 +132,32 @@ export class AudioTranscoder {
     encoder.configure(config);
 
     // Enough to make the encoder describe itself, and no more: this runs before the first frame
-    // of video is shown, so it is time the viewer is waiting through.
+    // of video is shown, so it is time the viewer is waiting through. Bounded, because an
+    // encoder that accepts a configuration and then never answers is a real possibility — and a
+    // player that waits for ever on it is worse than one that says what went wrong.
     const primer = decoder.samples(0);
-    for (let i = 0; i < 4 && !description; i++) {
-      const next = await primer.next();
-      if (next.done) break;
-      encode(encoder, next.value);
-      await encoder.flush();
+    const deadline = Date.now() + PRIMING_TIMEOUT_MS;
+    try {
+      while (!description && !encoderError && Date.now() < deadline) {
+        const next = await primer.next();
+        if (next.done) break;
+        encode(encoder, next.value);
+        await encoder.flush();
+      }
+    } finally {
+      await primer.return?.(undefined);
     }
-    await primer.return?.(undefined);
 
     if (encoderError) throw new Error(`Encodage audio refusé : ${encoderError}`);
-    if (!description) throw new Error("L'encodeur audio n'a pas décrit le flux qu'il produit.");
+    if (!description) {
+      encoder.close();
+      decoder.close();
+      throw new Error(
+        Date.now() >= deadline
+          ? "L'encodeur audio de ce navigateur n'a pas répondu."
+          : "L'encodeur audio n'a pas décrit le flux qu'il produit."
+      );
+    }
 
     const sampleEntry = audioSampleEntryFor({
       codecId: "A_AAC",
@@ -182,7 +208,13 @@ export class AudioTranscoder {
     if (this.failure) throw new Error(this.failure);
     if (!this.generator) this.seekTo(0);
 
-    while (!this.exhausted && this.lastDecodedSeconds < endSeconds) {
+    // Fed past the boundary rather than flushed at it. A flush is the only way to make a
+    // frame-based encoder hand back a part-filled frame, and it does that by padding it or
+    // throwing it away — every couple of seconds, for the length of a film. Feeding a little
+    // beyond instead lets every frame belonging below the boundary come out whole and on time,
+    // and the encoder carries its remainder across, exactly as it is meant to.
+    const feedUntil = endSeconds + ENCODER_LOOKAHEAD_SECONDS;
+    while (!this.exhausted && this.lastDecodedSeconds < feedUntil) {
       const next = await this.generator!.next();
       if (next.done) {
         this.exhausted = true;
@@ -191,12 +223,23 @@ export class AudioTranscoder {
       this.lastDecodedSeconds = next.value.timestampSeconds;
       encode(this.encoder, next.value);
     }
-    await this.encoder.flush();
+
+    // At the end of the file there is nothing left to feed, so the remainder has to be asked for.
+    if (this.exhausted) await this.encoder.flush();
+    else await this.drain();
+    if (this.failure) throw new Error(this.failure);
 
     const cut = endSeconds * 1e6;
     const ready = this.pending.filter((frame) => frame.timestampUs < cut);
     this.pending = this.pending.filter((frame) => frame.timestampUs >= cut);
     return ready;
+  }
+
+  /** Waits for what has been handed to the encoder to come back out, without forcing a frame. */
+  private async drain(): Promise<void> {
+    for (let i = 0; i < 200 && this.encoder.encodeQueueSize > 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
   }
 
   /** Both called by the encoder's own callbacks, redirected here once this object exists. */
