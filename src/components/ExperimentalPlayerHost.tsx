@@ -176,7 +176,12 @@ export function ExperimentalPlayerHost({
         positionRef.current = element.currentTime;
         setSubtitle(playback.subtitleAt(element.currentTime));
       };
-      const onPlay = () => setPlaying(true);
+      // A warning about not being able to reach a position is obsolete the instant pictures are
+      // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
+      const onPlay = () => {
+        setPlaying(true);
+        setWarning(null);
+      };
       const onPause = () => setPlaying(false);
       element.addEventListener("timeupdate", onTime);
       element.addEventListener("play", onPlay);

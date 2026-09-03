@@ -35,6 +35,14 @@ export interface MatroskaTrack {
 }
 
 export interface CuePoint {
+  /**
+   * Which track this entry indexes.
+   *
+   * A cue point carries one set of positions per indexed track, and they are not interchangeable:
+   * an audio entry marks a place where the *sound* can be picked up, which is very often nowhere
+   * near a video keyframe. Seeking to one leaves the decoder with nothing it can start from.
+   */
+  track: number;
   /** Presentation time in microseconds. */
   timeUs: number;
   /** Absolute file offset of the cluster holding it. */
@@ -320,34 +328,53 @@ async function parseCues(
   await forEachChild(source, start, end, async (point) => {
     if (point.id !== ID.CuePoint) return "continue";
     let time = -1;
-    let clusterPosition = -1;
+    const positions: { track: number; clusterPosition: number }[] = [];
     await forEachChild(source, point.offset, point.offset + (point.size ?? 0), async (c) => {
       if (c.id === ID.CueTime) time = readUint(await payload(source, c));
       if (c.id === ID.CueTrackPositions) {
+        let track = -1;
+        let clusterPosition = -1;
         await forEachChild(source, c.offset, c.offset + (c.size ?? 0), async (p) => {
-          // Only the cluster position is used: seeking restarts decoding at a keyframe anyway,
-          // so the finer CueRelativePosition would buy nothing.
+          if (p.id === ID.CueTrack) track = readUint(await payload(source, p));
+          // Only the cluster position is used: reading restarts at the cluster and runs forward
+          // to the keyframe, so the finer CueRelativePosition would buy nothing.
           if (p.id === ID.CueClusterPosition && clusterPosition < 0) clusterPosition = readUint(await payload(source, p));
           return "continue";
         });
+        if (track >= 0 && clusterPosition >= 0) positions.push({ track, clusterPosition });
       }
       return "continue";
     });
-    if (time >= 0 && clusterPosition >= 0) {
-      file.cues.push({
-        timeUs: Math.round((time * file.timestampScaleNs) / NS_PER_US),
-        clusterOffset: segmentDataStart + clusterPosition,
-      });
+    // One entry per indexed track, rather than whichever happened to be written first. Keeping
+    // only the first is how a seek ends up following the audio track's index into a cluster with
+    // no picture to start from.
+    if (time >= 0) {
+      for (const { track, clusterPosition } of positions) {
+        file.cues.push({
+          track,
+          timeUs: Math.round((time * file.timestampScaleNs) / NS_PER_US),
+          clusterOffset: segmentDataStart + clusterPosition,
+        });
+      }
     }
     return "continue";
   });
 }
 
-/** Where to start reading clusters to land at or just before `timeUs`. */
-export function clusterOffsetForTime(file: MatroskaFile, timeUs: number): number | null {
-  if (file.cues.length === 0) return file.firstClusterOffset;
-  let best = file.cues[0];
-  for (const cue of file.cues) {
+/**
+ * Where to start reading clusters to land at or just before `timeUs`.
+ *
+ * @param trackNumber the track that has to be decodable from there — the video one, in practice.
+ *   Entries for other tracks are ignored when any exist for this one, because they mark places
+ *   the *sound* can resume, which is regularly nowhere near a picture a decoder can start on.
+ */
+export function clusterOffsetForTime(file: MatroskaFile, timeUs: number, trackNumber?: number): number | null {
+  const forTrack = trackNumber === undefined ? file.cues : file.cues.filter((cue) => cue.track === trackNumber);
+  const cues = forTrack.length > 0 ? forTrack : file.cues;
+  if (cues.length === 0) return file.firstClusterOffset;
+
+  let best = cues[0];
+  for (const cue of cues) {
     if (cue.timeUs <= timeUs) best = cue;
     else break;
   }

@@ -202,7 +202,7 @@ export class RemuxPlayback {
       Audio: this.audioTrack ? `${this.audioTrack.codecId} ${this.audioTrack.audio?.channels ?? "?"} canaux` : "aucune",
       "Décalage de présentation": `${(remux.presentationDelaySeconds * 1000).toFixed(0)} ms`,
       "Images recalées": String(remux.clampedSamples),
-      Index: `${this.file.cues.length} points`,
+      Index: `${this.remuxer.videoCuePoints} points vidéo / ${this.file.cues.length}`,
       // The spans themselves, not one number derived from them. A single figure hid which range
       // it was measured against, and read as a large negative number while the player was in
       // fact working correctly on a range it had not been told about.

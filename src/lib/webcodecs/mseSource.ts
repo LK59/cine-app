@@ -24,6 +24,9 @@ const TARGET_BUFFER_SECONDS = 30;
  */
 const MIN_BUFFER_SECONDS = 8;
 
+/** How long repeated recoveries at one spot keep counting against each other. */
+const RECOVERY_WINDOW_MS = 5000;
+
 /** Refused appends in a row before playback is declared broken rather than merely interrupted. */
 const MAX_APPEND_FAILURES = 3;
 
@@ -162,6 +165,7 @@ export class MseSource {
   private recoveries = 0;
   private recoveryTarget = -1;
   private recoveryStreak = 0;
+  private lastRecoveryAt = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   private constructor(
@@ -617,6 +621,12 @@ export class MseSource {
    * into a loop that seeks, fails to arrive, and seeks again as fast as it can.
    */
   private recover(target: number): boolean {
+    // The count only means anything while the attempts are rapid. The same position failing
+    // again a minute later is a fresh problem, not a spin — and treating it as one used to latch
+    // the guard shut, so the position stayed unreachable until the viewer seeked elsewhere.
+    if (Date.now() - this.lastRecoveryAt > RECOVERY_WINDOW_MS) this.recoveryStreak = 0;
+    this.lastRecoveryAt = Date.now();
+
     if (Math.abs(target - this.recoveryTarget) < 1) {
       this.recoveryStreak += 1;
       if (this.recoveryStreak > 3) {

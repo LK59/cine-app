@@ -179,6 +179,7 @@ export class Remuxer {
   private audioDecodeTime = 0;
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
+  private needKeyframe = false;
   private subtitleTrackNumber: number | null = null;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
@@ -263,6 +264,11 @@ export class Remuxer {
     return this.file.cues.length > 0;
   }
 
+  /** Index entries that actually point at pictures, which is what a seek needs. */
+  get videoCuePoints(): number {
+    return this.file.cues.filter((cue) => cue.track === this.videoTrack.number).length;
+  }
+
   /** Which subtitle track to pick out of the stream, or null for none. Takes effect immediately. */
   setSubtitleTrack(trackNumber: number | null): void {
     const track = this.file.tracks.find((t) => t.number === trackNumber);
@@ -295,11 +301,12 @@ export class Remuxer {
    *   to subtract `presentationDelaySeconds` first.
    */
   seekTo(seconds: number): void {
-    const offset = clusterOffsetForTime(this.file, Math.round(seconds * 1e6));
+    const offset = clusterOffsetForTime(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
     this.reader.seekTo(offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart);
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
+    this.needKeyframe = true;
     this.done = false;
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
@@ -322,6 +329,13 @@ export class Remuxer {
         break;
       }
       if (sample.trackNumber === this.videoTrack.number) {
+        // A cluster does not have to begin on a keyframe, and a decoder cannot start anywhere
+        // else. Handing over the pictures that precede one produces a segment the browser holds
+        // but can never show — which looks exactly like a seek that froze.
+        if (this.needKeyframe) {
+          if (!sample.isKey) continue;
+          this.needKeyframe = false;
+        }
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (sample.isKey && span >= SEGMENT_US) {
           boundary = sample;
