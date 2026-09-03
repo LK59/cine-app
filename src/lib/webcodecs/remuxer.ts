@@ -184,11 +184,15 @@ async function describeAudio(
 export class Remuxer {
   private pendingVideo: MediaSample[] = [];
   private pendingAudio: MediaSample[] = [];
+  /**
+   * Where the last segment's decode timeline ended. Reporting only: decode times are absolute,
+   * anchored per segment on its own earliest picture, so nothing is chained off this.
+   */
   private videoDecodeTime = 0;
-  private audioDecodeTime = 0;
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
-  private subtitleNumbersCache: Set<number> | null = null;
+  private subtitleNumbersCache: Map<number, MatroskaTrack> | null = null;
+  private videoCuePointsCache: number | null = null;
   private needKeyframe = false;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
@@ -261,8 +265,16 @@ export class Remuxer {
     if (!track) throw new Error(`Piste audio ${trackNumber} introuvable.`);
     if (!remuxableAudio(track)) throw new Error(`Audio non remultiplexable : ${track.codecId}`);
 
+    // Probed from where the reader already is, not from the beginning of the file. Any frame of
+    // the track describes it equally well, and on a two-hour film the opening is long out of the
+    // byte source's cache — fetching it again to read one header would be network traffic spent
+    // on nothing. The start of the file remains the fallback if nothing turns up here.
+    const here = clusterOffsetForTime(this.file, this.videoDecodeTime, this.videoTrack.number);
     const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
-    this.audioInfo = await describeAudio(this.source, this.file, start, track);
+    this.audioInfo =
+      (here !== null && here !== start
+        ? await describeAudio(this.source, this.file, here, track).catch(() => null)
+        : null) ?? (await describeAudio(this.source, this.file, start, track));
     this.audioTrack = track;
     this.pendingAudio = [];
     this.audioFrameUs = null;
@@ -275,7 +287,12 @@ export class Remuxer {
 
   /** Index entries that actually point at pictures, which is what a seek needs. */
   get videoCuePoints(): number {
-    return this.file.cues.filter((cue) => cue.track === this.videoTrack.number).length;
+    // Counted once: the technical panel reads this twice a second, and a long film's index runs
+    // to several thousand entries.
+    if (this.videoCuePointsCache === null) {
+      this.videoCuePointsCache = this.file.cues.filter((cue) => cue.track === this.videoTrack.number).length;
+    }
+    return this.videoCuePointsCache;
   }
 
   /** The subtitle tracks this path can render — the text ones; styled formats are not handled. */
@@ -313,7 +330,6 @@ export class Remuxer {
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
     this.videoDecodeTime = Math.round(seconds * TIMESCALE);
-    this.audioDecodeTime = this.videoDecodeTime + (this.presentationDelayUs ?? 0);
   }
 
   /** The next pair of segments, or null once the file is exhausted. */
@@ -366,10 +382,10 @@ export class Remuxer {
     return { video, audio, subtitles, endSeconds: endUs / TIMESCALE };
   }
 
-  /** The text tracks worth collecting, worked out once. */
-  private get subtitleNumbers(): Set<number> {
+  /** The text tracks worth collecting, worked out once and kept by number for the cue builder. */
+  private get subtitleNumbers(): Map<number, MatroskaTrack> {
     if (!this.subtitleNumbersCache) {
-      this.subtitleNumbersCache = new Set(this.subtitleTracks().map((t) => t.number));
+      this.subtitleNumbersCache = new Map(this.subtitleTracks().map((t) => [t.number, t]));
     }
     return this.subtitleNumbersCache;
   }
@@ -382,7 +398,7 @@ export class Remuxer {
     const delay = (this.presentationDelayUs ?? 0) / TIMESCALE;
     const cues: TrackedCue[] = [];
     for (const sample of this.pendingSubtitles) {
-      const track = this.file.tracks.find((t) => t.number === sample.trackNumber);
+      const track = this.subtitleNumbers.get(sample.trackNumber);
       if (!track) continue;
       const text = subtitleText(new TextDecoder().decode(sample.data), track.codecId);
       if (!text) continue;
@@ -420,7 +436,6 @@ export class Remuxer {
     // on the sound: shifting the video alone is the classic lip-sync error in a remux.
     if (this.presentationDelayUs === null) {
       this.presentationDelayUs = ordered.presentationDelay + DELAY_MARGIN_FRAMES * (durations[0] || FALLBACK_FRAME_US);
-      this.audioDecodeTime += this.presentationDelayUs;
     }
     const delay = this.presentationDelayUs;
 
@@ -485,7 +500,6 @@ export class Remuxer {
       }
     }
 
-    this.audioDecodeTime = samples[samples.length - 1].decodeTime + samples[samples.length - 1].duration;
     return mediaSegment(this.audioInfo, this.sequence, samples);
   }
 }

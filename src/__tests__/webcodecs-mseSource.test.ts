@@ -155,8 +155,30 @@ class FakeSource extends EventTarget {
 /** Shared so an appended range can begin where the reader was pointed, as a real buffer does. */
 let playhead = 0;
 
+/** The intersection of every buffer's ranges, which is what a media element reports. */
+function intersectionOfBuffers(): TimeRanges {
+  const buffers = FakeSource.instances[0]?.buffers ?? [];
+  const lists = buffers.map((b) => b.buffered).filter((r) => r.length > 0);
+  if (lists.length === 0) return { length: 0 } as unknown as TimeRanges;
+  let ranges: [number, number][] = [];
+  for (let i = 0; i < lists[0].length; i++) ranges.push([lists[0].start(i), lists[0].end(i)]);
+  for (const other of lists.slice(1)) {
+    const next: [number, number][] = [];
+    for (const [s, e] of ranges) {
+      for (let i = 0; i < other.length; i++) {
+        const start = Math.max(s, other.start(i));
+        const end = Math.min(e, other.end(i));
+        if (end > start) next.push([start, end]);
+      }
+    }
+    ranges = next;
+  }
+  return { length: ranges.length, start: (i: number) => ranges[i][0], end: (i: number) => ranges[i][1] } as unknown as TimeRanges;
+}
+
 function fakeVideo() {
   const target = new EventTarget();
+  Object.defineProperty(target, "buffered", { get: intersectionOfBuffers, configurable: true });
   Object.defineProperty(target, "currentTime", {
     get: () => playhead,
     set: (v: number) => {
@@ -516,9 +538,11 @@ describe("MseSource", () => {
     const buffer = FakeSource.instances[0].buffers[0];
 
     // What a seek onto an index point produces: the media begins one presentation delay later
-    // than the playhead, and the element would otherwise wait there indefinitely.
+    // than the playhead, and the element would otherwise wait there indefinitely. Both tracks are
+    // set, because an element plays only where all of them have media.
     (video as unknown as { currentTime: number }).currentTime = 600;
     buffer.setBuffered(600.2, 620);
+    FakeSource.instances[0].buffers[1].setBuffered(600.2, 620);
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
     expect(video.currentTime).toBe(600.2);
@@ -532,6 +556,7 @@ describe("MseSource", () => {
 
     (video as unknown as { currentTime: number }).currentTime = 600;
     buffer.setBuffered(640, 660);
+    FakeSource.instances[0].buffers[1].setBuffered(640, 660);
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
     // Jumping forty seconds without being asked would hide a genuine fault behind a silent skip.
@@ -646,6 +671,19 @@ describe("MseSource", () => {
     await new Promise((r) => setTimeout(r, 120));
 
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("clamps a seek past the end to the media, instead of chasing a place that is not there", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+
+    // PLAN runs an hour. Asking for two would send the reader somewhere there is nothing to
+    // read, and the recovery machinery would then keep trying to reach a time that does not exist.
+    await mse.seek(7200);
+    expect(remuxer.seeks[0]).toBeLessThanOrEqual(PLAN.durationSeconds);
+    expect(video.currentTime).toBeLessThanOrEqual(PLAN.durationSeconds + 0.2);
   });
 
   it("detaches cleanly, leaving nothing listening", async () => {

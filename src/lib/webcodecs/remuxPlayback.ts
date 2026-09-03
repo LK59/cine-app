@@ -5,7 +5,7 @@
 // chosen and not again on every operation.
 
 import { HttpByteSource, type ByteSource } from "./byteSource";
-import { selectCue, type EngineTrack } from "./engine";
+import type { EngineTrack } from "./engine";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
@@ -13,6 +13,15 @@ import { Remuxer, type TrackedCue } from "./remuxer";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
+
+/**
+ * And this far ahead of it.
+ *
+ * Keeping only a window behind is not enough once seeking is involved: jump backwards and every
+ * line gathered further along the film is still "ahead", so nothing is ever dropped and the list
+ * grows with each seek. A window on both sides bounds it whatever the viewer does.
+ */
+const CUE_FUTURE_SECONDS = 120;
 
 export interface RemuxPlaybackOptions {
   streamUrl: string;
@@ -125,8 +134,11 @@ export class RemuxPlayback {
 
   private collect(cues: TrackedCue[]): void {
     this.cues.push(...cues);
-    const oldest = this.video.currentTime - CUE_HISTORY_SECONDS;
-    if (this.cues.length > 400) this.cues = this.cues.filter((cue) => cue.endSeconds >= oldest);
+    if (this.cues.length <= 600) return;
+    const now = this.video.currentTime;
+    this.cues = this.cues.filter(
+      (cue) => cue.endSeconds >= now - CUE_HISTORY_SECONDS && cue.startSeconds <= now + CUE_FUTURE_SECONDS
+    );
   }
 
   get audioTracks(): EngineTrack[] {
@@ -145,10 +157,21 @@ export class RemuxPlayback {
     return this.currentSubtitle;
   }
 
+  /**
+   * Scanned in place, on purpose.
+   *
+   * This is asked several times a second while a film plays. Filtering to the chosen track first
+   * allocated a fresh array of every line held, every time — and handed it to a helper that
+   * prunes its argument as it goes, so the pruning was thrown away with the copy. A direct scan
+   * allocates nothing and does not care that seeking leaves the lines out of order.
+   */
   subtitleAt(seconds: number): string | null {
     const track = this.currentSubtitle;
     if (track === null) return null;
-    return selectCue(this.cues.filter((cue) => cue.track === track), seconds)?.text ?? null;
+    for (const cue of this.cues) {
+      if (cue.track === track && cue.startSeconds <= seconds && seconds <= cue.endSeconds) return cue.text;
+    }
+    return null;
   }
 
   /**

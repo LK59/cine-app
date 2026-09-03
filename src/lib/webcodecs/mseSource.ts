@@ -273,10 +273,23 @@ export class MseSource {
     void this.seek(target);
   };
 
+  /**
+   * What the element can actually play.
+   *
+   * Not the video buffer's own ranges: an element plays only where *every* track it is using has
+   * media, and the media element reports precisely that intersection. Audio after a seek starts
+   * consistently a fraction of a second later than video, so measuring the video buffer alone is
+   * optimistic by exactly that much — it reports the playhead as covered while the element is
+   * still waiting for sound.
+   */
+  private get playable(): TimeRanges {
+    return this.video.buffered;
+  }
+
   /** How far the playhead is from the nearest media, or 0 when it is standing on some. */
   private distanceToMedia(seconds: number): number {
-    const ranges = this.videoBuffer?.buffered;
-    if (!ranges || ranges.length === 0) return Infinity;
+    const ranges = this.playable;
+    if (ranges.length === 0) return Infinity;
     let best = Infinity;
     for (let i = 0; i < ranges.length; i++) {
       if (ranges.start(i) <= seconds && seconds < ranges.end(i)) return 0;
@@ -286,12 +299,7 @@ export class MseSource {
   }
 
   private isBufferedAt(seconds: number): boolean {
-    const ranges = this.videoBuffer?.buffered;
-    if (!ranges) return false;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= seconds && seconds < ranges.end(i)) return true;
-    }
-    return false;
+    return this.distanceToMedia(seconds) === 0;
   }
 
   /** True while the system wants data. Plain MediaSource has no such signal, so it always does. */
@@ -313,9 +321,8 @@ export class MseSource {
    * playhead sits in front of nothing at all — the player would then quietly stop fetching.
    */
   private bufferedEnd(): number {
-    const ranges = this.videoBuffer?.buffered;
+    const ranges = this.playable;
     const now = this.video.currentTime;
-    if (!ranges) return now;
     for (let i = 0; i < ranges.length; i++) {
       if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
     }
@@ -426,8 +433,8 @@ export class MseSource {
    * small to see, and it is the difference between a seek that works and one that hangs.
    */
   private nudgeIntoBuffer(): void {
-    const ranges = this.videoBuffer?.buffered;
-    if (!ranges || ranges.length === 0 || this.destroyed) return;
+    const ranges = this.playable;
+    if (ranges.length === 0 || this.destroyed) return;
 
     const now = this.video.currentTime;
     let start: number | null = null;
@@ -522,8 +529,14 @@ export class MseSource {
     return task;
   }
 
-  private async performSeek(playerSeconds: number): Promise<void> {
+  private async performSeek(requested: number): Promise<void> {
     if (this.destroyed) return;
+
+    // Clamped to the media, as a media element clamps its own currentTime. Without this, asking
+    // for a time past the end sends the reader somewhere there is nothing to read, and the
+    // recovery machinery then tries again and again to reach a place that does not exist.
+    const end = this.plan.durationSeconds > 0 ? this.plan.durationSeconds + this.delaySeconds : Infinity;
+    const playerSeconds = Math.min(Math.max(0, requested), Math.max(0, end - 0.25));
 
     // A file with no index cannot be reached at a time. Restarting from the beginning and
     // reading forward would look like the player thinking very hard and then, minutes later,
