@@ -252,7 +252,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
               }}
               title={t("common.moreOptions")}
               style={{ height: btnSize, width: btnSize }}
-              className={`flex items-center justify-center rounded-full transition duration-150 hover:scale-105 ${
+              className={`btn btn-icon p-0 ${
                 addedStatus ? `${STATUS_META[addedStatus].bgSolid} text-white` : "bg-white/15 text-white/80 hover:bg-white/25"
               }`}
             >
@@ -279,9 +279,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                 <button
                   onClick={(e) => { e.stopPropagation(); setRequestModalOpen(true); }}
                   disabled={requested || item.pending}
-                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
-                    requested || item.pending ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
-                  }`}
+                  className={`btn btn-ghost btn-sm px-2 py-1 text-[10px] ${requested || item.pending ? "btn-on" : ""}`}
                 >
                   <CirclePlus size={9} />
                   {requested || item.pending ? t("recommendations.requested") : t("recommendations.request")}
@@ -293,7 +291,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                   disabled={addingSearch}
                   title={t("recommendations.interactiveSearch")}
                   style={{ height: btnSize, width: btnSize }}
-                  className="flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                  className="btn btn-ghost btn-icon rounded-lg p-0"
                 >
                   {addingSearch ? <Loader2 size={iconSize} className="animate-spin" /> : <Telescope size={iconSize} />}
                 </button>
@@ -304,7 +302,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                   disabled={addingSearch}
                   title={t("watchlist.addToLibrary")}
                   style={{ height: btnSize, width: btnSize }}
-                  className="flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                  className="btn btn-ghost btn-icon rounded-lg p-0"
                 >
                   {addingSearch ? <Loader2 size={iconSize} className="animate-spin" /> : <Plus size={iconSize} />}
                 </button>

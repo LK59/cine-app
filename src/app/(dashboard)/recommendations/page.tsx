@@ -202,7 +202,7 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
                     key={s}
                     onClick={(e) => { e.stopPropagation(); addToWatchlist(s); }}
                     title={meta.label}
-                    className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border transition duration-150 ${
+                    className={`btn btn-icon h-[22px] w-[22px] border p-0 ${
                       active
                         ? `${meta.bgSolid} border-white/30 text-white scale-110 shadow-md`
                         : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
@@ -228,9 +228,7 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
                 <button
                   onClick={(e) => doRequest(e)}
                   disabled={requested || requesting}
-                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
-                    requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
-                  }`}
+                  className={`btn btn-ghost btn-sm px-2 py-1 text-[10px] ${requested ? "btn-on" : ""}`}
                 >
                   <CirclePlus size={9} />
                   {requested ? t('recommendations.requested') : requesting ? "…" : t('recommendations.request')}
@@ -241,7 +239,7 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}
                   title={t('recommendations.interactiveSearch')}
-                  className="flex h-[22px] w-[22px] items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                  className="btn btn-ghost btn-icon h-[22px] w-[22px] rounded-lg p-0"
                 >
                   <Telescope size={9} />
                 </button>
