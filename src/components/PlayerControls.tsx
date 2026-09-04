@@ -1331,12 +1331,30 @@ export function PlayerControls({
               holdControls();
               updatePreview(e.touches[0].clientX);
             }}
+            /**
+             * Le saut est décidé ici, à partir de l'endroit où le doigt était — et non de la
+             * valeur de l'input.
+             *
+             * Un `input[type=range]` sur iOS ne saute pas là où on le touche : il faut attraper
+             * la pastille et la faire glisser. Tant qu'elle était visible en permanence, ça se
+             * devinait ; une fois cachée au repos, toucher la barre affichait bien la vignette —
+             * le conteneur, lui, suit le doigt — sans que l'input bouge d'un pixel, et le
+             * relâchement ne changeait donc rien. Le conteneur sait où le doigt est depuis le
+             * début : c'est lui qui conclut.
+             */
+            onTouchEnd={() => {
+              seekingRef.current = false;
+              if (previewTime !== null) commitSeek(previewTime);
+              setPreviewTime(null);
+              setTimeout(() => showControls(5000), 0);
+            }}
             // A touch the system takes back — a notification, a call, a gesture the browser
             // claims — never reaches touchend, and without this the bar would stay thick with
-            // nothing on it.
+            // nothing on it. Rien n'est validé : le doigt n'a pas été relâché, il a été repris.
             onTouchCancel={() => {
+              seekingRef.current = false;
               setPreviewTime(null);
-              if (!seekingRef.current) showControls(5000);
+              showControls(5000);
             }}
           >
             {/* The rail at rest. Painted here rather than left to the native track, which cannot
@@ -1454,11 +1472,10 @@ export function PlayerControls({
                 setPreviewTime(null);
                 setTimeout(() => showControls(5000), 0);
               }}
-              onTouchEnd={(e) => {
+              // Rien ici pour le toucher : c'est le conteneur qui le termine, et il est le seul
+              // à savoir où le doigt était. Voir son onTouchEnd.
+              onTouchEnd={() => {
                 seekingRef.current = false;
-                commitSeek(Number((e.target as HTMLInputElement).value));
-                setPreviewTime(null);
-                setTimeout(() => showControls(5000), 0);
               }}
               // Same preview/commit split as the mouse/touch handlers above, for arrow-key
               // seeking — without this, Left/Right looked like it "fought the bar and snapped

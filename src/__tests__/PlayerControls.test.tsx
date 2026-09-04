@@ -90,6 +90,39 @@ describe("PlayerControls — la barre de progression", () => {
     expect(bar.hasAttribute("data-scrub")).toBe(false);
   });
 
+  it("saute là où le doigt s'est posé, pas là où la pastille était", async () => {
+    // An input[type=range] on iOS does not jump to where it is touched: the thumb has to be
+    // grabbed and dragged. While the thumb was always visible that was guessable; hidden at
+    // rest, touching the bar showed the thumbnail — the container follows the finger — without
+    // the input moving at all, so releasing changed nothing.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    await withDuration(video!, bar);
+
+    // A quarter of the way along a bar two hundred pixels wide, on an hour-long film.
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 50 }] }));
+    await act(async () => void fireEvent.touchEnd(bar));
+
+    expect(video!.currentTime).toBeCloseTo(900, 0);
+  });
+
+  it("ne valide rien quand le système reprend le toucher", async () => {
+    // The finger was not released, it was taken away.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 50 }] }));
+    await act(async () => void fireEvent.touchCancel(bar));
+    expect(video!.currentTime).toBe(0);
+  });
+
   it("redevient fine aussi quand le système reprend le toucher", async () => {
     // A touch the system takes back never reaches touchend.
     stubMediaFetches();
