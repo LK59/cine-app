@@ -1342,7 +1342,7 @@ export function PlayerControls({
             {/* The rail at rest. Painted here rather than left to the native track, which cannot
                 be sized at all without giving up `accent-color` — and giving that up is what
                 lets the bar answer to a finger as well as to a pointer. */}
-            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/15 transition-[height] duration-150 ease-out ${scrubbing ? "h-2" : "h-1"}`} />
+            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/15 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`} />
             {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
                 second color): its only job is "can I scrub ahead without waiting", not
                 competing for attention with the actual playback position. Sits under the
@@ -1350,7 +1350,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-150 ease-out ${scrubbing ? "h-2" : "h-1"}`}
+                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`}
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -1371,7 +1371,7 @@ export function PlayerControls({
               chapters.map((ch, i) => (
                 <div
                   key={i}
-                  className={`pointer-events-none absolute top-1/2 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-150 ease-out ${scrubbing ? "h-2" : "h-1"}`}
+                  className={`pointer-events-none absolute top-1/2 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-[260ms] ease-[cubic-bezier(0.33,1,0.68,1)] ${scrubbing ? "h-2" : "h-1"}`}
                   style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}
