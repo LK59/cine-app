@@ -26,20 +26,23 @@ import { useEffect, useState } from "react";
  */
 function heightFactor(ratio: number | null): number {
   if (ratio === null) return 1;
-  if (ratio >= 5.5) return 0.72; // une ligne très longue : « MISSION: IMPOSSIBLE »
-  if (ratio >= 3.5) return 0.85; // une ligne ordinaire : « SUNSHINE »
-  if (ratio >= 2) return 1; // un mot large ou deux lignes courtes
-  return 1.25; // empilé ou presque carré : « CASINO ROYALE »
+  if (ratio >= 5.5) return 0.78; // une ligne très longue : « MISSION: IMPOSSIBLE »
+  if (ratio >= 3.5) return 0.9; // une ligne ordinaire : « SUNSHINE »
+  if (ratio >= 2) return 1.05; // un mot large ou deux lignes courtes
+  // Empilé ou presque carré : « CASINO ROYALE », « Le Parrain ». Ces images-là portent souvent
+  // une marge transparente autour du dessin, donc la hauteur mesurée est plus grande que la
+  // marque visible : sans ce supplément, elles paraissent petites à hauteur égale.
+  return 1.4;
 }
 
 /** Les trois surfaces qui portent un logo, et la hauteur qu'elles lui accordent. */
 const SURFACES = {
   /** La bannière du haut, sur l'écran de parcours. */
-  hero: { compact: 72, roomy: 124, maxWidth: "min(100%, 40rem)" },
+  hero: { compact: 76, roomy: 132, maxWidth: "min(100%, 42rem)" },
   /** La fiche plein écran. */
-  sheet: { compact: 64, roomy: 112, maxWidth: "min(100%, 30rem)" },
+  sheet: { compact: 68, roomy: 120, maxWidth: "min(100%, 32rem)" },
   /** Le téléphone, où la place est comptée dans les deux sens. */
-  phone: { compact: 48, roomy: 68, maxWidth: "min(100%, 20rem)" },
+  phone: { compact: 52, roomy: 76, maxWidth: "min(100%, 21rem)" },
 } as const;
 
 /** En dessous, la fenêtre est trop courte pour la hauteur généreuse. */
@@ -82,7 +85,18 @@ export function CinemaLogo({
         if (img.naturalHeight > 0) setRatio(img.naturalWidth / img.naturalHeight);
       }}
       style={{ maxHeight, maxWidth, filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))" }}
-      className={`w-auto object-contain ${className}`}
+      /**
+       * `self-start` : sans lui, l'image s'étirait à la largeur de sa colonne.
+       *
+       * Ces logos vivent dans un `flex flex-col`, dont l'alignement par défaut est `stretch` :
+       * une image y prend toute la largeur disponible, et `object-contain` centre alors le
+       * dessin à l'intérieur de cette boîte. D'où « le Parrain » décalé de trois cents pixels
+       * vers la droite, alors que le texte sous lui commençait au bord — et d'où l'impression
+       * qu'il était petit, puisque seule sa hauteur le limitait dans une boîte trop large.
+       * Un appelant qui veut le centrer passe `mx-auto`, dont les marges automatiques
+       * l'emportent sur cet alignement.
+       */
+      className={`w-auto self-start object-contain ${className}`}
     />
   );
 }

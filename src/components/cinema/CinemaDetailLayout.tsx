@@ -60,8 +60,8 @@ export const MENU_STYLE = { width: "min(26rem, 100%)" } as const;
  * de compter sur une largeur qui ne dit rien de la place verticale disponible.
  */
 export const SECTION_CLASS =
-  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-10 pt-14 " +
-  "[@media(min-height:820px)]:pb-14 [@media(min-height:820px)]:pt-20";
+  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-14 pt-10 " +
+  "[@media(min-height:820px)]:pb-24 [@media(min-height:820px)]:pt-12";
 
 
 
