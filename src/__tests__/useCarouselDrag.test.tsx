@@ -25,14 +25,16 @@ function Harness({
   count,
   onIndexChange,
   onRender,
+  onDragStateChange,
 }: {
   index: number;
   count: number;
   onIndexChange: (n: number) => void;
   onRender?: () => void;
+  onDragStateChange?: (dragging: boolean) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const drag = useCarouselDrag({ trackRef, count, index, onIndexChange });
+  const drag = useCarouselDrag({ trackRef, count, index, onIndexChange, onDragStateChange });
   // Compté depuis un effet : les effets suivent chaque rendu, et rien n'est modifié pendant.
   useEffect(() => {
     onRender?.();
@@ -170,5 +172,34 @@ describe("la traînée du carrousel", () => {
     move(20);
     up(20);
     expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
+  /**
+   * La rotation automatique se déclenchait au milieu d'un geste : elle redessinait tout l'écran
+   * *et* remplaçait la transformation écrite à la main par celle du nouvel index — la piste
+   * sautait sous le doigt. L'appelant a besoin de le savoir pour la suspendre, mais deux fois
+   * par geste, pas cent vingt.
+   */
+  it("annonce le début et la fin du geste, et rien entre les deux", () => {
+    const onDragStateChange = vi.fn();
+    render(
+      <Harness index={1} count={5} onIndexChange={vi.fn()} onDragStateChange={onDragStateChange} />
+    );
+    down();
+    for (let x = 190; x > 60; x -= 5) move(x);
+    expect(onDragStateChange.mock.calls).toEqual([[true]]);
+    up(60);
+    expect(onDragStateChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("ne l'annonce pas pour un geste qui appartient à la page", () => {
+    const onDragStateChange = vi.fn();
+    render(
+      <Harness index={1} count={5} onIndexChange={vi.fn()} onDragStateChange={onDragStateChange} />
+    );
+    down();
+    move(196, 60);
+    up(196, 60);
+    expect(onDragStateChange).not.toHaveBeenCalled();
   });
 });

@@ -62,11 +62,20 @@ export function useCarouselDrag({
   count,
   index,
   onIndexChange,
+  onDragStateChange,
 }: {
   trackRef: RefObject<HTMLDivElement | null>;
   count: number;
   index: number;
   onIndexChange: (next: number) => void;
+  /**
+   * Prévenu au début et à la fin du geste — deux fois, jamais à chaque pixel.
+   *
+   * L'appelant s'en sert pour suspendre la rotation automatique : sans cela elle se déclenchait
+   * au milieu d'un geste, ce qui redessinait tout l'écran *et* remplaçait la transformation
+   * écrite à la main par celle du nouvel index — la piste sautait sous le doigt.
+   */
+  onDragStateChange?: (dragging: boolean) => void;
 }): CarouselDrag {
   const from = useRef<{ x: number; y: number; at: number } | null>(null);
   const axis = useRef<Axis>("undecided");
@@ -113,6 +122,7 @@ export function useCarouselDrag({
         // La capture ne vient qu'ici : la prendre au premier contact volerait à la page les
         // gestes verticaux qui commencent sur l'affiche.
         (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        onDragStateChange?.(true);
       }
 
       // Aux extrémités, la piste résiste au lieu de partir dans le vide : la résistance dit
@@ -120,7 +130,7 @@ export function useCarouselDrag({
       const atEdge = (moveX > 0 && index === 0) || (moveX < 0 && index === count - 1);
       paint(atEdge ? moveX * 0.35 : moveX);
     },
-    [count, index, paint]
+    [count, index, paint, onDragStateChange]
   );
 
   const finish = useCallback(
@@ -136,6 +146,7 @@ export function useCarouselDrag({
         return;
       }
       axis.current = "undecided";
+      onDragStateChange?.(false);
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 
       const moved = e.clientX - start.x;
@@ -166,7 +177,7 @@ export function useCarouselDrag({
       }
       if (next !== index) onIndexChange(next);
     },
-    [count, index, onIndexChange, trackRef]
+    [count, index, onIndexChange, trackRef, onDragStateChange]
   );
 
   return {

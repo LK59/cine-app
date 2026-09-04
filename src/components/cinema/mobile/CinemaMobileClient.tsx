@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Info, Play, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -109,7 +109,12 @@ export function CinemaMobileClient() {
   // key art, Lire / Plus d'infos). Pauses while a sheet or the search is covering it: rotating
   // artwork nobody can see just burns image decodes.
   const heroItems = (payload?.recentlyAdded?.length ? payload.recentlyAdded : payload?.spotlight ?? []).slice(0, 8);
-  const [heroIndex, setHeroIndex] = useRotatingIndex(heroItems.length, selected !== null || searchOpen);
+  // Deux rendus par geste, à son début et à sa fin — voir `onDragStateChange`.
+  const [heroDragging, setHeroDragging] = useState(false);
+  const [heroIndex, setHeroIndex] = useRotatingIndex(
+    heroItems.length,
+    selected !== null || searchOpen || heroDragging
+  );
   const hero = heroItems[heroIndex];
   const myList = isSeries ? myListSeries : myListMovies;
   // The two payloads key their items differently; every rail below just needs *a* stable id.
@@ -151,6 +156,7 @@ export function CinemaMobileClient() {
     count: heroItems.length,
     index: heroIndex,
     onIndexChange: setHeroIndex,
+    onDragStateChange: setHeroDragging,
   });
 
   const exit = () => leaveCinema(router);
@@ -308,16 +314,28 @@ export function CinemaMobileClient() {
               <div
                 ref={heroTrackRef}
                 className="flex"
-                // Position au repos seulement : pendant le geste, la piste est écrite directement
-                // par le hook, sans passer par React — voir useCarouselDrag.
-                style={{ transform: carouselTransform(heroIndex), transition: CAROUSEL_TRANSITION }}
+                style={{
+                  transform: carouselTransform(heroIndex),
+                  transition: CAROUSEL_TRANSITION,
+                  // Promue une fois pour toutes, plutôt qu'à chaque geste : sans cela le
+                  // navigateur décide de promouvoir la piste au premier déplacement, ce qui veut
+                  // dire re-tramer une surface de plusieurs écrans de large au moment précis où
+                  // le doigt attend une réponse.
+                  willChange: "transform",
+                }}
               >
                 {heroItems.map((item, i) => (
                   <div key={itemId(item)} className="w-full shrink-0">
-                    {short ? (
+                    {/* Seules l'affiche courante et ses deux voisines existent.
+                        Les huit étaient rendues en même temps, chacune agrandie de sa largeur
+                        d'origine à celle de l'écran : une piste de huit écrans de large que le
+                        compositeur doit tramer, redimensionner et garder en mémoire, plus huit
+                        logos à ombre portée. Trois suffisent : celle qu'on voit, celle d'où l'on
+                        vient, celle où l'on va. */}
+                    {Math.abs(i - heroIndex) > 1 ? null : short ? (
                       <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
                         <div className="w-24 shrink-0 overflow-hidden rounded-lg">
-                          <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === 0} sizes="120px" />
+                          <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === heroIndex} sizes="120px" />
                         </div>
                         <div className="flex min-w-0 flex-1 flex-col justify-center">
                           {item.logoUrl ? (
@@ -333,7 +351,7 @@ export function CinemaMobileClient() {
                       </div>
                     ) : (
                       <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
-                        <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === 0} sizes="100vw" />
+                        <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === heroIndex} sizes="100vw" />
                         <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                           {item.logoUrl ? (
                             <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mx-auto mb-2" />

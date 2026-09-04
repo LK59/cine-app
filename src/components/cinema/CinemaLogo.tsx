@@ -107,7 +107,16 @@ export function CinemaLogo({
       style={{
         maxHeight,
         maxWidth,
-        filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))",
+        /**
+         * Deux ombres portées plates plutôt qu'une ombre floue.
+         *
+         * `drop-shadow` avec un rayon de vingt pixels oblige le navigateur à retramer l'image à
+         * chaque fois que la surface qui la porte bouge — et sur le téléphone, cette surface est
+         * une piste que le doigt déplace en continu. Un rayon nul se rasterise une fois et se
+         * déplace avec la texture ; deux passes décalées suffisent à détacher un logo blanc d'un
+         * fond clair, ce à quoi cette ombre sert.
+         */
+        filter: "drop-shadow(0 2px 0 rgb(0 0 0 / 0.55)) drop-shadow(0 -1px 0 rgb(0 0 0 / 0.35))",
         // Rien n'est montré avant que la forme soit connue : le logo apparaissait à la hauteur
         // par défaut puis se corrigeait sous les yeux, ce qui se voyait comme un sursaut. Il
         // paraît maintenant déjà à sa taille — la mesure prend une image, l'apparition en prend
