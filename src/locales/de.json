@@ -1139,7 +1139,7 @@
     "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfe deine Verbindung und versuch's erneut.",
     "playbackInterrupted": "Die Wiedergabe wurde unterbrochen. Versuch's erneut.",
     "info": {
-      "title": "Wiedergabeinfo",
+      "title": "Wiedergabe-Infos",
       "network": "Netzwerk",
       "estimatedBitrate": "Geschätzte Bitrate",
       "reason": "Grund",
@@ -1180,6 +1180,31 @@
         "VideoBitrateNotSupported": "Video-Bitrate nicht unterstützt",
         "AudioBitrateNotSupported": "Audio-Bitrate nicht unterstützt",
         "DirectPlayError": "Fehler bei Direktwiedergabe"
+      },
+      "sections": {
+        "file": "Die Datei",
+        "sound": "Der Ton",
+        "stream": "Der Datenstrom",
+        "device": "Was dieses Gerät akzeptiert"
+      },
+      "range": "Bereich",
+      "tracks": "Spuren",
+      "tracksValue": "{audio} Audio · {subtitles} Untertitel",
+      "track": "Spur",
+      "noDecodableTrack": "keine dekodierbare Spur",
+      "serverTranscode": "Server-Transkodierung",
+      "serverTranscodeYes": "ja",
+      "serverTranscodeNo": "keine",
+      "gaveWay": "Der native Player hat abgegeben: {reason}",
+      "paths": {
+        "directName": "Direktwiedergabe",
+        "directDetail": "kein Remuxing",
+        "remuxName": "Remuxing",
+        "remuxDetail": "Hardware-Dekodierung, natives HDR",
+        "webcodecsName": "WebCodecs → Canvas",
+        "webcodecsDetail": "Software-Dekodierung",
+        "pendingName": "Wird geprüft",
+        "pendingDetail": "die Datei hat noch nichts gesagt"
       }
     },
     "experimental": {

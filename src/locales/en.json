@@ -1139,7 +1139,7 @@
     "playbackInterruptedCheckConnection": "Playback was interrupted. Check your connection and try again.",
     "playbackInterrupted": "Playback was interrupted. Try again.",
     "info": {
-      "title": "Playback Info",
+      "title": "Playback info",
       "network": "Network",
       "estimatedBitrate": "Estimated bitrate",
       "reason": "Reason",
@@ -1180,6 +1180,31 @@
         "VideoBitrateNotSupported": "Video bitrate not supported",
         "AudioBitrateNotSupported": "Audio bitrate not supported",
         "DirectPlayError": "Direct play error"
+      },
+      "sections": {
+        "file": "The file",
+        "sound": "The sound",
+        "stream": "The stream",
+        "device": "What this device accepts"
+      },
+      "range": "Range",
+      "tracks": "Tracks",
+      "tracksValue": "{audio} audio · {subtitles} subtitles",
+      "track": "Track",
+      "noDecodableTrack": "no decodable track",
+      "serverTranscode": "Server transcoding",
+      "serverTranscodeYes": "yes",
+      "serverTranscodeNo": "none",
+      "gaveWay": "The native player gave way: {reason}",
+      "paths": {
+        "directName": "Direct play",
+        "directDetail": "no remuxing",
+        "remuxName": "Remuxing",
+        "remuxDetail": "hardware decoding, native HDR",
+        "webcodecsName": "WebCodecs → canvas",
+        "webcodecsDetail": "software decoding",
+        "pendingName": "Examining",
+        "pendingDetail": "the file has not spoken yet"
       }
     },
     "experimental": {

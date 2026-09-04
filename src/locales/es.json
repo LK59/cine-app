@@ -1139,7 +1139,7 @@
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",
     "playbackInterrupted": "La reproducción se interrumpió. Inténtalo de nuevo.",
     "info": {
-      "title": "Playback Info",
+      "title": "Información de reproducción",
       "network": "Red",
       "estimatedBitrate": "Tasa de bits estimada",
       "reason": "Motivo",
@@ -1180,6 +1180,31 @@
         "VideoBitrateNotSupported": "Tasa de bits de vídeo no compatible",
         "AudioBitrateNotSupported": "Tasa de bits de audio no compatible",
         "DirectPlayError": "Error de reproducción directa"
+      },
+      "sections": {
+        "file": "El archivo",
+        "sound": "El sonido",
+        "stream": "El flujo",
+        "device": "Lo que acepta el dispositivo"
+      },
+      "range": "Rango",
+      "tracks": "Pistas",
+      "tracksValue": "{audio} audio · {subtitles} subtítulos",
+      "track": "Pista",
+      "noDecodableTrack": "ninguna pista decodificable",
+      "serverTranscode": "Transcodificación del servidor",
+      "serverTranscodeYes": "sí",
+      "serverTranscodeNo": "ninguna",
+      "gaveWay": "El reproductor nativo cedió el paso: {reason}",
+      "paths": {
+        "directName": "Reproducción directa",
+        "directDetail": "sin remultiplexado",
+        "remuxName": "Remultiplexado",
+        "remuxDetail": "decodificación por hardware, HDR nativo",
+        "webcodecsName": "WebCodecs → canvas",
+        "webcodecsDetail": "decodificación por software",
+        "pendingName": "En examen",
+        "pendingDetail": "el archivo aún no ha hablado"
       }
     },
     "experimental": {

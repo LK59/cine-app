@@ -1,159 +1,152 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import type { PlaybackInfoSummary } from "@/components/PlayerHost";
 import { useT } from "@/components/TranslationProvider";
+import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
+import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 
-interface Props {
-  info: PlaybackInfoSummary | null;
-  networkBitrate: number | null;
-  open: boolean;
-  onClose: () => void;
-  /**
-   * Why the experimental player handed this file over, when it did.
-   *
-   * The viewer is no longer asked to decide, and is told only "negotiating with the server" for
-   * a few seconds. This is where the actual reason stays reachable — a step down that leaves no
-   * account of itself is how a player that stopped using its best path goes unnoticed for months.
-   */
-  fallbackReason?: string | null;
+export interface PanelRow {
+  label: string;
+  value: string;
 }
 
-// Every one of these is a real Jellyfin TranscodeReason string — translated via
-// player.info.reasons.<key> when known; an unrecognized one (a Jellyfin version returning a
-// reason this app doesn't know about yet) falls back to the raw string rather than a raw i18n
-// key path, same as the old REASON_LABELS[r] ?? r behavior.
-const KNOWN_REASONS = new Set([
-  "ContainerNotSupported", "VideoCodecNotSupported", "AudioCodecNotSupported",
-  "SubtitleCodecNotSupported", "VideoProfileNotSupported", "VideoLevelNotSupported",
-  "VideoResolutionNotSupported", "VideoBitDepthNotSupported", "VideoFramerateNotSupported",
-  "VideoRangeTypeNotSupported", "AudioChannelsNotSupported", "AudioProfileNotSupported",
-  "AnamorphicVideoNotSupported", "InterlacedVideoNotSupported", "RefFramesNotSupported",
-  "ContainerBitrateExceedsLimit", "VideoBitrateNotSupported", "AudioBitrateNotSupported",
-  "DirectPlayError",
-]);
+export interface PanelSection {
+  title: string;
+  rows: PanelRow[];
+}
 
-const METHOD_COLOR: Record<PlaybackInfoSummary["playMethod"], string> = {
-  DirectPlay: "text-emerald-400",
-  DirectStream: "text-sky-400",
-  Transcode: "text-amber-400",
+/**
+ * Ce que le lecteur a à dire de lui-même, quel que soit le lecteur.
+ *
+ * Les deux chemins de lecture tenaient chacun leur panneau : celui-ci en haut à gauche avec des
+ * définitions traduites, celui du lecteur natif en haut à droite avec ses propres intitulés, sa
+ * propre mise en page et le rapport copiable que l'autre n'avait pas. La même question posée à
+ * deux lecteurs recevait donc deux réponses de forme différente, et l'une des deux ne pouvait
+ * pas quitter l'appareil. Le panneau est maintenant unique : chaque hôte décrit ce qu'il sait
+ * dans ce modèle, et la présentation, la sonde des capacités et le rapport sont communs.
+ */
+export interface PlaybackPanelData {
+  /** La ligne à lire avant toutes les autres : comment ce fichier est lu. */
+  headline: { name: string; detail: string; tone: "good" | "warn" | "neutral" };
+  /** Pourquoi, quand il y a un pourquoi : raisons de transcodage, chemin retenu, repli. */
+  notes: string[];
+  sections: PanelSection[];
+  /** Le rapport copiable — les faits du démarrage, sous une forme qui survit à un copier-coller. */
+  report: ReportInput | null;
+}
+
+const TONES: Record<PlaybackPanelData["headline"]["tone"], string> = {
+  good: "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20",
+  warn: "bg-amber-500/10 text-amber-200 ring-amber-400/20",
+  neutral: "bg-slate-500/10 text-slate-300 ring-slate-400/20",
 };
 
-function formatBitrate(bitRate: number | null): string | null {
-  if (!bitRate) return null;
-  return `${(bitRate / 1_000_000).toFixed(1)} Mb/s`;
+function Row({ label, value }: PanelRow) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-[3px]">
+      <dt className="shrink-0 text-slate-500">{label}</dt>
+      {/* Des points de conduite, pour qu'un œil aille d'un intitulé à sa valeur vingt lignes plus
+          bas sans perdre la ligne — la même raison qu'un sommaire en porte. */}
+      <span aria-hidden className="mx-1 min-w-3 flex-1 translate-y-[-3px] border-b border-dotted border-white/10" />
+      <dd className="text-right font-mono text-[11px] leading-4 text-slate-200">{value}</dd>
+    </div>
+  );
 }
 
-export function PlaybackInfoPanel({ info, networkBitrate, open, onClose, fallbackReason }: Props) {
+/** Vingt lignes d'affilée, c'est une liste ; en cinq groupes, c'est une réponse. */
+function Section({ title, rows }: PanelSection) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="border-t border-white/5 pt-2.5 first:border-0 first:pt-0">
+      <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</h3>
+      <dl>
+        {rows.map((row) => (
+          <Row key={row.label} {...row} />
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+export function PlaybackInfoPanel({
+  data,
+  open,
+  onClose,
+}: {
+  data: PlaybackPanelData | null;
+  open: boolean;
+  onClose: () => void;
+}) {
   const t = useT();
-  if (!open || !info) return null;
+  const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
 
-  const methodLabel =
-    info.playMethod === "DirectPlay" ? t('player.info.directPlay')
-    : info.playMethod === "DirectStream" ? t('player.info.directStream')
-    : t('player.info.transcode');
+  // Demandé par le panneau plutôt que par chaque lecteur : ce que l'appareil accepte ne dépend
+  // pas du chemin de lecture, et les deux hôtes en avaient besoin.
+  useEffect(() => {
+    if (!open || capabilities) return;
+    let cancelled = false;
+    void probeCapabilities()
+      .then((found) => !cancelled && setCapabilities(describeCapabilities(found)))
+      .catch(() => !cancelled && setCapabilities({ "Sonde des capacités": "échec" }));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, capabilities]);
 
-  const methodDescription = (() => {
-    if (info.playMethod === "DirectPlay") return t('player.info.describeDirectPlay');
-    if (info.playMethod === "DirectStream") {
-      const audioOnly = info.transcodeReasons.some((r) => r.startsWith("Audio"));
-      return audioOnly ? t('player.info.describeDirectStreamAudio') : t('player.info.describeDirectStreamContainer');
-    }
-    return t('player.info.describeTranscode');
-  })();
+  if (!open || !data) return null;
+
+  const capabilityRows = capabilities
+    ? Object.entries(capabilities).map(([label, value]) => ({ label, value }))
+    : [];
 
   return (
     <div
-      // z-20: above PlayerControls' full-screen click-catching overlay (z-10, transparent,
-      // captures pointer events to auto-hide/show controls) — without this the panel paints
-      // visually on top but pointer events (close button, scroll) never actually reach it.
-      className="pointer-events-auto absolute z-20 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+      // z-20 : au-dessus de la nappe transparente que PlayerControls étend sur tout l'écran pour
+      // capter les pointeurs (z-10). Sans cela le panneau se peint par-dessus mais aucun clic ne
+      // l'atteint — ni la fermeture, ni le défilement.
+      className="player-panel pointer-events-auto absolute z-20 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] origin-top-right animate-fade-in-scale overflow-y-auto rounded-2xl p-4 text-xs text-slate-300"
       style={{
         top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
-        left: "max(1rem, env(safe-area-inset-left))",
+        right: "max(1rem, env(safe-area-inset-right))",
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <p className="text-sm font-medium text-white">{t('player.info.title')}</p>
-        <button onClick={onClose} className="btn btn-ghost btn-icon p-1">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-white">{t("player.info.title")}</p>
+        {/* Le panneau couvre les commandes : sans ce bouton, le seul moyen d'en sortir était de
+            fermer le lecteur. */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("common.close")}
+          className="-mr-1 -mt-1 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+        >
           <X size={16} />
         </button>
       </div>
-      <div className="max-h-[60vh] overflow-y-auto p-4 text-xs">
-        <div className="mb-3">
-          <p className={`text-sm font-semibold ${METHOD_COLOR[info.playMethod]}`}>{methodLabel}</p>
-          <p className="mt-0.5 text-slate-400">{methodDescription}</p>
-        </div>
 
-        {networkBitrate != null && (
-          <div className="mb-3">
-            <p className="mb-1 font-medium text-slate-300">{t('player.info.network')}</p>
-            <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-400">
-              <dt className="text-slate-500">{t('player.info.estimatedBitrate')}</dt>
-              <dd>{formatBitrate(networkBitrate) ?? "—"}</dd>
-            </dl>
-          </div>
-        )}
-
-        {info.transcodeReasons.length > 0 && (
-          <div className="mb-3">
-            <p className="mb-1 font-medium text-slate-300">{t('player.info.reason')}</p>
-            <ul className="space-y-0.5 text-slate-400">
-              {info.transcodeReasons.map((r) => (
-                <li key={r}>· {KNOWN_REASONS.has(r) ? t(`player.info.reasons.${r}`) : r}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="mb-3">
-          <p className="mb-1 font-medium text-slate-300">{t('player.info.container')}</p>
-          <p className="text-slate-400">{info.container ?? "—"}</p>
-        </div>
-
-        {info.video && (
-          <div className="mb-3">
-            <p className="mb-1 font-medium text-slate-300">{t('player.info.video')}</p>
-            <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-400">
-              <dt className="text-slate-500">{t('player.info.codec')}</dt>
-              <dd>{info.video.codec ?? "—"}{info.video.profile ? ` (${info.video.profile})` : ""}</dd>
-              <dt className="text-slate-500">{t('player.info.resolution')}</dt>
-              <dd>{info.video.width && info.video.height ? `${info.video.width}×${info.video.height}` : "—"}</dd>
-              <dt className="text-slate-500">{t('player.info.depth')}</dt>
-              <dd>{info.video.bitDepth ? `${info.video.bitDepth} bits` : "—"}</dd>
-              <dt className="text-slate-500">{t('player.info.fps')}</dt>
-              <dd>{info.video.frameRate ? info.video.frameRate.toFixed(2) : "—"}</dd>
-              <dt className="text-slate-500">{t('player.info.bitrate')}</dt>
-              <dd>{formatBitrate(info.video.bitRate) ?? "—"}</dd>
-            </dl>
-          </div>
-        )}
-
-        {info.audio && (
-          <div>
-            <p className="mb-1 font-medium text-slate-300">{t('player.info.audio')}</p>
-            <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-400">
-              <dt className="text-slate-500">{t('player.info.codec')}</dt>
-              <dd>{info.audio.codec ?? "—"}</dd>
-              <dt className="text-slate-500">{t('player.info.channels')}</dt>
-              <dd>{info.audio.channels ?? "—"}</dd>
-              <dt className="text-slate-500">{t('player.info.bitrate')}</dt>
-              <dd>{formatBitrate(info.audio.bitRate) ?? "—"}</dd>
-              <dt className="text-slate-500">{t('player.info.language')}</dt>
-              <dd>{info.audio.language ?? "—"}</dd>
-            </dl>
-          </div>
-        )}
-
-        {/* Kept where someone can find it later, because nobody was asked at the time. */}
-        {fallbackReason && (
-          <div className="border-t border-white/5 pt-3">
-            <p className="mb-1 font-medium text-slate-300">Lecteur expérimental</p>
-            <p className="leading-5 text-slate-400">A cédé la main : {fallbackReason}</p>
-          </div>
-        )}
+      <div className={`rounded-lg px-3 py-2 ring-1 ring-inset ${TONES[data.headline.tone]}`}>
+        <p className="text-[13px] font-medium leading-tight">{data.headline.name}</p>
+        <p className="mt-0.5 text-[11px] opacity-70">{data.headline.detail}</p>
       </div>
+
+      {data.notes.map((note) => (
+        <p key={note} className="mt-2 text-[11px] leading-4 text-slate-400">
+          {note}
+        </p>
+      ))}
+
+      <div className="mt-3 space-y-2.5">
+        {data.sections.map((section) => (
+          <Section key={section.title} {...section} />
+        ))}
+        <Section title={t("player.info.sections.device")} rows={capabilityRows} />
+      </div>
+
+      {/* Gardé là où on peut l'atteindre pendant la lecture : les fautes qui restent à traquer
+          sont justement celles qui arrivent *après* un démarrage réussi. */}
+      {data.report && <ExperimentalPlayerReport input={data.report} />}
     </div>
   );
 }

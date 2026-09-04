@@ -1139,7 +1139,7 @@
     "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifie ta connexion et réessaie.",
     "playbackInterrupted": "La lecture a été interrompue. Réessaie.",
     "info": {
-      "title": "Playback Info",
+      "title": "Infos de lecture",
       "network": "Réseau",
       "estimatedBitrate": "Débit estimé",
       "reason": "Raison",
@@ -1180,6 +1180,31 @@
         "VideoBitrateNotSupported": "Débit vidéo non supporté",
         "AudioBitrateNotSupported": "Débit audio non supporté",
         "DirectPlayError": "Erreur de lecture directe"
+      },
+      "sections": {
+        "file": "Le fichier",
+        "sound": "Le son",
+        "stream": "Le flux",
+        "device": "Ce que l'appareil accepte"
+      },
+      "range": "Plage",
+      "tracks": "Pistes",
+      "tracksValue": "{audio} audio · {subtitles} sous-titres",
+      "track": "Piste",
+      "noDecodableTrack": "aucune piste décodable",
+      "serverTranscode": "Transcodage serveur",
+      "serverTranscodeYes": "oui",
+      "serverTranscodeNo": "aucun",
+      "gaveWay": "Le lecteur natif a cédé la main : {reason}",
+      "paths": {
+        "directName": "Lecture directe",
+        "directDetail": "aucun remultiplexage",
+        "remuxName": "Remultiplexage",
+        "remuxDetail": "décodage matériel, HDR natif",
+        "webcodecsName": "WebCodecs → canvas",
+        "webcodecsDetail": "décodage logiciel",
+        "pendingName": "En cours d'examen",
+        "pendingDetail": "le fichier n'a pas encore parlé"
       }
     },
     "experimental": {

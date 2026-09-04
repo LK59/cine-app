@@ -11,6 +11,7 @@ import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
+import { describeJellyfinPlayback } from "@/lib/playbackPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT } from "@/components/TranslationProvider";
@@ -1096,11 +1097,27 @@ function ActivePlayer({
       )}
       {!isMini && (
         <PlaybackInfoPanel
-          info={playbackInfo}
-          networkBitrate={networkBitrate}
           open={showPlaybackInfo}
           onClose={() => setShowPlaybackInfo(false)}
-          fallbackReason={fallbackReason}
+          data={
+            playbackInfo
+              ? {
+                  ...describeJellyfinPlayback(playbackInfo, networkBitrate, fallbackReason, t),
+                  // Le même rapport copiable que le lecteur natif : c'est ce qui manquait ici,
+                  // et c'est justement la lecture dont on a le plus de mal à rapporter l'état.
+                  report: {
+                    error: null,
+                    elapsedMs: null,
+                    title,
+                    itemId,
+                    file: playbackInfo as unknown as Record<string, unknown>,
+                    pathReason: `Lecteur stable — ${playbackInfo.playMethod}`,
+                    diagnostics: networkBitrate ? { "Débit estimé": `${(networkBitrate / 1_000_000).toFixed(1)} Mb/s` } : {},
+                    running: true,
+                  },
+                }
+              : null
+          }
         />
       )}
       {isMini && !error && !needsReauth && (

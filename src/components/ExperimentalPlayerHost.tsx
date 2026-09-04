@@ -19,8 +19,9 @@ import { describePath } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
-import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
+import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
+import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import {
@@ -32,7 +33,6 @@ import {
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
-const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
 
 /** How long a threshold has to be crossed before anything is shown at all. */
 const SPINNER_AFTER_MS = 120;
@@ -110,55 +110,6 @@ function useElapsedSince(startedAt: number | null): number | null {
   }, [startedAt]);
 
   return startedAt === null ? null : Math.max(0, sampledAt - startedAt);
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 py-[3px]">
-      <dt className="shrink-0 text-slate-500">{label}</dt>
-      {/* Leaders, so an eye can travel from a label to a value twenty rows down without losing
-          the line — the same reason a table of contents has them. */}
-      <span aria-hidden className="mx-1 min-w-3 flex-1 translate-y-[-3px] border-b border-dotted border-white/10" />
-      <dd className="text-right font-mono text-[11px] leading-4 text-slate-200">{value}</dd>
-    </div>
-  );
-}
-
-/** A titled group of rows. Twenty of them in one list is a list; in five groups it is an answer. */
-function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border-t border-white/5 pt-2.5 first:border-0 first:pt-0">
-      <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</h3>
-      <dl>{children}</dl>
-    </section>
-  );
-}
-
-/**
- * The one line worth seeing before any other: which of the four paths is running.
- *
- * Coloured by how much of the work the device is doing rather than by whether anything failed —
- * the two are not the same, and the panel exists to tell them apart.
- */
-function PathBadge({ path }: { path: "remux" | "webcodecs" | "direct" | null }) {
-  const known = {
-    direct: ["Lecture directe", "aucun remultiplexage", "emerald"],
-    remux: ["Remultiplexage", "décodage matériel, HDR natif", "emerald"],
-    webcodecs: ["WebCodecs → canvas", "décodage logiciel", "amber"],
-  }[path ?? "webcodecs"];
-  const [name, detail, tone] = path === null ? ["En cours d'examen", "le fichier n'a pas encore parlé", "slate"] : known;
-  const colours =
-    tone === "emerald"
-      ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20"
-      : tone === "amber"
-        ? "bg-amber-500/10 text-amber-200 ring-amber-400/20"
-        : "bg-slate-500/10 text-slate-300 ring-slate-400/20";
-  return (
-    <div className={`rounded-lg px-3 py-2 ring-1 ring-inset ${colours}`}>
-      <p className="text-[13px] font-medium leading-tight">{name}</p>
-      <p className="mt-0.5 text-[11px] opacity-70">{detail}</p>
-    </div>
-  );
 }
 
 /** "1 h 12" — where the film will pick up, said the way a viewer thinks of it. */
@@ -293,7 +244,6 @@ export function ExperimentalPlayerHost({
   const [showInfo, setShowInfo] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
   // Answered once and kept: none of it changes while the page is open.
-  const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
   // Which of the two pipelines is running. Null until the file has been examined — the element
   // that shows the picture differs between them, so both are mounted and one is hidden.
   const [path, setPath] = useState<"remux" | "webcodecs" | "direct" | null>(null);
@@ -551,24 +501,6 @@ export function ExperimentalPlayerHost({
     const id = setInterval(read, 500);
     return () => clearInterval(id);
   }, [showInfo, error, stuck]);
-
-  // What this device actually accepts, asked of the platform rather than assumed. It is the only
-  // way to know whether a codec the browser cannot decode could still be played by decoding it
-  // here and handing back something the browser will take.
-  useEffect(() => {
-    if (!showInfo || capabilities) return;
-    let cancelled = false;
-    void probeCapabilities()
-      .then((found) => {
-        if (!cancelled) setCapabilities(describeCapabilities(found));
-      })
-      .catch(() => {
-        if (!cancelled) setCapabilities({ "Sonde des capacités": "échec" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [showInfo, capabilities]);
 
   // iOS starts every AudioContext suspended and only lets it resume from the task of a real
   // interaction. The player's own container already tries on each pointer down, but a tap can
@@ -1234,74 +1166,38 @@ export function ExperimentalPlayerHost({
       {/* The technical panel is this player's own: the stable one's reads Jellyfin's transcode
           session, and there is no transcode session here — everything below is what the browser
           is actually doing. */}
-      {showInfo && !isMini && (
-        <div className="player-panel absolute right-4 top-16 z-20 max-h-[70vh] w-80 origin-top-right animate-fade-in-scale overflow-y-auto rounded-2xl p-4 text-xs text-slate-300">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-white">{t("player.experimental.badge")}</p>
-            {/* The panel sits over the controls, so without this the only way out was to close
-                the player. */}
-            <button
-              type="button"
-              onClick={() => setShowInfo(false)}
-              aria-label={t("common.close")}
-              className="-mr-1 -mt-1 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <PathBadge path={path} />
-          {/* Shown whether or not the path succeeded: a step down whose reason is invisible is
-              the same as one that happened silently. */}
-          {pathReason && <p className="mt-2 text-[11px] leading-4 text-slate-400">{pathReason}</p>}
-
-          <div className="mt-3 space-y-2.5">
-            <InfoSection title="Le fichier">
-              <InfoRow label="Conteneur" value={info?.container?.toUpperCase() ?? "?"} />
-              <InfoRow
-                label="Vidéo"
-                value={`${info?.video?.codec ?? "?"} · ${info?.video?.width ?? "?"}×${info?.video?.height ?? "?"} · ${info?.video?.bitDepth ?? "?"} bits`}
-              />
-              <InfoRow label="Plage" value={info?.video?.rangeType ?? "SDR"} />
-              <InfoRow label="Pistes" value={`${tracks.audio.length} audio · ${tracks.subtitles.length} sous-titres`} />
-            </InfoSection>
-
-            <InfoSection title="Le son">
-              <InfoRow
-                label="Piste"
-                value={
-                  currentAudio !== null
-                    ? tracks.audio.find((a) => a.number === currentAudio)?.codecId.replace("A_", "") ?? "?"
-                    : "aucune piste décodable"
-                }
-              />
-              {AUDIO_ROWS.filter((k) => k in diagnostics).map((k) => (
-                <InfoRow key={k} label={k} value={diagnostics[k]} />
-              ))}
-            </InfoSection>
-
-            <InfoSection title="Le flux">
-              <InfoRow label="Transcodage serveur" value="aucun" />
-              {Object.entries(diagnostics)
-                .filter(([label]) => !AUDIO_ROWS.includes(label))
-                .map(([label, value]) => (
-                  <InfoRow key={label} label={label} value={value} />
-                ))}
-            </InfoSection>
-
-            {capabilities && (
-              <InfoSection title="Ce que l'appareil accepte">
-                {Object.entries(capabilities).map(([label, value]) => (
-                  <InfoRow key={label} label={label} value={value} />
-                ))}
-              </InfoSection>
-            )}
-          </div>
-
-          {/* The record of how this file was opened, kept where it can be reached while playing:
-              the faults left to chase are the ones that happen *after* a successful start. */}
-          <ExperimentalPlayerReport input={report} />
-        </div>
-      )}
+      {/* Le même panneau que le lecteur stable, nourri par ce que ce chemin-ci sait dire. */}
+      <PlaybackInfoPanel
+        open={showInfo && !isMini}
+        onClose={() => setShowInfo(false)}
+        data={{
+          ...describeRemuxPlayback(
+            {
+              path,
+              pathReason,
+              container: info?.container ?? null,
+              video: info?.video
+                ? {
+                    codec: info.video.codec ?? null,
+                    width: info.video.width ?? null,
+                    height: info.video.height ?? null,
+                    bitDepth: info.video.bitDepth ?? null,
+                    rangeType: info.video.rangeType ?? null,
+                  }
+                : null,
+              audioTrackCount: tracks.audio.length,
+              subtitleTrackCount: tracks.subtitles.length,
+              currentAudioCodec:
+                currentAudio !== null
+                  ? tracks.audio.find((a) => a.number === currentAudio)?.codecId.replace("A_", "") ?? "?"
+                  : null,
+              diagnostics,
+            },
+            t
+          ),
+          report,
+        }}
+      />
 
       {isMini ? (
         <MiniPlayerChrome
