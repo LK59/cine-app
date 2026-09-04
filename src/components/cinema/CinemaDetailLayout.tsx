@@ -47,9 +47,6 @@ export const VERTICAL_VEIL = `linear-gradient(to top,
 export const COLUMN_STYLE = { width: "min(40rem, 46vw)", minWidth: "min(100%, 22rem)" } as const;
 export const MENU_STYLE = { width: "min(26rem, 100%)" } as const;
 
-/** Le logo d'un titre, détaché du fond quel qu'il soit. */
-export const LOGO_STYLE = { filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))" } as const;
-
 /**
  * La première page tient dans l'écran, quel que soit l'écran.
  *
@@ -65,11 +62,6 @@ export const LOGO_STYLE = { filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))" }
 export const SECTION_CLASS =
   "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-10 pt-14 " +
   "[@media(min-height:820px)]:pb-14 [@media(min-height:820px)]:pt-20";
-
-/** Le logo : plus discret quand l'écran est court, sans jamais disparaître. */
-export const LOGO_CLASS =
-  "mb-1 max-h-14 w-auto max-w-full object-contain " +
-  "[@media(min-height:700px)]:max-h-20 [@media(min-height:900px)]:max-h-28";
 
 
 

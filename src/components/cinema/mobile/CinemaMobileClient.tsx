@@ -24,6 +24,7 @@ import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetai
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
+import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 // Roughly a third of a phone's width, so a row always shows "two and a bit" posters — the visual
 // cue that it scrolls, without a card so small the artwork stops being readable.
@@ -272,8 +273,7 @@ export function CinemaMobileClient() {
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col justify-center">
                   {hero.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={hero.logoUrl} alt={hero.title} className="mb-2 max-h-12 w-auto max-w-full self-start object-contain drop-shadow-lg" />
+                    <CinemaLogo src={hero.logoUrl} alt={hero.title} surface="phone" className="mb-2 self-start" />
                   ) : (
                     <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{hero.title}</h1>
                   )}
@@ -289,8 +289,7 @@ export function CinemaMobileClient() {
                 <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
                 <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                   {hero.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={hero.logoUrl} alt={hero.title} className="mx-auto mb-2 max-h-14 w-auto max-w-full object-contain drop-shadow-lg" />
+                    <CinemaLogo src={hero.logoUrl} alt={hero.title} surface="phone" className="mx-auto mb-2" />
                   ) : (
                     <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{hero.title}</h1>
                   )}

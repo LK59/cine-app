@@ -23,6 +23,7 @@ import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -224,13 +225,7 @@ export function CinemaMobileDetail({
 
       <div className="-mt-6 px-4 pb-16">
         {item.logoUrl && !logoErrored ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.logoUrl}
-            alt={item.title}
-            onError={() => setLogoErrored(true)}
-            className="mb-3 max-h-16 w-auto max-w-full object-contain object-left drop-shadow-lg"
-          />
+          <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" onError={() => setLogoErrored(true)} className="mb-3 object-left" />
         ) : (
           <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>
         )}

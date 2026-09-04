@@ -833,7 +833,15 @@ describe("MseSource", () => {
 
   it("lets a resume land where the sound actually stopped, half a second on", async () => {
     const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
+    // Dix segments, soit vingt secondes de média, et non cinq cents.
+    //
+    // La boucle de lecture n'est pas commandée par des minuteurs : figer le temps ne l'arrête
+    // pas. Avec cinq cents segments elle continuait donc de remplir le tampon pendant que le
+    // test observait la reprise, et les surveillances de la source, voyant une horloge immobile
+    // devant un tampon qui s'allonge, poussaient la tête de lecture loin en avant — 600 s, une
+    // fois sur six, selon la charge de la machine. Un média borné retire la course : le tampon
+    // couvre les vingt secondes attendues et cesse de croître.
+    const remuxer = fakeRemuxer(10, 0.2);
     await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
     await flush();
     const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);

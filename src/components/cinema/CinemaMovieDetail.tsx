@@ -20,7 +20,8 @@ import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
+import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -257,13 +258,12 @@ export function CinemaMovieDetail({
           className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <CinemaLogo
               src={item.logoUrl}
               alt={item.title}
+              surface="sheet"
               onError={() => setLogoErrored(true)}
-              style={LOGO_STYLE}
-              className={LOGO_CLASS}
+              className="mb-1"
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>

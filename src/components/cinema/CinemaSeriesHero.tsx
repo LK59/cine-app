@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
+import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 interface SonarrCastMember {
   tmdbId: number;
@@ -52,13 +53,7 @@ export function CinemaSeriesHero({
   return (
     <div key={item.sonarrId} className="relative flex h-full max-w-2xl flex-col justify-end gap-3 px-8 pb-10 sm:px-12">
       {item.logoUrl && !logoErrored ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={item.logoUrl}
-          alt={item.title}
-          onError={() => setLogoErrored(true)}
-          className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
-        />
+        <CinemaLogo src={item.logoUrl} alt={item.title} surface="hero" onError={() => setLogoErrored(true)} />
       ) : (
         <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
       )}
