@@ -155,14 +155,17 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_capability_checks ON capability_checks (capability, checked_at);
   `);
 
-  // Per-user opt-in for the experimental WebCodecs player, and separately for letting it handle
-  // HDR. Two flags rather than one because they fail differently: the player either works or
-  // refuses with a reason, whereas HDR is a rendering question that can look wrong rather than
-  // break, so it has to be switchable on its own.
-  try { db.exec("ALTER TABLE user_preferences ADD COLUMN experimental_player INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
-  // No column for HDR any more: it was a consent gate for converting the picture on the GPU, and
-  // the native path carries HDR through untouched. Databases that already have the column keep
-  // it — nothing reads it, and it has a default.
+  // Per-user opt-out, back to the server-side player.
+  //
+  // A new column rather than a reinterpretation of the old one, which meant the opposite: the
+  // people who had opted into the new player are exactly the people who must not be sent back to
+  // the old one, and inverting the stored values in place would have done precisely that to
+  // whoever was mid-migration. Everybody starts at zero, which is now the new player, which is
+  // what everybody gets.
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN legacy_player INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
+  // Two columns are left behind and nothing reads either: `experimental_player`, which asked the
+  // question the other way round, and an older HDR consent flag. Both have defaults and dropping
+  // a column rewrites the table, so they stay where they are.
 
   // The disk-saturation forecast switched from hourly df sampling to deriving straight from
   // library file mtimes (see diskForecast.ts) — no history to wait weeks for, and one less
@@ -188,19 +191,20 @@ export const userPrefsDb = {
     `).run(userId, lang, Date.now());
   },
 
-  getExperimentalPlayer(userId: string): { enabled: boolean } {
+  /** Whether this account has asked to go back to playback through the server. Off by default. */
+  getLegacyPlayer(userId: string): { enabled: boolean } {
     const row = getDb()
-      .prepare("SELECT experimental_player FROM user_preferences WHERE user_id = ?")
-      .get(userId) as { experimental_player: number | null } | undefined;
-    return { enabled: row?.experimental_player === 1 };
+      .prepare("SELECT legacy_player FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { legacy_player: number | null } | undefined;
+    return { enabled: row?.legacy_player === 1 };
   },
 
-  setExperimentalPlayer(userId: string, enabled: boolean): void {
+  setLegacyPlayer(userId: string, enabled: boolean): void {
     getDb().prepare(`
-      INSERT INTO user_preferences (user_id, lang, experimental_player, updated_at)
+      INSERT INTO user_preferences (user_id, lang, legacy_player, updated_at)
       VALUES (?, NULL, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET
-        experimental_player = excluded.experimental_player,
+        legacy_player = excluded.legacy_player,
         updated_at = excluded.updated_at
     `).run(userId, enabled ? 1 : 0, Date.now());
   },

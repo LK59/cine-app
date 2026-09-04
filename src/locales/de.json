@@ -848,12 +848,12 @@
       "reloadNotice": "Neustart erforderlich, um {lang} anzuwenden",
       "apply": "Anwenden"
     },
-    "experimentalPlayer": {
-      "title": "Experimenteller Player",
-      "subtitle": "Wiedergabekette der neuen Generation, in Entwicklung",
-      "enable": "Experimenteller Player",
-      "enableDesc": "Spielt die Datei direkt im Browser ab, ohne etwas vom Server zu verlangen: kein Transcoding, keine Stream-Aushandlung. Die Datei wird für den Player des Browsers neu verpackt, der in Hardware dekodiert und HDR nativ darstellt; wo die Codecs das ausschließen, wird stattdessen in Software dekodiert. Schnellerer Start und ein Server, der nichts zu tun hat, aber ohne adaptive Qualität — am besten im lokalen Netz. Lässt sich eine Datei so nicht abspielen, wechselt die Wiedergabe von selbst zum gewohnten Player, ohne Unterbrechung.",
-      "adminOnly": "Standardmäßig aus. Jedes Konto schaltet es für sich selbst ein."
+    "legacyPlayer": {
+      "title": "Alter Player",
+      "subtitle": "Wiedergabe wieder über den Server",
+      "enable": "Alten Player verwenden",
+      "enableDesc": "Standardmäßig werden Filme direkt im Browser abgespielt, ohne den Server um irgendetwas zu bitten. Diese Option kehrt zum alten Weg zurück: Der Server handelt den Stream aus und transkodiert, wenn es sein muss. Langsamer beim Start und teuer für den Server, aber der erprobte Weg — einschalten, wenn es Probleme bei der Wiedergabe gibt.",
+      "note": "Standardmäßig aus. Jedes Konto entscheidet für sich selbst."
     }
   },
   "watchlist": {

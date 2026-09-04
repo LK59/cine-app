@@ -848,12 +848,12 @@
       "reloadNotice": "Se necesita recargar para aplicar {lang}",
       "apply": "Aplicar"
     },
-    "experimentalPlayer": {
-      "title": "Reproductor experimental",
-      "subtitle": "Cadena de reproducción de nueva generación, en desarrollo",
-      "enable": "Reproductor experimental",
-      "enableDesc": "Reproduce el archivo directamente en el navegador, sin pedir nada al servidor: sin transcodificación ni negociación de flujo. El archivo se reempaqueta para el reproductor del navegador, que decodifica por hardware y muestra HDR de forma nativa; cuando los códecs no lo permiten, la decodificación se hace por software. Arranca más rápido y no carga el servidor, pero sin calidad adaptativa: mejor reservarlo a la red local. Si un archivo no puede reproducirse así, la reproducción pasa sola al reproductor habitual, sin interrupción.",
-      "adminOnly": "Desactivado por defecto. Cada cuenta lo activa para sí mismo."
+    "legacyPlayer": {
+      "title": "Reproductor antiguo",
+      "subtitle": "Volver a reproducir a través del servidor",
+      "enable": "Usar el reproductor antiguo",
+      "enableDesc": "De forma predeterminada, las películas se reproducen directamente en el navegador, sin pedir nada al servidor. Esta opción vuelve al camino anterior: el servidor negocia el flujo y transcodifica cuando hace falta. Arranca más lento y cuesta al servidor, pero es el camino probado: actívalo si tienes algún problema de reproducción.",
+      "note": "Desactivado de forma predeterminada. Cada cuenta elige por sí misma."
     }
   },
   "watchlist": {

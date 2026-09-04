@@ -18,7 +18,7 @@ vi.mock("@/lib/clients/jellyfin", () => ({
   },
 }));
 const mockPrefs = vi.fn();
-vi.mock("@/lib/db", () => ({ userPrefsDb: { getExperimentalPlayer: (...a: unknown[]) => mockPrefs(...a) } }));
+vi.mock("@/lib/db", () => ({ userPrefsDb: { getLegacyPlayer: (...a: unknown[]) => mockPrefs(...a) } }));
 
 const validId = "c".repeat(32);
 
@@ -63,7 +63,7 @@ async function get() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok", id: 7 });
-  mockPrefs.mockReturnValue({ enabled: true });
+  mockPrefs.mockReturnValue({ enabled: false });
   mockGetSources.mockResolvedValue(mediaSource());
   mockTimestamps.mockResolvedValue(null);
   mockNaming.mockResolvedValue(null);
@@ -103,7 +103,7 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
   });
 
   it("still objects to Dolby Vision without an HDR10 base, which has nothing to convert from", async () => {
-    mockPrefs.mockReturnValue({ enabled: true });
+    mockPrefs.mockReturnValue({ enabled: false });
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "DOVI" }));
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull(); // the native path may still manage it
@@ -141,8 +141,10 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     expect(body.creditsStart).toBeNull();
   });
 
-  it("turns away a caller who has not switched the experimental player on", async () => {
-    mockPrefs.mockReturnValue({ enabled: false });
+  it("turns away an account that has asked for the legacy player", async () => {
+    // The gate only ever refuses now: this is the ordinary path, and the flag exists for whoever
+    // has asked to be sent back to the server-side player instead.
+    mockPrefs.mockReturnValue({ enabled: true });
     expect((await get()).status).toBe(403);
   });
 

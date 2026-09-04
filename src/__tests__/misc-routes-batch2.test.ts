@@ -9,8 +9,8 @@ const mockPushDb = { getByUser: vi.fn(), remove: vi.fn() };
 const mockUserPrefsDb = {
   getLang: vi.fn(),
   setLang: vi.fn(),
-  getExperimentalPlayer: vi.fn(() => ({ enabled: false, hdr: false })),
-  setExperimentalPlayer: vi.fn(),
+  getLegacyPlayer: vi.fn(() => ({ enabled: false })),
+  setLegacyPlayer: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn() };
 vi.mock("@/lib/db", () => ({
@@ -134,25 +134,29 @@ describe("/api/user/preferences", () => {
     expect((await res.json()).lang).toBe("en");
   });
 
-  // The experimental player's opt-in shares this route. It is admin-only, and the two flags are
-  // coupled: an HDR switch on a disabled player is a setting that reads as active and does
-  // nothing.
-  it("PUT lets any account turn the experimental player on for itself", async () => {
-    // It used to be admin-only. Opening the setting to everyone and leaving the check here meant
-    // the toggle appeared for every account and answered 403 to all but one of them.
+  // The way back to playing through the server shares this route, for every account and not only
+  // for administrators.
+  it("PUT lets any account ask for the legacy player", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "someone", jfId: "jf-2", role: "user" });
     const { PUT } = await import("@/app/api/user/preferences/route");
-    const res = await PUT(fakeReq({ body: { experimentalPlayer: true } }));
+    const res = await PUT(fakeReq({ body: { legacyPlayer: true } }));
     expect(res.status).toBe(200);
-    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-2", true);
+    expect(mockUserPrefsDb.setLegacyPlayer).toHaveBeenCalledWith("jf-2", true);
   });
 
-  it("PUT turns the experimental player off again", async () => {
+  it("PUT brings an account back to the native player", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
     const { PUT } = await import("@/app/api/user/preferences/route");
-    const res = await PUT(fakeReq({ body: { experimentalPlayer: false } }));
+    const res = await PUT(fakeReq({ body: { legacyPlayer: false } }));
     expect(res.status).toBe(200);
-    expect(mockUserPrefsDb.setExperimentalPlayer).toHaveBeenCalledWith("jf-1", false);
+    expect(mockUserPrefsDb.setLegacyPlayer).toHaveBeenCalledWith("jf-1", false);
+  });
+
+  it("GET dit qu'un compte neuf est sur le lecteur natif", async () => {
+    // The default is the whole point of this change: nobody opts into anything to get it.
+    mockVerifySessionFull.mockResolvedValue({ u: "neuf", jfId: "jf-9" });
+    const { GET } = await import("@/app/api/user/preferences/route");
+    expect((await (await GET(fakeReq())).json()).legacyPlayer).toEqual({ enabled: false });
   });
 
   it("PUT keeps handling a plain language change", async () => {

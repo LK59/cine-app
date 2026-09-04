@@ -8,7 +8,7 @@ import { useStableFallback } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
-import { useExperimentalPlayer } from "@/lib/useExperimentalPlayer";
+import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
@@ -115,7 +115,7 @@ function pickMaxBitrate(): number {
 export function PlayerHost() {
   const playback = usePlayback();
   const { session, mode } = playback;
-  const experimental = useExperimentalPlayer();
+  const { legacy } = useLegacyPlayer();
   // Set by the experimental player's own "switch to the stable player" button. Deliberately not
   // persisted: it applies to this session only, so the option in settings stays the source of
   // truth and the next playback tries the experimental path again — which is what makes it
@@ -136,9 +136,14 @@ export function PlayerHost() {
   );
 
   if (!session) return null;
+  // Waited for rather than assumed. Whichever player is assumed while the answer is in flight
+  // mounts and *starts* — and for the server-side one that means negotiating a stream and
+  // warming a transcode, which was then thrown away a round trip later. One request, once per
+  // session, against an abandoned transcode on every playback.
+  if (legacy === undefined) return null;
 
-  const useExperimental = experimental.enabled && !handedOver.includes(session.itemId);
-  if (useExperimental) {
+  const useNative = !legacy && !handedOver.includes(session.itemId);
+  if (useNative) {
     return (
       <ExperimentalPlayerHost
         // A different film is a different player. Without this, advancing to the next episode

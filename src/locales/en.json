@@ -848,12 +848,12 @@
       "reloadNotice": "Reload required to apply {lang}",
       "apply": "Apply"
     },
-    "experimentalPlayer": {
-      "title": "Experimental player",
-      "subtitle": "Next-generation playback pipeline, under development",
-      "enable": "Experimental player",
-      "enableDesc": "Plays the file directly in the browser, asking the server for nothing: no transcoding, no stream negotiation. The file is repackaged for the browser's own player, which decodes in hardware and displays HDR natively; where the codecs rule that out, decoding happens in software instead. Faster to start and no load on the server, but no adaptive quality — best kept to the local network. If a file cannot be carried, playback moves to the usual player on its own, without interrupting.",
-      "adminOnly": "Off by default. Each account turns it on for itself."
+    "legacyPlayer": {
+      "title": "Legacy player",
+      "subtitle": "Go back to playing through the server",
+      "enable": "Use the legacy player",
+      "enableDesc": "By default, films play directly in the browser without asking the server for anything. This option goes back to the old path: the server negotiates the stream and transcodes when it has to. Slower to start and costly for the server, but it is the well-worn path — turn it on if you run into a playback problem.",
+      "note": "Off by default. Each account chooses for itself."
     }
   },
   "watchlist": {

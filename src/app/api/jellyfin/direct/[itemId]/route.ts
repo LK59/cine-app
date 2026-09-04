@@ -95,10 +95,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  // Gated on the same per-user flag the UI toggles, checked server-side: the experimental path
-  // must not be reachable by anyone who hasn't opted in, whatever the client asks for.
-  const prefs = userPrefsDb.getExperimentalPlayer(session.jfId ?? session.u);
-  if (!prefs.enabled) return NextResponse.json({ error: "Lecteur expérimental désactivé" }, { status: 403 });
+  // Gated on the same per-user flag the UI toggles, checked server-side. It only ever refuses
+  // now: this is the ordinary path, and the flag exists for the account that has asked to be
+  // sent back to the server-side player instead.
+  const prefs = userPrefsDb.getLegacyPlayer(session.jfId ?? session.u);
+  if (prefs.enabled) return NextResponse.json({ error: "Lecteur legacy demandé pour ce compte" }, { status: 403 });
 
   // Fetched together: the timestamps 404 for films and for episodes nobody has analysed, which
   // simply means no skip-intro and no next-up prompt for this one.

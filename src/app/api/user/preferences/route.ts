@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   const lang = userPrefsDb.getLang(userId, config.app.language);
   // Reported to every caller, but only ever true for an admin who turned it on: the PUT below
   // refuses to set it for anyone else, so a non-admin can't end up with it enabled.
-  const experimentalPlayer = userPrefsDb.getExperimentalPlayer(userId);
-  return NextResponse.json({ lang, experimentalPlayer });
+  const legacyPlayer = userPrefsDb.getLegacyPlayer(userId);
+  return NextResponse.json({ lang, legacyPlayer });
 }
 
 export async function PUT(req: NextRequest) {
@@ -29,9 +29,9 @@ export async function PUT(req: NextRequest) {
   //
   // No longer admin-only, either. The setting was opened to every account, and leaving this
   // check behind meant the toggle appeared for everyone and answered 403 to all but one of them.
-  if (typeof body?.experimentalPlayer === "boolean") {
-    userPrefsDb.setExperimentalPlayer(userId, body.experimentalPlayer);
-    return NextResponse.json({ ok: true, experimentalPlayer: { enabled: body.experimentalPlayer } });
+  if (typeof body?.legacyPlayer === "boolean") {
+    userPrefsDb.setLegacyPlayer(userId, body.legacyPlayer);
+    return NextResponse.json({ ok: true, legacyPlayer: { enabled: body.legacyPlayer } });
   }
 
   const lang = body?.lang as string | undefined;

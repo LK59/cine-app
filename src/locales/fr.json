@@ -848,12 +848,12 @@
       "reloadNotice": "Rechargement nécessaire pour appliquer {lang}",
       "apply": "Appliquer"
     },
-    "experimentalPlayer": {
-      "title": "Lecteur expérimental",
-      "subtitle": "Chaîne de lecture nouvelle génération, en cours de développement",
-      "enable": "Lecteur expérimental",
-      "enableDesc": "Lit le fichier directement dans le navigateur, sans rien demander au serveur : pas de transcodage, pas de négociation de flux. Le fichier est remis en forme pour le lecteur du navigateur, qui décode en matériel et affiche le HDR nativement ; là où les codecs l'interdisent, le décodage se fait en logiciel. Démarrage plus rapide et serveur au repos, mais pas de qualité adaptative : à réserver au réseau local. Si un fichier ne passe pas, la lecture bascule d'elle-même sur le lecteur habituel, sans interruption.",
-      "adminOnly": "Désactivé par défaut. Chaque compte l'active pour lui-même."
+    "legacyPlayer": {
+      "title": "Lecteur legacy",
+      "subtitle": "Repasser par le serveur pour la lecture",
+      "enable": "Utiliser le lecteur legacy",
+      "enableDesc": "Par défaut, les films sont lus directement dans le navigateur, sans rien demander au serveur. Cette option repasse par l'ancien chemin : le serveur négocie le flux et transcode si nécessaire. Plus lent à démarrer et coûteux pour le serveur, mais c'est le chemin éprouvé — à activer si vous rencontrez un problème de lecture.",
+      "note": "Désactivé par défaut. Chaque compte choisit pour lui-même."
     }
   },
   "watchlist": {

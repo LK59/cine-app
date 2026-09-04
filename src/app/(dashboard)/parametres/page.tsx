@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CircleCheckBig, FlaskConical, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
+import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, History, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
@@ -314,7 +314,7 @@ export default function ParametresPage() {
         {/* Open to everyone: the remux path is the ordinary way this player reads a file now,
             not an experiment to keep behind the admin account. Still off until each person
             turns it on, and still refused server-side for anyone who hasn't. */}
-        <ExperimentalPlayerSection />
+        <LegacyPlayerSection />
 
       </div>
     </div>
@@ -473,12 +473,13 @@ function PwaUpdateCard() {
   );
 }
 
-// The experimental player's opt-in. Off by default, and the server enforces that independently
-// of this UI — the route that serves a file to it refuses anyone who hasn't turned it on here.
-function ExperimentalPlayerSection() {
+// The opt-out, back to playback through the server. Off by default, and the server enforces
+// that independently of this UI — the route that serves a file to the native player refuses an
+// account that has asked to be sent back.
+function LegacyPlayerSection() {
   const t = useT();
-  const { data, mutate } = useSWR<{ experimentalPlayer?: { enabled: boolean } }>("/api/user/preferences", fetcher);
-  const enabled = data?.experimentalPlayer?.enabled ?? false;
+  const { data, mutate } = useSWR<{ legacyPlayer?: { enabled: boolean } }>("/api/user/preferences", fetcher);
+  const enabled = data?.legacyPlayer?.enabled ?? false;
 
   async function update(next: boolean) {
     // Optimistic, then reconciled with what the server actually stored.
@@ -487,32 +488,32 @@ function ExperimentalPlayerSection() {
         const res = await fetch("/api/user/preferences", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ experimentalPlayer: next }),
+          body: JSON.stringify({ legacyPlayer: next }),
         });
-        return res.ok ? { experimentalPlayer: (await res.json()).experimentalPlayer } : { experimentalPlayer: { enabled } };
+        return res.ok ? { legacyPlayer: (await res.json()).legacyPlayer } : { legacyPlayer: { enabled } };
       },
-      { optimisticData: { experimentalPlayer: { enabled: next } }, revalidate: false }
+      { optimisticData: { legacyPlayer: { enabled: next } }, revalidate: false }
     );
   }
 
   return (
     <section>
       <div className="mb-4 flex items-center gap-3">
-        <div className="rounded-lg bg-fuchsia-500/10 p-2 text-fuchsia-400 ring-1 ring-inset ring-fuchsia-500/20">
-          <FlaskConical size={18} />
+        <div className="rounded-lg bg-slate-500/10 p-2 text-slate-400 ring-1 ring-inset ring-slate-500/20">
+          <History size={18} />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">{t("settings.experimentalPlayer.title")}</h2>
-          <p className="text-xs text-slate-500">{t("settings.experimentalPlayer.subtitle")}</p>
+          <h2 className="text-base font-semibold text-white">{t("settings.legacyPlayer.title")}</h2>
+          <p className="text-xs text-slate-500">{t("settings.legacyPlayer.subtitle")}</p>
         </div>
       </div>
 
       <div className="card space-y-5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium text-white">{t("settings.experimentalPlayer.enable")}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{t("settings.experimentalPlayer.enableDesc")}</p>
-            <p className="mt-1 text-xs text-slate-600">{t("settings.experimentalPlayer.adminOnly")}</p>
+            <p className="text-sm font-medium text-white">{t("settings.legacyPlayer.enable")}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t("settings.legacyPlayer.enableDesc")}</p>
+            <p className="mt-1 text-xs text-slate-600">{t("settings.legacyPlayer.note")}</p>
           </div>
           <Toggle checked={enabled} onChange={update} />
         </div>
