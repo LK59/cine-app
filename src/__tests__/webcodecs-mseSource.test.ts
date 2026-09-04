@@ -907,7 +907,11 @@ describe("MseSource", () => {
     setTime(19);
     video.dispatchEvent(new Event("playing"));
     await flush();
-    expect(video.currentTime).toBe(12);
+    // Close to twelve rather than exactly twelve: on a machine slow enough for this test to run
+    // for more than a second and a half, the frozen-clock check is entitled to nudge a playhead
+    // that has media in front of it and is not moving — by eighty milliseconds. What is under
+    // test is that the position was put back at all rather than left at nineteen.
+    expect(video.currentTime).toBeCloseTo(12, 1);
   });
 
   it("lets playback simply carry on after resuming, without pulling it back", async () => {

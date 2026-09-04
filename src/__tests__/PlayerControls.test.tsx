@@ -109,6 +109,43 @@ describe("PlayerControls — la barre de progression", () => {
     expect(video!.currentTime).toBeCloseTo(900, 0);
   });
 
+  it("fait suivre la barre au doigt, pas seulement la vignette", async () => {
+    // A touch drag never reaches the input's own onChange — an input[type=range] on iOS only
+    // tracks its thumb — so the filled portion, the thumb and the timecode stayed where playback
+    // was while only the thumbnail moved. One navigated blind.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.touchStart(input, { touches: [{ clientX: 100 }] }));
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 100 }] }));
+    // Half of a two-hundred-pixel bar on an hour-long film, before anything is committed.
+    expect(Number(input.value)).toBeCloseTo(1800, 0);
+    expect(video!.currentTime).toBe(0);
+
+    await act(async () => void fireEvent.touchMove(bar, { touches: [{ clientX: 150 }] }));
+    expect(Number(input.value)).toBeCloseTo(2700, 0);
+  });
+
+  it("ne suit pas un curseur qui ne fait que passer", async () => {
+    // Previewing what is under the pointer is one thing; moving the playhead under it would be
+    // the bar chasing the mouse.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.mouseMove(bar, { clientX: 150 }));
+    expect(Number(input.value)).toBe(0);
+  });
+
   it("ne valide rien quand le système reprend le toucher", async () => {
     // The finger was not released, it was taken away.
     stubMediaFetches();

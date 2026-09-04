@@ -567,6 +567,15 @@ export function PlayerControls({
     const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     setPreviewFraction(fraction);
     setPreviewTime(fraction * duration);
+    // And the bar follows the finger, which it did not: a touch drag never reaches the input's
+    // own onChange — an input[type=range] on iOS only tracks its thumb — so the filled portion,
+    // the thumb and the timecode all stayed where playback was while the thumbnail moved. One
+    // navigated blind. This is the same call the input makes on a desktop drag, from the one
+    // place that knows where the finger is.
+    //
+    // Only while actually dragging. A pointer merely passing over the bar previews what is
+    // there; moving the playhead under it would be the bar chasing the mouse.
+    if (seekingRef.current) previewSeek(fraction * duration);
   }
 
   // Jellyfin's own trickplay resolution (already the smallest one it generates — see

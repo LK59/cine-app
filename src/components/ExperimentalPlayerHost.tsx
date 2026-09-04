@@ -37,9 +37,15 @@ const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
 /** How long a threshold has to be crossed before anything is shown at all. */
 const SPINNER_AFTER_MS = 120;
 
-/** And before the wait is worth a sentence, then before it is worth admitting it is long. */
-const WORD_AFTER_MS = 1000;
-const STILL_WORKING_AFTER_MS = 3000;
+/**
+ * And before the wait is worth a sentence, then before it is worth admitting it is long.
+ *
+ * Three seconds, not one. A film that opens in a second and a half is not a film that kept
+ * anybody waiting, and a word that appears and goes before it has been read is noise — it draws
+ * the eye to a delay that had gone unnoticed until it announced itself.
+ */
+const WORD_AFTER_MS = 3000;
+const STILL_WORKING_AFTER_MS = 8000;
 
 /** And before a wait stops being slow and starts being a fault worth reporting. */
 const STUCK_AFTER_MS = 20000;
