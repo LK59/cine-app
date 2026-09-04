@@ -19,6 +19,7 @@ import { useRole } from "@/lib/useRole";
 import dynamic from "next/dynamic";
 const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
 import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 import { useT } from "@/components/TranslationProvider";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -88,13 +89,17 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
     e?.preventDefault(); e?.stopPropagation();
     if (requested || requesting) return;
     setRequesting(true);
-    await fetch("/api/jellyseerr/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaType: "movie", mediaId: m.tmdbId }),
-    });
-    setRequested(true);
-    setRequesting(false);
+    try {
+      await apiAction("/api/jellyseerr/requests", {
+        method: "POST",
+        body: JSON.stringify({ mediaType: "movie", mediaId: m.tmdbId }),
+      });
+      setRequested(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      setRequesting(false);
+    }
   }
 
   function handlePosterClick() {

@@ -6,6 +6,10 @@ import userEvent from "@testing-library/user-event";
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
 }));
+const toastError = vi.fn();
+vi.mock("@/components/Toast", () => ({
+  useToast: () => ({ error: toastError, success: vi.fn(), info: vi.fn() }),
+}));
 
 import { PushToggle } from "@/components/PushToggle";
 
@@ -37,6 +41,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  toastError.mockClear();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
 });
 
@@ -130,5 +135,39 @@ describe("PushToggle", () => {
       "/api/push/subscribe",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+  /**
+   * Le navigateur peut très bien créer l'abonnement pendant que le serveur, lui, le refuse.
+   * Sans annulation ni message, l'interrupteur s'affichait « activé » pour un abonnement que
+   * personne n'écoutait — et l'utilisateur n'aurait jamais reçu la moindre notification.
+   */
+  it("undoes the browser subscription and speaks up when the server refuses it", async () => {
+    const unsubscribe = vi.fn().mockResolvedValue(true);
+    const subscription = {
+      endpoint: "https://push.example/1",
+      toJSON: () => ({ endpoint: "https://push.example/1" }),
+      unsubscribe,
+    };
+    stubServiceWorker({
+      getSubscription: () => Promise.resolve(null),
+      subscribe: () => Promise.resolve(subscription),
+    });
+    stubNotification("default", vi.fn().mockResolvedValue("granted"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/push/vapid-key") return Promise.resolve({ ok: true, json: async () => ({ publicKey: "AAAA" }) });
+        return Promise.resolve({ ok: false, status: 500, statusText: "Server Error", json: async () => ({ error: "Stockage indisponible" }) });
+      })
+    );
+    const user = userEvent.setup();
+    render(<PushToggle />);
+
+    await screen.findByText("notifications.pushToggle.enable");
+    await user.click(screen.getByText("notifications.pushToggle.enable"));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Stockage indisponible"));
+    expect(unsubscribe).toHaveBeenCalled();
+    expect(screen.getByText("notifications.pushToggle.enable")).toBeInTheDocument();
   });
 });

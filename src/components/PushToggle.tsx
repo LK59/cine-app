@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Bell, BellOff, Loader2, CircleCheckBig, CircleX } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 
 type State = "unsupported" | "denied" | "unsubscribed" | "subscribed" | "loading";
 
@@ -27,6 +29,7 @@ export function PushToggle() {
   const [sub, setSub] = useState<PushSubscription | null>(null);
   const swReg = useRef<ServiceWorkerRegistration | null>(null);
   const t = useT();
+  const toast = useToast();
 
   const detect = useCallback(async () => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -65,32 +68,43 @@ export function PushToggle() {
         applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
 
-      await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
+      // Si le serveur refuse l'abonnement, le navigateur en garde un que personne n'écoute :
+      // on annule le sien pour que l'interrupteur et la réalité restent d'accord.
+      try {
+        await apiAction("/api/push/subscribe", {
+          method: "POST",
+          body: JSON.stringify(subscription.toJSON()),
+        });
+      } catch (error) {
+        await subscription.unsubscribe().catch(() => {});
+        throw error;
+      }
 
       setSub(subscription);
       setState("subscribed");
-    } catch { setState("unsubscribed"); }
-  }, []);
+    } catch (error) {
+      setState("unsubscribed");
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    }
+  }, [toast, t]);
 
   const unsubscribe = useCallback(async () => {
     setState("loading");
     try {
       if (sub) {
-        await fetch("/api/push/subscribe", {
+        await apiAction("/api/push/subscribe", {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: sub.endpoint }),
         });
         await sub.unsubscribe();
       }
       setSub(null);
       setState("unsubscribed");
-    } catch { setState("subscribed"); }
-  }, [sub]);
+    } catch (error) {
+      setState("subscribed");
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    }
+  }, [sub, toast, t]);
 
   if (state === "unsupported") return (
     <div className="flex items-center gap-2 text-sm text-slate-500">

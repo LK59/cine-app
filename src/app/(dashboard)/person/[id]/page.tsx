@@ -21,6 +21,9 @@ import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { selectBio } from "@/lib/format";
 import { InstagramIcon } from "@/components/BrandIcons";
+import { apiAction } from "@/lib/apiAction";
+import { useT } from "@/components/TranslationProvider";
+import { useToast } from "@/components/Toast";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -50,21 +53,28 @@ interface PersonData {
 // ─── Generic credit card ──────────────────────────────────────────────────────
 
 function CreditCard({ c }: { c: PersonCredit }) {
+  const t = useT();
+  const toast = useToast();
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
   const poster = c.posterPath ? `${TMDB_IMAGE_BASE}/w342${c.posterPath}` : null;
 
+  // Même règle que partout : c'est la réponse du serveur qui fait passer le bouton en « demandé ».
   async function doRequest(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     setRequesting(true);
-    await fetch("/api/jellyseerr/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaType: c.mediaType === "movie" ? "movie" : "tv", mediaId: c.tmdbId }),
-    });
-    setRequested(true);
-    setRequesting(false);
+    try {
+      await apiAction("/api/jellyseerr/requests", {
+        method: "POST",
+        body: JSON.stringify({ mediaType: c.mediaType === "movie" ? "movie" : "tv", mediaId: c.tmdbId }),
+      });
+      setRequested(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      setRequesting(false);
+    }
   }
 
   const content = (

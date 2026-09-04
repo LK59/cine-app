@@ -23,6 +23,7 @@ const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal
 import { useT } from "@/components/TranslationProvider";
 import { RequestButton } from "@/components/RequestButton";
 import { RequestFlowModal } from "@/components/RequestFlowModal";
+import { apiAction } from "@/lib/apiAction";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -584,6 +585,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
 
 export default function WatchlistPage() {
   const t = useT();
+  const toast = useToast();
   const [activeStatus, setActiveStatus] = useState<WatchlistStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("date");
@@ -658,34 +660,41 @@ export default function WatchlistPage() {
     });
   }, [allItems, activeStatus, search, sort]);
 
+  /**
+   * L'écran répond d'abord, le serveur confirme ensuite — et se fait entendre s'il refuse.
+   *
+   * Les trois actions ci-dessous écrivaient déjà l'état sur place, ce qui est la bonne moitié du
+   * geste. Il manquait l'autre : `fetch` ne lève pas sur un 4xx, donc une modification refusée
+   * restait affichée comme acquise jusqu'au prochain chargement de la page, où elle disparaissait
+   * sans explication.
+   */
+  async function confirm(work: Promise<unknown>) {
+    try {
+      await work;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      mutate("/api/watchlist");
+    }
+  }
+
   async function changeStatus(item: WatchlistItem, status: WatchlistStatus) {
     mutate("/api/watchlist", { items: allItems.map((i) => i.id === item.id ? { ...i, status } : i) }, { revalidate: false });
-    await fetch("/api/watchlist/item", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: item.id, status }),
-    });
-    mutate("/api/watchlist");
+    await confirm(apiAction("/api/watchlist/item", { method: "PATCH", body: JSON.stringify({ id: item.id, status }) }));
   }
 
   async function saveNote(item: WatchlistItem, note: string) {
     mutate("/api/watchlist", { items: allItems.map((i) => i.id === item.id ? { ...i, note: note || null } : i) }, { revalidate: false });
-    await fetch("/api/watchlist/item", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: item.id, status: item.status, note }),
-    });
-    mutate("/api/watchlist");
+    await confirm(
+      apiAction("/api/watchlist/item", { method: "PATCH", body: JSON.stringify({ id: item.id, status: item.status, note }) })
+    );
   }
 
   async function removeItem(item: WatchlistItem) {
     mutate("/api/watchlist", { items: allItems.filter((i) => i.id !== item.id) }, { revalidate: false });
-    await fetch("/api/watchlist", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tmdbId: item.tmdbId, mediaType: item.mediaType }),
-    });
-    mutate("/api/watchlist");
+    await confirm(
+      apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify({ tmdbId: item.tmdbId, mediaType: item.mediaType }) })
+    );
   }
 
   return (

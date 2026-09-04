@@ -43,6 +43,7 @@ import { useRole } from "@/lib/useRole";
 import { canAutoSearchSeason } from "@/lib/mediaPermissions";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { apiAction } from "@/lib/apiAction";
 import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
@@ -232,11 +233,10 @@ export default function SonarrSeriesDetailPage() {
     if (!series) return;
     setSaving(true);
     try {
-      await fetch(seriesKey, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...series, ...payload }),
-      });
+      // `fetch` ne lève pas sur un 404 ou un 502 : le `catch` juste en dessous existait depuis
+      // toujours et n'avait jamais rien attrapé. Cet écran annonçait donc « enregistré » quel
+      // que soit ce que le serveur avait répondu.
+      await apiAction(seriesKey, { method: "PUT", body: JSON.stringify({ ...series, ...payload }) });
       mutate(seriesKey);
       toast.success(t('sonarr.saveSuccess'));
     } catch {
@@ -292,13 +292,28 @@ export default function SonarrSeriesDetailPage() {
     await saveSeries({ seasons });
   }
 
+  /**
+   * Le bouton répond tout de suite, le serveur tranche ensuite.
+   *
+   * Il ne répondait qu'après l'aller-retour, et seulement si celui-ci réussissait : un serveur
+   * lent laissait la pastille inerte sous le doigt, et un serveur qui refusait la laissait
+   * inerte pour toujours, sans un mot. L'état est donc écrit sur place, puis confirmé — et
+   * remis comme il était si le serveur dit non.
+   */
   async function toggleEpisodeMonitored(episode: SonarrEpisode, value: boolean) {
-    await fetch(`/api/sonarr/episodes/${episode.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...episode, monitored: value }),
-    });
-    mutate(episodesKey);
+    const optimistic = (list?: SonarrEpisode[]) =>
+      list?.map((e) => (e.id === episode.id ? { ...e, monitored: value } : e));
+    mutate(episodesKey, optimistic, { revalidate: false });
+    try {
+      await apiAction(`/api/sonarr/episodes/${episode.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...episode, monitored: value }),
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('sonarr.saveError'));
+    } finally {
+      mutate(episodesKey);
+    }
   }
 
   function toggleSeasonOpen(seasonNumber: number) {

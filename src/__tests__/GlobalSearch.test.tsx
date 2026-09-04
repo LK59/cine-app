@@ -11,6 +11,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string, vars?: Record<string, unknown>) => (vars ? `${key}:${JSON.stringify(vars)}` : key),
 }));
+const toastError = vi.fn();
+const toastSuccess = vi.fn();
+vi.mock("@/components/Toast", () => ({
+  useToast: () => ({ error: toastError, success: toastSuccess, info: vi.fn() }),
+}));
 const mockUseRole = vi.fn();
 vi.mock("@/lib/useRole", () => ({ useRole: () => mockUseRole() }));
 
@@ -20,7 +25,11 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   push.mockClear();
+  toastError.mockClear();
+  toastSuccess.mockClear();
 });
+
+const TMDB_RESULT = { tmdbId: 999, title: "New Movie", type: "movie", year: 2024, rating: 7.5, posterPath: null };
 
 const movie = {
   id: 1,
@@ -206,5 +215,70 @@ describe("GlobalSearch", () => {
 
     await user.click(screen.getByTitle("search.requestViaJellyseerr"));
     await waitFor(() => expect(requestFetch).toHaveBeenCalled());
+  });
+  /**
+   * Les deux épreuves ci-dessous portent sur la même exigence : un bouton peut répondre
+   * immédiatement, mais c'est le serveur qui a le dernier mot. S'il refuse, il faut le dire et
+   * remettre l'affichage dans l'état où il était.
+   */
+
+  function stubSearchWith(handler: (url: string, init?: RequestInit) => Promise<unknown> | null) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        const own = handler(url, init);
+        if (own) return own;
+        if (url === "/api/radarr/movies") return Promise.resolve({ ok: true, json: async () => [movie] });
+        if (url === "/api/sonarr/series") return Promise.resolve({ ok: true, json: async () => [series] });
+        if (url.startsWith("/api/watchlist/bulk-status")) return Promise.resolve({ ok: true, json: async () => ({}) });
+        if (url.startsWith("/api/search")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ tmdb: [TMDB_RESULT], persons: [], library: [] }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      })
+    );
+  }
+
+  async function openOnNewMovie() {
+    const user = userEvent.setup();
+    renderSearch();
+    fireEvent(window, new CustomEvent("open-search"));
+    const input = await screen.findByPlaceholderText("search.placeholder");
+    await user.type(input, "New Movie");
+    await waitFor(() => expect(screen.getByText("New Movie")).toBeInTheDocument(), { timeout: 1000 });
+    return user;
+  }
+
+  it("says so when Jellyseerr refuses the request instead of staying silent", async () => {
+    mockUseRole.mockReturnValue({ role: "admin" });
+    stubSearchWith((url) =>
+      url === "/api/jellyseerr/requests"
+        ? Promise.resolve({ ok: false, status: 409, statusText: "Conflict", json: async () => ({ error: "Déjà demandé" }) })
+        : null
+    );
+    const user = await openOnNewMovie();
+
+    await user.click(screen.getByTitle("search.requestViaJellyseerr"));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Déjà demandé"));
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("puts the bookmark back when the watchlist refuses the addition", async () => {
+    mockUseRole.mockReturnValue({ role: "admin" });
+    stubSearchWith((url, init) =>
+      url === "/api/watchlist" && init?.method === "POST"
+        ? Promise.resolve({ ok: false, status: 500, statusText: "Server Error", json: async () => ({ error: "Base indisponible" }) })
+        : null
+    );
+    const user = await openOnNewMovie();
+
+    await user.click(screen.getByTitle("search.addToList"));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Base indisponible"));
+    // Le libellé redevient « ajouter » : le refus a bien défait la bascule optimiste.
+    expect(screen.getByTitle("search.addToList")).toBeInTheDocument();
+    expect(screen.queryByTitle("search.removeFromList")).not.toBeInTheDocument();
   });
 });

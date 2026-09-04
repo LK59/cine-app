@@ -12,6 +12,8 @@ import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { getDateLocale } from "@/lib/i18n";
 import { usePersistentState } from "@/lib/usePersistentState";
+import { apiAction } from "@/lib/apiAction";
+import { useToast } from "@/components/Toast";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,22 +35,29 @@ type FilterMode = "all" | "cinema" | "library";
 
 function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: boolean }) {
   const t = useT();
+  const toast = useToast();
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested]   = useState(false);
 
   if (ev.source === "library-movie" || ev.source === "library-series") return null;
   if (!ev.tmdbId) return null;
 
+  // Le bouton ne s'annonce « demandé » que si Jellyseerr l'a bien dit. Avant, il le disait
+  // quoi qu'il arrive, y compris quand la demande était refusée.
   async function doRequest(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation();
     setRequesting(true);
-    await fetch("/api/jellyseerr/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaType: ev.type === "series" ? "tv" : "movie", mediaId: ev.tmdbId }),
-    });
-    setRequested(true);
-    setRequesting(false);
+    try {
+      await apiAction("/api/jellyseerr/requests", {
+        method: "POST",
+        body: JSON.stringify({ mediaType: ev.type === "series" ? "tv" : "movie", mediaId: ev.tmdbId }),
+      });
+      setRequested(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      setRequesting(false);
+    }
   }
 
   if (compact) {

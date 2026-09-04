@@ -11,6 +11,7 @@ import type { JellyfinSession } from "@/lib/clients/jellyfin";
 import { useRole } from "@/lib/useRole";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { useT } from "@/components/TranslationProvider";
@@ -83,11 +84,13 @@ export default function JellyfinPage() {
   async function refreshLibrary() {
     setRefreshing(true);
     try {
-      await fetch("/api/jellyfin/library/refresh", { method: "POST" });
+      // `fetch` ne lève pas sur un 4xx/5xx : sans ce passage par apiAction, un scan refusé
+      // par Jellyfin s'annonçait quand même « lancé ».
+      await apiAction("/api/jellyfin/library/refresh", { method: "POST" });
       mutate("/api/jellyfin/library");
       toast.success(t('jellyfin.refreshSuccess'));
-    } catch {
-      toast.error(t('jellyfin.refreshError'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('jellyfin.refreshError'));
     } finally {
       setRefreshing(false);
     }

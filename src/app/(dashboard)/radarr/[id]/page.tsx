@@ -43,6 +43,7 @@ import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { canAutoSearchMovie } from "@/lib/mediaPermissions";
 import { useT } from "@/components/TranslationProvider";
+import { apiAction } from "@/lib/apiAction";
 import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
@@ -152,11 +153,9 @@ export default function RadarrMovieDetailPage() {
     if (!movie) return;
     setSaving(true);
     try {
-      await fetch(movieKey, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...movie, ...payload }),
-      });
+      // Voir la page série : `fetch` ne lève pas sur un 4xx, donc le `catch` de cet écran
+      // n'attrapait rien et « enregistré » s'affichait quoi qu'il arrive.
+      await apiAction(movieKey, { method: "PUT", body: JSON.stringify({ ...movie, ...payload }) });
       mutate(movieKey);
       toast.success(t('radarr.saveSuccess'));
     } catch {

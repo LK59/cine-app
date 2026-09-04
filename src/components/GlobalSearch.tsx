@@ -15,6 +15,8 @@ import { posterUrl } from "@/lib/images";
 import { useSWRConfig } from "swr";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
+import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
@@ -171,6 +173,7 @@ export function GlobalSearch() {
   const { mutate } = useSWRConfig();
   const { role } = useRole();
   const t = useT();
+  const toast = useToast();
   const [searchDebug, setSearchDebug] = useState(false);
 
   // localStorage is unavailable during SSR — must be read post-mount. State starts at the
@@ -309,11 +312,13 @@ export function GlobalSearch() {
     if (requesting) return;
     setRequesting(result.tmdbId);
     try {
-      await fetch("/api/jellyseerr/requests", {
+      await apiAction("/api/jellyseerr/requests", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mediaType: result.type === "movie" ? "movie" : "tv", mediaId: result.tmdbId }),
       });
+      toast.success(t('common.requestSent'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
     } finally {
       setRequesting(null);
     }
@@ -326,14 +331,29 @@ export function GlobalSearch() {
     const year = "year" in result ? result.year : undefined;
     const poster = "posterPath" in result ? (result as UnifiedSearchResult).posterPath : ("poster" in result ? (result as LocalResult).poster : null);
 
-    if (inList) {
-      await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tmdbId: result.tmdbId, mediaType: result.type }) });
-      setWatchlisted((s) => { const n = new Set(s); n.delete(key); return n; });
-    } else {
-      await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaType: result.type, tmdbId: result.tmdbId, title, year, posterPath: poster }) });
-      setWatchlisted((s) => new Set([...s, key]));
+    // Le pictogramme bascule tout de suite, puis on remet l'état d'origine si le serveur refuse —
+    // sinon la recherche affichait un titre comme suivi alors qu'il n'avait jamais été enregistré.
+    setWatchlisted((s) => {
+      const n = new Set(s);
+      if (inList) n.delete(key); else n.add(key);
+      return n;
+    });
+    try {
+      if (inList) {
+        await apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify({ tmdbId: result.tmdbId, mediaType: result.type }) });
+      } else {
+        await apiAction("/api/watchlist", { method: "POST", body: JSON.stringify({ mediaType: result.type, tmdbId: result.tmdbId, title, year, posterPath: poster }) });
+      }
+    } catch (error) {
+      setWatchlisted((s) => {
+        const n = new Set(s);
+        if (inList) n.add(key); else n.delete(key);
+        return n;
+      });
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      mutate("/api/watchlist");
     }
-    mutate("/api/watchlist");
   }
 
   if (!open) return null;
