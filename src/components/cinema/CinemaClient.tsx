@@ -43,6 +43,8 @@ interface CinemaResumeItem {
   positionTicks: number;
   runtimeTicks: number;
   imageTag: string | null;
+  /** `/radarr/12` ou `/sonarr/34` — ce qui relie une reprise à sa fiche. */
+  cinemaHref: string | null;
 }
 
 const TV_NAV_RING =
@@ -144,6 +146,7 @@ function ContinueCard({
   episodeNumber,
   rowKey,
   index,
+  onOpen,
 }: {
   itemId: string;
   title: string;
@@ -155,22 +158,21 @@ function ContinueCard({
   episodeNumber?: number | null;
   rowKey: string;
   index: number;
+  /**
+   * Ouvre la fiche du titre. Une reprise menait directement à la lecture : un clic, et le film
+   * démarrait — sans moyen de regarder d'abord de quoi il s'agissait, ni de repartir du début.
+   * La fiche porte les deux, et « Reprendre » y est la première ligne.
+   */
+  onOpen: () => void;
 }) {
   const t = useT();
-  const playback = usePlayback();
   return (
     <button
       type="button"
       data-tv-card
       data-tv-row={rowKey}
       data-tv-col={index}
-      onClick={() =>
-        playback.play({
-          itemId,
-          title,
-          resumeAt: resumeTicks && resumeTicks > 0 ? resumeTicks / 10_000_000 : undefined,
-        })
-      }
+      onClick={onOpen}
       className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 overflow-visible rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
       <div className="relative overflow-hidden rounded-lg">
@@ -406,6 +408,26 @@ export function CinemaClient() {
     lastFocusedCard.current = document.activeElement as HTMLElement;
     cinemaNavigate({ film: item.radarrId, serie: null });
   }, []);
+
+  /**
+   * Ouvrir la fiche depuis une carte de reprise.
+   *
+   * Le lien vers la bibliothèque est déjà porté par la charge utile (`/radarr/12`, `/sonarr/34`) :
+   * il n'y a donc rien à retrouver, seulement à ouvrir. Un titre que la bibliothèque ne connaît
+   * pas — présent dans Jellyfin mais pas dans Radarr ni Sonarr — n'a pas de fiche : on lit,
+   * plutôt que de laisser un bouton mort.
+   */
+  const openResume = useCallback(
+    (href: string | null, play: () => void) => {
+      lastFocusedCard.current = document.activeElement as HTMLElement;
+      const film = href?.match(/^\/radarr\/(\d+)$/);
+      if (film) return cinemaNavigate({ film: Number(film[1]), serie: null });
+      const serie = href?.match(/^\/sonarr\/(\d+)$/);
+      if (serie) return cinemaNavigate({ serie: Number(serie[1]), film: null });
+      play();
+    },
+    []
+  );
 
   const closeDetail = useCallback(() => {
     cinemaClose({ film: null, episodes: false });
@@ -656,6 +678,15 @@ export function CinemaClient() {
                         runtimeTicks={item.runtimeTicks}
                         rowKey="continue-movies"
                         index={i}
+                        onOpen={() =>
+                          openResume(item.cinemaHref, () =>
+                            playback.play({
+                              itemId: item.id,
+                              title: item.name,
+                              resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined,
+                            })
+                          )
+                        }
                       />
                     ))}
                   </div>
@@ -740,6 +771,16 @@ export function CinemaClient() {
                         episodeNumber={item.episodeNumber}
                         rowKey="continue-series"
                         index={i}
+                        onOpen={() =>
+                          openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
+                            playback.play({
+                              itemId: item.jellyfinItemId,
+                              title: item.title,
+                              resumeAt:
+                                item.resumeTicks && item.resumeTicks > 0 ? item.resumeTicks / 10_000_000 : undefined,
+                            })
+                          )
+                        }
                       />
                     ))}
                   </div>

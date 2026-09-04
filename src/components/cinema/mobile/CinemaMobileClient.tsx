@@ -39,6 +39,8 @@ interface CinemaResumeItem {
   positionTicks: number;
   runtimeTicks: number;
   imageTag: string | null;
+  /** `/radarr/12` ou `/sonarr/34` — ce qui relie une reprise à sa fiche. */
+  cinemaHref: string | null;
 }
 
 const POSTER_WIDTH = "w-28 sm:w-32";
@@ -119,6 +121,20 @@ export function CinemaMobileClient() {
         ? { tab: "series", serie: (item as CinemaSeries).sonarrId, film: null }
         : { tab: "movies", film: (item as CinemaMovie).radarrId, serie: null }
     );
+  }, []);
+
+  /**
+   * Une reprise ouvre la fiche, comme sur le bureau.
+   *
+   * Elle lançait la lecture au premier appui : pas moyen de regarder de quoi il s'agit, ni de
+   * repartir du début. La fiche porte les deux, et « Reprendre » y est la première ligne.
+   */
+  const openResume = useCallback((href: string | null, play: () => void) => {
+    const film = href?.match(/^\/radarr\/(\d+)$/);
+    if (film) return cinemaNavigate({ tab: "movies", film: Number(film[1]), serie: null });
+    const serie = href?.match(/^\/sonarr\/(\d+)$/);
+    if (serie) return cinemaNavigate({ tab: "series", serie: Number(serie[1]), film: null });
+    play();
   }, []);
 
   const exit = () => leaveCinema(router);
@@ -313,11 +329,13 @@ export function CinemaMobileClient() {
                 key={entry.id}
                 type="button"
                 onClick={() =>
-                  playback.play({
-                    itemId: entry.id,
-                    title: entry.name,
-                    resumeAt: entry.positionTicks > 0 ? entry.positionTicks / 10_000_000 : undefined,
-                  })
+                  openResume(entry.cinemaHref, () =>
+                    playback.play({
+                      itemId: entry.id,
+                      title: entry.name,
+                      resumeAt: entry.positionTicks > 0 ? entry.positionTicks / 10_000_000 : undefined,
+                    })
+                  )
                 }
                 className={`${CONTINUE_WIDTH} shrink-0 text-left active:scale-95`}
               >
