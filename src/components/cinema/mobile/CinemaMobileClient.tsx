@@ -11,7 +11,7 @@ import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
-import { useHorizontalSwipe } from "@/lib/useHorizontalSwipe";
+import { useCarouselDrag } from "@/lib/useCarouselDrag";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -139,15 +139,16 @@ export function CinemaMobileClient() {
   }, []);
 
   /**
-   * Le balayage sur l'affiche : c'est le geste qu'on fait sans y penser devant un carrousel.
+   * La piste suit le doigt.
    *
    * Il n'y avait que les barres — atteignables, mais minuscules, et personne ne les vise sur un
-   * téléphone. Un balayage change de titre et, du même coup, relance le compte à rebours de la
-   * rotation, puisque celle-ci repart de l'index qu'on vient de poser.
+   * téléphone. Et un balayage qui remplace l'affiche d'un coup, sans que rien ne bouge sous le
+   * doigt, se sent comme un raccourci clavier, pas comme un carrousel.
    */
-  const heroSwipe = useHorizontalSwipe((direction) => {
-    if (heroItems.length < 2) return;
-    setHeroIndex((heroIndex + direction + heroItems.length) % heroItems.length);
+  const heroDrag = useCarouselDrag({
+    count: heroItems.length,
+    index: heroIndex,
+    onIndexChange: setHeroIndex,
   });
 
   const exit = () => leaveCinema(router);
@@ -159,7 +160,7 @@ export function CinemaMobileClient() {
   // Progress segments, same pattern (and same fill animation) as the dashboard hero's own — the
   // one place the carousel is visible as a carousel, and a way to jump straight to a title.
   const heroDots = heroItems.length > 1 && (
-    <div className="mt-3 flex max-w-xs gap-1">
+    <div className="mx-auto mt-3 flex max-w-xs gap-1">
       {heroItems.map((item, i) => (
         <button
           key={itemId(item)}
@@ -177,7 +178,7 @@ export function CinemaMobileClient() {
 
   // Identical in both hero layouts below — same buttons, same handlers, only the box around them
   // changes with the orientation.
-  const heroActions = hero && (
+  const heroActions = (item: CinemaMovie | CinemaSeries) => (
     <div className="flex gap-2">
       <button
         type="button"
@@ -185,8 +186,8 @@ export function CinemaMobileClient() {
         // (see playSeriesNextEpisode). This was starting a Series item id before.
         onClick={() =>
           isSeries
-            ? playSeriesNextEpisode(playback, hero)
-            : playback.play({ itemId: hero.jellyfinItemId, title: hero.title })
+            ? playSeriesNextEpisode(playback, item as CinemaSeries)
+            : playback.play({ itemId: item.jellyfinItemId, title: item.title })
         }
         className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
       >
@@ -195,7 +196,7 @@ export function CinemaMobileClient() {
       </button>
       <button
         type="button"
-        onClick={() => openDetail(hero, mediaType)}
+        onClick={() => openDetail(item, mediaType)}
         className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
       >
         <Info size={16} />
@@ -295,49 +296,61 @@ export function CinemaMobileClient() {
             underneath are untouched in both orientations. */}
         {hero && (
           <section className="px-4 pt-2">
-            {short ? (
+            {/* Une piste, et non une affiche remplacée.
+                Toutes les affiches sont côte à côte et la piste est décalée d'une largeur par
+                titre ; pendant le geste elle porte en plus le décalage du doigt, sans transition —
+                elle n'anime pas vers une cible, elle est là où le doigt l'a mise. Au relâchement
+                le décalage revient à zéro dans le même temps que l'index change, et la
+                transition reprend : le mouvement se poursuit au lieu de sauter. */}
+            <div className="overflow-hidden rounded-2xl" {...heroDrag.handlers} style={heroDrag.style}>
               <div
-                {...heroSwipe.handlers}
-                style={heroSwipe.style}
-                className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50"
+                className="flex"
+                style={{
+                  transform: `translate3d(calc(${-heroIndex * 100}% + ${heroDrag.dx}px), 0, 0)`,
+                  transition: heroDrag.dragging ? "none" : "transform 380ms cubic-bezier(0.32, 0.72, 0, 1)",
+                }}
               >
-                <div className="w-24 shrink-0 overflow-hidden rounded-lg">
-                  <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="120px" />
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col justify-center">
-                  {hero.logoUrl ? (
-                    <CinemaLogo src={hero.logoUrl} alt={hero.title} surface="phone" className="mb-2 self-start" />
-                  ) : (
-                    <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{hero.title}</h1>
-                  )}
-                  {hero.genres.length > 0 && (
-                    <p className="mb-3 truncate text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
-                  )}
-                  {heroActions}
-                  {heroDots}
-                </div>
+                {heroItems.map((item, i) => (
+                  <div key={itemId(item)} className="w-full shrink-0">
+                    {short ? (
+                      <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
+                        <div className="w-24 shrink-0 overflow-hidden rounded-lg">
+                          <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === 0} sizes="120px" />
+                        </div>
+                        <div className="flex min-w-0 flex-1 flex-col justify-center">
+                          {item.logoUrl ? (
+                            <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mb-2 self-start" />
+                          ) : (
+                            <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{item.title}</h1>
+                          )}
+                          {item.genres.length > 0 && (
+                            <p className="mb-3 truncate text-xs text-white/70">{item.genres.slice(0, 3).join(" · ")}</p>
+                          )}
+                          {heroActions(item)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
+                        <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === 0} sizes="100vw" />
+                        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
+                          {item.logoUrl ? (
+                            <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mx-auto mb-2" />
+                          ) : (
+                            <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
+                          )}
+                          {item.genres.length > 0 && (
+                            <p className="mb-3 text-center text-xs text-white/70">{item.genres.slice(0, 3).join(" · ")}</p>
+                          )}
+                          {heroActions(item)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : (
-              <div
-                {...heroSwipe.handlers}
-                style={heroSwipe.style}
-                className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50"
-              >
-                <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
-                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
-                  {hero.logoUrl ? (
-                    <CinemaLogo src={hero.logoUrl} alt={hero.title} surface="phone" className="mx-auto mb-2" />
-                  ) : (
-                    <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{hero.title}</h1>
-                  )}
-                  {hero.genres.length > 0 && (
-                    <p className="mb-3 text-center text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>
-                  )}
-                  {heroActions}
-                  {heroDots}
-                </div>
-              </div>
-            )}
+            </div>
+            {/* Hors de la piste : les barres disent où l'on en est, elles ne défilent pas avec. */}
+            {heroDots}
           </section>
         )}
 
