@@ -561,3 +561,71 @@ describe("PlayerControls et l'incrustation", () => {
     expect(exitFullscreen).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Le clavier du lecteur supposait qu'on soit d'abord entré dedans. Le lecteur stable amenait ce
+ * focus lui-même à l'ouverture ; le lecteur natif, devenu celui de tout le monde, ne l'a jamais
+ * fait — d'où l'impression, juste, qu'il n'avait plus de clavier.
+ */
+describe("PlayerControls au clavier, sans focus dans le lecteur", () => {
+  function press(code: string) {
+    fireEvent.keyDown(window, { code });
+  }
+
+  it("met en pause et relance à la barre d'espace", async () => {
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+    const play = vi.spyOn(video!, "play").mockResolvedValue(undefined);
+    Object.defineProperty(video!, "paused", { value: true, configurable: true });
+
+    await act(async () => { press("Space"); });
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("saute de dix secondes aux flèches gauche et droite", async () => {
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+    // La durée est de l'état, alimenté par l'événement : sans lui, le saut se borne à la position
+    // courante et ne bouge pas. Et `currentTime` n'est pas assignable sur un élément jsdom tant
+    // qu'on ne l'a pas redéfini.
+    Object.defineProperty(video!, "duration", { value: 600, configurable: true });
+    Object.defineProperty(video!, "currentTime", { value: 100, writable: true, configurable: true });
+    await act(async () => { video!.dispatchEvent(new Event("durationchange")); });
+
+    await act(async () => { press("ArrowRight"); });
+    expect(video!.currentTime).toBeCloseTo(110, 1);
+
+    await act(async () => { press("ArrowLeft"); });
+    expect(video!.currentTime).toBeCloseTo(100, 1);
+  });
+
+  it("règle le son aux flèches haut et bas", async () => {
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+    video!.volume = 0.5;
+
+    await act(async () => { press("ArrowUp"); });
+    expect(video!.volume).toBeCloseTo(0.6, 2);
+
+    await act(async () => { press("ArrowDown"); press("ArrowDown"); });
+    expect(video!.volume).toBeCloseTo(0.4, 2);
+  });
+
+  it("ne descend ni ne monte au-delà des bornes", async () => {
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+    video!.volume = 0.95;
+
+    await act(async () => { press("ArrowUp"); press("ArrowUp"); });
+    expect(video!.volume).toBe(1);
+  });
+
+  it("coupe le son avec M", async () => {
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+
+    await act(async () => { press("KeyM"); });
+    expect(video!.muted).toBe(true);
+  });
+});

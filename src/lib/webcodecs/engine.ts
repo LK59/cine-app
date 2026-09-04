@@ -31,6 +31,14 @@ export type EngineEventName =
   | "ended"
   | "error"
   | "warning"
+  /**
+   * La conversion HDR a été abandonnée, et l'image ne peut plus être juste.
+   *
+   * Distinct d'un avertissement : celui-ci dit « la lecture continue, dégradée », alors qu'ici la
+   * lecture continue avec une image délavée, fausse sur un écran standard. C'est à l'hôte de
+   * décider, et il choisit de rendre la main au lecteur du serveur, qui sait convertir.
+   */
+  | "hdr-abandoned"
   | "subtitle";
 
 export interface EngineTrack {
@@ -387,8 +395,7 @@ export class PlaybackEngine {
       peakNits: options.peakNits ?? this.videoTrack.video?.colour?.masteringMaxNits ?? 1000,
       // Surfaced rather than swallowed: the picture still plays, but flat, and knowing that is
       // the difference between "HDR isn't working here" and "this player is broken".
-      onHdrFallback: (reason) =>
-        this.emit("warning", `Conversion HDR indisponible, image affichée sans (${reason}).`),
+      onHdrFallback: (reason) => this.emit("hdr-abandoned", reason),
     });
 
     const epoch = ++this.decoderEpoch;

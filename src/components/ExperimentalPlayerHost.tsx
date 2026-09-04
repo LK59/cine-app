@@ -782,6 +782,13 @@ export function ExperimentalPlayerHost({
           fallToStable(message);
         }),
         engine.on("warning", (payload) => showWarning(typeof payload === "string" ? payload : null)),
+        // Une image HDR sans conversion tonale est délavée et fausse sur un écran standard, et
+        // aucun bandeau ne rattrape ça. Le lecteur du serveur, lui, sait convertir : on lui rend
+        // la main plutôt que de laisser regarder un film aux mauvaises couleurs.
+        engine.on("hdr-abandoned", (payload) => {
+          const reason = typeof payload === "string" ? payload : "conversion HDR indisponible";
+          fallToStable(`la conversion HDR est impossible ici (${reason})`);
+        }),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
           if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);

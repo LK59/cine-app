@@ -509,7 +509,15 @@ export function PlayerControls({
   function skip(deltaSeconds: number) {
     const video = videoRef.current;
     if (!video) return;
-    video.currentTime = Math.min(Math.max(0, video.currentTime + deltaSeconds), duration || video.currentTime);
+    // La durée est lue sur l'élément, pas dans l'état.
+    //
+    // L'écouteur clavier est posé une fois et ne dépend pas de la durée : sa fermeture gardait
+    // donc celle du premier rendu — zéro, puisque la durée n'arrive qu'ensuite. Le saut se
+    // bornait alors à la position courante, c'est-à-dire ne bougeait pas. Les boutons, eux,
+    // fonctionnaient : ils sont recréés à chaque rendu. C'est pourquoi les flèches semblaient
+    // sans effet là où les boutons marchaient.
+    const limit = video.duration || duration || video.currentTime;
+    video.currentTime = Math.min(Math.max(0, video.currentTime + deltaSeconds), limit);
   }
 
   // Split in two: dragging the seek bar only moves the thumb/displayed time locally (no real
@@ -834,6 +842,48 @@ export function PlayerControls({
       const navName = active instanceof HTMLElement ? active.getAttribute("data-player-nav") : null;
       const navGroup = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-player-navgroup]") : null;
 
+      /**
+       * Les raccourcis qui n'attendent aucun focus.
+       *
+       * Le clavier de ce lecteur supposait qu'on soit d'abord entré dedans : les flèches
+       * circulaient entre les commandes, la barre d'espace se retirait dès qu'un bouton avait le
+       * focus. Le lecteur stable amenait ce focus lui-même à l'ouverture ; le lecteur natif,
+       * devenu celui de tout le monde, ne l'a jamais fait — d'où l'impression, juste, qu'il
+       * n'avait plus de clavier du tout. Pire, un bouton resté focalisé *derrière* le lecteur
+       * suffisait à faire avaler la barre d'espace par la garde prévue pour les boutons du
+       * lecteur lui-même.
+       *
+       * Quand le focus est hors du lecteur, les touches valent donc pour ce qu'elles disent :
+       * espace lit ou met en pause, les flèches sautent et règlent le son, M coupe, F agrandit.
+       * La circulation entre commandes reste ce qu'elle était dès qu'on est entré dedans.
+       */
+      const outside = !(active instanceof Node) || !containerRef.current?.contains(active);
+      if (outside && !menu) {
+        if (e.code === "Space") {
+          e.preventDefault();
+          togglePlay();
+          showControls();
+          return;
+        }
+        if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+          e.preventDefault();
+          skip(e.code === "ArrowRight" ? 10 : -10);
+          showControls();
+          return;
+        }
+        if (e.code === "ArrowUp" || e.code === "ArrowDown") {
+          const video = videoRef.current;
+          // Le volume ne se règle pas partout — iOS l'ignore en silence, ce que la barre elle-même
+          // a appris à ses dépens. Là où il est ignoré, la touche ne fait rien plutôt que de
+          // mentir.
+          if (!video || !volumeSettable) return;
+          e.preventDefault();
+          changeVolume(Math.min(1, Math.max(0, video.volume + (e.code === "ArrowUp" ? 0.1 : -0.1))));
+          showControls();
+          return;
+        }
+      }
+
       // A menu (captions/audio/···/chapters/speed) is open — Up/Down/Escape belong entirely to
       // it while it's up, not to the control-bar nav map below (its own targets, like Down from
       // "captions" going to playpause, would otherwise fight this every press). No data-player-
@@ -925,8 +975,10 @@ export function PlayerControls({
     // on it directly, and without it in the array the closure would keep whatever `menu` was set
     // to the last time fullscreenSupported changed, silently going stale every time a menu
     // actually opens or closes.
+    // `volumeSettable` en dépend aussi : les flèches haut/bas se retirent là où la plateforme
+    // ignore le volume, et une fermeture capturant l'ancienne valeur ferait mentir la touche.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreenSupported, menu]);
+  }, [fullscreenSupported, menu, volumeSettable]);
 
   if (hidden) return null;
 
