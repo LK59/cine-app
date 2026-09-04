@@ -422,12 +422,6 @@
     --accent-600: 217 119 6;
     --accent-700: 180 83 9;
   }
-
-  /* ── AMOLED ultra-dark mode ─────────────────────────────────────────────────── */
-  :root[data-amoled] body {
-    background-color: #000000;
-    background-image: none;
-  }
 }
 
 @layer utilities {

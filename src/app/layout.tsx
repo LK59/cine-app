@@ -79,7 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={lang} className={`dark ${inter.variable} ${display.variable}`}>
       <head>
         {/* Apply saved theme before first paint to avoid flash */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;if(localStorage.getItem("cine-amoled")==="1")document.documentElement.dataset.amoled="";}catch(e){}` }} />
+        <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;}catch(e){}` }} />
         {SPLASH_SCREENS.map((s) => (
           <link
             key={s.file}

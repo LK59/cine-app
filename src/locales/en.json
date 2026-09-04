@@ -819,9 +819,7 @@
     "appearance": {
       "title": "Appearance",
       "subtitle": "Accent colour and display mode",
-      "accentColor": "Accent colour",
-      "ultraDark": "Ultra dark mode",
-      "ultraDarkDesc": "Pure black background (#000000). On OLED screens, black pixels are off — saves battery and maximises contrast at night."
+      "accentColor": "Accent colour"
     },
     "security": {
       "title": "Security",

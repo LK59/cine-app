@@ -819,9 +819,7 @@
     "appearance": {
       "title": "Darstellung",
       "subtitle": "Akzentfarbe und Anzeigemodus",
-      "accentColor": "Akzentfarbe",
-      "ultraDark": "Ultra-Dunkelmodus",
-      "ultraDarkDesc": "Reiner schwarzer Hintergrund (#000000). Auf OLED-Displays sind schwarze Pixel ausgeschaltet — Akku sparen und maximaler Kontrast nachts."
+      "accentColor": "Akzentfarbe"
     },
     "security": {
       "title": "Sicherheit",

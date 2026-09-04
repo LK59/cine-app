@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Moon, Palette, RefreshCw, History, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
+import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Palette, RefreshCw, History, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
@@ -20,7 +20,7 @@ import { apiAction } from "@/lib/apiAction";
 type TestState = "idle" | "sending" | "sent" | "error";
 
 export default function ParametresPage() {
-  const { accent, amoled, setAccent, setAmoled } = useTheme();
+  const { accent, setAccent } = useTheme();
   const { role } = useRole();
   const t = useT();
 
@@ -119,7 +119,7 @@ export default function ParametresPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div>
             {/* Accent color picker */}
             <div className="card p-5">
               <p className="mb-4 text-sm font-medium text-white">{t('settings.appearance.accentColor')}</p>
@@ -155,23 +155,6 @@ export default function ParametresPage() {
               </div>
             </div>
 
-            {/* AMOLED toggle */}
-            <div className="card p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 text-slate-500">
-                    <Moon size={16} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{t('settings.appearance.ultraDark')}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {t('settings.appearance.ultraDarkDesc')}
-                    </p>
-                  </div>
-                </div>
-                <Toggle checked={amoled} onChange={setAmoled} />
-              </div>
-            </div>
           </div>
         </section>
 

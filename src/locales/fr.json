@@ -819,9 +819,7 @@
     "appearance": {
       "title": "Apparence",
       "subtitle": "Couleur d'accent et mode d'affichage",
-      "accentColor": "Couleur d'accent",
-      "ultraDark": "Mode ultra-sombre",
-      "ultraDarkDesc": "Fond noir pur (#000000). Sur écran OLED, les pixels noirs sont éteints — économie de batterie et contraste maximal la nuit."
+      "accentColor": "Couleur d'accent"
     },
     "security": {
       "title": "Sécurité",
