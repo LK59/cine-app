@@ -329,7 +329,10 @@
     "filterCategoryAll": "Toutes les catégories",
     "filterTrackerAll": "Tous les indexeurs",
     "paused": "Torrent mis en pause",
-    "resumed": "Torrent relancé"
+    "resumed": "Torrent relancé",
+    "actionPause": "Mettre en pause",
+    "actionResume": "Relancer",
+    "actionDelete": "Supprimer"
   },
   "health": {
     "pageTitle": "Santé système",

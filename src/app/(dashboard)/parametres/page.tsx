@@ -14,6 +14,8 @@ import { useRole } from "@/lib/useRole";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
+import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 
 type TestState = "idle" | "sending" | "sent" | "error";
 
@@ -392,6 +394,7 @@ function SessionsCard() {
   const [revoking, setRevoking] = useState(false);
   const [revoked, setRevoked] = useState(false);
   const t = useT();
+  const toast = useToast();
 
   useEffect(() => {
     fetch("/api/auth/sessions")
@@ -402,8 +405,13 @@ function SessionsCard() {
   async function revokeOthers() {
     setRevoking(true);
     try {
-      const res = await fetch("/api/auth/sessions", { method: "DELETE" });
-      if (res.ok) { setCount(0); setRevoked(true); }
+      // Une révocation refusée ne disait rien du tout : le bouton revenait à son état de repos
+      // comme si l'utilisateur n'avait jamais cliqué, et les autres sessions restaient ouvertes.
+      await apiAction("/api/auth/sessions", { method: "DELETE" });
+      setCount(0);
+      setRevoked(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
     } finally {
       setRevoking(false);
     }

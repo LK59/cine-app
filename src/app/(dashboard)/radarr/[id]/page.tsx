@@ -247,9 +247,10 @@ export default function RadarrMovieDetailPage() {
   async function triggerAutoSearch() {
     setAutoSearching(true);
     try {
-      const res = await fetch(`/api/radarr/movies/${id}/search`, { method: "POST" });
-      if (res.ok) toast.success(t('sonarr.searchLaunched'));
-      else toast.error(t('common.unknown'));
+      await apiAction(`/api/radarr/movies/${id}/search`, { method: "POST" });
+      toast.success(t('sonarr.searchLaunched'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.unknown'));
     } finally {
       setAutoSearching(false);
     }

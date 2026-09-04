@@ -276,9 +276,11 @@ export default function SonarrSeriesDetailPage() {
   async function triggerAutoSearch(seasonNumber: number) {
     setAutoSearching(seasonNumber);
     try {
-      const res = await fetch(`/api/sonarr/series/${id}/search?seasonNumber=${seasonNumber}`, { method: "POST" });
-      if (res.ok) toast.success(t('sonarr.searchLaunched'));
-      else toast.error(t('common.unknown'));
+      await apiAction(`/api/sonarr/series/${id}/search?seasonNumber=${seasonNumber}`, { method: "POST" });
+      toast.success(t('sonarr.searchLaunched'));
+    } catch (error) {
+      // Sonarr explique pourquoi il refuse une recherche ; autant le répéter plutôt que « erreur ».
+      toast.error(error instanceof Error ? error.message : t('common.unknown'));
     } finally {
       setAutoSearching(null);
     }

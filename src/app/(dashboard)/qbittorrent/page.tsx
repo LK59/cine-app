@@ -127,22 +127,37 @@ export default function QbittorrentPage() {
     }
   }
 
+  /**
+   * Le bouton bascule sous le doigt, qBittorrent confirme ensuite.
+   *
+   * L'état est écrit sur place *avant* l'appel, parce que qBittorrent met un instant à refléter
+   * l'ordre qu'on vient de lui donner : une relecture immédiate renvoie encore l'ancien état et
+   * ferait clignoter le bouton. On lui laisse donc une seconde et demie avant de relire, et on
+   * remet l'état d'origine tout de suite s'il a refusé.
+   */
   async function action(hash: string, action: "pause" | "resume") {
-    const paused = action === "pause";
-    await run(
-      apiAction(`/api/qbittorrent/torrents/${hash}`, { method: "POST", body: JSON.stringify({ action }) }),
-      paused ? t('qbittorrent.paused') : t('qbittorrent.resumed')
-    );
-    // Écrit tout de suite, puis revalidé. qBittorrent met un instant à refléter l'ordre qu'on
-    // vient de lui donner, et le rafraîchissement qui suit renvoie donc souvent l'ancien état :
-    // le bouton restait sur « Pause » alors que la mise en pause avait réussi, jusqu'au sondage
-    // suivant, cinq secondes plus tard.
-    mutate(
-      "/api/qbittorrent/torrents",
-      (current?: QbTorrent[]) =>
-        current?.map((x) => (x.hash === hash ? { ...x, state: paused ? "pausedDL" : "downloading" } : x)),
-      { revalidate: false }
-    );
+    const before = torrents?.find((x) => x.hash === hash)?.state ?? "";
+    const seeding = /up$/i.test(before) || /^(uploading|stalledUP)/i.test(before);
+    const after =
+      action === "pause" ? (seeding ? "pausedUP" : "pausedDL") : seeding ? "uploading" : "downloading";
+
+    const write = (state: string) =>
+      mutate(
+        "/api/qbittorrent/torrents",
+        (current?: QbTorrent[]) => current?.map((x) => (x.hash === hash ? { ...x, state } : x)),
+        { revalidate: false }
+      );
+
+    write(after);
+    try {
+      await apiAction(`/api/qbittorrent/torrents/${hash}`, { method: "POST", body: JSON.stringify({ action }) });
+      toast.success(action === "pause" ? t('qbittorrent.paused') : t('qbittorrent.resumed'));
+      setTimeout(() => mutate("/api/qbittorrent/torrents"), 1500);
+    } catch (error) {
+      write(before);
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+      mutate("/api/qbittorrent/torrents");
+    }
   }
 
   async function remove(hash: string) {
@@ -286,15 +301,15 @@ export default function QbittorrentPage() {
               {!isGuest && (
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   {isPaused(torrent.state) ? (
-                    <button onClick={() => action(torrent.hash, "resume")} className="btn-ghost px-2">
+                    <button onClick={() => action(torrent.hash, "resume")} className="btn-ghost px-2" title={t('qbittorrent.actionResume')} aria-label={t('qbittorrent.actionResume')}>
                       <Play size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => action(torrent.hash, "pause")} className="btn-ghost px-2">
+                    <button onClick={() => action(torrent.hash, "pause")} className="btn-ghost px-2" title={t('qbittorrent.actionPause')} aria-label={t('qbittorrent.actionPause')}>
                       <Pause size={14} />
                     </button>
                   )}
-                  <button onClick={() => remove(torrent.hash)} className="btn-danger px-2">
+                  <button onClick={() => remove(torrent.hash)} className="btn-danger px-2" title={t('qbittorrent.actionDelete')} aria-label={t('qbittorrent.actionDelete')}>
                     <Trash2 size={14} />
                   </button>
                 </div>

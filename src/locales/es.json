@@ -329,7 +329,10 @@
     "filterCategoryAll": "Todas las categorías",
     "filterTrackerAll": "Todos los indexadores",
     "paused": "Torrent en pausa",
-    "resumed": "Torrent reanudado"
+    "resumed": "Torrent reanudado",
+    "actionPause": "Pausar",
+    "actionResume": "Reanudar",
+    "actionDelete": "Eliminar"
   },
   "health": {
     "pageTitle": "Estado del sistema",

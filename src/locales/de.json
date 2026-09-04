@@ -329,7 +329,10 @@
     "filterCategoryAll": "Alle Kategorien",
     "filterTrackerAll": "Alle Tracker",
     "paused": "Torrent pausiert",
-    "resumed": "Torrent fortgesetzt"
+    "resumed": "Torrent fortgesetzt",
+    "actionPause": "Pausieren",
+    "actionResume": "Fortsetzen",
+    "actionDelete": "Löschen"
   },
   "health": {
     "pageTitle": "Systemstatus",
