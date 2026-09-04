@@ -44,6 +44,10 @@ export function PlayerPanelFrame({
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
+  // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
+  // `document` n'existe pas et où `createPortal` fait échouer la page entière.
+  if (typeof document === "undefined") return null;
+
   return createPortal(
     <div
       className="fixed inset-0 flex flex-col overflow-hidden bg-ink animate-fade-in"

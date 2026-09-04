@@ -1,29 +1,33 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { createPortal } from "react-dom";
 import { useIsMobile } from "@/lib/useIsMobile";
 
-// ssr:false — see CinemaClient's own doc comment for why (unrecoverable hydration mismatch on a
-// page that's 100% client-fetched anyway, same pattern as PlayerHostLazy/GlobalSearchLazy).
-// Loading fallback is portaled to document.body too — same reason as CinemaClient's own portal.
-function loadingPortal() {
-  return createPortal(
+// L'écran d'attente est un simple bloc `fixed`, et non plus un portage dans `document.body`.
+//
+// Le portage n'avait de raison d'être que sous l'ancienne coquille, où l'animation de
+// PageTransition posait un `transform` permanent qui faisait d'elle le bloc conteneur de tout
+// descendant `fixed`. Le lecteur n'a plus cette coquille — et surtout, ce composant de repli est
+// rendu côté serveur (c'est ce que `ssr: false` fait du `loading`), où `document` n'existe pas :
+// la page répondait 500 avant d'avoir affiché quoi que ce soit.
+function LoadingScreen() {
+  return (
     <div className="fixed inset-0 flex items-center justify-center bg-ink" style={{ zIndex: 200 }}>
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-    </div>,
-    document.body
+    </div>
   );
 }
 
+// ssr:false — see CinemaClient's own doc comment for why (unrecoverable hydration mismatch on a
+// page that's 100% client-fetched anyway, same pattern as PlayerHostLazy/GlobalSearchLazy).
 const CinemaClient = dynamic(() => import("@/components/cinema/CinemaClient").then((m) => m.CinemaClient), {
   ssr: false,
-  loading: loadingPortal,
+  loading: LoadingScreen,
 });
 
 const CinemaMobileClient = dynamic(
   () => import("@/components/cinema/mobile/CinemaMobileClient").then((m) => m.CinemaMobileClient),
-  { ssr: false, loading: loadingPortal }
+  { ssr: false, loading: LoadingScreen }
 );
 
 // Two genuinely different screens rather than one responsive layout — see CinemaMobileClient's

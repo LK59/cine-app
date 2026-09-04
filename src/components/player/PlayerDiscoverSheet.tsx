@@ -80,6 +80,10 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   const inList = data?.watchlistStatus === "to_watch";
   const StateIcon = data?.requestState ? STATE_ICON[data.requestState] : Clock;
 
+  // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
+  // `document` n'existe pas et où `createPortal` fait échouer la page entière.
+  if (typeof document === "undefined") return null;
+
   return createPortal(
     <div
       ref={containerRef}

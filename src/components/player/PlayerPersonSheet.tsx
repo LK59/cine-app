@@ -69,6 +69,10 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
   const credits = useMemo(() => (data?.credits ?? []).filter((c) => c.title), [data]);
   const owned = credits.filter((c) => c.inLibrary).length;
 
+  // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
+  // `document` n'existe pas et où `createPortal` fait échouer la page entière.
+  if (typeof document === "undefined") return null;
+
   return createPortal(
     <div
       className="fixed inset-0 animate-fade-in overflow-hidden bg-ink"

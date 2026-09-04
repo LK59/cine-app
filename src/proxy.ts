@@ -58,6 +58,15 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "PATCH /api/watchlist/item",
 ]);
 
+/**
+ * Le mode cinéma est devenu le lecteur, avec sa propre coquille et sa propre adresse. L'ancienne
+ * reste valable — pour les liens partagés, les onglets ouverts et les raccourcis installés sur un
+ * écran d'accueil.
+ */
+const MOVED_PATHS: Record<string, string> = {
+  "/cinema": "/player",
+};
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -68,6 +77,19 @@ export async function proxy(req: NextRequest) {
   ) {
     return NextResponse.next();
   }
+
+  // Les adresses qui ont déménagé, redirigées ici plutôt que par la page elle-même.
+  //
+  // `redirect()` dans un composant serveur imbriqué ne produit pas de 307 : la coquille du
+  // tableau de bord a déjà commencé à être envoyée, et le navigateur reçoit une page complète
+  // qui lui demande ensuite d'aller ailleurs — donc un éclair de barre latérale avant d'arriver
+  // au lecteur. Ici, rien n'a encore été rendu.
+  //
+  // Le fragment est concaténé par acquit de conscience : un navigateur ne l'envoie jamais au
+  // serveur, et le réapplique de lui-même quand la nouvelle adresse n'en porte pas. La ligne est
+  // donc sans effet en pratique, et juste si quelque chose venait un jour à le transmettre.
+  const moved = MOVED_PATHS[pathname];
+  if (moved) return NextResponse.redirect(new URL(moved + req.nextUrl.hash, req.url), 308);
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
