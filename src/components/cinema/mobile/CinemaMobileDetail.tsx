@@ -89,6 +89,7 @@ export function CinemaMobileDetail({
   const inList = addedStatus === "to_watch";
 
   const [logoErrored, setLogoErrored] = useState(false);
+  const [backdropFailed, setBackdropFailed] = useState(false);
   const seasons = episodesData?.seasons ?? [];
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
   const activeSeason = selectedSeason ?? seasons[0]?.seasonNumber ?? null;
@@ -205,9 +206,18 @@ export function CinemaMobileDetail({
         // the rest of the sheet scrolls natively.
         style={{ touchAction: "none" }}
       >
-        {item.backdropUrl ? (
+        {/* Un échec de chargement retombe sur le fond uni, comme une absence d'image.
+            Sans cela le navigateur dessinait sa propre vignette d'image cassée — un « ? » en
+            plein milieu de la bannière, ce qu'on voyait sur les fiches de séries dont le visuel
+            manque. */}
+        {item.backdropUrl && !backdropFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <img
+            src={item.backdropUrl}
+            alt=""
+            onError={() => setBackdropFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         ) : (
           <div className="absolute inset-0 bg-slate-900" />
         )}

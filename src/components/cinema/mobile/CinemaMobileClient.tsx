@@ -371,12 +371,16 @@ export function CinemaMobileClient() {
               <button
                 key={entry.jellyfinItemId}
                 type="button"
+                // La rangée des séries était restée sur la lecture directe quand celle des films
+                // est passée à la fiche : deux rangées voisines, deux gestes différents.
                 onClick={() =>
-                  playback.play({
-                    itemId: entry.jellyfinItemId,
-                    title: entry.title,
-                    resumeAt: entry.resumeTicks ? entry.resumeTicks / 10_000_000 : undefined,
-                  })
+                  openResume(entry.sonarrId ? `/sonarr/${entry.sonarrId}` : null, () =>
+                    playback.play({
+                      itemId: entry.jellyfinItemId,
+                      title: entry.title,
+                      resumeAt: entry.resumeTicks ? entry.resumeTicks / 10_000_000 : undefined,
+                    })
+                  )
                 }
                 className={`${CONTINUE_WIDTH} shrink-0 text-left active:scale-95`}
               >
@@ -437,6 +441,17 @@ export function CinemaMobileClient() {
 
       {selected && (
         <CinemaMobileDetail
+          /**
+           * Une fiche par titre.
+           *
+           * Sans cette clé, ouvrir un titre similaire ne faisait que changer les propriétés de la
+           * même fiche : le contenu se remplaçait sur place, sans animation d'ouverture — et tout
+           * ce que la fiche gardait par-devers elle restait en place avec lui. Le défilement
+           * d'abord, mais aussi la saison choisie, l'échec de chargement d'un logo, et surtout
+           * l'état du geste de fermeture : une fiche qu'on venait de tirer vers le bas rouvrait
+           * la suivante déjà décalée, ce qui explique les gestes qui « réagissent bizarrement ».
+           */
+          key={"radarrId" in selected.item ? `film-${selected.item.radarrId}` : `serie-${selected.item.sonarrId}`}
           item={selected.item}
           mediaType={selected.mediaType}
           onClose={() => cinemaClose({ film: null, serie: null })}
