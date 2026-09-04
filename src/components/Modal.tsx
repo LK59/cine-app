@@ -149,7 +149,7 @@ export function Modal({
 
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-white">{title}</h2>
-          <button onClick={closeAnimated} className="rounded-md p-1 text-slate-400 hover:bg-white/10">
+          <button onClick={closeAnimated} className="btn btn-ghost btn-icon p-1">
             <X size={18} />
           </button>
         </div>

@@ -147,7 +147,7 @@ function ApiChecksSection() {
           <button
             onClick={run}
             disabled={running}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40"
+            className="btn btn-ghost btn-sm"
           >
             <RefreshCw size={12} className={running ? "animate-spin" : ""} />
             {running ? t('health.apiTests.running') : results.length === 0 ? t('health.apiTests.run') : t('health.apiTests.rerun')}

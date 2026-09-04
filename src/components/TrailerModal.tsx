@@ -38,7 +38,7 @@ export function TrailerModal({ youtubeKey, title, onClose }: {
           <p className="text-sm font-medium text-white truncate pr-4">{title}</p>
           <button
             onClick={requestClose}
-            className="shrink-0 rounded-lg bg-white/10 p-1.5 text-slate-300 hover:bg-white/20"
+            className="btn btn-ghost btn-icon shrink-0 p-1.5"
           >
             <X size={16} />
           </button>

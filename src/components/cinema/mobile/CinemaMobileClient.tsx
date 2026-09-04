@@ -193,7 +193,7 @@ export function CinemaMobileClient() {
           type="button"
           onClick={exit}
           aria-label={t("cinema.standardMode")}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white active:scale-95"
+          className="btn btn-ghost btn-icon h-9 w-9 shrink-0"
         >
           <ArrowLeft size={18} />
         </button>

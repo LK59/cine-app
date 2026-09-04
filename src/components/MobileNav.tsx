@@ -304,13 +304,13 @@ export function MobileNav() {
             <button
               onClick={refresh}
               disabled={refreshing}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors disabled:opacity-60"
+              className="btn btn-ghost flex-1 rounded-xl py-3"
             >
               <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} /> {t('common.refresh')}
             </button>
             <button
               onClick={logout}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors"
+              className="btn btn-ghost flex-1 rounded-xl py-3 text-red-400"
             >
               <LogOut size={16} /> {t('nav.logout')}
             </button>

@@ -76,7 +76,7 @@ export function PlaybackInfoPanel({ info, networkBitrate, open, onClose, fallbac
     >
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <p className="text-sm font-medium text-white">{t('player.info.title')}</p>
-        <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white">
+        <button onClick={onClose} className="btn btn-ghost btn-icon p-1">
           <X size={16} />
         </button>
       </div>

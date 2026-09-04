@@ -208,7 +208,7 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
           <button
             onClick={onRefresh}
             disabled={storage.computing}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+            className="btn btn-ghost btn-sm"
           >
             <RefreshCw size={12} className={storage.computing ? "animate-spin" : ""} />
             {storage.computing ? t('stats.storage.refreshing') : t('stats.storage.refresh')}

@@ -239,7 +239,7 @@ export default function ParametresPage() {
               <button
                 onClick={startTest}
                 disabled={countdown !== null || testState === "sending"}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn btn-ghost btn-lg w-full"
               >
                 {countdown !== null || testState === "sending" ? (
                   <><Loader2 size={15} className="animate-spin" />{countdown !== null ? t('notifications.sendingIn', { n: countdown }) : t('notifications.sending')}</>
@@ -462,7 +462,7 @@ function PwaUpdateCard() {
       <button
         onClick={refresh}
         disabled={refreshing}
-        className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-60"
+        className="btn btn-ghost px-4 py-2"
       >
         <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
         {refreshing ? t('settings.app.checking') : t('settings.app.updateButton')}

@@ -116,7 +116,7 @@ export function RequestFlowModal({
         <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 transition-colors hover:text-white"
+            className="chip flex-1 justify-center rounded-xl py-2"
           >
             {t("common.cancel")}
           </button>
@@ -174,7 +174,7 @@ export function RequestFlowModal({
           <div className="mt-4 flex gap-2">
             <button
               onClick={onClose}
-              className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 transition-colors hover:text-white"
+              className="chip flex-1 justify-center rounded-xl py-2"
             >
               {t("common.cancel")}
             </button>

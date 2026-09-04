@@ -62,7 +62,7 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: string[]; star
         <ChevronRight size={20} />
       </button>
       <button onClick={onClose}
-        className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
+        className="btn btn-ghost btn-icon absolute right-4 top-4 z-10 h-9 w-9">
         <X size={16} />
       </button>
       {/* eslint-disable-next-line @next/next/no-img-element */}

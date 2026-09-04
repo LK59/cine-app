@@ -80,7 +80,7 @@ function NoteModal({ item, onSave, onClose }: {
           className="w-full resize-none rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-hidden focus:border-accent-500/50"
         />
         <div className="mt-3 flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">{t('watchlist.noteModal.cancel')}</button>
+          <button onClick={onClose} className="chip flex-1 justify-center rounded-xl py-2">{t('watchlist.noteModal.cancel')}</button>
           {item.note && (
             <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
               <Trash2 size={14} />
@@ -111,7 +111,7 @@ function ConfirmDeleteModal({ title, onConfirm, onClose }: {
         <p className="mt-1 truncate text-xs text-slate-400">{title}</p>
         <p className="mt-2 text-xs text-slate-500">{t('watchlist.confirmDelete.body')}</p>
         <div className="mt-4 flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="chip flex-1 justify-center rounded-xl py-2">
             {t('watchlist.confirmDelete.cancel')}
           </button>
           <button
@@ -212,7 +212,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                 className="w-full rounded-xl border border-white/10 bg-slate-800 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-600 outline-hidden focus:border-accent-500/50"
               />
             </div>
-            <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:text-white transition-colors">
+            <button onClick={onClose} className="btn btn-ghost btn-icon h-8 w-8 shrink-0">
               <X size={15} />
             </button>
           </div>

@@ -372,7 +372,7 @@ export default function CalendarPage() {
             <ChevronRight size={14} />
           </button>
         </div>
-        <button onClick={goToday} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-400 hover:text-white hover:border-white/20 transition-colors">
+        <button onClick={goToday} className="btn btn-ghost btn-sm">
           {t('calendar.today')}
         </button>
         <div className="ml-auto flex items-center gap-1">

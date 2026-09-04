@@ -132,7 +132,7 @@ export function CinemaSearchOverlay({
         <button
           type="button"
           onClick={requestClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          className="btn btn-ghost btn-icon h-11 w-11 shrink-0"
           aria-label={t("cinema.back")}
         >
           <X className="h-5 w-5" />
