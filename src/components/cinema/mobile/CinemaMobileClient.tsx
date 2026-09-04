@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Info, Play, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
-import { useCarouselDrag } from "@/lib/useCarouselDrag";
+import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -145,7 +145,9 @@ export function CinemaMobileClient() {
    * téléphone. Et un balayage qui remplace l'affiche d'un coup, sans que rien ne bouge sous le
    * doigt, se sent comme un raccourci clavier, pas comme un carrousel.
    */
+  const heroTrackRef = useRef<HTMLDivElement>(null);
   const heroDrag = useCarouselDrag({
+    trackRef: heroTrackRef,
     count: heroItems.length,
     index: heroIndex,
     onIndexChange: setHeroIndex,
@@ -304,11 +306,11 @@ export function CinemaMobileClient() {
                 transition reprend : le mouvement se poursuit au lieu de sauter. */}
             <div className="overflow-hidden rounded-2xl" {...heroDrag.handlers} style={heroDrag.style}>
               <div
+                ref={heroTrackRef}
                 className="flex"
-                style={{
-                  transform: `translate3d(calc(${-heroIndex * 100}% + ${heroDrag.dx}px), 0, 0)`,
-                  transition: heroDrag.dragging ? "none" : "transform 380ms cubic-bezier(0.32, 0.72, 0, 1)",
-                }}
+                // Position au repos seulement : pendant le geste, la piste est écrite directement
+                // par le hook, sans passer par React — voir useCarouselDrag.
+                style={{ transform: carouselTransform(heroIndex), transition: CAROUSEL_TRANSITION }}
               >
                 {heroItems.map((item, i) => (
                   <div key={itemId(item)} className="w-full shrink-0">

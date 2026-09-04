@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { useCarouselDrag } from "@/lib/useCarouselDrag";
+import { useEffect, useRef } from "react";
+import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 
 afterEach(() => cleanup());
 beforeEach(() => {
@@ -9,36 +10,73 @@ beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, "clientWidth", { value: 400, configurable: true });
   HTMLElement.prototype.setPointerCapture = vi.fn();
   HTMLElement.prototype.releasePointerCapture = vi.fn();
+  // La peinture est calée sur l'image d'écran : ici on l'exécute tout de suite.
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => { cb(0); return 1; });
+  vi.stubGlobal("cancelAnimationFrame", () => {});
 });
 
-function Harness({ index, count, onIndexChange }: { index: number; count: number; onIndexChange: (n: number) => void }) {
-  const drag = useCarouselDrag({ count, index, onIndexChange });
+/**
+ * Le nombre de rendus est ce qui compte autant que le comportement : la première version gardait
+ * le décalage dans l'état de React et redessinait tout l'écran d'accueil à chaque pixel — cinq
+ * images par seconde pour un geste qui ne demande qu'une propriété CSS.
+ */
+function Harness({
+  index,
+  count,
+  onIndexChange,
+  onRender,
+}: {
+  index: number;
+  count: number;
+  onIndexChange: (n: number) => void;
+  onRender?: () => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useCarouselDrag({ trackRef, count, index, onIndexChange });
+  // Compté depuis un effet : les effets suivent chaque rendu, et rien n'est modifié pendant.
+  useEffect(() => {
+    onRender?.();
+  });
   return (
-    <div data-testid="track" {...drag.handlers} style={drag.style} data-dx={drag.dx} data-dragging={drag.dragging} />
+    <div data-testid="frame" {...drag.handlers} style={drag.style}>
+      <div
+        data-testid="track"
+        ref={trackRef}
+        style={{ transform: carouselTransform(index), transition: CAROUSEL_TRANSITION }}
+      />
+    </div>
   );
 }
 
+const frame = () => screen.getByTestId("frame");
 const track = () => screen.getByTestId("track");
-const dx = () => Number(track().getAttribute("data-dx"));
-const dragging = () => track().getAttribute("data-dragging") === "true";
 
 function down(x = 200, y = 200) {
-  fireEvent.pointerDown(track(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
+  fireEvent.pointerDown(frame(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
 }
 function move(x: number, y = 200) {
-  fireEvent.pointerMove(track(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
+  fireEvent.pointerMove(frame(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
 }
 function up(x: number, y = 200) {
-  fireEvent.pointerUp(track(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
+  fireEvent.pointerUp(frame(), { clientX: x, clientY: y, pointerType: "touch", pointerId: 1 });
 }
 
 describe("la traînée du carrousel", () => {
-  it("suit le doigt pendant le geste", () => {
+  it("suit le doigt sans transition, en écrivant sur la piste", () => {
     render(<Harness index={1} count={5} onIndexChange={vi.fn()} />);
     down();
     move(140);
-    expect(dragging()).toBe(true);
-    expect(dx()).toBe(-60);
+    expect(track().style.transform).toBe(carouselTransform(1, -60));
+    expect(track().style.transition).toBe("none");
+  });
+
+  it("ne redessine rien pendant le geste", () => {
+    const onRender = vi.fn();
+    render(<Harness index={1} count={5} onIndexChange={vi.fn()} onRender={onRender} />);
+    onRender.mockClear();
+    down();
+    for (let x = 190; x > 60; x -= 5) move(x);
+    expect(onRender).not.toHaveBeenCalled();
   });
 
   it("passe au titre suivant quand on est allé assez loin", () => {
@@ -48,19 +86,20 @@ describe("la traînée du carrousel", () => {
     move(60); // 140 px sur 400, au-delà du quart
     up(60);
     expect(onIndexChange).toHaveBeenCalledWith(2);
-    expect(dx()).toBe(0);
+    // Le geste se poursuit sans attendre le rendu de React.
+    expect(track().style.transform).toBe(carouselTransform(2));
+    expect(track().style.transition).toBe(CAROUSEL_TRANSITION);
   });
 
   it("revient à sa place quand le geste s'arrête trop tôt", () => {
     const onIndexChange = vi.fn();
     render(<Harness index={1} count={5} onIndexChange={onIndexChange} />);
     down();
-    // Vingt pixels : ni la distance (un quart de 400, soit 100) ni le plancher du lancer (24)
-    // ne sont atteints.
+    // Vingt pixels : ni la distance (un quart de 400, soit 100) ni le plancher du lancer (24).
     move(180);
     up(180);
     expect(onIndexChange).not.toHaveBeenCalled();
-    expect(dx()).toBe(0);
+    expect(track().style.transform).toBe(carouselTransform(1));
   });
 
   it("recule quand on tire vers la droite", () => {
@@ -80,26 +119,25 @@ describe("la traînée du carrousel", () => {
   it("laisse le geste vertical à la page, et ne le reprend pas en route", () => {
     const onIndexChange = vi.fn();
     render(<Harness index={1} count={5} onIndexChange={onIndexChange} />);
+    const initial = track().style.transform;
     down();
     move(196, 60); // surtout vertical : l'axe est concédé
     move(20, 60); // franchement horizontal, mais trop tard
     up(20, 60);
-    expect(dragging()).toBe(false);
-    expect(dx()).toBe(0);
+    expect(track().style.transform).toBe(initial);
     expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   it("ne réclame que l'axe horizontal au navigateur", () => {
     render(<Harness index={0} count={3} onIndexChange={vi.fn()} />);
-    expect(track().style.touchAction).toBe("pan-y");
+    expect(frame().style.touchAction).toBe("pan-y");
   });
 
   it("résiste au bord plutôt que de partir dans le vide", () => {
     render(<Harness index={0} count={3} onIndexChange={vi.fn()} />);
     down();
     move(300); // on tire vers la droite alors qu'on est déjà au premier
-    expect(dx()).toBeGreaterThan(0);
-    expect(dx()).toBeLessThan(100);
+    expect(track().style.transform).toBe(carouselTransform(0, 35));
   });
 
   it("ne sort pas de la liste au relâchement, même lancée fort", () => {
