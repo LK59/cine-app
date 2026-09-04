@@ -19,8 +19,8 @@ import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_ROW_PRIMARY, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, OVERVIEW_CLASS, CAST_CLASS, COLUMN_GAP, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -249,11 +249,11 @@ export function CinemaMovieDetail({
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
       <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
-        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end pb-16 pt-28">
+        <div data-snap-section className={SECTION_CLASS}>
         <div
           key={item.radarrId}
           style={COLUMN_STYLE}
-          className={`flex flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -262,7 +262,7 @@ export function CinemaMovieDetail({
               alt={item.title}
               onError={() => setLogoErrored(true)}
               style={LOGO_STYLE}
-              className="mb-1 max-h-20 w-auto max-w-full object-contain sm:max-h-28"
+              className={LOGO_CLASS}
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
@@ -276,12 +276,12 @@ export function CinemaMovieDetail({
 
           <CinemaProgressBar resumeTicks={progress?.resumeTicks} runtimeTicks={progress?.runtimeTicks} />
 
-          <p className="line-clamp-3 text-sm text-white/90 drop-shadow-sm sm:text-base">
+          <p className={OVERVIEW_CLASS}>
             {info?.tmdb?.overview || item.overview}
           </p>
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-            <p className="truncate text-xs text-white/60">
+            <p className={CAST_CLASS}>
               {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
             </p>
           )}
@@ -299,9 +299,9 @@ export function CinemaMovieDetail({
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
               label={formatContinueLabel(t, progress?.resumeTicks, progress?.runtimeTicks)}
-              // Pleine et blanche. Cinq lignes de même poids, c'est cinq lignes dont aucune n'est
-              // l'action principale — et c'était pourtant celle qu'on vient chercher.
-              className={MENU_ROW_PRIMARY}
+              // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas
+              // elle. Deux blancs à l'écran — un fixe et un mobile — se disputaient le sens.
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
             />
 
             {/* Only when there's actually something to restart FROM — a movie with no progress

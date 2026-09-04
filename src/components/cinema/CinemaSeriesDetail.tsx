@@ -21,8 +21,8 @@ import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_ROW_PRIMARY, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, OVERVIEW_CLASS, CAST_CLASS, COLUMN_GAP, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -226,11 +226,11 @@ export function CinemaSeriesDetail({
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
       <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
-        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end pb-16 pt-28">
+        <div data-snap-section className={SECTION_CLASS}>
         <div
           key={item.sonarrId}
           style={COLUMN_STYLE}
-          className={`flex flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -239,7 +239,7 @@ export function CinemaSeriesDetail({
               alt={item.title}
               onError={() => setLogoErrored(true)}
               style={LOGO_STYLE}
-              className="mb-1 max-h-20 w-auto max-w-full object-contain sm:max-h-28"
+              className={LOGO_CLASS}
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
@@ -253,12 +253,12 @@ export function CinemaSeriesDetail({
 
           <CinemaProgressBar resumeTicks={nextEpisode?.resumeTicks} runtimeTicks={nextEpisode?.runtimeTicks} />
 
-          <p className="line-clamp-3 text-sm text-white/90 drop-shadow-sm sm:text-base">
+          <p className={OVERVIEW_CLASS}>
             {info?.tmdb?.overview || item.overview}
           </p>
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-            <p className="truncate text-xs text-white/60">
+            <p className={CAST_CLASS}>
               {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
             </p>
           )}
@@ -285,8 +285,8 @@ export function CinemaSeriesDetail({
                   nextEpisode.seasonNumber,
                   nextEpisode.episodeNumber
                 )}
-                // Pleine et blanche : l'action principale se voit sans être lue.
-                className={MENU_ROW_PRIMARY}
+                // La même ligne que les autres : c'est le sélecteur qui se peint en blanc.
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               />
             )}
 

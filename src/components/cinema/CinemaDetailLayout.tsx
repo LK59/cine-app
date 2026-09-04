@@ -66,3 +66,34 @@ export function CinemaProgressBar({
     </div>
   );
 }
+
+/**
+ * La première page tient dans l'écran, quel que soit l'écran.
+ *
+ * Elle était `min-h-full` : sur un 13 pouces, le logo, le synopsis et cinq lignes de menu
+ * dépassaient, la section grandissait au-delà de la fenêtre, et cette « page unique » devenait
+ * elle-même défilante. Remonter depuis les titres similaires ne ramenait donc pas en haut mais
+ * quelque part au milieu, logo collé au bouton Retour.
+ *
+ * `h-full` la fixe à exactement une fenêtre. Ce qu'il faut alors, c'est que le contenu sache
+ * rétrécir : les valeurs ci-dessous se réduisent par paliers de hauteur de fenêtre, plutôt que
+ * de compter sur une largeur qui ne dit rien de la place verticale disponible.
+ */
+export const SECTION_CLASS =
+  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-10 pt-16 " +
+  "[@media(min-height:820px)]:pb-16 [@media(min-height:820px)]:pt-28";
+
+/** Le logo : plus discret quand l'écran est court, sans jamais disparaître. */
+export const LOGO_CLASS =
+  "mb-1 max-h-14 w-auto max-w-full object-contain " +
+  "[@media(min-height:700px)]:max-h-20 [@media(min-height:900px)]:max-h-28";
+
+/** Le synopsis : trois lignes quand il y a la place, deux sinon. */
+export const OVERVIEW_CLASS =
+  "line-clamp-2 text-sm text-white/90 drop-shadow-sm sm:text-base [@media(min-height:760px)]:line-clamp-3";
+
+/** La distribution : la première chose qu'on sacrifie quand la place manque. */
+export const CAST_CLASS = "hidden truncate text-xs text-white/60 [@media(min-height:700px)]:block";
+
+/** L'espacement de la colonne, resserré sur un écran court. */
+export const COLUMN_GAP = "gap-3 [@media(min-height:820px)]:gap-4";
