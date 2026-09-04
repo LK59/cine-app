@@ -1,6 +1,7 @@
-// v8: flushes any RSC payloads cached by earlier versions (see the fetch handler — they are no
-// longer intercepted at all, but ones already stored would otherwise linger).
-const CACHE_NAME = "cine-app-v8";
+// v9: flushes the HTML documents earlier versions stored. They are no longer cached at all — see
+// the fetch handler — and the ones already saved have to go with them, or a client would keep
+// being handed a page built by a previous deploy.
+const CACHE_NAME = "cine-app-v9";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {
@@ -42,14 +43,34 @@ self.addEventListener("fetch", (event) => {
       caches.match(event.request).then((cached) => {
         if (cached) return cached;
         return fetch(event.request).then((response) => {
+          if (!response.ok) return response;
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, copy))
+            .catch(() => {});
           return response;
         });
       })
     );
     return;
   }
+
+  /**
+   * Les documents HTML ne sont pas mis en cache — ils sont seulement servis depuis le réseau.
+   *
+   * Ils l'étaient, et deux choses en découlaient. La première : une page mise en cache par un
+   * déploiement se retrouvait servie à un client qui exécute le suivant, dont les fragments
+   * JavaScript ne correspondent plus — c'est la famille d'erreurs d'hydratation de React, dont
+   * le #419 relevé au retour depuis un titre similaire. La seconde : Next diffuse son HTML en
+   * flux, et une navigation abandonnée en cours de route laisse une réponse tronquée, qu'on
+   * s'empressait d'enregistrer telle quelle. Une frontière Suspense jamais refermée, relue plus
+   * tard, donne exactement la même erreur.
+   *
+   * Hors ligne, ces pages retombent sur `offline.html`, ce qu'elles faisaient déjà lorsque rien
+   * n'avait encore été mis en cache.
+   */
+  const isDocument = event.request.mode === "navigate";
 
   // Network-first for everything else: this is a live dashboard, HTML/data
   // must stay fresh. We only fall back to cache when the network is
@@ -58,14 +79,22 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
+        // Une réponse d'erreur n'a rien à faire en cache : la garder revient à servir l'erreur
+        // encore et encore une fois le réseau revenu.
+        if (isDocument || !response.ok) return response;
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        // `.catch` : un corps interrompu fait échouer l'écriture, et une promesse rejetée sans
+        // personne pour l'attraper remonte comme une erreur du service worker.
+        caches
+          .open(CACHE_NAME)
+          .then((cache) => cache.put(event.request, copy))
+          .catch(() => {});
         return response;
       })
       .catch(() =>
         caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          if (event.request.mode === "navigate") {
+          if (cached && !isDocument) return cached;
+          if (isDocument) {
             return caches
               .match("/offline.html")
               .then((offline) => offline ?? new Response("Offline", { status: 503 }));
