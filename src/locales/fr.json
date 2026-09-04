@@ -852,8 +852,7 @@
       "title": "Lecteur legacy",
       "subtitle": "Repasser par le serveur pour la lecture",
       "enable": "Utiliser le lecteur legacy",
-      "enableDesc": "Par défaut, les films sont lus directement dans le navigateur, sans rien demander au serveur. Cette option repasse par l'ancien chemin : le serveur négocie le flux et transcode si nécessaire. Plus lent à démarrer et coûteux pour le serveur, mais c'est le chemin éprouvé — à activer si vous rencontrez un problème de lecture.",
-      "note": "Désactivé par défaut. Chaque compte choisit pour lui-même."
+      "enableDesc": "Par défaut, les films sont lus directement dans le navigateur, sans rien demander au serveur. Cette option repasse par l'ancien chemin : le serveur négocie le flux et transcode si nécessaire. Plus lent à démarrer et coûteux pour le serveur, mais c'est le chemin éprouvé — à activer si vous rencontrez un problème de lecture."
     }
   },
   "watchlist": {

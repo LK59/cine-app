@@ -852,8 +852,7 @@
       "title": "Alter Player",
       "subtitle": "Wiedergabe wieder über den Server",
       "enable": "Alten Player verwenden",
-      "enableDesc": "Standardmäßig werden Filme direkt im Browser abgespielt, ohne den Server um irgendetwas zu bitten. Diese Option kehrt zum alten Weg zurück: Der Server handelt den Stream aus und transkodiert, wenn es sein muss. Langsamer beim Start und teuer für den Server, aber der erprobte Weg — einschalten, wenn es Probleme bei der Wiedergabe gibt.",
-      "note": "Standardmäßig aus. Jedes Konto entscheidet für sich selbst."
+      "enableDesc": "Standardmäßig werden Filme direkt im Browser abgespielt, ohne den Server um irgendetwas zu bitten. Diese Option kehrt zum alten Weg zurück: Der Server handelt den Stream aus und transkodiert, wenn es sein muss. Langsamer beim Start und teuer für den Server, aber der erprobte Weg — einschalten, wenn es Probleme bei der Wiedergabe gibt."
     }
   },
   "watchlist": {

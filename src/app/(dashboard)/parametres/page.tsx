@@ -513,7 +513,6 @@ function LegacyPlayerSection() {
           <div>
             <p className="text-sm font-medium text-white">{t("settings.legacyPlayer.enable")}</p>
             <p className="mt-1 text-xs leading-5 text-slate-500">{t("settings.legacyPlayer.enableDesc")}</p>
-            <p className="mt-1 text-xs text-slate-600">{t("settings.legacyPlayer.note")}</p>
           </div>
           <Toggle checked={enabled} onChange={update} />
         </div>
