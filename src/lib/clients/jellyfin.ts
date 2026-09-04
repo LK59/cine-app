@@ -73,6 +73,11 @@ export interface JellyfinMediaStream {
   Width?: number;
   Height?: number;
   Channels?: number;
+  // Jellyfin 10.10 et suivants. Absent des versions antérieures, d'où l'optionnel : les
+  // appelants retombent alors sur ce que la piste dit d'elle-même dans son nom.
+  IsHearingImpaired?: boolean;
+  IsForced?: boolean;
+  Title?: string;
   AverageFrameRate?: number;
   DeliveryUrl?: string;
 }

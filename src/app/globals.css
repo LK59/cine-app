@@ -221,6 +221,20 @@
   @apply rounded-xl border border-white/8 bg-white/4 backdrop-blur-xl shadow-glow;
 }
 
+/**
+ * La même carte, pour un contenu qui ne laisse rien voir derrière lui — une affiche.
+ *
+ * `card` floute ce qui est derrière elle. Sur une carte remplie par une affiche opaque ce flou
+ * ne se voit nulle part, mais il coûte une couche de composition par carte, que le navigateur
+ * rééchantillonne dès que la carte change d'ombre. C'est ce qui faisait clignoter une nuance de
+ * noir sur la carte survolée d'un carrousel, et sur elle seule. La couleur ci-dessous est
+ * exactement celle que `bg-white/4` donne au-dessus du fond de l'app, en opaque.
+ */
+@utility card-solid {
+  @apply rounded-xl border border-white/8 shadow-glow;
+  background-color: color-mix(in srgb, #ffffff 4%, #0a0a0c);
+}
+
 @utility glass-panel {
   @apply border border-white/10 bg-[#0a0a0c]/72 backdrop-blur-2xl;
 }

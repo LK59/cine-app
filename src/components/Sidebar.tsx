@@ -77,7 +77,9 @@ export function Sidebar() {
       >
         {/* Les mêmes groupes que le téléphone, avec leur intitulé : seize entrées d'affilée sans
             respiration, c'est une liste où l'on cherche au lieu de reconnaître. */}
-        <div className="pb-2">
+        {/* pt-3 : le masque ci-dessus efface les douze premiers pixels pour dire « ça défile ».
+            Le premier intitulé de groupe tombait pile dedans et s'affichait à moitié effacé. */}
+        <div className="pt-3 pb-2">
           {NAV_GROUPS.map((group, groupIndex) => (
           <div key={group.titleKey} className={groupIndex > 0 ? "mt-4" : ""}>
           <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-wider text-slate-600">

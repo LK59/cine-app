@@ -39,6 +39,9 @@ import {
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { MoreMenu } from "@/components/MoreMenu";
+import { FileTrackChips } from "@/components/FileTrackChips";
+import { prettyCodec } from "@/lib/fileTracks";
+import type { FileStreamsResponse } from "@/app/api/jellyfin/streams/[itemId]/route";
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { canAutoSearchMovie } from "@/lib/mediaPermissions";
@@ -105,6 +108,15 @@ export default function RadarrMovieDetailPage() {
       ? `/api/jellyfin/items?tmdbId=${movie.tmdbId ?? 0}&type=Movie&title=${encodeURIComponent(movie.title)}&year=${movie.year ?? ""}${movie.imdbId ? `&imdbId=${movie.imdbId}` : ""}`
       : null,
     fetcher
+  );
+
+  // Les pistes du fichier, telles que le conteneur les déclare. Bazarr les aplatit en « nom +
+  // forced + hi » et rend quatre pistes indistinguables ; Jellyfin garde leurs titres, leurs
+  // codecs et la distinction interne/externe.
+  const { data: streams } = useSWR<FileStreamsResponse>(
+    jfData?.item ? `/api/jellyfin/streams/${jfData.item.Id}` : null,
+    fetcher,
+    { revalidateOnFocus: false }
   );
 
   const { data: jsData, mutate: mutateJs } = useSWR<{ status: number }>(
@@ -555,8 +567,10 @@ export default function RadarrMovieDetailPage() {
                   <p className="text-white">
                     {movie.movieFile.quality?.quality?.name} · {formatBytes(movie.movieFile.size)}
                   </p>
+                  {/* « x265 » est le nom d'un encodeur, pas d'un codec : le lecteur et son
+                      panneau disent « HEVC » depuis toujours, la fiche disait autre chose. */}
                   <p className="text-slate-500">
-                    {movie.movieFile.mediaInfo?.videoCodec}
+                    {prettyCodec(streams?.video?.codec ?? movie.movieFile.mediaInfo?.videoCodec)}
                     {movie.movieFile.mediaInfo?.resolution ? ` · ${movie.movieFile.mediaInfo.resolution}` : ""}
                     {movie.movieFile.mediaInfo?.audioCodec ? ` · ${movie.movieFile.mediaInfo.audioCodec}` : ""}
                     {movie.movieFile.mediaInfo?.videoDynamicRangeType
@@ -576,7 +590,9 @@ export default function RadarrMovieDetailPage() {
                 </button>
               )}
             </div>
-            {(info?.subtitles?.length || info?.audioLanguages?.length) ? (
+            {streams && (streams.audio.length > 0 || streams.subtitles.length > 0) ? (
+              <FileTrackChips audio={streams.audio} subtitles={streams.subtitles} />
+            ) : (info?.subtitles?.length || info?.audioLanguages?.length) ? (
               <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-white/5 pt-3">
                 {info.audioLanguages.length > 0 && (
                   <div className="flex items-center gap-2">

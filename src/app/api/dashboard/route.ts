@@ -148,7 +148,8 @@ async function probeServices(session: SessionPayload | null): Promise<ServiceSta
     probe("jackett", async () => {
       if (!config.jackett.apiKey) throw notConfigured("JACKETT_API_KEY");
       const indexers = await jackett.getIndexers();
-      return { detail: `${indexers.length} indexeurs`, stats: { Indexeurs: indexers.length } };
+      // Pas de `detail` : il répétait mot pour mot le chiffre juste en dessous.
+      return { stats: { Indexeurs: indexers.length } };
     }),
     probe("jellyfin", async () => {
       if (!config.jellyfin.apiKey) throw notConfigured("JELLYFIN_API_KEY");

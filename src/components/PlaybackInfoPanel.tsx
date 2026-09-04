@@ -105,10 +105,13 @@ export function PlaybackInfoPanel({
       // z-20 : au-dessus de la nappe transparente que PlayerControls étend sur tout l'écran pour
       // capter les pointeurs (z-10). Sans cela le panneau se peint par-dessus mais aucun clic ne
       // l'atteint — ni la fermeture, ni le défilement.
-      className="player-panel pointer-events-auto absolute z-20 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] origin-top-right animate-fade-in-scale overflow-y-auto rounded-2xl p-4 text-xs text-slate-300"
+      className="player-panel pointer-events-auto absolute z-20 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] origin-top-left animate-fade-in-scale overflow-y-auto rounded-2xl p-4 text-xs text-slate-300"
       style={{
         top: "max(4rem, calc(env(safe-area-inset-top) + 5rem))",
-        right: "max(1rem, env(safe-area-inset-right))",
+        // À gauche, et non à droite : les menus de pistes audio et de sous-titres s'ouvrent
+        // depuis le bord droit des commandes, et le panneau les recouvrait — impossible de
+        // changer de langue en gardant les infos sous les yeux.
+        left: "max(1rem, env(safe-area-inset-left))",
       }}
       onClick={(e) => e.stopPropagation()}
     >

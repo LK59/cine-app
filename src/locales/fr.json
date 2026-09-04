@@ -29,7 +29,7 @@
     "discover": "Découverte",
     "radarr": "Films · Radarr",
     "sonarr": "Séries · Sonarr",
-    "qbittorrent": "Téléchargements · qBittorrent",
+    "qbittorrent": "Téléchargements",
     "settings": "Paramètres",
     "stats": "Statistiques",
     "bazarr": "Sous-titres · Bazarr",
@@ -129,7 +129,9 @@
       "dismiss": "Plus tard"
     },
     "moreOptions": "Plus d'options",
-    "missing": "Manquant"
+    "missing": "Manquant",
+    "online": "En ligne",
+    "offline": "Hors ligne"
   },
   "dashboard": {
     "resumeWatching": "Continuer à regarder",
@@ -154,7 +156,9 @@
     "activityTitle": "Activité récente",
     "noActivity": "Aucune activité récente.",
     "servicesStatus": "Statut des services",
-    "unavailableWord": "indisponible"
+    "unavailableWord": "indisponible",
+    "servicesAllUp": "{n} services · tous en ligne",
+    "servicesSomeDown": "{n} hors ligne sur {total}"
   },
   "serviceStats": {
     "movies": "Films",

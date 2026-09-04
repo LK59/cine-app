@@ -264,7 +264,7 @@ export default function SonarrPage() {
                       data-nav-idx={i}
                       onMouseEnter={() => prefetchSeriesDetail(show.id)}
                       onFocus={() => prefetchSeriesDetail(show.id)}
-                      className={`card group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
+                      className={`card-solid group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
                     >
                       <PosterImage src={poster(show)} alt={show.title} />
                       {show.tmdbId != null && (
@@ -426,7 +426,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
             const inLibrary = Boolean(show.id);
             const isAdded = added.has(show.tvdbId);
             return (
-              <div key={show.tvdbId} className="card overflow-hidden">
+              <div key={show.tvdbId} className="card-solid overflow-hidden">
                 <div className="relative aspect-2/3 bg-slate-800">
                   {show.remotePoster ? (
                     // eslint-disable-next-line @next/next/no-img-element

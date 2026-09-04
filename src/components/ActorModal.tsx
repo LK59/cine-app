@@ -135,7 +135,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
   }
 
   const inner = (
-    <div className="card flex flex-col overflow-hidden transition hover:ring-1 hover:ring-accent-500/40">
+    <div className="card-solid flex flex-col overflow-hidden transition hover:ring-1 hover:ring-accent-500/40">
       <div className="relative aspect-2/3 bg-slate-800">
         {credit.posterPath ? (
           <Image src={`${TMDB_IMAGE_BASE}/w185${credit.posterPath}`} alt={credit.title} fill sizes="120px" className="object-cover" />

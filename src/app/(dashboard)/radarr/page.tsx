@@ -251,7 +251,7 @@ export default function RadarrPage() {
                       data-nav-idx={i}
                       onMouseEnter={() => prefetchMovieDetail(movie.id)}
                       onFocus={() => prefetchMovieDetail(movie.id)}
-                      className={`card group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
+                      className={`card-solid group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
                     >
                       <PosterImage src={poster(movie)} alt={movie.title} />
                       {movie.ratings?.imdb?.value != null && (
@@ -412,7 +412,7 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
             const inLibrary = Boolean(movie.id);
             const isAdded = added.has(movie.tmdbId);
             return (
-              <div key={movie.tmdbId} className="card overflow-hidden">
+              <div key={movie.tmdbId} className="card-solid overflow-hidden">
                 <div className="relative aspect-2/3 bg-slate-800">
                   {movie.remotePoster ? (
                     // eslint-disable-next-line @next/next/no-img-element

@@ -260,7 +260,7 @@ export default function JellyfinPage() {
                     {playback.recentMovies.map((m) => (
                       <div
                         key={m.id}
-                        className="card relative w-32 shrink-0 overflow-hidden hover:ring-1 hover:ring-accent-500/40 touch-manipulation"
+                        className="card-solid relative w-32 shrink-0 overflow-hidden hover:ring-1 hover:ring-accent-500/40 touch-manipulation"
                       >
                         <PlayButton
                           itemId={m.id}

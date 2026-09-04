@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
-import { StatusBadge } from "@/components/StatusBadge";
 import { LoadingState, EmptyState } from "@/components/StateViews";
 import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight, CirclePlus } from "lucide-react";
 import { useRole } from "@/lib/useRole";
@@ -151,14 +150,14 @@ function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
           data-tv-card
           data-tv-row="resume"
           data-tv-col={index}
-          className={`card w-36 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 sm:w-40 touch-manipulation select-none ${TV_NAV_RING}`}
+          className={`card-solid w-36 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 sm:w-40 touch-manipulation select-none ${TV_NAV_RING}`}
         >
           {cardBody}
         </Link>
       ) : (
         <div
           {...lp}
-          className="card w-36 shrink-0 overflow-hidden sm:w-40 touch-manipulation select-none"
+          className="card-solid w-36 shrink-0 overflow-hidden sm:w-40 touch-manipulation select-none"
         >
           {cardBody}
         </div>
@@ -191,7 +190,7 @@ function RecentMovieCard({ m, index }: { m: RecentItem; index: number }) {
         data-tv-card
         data-tv-row="recent-movies"
         data-tv-col={index}
-        className={`card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
+        className={`card-solid w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
       >
         <div className="relative">
           <PosterImage src={m.posterUrl} alt={m.title} />
@@ -229,7 +228,7 @@ function RecentSeriesCard({ s, index }: { s: RecentItem; index: number }) {
         data-tv-card
         data-tv-row="recent-series"
         data-tv-col={index}
-        className={`card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
+        className={`card-solid w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
       >
         <div className="relative">
           <PosterImage src={s.posterUrl} alt={s.title} />
@@ -351,7 +350,7 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
       data-tv-card
       data-tv-row="watchlist"
       data-tv-col={index}
-      className={`card w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
+      className={`card-solid w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
     >
       {body}
     </Link>
@@ -492,47 +491,108 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
   );
 }
 
+/**
+ * L'état de la pile, en un panneau plutôt qu'en neuf briques.
+ *
+ * C'était une grille de tuiles : chacune portait son cadre, son icône encadrée, sa pastille
+ * « En ligne » qui passait à la ligne faute de place, et ses chiffres dans une grille à deux
+ * colonnes dont les intitulés se coupaient en trois. Comme les lignes d'une grille s'alignent
+ * en hauteur, la tuile la plus fournie fixait la hauteur des autres : Bazarr et Jackett étaient
+ * aux trois quarts vides. Et rien ne s'alignait d'une tuile à l'autre, alors que ces neuf
+ * services disent exactement la même chose — un nom, une version, des chiffres, un état.
+ *
+ * Donc : une seule surface, une ligne par service, des colonnes qui se répondent d'une ligne à
+ * l'autre. L'état tient dans une pastille de couleur, dit une fois en clair par l'en-tête, et
+ * la ligne d'un service tombé se colore en entier avec son erreur à la place de ses chiffres.
+ */
 function ServicesSection({ services }: { services: ServiceStatus[] }) {
+  const t = useT();
+  const known = services.filter((s) => SERVICE_META[s.name]);
+  const down = known.filter((s) => !s.up);
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {services.map((service) => {
-        const meta = SERVICE_META[service.name];
-        if (!meta) return null;
-        const Icon = meta.icon;
-        const Tag = (meta.href ? Link : "div") as React.ElementType;
-        return (
-          <Tag key={service.name} {...(meta.href ? { href: meta.href } : {})}
-            className={`card flex flex-col gap-3 p-4 ${meta.href ? "transition-transform hover:-translate-y-0.5" : ""}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-white/5 p-2 text-accent-400 ring-1 ring-inset ring-white/10">
-                  <Icon size={20} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">{meta.label}</p>
-                  {service.up && service.detail && <p className="text-xs text-slate-500">{service.detail}</p>}
-                </div>
+    <div className="card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+        <p className="text-sm font-semibold text-white">{t("dashboard.servicesStatus")}</p>
+        <p className={`text-xs ${down.length > 0 ? "text-red-400" : "text-slate-500"}`}>
+          {down.length === 0
+            ? t("dashboard.servicesAllUp", { n: String(known.length) })
+            : t("dashboard.servicesSomeDown", { n: String(down.length), total: String(known.length) })}
+        </p>
+      </div>
+
+      <div className="divide-y divide-white/5">
+        {known.map((service) => {
+          const meta = SERVICE_META[service.name]!;
+          const Icon = meta.icon;
+          const Tag = (meta.href ? Link : "div") as React.ElementType;
+          const entries = Object.entries(service.stats ?? {});
+          return (
+            <Tag
+              key={service.name}
+              {...(meta.href ? { href: meta.href } : {})}
+              className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
+                service.up ? "" : "bg-red-500/[0.04]"
+              } ${meta.href ? "hover:bg-white/[0.04]" : ""}`}
+            >
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${service.up ? "bg-emerald-400" : "bg-red-400"}`}
+              />
+              <Icon size={15} className={`shrink-0 ${service.up ? "text-slate-400" : "text-red-400/80"}`} />
+
+              {/* Largeur fixe à partir de sm : c'est ce qui met les chiffres de neuf services
+                  sur la même colonne, ce qu'une grille de tuiles ne peut pas faire. */}
+              <div className="min-w-0 shrink-0 sm:w-44">
+                <p className="truncate text-[13px] font-medium leading-tight text-white">{meta.label}</p>
+                {service.detail && (
+                  <p className="truncate text-[11px] leading-tight text-slate-500">{service.detail}</p>
+                )}
               </div>
-              <StatusBadge up={service.up} />
+
+              {service.up ? (
+                <div className="hidden min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 sm:flex">
+                  {entries.map(([label, value]) => (
+                    <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
+                      <span className="text-[13px] font-semibold tabular-nums text-white">{value}</span>
+                      <span className="text-[11px] text-slate-500">{label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="min-w-0 flex-1 truncate text-[11px] text-red-400" title={service.detail ?? undefined}>
+                  {service.detail}
+                </p>
+              )}
+
+              <span className="ml-auto shrink-0 sr-only">
+                {service.up ? t("common.online") : t("common.offline")}
+              </span>
+              {meta.href && <ChevronRight size={14} className="shrink-0 text-slate-600" />}
+            </Tag>
+          );
+        })}
+      </div>
+
+      {/* Sur téléphone les chiffres passent sous leur ligne : les mettre à côté du nom
+          reviendrait à les couper en trois, ce que faisaient les tuiles. */}
+      <div className="divide-y divide-white/5 border-t border-white/5 sm:hidden">
+        {known
+          .filter((s) => s.up && Object.keys(s.stats ?? {}).length > 0)
+          .map((service) => (
+            <div key={service.name} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2">
+              <span className="w-full text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                {SERVICE_META[service.name]!.label}
+              </span>
+              {Object.entries(service.stats ?? {}).map(([label, value]) => (
+                <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
+                  <span className="text-[13px] font-semibold tabular-nums text-white">{value}</span>
+                  <span className="text-[11px] text-slate-500">{label}</span>
+                </span>
+              ))}
             </div>
-            {service.up && service.stats && (
-              <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
-                {Object.entries(service.stats).map(([label, value]) => (
-                  <div key={label}>
-                    <p className="text-base font-semibold text-white">{value}</p>
-                    <p className="text-[11px] text-slate-500">{label}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!service.up && service.detail && (
-              <p className="truncate border-t border-white/5 pt-3 text-xs text-red-400" title={service.detail}>
-                {service.detail}
-              </p>
-            )}
-          </Tag>
-        );
-      })}
+          ))}
+      </div>
     </div>
   );
 }
