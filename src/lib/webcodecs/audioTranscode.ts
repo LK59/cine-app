@@ -124,11 +124,38 @@ async function firstSupported(codec: string, sampleRate: number, channels: numbe
  * in a MediaSource. Firefox encodes Opus and takes it; Safari encodes Opus and does not.
  */
 export async function chooseTranscodeCodec(sampleRate: number, channels: number): Promise<string | null> {
-  for (const codec of [TARGET_CODEC, FALLBACK_CODEC]) {
-    if (!containerAccepts(`audio/mp4; codecs="${codec}"`)) continue;
-    if (await firstSupported(codec, sampleRate, channels)) {
-      chosenTarget = codec;
-      return codec;
+  return (await chooseTranscodePlan(sampleRate, channels))?.codec ?? null;
+}
+
+/** Ce qui sera livré à la place de la piste : un codec, et un nombre de canaux. */
+export interface TranscodePlan {
+  codec: string;
+  /** Peut être inférieur à celui de la source — voir la descente ci-dessous. */
+  channels: number;
+}
+
+/**
+ * Le même nombre de canaux si le navigateur sait l'encoder, sinon le plus proche qu'il sait.
+ *
+ * Mesuré sur un Chrome Windows : il encode l'AAC en 2 et en 6 canaux, pas en 8. Une piste
+ * E-AC3 7.1 — le cas de « Mourir peut attendre », dont la piste française est en 7.1 Atmos —
+ * n'avait donc aucun remplaçant, le remultiplexage était refusé, et la lecture tombait sur le
+ * chemin canevas : décodage logiciel d'un 4K HDR, et pour une source Dolby Vision une image que
+ * ce navigateur ne sait pas convertir. Le même fichier se lit nativement sur iPhone, qui accepte
+ * l'E-AC3 tel quel.
+ *
+ * Descendre d'un 7.1 à un 5.1 coûte deux canaux d'ambiance ; le chemin canevas coûtait l'image.
+ */
+export async function chooseTranscodePlan(sampleRate: number, channels: number): Promise<TranscodePlan | null> {
+  // Le compte de la source d'abord, puis les deux dispositions qu'un navigateur sait produire.
+  const wanted = [channels, ...[6, 2].filter((n) => n < channels)];
+  for (const target of wanted) {
+    for (const codec of [TARGET_CODEC, FALLBACK_CODEC]) {
+      if (!containerAccepts(`audio/mp4; codecs="${codec}"`)) continue;
+      if (await firstSupported(codec, sampleRate, target)) {
+        chosenTarget = codec;
+        return { codec, channels: target };
+      }
     }
   }
   return null;
@@ -192,10 +219,15 @@ export class AudioTranscoder {
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId);
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
-    const target = await chooseTranscodeCodec(sampleRate, numberOfChannels);
-    if (!target) {
+    const plan = await chooseTranscodePlan(sampleRate, numberOfChannels);
+    if (!plan) {
       decoder.close();
       throw new Error(`Ce navigateur ne sait produire aucun codec audio en ${numberOfChannels} canaux.`);
+    }
+    const target = plan.codec;
+    const outChannels = plan.channels;
+    if (outChannels !== numberOfChannels) {
+      trace(`transcodage audio : ${numberOfChannels} canaux non encodables, descente à ${outChannels}`);
     }
 
     let description: Uint8Array | null = null;
@@ -221,7 +253,8 @@ export class AudioTranscoder {
     });
     // The shape this browser accepted when it was asked, a moment ago.
     const config =
-      (await firstSupported(target, sampleRate, numberOfChannels)) ?? { codec: target, sampleRate, numberOfChannels };
+      (await firstSupported(target, sampleRate, outChannels)) ??
+      { codec: target, sampleRate, numberOfChannels: outChannels };
     encoder.configure(config);
     trace(`transcodage audio : encodeur configuré (${target}), amorçage à ${fromSeconds.toFixed(1)} s`);
 
@@ -241,7 +274,7 @@ export class AudioTranscoder {
         for (let i = 0; i < 8; i++) {
           const next = await primer.next();
           if (next.done) return;
-          encode(encoder, next.value);
+          encode(encoder, next.value, outChannels);
         }
         for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
           await new Promise((resolve) => setTimeout(resolve, 5));
@@ -316,7 +349,8 @@ export class AudioTranscoder {
     );
 
     const entryRate = actual?.sampleRate ?? sampleRate;
-    const entryChannels = actual?.channels ?? numberOfChannels;
+    // Ce que l'encodeur produit réellement, qui peut être moins que la source — voir la descente.
+    const entryChannels = actual?.channels ?? outChannels;
     const codecString = target === TARGET_CODEC ? (actual ? `mp4a.40.${actual.objectType}` : TARGET_CODEC) : target;
 
     const sampleEntry =
@@ -337,7 +371,7 @@ export class AudioTranscoder {
       encoder,
       sampleEntry,
       sampleRate,
-      numberOfChannels,
+      outChannels,
       codecString
     );
     sink.frame = (frame) => transcoder.collect(frame);
@@ -393,7 +427,7 @@ export class AudioTranscoder {
         break;
       }
       this.lastDecodedSeconds = next.value.timestampSeconds;
-      encode(this.encoder, next.value);
+      encode(this.encoder, next.value, this.channels);
     }
 
     // At the end of the file there is nothing left to feed, so the remainder has to be asked for.
@@ -460,15 +494,56 @@ function toFrame(chunk: EncodedAudioChunk): TranscodedFrame {
   return { data, timestampUs: chunk.timestamp, durationUs: chunk.duration ?? 0 };
 }
 
+/**
+ * Ramène des plans décodés au nombre de canaux que l'encodeur accepte.
+ *
+ * L'ordre des canaux d'un flux AC-3/E-AC3 est L R C LFE Ls Rs Lrs Rrs. Passer d'un 7.1 à un 5.1
+ * revient donc à replier les deux canaux arrière sur les deux canaux d'ambiance ; le coefficient
+ * de 0,707 (soit 1/√2) est celui qui conserve la puissance en additionnant deux sources
+ * décorrélées, et non leur amplitude — additionner brutalement saturerait.
+ *
+ * Le repli vers deux canaux est la matrice de mixage ITU-R BS.775, celle qu'appliquent les
+ * décodeurs matériels : le centre et l'ambiance entrent à −3 dB dans chaque côté, la basse
+ * fréquence est écartée plutôt que sommée, où elle ne ferait que de la boue.
+ */
+function fold(planes: Float32Array[], to: number): Float32Array[] {
+  const from = planes.length;
+  if (to >= from) return planes;
+  const [L, R, C, , Ls, Rs, Lrs, Rrs] = planes;
+  const mix = (...parts: [Float32Array | undefined, number][]) => {
+    const out = new Float32Array(planes[0].length);
+    for (const [plane, gain] of parts) {
+      if (!plane) continue;
+      for (let i = 0; i < out.length; i++) out[i] += plane[i] * gain;
+    }
+    return out;
+  };
+
+  if (from === 8 && to === 6) {
+    return [L, R, C, planes[3], mix([Ls, 0.707], [Lrs, 0.707]), mix([Rs, 0.707], [Rrs, 0.707])];
+  }
+  if (to === 2) {
+    const back = from >= 8 ? [[Lrs, 0.5], [Rrs, 0.5]] : [];
+    return [
+      mix([L, 1], [C, 0.707], [Ls, 0.707], ...(back.slice(0, 1) as [Float32Array | undefined, number][])),
+      mix([R, 1], [C, 0.707], [Rs, 0.707], ...(back.slice(1, 2) as [Float32Array | undefined, number][])),
+    ];
+  }
+  // Une disposition qu'on ne sait pas replier proprement : on garde les premiers canaux plutôt
+  // que d'inventer une matrice, ce qui vaut toujours mieux qu'un silence.
+  return planes.slice(0, to);
+}
+
 /** Interleaves the decoder's planes, which is the layout an encoder takes. */
-function encode(encoder: AudioEncoder, decoded: DecodedAudio): void {
-  const channels = decoded.planes.length;
-  const frames = decoded.planes[0]?.length ?? 0;
+function encode(encoder: AudioEncoder, decoded: DecodedAudio, outChannels?: number): void {
+  const planes = outChannels ? fold(decoded.planes, outChannels) : decoded.planes;
+  const channels = planes.length;
+  const frames = planes[0]?.length ?? 0;
   if (frames === 0) return;
 
   const interleaved = new Float32Array(frames * channels);
   for (let channel = 0; channel < channels; channel++) {
-    const plane = decoded.planes[channel];
+    const plane = planes[channel];
     for (let i = 0; i < frames; i++) interleaved[i * channels + channel] = plane[i];
   }
 

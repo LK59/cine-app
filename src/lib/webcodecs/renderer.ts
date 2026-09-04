@@ -44,14 +44,18 @@ export interface FrameRenderer {
 // ── SDR ──────────────────────────────────────────────────────────────────────
 
 class CanvasRenderer implements FrameRenderer {
-  private readonly ctx: CanvasRenderingContext2D | null;
+  private readonly ctx: CanvasRenderingContext2D;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
-    this.ctx = canvas.getContext("2d", { alpha: false });
+    // Un canevas qui porte déjà un contexte WebGL n'en rendra jamais un 2D : il répond `null`.
+    // Signalé plutôt que gardé pour soi — un rendu qui ne dessine rien est indiscernable d'un
+    // film noir, et c'est ainsi que le repli passait inaperçu.
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("Contexte 2D indisponible sur ce canevas.");
+    this.ctx = ctx;
   }
 
   draw(frame: VideoFrame): void {
-    if (!this.ctx) return;
     fitCanvas(this.canvas, frame);
     this.ctx.drawImage(frame, 0, 0, this.canvas.width, this.canvas.height);
   }
@@ -392,15 +396,26 @@ class FallbackRenderer implements FrameRenderer {
     }
   }
 
+  /**
+   * Le repli se fait sur le canevas déjà en place, jamais sur un autre.
+   *
+   * Il remplaçait le canevas par un clone, puis dessinait sur l'original — devenu détaché du
+   * document. Tout ce qui suivait allait donc dans le vide : écran noir. Et comme ce canevas est
+   * rendu par React, l'arracher du DOM laissait React réconcilier autour d'un nœud qui n'y était
+   * plus, ce qui faisait clignoter les commandes par-dessus. Deux symptômes, une seule cause.
+   *
+   * Le clone n'existait que pour un cas : un contexte 2D ne s'obtient pas sur un canevas qui
+   * porte déjà du WebGL. Or le repli d'une source HDR est lui-même du WebGL — `getContext` rend
+   * alors le contexte existant, et le même élément convient. Reste le cas où il ne convient
+   * pas : il est dit, et la lecture s'arrête proprement au lieu de continuer sur une image noire.
+   */
   private downgrade(error: unknown): void {
     if (this.fellBack) return;
     this.fellBack = true;
     this.active.destroy();
-    // A fresh canvas context: the element already holds a WebGL context, and a canvas cannot
-    // hand out a 2D one afterwards.
-    this.canvas.replaceWith(this.canvas.cloneNode() as HTMLCanvasElement);
-    this.active = this.makeFallback(this.canvas);
     this.onFallback(error instanceof Error ? error.message : "conversion HDR interrompue");
+    this.active = this.makeFallback(this.canvas);
+    return;
   }
 
   destroy(): void {
@@ -532,4 +547,4 @@ export function createRenderer(
   );
 }
 
-export const __testing = { ToneMapRenderer, CanvasRenderer };
+export const __testing = { ToneMapRenderer, CanvasRenderer, FallbackRenderer };

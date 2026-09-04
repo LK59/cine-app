@@ -26,7 +26,7 @@ import { unsupportedReason } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { canRebuildAudioBuffer, playabilityOf } from "./mseSource";
 import { trace } from "./trace";
-import { canEncodeAac, chooseTranscodeCodec } from "./audioTranscode";
+import { chooseTranscodePlan, chooseTranscodeCodec } from "./audioTranscode";
 import {
   Remuxer,
   audioDelivery,
@@ -116,8 +116,14 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     const rate = audioTrack.audio?.sampleRate ?? 48000;
     const channels = audioTrack.audio?.channels ?? 2;
     trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on demande l'AAC en ${channels} canaux`);
-    if (!(await canEncodeAac(rate, channels))) {
-      return `ce navigateur n'accepte pas ${audioTrack.codecId} et ne sait produire aucun codec de remplacement en ${channels} canaux`;
+    const plan = await chooseTranscodePlan(rate, channels);
+    if (!plan) {
+      return `ce navigateur n'accepte pas ${audioTrack.codecId} et ne sait produire aucun codec de remplacement`;
+    }
+    if (plan.channels !== channels) {
+      // Deux canaux d'ambiance en moins valent mieux que le chemin canevas, qui décode un 4K HDR
+      // en logiciel et, sur une source Dolby Vision, ne sait pas convertir l'image.
+      trace(`chemin : ${channels} canaux non encodables ici, la piste sera livrée en ${plan.channels}`);
     }
   }
 
