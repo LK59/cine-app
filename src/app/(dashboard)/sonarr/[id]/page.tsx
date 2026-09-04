@@ -500,7 +500,7 @@ export default function SonarrSeriesDetailPage() {
         )}
         {canRequest && (
           <button
-            className="btn-secondary px-3"
+            className="btn-ghost px-3"
             onClick={requestSeries}
             disabled={requesting}
           >

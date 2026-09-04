@@ -1061,8 +1061,8 @@
     "loading": "Chargement de la saga…",
     "inLibrary": "Dans la bibliothèque ({n}/{total})",
     "toAdd": "À ajouter ({n})",
-    "addAllToWatchlist": "Tout ajouter à la watchlist",
-    "bulkAddedToast": "{n} films ajoutés à la watchlist"
+    "addAllToWatchlist": "Tout ajouter à ma liste",
+    "bulkAddedToast": "{n} films ajoutés à ma liste"
   },
   "mediaInfo": {
     "title": "Informations techniques",
