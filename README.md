@@ -548,7 +548,7 @@ It is the answer to the paragraph above: the transcoding cost is not reduced, it
 is not incurred. On this library it plays 4K Dolby Vision + HDR10+ HEVC with
 E-AC3 Atmos, on an iPhone, with nothing running on the server.
 
-**[Full technical documentation](src/lib/webcodecs/README.md)** - the three
+**[Full technical documentation](DOC-TECH.md)** - the three
 paths, how the remuxer reconstructs decode times, what a keyframe really is in
 Matroska (and why trusting the container is the single largest source of crashes
 this player had), how audio is delivered or re-encoded, what the server is still
