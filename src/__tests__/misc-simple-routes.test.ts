@@ -26,7 +26,7 @@ describe("GET /api/config/public", () => {
 
 describe("POST /api/cache/invalidate", () => {
   it("returns 403 for a non-admin session", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user" });
     const { POST } = await import("@/app/api/cache/invalidate/route");
     const res = await POST(fakeReq());
     expect(res.status).toBe(403);

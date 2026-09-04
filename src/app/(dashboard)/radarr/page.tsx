@@ -53,7 +53,7 @@ function decadeOf(year: number): DecadeFilter {
 export default function RadarrPage() {
   const t = useT();
   const { mutate } = useSWRConfig();
-  const { isGuest } = useRole();
+  const { isReadOnly } = useRole();
   const toast = useToast();
   const { data: movies, error, isLoading } = useSWR<RadarrMovie[]>("/api/radarr/movies", fetcher);
   const [showAdd, setShowAdd] = useState(false);
@@ -141,7 +141,7 @@ export default function RadarrPage() {
         title={t('radarr.pageTitle')}
         subtitle={movies ? t('radarr.subtitle', { n: movies.length }) : undefined}
         action={
-          !isGuest && (
+          !isReadOnly && (
             <button className="btn-primary" onClick={() => setShowAdd(true)}>
               <Plus size={16} /> {t('radarr.addMovie')}
             </button>

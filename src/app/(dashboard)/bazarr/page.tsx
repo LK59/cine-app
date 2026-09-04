@@ -26,7 +26,7 @@ interface ActiveSearch {
 const PAGE_SIZE = 25;
 
 export default function BazarrPage() {
-  const { isGuest } = useRole();
+  const { isReadOnly } = useRole();
   const t = useT();
   const [movieLength, setMovieLength] = useState(PAGE_SIZE);
   const [episodeLength, setEpisodeLength] = useState(PAGE_SIZE);
@@ -67,7 +67,7 @@ export default function BazarrPage() {
                         </p>
                       </div>
                     </div>
-                    {!isGuest && (
+                    {!isReadOnly && (
                       <button
                         className="btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() =>
@@ -119,7 +119,7 @@ export default function BazarrPage() {
                         </p>
                       </div>
                     </div>
-                    {!isGuest && (
+                    {!isReadOnly && (
                       <button
                         className="btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() =>

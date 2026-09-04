@@ -21,7 +21,7 @@ beforeEach(() => {
 
 describe("POST /api/admin/notifications/check", () => {
   it("returns 401 for a non-admin session", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "guest" });
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "user" });
     const { POST } = await import("@/app/api/admin/notifications/check/route");
     const res = await POST(fakeReq());
     expect(res.status).toBe(401);

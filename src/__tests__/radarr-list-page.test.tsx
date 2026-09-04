@@ -44,7 +44,7 @@ function renderPage() {
 
 describe("Radarr library page — 'Ajouter un film' guest gating", () => {
   it("admin sees the Ajouter button", async () => {
-    mockUseRole.mockReturnValue({ isGuest: false, role: "admin", jfId: null, jfUser: null });
+    mockUseRole.mockReturnValue({ isReadOnly: false, role: "admin", jfId: null, jfUser: null });
     mockEmptyLibrary();
     renderPage();
 
@@ -52,7 +52,7 @@ describe("Radarr library page — 'Ajouter un film' guest gating", () => {
   });
 
   it("guest never sees the Ajouter button — the direct-add flow bypasses Jellyseerr attribution entirely", async () => {
-    mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
+    mockUseRole.mockReturnValue({ isReadOnly: true, role: "user", jfId: "x", jfUser: "invite" });
     mockEmptyLibrary();
     renderPage();
 

@@ -20,6 +20,8 @@ export interface JellyfinItem {
     PlayCount: number;
     LastPlayedDate?: string;
     PlaybackPositionTicks?: number;
+    /** Présent dans la réponse dès que `Fields=UserData` est demandé — vérifié en direct. */
+    IsFavorite?: boolean;
   };
   ProviderIds?: { Tmdb?: string; Tvdb?: string; Imdb?: string };
   ImageTags?: { Primary?: string };
@@ -241,6 +243,34 @@ export const jellyfin = {
     }>(`${url}/Users/${userId}`, { headers: { "X-Emby-Token": token } }),
 
   /**
+   * Écrire ces mêmes préférences, avec le jeton de la personne.
+   *
+   * Jellyfin remplace la configuration entière : envoyer seulement les deux champs modifiés
+   * effacerait tout le reste. L'appelant relit donc la configuration courante et renvoie l'objet
+   * complet — voir la route, qui fait exactement ça.
+   */
+  updateUserConfiguration: (userId: string, token: string, configuration: Record<string, unknown>) =>
+    fetchJson<void>(`${url}/Users/${userId}/Configuration`, {
+      method: "POST",
+      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify(configuration),
+    }),
+
+  /**
+   * Changer son propre mot de passe.
+   *
+   * Avec le jeton de la personne, et son mot de passe actuel : c'est Jellyfin qui vérifie, pas
+   * nous. La clé d'administration ferait le changement sans rien demander, ce qui transformerait
+   * une session volée en prise de contrôle du compte.
+   */
+  changePassword: (userId: string, token: string, currentPw: string, newPw: string) =>
+    fetchJson<void>(`${url}/Users/${userId}/Password`, {
+      method: "POST",
+      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ CurrentPw: currentPw, NewPw: newPw }),
+    }),
+
+  /**
    * Just enough of an item to name it on screen: the series, the season, the number, the title.
    *
    * Asked of the server rather than taken from whoever opened the player — eight places do, and
@@ -294,6 +324,23 @@ export const jellyfin = {
 
   markUnplayed: (userId: string, itemId: string) =>
     fetchJson<void>(`${url}/Users/${userId}/PlayedItems/${itemId}`, { method: "DELETE", headers }),
+
+  // Les favoris vivent chez Jellyfin, pas dans la base locale : c'est ce qui les fait apparaître
+  // aussi dans les applications Jellyfin de la personne, sur sa télé comme sur son téléphone. Ils
+  // ne concernent donc que des titres présents dans la bibliothèque — sans identifiant Jellyfin,
+  // il n'y a rien à marquer.
+  markFavorite: (userId: string, itemId: string) =>
+    fetchJson<void>(`${url}/Users/${userId}/FavoriteItems/${itemId}`, { method: "POST", headers }),
+
+  unmarkFavorite: (userId: string, itemId: string) =>
+    fetchJson<void>(`${url}/Users/${userId}/FavoriteItems/${itemId}`, { method: "DELETE", headers }),
+
+  // `Filters=IsFavorite` est le pendant exact de `IsPlayed` utilisé plus haut pour « déjà vu ».
+  getFavorites: (userId: string) =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${url}/Users/${userId}/Items?Filters=IsFavorite&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,
+      { headers }
+    ).then((res) => res.Items),
 
   getResumeItems: (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(

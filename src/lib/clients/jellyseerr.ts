@@ -19,11 +19,20 @@ function authHeaders(cookie?: string): Record<string, string> {
 
 export interface JellyseerrRequest {
   id: number;
+  /** MediaRequestStatus : 1 en attente, 2 acceptée, 3 refusée, 4 échouée, 5 terminée. */
   status: number;
-  media: { title?: string; tmdbId?: number; mediaType: string; posterPath?: string };
+  /**
+   * `title` et `posterPath` ne sont PAS renvoyés par `/api/v1/request` — vérifié en direct sur
+   * l'instance : la réponse ne porte que les identifiants et le statut. C'est exactement ce que
+   * `enrichRequests` va rechercher ailleurs. `status` en revanche est bien là (MediaStatus :
+   * 1 inconnu, 2 en attente, 3 en traitement, 4 partiellement disponible, 5 disponible).
+   */
+  media: { title?: string; tmdbId?: number; mediaType: string; posterPath?: string; status?: number };
   type: string;
   createdAt: string;
   requestedBy: { id?: number; displayName?: string; username?: string };
+  /** Jellyseerr dit lui-même si le compte courant a le droit de retirer cette demande. */
+  canRemove?: boolean;
 }
 
 export interface JellyseerrUser {
@@ -109,8 +118,12 @@ export const jellyseerr = {
         ...(cookie ? {} : userId != null ? { userId } : {}),
       }),
     }),
+  // `releaseDate` (ISO `YYYY-MM-DD`) est bien présent dans la réponse — vérifié en direct. C'est
+  // lui qui permet de distinguer « en cours de récupération » de « pas encore sorti », que rien
+  // d'autre ne dit : un film demandé six mois avant sa sortie reste sinon « en cours » tout ce
+  // temps, ce qui ressemble à une panne.
   getMovieMedia: (tmdbId: number, cookie?: string) =>
-    fetchJson<{ title?: string; posterPath?: string | null; mediaInfo?: { id: number; status: number } }>(
+    fetchJson<{ title?: string; posterPath?: string | null; releaseDate?: string | null; mediaInfo?: { id: number; status: number } }>(
       `${url}/api/v1/movie/${tmdbId}`, { headers: authHeaders(cookie) }
     ),
   // `seasons` (TMDB-sourced: number/name/episodeCount per season) and `mediaInfo.seasons`
@@ -121,6 +134,7 @@ export const jellyseerr = {
     fetchJson<{
       name?: string;
       posterPath?: string | null;
+      firstAirDate?: string | null;
       seasons?: { seasonNumber: number; name?: string; episodeCount?: number }[];
       mediaInfo?: { id: number; status: number; seasons?: { seasonNumber: number; status: number }[] };
     }>(`${url}/api/v1/tv/${tmdbId}`, { headers: authHeaders(cookie) }),
@@ -131,6 +145,13 @@ export const jellyseerr = {
   // or gets rejected as a duplicate — reported live, reproduced, confirmed fixed by removing the
   // stale entry from Jellyseerr's own UI. This automates that same cleanup on cine-app's own
   // delete action.
+  // Supprime la *demande* seule — pas le média, pas l'entrée Radarr/Sonarr, pas le
+  // téléchargement en cours. C'est délibéré : côté utilisateur, « annuler » veut dire « retire ça
+  // de mes demandes », et le ménage dans Radarr est un geste d'administration que Louis fait
+  // depuis son propre panneau. Jellyseerr accepte cet appel de la part du compte qui a fait la
+  // demande, sans droits d'administration.
+  deleteRequest: (requestId: number, cookie?: string) =>
+    fetchJson<void>(`${url}/api/v1/request/${requestId}`, { method: "DELETE", headers: authHeaders(cookie) }),
   deleteMedia: (mediaId: number, cookie?: string) =>
     fetchJson<void>(`${url}/api/v1/media/${mediaId}`, { method: "DELETE", headers: authHeaders(cookie) }),
 };

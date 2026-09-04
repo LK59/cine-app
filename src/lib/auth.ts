@@ -3,7 +3,14 @@ import { config } from "@/lib/config";
 const COOKIE_NAME = "cine_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export type Role = "admin" | "guest";
+export type Role = "admin" | "user";
+
+/**
+ * Le rôle non-administrateur s'est appelé « guest » jusqu'au chantier du lecteur, et les jetons
+ * déjà émis le portent encore. On les accepte donc en lecture et on les ramène à « user » : sans
+ * ça, le renommage aurait déconnecté tout le monde d'un coup.
+ */
+const LEGACY_GUEST = "guest";
 
 export interface SessionPayload {
   u: string;
@@ -118,7 +125,8 @@ export async function verifySessionToken(
   try {
     const payload = JSON.parse(new TextDecoder().decode(fromBase64url(encodedPayload))) as SessionPayload;
     if (typeof payload.exp !== "number" || payload.exp <= Date.now()) return null;
-    if (payload.role !== "admin" && payload.role !== "guest") return null;
+    if ((payload.role as string) === LEGACY_GUEST) payload.role = "user";
+    if (payload.role !== "admin" && payload.role !== "user") return null;
     return payload;
   } catch {
     return null;

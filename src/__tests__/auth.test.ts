@@ -35,11 +35,22 @@ describe("auth", () => {
       expect(payload?.role).toBe("admin");
     });
 
-    it("verifies a guest token", async () => {
-      const { token } = await createSessionToken("viewer", "guest");
+    it("verifies a plain user token", async () => {
+      const { token } = await createSessionToken("viewer", "user");
       const payload = await verifySessionToken(token);
-      expect(payload?.role).toBe("guest");
+      expect(payload?.role).toBe("user");
       expect(payload?.u).toBe("viewer");
+    });
+
+    // Le rôle non-administrateur s'appelait « guest » avant le chantier du lecteur. Les jetons
+    // déjà distribués le portent, et ils durent une semaine : les rejeter aurait déconnecté tout
+    // le monde au premier déploiement. Ce test est là pour que le repli ne soit pas retiré par
+    // mégarde tant que ces jetons peuvent encore circuler.
+    it("accepts a legacy guest token and reports it as a user", async () => {
+      const { token } = await createSessionToken("viewer", "guest" as unknown as "user");
+      const payload = await verifySessionToken(token);
+      expect(payload).not.toBeNull();
+      expect(payload?.role).toBe("user");
     });
 
     it("includes exp in the future", async () => {

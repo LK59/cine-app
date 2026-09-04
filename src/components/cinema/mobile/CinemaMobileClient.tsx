@@ -3,10 +3,8 @@
 import useSWR from "swr";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Info, Play, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Info, Menu, Play, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { leaveCinema } from "@/lib/leaveCinema";
 import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
@@ -14,7 +12,6 @@ import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
-import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
 import { useCinemaMyList } from "@/lib/useCinemaMyList";
@@ -63,7 +60,6 @@ export function CinemaMobileClient() {
   const route = useCinemaRoute();
   const mediaType = route.tab;
   const setMediaType = (tab: "movies" | "series") => cinemaNavigate({ tab }, "replace");
-  const router = useRouter();
   const searchOpen = route.search;
   const setSearchOpen = (open: boolean) =>
     open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false });
@@ -164,7 +160,6 @@ export function CinemaMobileClient() {
     [openDetail]
   );
 
-  const exit = () => leaveCinema(router);
 
   if (typeof document === "undefined") return null;
 
@@ -175,7 +170,7 @@ export function CinemaMobileClient() {
   // globals.css.
   return createPortal(
     <div className="app-viewport fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ zIndex: 45 }}>
-      {/* Sticky chrome: exit on the left, the two library tabs as Netflix-style filter pills. */}
+      {/* Sticky chrome: le menu à gauche, les deux onglets de bibliothèque en pastilles. */}
       {/* The safe-area inset alone puts this flush against the status bar, which iOS then dims
           and blurs over in a standalone PWA — the pills came out half-hidden. An explicit gap on
           top of the inset keeps them clear of it. No backdrop-blur either: a blurred layer that
@@ -185,13 +180,16 @@ export function CinemaMobileClient() {
         className="flex shrink-0 items-center gap-3 bg-ink px-4 pb-3"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.25rem)" }}
       >
+        {/* Le menu remplace la flèche de sortie : un seul bouton dans ce coin, qui mène à tout —
+            l'accueil, la recherche, les listes, le compte, et la gestion tout en bas. La sortie
+            n'a pas disparu, elle a juste cessé d'être la seule chose qu'on pouvait faire d'ici. */}
         <button
           type="button"
-          onClick={exit}
-          aria-label={t("cinema.standardMode")}
+          onClick={() => cinemaNavigate({ menu: true })}
+          aria-label={t("player.nav.label")}
           className="btn btn-ghost btn-icon h-9 w-9 shrink-0"
         >
-          <ArrowLeft size={18} />
+          <Menu size={18} />
         </button>
         <div className="flex gap-2">
           {(["movies", "series"] as const).map((type) => (
@@ -219,19 +217,9 @@ export function CinemaMobileClient() {
         </button>
       </header>
 
-      {searchOpen && (
-        <CinemaSearchOverlay
-          onClose={() => setSearchOpen(false)}
-          // Replaces the search entry rather than stacking on it — see the desktop client's own
-          // note on why coming back to a search that lost its query would be worse.
-          onSelectMovie={(item) =>
-            cinemaNavigate({ search: false, tab: "movies", film: item.radarrId, serie: null }, "replace")
-          }
-          onSelectSeries={(item) =>
-            cinemaNavigate({ search: false, tab: "series", serie: item.sonarrId, film: null }, "replace")
-          }
-        />
-      )}
+      {/* La recherche est rendue par la coquille du lecteur : c'est le moteur global, celui qui
+          trouve aussi les personnes et les titres qu'on n'a pas encore. `searchOpen` reste lu
+          ci-dessous pour mettre la bande-annonce en pause pendant qu'elle est ouverte. */}
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-12">
         {loading && (

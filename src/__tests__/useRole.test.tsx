@@ -27,32 +27,32 @@ afterEach(() => {
 });
 
 describe("useRole", () => {
-  it("defaults to the most restrictive shape before the fetch resolves — isGuest true even for an eventual admin", () => {
+  it("defaults to the most restrictive shape before the fetch resolves — isReadOnly true even for an eventual admin", () => {
     mockMeResponse({ role: "admin", username: "louis", jfId: "abc", jfUser: "louis" });
     const { result } = renderHook(() => useRole(), { wrapper });
 
     expect(result.current.role).toBeUndefined();
-    expect(result.current.isGuest).toBe(true);
+    expect(result.current.isReadOnly).toBe(true);
     expect(result.current.jfId).toBeNull();
     expect(result.current.jfUser).toBeNull();
   });
 
-  it("derives isGuest=true for a guest session", async () => {
-    mockMeResponse({ role: "guest", username: "invite", jfId: "xyz", jfUser: "invite" });
+  it("derives isReadOnly=true for a guest session", async () => {
+    mockMeResponse({ role: "user", username: "invite", jfId: "xyz", jfUser: "invite" });
     const { result } = renderHook(() => useRole(), { wrapper });
 
-    await waitFor(() => expect(result.current.role).toBe("guest"));
-    expect(result.current.isGuest).toBe(true);
+    await waitFor(() => expect(result.current.role).toBe("user"));
+    expect(result.current.isReadOnly).toBe(true);
     expect(result.current.jfId).toBe("xyz");
     expect(result.current.jfUser).toBe("invite");
   });
 
-  it("derives isGuest=false for an admin session", async () => {
+  it("derives isReadOnly=false for an admin session", async () => {
     mockMeResponse({ role: "admin", username: "louis", jfId: null, jfUser: null });
     const { result } = renderHook(() => useRole(), { wrapper });
 
     await waitFor(() => expect(result.current.role).toBe("admin"));
-    expect(result.current.isGuest).toBe(false);
+    expect(result.current.isReadOnly).toBe(false);
   });
 
   it("falls back jfId/jfUser to null when the API omits them (local-admin login)", async () => {

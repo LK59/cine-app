@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
 
-  if (session?.role === "guest" && session.jfUser) {
+  if (session && session.role !== "admin" && session.jfUser) {
     return withErrorHandling(async () => {
       const jellyseerrUserId = await resolveOwnUserId(session);
       if (!jellyseerrUserId) return { results: [], pageInfo: { results: 0 } };

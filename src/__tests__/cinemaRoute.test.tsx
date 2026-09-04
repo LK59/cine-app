@@ -15,7 +15,19 @@ afterEach(() => {
 describe("cinemaRoute", () => {
   it("starts empty and reflects what the hash says", () => {
     const { result } = renderHook(() => useCinemaRoute());
-    expect(result.current).toEqual({ tab: "movies", film: null, serie: null, episodes: false, search: false });
+    expect(result.current).toEqual({
+      tab: "movies",
+      film: null,
+      serie: null,
+      episodes: false,
+      search: false,
+      list: false,
+      account: false,
+      discover: null,
+      discoverType: "movie",
+      person: null,
+      menu: false,
+    });
 
     act(() => cinemaNavigate({ film: 603 }));
     expect(window.location.hash).toBe("#film=603");
@@ -65,7 +77,19 @@ describe("cinemaRoute", () => {
   it("ignores junk in the hash rather than opening a broken sheet", () => {
     window.history.replaceState(null, "", "/cinema#film=abc&serie=-4&tab=nope");
     const { result } = renderHook(() => useCinemaRoute());
-    expect(result.current).toEqual({ tab: "movies", film: null, serie: null, episodes: false, search: false });
+    expect(result.current).toEqual({
+      tab: "movies",
+      film: null,
+      serie: null,
+      episodes: false,
+      search: false,
+      list: false,
+      account: false,
+      discover: null,
+      discoverType: "movie",
+      person: null,
+      menu: false,
+    });
   });
 
   it("follows Back and Forward", () => {

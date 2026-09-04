@@ -668,3 +668,48 @@
   .player-wait-thread { display: none; }
   .player-wait-wheel { display: flex; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Le rail du lecteur.
+
+   Le déploiement est en CSS et pas en état React : le survol d'une navigation ne
+   doit pas déclencher un rendu sur un écran qui redessine déjà des lignes
+   d'affiches. `:focus-within` fait le même travail au clavier, gratuitement.
+
+   La largeur repliée est aussi publiée en variable, parce que l'écran cinéma est
+   porté dans document.body et ne peut donc pas hériter d'un padding : il lit
+   `--player-rail` pour réserver la bande. */
+:root {
+  --player-rail: 0px;
+}
+
+.player-rail {
+  width: 4.5rem;
+  background: var(--color-ink);
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
+}
+/* Replié, le rail est une bande opaque et le contenu se décale d'exactement sa largeur : pas de
+   dégradé à raccorder, pas d'affiche coupée. Déployé, il passe par-dessus — une ombre portée
+   suffit à dire qu'il flotte, et le décalage du contenu ne bouge pas d'un pixel. */
+.player-rail:hover,
+.player-rail:focus-within {
+  width: 15rem;
+  box-shadow: 0 0 3rem rgb(0 0 0 / 0.55);
+}
+.player-rail-label {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.player-rail:hover .player-rail-label,
+.player-rail:focus-within .player-rail-label {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-rail,
+  .player-rail-label {
+    transition: none;
+  }
+}

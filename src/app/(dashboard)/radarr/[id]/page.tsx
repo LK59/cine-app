@@ -91,7 +91,7 @@ export default function RadarrMovieDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const { isGuest, jfId } = useRole();
+  const { isReadOnly, jfId } = useRole();
   const toast = useToast();
   const t = useT();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
@@ -407,7 +407,7 @@ export default function RadarrMovieDetailPage() {
             iconSize={16}
           />
         )}
-        {!isGuest && jfItem && (
+        {!isReadOnly && jfItem && (
           <button
             className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}
             onClick={toggleWatched}
@@ -452,7 +452,7 @@ export default function RadarrMovieDetailPage() {
         <MoreMenu
           label={t('common.moreOptions')}
           items={[
-            ...(canAutoSearchMovie(isGuest, movie.hasFile)
+            ...(canAutoSearchMovie(isReadOnly, movie.hasFile)
               ? [{
                   label: t('common.autoSearch'),
                   icon: <RefreshCw size={16} className={autoSearching ? "animate-spin" : ""} />,
@@ -460,7 +460,7 @@ export default function RadarrMovieDetailPage() {
                   disabled: autoSearching,
                 }]
               : []),
-            ...(!isGuest
+            ...(!isReadOnly
               ? [{ label: t('common.interactiveSearch'), icon: <Search size={16} />, onSelect: () => setShowSearch(true) }]
               : []),
             { label: "NFO", icon: <Info size={16} />, onSelect: () => setShowNfo(true) },
@@ -505,7 +505,7 @@ export default function RadarrMovieDetailPage() {
       <ErrorBoundary><MediaRatings imdbId={movie.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
-      {isGuest ? (
+      {isReadOnly ? (
         <div className="card mb-4 flex flex-wrap items-center gap-4 p-4 text-sm text-slate-300">
           <span className="badge bg-white/5">{movie.monitored ? t('common.monitored') : t('common.notMonitored')}</span>
           {meta?.qualityProfiles?.find((p) => p.id === movie.qualityProfileId) && (
@@ -592,7 +592,7 @@ export default function RadarrMovieDetailPage() {
                   </p>
                 </div>
               </div>
-              {!isGuest && (
+              {!isReadOnly && (
                 <button
                   onClick={() => setConfirmModal("file")}
                   disabled={deletingFile}

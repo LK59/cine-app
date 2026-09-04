@@ -38,7 +38,6 @@
     "jellyseerr": "Solicitudes · Jellyseerr",
     "health": "Estado del sistema",
     "logout": "Cerrar sesión",
-    "guest": "Invitado",
     "searchPlaceholder": "Buscar…",
     "mobile": {
       "home": "Inicio",
@@ -1229,7 +1228,128 @@
       "preparing": "Preparando el vídeo…",
       "stillWorking": "Todavía en curso…"
     },
-    "volume": "Volumen"
+    "volume": "Volumen",
+    "nav": {
+      "label": "Navegación",
+      "home": "Inicio",
+      "search": "Buscar",
+      "myList": "Mi lista",
+      "account": "Cuenta",
+      "manage": "Gestión"
+    },
+    "kind": {
+      "movie": "Película",
+      "series": "Serie",
+      "person": "Persona",
+      "moviePlural": "Películas",
+      "seriesPlural": "Series",
+      "personPlural": "Personas"
+    },
+    "notInLibrary": "Aún no está",
+    "search": {
+      "placeholder": "Un título, un actor, un género…",
+      "hint": "Busca una película, una serie o alguien. Lo que aún no está en la biblioteca se puede pedir.",
+      "noResults": "No hay resultados para «{query}».",
+      "filterAll": "Todo",
+      "personTitles": "{n} título(s) aquí"
+    },
+    "lists": {
+      "requests": "Peticiones",
+      "toWatch": "Por ver",
+      "watched": "Visto",
+      "abandoned": "Abandonado",
+      "favorites": "Favoritos",
+      "arrivedBadge": "{n} título(s) disponible(s)",
+      "requestsHint": "Usa la búsqueda para pedir un título. Se queda aquí hasta que esté disponible.",
+      "favoritesHint": "Los favoritos solo se aplican a los títulos que ya están en la biblioteca. Se sincronizan con Jellyfin.",
+      "watchedHint": "Se rellena solo según lo que ves. Puedes corregirlo desde la ficha de un título.",
+      "empty": {
+        "requests": "Todavía no hay peticiones.",
+        "toWatch": "Nada pendiente. Añade un título desde su ficha.",
+        "watched": "Nada terminado por ahora.",
+        "abandoned": "Nada abandonado. Mejor así.",
+        "favorites": "Sin favoritos. El corazón de una ficha añade uno."
+      }
+    },
+    "requests": {
+      "state": {
+        "unreleased": "Aún no ha salido",
+        "processing": "En camino",
+        "available": "Disponible",
+        "failed": "No salió bien"
+      },
+      "cancel": "Cancelar la petición de {title}",
+      "cancelHint": "Quita la petición de tu lista."
+    },
+    "actions": {
+      "removedFromList": "Quitado de la lista",
+      "addedTo": {
+        "to_watch": "Añadido a «Por ver»",
+        "watched": "Marcado como visto",
+        "abandoned": "Marcado como abandonado",
+        "favorite": "Añadido a favoritos",
+        "to_request": "Añadido a la lista"
+      },
+      "requested": "Se ha pedido {title}",
+      "requestCancelled": "Petición cancelada"
+    },
+    "discover": {
+      "open": "Abrir la ficha",
+      "request": "Pedir",
+      "addToList": "Añadir a mi lista",
+      "inList": "En mi lista",
+      "favorite": "Favorito",
+      "favoriteDisabledHint": "Los favoritos solo se aplican a los títulos que ya están en la biblioteca.",
+      "castTitle": "Reparto"
+    },
+    "person": {
+      "less": "Ver menos",
+      "filmography": "Filmografía",
+      "ownedCount": "{owned} de {total} disponibles"
+    },
+    "account": {
+      "language": "Idioma",
+      "playback": "Reproducción",
+      "audioLanguage": "Idioma de audio preferido",
+      "subtitleLanguage": "Idioma de los subtítulos",
+      "subtitleMode": "Mostrar subtítulos",
+      "subtitleModes": {
+        "Default": "Por defecto",
+        "Always": "Siempre",
+        "OnlyForced": "Solo forzados",
+        "None": "Nunca"
+      },
+      "playbackHint": "Estos ajustes van con tu cuenta: también se aplican en las apps de Jellyfin.",
+      "langAny": "Cualquiera",
+      "lang": {
+        "fre": "Francés",
+        "eng": "Inglés",
+        "spa": "Español",
+        "ger": "Alemán",
+        "ita": "Italiano",
+        "jpn": "Japonés"
+      },
+      "notifications": "Notificaciones",
+      "notificationsLabel": "Avisarme cuando llegue un título",
+      "notificationsHint": "Una notificación cuando una de tus peticiones esté disponible.",
+      "password": "Contraseña",
+      "currentPassword": "Contraseña actual",
+      "newPassword": "Nueva contraseña",
+      "confirmPassword": "Confirmar",
+      "changePassword": "Cambiar la contraseña",
+      "passwordRule": "Al menos 8 caracteres.",
+      "passwordMismatch": "Las dos contraseñas no coinciden.",
+      "passwordChanged": "Contraseña cambiada",
+      "saving": "Guardando…",
+      "saved": "Guardado",
+      "devices": "Dispositivos conectados",
+      "noOtherDevices": "Ningún otro dispositivo conectado.",
+      "otherDevices": "{n} otro(s) dispositivo(s) conectado(s).",
+      "signOutOthers": "Desconectar los demás",
+      "devicesRevoked": "Los demás dispositivos se han desconectado",
+      "signOut": "Cerrar sesión",
+      "signOutAction": "Cerrar sesión"
+    }
   },
   "cinema": {
     "standardMode": "Modo estándar",
@@ -1268,6 +1388,10 @@
     "inMyList": "En mi lista",
     "watchedState": "Visto",
     "readMore": "Ver más",
-    "spotlight": "Destacados"
+    "spotlight": "Destacados",
+    "discovery": {
+      "trendingMovies": "Tendencias — películas",
+      "trendingSeries": "Tendencias — series"
+    }
   }
 }

@@ -93,7 +93,7 @@ async function openMoreMenu() {
 
 describe("Radarr movie detail page — guest button visibility", () => {
   it("admin always sees auto-search, NFO, and interactive search, file or not", async () => {
-    mockUseRole.mockReturnValue({ isGuest: false, role: "admin", jfId: null, jfUser: null });
+    mockUseRole.mockReturnValue({ isReadOnly: false, role: "admin", jfId: null, jfUser: null });
     mockMovieFetches(true);
     renderPage();
 
@@ -106,7 +106,7 @@ describe("Radarr movie detail page — guest button visibility", () => {
   });
 
   it("guest with a downloaded file sees no search action at all — a file is a fact — but still sees NFO", async () => {
-    mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
+    mockUseRole.mockReturnValue({ isReadOnly: true, role: "user", jfId: "x", jfUser: "invite" });
     mockMovieFetches(true);
     renderPage();
 
@@ -120,7 +120,7 @@ describe("Radarr movie detail page — guest button visibility", () => {
   });
 
   it("guest with no file yet sees exactly auto-search, never interactive search, but still sees NFO", async () => {
-    mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
+    mockUseRole.mockReturnValue({ isReadOnly: true, role: "user", jfId: "x", jfUser: "invite" });
     mockMovieFetches(false);
     renderPage();
 

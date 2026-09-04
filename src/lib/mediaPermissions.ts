@@ -4,17 +4,17 @@
 // something to search for — and exactly one action, auto-search (never interactive search),
 // when it doesn't. Admins always see both auto-search and interactive search, unconditionally.
 
-export function canAutoSearchMovie(isGuest: boolean, hasFile: boolean): boolean {
-  return !isGuest || !hasFile;
+export function canAutoSearchMovie(isReadOnly: boolean, hasFile: boolean): boolean {
+  return !isReadOnly || !hasFile;
 }
 
-export function canAutoSearchSeason(isGuest: boolean, fileCount: number, episodeCount: number): boolean {
-  return !isGuest || fileCount < episodeCount;
+export function canAutoSearchSeason(isReadOnly: boolean, fileCount: number, episodeCount: number): boolean {
+  return !isReadOnly || fileCount < episodeCount;
 }
 
 // Même règle au niveau de la série entière : un compte ordinaire ne cherche pas ce qui est
 // déjà complet. `episodeCount` à zéro (une série que Sonarr n'a pas encore inventoriée) compte
 // comme incomplète — il n'y a rien sur le disque à opposer à la recherche.
-export function canAutoSearchSeries(isGuest: boolean, fileCount: number, episodeCount: number): boolean {
-  return !isGuest || fileCount < episodeCount || episodeCount === 0;
+export function canAutoSearchSeries(isReadOnly: boolean, fileCount: number, episodeCount: number): boolean {
+  return !isReadOnly || fileCount < episodeCount || episodeCount === 0;
 }

@@ -13,13 +13,13 @@ function isPaused(state: string): boolean {
 
 export function TorrentDetailModal({
   torrent,
-  isGuest,
+  isReadOnly,
   onClose,
   onAction,
   onRemove,
 }: {
   torrent: QbTorrent;
-  isGuest: boolean;
+  isReadOnly: boolean;
   onClose: () => void;
   onAction: (hash: string, action: "pause" | "resume") => void;
   onRemove: (hash: string, deleteFiles: boolean) => void;
@@ -95,7 +95,7 @@ export function TorrentDetailModal({
           </div>
         </div>
 
-        {!isGuest && (
+        {!isReadOnly && (
           <div className="flex flex-col gap-3 border-t border-white/5 pt-4">
             <div className="flex items-center gap-2">
               {isPaused(torrent.state) ? (

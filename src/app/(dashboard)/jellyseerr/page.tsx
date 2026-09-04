@@ -91,12 +91,12 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
 
 export default function JellyseerrPage() {
   const { mutate } = useSWRConfig();
-  const { isGuest, jfUser } = useRole();
+  const { isReadOnly, jfUser } = useRole();
   const toast = useToast();
   const t = useT();
   const [tab, setTab] = useState<"all" | "mine">(jfUser ? "mine" : "all");
 
-  const allKey = isGuest
+  const allKey = isReadOnly
     ? "/api/jellyseerr/requests?filter=all"
     : "/api/jellyseerr/requests?filter=pending";
 
@@ -163,7 +163,7 @@ export default function JellyseerrPage() {
           }`}
         >
           <ListChecks size={14} />
-          {isGuest ? t('jellyseerr.tabAll') : t('jellyseerr.tabPending')}
+          {isReadOnly ? t('jellyseerr.tabAll') : t('jellyseerr.tabPending')}
           {tab === "all" && allRequests.length > 0 && (
             <span className="ml-1 rounded-full bg-accent-600/30 px-1.5 py-0.5 text-[10px] text-accent-400">
               {allRequests.length}
@@ -195,7 +195,7 @@ export default function JellyseerrPage() {
           {allLoading && <LoadingState />}
           {allError && <ErrorState message={t('jellyseerr.serviceDown')} />}
           {allData && allRequests.length === 0 && (
-            <EmptyState label={isGuest ? t('jellyseerr.emptyAll') : t('jellyseerr.emptyPending')} />
+            <EmptyState label={isReadOnly ? t('jellyseerr.emptyAll') : t('jellyseerr.emptyPending')} />
           )}
           {allRequests.length > 0 && (
             <div className="card divide-y divide-white/5">
@@ -203,7 +203,7 @@ export default function JellyseerrPage() {
                 <RequestRow
                   key={r.id}
                   r={r}
-                  showActions={!isGuest}
+                  showActions={!isReadOnly}
                   onApprove={() => respond(r.id, "approve")}
                   onDecline={() => respond(r.id, "decline")}
                 />

@@ -27,9 +27,39 @@ export interface CinemaRoute {
   /** The season/episode browser, opened from a series sheet. */
   episodes: boolean;
   search: boolean;
+  /** « Ma liste » — les cinq segments, ouverts depuis le rail. */
+  list: boolean;
+  /** « Compte » — réglages et déconnexion, ouverts depuis le rail. */
+  account: boolean;
+  /** Une fiche de titre absent de la bibliothèque, identifiée par son id TMDB. */
+  discover: number | null;
+  /** Le type de `discover` — une fiche TMDB n'a pas d'id Radarr/Sonarr pour le déduire. */
+  discoverType: "movie" | "series";
+  /** Une fiche personne, identifiée par son id TMDB. */
+  person: number | null;
+  /**
+   * Le tiroir de navigation, sur téléphone.
+   *
+   * Dans l'URL, contrairement au rail du bureau qui n'est qu'un survol : sur Android, le geste de
+   * retour doit refermer le tiroir plutôt que quitter l'écran, et c'est l'historique qui le
+   * permet — gratuitement, puisque tout le reste passe déjà par là.
+   */
+  menu: boolean;
 }
 
-const EMPTY: CinemaRoute = { tab: "movies", film: null, serie: null, episodes: false, search: false };
+const EMPTY: CinemaRoute = {
+  tab: "movies",
+  film: null,
+  serie: null,
+  episodes: false,
+  search: false,
+  list: false,
+  account: false,
+  discover: null,
+  discoverType: "movie",
+  person: null,
+  menu: false,
+};
 
 // How many entries this session has pushed. Kept in history.state so a close can tell "I opened
 // this, stepping back is right" from "someone deep-linked straight here, there is nothing of ours
@@ -51,6 +81,12 @@ function parse(hash: string): CinemaRoute {
     serie: readNumber(params, "serie"),
     episodes: params.get("episodes") === "1",
     search: params.get("recherche") === "1",
+    list: params.get("liste") === "1",
+    account: params.get("compte") === "1",
+    discover: readNumber(params, "decouverte"),
+    discoverType: params.get("type") === "series" ? "series" : "movie",
+    person: readNumber(params, "personne"),
+    menu: params.get("menu") === "1",
   };
 }
 
@@ -61,6 +97,14 @@ function serialize(route: CinemaRoute): string {
   if (route.serie) params.set("serie", String(route.serie));
   if (route.episodes) params.set("episodes", "1");
   if (route.search) params.set("recherche", "1");
+  if (route.list) params.set("liste", "1");
+  if (route.account) params.set("compte", "1");
+  if (route.discover) {
+    params.set("decouverte", String(route.discover));
+    if (route.discoverType === "series") params.set("type", "series");
+  }
+  if (route.person) params.set("personne", String(route.person));
+  if (route.menu) params.set("menu", "1");
   const query = params.toString();
   return query ? `#${query}` : "";
 }

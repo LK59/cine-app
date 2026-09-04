@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  mockUseRole.mockReturnValue({ role: "admin", isGuest: false });
+  mockUseRole.mockReturnValue({ role: "admin", isReadOnly: false });
   toastSuccess.mockClear();
   toastError.mockClear();
   // La carte ouvre sa feuille d'actions sur écran tactile ; on force le pointeur fin pour

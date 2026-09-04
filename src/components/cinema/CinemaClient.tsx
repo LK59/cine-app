@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Play, Search } from "lucide-react";
+import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
@@ -24,8 +24,8 @@ import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
 import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
 import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
-import { CinemaSearchOverlay } from "@/components/cinema/CinemaSearchOverlay";
 import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
+import { CinemaDiscoveryRow } from "@/components/cinema/CinemaDiscoveryRow";
 import { useCinemaMyList } from "@/lib/useCinemaMyList";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
@@ -34,6 +34,7 @@ import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
+import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
 // sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
@@ -304,6 +305,26 @@ export function CinemaClient() {
   }, [series]);
 
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
+
+  // Les rangées de découverte, tout en bas : chargées comme le reste, mais elles ne bloquent
+  // rien — la page est déjà utilisable sans elles, et TMDB est le seul appel de cet écran qui
+  // sorte de la maison.
+  const { data: discovery } = useSWR<PlayerDiscoverPayload>("/api/player/discover", fetcher, {
+    revalidateOnFocus: false,
+  });
+
+  // Un titre de découverte mène à sa fiche quand on l'a, à la fiche TMDB sinon — où « Lire » est
+  // devenu « Demander ». Un seul chemin, quel que soit le côté de la frontière.
+  // Le focus d'une rangée de découverte rend la main au carrousel : voir CinemaDiscoveryRow.
+  const clearFocus = useCallback(() => setFocusedItem(null), []);
+
+  const openDiscovery = useCallback((item: DiscoveryItem) => {
+    if (item.libraryId !== null) {
+      cinemaNavigate(item.type === "movie" ? { film: item.libraryId } : { serie: item.libraryId });
+      return;
+    }
+    cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
+  }, []);
   // Which sheet is open is read back out of the URL, not held here: that's what makes Back close
   // it. Until the payload has loaded (a cold deep link into a title) the lookup simply finds
   // nothing and the sheet opens as soon as the data lands.
@@ -332,6 +353,7 @@ export function CinemaClient() {
   // above (not touched) so each tab remembers its own position independently when you switch
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
+  const clearSeriesFocus = useCallback(() => setSeriesFocusedItem(null), []);
   const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
   const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
   const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
@@ -534,7 +556,7 @@ export function CinemaClient() {
     // into is already on screen, so the load reads as content filling in rather than a blank
     // screen swapping for a full one.
     return createPortal(
-      <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={zLayer}>
+      <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
         <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
           <div className="flex h-full max-w-2xl flex-col justify-end gap-4 px-8 pb-10 sm:px-12">
             <div className="skeleton h-12 w-72 rounded-lg sm:h-16" />
@@ -560,7 +582,7 @@ export function CinemaClient() {
 
   if (moviesError) {
     return createPortal(
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={zLayer}>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
         <p className="max-w-sm text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>
         {exitButton}
       </div>,
@@ -570,7 +592,7 @@ export function CinemaClient() {
 
   if (movies && movies.spotlight.length === 0) {
     return createPortal(
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={zLayer}>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
         <p className="max-w-sm text-sm text-slate-400">{t("cinema.empty")}</p>
         {exitButton}
       </div>,
@@ -579,44 +601,21 @@ export function CinemaClient() {
   }
 
   return createPortal(
-    <div className="fixed inset-0 animate-fade-in overflow-hidden bg-ink" style={zLayer}>
-      <button
-        onClick={() => leaveCinema(router)}
-        className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
-        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
-        title={t("cinema.standardMode")}
-      >
-        <ArrowLeft size={16} />
-      </button>
-
-      <button
-        onClick={() => setSearchOpen(true)}
-        className="fixed right-4 z-20 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
-        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
-        title={t("cinema.search")}
-      >
-        <Search size={16} />
-      </button>
+    // `--player-rail` est posée par PlayerShell : la bande repliée du rail est réservée ici,
+    // parce qu'un écran porté dans document.body n'hérite d'aucun padding de la coquille.
+    <div className="fixed inset-0 animate-fade-in overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
+      {/* La sortie et la loupe ont quitté les coins de l'écran : elles sont dans le rail, à
+          gauche, avec le reste de la navigation. Deux boutons flottants de moins par-dessus les
+          affiches, et un seul endroit où l'on va chercher où aller. */}
 
       <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
       <CinemaShortcutsGuide />
 
-      {searchOpen && (
-        <CinemaSearchOverlay
-          onClose={() => setSearchOpen(false)}
-          // One history step, replacing the search entry rather than stacking on it: Back from
-          // the title lands on the grid. Coming back to a search overlay that had lost the query
-          // you typed would be worse than not coming back to it at all.
-          onSelectMovie={(item) => {
-            setFocusedItem(item);
-            cinemaNavigate({ search: false, tab: "movies", film: item.radarrId, serie: null }, "replace");
-          }}
-          onSelectSeries={(item) => {
-            setSeriesFocusedItem(item);
-            cinemaNavigate({ search: false, tab: "series", serie: item.sonarrId, film: null }, "replace");
-          }}
-        />
-      )}
+      {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
+          même moteur que la recherche globale, elle trouve aussi les personnes et les titres
+          qu'on ne possède pas encore, et elle doit donc exister partout, pas seulement sur la
+          grille. `searchOpen` reste lu plus haut pour suspendre la navigation aux flèches et la
+          bande-annonce pendant qu'elle est ouverte. */}
 
       {/* One continuous ambient background for the WHOLE screen, not scoped to the hero pane —
           a sharp copy of the focused item's backdrop (masked, fading out by ~72% of the full
@@ -834,6 +833,22 @@ export function CinemaClient() {
                   onSelectItem={openDetail}
                 />
               ))}
+
+              {discovery?.rows
+                .filter((row) => row.key === "trendingMovies")
+                .map((row) => (
+                  <CinemaDiscoveryRow
+                    key={row.key}
+                    label={t(`cinema.discovery.${row.key}`)}
+                    rowKey={row.key}
+                    rowIndex={RAIL_COUNT}
+                    items={row.items}
+                    cardWidthClassName={CARD_WIDTH}
+                    missingLabel={t("player.notInLibrary")}
+                    onFocusItem={clearFocus}
+                    onSelectItem={openDiscovery}
+                  />
+                ))}
             </>
           ) : (
             <>
@@ -964,6 +979,22 @@ export function CinemaClient() {
                   onSelectItem={openSeriesDetail}
                 />
               ))}
+
+              {discovery?.rows
+                .filter((row) => row.key === "trendingSeries")
+                .map((row) => (
+                  <CinemaDiscoveryRow
+                    key={row.key}
+                    label={t(`cinema.discovery.${row.key}`)}
+                    rowKey={row.key}
+                    rowIndex={RAIL_COUNT}
+                    items={row.items}
+                    cardWidthClassName={CARD_WIDTH}
+                    missingLabel={t("player.notInLibrary")}
+                    onFocusItem={clearSeriesFocus}
+                    onSelectItem={openDiscovery}
+                  />
+                ))}
             </>
           )}
           </div>

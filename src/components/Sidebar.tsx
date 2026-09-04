@@ -12,7 +12,6 @@ import { enterCinema } from "@/lib/leaveCinema";
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { isGuest } = useRole();
   const t = useT();
 
   async function logout() {
@@ -28,7 +27,6 @@ export function Sidebar() {
           <Clapperboard size={20} />
         </div>
         <span className="text-base font-semibold text-white">Cine App</span>
-        {isGuest && <span className="badge bg-white/5 text-[10px] text-slate-400">{t('nav.guest')}</span>}
       </div>
 
       {/* Search shortcut */}

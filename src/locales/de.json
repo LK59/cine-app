@@ -38,7 +38,6 @@
     "jellyseerr": "Anfragen · Jellyseerr",
     "health": "Systemstatus",
     "logout": "Abmelden",
-    "guest": "Gast",
     "searchPlaceholder": "Suchen…",
     "mobile": {
       "home": "Start",
@@ -1229,7 +1228,128 @@
       "preparing": "Video wird vorbereitet…",
       "stillWorking": "Läuft noch…"
     },
-    "volume": "Lautstärke"
+    "volume": "Lautstärke",
+    "nav": {
+      "label": "Navigation",
+      "home": "Start",
+      "search": "Suche",
+      "myList": "Meine Liste",
+      "account": "Konto",
+      "manage": "Verwaltung"
+    },
+    "kind": {
+      "movie": "Film",
+      "series": "Serie",
+      "person": "Person",
+      "moviePlural": "Filme",
+      "seriesPlural": "Serien",
+      "personPlural": "Personen"
+    },
+    "notInLibrary": "Noch nicht da",
+    "search": {
+      "placeholder": "Ein Titel, ein Schauspieler, ein Genre…",
+      "hint": "Suche nach einem Film, einer Serie oder einer Person. Was noch nicht da ist, lässt sich anfragen.",
+      "noResults": "Nichts gefunden für „{query}“.",
+      "filterAll": "Alles",
+      "personTitles": "{n} Titel hier"
+    },
+    "lists": {
+      "requests": "Anfragen",
+      "toWatch": "Anschauen",
+      "watched": "Gesehen",
+      "abandoned": "Abgebrochen",
+      "favorites": "Favoriten",
+      "arrivedBadge": "{n} Titel angekommen",
+      "requestsHint": "Über die Suche einen Titel anfragen. Er bleibt hier, bis er verfügbar ist.",
+      "favoritesHint": "Favoriten gelten nur für Titel, die schon in der Bibliothek sind. Sie werden mit Jellyfin synchronisiert.",
+      "watchedHint": "Füllt sich beim Anschauen von selbst. Auf der Seite eines Titels lässt es sich korrigieren.",
+      "empty": {
+        "requests": "Noch keine Anfragen.",
+        "toWatch": "Noch nichts vorgemerkt. Füge einen Titel von seiner Seite aus hinzu.",
+        "watched": "Noch nichts zu Ende geschaut.",
+        "abandoned": "Nichts abgebrochen. Umso besser.",
+        "favorites": "Keine Favoriten. Das Herz auf einer Seite fügt einen hinzu."
+      }
+    },
+    "requests": {
+      "state": {
+        "unreleased": "Noch nicht erschienen",
+        "processing": "Unterwegs",
+        "available": "Verfügbar",
+        "failed": "Hat nicht geklappt"
+      },
+      "cancel": "Anfrage für {title} zurückziehen",
+      "cancelHint": "Entfernt die Anfrage aus deiner Liste."
+    },
+    "actions": {
+      "removedFromList": "Aus der Liste entfernt",
+      "addedTo": {
+        "to_watch": "Zu „Anschauen“ hinzugefügt",
+        "watched": "Als gesehen markiert",
+        "abandoned": "Als abgebrochen markiert",
+        "favorite": "Zu den Favoriten hinzugefügt",
+        "to_request": "Zur Liste hinzugefügt"
+      },
+      "requested": "{title} wurde angefragt",
+      "requestCancelled": "Anfrage zurückgezogen"
+    },
+    "discover": {
+      "open": "Seite öffnen",
+      "request": "Anfragen",
+      "addToList": "Zu meiner Liste",
+      "inList": "In meiner Liste",
+      "favorite": "Favorit",
+      "favoriteDisabledHint": "Favoriten gelten nur für Titel, die schon in der Bibliothek sind.",
+      "castTitle": "Besetzung"
+    },
+    "person": {
+      "less": "Weniger",
+      "filmography": "Filmografie",
+      "ownedCount": "{owned} von {total} verfügbar"
+    },
+    "account": {
+      "language": "Sprache",
+      "playback": "Wiedergabe",
+      "audioLanguage": "Bevorzugte Tonspur",
+      "subtitleLanguage": "Untertitelsprache",
+      "subtitleMode": "Untertitel anzeigen",
+      "subtitleModes": {
+        "Default": "Standard",
+        "Always": "Immer",
+        "OnlyForced": "Nur erzwungene",
+        "None": "Nie"
+      },
+      "playbackHint": "Diese Einstellungen gehören zum Konto und gelten auch in den Jellyfin-Apps.",
+      "langAny": "Egal",
+      "lang": {
+        "fre": "Französisch",
+        "eng": "Englisch",
+        "spa": "Spanisch",
+        "ger": "Deutsch",
+        "ita": "Italienisch",
+        "jpn": "Japanisch"
+      },
+      "notifications": "Benachrichtigungen",
+      "notificationsLabel": "Bescheid geben, wenn ein Titel ankommt",
+      "notificationsHint": "Eine Benachrichtigung, sobald eine deiner Anfragen verfügbar ist.",
+      "password": "Passwort",
+      "currentPassword": "Aktuelles Passwort",
+      "newPassword": "Neues Passwort",
+      "confirmPassword": "Bestätigen",
+      "changePassword": "Passwort ändern",
+      "passwordRule": "Mindestens 8 Zeichen.",
+      "passwordMismatch": "Die beiden Passwörter stimmen nicht überein.",
+      "passwordChanged": "Passwort geändert",
+      "saving": "Wird gespeichert…",
+      "saved": "Gespeichert",
+      "devices": "Angemeldete Geräte",
+      "noOtherDevices": "Kein weiteres Gerät angemeldet.",
+      "otherDevices": "{n} weitere(s) Gerät(e) angemeldet.",
+      "signOutOthers": "Andere abmelden",
+      "devicesRevoked": "Die anderen Geräte wurden abgemeldet",
+      "signOut": "Abmelden",
+      "signOutAction": "Abmelden"
+    }
   },
   "cinema": {
     "standardMode": "Standardmodus",
@@ -1268,6 +1388,10 @@
     "inMyList": "In meiner Liste",
     "watchedState": "Gesehen",
     "readMore": "Mehr anzeigen",
-    "spotlight": "Im Fokus"
+    "spotlight": "Im Fokus",
+    "discovery": {
+      "trendingMovies": "Im Trend — Filme",
+      "trendingSeries": "Im Trend — Serien"
+    }
   }
 }

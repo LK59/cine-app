@@ -69,7 +69,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  mockUseRole.mockReturnValue({ role: "admin", isGuest: false });
+  mockUseRole.mockReturnValue({ role: "admin", isReadOnly: false });
   toastSuccess.mockClear();
   toastError.mockClear();
 });
@@ -129,7 +129,7 @@ describe("page Téléchargements", () => {
   });
 
   it("cache les boutons d'action aux invités", async () => {
-    mockUseRole.mockReturnValue({ role: "guest", isGuest: true });
+    mockUseRole.mockReturnValue({ role: "user", isReadOnly: true });
     stubApi(() => ({ ok: true, json: async () => ({}) }));
     renderPage();
 

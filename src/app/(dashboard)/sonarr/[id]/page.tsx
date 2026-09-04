@@ -91,7 +91,7 @@ export default function SonarrSeriesDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const { isGuest, jfId } = useRole();
+  const { isReadOnly, jfId } = useRole();
   const toast = useToast();
   const t = useT();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
@@ -515,7 +515,7 @@ export default function SonarrSeriesDetailPage() {
             getNextEpisode={getNextEpisode}
           />
         )}
-        {!isGuest && jfItem && (
+        {!isReadOnly && jfItem && (
           <button
             className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}
             onClick={toggleWatched}
@@ -555,7 +555,7 @@ export default function SonarrSeriesDetailPage() {
         <MoreMenu
           label={t('common.moreOptions')}
           items={[
-            ...(canAutoSearchSeries(isGuest, fileCount, episodeCount)
+            ...(canAutoSearchSeries(isReadOnly, fileCount, episodeCount)
               ? [{
                   label: t('sonarr.autoSearchSeries'),
                   icon: <RefreshCw size={16} className={seriesSearching ? "animate-spin" : ""} />,
@@ -563,7 +563,7 @@ export default function SonarrSeriesDetailPage() {
                   disabled: seriesSearching,
                 }]
               : []),
-            ...(!isGuest
+            ...(!isReadOnly
               ? [{
                   label: t('common.interactiveSearch'),
                   icon: <Search size={16} />,
@@ -597,7 +597,7 @@ export default function SonarrSeriesDetailPage() {
       <ErrorBoundary><MediaRatings imdbId={series.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
-      {isGuest ? (
+      {isReadOnly ? (
         <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 text-sm text-slate-300">
           <span className="badge bg-white/5">{series.monitored ? t('common.monitored') : t('common.notMonitored')}</span>
           {meta?.qualityProfiles?.find((p) => p.id === series.qualityProfileId) && (
@@ -716,7 +716,7 @@ export default function SonarrSeriesDetailPage() {
                       {/* Guests only get the auto-search entry point when the season is missing
                           at least one episode file — a complete season is a fact, not something
                           to search for. Admins always keep it, regardless of completion. */}
-                      {canAutoSearchSeason(isGuest, fileCount, seasonEpisodes.length) && (
+                      {canAutoSearchSeason(isReadOnly, fileCount, seasonEpisodes.length) && (
                         <button
                           className="btn btn-ghost btn-icon"
                           onClick={() => triggerAutoSearch(seasonNumber)}
@@ -727,7 +727,7 @@ export default function SonarrSeriesDetailPage() {
                           <RefreshCw size={14} className={autoSearching === seasonNumber ? "animate-spin" : ""} />
                         </button>
                       )}
-                      {isGuest ? (
+                      {isReadOnly ? (
                         <span className="badge bg-white/5 text-xs">
                           {seasonMeta?.monitored ? t('common.monitored') : t('common.notMonitored')}
                         </span>
@@ -770,7 +770,7 @@ export default function SonarrSeriesDetailPage() {
                             <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-4">
                               <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
                                 <div className="flex min-w-0 items-center gap-2">
-                                  {isGuest ? (
+                                  {isReadOnly ? (
                                     ep.monitored ? (
                                       <CircleCheck size={16} className="text-accent-400" />
                                     ) : (
@@ -806,7 +806,7 @@ export default function SonarrSeriesDetailPage() {
                                   />
                                 </div>
                               </div>
-                              {(jfEp || !isGuest) && (
+                              {(jfEp || !isReadOnly) && (
                                 <div className="flex shrink-0 items-center gap-2">
                                   {jfEp && (
                                     <PlayButton
@@ -825,7 +825,7 @@ export default function SonarrSeriesDetailPage() {
                                       getNextEpisode={getNextEpisode}
                                     />
                                   )}
-                                  {!isGuest && (
+                                  {!isReadOnly && (
                                   <button
                                     className="btn btn-ghost btn-icon shrink-0"
                                     title={t('sonarr.episodeSearch', { title: ep.title })}

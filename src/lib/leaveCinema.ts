@@ -8,10 +8,9 @@ type Router = ReturnType<typeof useRouter>;
 // which tears down the whole React tree — including PlayerHost, so anything playing (full screen
 // or minimized) was killed on the way out.
 //
-// It doesn't have to be. /cinema lives under the (dashboard) route group, and PlayerHost is
-// mounted by that group's layout, so a client-side navigation from /cinema to / keeps the same
-// layout — and the same <video> element — alive. Playback simply continues, with the mini player
-// carrying over onto the dashboard.
+// It doesn't have to be. PlayerHost is mounted by the *root* layout (it moved there when the
+// player got its own route group), so a client-side navigation between /player and /gestion keeps
+// the same <video> element alive. Playback simply continues, with the mini player carrying over.
 //
 // The hard navigation existed for a reason: Next's client-side transition fetches the target
 // route's RSC payload, and that fetch was, for months, failing in production. It no longer does
@@ -25,7 +24,7 @@ type Router = ReturnType<typeof useRouter>;
 const FALLBACK_MS = 1200;
 
 export function leaveCinema(router: Router): void {
-  navigateWithFallback(router, "/", (path) => path.startsWith("/cinema"));
+  navigateWithFallback(router, "/gestion", (path) => path.startsWith("/player"));
 }
 
 // Entering Cinema Mode, with the same belt-and-braces as leaving it.
@@ -35,7 +34,7 @@ export function leaveCinema(router: Router): void {
 // the crossing), so they go through the router again. Same fallback as above, for the same
 // deploy-window reason.
 export function enterCinema(router: Router): void {
-  navigateWithFallback(router, "/cinema", (path) => !path.startsWith("/cinema"));
+  navigateWithFallback(router, "/player", (path) => !path.startsWith("/player"));
 }
 
 function navigateWithFallback(router: Router, target: string, stillHere: (path: string) => boolean): void {

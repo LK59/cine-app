@@ -38,7 +38,6 @@
     "jellyseerr": "Requests · Jellyseerr",
     "health": "System health",
     "logout": "Log out",
-    "guest": "Guest",
     "searchPlaceholder": "Search…",
     "mobile": {
       "home": "Home",
@@ -1229,7 +1228,128 @@
       "preparing": "Preparing the video…",
       "stillWorking": "Still working…"
     },
-    "volume": "Volume"
+    "volume": "Volume",
+    "nav": {
+      "label": "Navigation",
+      "home": "Home",
+      "search": "Search",
+      "myList": "My list",
+      "account": "Account",
+      "manage": "Management"
+    },
+    "kind": {
+      "movie": "Movie",
+      "series": "Series",
+      "person": "Person",
+      "moviePlural": "Movies",
+      "seriesPlural": "Series",
+      "personPlural": "People"
+    },
+    "notInLibrary": "Not here yet",
+    "search": {
+      "placeholder": "A title, an actor, a genre…",
+      "hint": "Search for a movie, a series or someone. Anything not in the library yet can be requested.",
+      "noResults": "Nothing found for “{query}”.",
+      "filterAll": "All",
+      "personTitles": "{n} title(s) here"
+    },
+    "lists": {
+      "requests": "Requests",
+      "toWatch": "To watch",
+      "watched": "Watched",
+      "abandoned": "Dropped",
+      "favorites": "Favourites",
+      "arrivedBadge": "{n} title(s) arrived",
+      "requestsHint": "Use search to request a title. It stays here until it becomes available.",
+      "favoritesHint": "Favourites only apply to titles already in the library. They sync with Jellyfin.",
+      "watchedHint": "Filled in automatically as you watch. You can correct it from a title’s page.",
+      "empty": {
+        "requests": "No requests yet.",
+        "toWatch": "Nothing lined up yet. Add a title from its page.",
+        "watched": "Nothing finished yet.",
+        "abandoned": "Nothing dropped. Good.",
+        "favorites": "No favourites yet. The heart on a title adds one."
+      }
+    },
+    "requests": {
+      "state": {
+        "unreleased": "Not released yet",
+        "processing": "On the way",
+        "available": "Available",
+        "failed": "Didn’t work out"
+      },
+      "cancel": "Cancel the request for {title}",
+      "cancelHint": "Removes the request from your list."
+    },
+    "actions": {
+      "removedFromList": "Removed from the list",
+      "addedTo": {
+        "to_watch": "Added to “To watch”",
+        "watched": "Marked as watched",
+        "abandoned": "Marked as dropped",
+        "favorite": "Added to favourites",
+        "to_request": "Added to the list"
+      },
+      "requested": "{title} has been requested",
+      "requestCancelled": "Request cancelled"
+    },
+    "discover": {
+      "open": "Open the page",
+      "request": "Request",
+      "addToList": "Add to my list",
+      "inList": "In my list",
+      "favorite": "Favourite",
+      "favoriteDisabledHint": "Favourites only apply to titles already in the library.",
+      "castTitle": "Cast"
+    },
+    "person": {
+      "less": "Show less",
+      "filmography": "Filmography",
+      "ownedCount": "{owned} of {total} available"
+    },
+    "account": {
+      "language": "Language",
+      "playback": "Playback",
+      "audioLanguage": "Preferred audio language",
+      "subtitleLanguage": "Subtitle language",
+      "subtitleMode": "Subtitle display",
+      "subtitleModes": {
+        "Default": "Default",
+        "Always": "Always",
+        "OnlyForced": "Forced only",
+        "None": "Never"
+      },
+      "playbackHint": "These follow your account: they apply in the Jellyfin apps too.",
+      "langAny": "Any",
+      "lang": {
+        "fre": "French",
+        "eng": "English",
+        "spa": "Spanish",
+        "ger": "German",
+        "ita": "Italian",
+        "jpn": "Japanese"
+      },
+      "notifications": "Notifications",
+      "notificationsLabel": "Tell me when a title arrives",
+      "notificationsHint": "A notification when one of your requests becomes available.",
+      "password": "Password",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm",
+      "changePassword": "Change password",
+      "passwordRule": "At least 8 characters.",
+      "passwordMismatch": "The two passwords don’t match.",
+      "passwordChanged": "Password changed",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "devices": "Signed-in devices",
+      "noOtherDevices": "No other device signed in.",
+      "otherDevices": "{n} other device(s) signed in.",
+      "signOutOthers": "Sign the others out",
+      "devicesRevoked": "The other devices have been signed out",
+      "signOut": "Sign out",
+      "signOutAction": "Sign out"
+    }
   },
   "cinema": {
     "standardMode": "Standard mode",
@@ -1268,6 +1388,10 @@
     "inMyList": "In my list",
     "watchedState": "Watched",
     "readMore": "Show more",
-    "spotlight": "Spotlight"
+    "spotlight": "Spotlight",
+    "discovery": {
+      "trendingMovies": "Trending movies",
+      "trendingSeries": "Trending series"
+    }
   }
 }

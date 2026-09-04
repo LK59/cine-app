@@ -60,7 +60,7 @@ function renderPage() {
 
 describe("Jellyseerr page — approve/decline guest gating", () => {
   it("admin sees the approve/decline buttons on a pending request", async () => {
-    mockUseRole.mockReturnValue({ isGuest: false, role: "admin", jfId: null, jfUser: null });
+    mockUseRole.mockReturnValue({ isReadOnly: false, role: "admin", jfId: null, jfUser: null });
     mockRequestsList();
     renderPage();
 
@@ -69,12 +69,12 @@ describe("Jellyseerr page — approve/decline guest gating", () => {
   });
 
   it("guest never sees approve/decline, even on the 'all requests' tab they're limited to", async () => {
-    mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
+    mockUseRole.mockReturnValue({ isReadOnly: true, role: "user", jfId: "x", jfUser: "invite" });
     mockRequestsList();
     renderPage();
 
     // Guest's default tab is "mine" (jfUser is set) — switch to "all" to hit the same
-    // showActions={!isGuest} code path an admin sees requests through.
+    // showActions={!isReadOnly} code path an admin sees requests through.
     await screen.findByText("jellyseerr.tabAll");
 
     const { default: userEvent } = await import("@testing-library/user-event");

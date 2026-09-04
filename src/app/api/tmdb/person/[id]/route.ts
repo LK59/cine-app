@@ -52,6 +52,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           libraryHref: libraryId
             ? isMovie ? `/radarr/${libraryId}` : `/sonarr/${libraryId}`
             : null,
+          // Le même identifiant, nu : le lecteur ouvre une fiche par son id, pas par une adresse
+          // de la partie gestion — et il ne doit surtout pas avoir à découper une URL pour ça.
+          libraryId: libraryId ?? null,
         };
       })
       .sort((a, b) => {

@@ -47,7 +47,7 @@ function ratingKey(show: { tmdbId?: number | null; tvdbId?: number | null }): st
 
 export default function SonarrPage() {
   const { mutate } = useSWRConfig();
-  const { isGuest } = useRole();
+  const { isReadOnly } = useRole();
   const toast = useToast();
   const t = useT();
   const { data: series, error, isLoading } = useSWR<SonarrSeries[]>("/api/sonarr/series", fetcher);
@@ -162,7 +162,7 @@ export default function SonarrPage() {
         title={t('sonarr.pageTitle')}
         subtitle={series ? t('sonarr.subtitle', { n: series.length }) : undefined}
         action={
-          !isGuest && (
+          !isReadOnly && (
             <button className="btn-primary" onClick={() => setShowAdd(true)}>
               <Plus size={16} /> {t('sonarr.addSeries')}
             </button>

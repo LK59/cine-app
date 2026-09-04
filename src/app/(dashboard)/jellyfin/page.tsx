@@ -55,7 +55,7 @@ interface PlaybackData {
 }
 
 export default function JellyfinPage() {
-  const { isGuest, jfId, jfUser } = useRole();
+  const { isReadOnly, jfId, jfUser } = useRole();
   const toast = useToast();
   const t = useT();
   const { mutate } = useSWRConfig();
@@ -78,7 +78,7 @@ export default function JellyfinPage() {
   );
 
   const playing = (sessions?.filter((s) => s.NowPlayingItem) ?? []).filter((s) =>
-    isGuest && jfUser ? s.UserName?.toLowerCase() === jfUser.toLowerCase() : true
+    isReadOnly && jfUser ? s.UserName?.toLowerCase() === jfUser.toLowerCase() : true
   );
 
   async function refreshLibrary() {
@@ -102,7 +102,7 @@ export default function JellyfinPage() {
         title="Jellyfin"
         subtitle={library ? `${library.systemInfo.ServerName} · v${library.systemInfo.Version}` : undefined}
         action={
-          !isGuest && (
+          !isReadOnly && (
             <button onClick={refreshLibrary} disabled={refreshing} className="btn-ghost px-3 py-1.5 text-xs">
               <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
               {refreshing ? t('jellyfin.refreshing') : t('jellyfin.refreshButton')}

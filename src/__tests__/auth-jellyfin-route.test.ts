@@ -122,6 +122,6 @@ describe("POST /api/auth/jellyfin", () => {
     const { POST } = await import("@/app/api/auth/jellyfin/route");
     const res = await POST(fakeReq({ username: "guest1", password: "x" }));
     const body = await res.json();
-    expect(body.role).toBe("guest");
+    expect(body.role).toBe("user");
   });
 });

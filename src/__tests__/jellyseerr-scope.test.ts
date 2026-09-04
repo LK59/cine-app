@@ -11,7 +11,7 @@ vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr: mockJellyseerr }));
 beforeEach(() => vi.clearAllMocks());
 
 const adminSession = { role: "admin", jsCookie: "s%3Aadmin" } as SessionPayload;
-const guestSession = { role: "guest", jsCookie: "s%3Aguest" } as SessionPayload;
+const userSession = { role: "user", jsCookie: "s%3Auser" } as SessionPayload;
 
 describe("getJellyseerrPendingCount", () => {
   it("admin: the instance-wide pending count via the admin's own cookie", async () => {
@@ -23,15 +23,15 @@ describe("getJellyseerrPendingCount", () => {
     expect(count).toBe(2);
   });
 
-  it("guest: only their own still-pending requests, resolved via getMe (not the admin-gated user list)", async () => {
+  it("user: only their own still-pending requests, resolved via getMe (not the admin-gated user list)", async () => {
     mockJellyseerr.getMe.mockResolvedValue({ id: 42 });
     mockJellyseerr.getRequestsByUser.mockResolvedValue({
       results: [{ status: 1 }, { status: 1 }, { status: 2 }],
     });
     const { getJellyseerrPendingCount } = await import("@/lib/jellyseerr-scope");
-    const count = await getJellyseerrPendingCount(guestSession);
-    expect(mockJellyseerr.getMe).toHaveBeenCalledWith("s%3Aguest");
-    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(42, "s%3Aguest");
+    const count = await getJellyseerrPendingCount(userSession);
+    expect(mockJellyseerr.getMe).toHaveBeenCalledWith("s%3Auser");
+    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(42, "s%3Auser");
     expect(mockJellyseerr.getRequests).not.toHaveBeenCalled();
     expect(count).toBe(2); // only the two status:1 (pending approval) entries
   });
@@ -39,7 +39,7 @@ describe("getJellyseerrPendingCount", () => {
   it("guest with no resolvable Jellyseerr identity: 0, no crash", async () => {
     mockJellyseerr.getMe.mockResolvedValue(null);
     const { getJellyseerrPendingCount } = await import("@/lib/jellyseerr-scope");
-    const count = await getJellyseerrPendingCount(guestSession);
+    const count = await getJellyseerrPendingCount(userSession);
     expect(count).toBe(0);
   });
 
@@ -60,12 +60,12 @@ describe("getJellyseerrActivityItems", () => {
     expect(items).toEqual([{ id: 1 }, { id: 2 }]);
   });
 
-  it("guest: only their own requests", async () => {
+  it("user: only their own requests", async () => {
     mockJellyseerr.getMe.mockResolvedValue({ id: 7 });
     mockJellyseerr.getRequestsByUser.mockResolvedValue({ results: [{ id: 9 }] });
     const { getJellyseerrActivityItems } = await import("@/lib/jellyseerr-scope");
-    const items = await getJellyseerrActivityItems(guestSession, 15);
-    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(7, "s%3Aguest");
+    const items = await getJellyseerrActivityItems(userSession, 15);
+    expect(mockJellyseerr.getRequestsByUser).toHaveBeenCalledWith(7, "s%3Auser");
     expect(items).toEqual([{ id: 9 }]);
   });
 });

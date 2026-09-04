@@ -201,7 +201,10 @@ export function CinemaSeriesDetail({
     <div
       ref={containerRef}
       className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : "animate-fade-in"}`}
-      style={{ zIndex: 46 }}
+      // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
+      // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
+      // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
+      style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
     >
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -222,8 +225,8 @@ export function CinemaSeriesDetail({
 
       <button
         onClick={requestClose}
-        className="btn btn-ghost fixed left-4 top-4 z-10 rounded-full bg-black/55 px-3 py-2"
-        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2"
+        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
       >
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>

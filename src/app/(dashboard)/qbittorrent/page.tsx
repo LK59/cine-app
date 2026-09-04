@@ -61,7 +61,7 @@ function sortTorrents(torrents: QbTorrent[]): QbTorrent[] {
 export default function QbittorrentPage() {
   const toast = useToast();
   const { mutate } = useSWRConfig();
-  const { isGuest } = useRole();
+  const { isReadOnly } = useRole();
   const t = useT();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [query, setQuery] = useState("");
@@ -298,7 +298,7 @@ export default function QbittorrentPage() {
                   />
                 </div>
               </div>
-              {!isGuest && (
+              {!isReadOnly && (
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   {isPaused(torrent.state) ? (
                     <button onClick={() => action(torrent.hash, "resume")} className="btn-ghost px-2" title={t('qbittorrent.actionResume')} aria-label={t('qbittorrent.actionResume')}>
@@ -338,7 +338,7 @@ export default function QbittorrentPage() {
       {selectedTorrent && (
         <TorrentDetailModal
           torrent={selectedTorrent}
-          isGuest={isGuest}
+          isReadOnly={isReadOnly}
           onClose={() => setSelectedHash(null)}
           onAction={action}
           onRemove={removeWithFiles}

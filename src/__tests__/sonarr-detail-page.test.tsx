@@ -88,7 +88,7 @@ function mockSeriesFetches(seasonComplete: boolean) {
 
 describe("Sonarr series detail page — guest button visibility", () => {
   it("admin always sees the season auto-search button, complete or not, plus per-episode search", async () => {
-    mockUseRole.mockReturnValue({ isGuest: false, role: "admin", jfId: null, jfUser: null });
+    mockUseRole.mockReturnValue({ isReadOnly: false, role: "admin", jfId: null, jfUser: null });
     mockSeriesFetches(true);
     renderPage();
 
@@ -105,7 +105,7 @@ describe("Sonarr series detail page — guest button visibility", () => {
   });
 
   it("guest sees the season auto-search button while the season is incomplete", async () => {
-    mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
+    mockUseRole.mockReturnValue({ isReadOnly: true, role: "user", jfId: "x", jfUser: "invite" });
     mockSeriesFetches(false);
     renderPage();
 
@@ -114,7 +114,7 @@ describe("Sonarr series detail page — guest button visibility", () => {
   });
 
   it("guest never sees the season auto-search button once every episode has a file", async () => {
-    mockUseRole.mockReturnValue({ isGuest: true, role: "guest", jfId: "x", jfUser: "invite" });
+    mockUseRole.mockReturnValue({ isReadOnly: true, role: "user", jfId: "x", jfUser: "invite" });
     mockSeriesFetches(true);
     renderPage();
 

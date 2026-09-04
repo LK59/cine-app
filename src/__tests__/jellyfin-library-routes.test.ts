@@ -26,7 +26,7 @@ describe("GET /api/jellyfin/library", () => {
 
 describe("POST /api/jellyfin/library/refresh", () => {
   it("returns 403 for a non-admin session", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user" });
     const { POST } = await import("@/app/api/jellyfin/library/refresh/route");
     const res = await POST(fakeReq());
     expect(res.status).toBe(403);

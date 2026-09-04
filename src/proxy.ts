@@ -38,7 +38,7 @@ function isPublicClaraPhoto(pathname: string): boolean {
 //
 // "POST /api/radarr/movies" and "POST /api/sonarr/series" (direct library add, monitored,
 // immediate auto-search — distinct from the Jellyseerr request flow above) used to be listed
-// here. They were removed after finding their UI buttons were never gated by isGuest either:
+// here. They were removed after finding their UI buttons were never gated by isReadOnly either:
 // any guest could add arbitrary new content straight into Radarr/Sonarr, bypassing the whole
 // per-user request/attribution system entirely. Both the buttons and this whitelist entry were
 // the two halves of the same bug — see AddMovieModal/AddSeriesModal in radarr/page.tsx and
@@ -82,7 +82,7 @@ export async function proxy(req: NextRequest) {
   }
 
   if (
-    session.role === "guest" &&
+    session.role !== "admin" &&
     pathname.startsWith("/api/") &&
     req.method !== "GET" &&
     !GUEST_ALLOWED_MUTATIONS.has(`${req.method} ${pathname}`)

@@ -68,14 +68,14 @@ describe("GET /api/jellyseerr/my-requests", () => {
   });
 
   it("returns empty results for a non-admin with no Jellyfin account", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user" });
     const { GET } = await import("@/app/api/jellyseerr/my-requests/route");
     const res = await GET(fakeReq());
     expect((await res.json()).results).toEqual([]);
   });
 
   it("matches the Jellyfin username to a Jellyseerr user (case-insensitive)", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "Louis" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "Louis" });
     mockJellyseerr.getUsers.mockResolvedValue({ results: [{ id: 5, jellyfinUsername: "louis" }] });
     mockJellyseerr.getRequestsByUser.mockResolvedValue({ results: [{ id: 9 }] });
     const { GET } = await import("@/app/api/jellyseerr/my-requests/route");
@@ -85,7 +85,7 @@ describe("GET /api/jellyseerr/my-requests", () => {
   });
 
   it("returns empty results when no Jellyseerr user matches the Jellyfin username", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "Louis" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "Louis" });
     mockJellyseerr.getUsers.mockResolvedValue({ results: [] });
     const { GET } = await import("@/app/api/jellyseerr/my-requests/route");
     const res = await GET(fakeReq());
@@ -117,7 +117,7 @@ describe("POST /api/jellyseerr/requests/[id]", () => {
 
 describe("GET /api/jellyseerr/requests", () => {
   it("scopes a guest session to only their own Jellyseerr requests", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis" });
     mockJellyseerr.getUsers.mockResolvedValue({ results: [{ id: 5, jellyfinUsername: "louis" }] });
     mockJellyseerr.getRequestsByUser.mockResolvedValue({ results: [{ id: 1 }], pageInfo: { results: 1 } });
     const { GET } = await import("@/app/api/jellyseerr/requests/route");
@@ -128,7 +128,7 @@ describe("GET /api/jellyseerr/requests", () => {
   });
 
   it("returns empty results for a guest with no matching Jellyseerr user, without calling getRequests", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis" });
     mockJellyseerr.getUsers.mockResolvedValue({ results: [] });
     const { GET } = await import("@/app/api/jellyseerr/requests/route");
     const res = await GET(fakeReq());
@@ -153,7 +153,7 @@ describe("POST /api/jellyseerr/requests", () => {
   });
 
   it("resolves the requester's Jellyseerr user id from their Jellyfin username before creating the request", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis" });
     mockJellyseerr.getUsers.mockResolvedValue({ results: [{ id: 5, jellyfinUsername: "louis" }] });
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
@@ -170,7 +170,7 @@ describe("POST /api/jellyseerr/requests", () => {
   });
 
   it("prefers the session's own Jellyseerr cookie over resolving a userId", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis", jsCookie: "s%3Asecret" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis", jsCookie: "s%3Asecret" });
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
@@ -186,7 +186,7 @@ describe("POST /api/jellyseerr/requests", () => {
   });
 
   it("passes seasons through for a tv request", async () => {
-    mockVerifySessionFull.mockResolvedValue({ role: "guest", jfUser: "louis", jsCookie: "s%3Asecret" });
+    mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis", jsCookie: "s%3Asecret" });
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "tv", mediaId: 7, seasons: [1, 2] } }));

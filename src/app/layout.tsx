@@ -28,6 +28,7 @@ import { TranslationProvider } from "@/components/TranslationProvider";
 import { PlaybackProvider } from "@/components/PlaybackProvider";
 import { LOCALES, LOCALE_COOKIE, loadLocaleDict, type Locale } from "@/lib/i18n";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { PlayerHostLazy } from "@/components/PlayerHostLazy";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
@@ -94,7 +95,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <ThemeProvider>
             <SWRProvider>
               <ToastProvider>
-                <PlaybackProvider>{children}</PlaybackProvider>
+                <PlaybackProvider>
+                  {children}
+                  {/* Monté à la racine, et non plus dans la coquille de gestion : le lecteur et
+                      le tableau de bord sont maintenant deux groupes de routes distincts, et
+                      passer de l'un à l'autre démontait l'élément <video>. PlayerHost ne rend
+                      rien tant que rien ne joue, donc le coût est nul ailleurs. */}
+                  <PlayerHostLazy />
+                </PlaybackProvider>
               </ToastProvider>
             </SWRProvider>
           </ThemeProvider>

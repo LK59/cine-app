@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   const jellyfinUsername: string = data.User?.Name ?? username;
   const jellyfinId: string = data.User?.Id ?? "";
   const jellyfinToken: string = data.AccessToken ?? "";
-  const role: Role = isAdmin ? "admin" : "guest";
+  const role: Role = isAdmin ? "admin" : "user";
 
   // Logs into Jellyseerr AS this same user, with the same credentials they just used here — the
   // only correct way to attribute a later request (e.g. from the "Demander" buttons) to them

@@ -61,6 +61,12 @@ export interface TmdbPersonCredit {
 }
 
 export interface TmdbMovie {
+  // Champs de base : présents dans la réponse depuis toujours, simplement pas déclarés tant que
+  // rien n'en avait besoin (la fiche du lecteur, elle, dessine le titre et l'année elle-même).
+  id?: number;
+  title?: string;
+  release_date?: string;
+  vote_average?: number;
   overview: string;
   genres: { id: number; name: string }[];
   backdrop_path: string | null;
@@ -87,6 +93,13 @@ export interface TmdbCollection {
 }
 
 export interface TmdbTv {
+  // Idem côté séries. `number_of_seasons` sert à demander une série entière quand Jellyseerr
+  // n'a pas répondu avec sa propre liste de saisons.
+  id?: number;
+  name?: string;
+  first_air_date?: string;
+  vote_average?: number;
+  number_of_seasons?: number;
   overview: string;
   genres: { id: number; name: string }[];
   backdrop_path: string | null;

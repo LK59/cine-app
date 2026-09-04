@@ -13,7 +13,7 @@ import { useT } from "@/components/TranslationProvider";
 type TestState = "idle" | "testing" | "ok" | "fail";
 
 export default function JackettPage() {
-  const { isGuest } = useRole();
+  const { isReadOnly } = useRole();
   const t = useT();
   const { data, error, isLoading } = useSWR<JackettIndexer[]>("/api/jackett/indexers", fetcher);
   const [testResults, setTestResults] = useState<Record<string, TestState>>({});
@@ -61,7 +61,7 @@ export default function JackettPage() {
                       <CircleX size={12} /> {t('jackett.testFailed')}
                     </span>
                   )}
-                  {!isGuest && (
+                  {!isReadOnly && (
                     <button
                       className="btn-ghost px-2 py-1 text-xs"
                       disabled={state === "testing"}
