@@ -16,6 +16,9 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
+import { CinemaSpotlight } from "@/components/cinema/CinemaSpotlight";
+import { CinemaCard } from "@/components/cinema/CinemaCard";
+import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import { CinemaMovieDetail } from "@/components/cinema/CinemaMovieDetail";
 import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
 import { CinemaSeriesRow } from "@/components/cinema/CinemaSeriesRow";
@@ -62,7 +65,7 @@ const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 // How many curated rails can sit above the genre rows (Continue, Top 10, Recently added, My
 // list). Only used as the genre rows' entrance-animation offset, which caps at 6 anyway — an
 // exact count per tab would buy nothing visible.
-const RAIL_COUNT = 4;
+const RAIL_COUNT = 5;
 
 const EDGE_FADE = {
   maskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
@@ -296,8 +299,10 @@ export function CinemaClient() {
   // one fixed pick — the same carousel (and the same 8s cadence) as the dashboard's own hero.
   // The moment a card takes focus it wins and the rotation stops: this pane's job from then on
   // is to preview whatever you're pointing at.
-  const movieCarousel = (movies?.recentlyAdded?.length ? movies.recentlyAdded : movies?.spotlight ?? []).slice(0, 8);
-  const [movieCarouselIndex] = useRotatingIndex(movieCarousel.length, focusedItem !== null);
+  // Le « spotlight » plutôt que « récemment ajouté » : ce dernier a sa propre rangée plus bas, et
+  // les mêmes huit titres deux fois de suite ne font pas deux sections.
+  const movieCarousel = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
+  const [movieCarouselIndex, setMovieCarouselIndex] = useRotatingIndex(movieCarousel.length, focusedItem !== null);
   const heroItem = focusedItem ?? movieCarousel[movieCarouselIndex] ?? null;
 
   // Series' own parallel focus/selection state — kept entirely separate from the movie state
@@ -305,8 +310,8 @@ export function CinemaClient() {
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
   const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
-  const seriesCarousel = (series?.recentlyAdded?.length ? series.recentlyAdded : series?.spotlight ?? []).slice(0, 8);
-  const [seriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
+  const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
+  const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
 
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
@@ -357,6 +362,7 @@ export function CinemaClient() {
   // left it instead of snapping back to the first card (useTvGridNav treats "nothing focused"
   // as "start over").
   const lastFocusedCard = useRef<HTMLElement | null>(null);
+  const rowsPaneRef = useRef<HTMLDivElement>(null);
 
   // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu (see the
   // hook's own doc comment) AND while the player is open. The player closes CinemaMovieDetail
@@ -417,6 +423,19 @@ export function CinemaClient() {
    * pas — présent dans Jellyfin mais pas dans Radarr ni Sonarr — n'a pas de fiche : on lit,
    * plutôt que de laisser un bouton mort.
    */
+  /**
+   * On arrive sur la première rangée.
+   *
+   * Le panneau est en `snap-mandatory` : au chargement, le navigateur cale sur le point
+   * d'accroche le plus proche, qui selon la hauteur de la fenêtre pouvait être le Top 10 plutôt
+   * que la première rangée. Remis en haut explicitement, à l'arrivée comme à chaque changement
+   * d'onglet — où la liste des rangées change entièrement et où rester à mi-hauteur n'a aucun
+   * sens. `instant`, sinon l'accrochage tranche avant que le défilement doux ait fini.
+   */
+  useEffect(() => {
+    rowsPaneRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [mediaType]);
+
   const openResume = useCallback(
     (href: string | null, play: () => void) => {
       lastFocusedCard.current = document.activeElement as HTMLElement;
@@ -633,7 +652,10 @@ export function CinemaClient() {
             CinemaHero's own doc comment on why that's deliberate, not debounced); this key only
             changes on an actual Films/Séries switch, so the crossfade plays once per tab flip,
             not on every arrow-key scrub. */}
-        <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "50%" }}>
+        {/* 44 % et non 50 % : la première page doit montrer la bannière, la rangée « À la une »
+            *entière*, puis le titre de « Reprendre » et le haut de ses affiches — c'est ce qui
+            dit qu'on peut descendre. Six points de hauteur suffisent à l'obtenir. */}
+        <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "44%" }}>
           {mediaType === "movies"
             ? heroItem && <CinemaHero item={heroItem} onTrailerKeyChange={setHeroTrailerKey} />
             : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} onTrailerKeyChange={setHeroTrailerKey} />}
@@ -652,7 +674,10 @@ export function CinemaClient() {
             one row per notch rather than gliding — a known, inherent trait of mandatory snap with
             discrete wheel input, not something further JS here fixed better than the browser
             itself. Reliability was the explicit priority over that. */}
-        <div className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6">
+        <div
+          ref={rowsPaneRef}
+          className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6"
+        >
           {/* Keyed by mediaType so switching Films/Séries crossfades the whole rows pane in
               instead of hard-cutting between them — only the ENTERING side needs an animation
               here (the old content just vanishes underneath it, same instant swap as before,
@@ -663,6 +688,32 @@ export function CinemaClient() {
           <div key={mediaType} className="animate-fade-in">
           {mediaType === "movies" ? (
             <>
+              {/* Première rangée, et celle que la bannière suit — voir CinemaSpotlight. */}
+              <CinemaSpotlight
+                label={t("cinema.spotlight")}
+                count={movieCarousel.length}
+                activeIndex={movieCarouselIndex}
+                onPick={(i) => {
+                  // La bannière doit repartir sur la rotation : tant qu'une carte est retenue,
+                  // c'est elle qui commande, et les barres ne changeraient rien à l'écran.
+                  setFocusedItem(null);
+                  setMovieCarouselIndex(i);
+                }}
+              >
+                {movieCarousel.map((item, i) => (
+                  <CinemaCard
+                    key={item.radarrId}
+                    item={item}
+                    index={i}
+                    rowKey="spotlight-movies"
+                    widthClassName={CARD_WIDTH}
+                    onFocusItem={setFocusedItem}
+                    onSelectItem={openDetail}
+                    showNewBadge={false}
+                  />
+                ))}
+              </CinemaSpotlight>
+
               {resumeMovies.length > 0 && (
                 <div className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
@@ -700,7 +751,7 @@ export function CinemaClient() {
                 <CinemaTop10Row
                   label={t("cinema.top10")}
                   rowKey="top10-movies"
-                  rowIndex={resumeMovies.length > 0 ? 1 : 0}
+                  rowIndex={resumeMovies.length > 0 ? 2 : 1}
                   items={movies.top10}
                   idOf={(m) => m.radarrId}
                   cardWidthClassName={CARD_WIDTH}
@@ -752,6 +803,29 @@ export function CinemaClient() {
                   exists yet (fine, since movies always load first); series loads lazily after
                   the toggle is already up, so its own states have to render inside the same
                   chrome instead of hiding the toggle that got you here. */}
+              <CinemaSpotlight
+                label={t("cinema.spotlight")}
+                count={seriesCarousel.length}
+                activeIndex={seriesCarouselIndex}
+                onPick={(i) => {
+                  setSeriesFocusedItem(null);
+                  setSeriesCarouselIndex(i);
+                }}
+              >
+                {seriesCarousel.map((item, i) => (
+                  <CinemaSeriesCard
+                    key={item.sonarrId}
+                    item={item}
+                    index={i}
+                    rowKey="spotlight-series"
+                    widthClassName={CARD_WIDTH}
+                    onFocusItem={setSeriesFocusedItem}
+                    onSelectItem={openSeriesDetail}
+                    showNewBadge={false}
+                  />
+                ))}
+              </CinemaSpotlight>
+
               {continueSeries.length > 0 && (
                 <div className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
