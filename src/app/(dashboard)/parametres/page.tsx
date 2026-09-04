@@ -108,7 +108,7 @@ export default function ParametresPage() {
         {/* ── Apparence ── */}
         <section>
           <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+            <div className="text-slate-500">
               <Palette size={18} />
             </div>
             <div>
@@ -157,7 +157,7 @@ export default function ParametresPage() {
             <div className="card p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-lg bg-slate-800 p-2 text-slate-300 ring-1 ring-inset ring-white/10">
+                  <div className="mt-0.5 text-slate-500">
                     <Moon size={16} />
                   </div>
                   <div>
@@ -176,7 +176,7 @@ export default function ParametresPage() {
         {/* ── Notifications ── */}
         <section>
           <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+            <div className="text-slate-500">
               <Bell size={18} />
             </div>
             <div>
@@ -189,7 +189,7 @@ export default function ParametresPage() {
             <div className="space-y-4">
               <div className="card p-5">
                 <div className="mb-5 flex items-start gap-3">
-                  <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+                  <div className="text-slate-500">
                     <Settings size={16} />
                   </div>
                   <div>
@@ -260,7 +260,7 @@ export default function ParametresPage() {
         {/* ── Sécurité ── */}
         <section>
           <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+            <div className="text-slate-500">
               <Shield size={18} />
             </div>
             <div>
@@ -274,7 +274,7 @@ export default function ParametresPage() {
         {/* ── Application ── */}
         <section>
           <div className="mb-4 flex items-center gap-3">
-            <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+            <div className="text-slate-500">
               <Smartphone size={18} />
             </div>
             <div>
@@ -288,7 +288,7 @@ export default function ParametresPage() {
         {role === "admin" && (
           <section>
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-400 ring-1 ring-inset ring-amber-500/20">
+              <div className="text-amber-400/80">
                 <Settings size={18} />
               </div>
               <div>
@@ -344,7 +344,7 @@ function LanguageSection() {
   return (
     <section>
       <div className="mb-4 flex items-center gap-3">
-        <div className="rounded-lg bg-accent-500/10 p-2 text-accent-400 ring-1 ring-inset ring-accent-500/20">
+        <div className="text-slate-500">
           <Globe size={18} />
         </div>
         <div>
@@ -359,12 +359,10 @@ function LanguageSection() {
             <button
               key={l}
               onClick={() => select(l)}
-              className={[
-                "rounded-lg border px-5 py-2 text-sm font-medium transition-colors",
-                active === l
-                  ? "border-accent-500 bg-accent-500/20 text-accent-300"
-                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white",
-              ].join(" ")}
+              /* Le même geste que les filtres de Découverte, donc la même forme : plein quand
+                 c'est le choix retenu, presque rien sinon. Une bordure *et* un fond *et* un
+                 rayon sur chaque option, c'est quatre boîtes qui se disputent une décision. */
+              className={`chip px-5 py-2 ${active === l ? "chip-on" : ""}`}
             >
               {LOCALE_LABELS[l]}
             </button>
@@ -499,7 +497,7 @@ function LegacyPlayerSection() {
   return (
     <section>
       <div className="mb-4 flex items-center gap-3">
-        <div className="rounded-lg bg-slate-500/10 p-2 text-slate-400 ring-1 ring-inset ring-slate-500/20">
+        <div className="text-slate-500">
           <History size={18} />
         </div>
         <div>

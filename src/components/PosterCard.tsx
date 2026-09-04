@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Star, BookCheck, CirclePlus, ExternalLink, Loader2, Clock,
-  Eye, Heart, X, CircleCheck, Telescope, Film, Tv, Plus,
+  Eye, Heart, X, CircleCheck, Telescope, Film, Tv, Plus, EllipsisVertical,
 } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
@@ -204,8 +204,12 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
             </div>
           )}
 
+          {/* La note ne s'affiche plus au repos. Elle était sur *chaque* affiche d'une grille de
+              trente, ce qui est trente petites boîtes ambre qui se disputent l'attention avec les
+              affiches — et deux flous d'arrière-plan par carte, recalculés à chaque image, pendant
+              qu'on fait défiler. Elle reste au survol, et sur la fiche. */}
           {item.rating > 0 && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 backdrop-blur-xs">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
               <Star size={7} className="fill-current" /> {item.rating.toFixed(1)}
             </div>
           )}
@@ -217,29 +221,31 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
           )}
 
           {/* Desktop hover overlay */}
-          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/75 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <div className="flex gap-0.5">
-              {ALL_STATUSES.map((s) => {
-                const meta = STATUS_META[s];
-                const Icon = meta.icon;
-                const active = addedStatus === s;
-                return (
-                  <button
-                    key={s}
-                    onClick={(e) => { e.stopPropagation(); addToWatchlist(s); }}
-                    title={meta.label}
-                    style={{ height: btnSize, width: btnSize }}
-                    className={`flex items-center justify-center rounded-full border transition duration-150 ${
-                      active
-                        ? `${meta.bgSolid} border-white/30 text-white scale-110 shadow-md`
-                        : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
-                    }`}
-                  >
-                    <Icon size={iconSize} />
-                  </button>
-                );
-              })}
-            </div>
+          <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center gap-1.5 bg-black/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            {/* Une seule action de plus, au lieu des cinq états côte à côte. Sept contrôles
+                apparaissant sur une affiche au survol, c'est un menu déguisé en rangée — et la
+                liste complète existe déjà, c'est celle que le tactile ouvre depuis toujours.
+                Un seul bouton la donne aux deux. */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSheetOpen(true);
+              }}
+              title={t("common.moreOptions")}
+              style={{ height: btnSize, width: btnSize }}
+              className={`flex items-center justify-center rounded-full transition duration-150 hover:scale-105 ${
+                addedStatus ? `${STATUS_META[addedStatus].bgSolid} text-white` : "bg-white/15 text-white/80 hover:bg-white/25"
+              }`}
+            >
+              {addedStatus ? (
+                (() => {
+                  const Icon = STATUS_META[addedStatus].icon;
+                  return <Icon size={iconSize} />;
+                })()
+              ) : (
+                <EllipsisVertical size={iconSize} />
+              )}
+            </button>
 
             <div className="flex items-center gap-1">
               {item.libraryHref ? (

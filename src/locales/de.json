@@ -124,7 +124,8 @@
       "body": "Füge die App zum Home-Bildschirm hinzu, um Benachrichtigungen und einen schnelleren Start zu aktivieren.",
       "steps": "Tippe auf Teilen, dann auf \"Zum Home-Bildschirm\".",
       "dismiss": "Später"
-    }
+    },
+    "moreOptions": "Weitere Optionen"
   },
   "dashboard": {
     "resumeWatching": "Weiterschauen",

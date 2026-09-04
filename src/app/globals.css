@@ -185,20 +185,102 @@
   @apply border border-white/10 bg-slate-950/45 backdrop-blur-2xl;
 }
 
+/* ─── Les boutons ─────────────────────────────────────────────────────────────
+   Le système existait déjà ; sur deux cent soixante-neuf boutons, trente-deux
+   s'en servaient. Les deux cent trente-sept autres portaient vingt et un fonds
+   différents, six rayons et douze espacements — et **un pour cent** d'entre eux
+   réagissaient au clic. C'est la seule raison pour laquelle le lecteur paraît
+   plus fini que le reste de l'app : c'est le seul endroit où appuyer sur un
+   bouton fait quelque chose.
+
+   Le flou d'arrière-plan disparaît d'ici : il se recalcule par élément et par
+   image, et il y a des rangées entières de ces boutons à l'écran. Ce qu'il
+   apportait — un fond qui tient sur n'importe quel fond — est déjà obtenu par
+   l'opacité. */
+
 @utility btn {
-  @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur-xs transition-colors;
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out,
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Le retour au doigt, pour tous : la surface s'enfonce, elle ne clignote pas. */
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.btn:disabled {
+  @apply cursor-not-allowed opacity-45;
+}
+.btn:focus-visible {
+  @apply outline-2 outline-offset-2 outline-white/60;
 }
 
+/** L'action principale d'un écran. Une seule — c'est ce qui la rend principale. */
 @utility btn-primary {
-  @apply btn bg-accent-600/90 text-white shadow-glow hover:bg-accent-600;
+  @apply btn bg-accent-600 text-white shadow-glow;
+}
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-accent-500;
+  }
 }
 
+/** Tout le reste. Discret au repos, présent sous la main. */
 @utility btn-ghost {
-  @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10;
+  @apply btn bg-white/8 text-slate-200;
+}
+@media (hover: hover) {
+  .btn-ghost:hover:not(:disabled) {
+    @apply bg-white/16 text-white;
+  }
+}
+
+/** Un ghost qui est actuellement l'option retenue. */
+@utility btn-on {
+  @apply bg-accent-500/22 text-white;
 }
 
 @utility btn-danger {
-  @apply btn bg-red-600/80 text-white hover:bg-red-600;
+  @apply btn bg-red-600/85 text-white;
+}
+@media (hover: hover) {
+  .btn-danger:hover:not(:disabled) {
+    @apply bg-red-600;
+  }
+}
+
+/** Tailles. Le défaut est le confort de lecture ; les deux autres sont des exceptions. */
+@utility btn-sm {
+  @apply gap-1.5 px-2.5 py-1 text-xs;
+}
+@utility btn-lg {
+  @apply gap-2.5 px-4 py-2.5 text-sm;
+}
+/** Un bouton qui n'est qu'une icône est rond, comme dans le lecteur. */
+@utility btn-icon {
+  @apply gap-0 rounded-full p-2;
+}
+
+/* ─── Les puces ───────────────────────────────────────────────────────────────
+   Un filtre, un genre, un segment : le même geste, et jusqu'ici trois formes
+   selon la page. Actif = plein, sans bordure. Inactif = presque rien. Une puce
+   qui porte à la fois une bordure, un fond et un rayon se dispute l'attention
+   avec le contenu qu'elle filtre. */
+
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-400;
+  transition: background-color 150ms ease-out, color 150ms ease-out,
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chip:active {
+  transform: scale(0.96);
+}
+@media (hover: hover) {
+  .chip:hover {
+    @apply bg-white/8 text-slate-100;
+  }
+}
+@utility chip-on {
+  @apply bg-accent-500/22 text-white;
 }
 
 @utility input {

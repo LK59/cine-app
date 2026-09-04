@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
+import { MoreMenu } from "@/components/MoreMenu";
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { canAutoSearchMovie } from "@/lib/mediaPermissions";
@@ -397,7 +398,7 @@ export default function RadarrMovieDetailPage() {
         {/* Unified request button — visible only when not yet downloaded or in progress */}
         {canRequest && (
           <button
-            className="btn-secondary px-3"
+            className="btn-ghost px-3"
             onClick={requestMovie}
             disabled={requesting}
           >
@@ -410,23 +411,30 @@ export default function RadarrMovieDetailPage() {
             <PlayCircle size={16} /> {t('common.trailer')}
           </button>
         )}
-        {/* Guests only get the auto-search entry point when there's no file yet — a downloaded
-            movie is a fact, not something to search for. Admins always keep it. */}
-        {canAutoSearchMovie(isGuest, movie.hasFile) && (
-          <button className="btn-ghost px-3" onClick={triggerAutoSearch} disabled={autoSearching}>
-            <RefreshCw size={16} className={autoSearching ? "animate-spin" : ""} /> {t('common.autoSearch')}
-          </button>
-        )}
-        {/* NFO is a read-only technical info panel (file path, codec, bitrate...) — no mutation,
-            no reason to hide it from guests the way the admin-only actions below are. */}
-        <button className="btn-ghost px-3" onClick={() => setShowNfo(true)}>
-          <Info size={16} /> NFO
-        </button>
-        {!isGuest && (
-          <button className="btn-primary" onClick={() => setShowSearch(true)}>
-            <Search size={16} /> {t('common.interactiveSearch')}
-          </button>
-        )}
+        {/* Everything technical goes behind one button rather than beside the others. Seven
+            actions of identical weight in a row means none of them is the obvious one — and the
+            interactive search was a *second* primary, in a second colour, next to Play.
+
+            Guests only get the auto-search entry point when there's no file yet — a downloaded
+            movie is a fact, not something to search for. Admins always keep it. NFO is read-only
+            and stays available to everyone. */}
+        <MoreMenu
+          label={t('common.moreOptions')}
+          items={[
+            ...(canAutoSearchMovie(isGuest, movie.hasFile)
+              ? [{
+                  label: t('common.autoSearch'),
+                  icon: <RefreshCw size={16} className={autoSearching ? "animate-spin" : ""} />,
+                  onSelect: triggerAutoSearch,
+                  disabled: autoSearching,
+                }]
+              : []),
+            ...(!isGuest
+              ? [{ label: t('common.interactiveSearch'), icon: <Search size={16} />, onSelect: () => setShowSearch(true) }]
+              : []),
+            { label: "NFO", icon: <Info size={16} />, onSelect: () => setShowNfo(true) },
+          ]}
+        />
       </div>
 
       {/* "En attente de sortie" notice for films still in cinemas */}

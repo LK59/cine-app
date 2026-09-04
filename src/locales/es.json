@@ -124,7 +124,8 @@
       "body": "Añade la app a tu pantalla de inicio para activar las notificaciones y un inicio más rápido.",
       "steps": "Toca Compartir y luego \"Añadir a pantalla de inicio\".",
       "dismiss": "Más tarde"
-    }
+    },
+    "moreOptions": "Más opciones"
   },
   "dashboard": {
     "resumeWatching": "Continuar viendo",

@@ -89,8 +89,13 @@ export function CinemaHero({
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
       </div>
 
-      <p className="line-clamp-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
-        {info?.tmdb?.overview || item.overview}
+      {/* Rien plutôt que de l'anglais. Le synopsis traduit vient de TMDB et met un instant à
+          arriver ; celui qui servait de repli vient de Radarr, qui ne traduit pas — alors sous
+          une interface en français, l'accueil affichait un texte en anglais le temps que le bon
+          arrive, puis le remplaçait. Une ligne vide un court instant se remarque moins qu'une
+          langue qui change sous les yeux. */}
+      <p className="line-clamp-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+        {info?.tmdb?.overview ?? (info ? item.overview : "")}
       </p>
 
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (

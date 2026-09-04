@@ -53,16 +53,27 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => enterCinema(router)}
-        className="mb-3 flex shrink-0 items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20"
+        className="btn btn-ghost mb-3 w-full shrink-0 justify-start px-3 py-2 text-accent-300"
       >
         <MonitorPlay size={16} />
         {t("nav.cinemaMode")}
       </button>
 
       {/* Scrollable nav list */}
+      {/* La liste défile quand elle ne tient pas, et jusqu'ici une entrée coupée net en haut ou
+          en bas ressemblait à un défaut de mise en page plutôt qu'à « il y en a plus ». Le
+          dégradé de masque le dit sans rien ajouter au DOM. Les entrées sont aussi un peu plus
+          serrées, ce qui suffit à faire tenir la liste entière sur la plupart des écrans. */}
       <nav
         className="flex-1 overflow-y-auto overscroll-contain"
-        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+        style={
+          {
+            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+            maskImage: "linear-gradient(to bottom, transparent, black 12px, black calc(100% - 12px), transparent)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent, black 12px, black calc(100% - 12px), transparent)",
+          } as React.CSSProperties
+        }
       >
         <div className="space-y-0.5 pb-2">
           {NAV_ITEMS.map(({ href, navKey, icon: Icon }) => {
@@ -73,9 +84,14 @@ export function Sidebar() {
                 href={href}
                 onMouseEnter={() => prefetchRoute(href)}
                 onFocus={() => prefetchRoute(href)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium backdrop-blur-xs transition-colors ${
+                /* Un repère fin à gauche et du texte plus clair, plutôt qu'un pavé violet.
+                   L'accent était le fond de l'entrée active, l'encadré du mode cinéma, le bouton
+                   principal, la puce sélectionnée et l'icône de chaque section : une couleur qui
+                   veut dire six choses n'en dit plus aucune. Ici deux de ces pavés se touchaient
+                   et se disputaient l'œil. */
+                className={`relative flex items-center gap-3 rounded-lg py-1.5 pl-4 pr-3 text-sm font-medium transition-colors ${
                   active
-                    ? "bg-accent-600/15 text-accent-400 ring-1 ring-inset ring-accent-500/20"
+                    ? "text-white before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent-500"
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
                 }`}
               >
@@ -90,7 +106,7 @@ export function Sidebar() {
       {/* Logout */}
       <button
         onClick={logout}
-        className="mt-2 flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-red-400"
+        className="btn mt-2 w-full shrink-0 justify-start gap-3 px-3 py-2 text-slate-400 hover:bg-white/5 hover:text-red-400"
       >
         <LogOut size={18} className="shrink-0" />
         <span className="truncate">{t('nav.logout')}</span>

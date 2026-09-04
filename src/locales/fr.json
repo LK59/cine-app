@@ -124,7 +124,8 @@
       "body": "Ajoutez l'app à votre écran d'accueil pour activer les notifications et un lancement plus rapide.",
       "steps": "Appuyez sur Partager, puis \"Sur l'écran d'accueil\".",
       "dismiss": "Plus tard"
-    }
+    },
+    "moreOptions": "Plus d'options"
   },
   "dashboard": {
     "resumeWatching": "Continuer à regarder",

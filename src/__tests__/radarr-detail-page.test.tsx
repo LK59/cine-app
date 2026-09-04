@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 vi.mock("next/navigation", () => ({
@@ -80,13 +80,26 @@ function mockMovieFetches(hasFile: boolean) {
   );
 }
 
+/**
+ * Opens the overflow menu, where the technical actions now live.
+ *
+ * They used to sit in the row beside Play, seven buttons of identical weight. What these tests
+ * check is the permission rule, which has not moved — only the button has.
+ */
+async function openMoreMenu() {
+  const trigger = screen.queryByLabelText("common.moreOptions");
+  if (trigger) await act(async () => void fireEvent.click(trigger));
+}
+
 describe("Radarr movie detail page — guest button visibility", () => {
   it("admin always sees auto-search, NFO, and interactive search, file or not", async () => {
     mockUseRole.mockReturnValue({ isGuest: false, role: "admin", jfId: null, jfUser: null });
     mockMovieFetches(true);
     renderPage();
 
-    expect(await screen.findByText("common.autoSearch")).toBeInTheDocument();
+    await screen.findByText("Test Movie");
+    await openMoreMenu();
+    expect(screen.getByText("common.autoSearch")).toBeInTheDocument();
     expect(screen.getByText("NFO")).toBeInTheDocument();
     expect(screen.getByText("common.interactiveSearch")).toBeInTheDocument();
     expect(screen.getByText("radarr.deleteFromRadarr")).toBeInTheDocument();
@@ -98,6 +111,7 @@ describe("Radarr movie detail page — guest button visibility", () => {
     renderPage();
 
     await screen.findByText("Test Movie");
+    await openMoreMenu();
     expect(screen.queryByText("common.autoSearch")).not.toBeInTheDocument();
     expect(screen.queryByText("common.interactiveSearch")).not.toBeInTheDocument();
     expect(screen.queryByText("radarr.deleteFromRadarr")).not.toBeInTheDocument();
@@ -110,7 +124,9 @@ describe("Radarr movie detail page — guest button visibility", () => {
     mockMovieFetches(false);
     renderPage();
 
-    expect(await screen.findByText("common.autoSearch")).toBeInTheDocument();
+    await screen.findByText("Test Movie");
+    await openMoreMenu();
+    expect(screen.getByText("common.autoSearch")).toBeInTheDocument();
     expect(screen.queryByText("common.interactiveSearch")).not.toBeInTheDocument();
     expect(screen.getByText("NFO")).toBeInTheDocument();
   });

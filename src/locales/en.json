@@ -124,7 +124,8 @@
       "body": "Add the app to your Home Screen to enable notifications and faster launches.",
       "steps": "Tap Share, then \"Add to Home Screen\".",
       "dismiss": "Later"
-    }
+    },
+    "moreOptions": "More options"
   },
   "dashboard": {
     "resumeWatching": "Continue watching",

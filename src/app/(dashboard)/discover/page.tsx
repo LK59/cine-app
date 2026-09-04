@@ -90,11 +90,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
         <div className="mb-5 flex flex-wrap gap-2">
           <button
             onClick={() => setGenreFilter("")}
-            className={`badge cursor-pointer transition-colors ${
-              !genreFilter
-                ? "bg-accent-600/20 text-accent-400 ring-1 ring-accent-500/30"
-                : "bg-white/5 text-slate-400 hover:text-slate-200"
-            }`}
+            className={`chip btn-sm ${!genreFilter ? "chip-on" : ""}`}
           >
             {t('discover.genreAll')}
           </button>
@@ -102,11 +98,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
             <button
               key={g}
               onClick={() => setGenreFilter(g === genreFilter ? "" : g)}
-              className={`badge cursor-pointer transition-colors ${
-                genreFilter === g
-                  ? "bg-accent-600/20 text-accent-400 ring-1 ring-accent-500/30"
-                  : "bg-white/5 text-slate-400 hover:text-slate-200"
-              }`}
+              className={`chip btn-sm ${genreFilter === g ? "chip-on" : ""}`}
             >
               {g}
             </button>
@@ -265,10 +257,10 @@ export default function DiscoverPage() {
         {jfId && !isSearching && (
           <button
             onClick={() => setTab("pour-vous")}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            className={`chip px-4 py-2 ${
               tab === "pour-vous"
-                ? "bg-accent-600/15 text-accent-400 ring-1 ring-inset ring-accent-500/20"
-                : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+                ? "chip-on"
+                : ""
             }`}
           >
             <Sparkles size={16} />
@@ -277,10 +269,10 @@ export default function DiscoverPage() {
         )}
         <button
           onClick={() => setTab("movie")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+          className={`chip px-4 py-2 ${
             (isSearching ? searchType === "movie" : tab === "movie")
-              ? "bg-accent-600/15 text-accent-400 ring-1 ring-inset ring-accent-500/20"
-              : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+              ? "chip-on"
+              : ""
           }`}
         >
           <Film size={16} />
@@ -288,10 +280,10 @@ export default function DiscoverPage() {
         </button>
         <button
           onClick={() => setTab("tv")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+          className={`chip px-4 py-2 ${
             (isSearching ? searchType === "tv" : tab === "tv")
-              ? "bg-accent-600/15 text-accent-400 ring-1 ring-inset ring-accent-500/20"
-              : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+              ? "chip-on"
+              : ""
           }`}
         >
           <Tv size={16} />
