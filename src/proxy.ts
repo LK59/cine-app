@@ -47,6 +47,7 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/auth/logout",
   "POST /api/jellyfin/played",
   "POST /api/jellyfin/playback/start",
+  "POST /api/player/log",
   "POST /api/jellyfin/playback/playing",
   "POST /api/jellyfin/playback/progress",
   "POST /api/jellyfin/playback/stop",

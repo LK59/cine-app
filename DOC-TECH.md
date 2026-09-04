@@ -501,6 +501,43 @@ décrivent tous un instant, pas un état.
 
 ---
 
+## Le journal des lectures
+
+Le repli vers le lecteur stable est **automatique et silencieux** — c'est le bon
+comportement pour qui regarde, et le mauvais pour qui entretient : sur un serveur
+à dix-huit comptes, un chemin qui échoue sans bruit échoue **sans témoin**. Le
+seul à s'en apercevoir serait celui qui pense à ouvrir le panneau technique.
+
+D'où un journal, dans `data/logs/player.log`, un objet JSON par ligne :
+
+| Événement | Écrit quand |
+|---|---|
+| `start` | un chemin a été choisi — lequel, pourquoi, en combien de ms, à quelle seconde |
+| `fallback` | le lecteur stable prend la main, avec la raison et le chemin abandonné |
+| `network` | le réseau a lâché en cours de lecture, avec la position |
+| `rebuild` | source perdue et reconstruite, avec la tentative et si un passage a été sauté |
+| `error` | une erreur montrée au spectateur |
+
+Chaque ligne porte l'heure, **le compte pris de la session** (jamais du corps de
+la requête : le seul champ qui dit de qui il s'agit ne doit pas être celui que
+n'importe qui peut inventer), le fichier, son conteneur, son codec vidéo, sa
+définition, sa profondeur et sa plage, plus le navigateur.
+
+Trois garde-fous, parce que c'est un navigateur qui décide de ce qui s'écrit :
+les champs sont **bornés** (24 au plus, 500 caractères chacun, rien d'imbriqué),
+le fichier **tourne** à 5 Mo en gardant une génération, et une écriture qui
+échoue **ne fait jamais tomber une lecture**.
+
+À lire simplement :
+
+```bash
+tail -f data/logs/player.log | jq .
+jq -c 'select(.kind == "fallback")' data/logs/player.log   # que les replis
+jq -r '.kind' data/logs/player.log | sort | uniq -c        # la répartition
+```
+
+---
+
 ## Carte des fichiers
 
 Tout est dans `src/lib/webcodecs/`, sauf mention contraire.
@@ -520,6 +557,8 @@ Tout est dans `src/lib/webcodecs/`, sauf mention contraire.
 | `externalSubtitles.ts` | Les `.srt` posés à côté du film : lecture, recherche par temps |
 | `src/lib/usePlaybackSession.ts` | Ce que le serveur apprend : démarrage, battement, fin |
 | `src/lib/playbackClients.ts` | Les deux noms sous lesquels l'app joue |
+| `src/lib/playerLog.ts` | Le journal des lectures : écriture, bornes, rotation |
+| `src/lib/reportPlayback.ts` | Ce que le navigateur y envoie |
 | `playbackGuard.ts` | L'horloge de l'élément : pause, reprise, atterrissage, maintien de l'image |
 | `mseSource.ts` | MediaSource, tampons, remplissage, sauts, reprises |
 | `remuxPlayback.ts` | Assemblage : fichier en entrée, `<video>` qui joue en sortie |

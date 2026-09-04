@@ -310,6 +310,12 @@ export class MseSource {
   };
 
   private readonly onPlay = () => {
+    // A resume is movement. Without this the frozen-clock check could be part-way through its
+    // count when playback started again, and push the playhead of an element that had just been
+    // given back to the viewer — which is both wrong and exactly what the pause machinery above
+    // spends its time getting right.
+    this.frozenSince = null;
+    this.lastClockAt = -1;
     this.guard.playing();
     void this.fill();
   };

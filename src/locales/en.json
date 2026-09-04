@@ -852,8 +852,8 @@
       "title": "Experimental player",
       "subtitle": "Next-generation playback pipeline, under development",
       "enable": "Experimental player",
-      "enableDesc": "Decodes video directly in the browser (WebCodecs), with no server-side transcoding or remuxing. Faster to start, but no adaptive quality: best kept to your local network. On failure the player explains why and offers to switch back to the stable one.",
-      "adminOnly": "Administrators only, off by default."
+      "enableDesc": "Plays the file directly in the browser, asking the server for nothing: no transcoding, no stream negotiation. The file is repackaged for the browser's own player, which decodes in hardware and displays HDR natively; where the codecs rule that out, decoding happens in software instead. Faster to start and no load on the server, but no adaptive quality — best kept to the local network. If a file cannot be carried, playback moves to the usual player on its own, without interrupting.",
+      "adminOnly": "Off by default. Each account turns it on for itself."
     }
   },
   "watchlist": {

@@ -850,10 +850,10 @@
     },
     "experimentalPlayer": {
       "title": "Experimenteller Player",
-      "subtitle": "Wiedergabekette der nächsten Generation, in Entwicklung",
+      "subtitle": "Wiedergabekette der neuen Generation, in Entwicklung",
       "enable": "Experimenteller Player",
-      "enableDesc": "Dekodiert Video direkt im Browser (WebCodecs), ohne Transkodierung oder Remuxing auf dem Server. Schnellerer Start, aber keine adaptive Qualität: am besten im lokalen Netz. Bei einem Fehler nennt der Player den Grund und bietet den Wechsel zum stabilen Player an.",
-      "adminOnly": "Nur für Administratoren, standardmäßig aus."
+      "enableDesc": "Spielt die Datei direkt im Browser ab, ohne etwas vom Server zu verlangen: kein Transcoding, keine Stream-Aushandlung. Die Datei wird für den Player des Browsers neu verpackt, der in Hardware dekodiert und HDR nativ darstellt; wo die Codecs das ausschließen, wird stattdessen in Software dekodiert. Schnellerer Start und ein Server, der nichts zu tun hat, aber ohne adaptive Qualität — am besten im lokalen Netz. Lässt sich eine Datei so nicht abspielen, wechselt die Wiedergabe von selbst zum gewohnten Player, ohne Unterbrechung.",
+      "adminOnly": "Standardmäßig aus. Jedes Konto schaltet es für sich selbst ein."
     }
   },
   "watchlist": {

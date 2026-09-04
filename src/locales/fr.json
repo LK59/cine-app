@@ -852,8 +852,8 @@
       "title": "Lecteur expérimental",
       "subtitle": "Chaîne de lecture nouvelle génération, en cours de développement",
       "enable": "Lecteur expérimental",
-      "enableDesc": "Décode la vidéo directement dans le navigateur (WebCodecs), sans transcodage ni remultiplexage côté serveur. Démarrage plus rapide, mais pas de qualité adaptative : à réserver au réseau local. En cas d'échec, le lecteur affiche la cause et propose de repasser au lecteur stable.",
-      "adminOnly": "Réservé aux administrateurs, désactivé par défaut."
+      "enableDesc": "Lit le fichier directement dans le navigateur, sans rien demander au serveur : pas de transcodage, pas de négociation de flux. Le fichier est remis en forme pour le lecteur du navigateur, qui décode en matériel et affiche le HDR nativement ; là où les codecs l'interdisent, le décodage se fait en logiciel. Démarrage plus rapide et serveur au repos, mais pas de qualité adaptative : à réserver au réseau local. Si un fichier ne passe pas, la lecture bascule d'elle-même sur le lecteur habituel, sans interruption.",
+      "adminOnly": "Désactivé par défaut. Chaque compte l'active pour lui-même."
     }
   },
   "watchlist": {

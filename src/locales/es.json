@@ -852,8 +852,8 @@
       "title": "Reproductor experimental",
       "subtitle": "Cadena de reproducción de nueva generación, en desarrollo",
       "enable": "Reproductor experimental",
-      "enableDesc": "Decodifica el vídeo directamente en el navegador (WebCodecs), sin transcodificación ni remultiplexado en el servidor. Arranque más rápido, pero sin calidad adaptativa: úsalo en tu red local. Si falla, el reproductor explica el motivo y ofrece volver al estable.",
-      "adminOnly": "Solo administradores, desactivado por defecto."
+      "enableDesc": "Reproduce el archivo directamente en el navegador, sin pedir nada al servidor: sin transcodificación ni negociación de flujo. El archivo se reempaqueta para el reproductor del navegador, que decodifica por hardware y muestra HDR de forma nativa; cuando los códecs no lo permiten, la decodificación se hace por software. Arranca más rápido y no carga el servidor, pero sin calidad adaptativa: mejor reservarlo a la red local. Si un archivo no puede reproducirse así, la reproducción pasa sola al reproductor habitual, sin interrupción.",
+      "adminOnly": "Desactivado por defecto. Cada cuenta lo activa para sí mismo."
     }
   },
   "watchlist": {

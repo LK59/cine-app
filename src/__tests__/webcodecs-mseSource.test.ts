@@ -490,6 +490,12 @@ describe("MseSource", () => {
     const before = video.currentTime;
     const frozen = source as unknown as { watchForFrozenClock: (at: number) => void; frozenSince: number | null };
 
+    // And a resume is movement: an element just given back to the viewer is never pushed.
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    frozen.watchForFrozenClock(before);
+    expect(frozen.frozenSince).not.toBeNull();
+
     // Seen once: noted, not acted on. A clock that has just stopped is not a stall.
     frozen.watchForFrozenClock(before);
     expect(video.currentTime).toBe(before);

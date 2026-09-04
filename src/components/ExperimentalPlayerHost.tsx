@@ -18,6 +18,7 @@ import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlay
 import { describePath } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
+import { reportPlayback } from "@/lib/reportPlayback";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -231,6 +232,15 @@ export function ExperimentalPlayerHost({
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
 
   const steppedAside = useRef(false);
+  /**
+   * The record's view of what is playing, read through refs.
+   *
+   * `fallToStable` must stay stable for the life of the player — a caller passing an inline arrow
+   * once turned every render into a rebuilt pipeline — so it cannot close over any of this
+   * directly. These are filled in by effects below, once there is something to describe.
+   */
+  const describeFileRef = useRef<() => Record<string, unknown>>(() => ({}));
+  const pathRef = useRef<"remux" | "webcodecs" | "direct" | null>(null);
   // Read through a ref so this function is stable for the life of the player. The pipeline is
   // built by an effect that depends on it, and a caller passing an inline arrow — which the one
   // above did — turned every one of its own renders into a teardown and a rebuild.
@@ -242,6 +252,9 @@ export function ExperimentalPlayerHost({
     if (steppedAside.current) return;
     steppedAside.current = true;
     trace(`repli : passage au lecteur stable — ${reason}`);
+    // Written down before anything else. A step down nobody is told about is a step down nobody
+    // can fix, and on a server with eighteen accounts this is the only place it will be noticed.
+    reportPlayback("fallback", { ...describeFileRef.current(), reason, path: pathRef.current ?? "non décidé" });
     onFallbackRef.current(reason);
   }, []);
   /**
@@ -284,6 +297,9 @@ export function ExperimentalPlayerHost({
   // Two of the three paths put a real <video> on screen and are driven through it; only the
   // WebCodecs one paints a canvas and needs the façade in front of it.
   const onElement = path === "remux" || path === "direct";
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
   // Bumped to build the pipeline again from scratch. iOS takes the media resources back when the
   // page goes to the background, and a MediaSource it has closed cannot be reopened — so coming
   // back from a locked screen means starting over, at the position the viewer left.
@@ -403,6 +419,24 @@ export function ExperimentalPlayerHost({
   // The server's own name for it, which is the only one that knows an episode is an episode.
   // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
   const title = info?.title ?? openedAs;
+
+  /** The file, as every entry in the server's record wants it described. */
+  const describeFile = useCallback(
+    () => ({
+      itemId,
+      title: info?.title ?? openedAs,
+      container: info?.container ?? "?",
+      video: `${info?.video?.codec ?? "?"} ${info?.video?.width ?? "?"}x${info?.video?.height ?? "?"} ${info?.video?.bitDepth ?? "?"}bit`,
+      range: info?.video?.rangeType ?? "SDR",
+      agent: typeof navigator === "undefined" ? "?" : navigator.userAgent,
+    }),
+    [itemId, info, openedAs]
+  );
+
+  useEffect(() => {
+    describeFileRef.current = describeFile;
+  }, [describeFile]);
+
   const resizing = useViewportResizing();
   const isMini = mode === "mini";
 
@@ -566,6 +600,24 @@ export function ExperimentalPlayerHost({
       return wantedAudio?.number ?? null;
     };
 
+    // Timed from here rather than from the `openedAt` state: that one is reset by a restart, so
+    // depending on it would make every restart rebuild the pipeline a second time.
+    const attemptStartedAt = Date.now();
+    let announced = false;
+    /** Written once per pipeline: what was actually chosen, and how long it took to get there. */
+    const announceStart = (chosen: "remux" | "webcodecs" | "direct", why: string | null) => {
+      if (announced) return;
+      announced = true;
+      reportPlayback("start", {
+        ...describeFileRef.current(),
+        path: chosen,
+        reason: why ?? "",
+        openedInMs: Date.now() - attemptStartedAt,
+        at: startSeconds,
+        rebuild: rebuildCount,
+      });
+    };
+
     const declareReady = () => {
       setStartingAt(null);
       setSwitchingAudio(false);
@@ -594,6 +646,7 @@ export function ExperimentalPlayerHost({
 
       remuxRef.current = playback;
       setPath("remux");
+      announceStart("remux", "remultiplexage → lecteur natif");
       setTracks({ audio: playback.audioTracks, subtitles: playback.subtitleTracks });
 
       // Given back what the viewer had chosen, if this pipeline is a replacement for one that
@@ -657,6 +710,7 @@ export function ExperimentalPlayerHost({
     const startDirect = async (element: HTMLVideoElement) => {
       setPath("direct");
       setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
+      announceStart("direct", "le conteneur est déjà celui du navigateur");
       setTracks({ audio: [], subtitles: [] });
       setCurrentAudio(null);
       // Nothing here opens the container, so the only tracks to choose between are the subtitle
@@ -677,9 +731,9 @@ export function ExperimentalPlayerHost({
       // The element's own verdict, which is the only one there is on this path.
       const onFailure = () => {
         const failure = element.error;
-        setRuntimeError(
-          `Ce navigateur n'a pas pu lire ce fichier${failure?.message ? ` : ${failure.message}` : ` (code ${failure?.code ?? "?"})`}.`
-        );
+        const said = `Ce navigateur n'a pas pu lire ce fichier${failure?.message ? ` : ${failure.message}` : ` (code ${failure?.code ?? "?"})`}.`;
+        reportPlayback("error", { ...describeFileRef.current(), reason: said, at: positionRef.current });
+        setRuntimeError(said);
       };
       // Set once the element knows how long the film is: asking earlier is ignored.
       const onMetadata = () => {
@@ -721,6 +775,7 @@ export function ExperimentalPlayerHost({
       const engine = new PlaybackEngine(canvasRef.current!);
       engineRef.current = engine;
       setPath("webcodecs");
+      announceStart("webcodecs", reason);
 
       unsubscribes = [
         // The engine distinguishes the two itself, rather than the host guessing from the
@@ -774,6 +829,7 @@ export function ExperimentalPlayerHost({
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
           trace(`réseau : lecture interrompue — ${message}`);
+          reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           return;
         }
@@ -791,6 +847,13 @@ export function ExperimentalPlayerHost({
           const again = lastRebuildAtRef.current !== null && Math.abs(where - lastRebuildAtRef.current) < SAME_PLACE_SECONDS;
           const at = again ? where + REBUILD_STEP_SECONDS : where;
           lastRebuildAtRef.current = where;
+          reportPlayback("rebuild", {
+            ...describeFileRef.current(),
+            reason: message,
+            at,
+            attempt: rebuildsRef.current,
+            skipped: again,
+          });
           restart(
             at,
             `la source a été perdue (${rebuildsRef.current})` +
