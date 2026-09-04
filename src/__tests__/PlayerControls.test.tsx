@@ -62,6 +62,52 @@ function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
 
+describe("PlayerControls — l'attente d'un saut", () => {
+  /** The spinner and the centre buttons are exclusive: one replaces the other. */
+  const spinning = (container: HTMLElement) => !!container.querySelector(".animate-spin");
+
+  it("montre que ça travaille quand un saut prend du temps", async () => {
+    // Without this the pause button simply stayed where it was while the player went and
+    // fetched the position — which on a dense file is seconds, and reads as a freeze rather
+    // than as work in progress.
+    vi.useFakeTimers();
+    stubMediaFetches();
+    let element: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (element = v)} />);
+    await act(async () => {});
+    expect(spinning(container)).toBe(false);
+
+    Object.defineProperty(element!, "seeking", { value: true, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("seeking")));
+    await act(async () => void vi.advanceTimersByTime(200));
+    expect(spinning(container)).toBe(true);
+
+    Object.defineProperty(element!, "seeking", { value: false, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("seeked")));
+    expect(spinning(container)).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("ne clignote pas pour un saut qui atterrit tout de suite", async () => {
+    // Most seeks land in media the player already holds and finish within a frame. A spinner
+    // that appears and goes before it can be seen is noise.
+    vi.useFakeTimers();
+    stubMediaFetches();
+    let element: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (element = v)} />);
+    await act(async () => {});
+
+    Object.defineProperty(element!, "seeking", { value: true, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("seeking")));
+    Object.defineProperty(element!, "seeking", { value: false, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("seeked")));
+
+    await act(async () => void vi.advanceTimersByTime(500));
+    expect(spinning(container)).toBe(false);
+    vi.useRealTimers();
+  });
+});
+
 describe("PlayerControls", () => {
   it("renders nothing while hidden", async () => {
     stubMediaFetches();

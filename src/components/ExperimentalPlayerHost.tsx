@@ -1012,12 +1012,6 @@ export function ExperimentalPlayerHost({
         </div>
       )}
 
-      {!isMini && (
-        <span className="pointer-events-none absolute left-4 top-4 z-10 rounded-full bg-fuchsia-500/20 px-2.5 py-1 text-xs font-medium text-fuchsia-200 ring-1 ring-fuchsia-400/30">
-          {t("player.experimental.badge")}
-        </span>
-      )}
-
       {/* A network cut is not a fault to report, it is a wait to sit through — so it gets its own
           screen rather than the error one. The film is not lost: the position, the language and
           the subtitles are all still here, and pressing the button gives them back. */}

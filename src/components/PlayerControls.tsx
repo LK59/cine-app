@@ -41,6 +41,9 @@ interface PlayerControlsProps {
 const NEXT_UP_COUNTDOWN_S = 10;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const VOLUME_STORAGE_KEY = "cine:player-volume";
+
+/** How long a seek may take before it is worth showing as a wait rather than as a still button. */
+const SEEK_SPINNER_MS = 150;
 // labelKey, not a literal string — SUBTITLE_SIZES is a module-level constant (evaluated once,
 // outside any component), so it can't call the useT() hook itself; each label is resolved via
 // t(`player.${labelKey}`) at render time instead.
@@ -86,6 +89,8 @@ export function PlayerControls({
   const t = useT();
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  /** Pending "this seek is taking long enough to say so". */
+  const seekSpinner = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -242,7 +247,31 @@ export function PlayerControls({
       }
     };
     const onWaiting = () => setBuffering(true);
-    const onPlaying = () => setBuffering(false);
+    const onPlaying = () => {
+      if (seekSpinner.current) clearTimeout(seekSpinner.current);
+      seekSpinner.current = null;
+      setBuffering(false);
+    };
+
+    /**
+     * A seek is a wait like any other, and it did not look like one.
+     *
+     * The pause button stayed where it was while the player went and fetched the position, which
+     * reads as a freeze rather than as work in progress — and on a dense file that fetch is
+     * seconds long. `waiting` is not reliable here: the element can report itself able to play
+     * the instant the seek is issued and only stall afterwards.
+     *
+     * Delayed, because most seeks land in media the player already holds and finish within a
+     * frame. A spinner that appears and goes before it can be seen is noise.
+     */
+    const onSeeking = () => {
+      if (seekSpinner.current) clearTimeout(seekSpinner.current);
+      seekSpinner.current = setTimeout(() => {
+        seekSpinner.current = null;
+        if (video.seeking) setBuffering(true);
+      }, SEEK_SPINNER_MS);
+    };
+    const onSeeked = () => onPlaying();
     const onRateChange = () => setSpeed(video.playbackRate || 1);
     // The range containing currentTime (not just the last one) — a rewind past hls.js's
     // in-memory buffer can leave an earlier, already-downloaded range that's no longer the
@@ -270,6 +299,8 @@ export function PlayerControls({
     video.addEventListener("volumechange", onVolume);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("seeking", onSeeking);
+    video.addEventListener("seeked", onSeeked);
     video.addEventListener("canplay", onPlaying);
     video.addEventListener("ratechange", onRateChange);
     video.addEventListener("progress", onProgress);
@@ -299,6 +330,9 @@ export function PlayerControls({
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("seeking", onSeeking);
+      video.removeEventListener("seeked", onSeeked);
+      if (seekSpinner.current) clearTimeout(seekSpinner.current);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("canplay", onPlaying);
       video.removeEventListener("timeupdate", onTime);
