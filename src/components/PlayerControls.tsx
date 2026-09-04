@@ -549,6 +549,8 @@ export function PlayerControls({
 
   const seekBarRef = useRef<HTMLDivElement>(null);
   const [previewTime, setPreviewTime] = useState<number | null>(null);
+  /** The bar is under a finger or a pointer — the one state that thickens it. */
+  const scrubbing = previewTime !== null;
   const [previewFraction, setPreviewFraction] = useState(0);
 
   // Shared by mouse hover (desktop) and touch drag (mobile — there's no true hover there, so
@@ -1300,7 +1302,12 @@ export function PlayerControls({
         >
           <div
             ref={seekBarRef}
-            className="group relative select-none"
+            className="relative select-none"
+            // Posé et retiré par le composant, qui sait exactement quand la barre est sous un
+            // doigt ou un curseur — c'est déjà ce qui décide d'afficher la vignette. Laisser
+            // faire `:hover` voulait dire la laisser épaissie longtemps après le doigt parti,
+            // WebKit gardant l'état de survol jusqu'à ce qu'on touche ailleurs.
+            data-scrub={previewTime !== null ? "" : undefined}
             style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
             // Same treatment as the top-bar buttons (see showControls' comment) but stronger:
             // holdControls() suspends auto-hide entirely for as long as the pointer is anywhere
@@ -1324,11 +1331,18 @@ export function PlayerControls({
               holdControls();
               updatePreview(e.touches[0].clientX);
             }}
+            // A touch the system takes back — a notification, a call, a gesture the browser
+            // claims — never reaches touchend, and without this the bar would stay thick with
+            // nothing on it.
+            onTouchCancel={() => {
+              setPreviewTime(null);
+              if (!seekingRef.current) showControls(5000);
+            }}
           >
             {/* The rail at rest. Painted here rather than left to the native track, which cannot
                 be sized at all without giving up `accent-color` — and giving that up is what
                 lets the bar answer to a finger as well as to a pointer. */}
-            <div className="pointer-events-none absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-white/15 transition-[height] duration-150 ease-out group-hover:h-2 group-active:h-2" />
+            <div className={`pointer-events-none absolute top-1/2 w-full -translate-y-1/2 rounded-full bg-white/15 transition-[height] duration-150 ease-out ${scrubbing ? "h-2" : "h-1"}`} />
             {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
                 second color): its only job is "can I scrub ahead without waiting", not
                 competing for attention with the actual playback position. Sits under the
@@ -1336,7 +1350,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-2 group-active:h-2"
+                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-150 ease-out ${scrubbing ? "h-2" : "h-1"}`}
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -1357,7 +1371,7 @@ export function PlayerControls({
               chapters.map((ch, i) => (
                 <div
                   key={i}
-                  className="pointer-events-none absolute top-1/2 h-1 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-150 ease-out group-hover:h-2 group-active:h-2"
+                  className={`pointer-events-none absolute top-1/2 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-150 ease-out ${scrubbing ? "h-2" : "h-1"}`}
                   style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}

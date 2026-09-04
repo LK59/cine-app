@@ -359,7 +359,13 @@
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
   transition: background-color 150ms ease-out, transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.player-glass:hover { background: rgb(0 0 0 / 0.62); }
+/* Le survol seulement là où il existe vraiment. WebKit garde l'état de survol après un tap,
+   jusqu'à ce qu'on touche ailleurs — donc sur un téléphone, tout ce qui est écrit ici reste
+   allumé bien après que le doigt soit parti. Tailwind enveloppe déjà ses propres variantes
+   `hover:` de cette façon ; ces règles-ci sont écrites à la main et ne l'étaient pas. */
+@media (hover: hover) {
+  .player-glass:hover { background: rgb(0 0 0 / 0.62); }
+}
 /* Le retour au doigt : la surface s'enfonce, elle ne clignote pas.
    Les deux variantes portent leur rotation ici plutôt que par une classe utilitaire : les deux
    écriraient `transform`, celle-ci gagnerait, et le geste de ±10 s aurait disparu en silence. */
@@ -367,7 +373,9 @@
 .player-glass-back:active { transform: scale(0.94) rotate(-14deg); }
 .player-glass-fwd:active { transform: scale(0.94) rotate(14deg); }
 .player-glass-on { background: rgb(255 255 255 / 0.22); }
-.player-glass-on:hover { background: rgb(255 255 255 / 0.3); }
+@media (hover: hover) {
+  .player-glass-on:hover { background: rgb(255 255 255 / 0.3); }
+}
 
 /* Un panneau est le même matériau, plus dense — il porte du texte à lire. */
 .player-panel {
@@ -411,8 +419,13 @@
   background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.player-seek:hover::-webkit-slider-runnable-track,
-.player-seek:active::-webkit-slider-runnable-track,
+/* Épaissie tant que le doigt ou le curseur est sur la barre, et pas une milliseconde de plus.
+   Piloté par un attribut que le composant pose et retire lui-même, plutôt que par `:hover` ou
+   `:active` : WebKit garde le survol après un tap jusqu'à ce qu'on touche ailleurs, ce qui
+   laissait la barre épaissie longtemps après que le doigt soit parti. Le composant, lui, sait
+   exactement quand ça commence et quand ça s'arrête — il le sait déjà, c'est ce qui pilote la
+   vignette de prévisualisation. */
+[data-scrub] .player-seek::-webkit-slider-runnable-track,
 .player-seek:focus-visible::-webkit-slider-runnable-track { height: 8px; }
 
 .player-seek::-webkit-slider-thumb {
@@ -429,8 +442,7 @@
   transform: scale(0.5);
   transition: opacity 140ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.player-seek:hover::-webkit-slider-thumb,
-.player-seek:active::-webkit-slider-thumb,
+[data-scrub] .player-seek::-webkit-slider-thumb,
 .player-seek:focus-visible::-webkit-slider-thumb {
   opacity: 1;
   transform: scale(1);
@@ -443,8 +455,7 @@
   background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 140ms ease-out;
 }
-.player-seek:hover::-moz-range-track,
-.player-seek:active::-moz-range-track { height: 8px; }
+[data-scrub] .player-seek::-moz-range-track { height: 8px; }
 .player-seek::-moz-range-thumb {
   width: 14px;
   height: 14px;
@@ -454,8 +465,7 @@
   opacity: 0;
   transition: opacity 140ms ease-out;
 }
-.player-seek:hover::-moz-range-thumb,
-.player-seek:active::-moz-range-thumb { opacity: 1; }
+[data-scrub] .player-seek::-moz-range-thumb { opacity: 1; }
 
 /* ─── L'attente, pendant la lecture ───────────────────────────────────────────
    Une roue au centre de l'écran dit « bloqué ». Un fil qui court en haut dit

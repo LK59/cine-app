@@ -62,6 +62,50 @@ function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
 
+describe("PlayerControls — la barre de progression", () => {
+  /** The bar only tracks a pointer once the film has a length to map it onto. */
+  const withDuration = async (video: HTMLVideoElement, bar: HTMLElement) => {
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    bar.getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 20, right: 200, bottom: 20, x: 0, y: 0, toJSON: () => ({}) });
+    await act(async () => void video.dispatchEvent(new Event("durationchange")));
+  };
+
+  it("s'épaissit sous le doigt et redevient fine dès qu'il part", async () => {
+    // Keyed off the component's own state rather than :hover — WebKit keeps the hover state
+    // after a tap until something else is touched, which left the bar thick long after the
+    // finger had gone, until the whole overlay faded out.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    await withDuration(video!, bar);
+    expect(bar.hasAttribute("data-scrub")).toBe(false);
+
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 40 }] }));
+    expect(bar.hasAttribute("data-scrub")).toBe(true);
+
+    await act(async () => void fireEvent.touchEnd(container.querySelector(".player-seek")!));
+    expect(bar.hasAttribute("data-scrub")).toBe(false);
+  });
+
+  it("redevient fine aussi quand le système reprend le toucher", async () => {
+    // A touch the system takes back never reaches touchend.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.touchStart(bar, { touches: [{ clientX: 40 }] }));
+    expect(bar.hasAttribute("data-scrub")).toBe(true);
+    await act(async () => void fireEvent.touchCancel(bar));
+    expect(bar.hasAttribute("data-scrub")).toBe(false);
+  });
+});
+
 describe("PlayerControls — le volume", () => {
   const asIphone = () => {
     Object.defineProperty(navigator, "userAgent", {
