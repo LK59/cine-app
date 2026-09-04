@@ -140,7 +140,6 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
     <MediaCard
       posterUrl={credit.posterPath ? `${TMDB_IMAGE_BASE}/w185${credit.posterPath}` : null}
       alt={credit.title}
-      className="flex flex-col"
       overlay={
         <>
           {isInLib && (

@@ -100,31 +100,37 @@ function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
     </>
   );
 
+  /**
+   * Reprendre, et repartir du début. Rien d'autre.
+   *
+   * Il y avait là un bouton « Jellyfin » qui envoyait vers un autre lecteur : la même carte
+   * proposait donc de lire son film à deux endroits différents, dont l'un quittait l'app. Il
+   * reste accessible depuis la feuille d'actions, où on va chercher les sorties de route.
+   *
+   * `mt-auto` cloue la rangée en bas de la carte : les titres font une ou deux lignes selon
+   * l'épisode, et les boutons montaient et descendaient d'une carte à l'autre le long de la
+   * rangée.
+   */
   const actions = (
-    <div className="flex gap-1 px-2 pb-2">
+    <div className="mt-auto flex items-center gap-1 px-2 pb-2">
       <PlayButton
         itemId={item.id}
         title={item.name}
         resumeTicks={item.positionTicks}
         runtimeTicks={item.runtimeTicks}
+        label={item.positionTicks > 0 ? t('common.resume') : t('common.play')}
+        className="btn btn-primary btn-sm min-w-0 flex-1"
+        iconSize={13}
+      />
+      <PlayButton
+        restart
+        itemId={item.id}
+        title={item.name}
+        resumeTicks={item.positionTicks}
         variant="icon"
         iconSize={13}
-        className="btn btn-ghost btn-sm btn-on"
+        className="btn btn-ghost btn-icon shrink-0 p-1.5"
       />
-      {/* A plain <a> here would nest an anchor inside the card's own Link below — browsers
-          auto-close the outer anchor when they hit a nested one, breaking its navigation
-          entirely. A button + window.open() (identical to the ActionSheet's own "Jellyfin"
-          action just below) sidesteps that without changing the visible behavior at all. */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank");
-        }}
-        className="btn btn-ghost btn-sm btn-on flex-1"
-      >
-        Jellyfin
-      </button>
     </div>
   );
 

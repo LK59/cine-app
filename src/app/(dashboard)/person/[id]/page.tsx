@@ -84,7 +84,7 @@ function CreditCard({ c }: { c: PersonCredit }) {
     <MediaCard
       posterUrl={poster}
       alt={c.title}
-      className="group flex flex-col"
+      className="group"
       overlay={
         <>
         {c.inLibrary && (

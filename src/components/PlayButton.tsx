@@ -1,6 +1,6 @@
 "use client";
 
-import { PlayCircle } from "lucide-react";
+import { PlayCircle, RotateCcw } from "lucide-react";
 import { formatResumeTicks } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -25,6 +25,15 @@ interface PlayButtonProps {
   /** For series: resolves the episode after the given itemId, if any — powers
    *  the credits-time "next up" prompt and its in-place auto-advance. */
   getNextEpisode?: (currentItemId: string) => { itemId: string; title: string } | null;
+  /**
+   * Repartir du début plutôt que de reprendre.
+   *
+   * Rendu par ce composant et non par un bouton à part, pour la même raison que le reste : la
+   * position de reprise, l'accès au lecteur et le comportement du clic sont décidés ici une
+   * fois. Le bouton ne s'affiche que là où il a un sens — c'est-à-dire quand il y a bien une
+   * reprise à écarter.
+   */
+  restart?: boolean;
 }
 
 // Single source of truth for the Lire/Reprendre label + resume behavior, used
@@ -40,6 +49,7 @@ export function PlayButton({
   variant = "pill",
   label: labelOverride,
   getNextEpisode,
+  restart = false,
 }: PlayButtonProps) {
   const playback = usePlayback();
   const t = useT();
@@ -48,10 +58,16 @@ export function PlayButton({
   if (!playerEnabled) return null;
 
   const hasResume = !!resumeTicks && resumeTicks > 0;
-  const label = labelOverride ?? (hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play'));
-  const initialResumeAt = hasResume ? resumeTicks! / 10_000_000 : undefined;
+  // Un bouton « recommencer » sans reprise en cours ne recommencerait rien.
+  if (restart && !hasResume) return null;
+
+  const label = labelOverride ?? (
+    restart ? t('common.restart') : hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play')
+  );
+  const initialResumeAt = restart ? 0 : hasResume ? resumeTicks! / 10_000_000 : undefined;
   const progressPct =
-    hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
+    !restart && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
+  const Icon = restart ? RotateCcw : PlayCircle;
 
   const defaultClass =
     variant === "icon"
@@ -79,13 +95,13 @@ export function PlayButton({
       {variant === "row" ? (
         <>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10">
-            <PlayCircle size={iconSize} />
+            <Icon size={iconSize} />
           </span>
           <span className="text-sm font-medium">{label}</span>
         </>
       ) : (
         <span className="relative z-10 inline-flex items-center gap-1.5">
-          <PlayCircle size={iconSize} />
+          <Icon size={iconSize} />
           {variant !== "icon" && label}
         </span>
       )}

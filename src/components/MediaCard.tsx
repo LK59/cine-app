@@ -62,7 +62,10 @@ export function MediaCard({
   children,
 }: Props) {
   const surface = [
-    "card-solid relative block overflow-hidden select-none touch-manipulation",
+    // Colonne, toujours : l'affiche, le texte, puis ce que l'écran ajoute. C'est ce qui permet
+    // à une rangée d'actions de se clouer en bas d'une carte (`mt-auto`) au lieu de flotter à la
+    // suite d'un titre qui fait une ou deux lignes selon le film.
+    "card-solid relative flex flex-col overflow-hidden select-none touch-manipulation",
     "transition-[transform,box-shadow] duration-200",
     width ? `${width} shrink-0` : "",
     href ? "hover:-translate-y-0.5 hover:ring-1 hover:ring-accent-500/40" : "",

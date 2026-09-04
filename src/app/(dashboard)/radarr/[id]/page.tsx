@@ -394,6 +394,19 @@ export default function RadarrMovieDetailPage() {
             variant="primary"
           />
         )}
+        {/* Ne s'affiche que lorsqu'il y a une reprise à écarter — le composant s'en assure
+            lui-même. Une reprise sans moyen de repartir du début oblige à chercher la barre de
+            progression et à la ramener à la main. */}
+        {jfItem && (
+          <PlayButton
+            restart
+            itemId={jfItem.Id}
+            title={movie.title}
+            resumeTicks={jfItem.UserData?.PlaybackPositionTicks}
+            className="btn btn-ghost"
+            iconSize={16}
+          />
+        )}
         {!isGuest && jfItem && (
           <button
             className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}

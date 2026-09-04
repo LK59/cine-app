@@ -501,6 +501,20 @@ export default function SonarrSeriesDetailPage() {
             getNextEpisode={getNextEpisode}
           />
         )}
+        {/* L'épisode en cours, repris depuis son début. Ne s'affiche que si un épisode est bien
+            entamé : sur une série qu'on n'a pas commencée, il n'y a rien à recommencer. */}
+        {seriesPlayTarget && (
+          <PlayButton
+            restart
+            itemId={seriesPlayTarget.itemId}
+            title={seriesPlayTarget.title}
+            resumeTicks={seriesPlayTarget.resumeTicks}
+            label={t('sonarr.restartEpisode')}
+            className="btn btn-ghost"
+            iconSize={16}
+            getNextEpisode={getNextEpisode}
+          />
+        )}
         {!isGuest && jfItem && (
           <button
             className={`btn-ghost px-3 ${isWatched ? "text-emerald-400" : "text-slate-400"}`}

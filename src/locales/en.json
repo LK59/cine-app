@@ -132,7 +132,8 @@
     "missing": "Missing",
     "online": "Online",
     "offline": "Offline",
-    "downloaded": "Downloaded"
+    "downloaded": "Downloaded",
+    "restart": "Start over"
   },
   "dashboard": {
     "resumeWatching": "Continue watching",
@@ -303,7 +304,8 @@
     "jsStatusPartial": "Partial",
     "jsStatusAvailable": "Available",
     "minPerEp": "{n} min/ep.",
-    "autoSearchSeries": "Auto search (all seasons)"
+    "autoSearchSeries": "Auto search (all seasons)",
+    "restartEpisode": "Restart the episode"
   },
   "qbittorrent": {
     "pageTitle": "Downloads",
