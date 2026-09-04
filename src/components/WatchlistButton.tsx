@@ -64,22 +64,25 @@ export function WatchlistButton({
 
   const Icon = inList ? BookmarkCheck : Bookmark;
   const label = inList ? t('search.removeFromList') : t('search.addToList');
-  const sizeClass = size === "sm" ? "p-1.5" : "px-3 py-1.5";
-  const iconSize = size === "sm" ? 13 : 14;
+  const iconSize = size === "sm" ? 13 : 16;
 
   return (
     <button
       onClick={toggle}
       disabled={busy}
       title={label}
-      className={`flex items-center gap-1.5 rounded transition-colors ${sizeClass} ${
-        inList
-          ? "bg-accent-500/20 text-accent-400 hover:bg-accent-500/30"
-          : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-      } ${className}`}
+      aria-pressed={inList}
+      // Ce bouton était resté en dehors du système : `rounded` au lieu de `rounded-lg`, un fond
+      // deux fois plus discret et un texte deux tons plus sombre que ses voisins. Posé entre
+      // « Marquer vu » et « Bande-annonce », il avait l'air désactivé. `btn-on` est la façon dont
+      // le reste de l'app dit « c'est l'option retenue » — ici, « ce titre est dans la liste ».
+      className={`btn btn-ghost ${inList ? "btn-on" : ""} ${size === "sm" ? "btn-icon" : ""} ${className}`}
     >
       <Icon size={iconSize} />
-      {size === "md" && <span className="text-xs">{inList ? t('search.removeFromList') : t('common.add')}</span>}
+      {/* Le libellé court : la rangée d'actions d'une fiche en porte déjà quatre autres, et
+          « Ajouter à la liste » l'y ferait passer à la ligne. L'intitulé complet est dans
+          l'infobulle et dans le nom accessible. */}
+      {size === "md" && <span>{inList ? t('search.removeFromList') : t('common.add')}</span>}
     </button>
   );
 }
