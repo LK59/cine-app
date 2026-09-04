@@ -94,7 +94,10 @@ export function PlayButton({
       )}
       {variant === "row" ? (
         <>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10">
+          {/* `bg-current/15` et non `bg-white/10` : la pastille se teinte de la couleur du texte de la
+              ligne, donc elle reste visible aussi bien sur une ligne sombre que sur la ligne
+              blanche de l'action principale, sans que l'appelant ait à s'en occuper. */}
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-current/15">
             <Icon size={iconSize} />
           </span>
           <span className="text-sm font-medium">{label}</span>

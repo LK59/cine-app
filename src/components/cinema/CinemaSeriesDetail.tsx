@@ -21,7 +21,8 @@ import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_ROW_PRIMARY, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -201,8 +202,10 @@ export function CinemaSeriesDetail({
           WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
         }}
       />
-      <div className="absolute inset-0 bg-linear-to-t from-ink/85 via-ink/15 to-transparent" />
-      <div className="absolute inset-0 bg-linear-to-r from-ink/70 via-ink/15 to-transparent" />
+      {/* Deux voiles à étapes explicites plutôt qu'un dégradé en trois arrêts : voir
+          CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
+      <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+      <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
 
       <button
         onClick={requestClose}
@@ -221,10 +224,11 @@ export function CinemaSeriesDetail({
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
       <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
-        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end py-16">
+        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end pb-16 pt-28">
         <div
           key={item.sonarrId}
-          className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          style={COLUMN_STYLE}
+          className={`flex flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -232,7 +236,8 @@ export function CinemaSeriesDetail({
               src={item.logoUrl}
               alt={item.title}
               onError={() => setLogoErrored(true)}
-              className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
+              style={LOGO_STYLE}
+              className="mb-1 max-h-20 w-auto max-w-full object-contain sm:max-h-28"
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
@@ -244,17 +249,20 @@ export function CinemaSeriesDetail({
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
-          <p className="line-clamp-3 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+          <CinemaProgressBar resumeTicks={nextEpisode?.resumeTicks} runtimeTicks={nextEpisode?.runtimeTicks} />
+
+          <p className="line-clamp-3 text-sm text-white/90 drop-shadow-sm sm:text-base">
             {info?.tmdb?.overview || item.overview}
           </p>
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-            <p className="max-w-xl truncate text-xs text-white/60">
+            <p className="truncate text-xs text-white/60">
               {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
             </p>
           )}
 
-          <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
+          {/* Plus étroit que le texte au-dessus, sans être une colonne à part — voir MENU_STYLE. */}
+          <div className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             {nextEpisode && (
               <PlayButton
                 itemId={nextEpisode.itemId}
@@ -275,6 +283,8 @@ export function CinemaSeriesDetail({
                   nextEpisode.seasonNumber,
                   nextEpisode.episodeNumber
                 )}
+                // Pleine et blanche : l'action principale se voit sans être lue.
+                className={MENU_ROW_PRIMARY}
               />
             )}
 

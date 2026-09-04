@@ -19,7 +19,8 @@ import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_ROW_PRIMARY, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -214,8 +215,10 @@ export function CinemaMovieDetail({
           WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
         }}
       />
-      <div className="absolute inset-0 bg-linear-to-t from-ink/85 via-ink/15 to-transparent" />
-      <div className="absolute inset-0 bg-linear-to-r from-ink/70 via-ink/15 to-transparent" />
+      {/* Deux voiles à étapes explicites plutôt qu'un dégradé en trois arrêts : voir
+          CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
+      <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
+      <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
 
       {/* z-10, explicitly above the content column below: that column spans the full height
           (flex items-center, for vertical centering) and — even with a transparent background —
@@ -238,10 +241,11 @@ export function CinemaMovieDetail({
           unreachable by scrolling — that's what pushed the logo and title off the top of the
           screen when the similar row first landed here. A section that simply grows can't. */}
       <div className="scrollbar-thin relative h-full snap-y snap-mandatory overflow-y-auto scroll-smooth">
-        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end py-16">
+        <div data-snap-section className="relative flex min-h-full snap-start flex-col justify-end pb-16 pt-28">
         <div
           key={item.radarrId}
-          className={`flex w-full max-w-2xl flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          style={COLUMN_STYLE}
+          className={`flex flex-col gap-4 px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
         >
           {item.logoUrl && !logoErrored ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -249,7 +253,8 @@ export function CinemaMovieDetail({
               src={item.logoUrl}
               alt={item.title}
               onError={() => setLogoErrored(true)}
-              className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
+              style={LOGO_STYLE}
+              className="mb-1 max-h-20 w-auto max-w-full object-contain sm:max-h-28"
             />
           ) : (
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
@@ -261,19 +266,21 @@ export function CinemaMovieDetail({
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
-          <p className="line-clamp-3 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+          <CinemaProgressBar resumeTicks={progress?.resumeTicks} runtimeTicks={progress?.runtimeTicks} />
+
+          <p className="line-clamp-3 text-sm text-white/90 drop-shadow-sm sm:text-base">
             {info?.tmdb?.overview || item.overview}
           </p>
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-            <p className="max-w-xl truncate text-xs text-white/60">
+            <p className="truncate text-xs text-white/60">
               {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
             </p>
           )}
 
-          {/* Narrower than the text above it, and left-aligned on its own — Netflix's TV menu
-              never stretches to the width of the synopsis paragraph above it. */}
-          <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
+          {/* Plus étroit que le texte au-dessus, sans être une colonne à part : deux tiers de
+              la largeur du bloc — voir MENU_STYLE. */}
+          <div className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             <PlayButton
               itemId={item.jellyfinItemId}
               title={item.title}
@@ -284,6 +291,9 @@ export function CinemaMovieDetail({
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
               label={formatContinueLabel(t, progress?.resumeTicks, progress?.runtimeTicks)}
+              // Pleine et blanche. Cinq lignes de même poids, c'est cinq lignes dont aucune n'est
+              // l'action principale — et c'était pourtant celle qu'on vient chercher.
+              className={MENU_ROW_PRIMARY}
             />
 
             {/* Only when there's actually something to restart FROM — a movie with no progress

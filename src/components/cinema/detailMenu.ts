@@ -24,3 +24,15 @@ export const MENU_BADGE =
 /** La pastille d'une action déjà accomplie : dans ma liste, déjà vu. */
 export const MENU_BADGE_ACTIVE =
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-500/30 text-accent-300 ring-1 ring-accent-400/40 transition-all duration-200";
+
+/**
+ * L'action principale de la fiche : pleine, blanche, lisible de loin.
+ *
+ * Les cinq lignes du menu avaient le même poids — reprendre, recommencer, bande-annonce, vu,
+ * à voir — donc aucune n'était celle qu'on vient chercher. Le fond blanc est ce que fait déjà
+ * la version téléphone de cette même fiche ; le bureau ne l'avait jamais reprise.
+ *
+ * La pastille intérieure du bouton se teinte de la couleur du texte (`bg-current/15`), donc elle
+ * suit d'elle-même : claire sur une ligne sombre, sombre sur celle-ci.
+ */
+export const MENU_ROW_PRIMARY = `${MENU_ROW} bg-white font-semibold text-ink hover:bg-white/90 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink/40`;
