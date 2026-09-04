@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { detectCodecSupport } from "@/lib/codecSupport";
+import { setWatchingFullScreen } from "@/lib/playbackBusy";
 
 export interface PlaybackSession {
   itemId: string;
@@ -63,6 +64,12 @@ export function usePlayback(): PlaybackContextValue {
 export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PlaybackSession | null>(null);
   const [mode, setMode] = useState<PlaybackMode>("closed");
+
+  // Told to the rest of the app, which stops polling while the film has the whole screen.
+  useEffect(() => {
+    setWatchingFullScreen(mode === "full");
+    return () => setWatchingFullScreen(false);
+  }, [mode]);
 
   // Speculative, fire-and-forget: detectCodecSupport() already caches its result in
   // localStorage per browser/device (not per session, not per film) — this just moves that

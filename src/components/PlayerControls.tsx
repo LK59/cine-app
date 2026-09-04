@@ -928,7 +928,7 @@ export function PlayerControls({
             e.stopPropagation();
             if (videoRef.current) videoRef.current.currentTime = introSkip!.end;
           }}
-          className="pointer-events-auto absolute rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur-xs hover:bg-white/25"
+          className="player-glass pointer-events-auto absolute rounded-full px-4 py-2 text-sm font-medium text-white"
           style={{
             bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
             right: "max(1rem, env(safe-area-inset-right))",
@@ -963,10 +963,17 @@ export function PlayerControls({
       )}
 
       <div
-        className={`pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-b from-black/60 via-transparent to-black/70 transition-opacity duration-300 ${
+        className={`pointer-events-none absolute inset-0 flex flex-col justify-between transition-opacity duration-300 ${
           visible ? "opacity-100" : "opacity-0"
         }`}
       >
+        {/* Deux bandes plutôt qu'un dégradé plein écran. Le milieu était transparent mais était
+            composité quand même : le compositeur mélange toute la surface du calque, image par
+            image, par-dessus une vidéo qui peut être en 4K. Ces deux-là couvrent ce qu'il y a à
+            couvrir — le titre en haut, les contrôles en bas — et laissent les quarante pour cent
+            du milieu tranquilles. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent" />
         {/* Top bar — padded past the safe area so the close button isn't
             hidden under the notch / rounded corners in landscape PWA mode,
             plus extra clearance for the Dynamic Island / translucent status
