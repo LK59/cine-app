@@ -125,7 +125,8 @@
       "steps": "Toca Compartir y luego \"Añadir a pantalla de inicio\".",
       "dismiss": "Más tarde"
     },
-    "moreOptions": "Más opciones"
+    "moreOptions": "Más opciones",
+    "missing": "Ausente"
   },
   "dashboard": {
     "resumeWatching": "Continuar viendo",

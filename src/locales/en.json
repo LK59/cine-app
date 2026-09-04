@@ -125,7 +125,8 @@
       "steps": "Tap Share, then \"Add to Home Screen\".",
       "dismiss": "Later"
     },
-    "moreOptions": "More options"
+    "moreOptions": "More options",
+    "missing": "Missing"
   },
   "dashboard": {
     "resumeWatching": "Continue watching",

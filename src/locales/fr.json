@@ -125,7 +125,8 @@
       "steps": "Appuyez sur Partager, puis \"Sur l'écran d'accueil\".",
       "dismiss": "Plus tard"
     },
-    "moreOptions": "Plus d'options"
+    "moreOptions": "Plus d'options",
+    "missing": "Manquant"
   },
   "dashboard": {
     "resumeWatching": "Continuer à regarder",

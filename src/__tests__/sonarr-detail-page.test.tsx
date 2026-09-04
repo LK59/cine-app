@@ -92,7 +92,7 @@ describe("Sonarr series detail page — guest button visibility", () => {
     mockSeriesFetches(true);
     renderPage();
 
-    expect(await screen.findAllByText("common.autoSearch")).toHaveLength(1);
+    expect(await screen.findAllByLabelText("common.autoSearch")).toHaveLength(1);
 
     // Seasons start collapsed — expand it to reach the per-episode search icon buttons
     // (admin-only, title includes the episode name).
@@ -109,7 +109,7 @@ describe("Sonarr series detail page — guest button visibility", () => {
     mockSeriesFetches(false);
     renderPage();
 
-    expect(await screen.findByText("common.autoSearch")).toBeInTheDocument();
+    expect(await screen.findByLabelText("common.autoSearch")).toBeInTheDocument();
     expect(screen.queryByTitle('sonarr.episodeSearch:{"title":"Ep 1"}')).not.toBeInTheDocument();
   });
 
@@ -119,6 +119,6 @@ describe("Sonarr series detail page — guest button visibility", () => {
     renderPage();
 
     await screen.findByText("Test Show");
-    expect(screen.queryByText("common.autoSearch")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("common.autoSearch")).not.toBeInTheDocument();
   });
 });

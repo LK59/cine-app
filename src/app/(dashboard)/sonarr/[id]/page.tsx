@@ -651,12 +651,13 @@ export default function SonarrSeriesDetailPage() {
                           to search for. Admins always keep it, regardless of completion. */}
                       {canAutoSearchSeason(isGuest, fileCount, seasonEpisodes.length) && (
                         <button
-                          className="btn-ghost px-2 py-1 text-xs"
+                          className="btn btn-ghost btn-icon"
                           onClick={() => triggerAutoSearch(seasonNumber)}
                           disabled={autoSearching === seasonNumber}
                           title={t('sonarr.autoSearchSeason', { n: String(seasonNumber) })}
+                          aria-label={t('common.autoSearch')}
                         >
-                          <RefreshCw size={12} className={autoSearching === seasonNumber ? "animate-spin" : ""} /> {t('common.autoSearch')}
+                          <RefreshCw size={14} className={autoSearching === seasonNumber ? "animate-spin" : ""} />
                         </button>
                       )}
                       {isGuest ? (
@@ -666,7 +667,9 @@ export default function SonarrSeriesDetailPage() {
                       ) : (
                         <>
                           <button
-                            className="btn-ghost px-2 py-1 text-xs"
+                            className="btn btn-ghost btn-icon"
+                            title={t('sonarr.searchSeason', { n: String(seasonNumber) })}
+                            aria-label={t('common.search')}
                             onClick={() =>
                               setActiveSearch({
                                 title: t('sonarr.searchSeason', { n: String(seasonNumber) }),
@@ -674,7 +677,7 @@ export default function SonarrSeriesDetailPage() {
                               })
                             }
                           >
-                            <Search size={12} /> {t('common.search')}
+                            <Search size={14} />
                           </button>
                           <Toggle
                             checked={seasonMeta?.monitored ?? false}
@@ -718,9 +721,20 @@ export default function SonarrSeriesDetailPage() {
                                   <span className="shrink-0 text-slate-500">{ep.episodeNumber}.</span>
                                   <span className="truncate text-slate-200">{ep.title}</span>
                                 </div>
-                                <div className="flex shrink-0 items-center gap-3">
-                                  {ep.airDate && <span className="text-xs text-slate-500">{ep.airDate}</span>}
+                                {/* Langues, date et état réunis en une seule mention discrète.
+                                    Chacun était un objet séparé — deux puces bordées, une date,
+                                    un point — soit neuf choses par ligne et dix lignes par
+                                    saison. Ce sont des informations qu'on lit *après* le titre,
+                                    et elles doivent en avoir l'air. */}
+                                <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
+                                  {subs?.subtitles?.length ? (
+                                    <span className="hidden sm:inline">
+                                      {subs.subtitles.map((x) => x.name).join(" · ")}
+                                    </span>
+                                  ) : null}
+                                  {ep.airDate && <span className="tabular-nums">{ep.airDate}</span>}
                                   <span
+                                    title={ep.hasFile ? t('common.available') : t('common.missing')}
                                     className={`h-1.5 w-1.5 rounded-full ${ep.hasFile ? "bg-emerald-400" : "bg-amber-400"}`}
                                   />
                                 </div>
@@ -733,15 +747,20 @@ export default function SonarrSeriesDetailPage() {
                                       title={`${series.title} · EP${ep.episodeNumber} S${seasonNumber}`}
                                       resumeTicks={jfEp.UserData?.PlaybackPositionTicks}
                                       runtimeTicks={jfEp.RunTimeTicks}
-                                      variant="pill"
-                                      iconSize={14}
-                                      className="flex w-full min-w-24 max-w-48 items-center justify-center gap-1.5 rounded-lg bg-accent-600/80 py-2 text-xs font-medium text-white hover:bg-accent-600"
+                                      variant="icon"
+                                      iconSize={16}
+                                      /* Une icône, pas une pastille pleine. Dix boutons
+                                         primaires sur un écran, c'est zéro bouton primaire :
+                                         l'œil ne sait plus où aller. Elle reste visible en
+                                         permanence — la cacher au survol la rendrait
+                                         introuvable au doigt. */
+                                      className="btn btn-ghost btn-icon text-accent-300"
                                       getNextEpisode={getNextEpisode}
                                     />
                                   )}
                                   {!isGuest && (
                                   <button
-                                    className="btn-ghost shrink-0 px-3 py-2"
+                                    className="btn btn-ghost btn-icon shrink-0"
                                     title={t('sonarr.episodeSearch', { title: ep.title })}
                                     onClick={() =>
                                       setActiveSearch({
@@ -756,13 +775,19 @@ export default function SonarrSeriesDetailPage() {
                                 </div>
                               )}
                             </div>
-                            {(subs?.subtitles?.length || download) && (
-                              <div className="ml-6 flex flex-wrap items-center gap-1.5">
-                                {subs?.subtitles?.map((s, i) => (
-                                  <span key={i} className="badge bg-white/5 text-[11px] text-slate-400">
-                                    <Captions size={10} /> {s.name}
+                            {/* Ne reste sur une seconde ligne que ce qui change tout seul : un
+                                téléchargement en cours. Les langues, elles, sont montées dans la
+                                mention de droite — elles ne bougent pas, elles n'ont pas besoin
+                                d'une ligne à elles. Sur un écran étroit, où elles n'entrent pas,
+                                elles reviennent ici. */}
+                            {(download || subs?.subtitles?.length) && (
+                              <div className="ml-6 flex flex-wrap items-center gap-2 text-[11px]">
+                                {subs?.subtitles?.length ? (
+                                  <span className="text-slate-500 sm:hidden">
+                                    <Captions size={10} className="mr-1 inline" />
+                                    {subs.subtitles.map((x) => x.name).join(" · ")}
                                   </span>
-                                ))}
+                                ) : null}
                                 {download && (
                                   <span className="badge bg-accent-600/15 text-[11px] text-accent-400">
                                     <Download size={10} /> {download.trackedDownloadStatus}

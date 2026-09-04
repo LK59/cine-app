@@ -125,7 +125,8 @@
       "steps": "Tippe auf Teilen, dann auf \"Zum Home-Bildschirm\".",
       "dismiss": "Später"
     },
-    "moreOptions": "Weitere Optionen"
+    "moreOptions": "Weitere Optionen",
+    "missing": "Fehlt"
   },
   "dashboard": {
     "resumeWatching": "Weiterschauen",
