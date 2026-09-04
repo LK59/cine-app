@@ -44,7 +44,10 @@ export function PlayerRequestCard({
 }) {
   const t = useT();
   const Icon = STATE_ICON[request.state];
-  const openable = request.state === "available" && request.libraryId !== null;
+  // Ouvrable dès que le titre est arrivé — vers sa fiche de bibliothèque, ou à défaut vers sa
+  // fiche TMDB (voir `openRequest`). Une carte qui annonce « disponible » et ne réagit pas au
+  // clic est le pire des deux mondes.
+  const openable = request.state === "available" && (request.libraryId !== null || request.tmdbId !== null);
 
   return (
     <div className="group relative flex flex-col">

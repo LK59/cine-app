@@ -835,7 +835,7 @@ export function CinemaClient() {
               ))}
 
               {discovery?.rows
-                .filter((row) => row.key === "trendingMovies")
+                .filter((row) => row.key === "recommended" || row.key === "trendingMovies")
                 .map((row) => (
                   <CinemaDiscoveryRow
                     key={row.key}

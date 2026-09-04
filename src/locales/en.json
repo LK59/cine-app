@@ -1392,7 +1392,8 @@
     "spotlight": "Spotlight",
     "discovery": {
       "trendingMovies": "Trending movies",
-      "trendingSeries": "Trending series"
+      "trendingSeries": "Trending series",
+      "recommended": "Recommended for you"
     }
   }
 }

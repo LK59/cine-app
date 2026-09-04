@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { cachedMovies, cachedSeries, withCache, TTL } from "@/lib/server-cache";
+import { cachedMovies, cachedSeries, withCache, TTL, getProviderIdCI } from "@/lib/server-cache";
+import { jellyfin } from "@/lib/clients/jellyfin";
 import { getTmdbLocale, LOCALE_COOKIE } from "@/lib/i18n";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -30,6 +31,60 @@ export interface PlayerDiscoverPayload {
 const ROW_SIZE = 24;
 
 /**
+ * Combien de films récemment regardés servent de graine aux recommandations.
+ *
+ * Trois, et pas huit comme la page dédiée : chaque graine coûte un appel TMDB, et une rangée n'a
+ * de place que pour vingt-quatre affiches de toute façon. Au-delà, on paierait des appels pour
+ * des titres qui ne seraient jamais affichés.
+ */
+const SEED_COUNT = 3;
+
+/**
+ * Les recommandations de la personne, à partir de ce qu'elle a regardé en dernier.
+ *
+ * Même principe que la page « Recommandations » du côté gestion, en plus court : Jellyfin donne
+ * les derniers films joués (triés par date de lecture, ce que les listes ordinaires ne font pas),
+ * TMDB dit ce qui leur ressemble. Sans compte Jellyfin il n'y a pas d'historique, donc pas de
+ * rangée — et c'est mieux qu'une rangée générique déguisée en recommandation personnelle.
+ */
+async function recommendedFor(
+  userId: string | null,
+  tmdb: ReturnType<typeof createTmdbClient>,
+  locale: string
+): Promise<{ id: number; title: string; year: number | null; posterPath: string | null }[]> {
+  if (!userId) return [];
+  return withCache(`player:reco:${userId}:${locale}`, TTL.MEDIUM, async () => {
+    const played = await jellyfin.getRecentlyPlayed(userId, "Movie", SEED_COUNT).catch(() => null);
+    const seeds = (played?.Items ?? [])
+      .map((item) => Number(getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "tmdb") ?? 0))
+      .filter((id) => id > 0);
+    if (seeds.length === 0) return [];
+
+    const batches = await Promise.allSettled(seeds.map((id) => tmdb.movieRecommendations(id)));
+    const seen = new Set<number>(seeds);
+    const out: { id: number; title: string; year: number | null; posterPath: string | null }[] = [];
+    // Entrelacé plutôt que concaténé : trois films d'affilée tirés de la même graine donnent
+    // l'impression d'une rangée qui n'a qu'une idée.
+    const lists = batches.map((b) => (b.status === "fulfilled" ? b.value.results : []));
+    for (let i = 0; out.length < ROW_SIZE && lists.some((l) => i < l.length); i++) {
+      for (const list of lists) {
+        const r = list[i];
+        if (!r || seen.has(r.id) || !r.poster_path || r.vote_average <= 6) continue;
+        seen.add(r.id);
+        out.push({
+          id: r.id,
+          title: r.title,
+          year: r.release_date ? Number.parseInt(r.release_date.slice(0, 4), 10) || null : null,
+          posterPath: r.poster_path,
+        });
+        if (out.length >= ROW_SIZE) break;
+      }
+    }
+    return out;
+  });
+}
+
+/**
  * Découverte et recommandations, en lignes.
  *
  * Elles étaient deux pages entières côté gestion. Ici ce sont des rangées : dans une interface
@@ -51,17 +106,29 @@ export async function GET(req: NextRequest) {
   return withErrorHandling(async () => {
     // Les tendances sont les mêmes pour tout le monde et changent une fois par semaine : un cache
     // partagé évite de refaire l'appel pour chaque personne qui ouvre l'accueil.
-    const [movies, tv, library, seriesLibrary] = await Promise.all([
+    const [movies, tv, library, seriesLibrary, recommended] = await Promise.all([
       withCache(`tmdb:trending:movie:${locale}`, TTL.LONG, () => tmdb.trendingMovies()).catch(() => ({ results: [] })),
       withCache(`tmdb:trending:tv:${locale}`, TTL.LONG, () => tmdb.trendingTv()).catch(() => ({ results: [] })),
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
+      recommendedFor(session.jfId ?? null, tmdb, locale).catch(() => []),
     ]);
 
     const movieLibrary = new Map(library.map((m) => [m.tmdbId, m.id]));
     const tvLibrary = new Map(seriesLibrary.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
 
     const rows: DiscoveryRow[] = [
+      {
+        key: "recommended",
+        items: recommended.map((r): DiscoveryItem => ({
+          tmdbId: r.id,
+          type: "movie",
+          title: r.title,
+          year: r.year,
+          poster: r.posterPath ? `${TMDB_IMAGE_BASE}/w342${r.posterPath}` : null,
+          libraryId: movieLibrary.get(r.id) ?? null,
+        })),
+      },
       {
         key: "trendingMovies",
         items: movies.results.slice(0, ROW_SIZE).map((m): DiscoveryItem => ({

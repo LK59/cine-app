@@ -40,8 +40,11 @@ export function CinemaModeToggle({
 
   return (
     <div
-      className="fixed left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 p-1 backdrop-blur-xs"
-      style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+      className="fixed top-4 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 p-1 backdrop-blur-xs"
+      // Centré sur le contenu, pas sur la fenêtre : le rail du lecteur occupe la bande de gauche,
+      // et un `left-1/2` nu laissait la bascule décalée d'une demi-largeur de rail vers la gauche.
+      // La variable vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
+      style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(50% + var(--player-rail, 0px) / 2)" }}
     >
       <button
         ref={moviesRef}

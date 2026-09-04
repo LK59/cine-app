@@ -1392,7 +1392,8 @@
     "spotlight": "À la une",
     "discovery": {
       "trendingMovies": "Tendances — films",
-      "trendingSeries": "Tendances — séries"
+      "trendingSeries": "Tendances — séries",
+      "recommended": "Recommandé pour vous"
     }
   }
 }

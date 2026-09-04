@@ -1392,7 +1392,8 @@
     "spotlight": "Im Fokus",
     "discovery": {
       "trendingMovies": "Im Trend — Filme",
-      "trendingSeries": "Im Trend — Serien"
+      "trendingSeries": "Im Trend — Serien",
+      "recommended": "Für dich empfohlen"
     }
   }
 }

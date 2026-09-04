@@ -55,6 +55,18 @@ export function PlayerListPanel() {
   // provoquer de rendu en cascade, et un choix explicite l'emporte pour toujours.
   const segment: Segment = chosen ?? SEGMENTS.find((key) => counts[key] > 0) ?? "requests";
 
+  // Une demande arrivée mène à sa fiche. Il arrive qu'elle soit marquée disponible sans qu'on
+  // retrouve le titre dans la bibliothèque — supprimé depuis, ou identifiant qui ne correspond
+  // plus : la fiche TMDB prend alors le relais, plutôt qu'une carte qui ne fait rien quand on
+  // clique dessus.
+  function openRequest(r: { type: "movie" | "series"; libraryId: number | null; tmdbId: number | null }) {
+    if (r.libraryId !== null) {
+      cinemaNavigate(r.type === "movie" ? { list: false, film: r.libraryId } : { list: false, serie: r.libraryId });
+      return;
+    }
+    if (r.tmdbId) cinemaNavigate({ list: false, discover: r.tmdbId, discoverType: r.type });
+  }
+
   function openTitle(item: PlayerListItem) {
     if (item.libraryId === null) {
       if (item.tmdbId) cinemaNavigate({ list: false, discover: item.tmdbId, discoverType: item.type });
@@ -121,10 +133,7 @@ export function PlayerListPanel() {
                 request={r}
                 busy={busy}
                 onCancel={() => void cancelRequest(r.id)}
-                onOpen={() =>
-                  r.libraryId !== null &&
-                  cinemaNavigate(r.type === "movie" ? { list: false, film: r.libraryId } : { list: false, serie: r.libraryId })
-                }
+                onOpen={() => openRequest(r)}
               />
             ))}
           </div>
