@@ -855,7 +855,11 @@ describe("MseSource", () => {
     video.dispatchEvent(new Event("play"));
     await flush();
 
-    expect(video.currentTime).toBe(12.49);
+    // Close to, not exactly: on a machine slow enough for this test to run for more than a
+    // second and a half, the frozen-clock check is entitled to nudge a playhead that has media
+    // in front of it and is not moving. What is under test is that the resume was not pulled
+    // *back* to where the pause was.
+    expect(video.currentTime).toBeCloseTo(12.49, 1);
     // The behaviour under test is that the resume is not pulled *back* to where the pause was.
     // Asserting that nothing in the whole source asked for any seek at all made this fail on a
     // loaded machine for a reason that had nothing to do with it — the watchdog doing its job.

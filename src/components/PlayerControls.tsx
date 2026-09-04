@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { useMediaSession } from "@/lib/useMediaSession";
 
 export interface Track {
   id: number;
@@ -551,6 +552,32 @@ export function PlayerControls({
   const [previewTime, setPreviewTime] = useState<number | null>(null);
   /** The bar is under a finger or a pointer — the one state that thickens it. */
   const scrubbing = previewTime !== null;
+
+  /**
+   * What the lock screen, the Dynamic Island and a pair of headphones are told.
+   *
+   * Nothing was, and a media element playing sound claims the system's Now Playing slot whether
+   * or not anybody describes what is in it — so iOS was showing a live activity for this film
+   * carrying whatever the last web app to set one had left behind, which is why tapping it
+   * opened a different application. Claiming the session puts our own name on it, and the
+   * buttons on it reach this player rather than nothing.
+   */
+  useMediaSession(
+    hidden
+      ? null
+      : {
+          title,
+          artworkUrl: `/api/jellyfin/image?itemId=${itemId}`,
+          duration,
+          position: currentTime,
+          playing,
+          onPlay: () => void videoRef.current?.play(),
+          onPause: () => videoRef.current?.pause(),
+          onSeek: (seconds) => commitSeek(seconds),
+          onSkip: (delta) => skip(delta),
+          onNext: nextEpisode ? onAdvance : null,
+        }
+  );
   const [previewFraction, setPreviewFraction] = useState(0);
 
   // Shared by mouse hover (desktop) and touch drag (mobile — there's no true hover there, so
