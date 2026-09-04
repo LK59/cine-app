@@ -21,7 +21,7 @@ import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
@@ -64,6 +64,7 @@ export function CinemaSeriesDetail({
   const containerRef = useRef<HTMLDivElement>(null);
   /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
   const userMovedFocus = useRef(false);
+
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
@@ -91,6 +92,14 @@ export function CinemaSeriesDetail({
   const similar = useCinemaSimilar(item, "series");
   const hasSimilar = !!onSelectSimilar && similar.length > 0;
 
+  // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
+  // drapeau doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc
+  // ayant forcément bougé le focus pour l'atteindre — n'était plus jamais ramené sur la lecture.
+  // Déclaré avant l'effet de focus : les effets s'exécutent dans leur ordre de déclaration.
+  useEffect(() => {
+    userMovedFocus.current = false;
+  }, [item.sonarrId]);
+
   const playerEnabled = usePlayerEnabled();
   // Re-runs once playerEnabled AND episodesData (Play only renders once nextEpisode is known —
   // see the doc comment above) resolve, same race this fixed on the movie side: landing before
@@ -99,10 +108,10 @@ export function CinemaSeriesDetail({
     // Tant que le spectateur n'a pas bougé lui-même — voir la fiche film pour le détail.
     const frame = requestAnimationFrame(() => {
       if (userMovedFocus.current) return;
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
+      focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode]);
+  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode, item.sonarrId]);
 
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
   // closing the player comes back here, and stands down from the keyboard while it's up there.
@@ -111,7 +120,7 @@ export function CinemaSeriesDetail({
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
     if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
+      focusFirstAction(containerRef.current);
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
   }, [playerOwnsKeyboard]);
@@ -383,7 +392,7 @@ export function CinemaSeriesDetail({
           onClose={() => {
             setShowTrailer(false);
             // Same focus-restore fix as CinemaMovieDetail — see its own note.
-            requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+            requestAnimationFrame(() => focusFirstAction(containerRef.current));
           }}
         />
       )}
@@ -397,7 +406,7 @@ export function CinemaSeriesDetail({
             setShowEpisodes(false);
             // Same focus-restore fix — CinemaEpisodeBrowser unmounting otherwise leaves focus
             // stranded on <body>, same as TrailerModal above.
-            requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+            requestAnimationFrame(() => focusFirstAction(containerRef.current));
           }}
           onPlayEpisode={playEpisode}
         />
@@ -412,7 +421,7 @@ export function CinemaSeriesDetail({
             setShowSynopsis(false);
             // Rendre le focus à la ligne qui a ouvert la fenêtre, comme le fait la bande-annonce.
             requestAnimationFrame(() =>
-              containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus()
+              focusFirstAction(containerRef.current)
             );
           }}
         />

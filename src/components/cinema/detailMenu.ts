@@ -50,3 +50,17 @@ export const MENU_BADGE =
 export const MENU_BADGE_ACTIVE =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-500/35 ring-1 ring-accent-400/40 " +
   "transition-all duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
+
+/**
+ * Rendre la main à la première action de la fiche.
+ *
+ * Un seul chemin, appelé par les cinq retours possibles : l'arrivée sur la fiche, la fermeture
+ * de la bande-annonce, celle de la fenêtre du synopsis, celle de la liste des épisodes, et la
+ * sortie du lecteur. Ils cherchaient chacun « la première ligne du menu », ce qui était vrai
+ * jusqu'à ce que le résumé devienne navigable et se place devant elle : fermer la bande-annonce
+ * ramenait alors sur le synopsis. `[data-detail-actions]` désigne le bloc des actions, et lui
+ * seul — le résumé est en dehors.
+ */
+export function focusFirstAction(container: HTMLElement | null | undefined) {
+  container?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
+}

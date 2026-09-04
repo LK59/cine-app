@@ -526,3 +526,38 @@ describe("PlayerControls", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+/**
+ * L'incrustation est offerte par le navigateur, pas par cette app : elle sort la vidéo de la
+ * page sans rien dire au conteneur, qui restait en plein écran — un écran entier vide dont on
+ * ne sortait qu'avec Échap.
+ */
+describe("PlayerControls et l'incrustation", () => {
+  it("quitte le plein écran quand la vidéo passe en incrustation", async () => {
+    const exitFullscreen = vi.fn().mockResolvedValue(undefined);
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+
+    Object.defineProperty(document, "fullscreenElement", { value: document.body, configurable: true });
+    Object.defineProperty(document, "exitFullscreen", { value: exitFullscreen, configurable: true });
+
+    await act(async () => {
+      video!.dispatchEvent(new Event("enterpictureinpicture"));
+    });
+    expect(exitFullscreen).toHaveBeenCalled();
+  });
+
+  it("ne touche à rien quand il n'y avait pas de plein écran", async () => {
+    const exitFullscreen = vi.fn().mockResolvedValue(undefined);
+    let video: HTMLVideoElement | null = null;
+    render(<Harness onVideoRef={(el) => { video = el; }} />);
+
+    Object.defineProperty(document, "fullscreenElement", { value: null, configurable: true });
+    Object.defineProperty(document, "exitFullscreen", { value: exitFullscreen, configurable: true });
+
+    await act(async () => {
+      video!.dispatchEvent(new Event("enterpictureinpicture"));
+    });
+    expect(exitFullscreen).not.toHaveBeenCalled();
+  });
+});

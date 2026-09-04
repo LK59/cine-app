@@ -19,7 +19,7 @@ import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
@@ -61,6 +61,7 @@ export function CinemaMovieDetail({
   const containerRef = useRef<HTMLDivElement>(null);
   /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
   const userMovedFocus = useRef(false);
+
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
@@ -101,6 +102,14 @@ export function CinemaMovieDetail({
   // played the trailer instead of the film. Re-running once playerEnabled flips true (and once
   // trailerKey is known, which can also reorder what's "first") re-targets focus at whichever
   // row is now actually first, catching that race instead of freezing on its initial guess.
+  // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
+  // drapeau doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc
+  // ayant forcément bougé le focus pour l'atteindre — n'était plus jamais ramené sur la lecture.
+  // Déclaré avant l'effet de focus : les effets s'exécutent dans leur ordre de déclaration.
+  useEffect(() => {
+    userMovedFocus.current = false;
+  }, [item.radarrId]);
+
   const playerEnabled = usePlayerEnabled();
   useEffect(() => {
     /**
@@ -115,10 +124,10 @@ export function CinemaMovieDetail({
      */
     const frame = requestAnimationFrame(() => {
       if (userMovedFocus.current) return;
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
+      focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey]);
+  }, [playerEnabled, info?.trailerKey, item.radarrId]);
 
   // Stays open underneath the player instead of closing when Lecture starts, so dismissing the
   // player lands you back on the sheet you started from rather than on the browse grid. What
@@ -132,7 +141,7 @@ export function CinemaMovieDetail({
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
     if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
+      focusFirstAction(containerRef.current);
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
   }, [playerOwnsKeyboard]);
@@ -393,7 +402,7 @@ export function CinemaMovieDetail({
             // <body>, so this overlay's own Up/Down handler (indexOf returns -1) needs an extra,
             // wasted keypress before arrow-nav does anything again. Same class of bug already
             // fixed for the player's own menu-close case.
-            requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+            requestAnimationFrame(() => focusFirstAction(containerRef.current));
           }}
         />
       )}
@@ -407,7 +416,7 @@ export function CinemaMovieDetail({
             setShowSynopsis(false);
             // Rendre le focus à la ligne qui a ouvert la fenêtre, comme le fait la bande-annonce.
             requestAnimationFrame(() =>
-              containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus()
+              focusFirstAction(containerRef.current)
             );
           }}
         />

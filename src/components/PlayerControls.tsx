@@ -400,6 +400,24 @@ export function PlayerControls({
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, [containerRef]);
 
+  /**
+   * Le passage en incrustation quitte le plein écran qu'il laissait derrière lui.
+   *
+   * L'incrustation est offerte par le navigateur lui-même, pas par cette app : elle sort la
+   * vidéo de la page sans rien dire à ce qui l'entoure. Le conteneur, lui, restait en plein
+   * écran — un écran entier vide, avec pour seules commandes celles de la vignette, et il
+   * fallait Échap pour en sortir. Un plein écran dont l'image est partie n'a plus d'objet.
+   */
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    function onEnterPip() {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    }
+    video.addEventListener("enterpictureinpicture", onEnterPip);
+    return () => video.removeEventListener("enterpictureinpicture", onEnterPip);
+  }, [videoRef]);
+
   // Shows the controls and (re)starts the auto-hide — called directly from
   // interaction handlers rather than left to a visible-state-diffing effect,
   // since repeated taps while already visible wouldn't otherwise change

@@ -101,8 +101,9 @@ class FakeBuffer extends EventTarget {
     // reader was pointed, exactly as a real one does — starting every range at zero would mean
     // media never reached a seeked-to playhead, and the model would loop rather than the code.
     if (this.initSeen) {
-      const start = this.ranges.length > 0 ? this.ranges[0][0] : playhead + this.landsLate;
-      const end = (this.ranges.length > 0 ? this.ranges[0][1] : playhead + this.landsLate) + this.secondsPerAppend;
+      const here = playheadOf();
+      const start = this.ranges.length > 0 ? this.ranges[0][0] : here + this.landsLate;
+      const end = (this.ranges.length > 0 ? this.ranges[0][1] : here + this.landsLate) + this.secondsPerAppend;
       this.ranges = [[start, end]];
     }
     this.initSeen = true;
@@ -174,8 +175,21 @@ class FakeSource extends EventTarget {
   }
 }
 
-/** Shared so an appended range can begin where the reader was pointed, as a real buffer does. */
-let playhead = 0;
+/**
+ * La tête de lecture de l'élément le plus récemment créé.
+ *
+ * Elle a longtemps été une simple variable de module, partagée par tous les éléments simulés du
+ * fichier — et c'est ce qui rendait « la reprise repart où le son s'est arrêté » instable une
+ * fois sur six : une source d'un test précédent, jamais fermée, continuait sa boucle de lecture
+ * et poussait *sa* tête de lecture, dont l'écriture atterrissait dans cette variable, c'est-à-dire
+ * dans l'élément du test en cours. Avec cinq cents segments derrière elle, elle y écrivait des
+ * valeurs comme 600 s.
+ *
+ * Chaque élément garde donc désormais la sienne, en fermeture ; seule la lecture — ce dont le
+ * modèle de tampon a besoin pour savoir où commencer une plage — passe encore par ici, et
+ * désigne le dernier élément créé, c'est-à-dire celui du test en cours.
+ */
+let playheadOf: () => number = () => 0;
 
 /** The intersection of every buffer's ranges, which is what a media element reports. */
 function intersectionOfBuffers(): TimeRanges {
@@ -201,6 +215,9 @@ function intersectionOfBuffers(): TimeRanges {
 }
 
 function fakeVideo() {
+  // Propre à cet élément : une horloge poussée par une source oubliée n'atteint plus les autres.
+  let playhead = 0;
+  playheadOf = () => playhead;
   const target = new EventTarget();
   Object.defineProperty(target, "buffered", { get: intersectionOfBuffers, configurable: true });
   Object.defineProperty(target, "currentTime", {
@@ -279,7 +296,7 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
 }
 
 beforeEach(() => {
-  playhead = 0;
+  playheadOf = () => 0;
   FakeSource.instances = [];
   FakeSource.supported = new Set([PLAN.videoMimeType, PLAN.audioMimeType!]);
   vi.stubGlobal("ManagedMediaSource", FakeSource);
