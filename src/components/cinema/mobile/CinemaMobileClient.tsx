@@ -10,8 +10,6 @@ import { leaveCinema } from "@/lib/leaveCinema";
 import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
-import { useRotatingIndex } from "@/lib/useRotatingIndex";
-import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -22,6 +20,7 @@ import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
 import { useCinemaMyList } from "@/lib/useCinemaMyList";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
+import { CinemaMobileHero } from "@/components/cinema/mobile/CinemaMobileHero";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
@@ -106,16 +105,9 @@ export function CinemaMobileClient() {
   const myListSeries = useCinemaMyList("series", series);
   // A rotating carousel of the latest arrivals rather than a single fixed pick — same idea and
   // same cadence as the dashboard's own hero, kept in this screen's own visual language (poster
-  // key art, Lire / Plus d'infos). Pauses while a sheet or the search is covering it: rotating
-  // artwork nobody can see just burns image decodes.
+  // key art, Lire / Plus d'infos). L'index et la rotation vivent dans CinemaMobileHero : ils ne
+  // regardent que lui, et les y laisser faisait redessiner tout cet écran à chaque changement.
   const heroItems = (payload?.recentlyAdded?.length ? payload.recentlyAdded : payload?.spotlight ?? []).slice(0, 8);
-  // Deux rendus par geste, à son début et à sa fin — voir `onDragStateChange`.
-  const [heroDragging, setHeroDragging] = useState(false);
-  const [heroIndex, setHeroIndex] = useRotatingIndex(
-    heroItems.length,
-    selected !== null || searchOpen || heroDragging
-  );
-  const hero = heroItems[heroIndex];
   const myList = isSeries ? myListSeries : myListMovies;
   // The two payloads key their items differently; every rail below just needs *a* stable id.
   const itemId = (item: CinemaMovie | CinemaSeries) =>
@@ -150,68 +142,33 @@ export function CinemaMobileClient() {
    * téléphone. Et un balayage qui remplace l'affiche d'un coup, sans que rien ne bouge sous le
    * doigt, se sent comme un raccourci clavier, pas comme un carrousel.
    */
-  const heroTrackRef = useRef<HTMLDivElement>(null);
-  const heroDrag = useCarouselDrag({
-    trackRef: heroTrackRef,
-    count: heroItems.length,
-    index: heroIndex,
-    onIndexChange: setHeroIndex,
-    onDragStateChange: setHeroDragging,
-  });
+  /**
+   * Deux fonctions stables, pour que la bannière reste mémoïsée.
+   *
+   * Une fonction recréée à chaque rendu du parent annulerait la mémoïsation : la bannière se
+   * redessinerait à chaque battement de l'écran d'accueil, ce que l'extraction visait justement
+   * à éviter.
+   */
+  const playHero = useCallback(
+    (item: CinemaMovie | CinemaSeries) => {
+      // Un identifiant de série ne se lit pas tel quel : il faut d'abord résoudre son prochain
+      // épisode (voir playSeriesNextEpisode).
+      if ("sonarrId" in item) playSeriesNextEpisode(playback, item);
+      else playback.play({ itemId: item.jellyfinItemId, title: item.title });
+    },
+    [playback]
+  );
+
+  const openHero = useCallback(
+    (item: CinemaMovie | CinemaSeries) => openDetail(item, "sonarrId" in item ? "series" : "movies"),
+    [openDetail]
+  );
 
   const exit = () => leaveCinema(router);
 
   if (typeof document === "undefined") return null;
 
   const loading = moviesLoading || (isSeries && seriesLoading && !series);
-
-  // Progress segments, same pattern (and same fill animation) as the dashboard hero's own — the
-  // one place the carousel is visible as a carousel, and a way to jump straight to a title.
-  const heroDots = heroItems.length > 1 && (
-    <div className="mx-auto mt-3 flex max-w-xs gap-1">
-      {heroItems.map((item, i) => (
-        <button
-          key={itemId(item)}
-          type="button"
-          onClick={() => setHeroIndex(i)}
-          aria-label={item.title}
-          className="h-1 flex-1 overflow-hidden rounded-full bg-white/25"
-        >
-          {i < heroIndex && <div className="h-full w-full bg-white" />}
-          {i === heroIndex && <div key={heroIndex} className="h-full animate-hero-fill bg-white" />}
-        </button>
-      ))}
-    </div>
-  );
-
-  // Identical in both hero layouts below — same buttons, same handlers, only the box around them
-  // changes with the orientation.
-  const heroActions = (item: CinemaMovie | CinemaSeries) => (
-    <div className="flex gap-2">
-      <button
-        type="button"
-        // A series id isn't playable on its own — it has to resolve its next-up episode first
-        // (see playSeriesNextEpisode). This was starting a Series item id before.
-        onClick={() =>
-          isSeries
-            ? playSeriesNextEpisode(playback, item as CinemaSeries)
-            : playback.play({ itemId: item.jellyfinItemId, title: item.title })
-        }
-        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
-      >
-        <Play size={16} fill="currentColor" />
-        {t("common.play")}
-      </button>
-      <button
-        type="button"
-        onClick={() => openDetail(item, mediaType)}
-        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
-      >
-        <Info size={16} />
-        {t("cinema.moreInfo")}
-      </button>
-    </div>
-  );
 
   // app-viewport instead of inset-0's implicit height: in an installed PWA that resolves to the
   // real screen, where the viewport iOS lays the app out in at first is short — see the note in
@@ -302,77 +259,13 @@ export function CinemaMobileClient() {
             below the fold — the "broken banner". The same pieces laid out as a row (small poster,
             text and actions beside it) stay entirely on screen at any landscape height. The rows
             underneath are untouched in both orientations. */}
-        {hero && (
-          <section className="px-4 pt-2">
-            {/* Une piste, et non une affiche remplacée.
-                Toutes les affiches sont côte à côte et la piste est décalée d'une largeur par
-                titre ; pendant le geste elle porte en plus le décalage du doigt, sans transition —
-                elle n'anime pas vers une cible, elle est là où le doigt l'a mise. Au relâchement
-                le décalage revient à zéro dans le même temps que l'index change, et la
-                transition reprend : le mouvement se poursuit au lieu de sauter. */}
-            <div className="overflow-hidden rounded-2xl" {...heroDrag.handlers} style={heroDrag.style}>
-              <div
-                ref={heroTrackRef}
-                className="flex"
-                style={{
-                  transform: carouselTransform(heroIndex),
-                  transition: CAROUSEL_TRANSITION,
-                  // Promue une fois pour toutes, plutôt qu'à chaque geste : sans cela le
-                  // navigateur décide de promouvoir la piste au premier déplacement, ce qui veut
-                  // dire re-tramer une surface de plusieurs écrans de large au moment précis où
-                  // le doigt attend une réponse.
-                  willChange: "transform",
-                }}
-              >
-                {heroItems.map((item, i) => (
-                  <div key={itemId(item)} className="w-full shrink-0">
-                    {/* Seules l'affiche courante et ses deux voisines existent.
-                        Les huit étaient rendues en même temps, chacune agrandie de sa largeur
-                        d'origine à celle de l'écran : une piste de huit écrans de large que le
-                        compositeur doit tramer, redimensionner et garder en mémoire, plus huit
-                        logos à ombre portée. Trois suffisent : celle qu'on voit, celle d'où l'on
-                        vient, celle où l'on va. */}
-                    {Math.abs(i - heroIndex) > 1 ? null : short ? (
-                      <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
-                        <div className="w-24 shrink-0 overflow-hidden rounded-lg">
-                          <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === heroIndex} sizes="120px" />
-                        </div>
-                        <div className="flex min-w-0 flex-1 flex-col justify-center">
-                          {item.logoUrl ? (
-                            <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mb-2 self-start" />
-                          ) : (
-                            <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{item.title}</h1>
-                          )}
-                          {item.genres.length > 0 && (
-                            <p className="mb-3 truncate text-xs text-white/70">{item.genres.slice(0, 3).join(" · ")}</p>
-                          )}
-                          {heroActions(item)}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
-                        <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === heroIndex} sizes="100vw" />
-                        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
-                          {item.logoUrl ? (
-                            <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mx-auto mb-2" />
-                          ) : (
-                            <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
-                          )}
-                          {item.genres.length > 0 && (
-                            <p className="mb-3 text-center text-xs text-white/70">{item.genres.slice(0, 3).join(" · ")}</p>
-                          )}
-                          {heroActions(item)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Hors de la piste : les barres disent où l'on en est, elles ne défilent pas avec. */}
-            {heroDots}
-          </section>
-        )}
+        <CinemaMobileHero
+          items={heroItems}
+          paused={selected !== null || searchOpen}
+          short={short}
+          onPlay={playHero}
+          onOpen={openHero}
+        />
 
         {/* Continue watching — landscape stills with a progress bar and the same resume wording
             the desktop cards use. */}

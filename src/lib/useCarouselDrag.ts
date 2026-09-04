@@ -157,25 +157,29 @@ export function useCarouselDrag({
       const next = (far || thrown) && wanted >= 0 && wanted < count ? wanted : index;
 
       /**
-       * La transformation d'arrivée est écrite ici, avec la transition rendue : le geste se
-       * poursuit sans attendre le rendu de React. Celui-ci écrira ensuite la même chaîne, ce qui
-       * ne se voit pas — c'est pourquoi les deux côtés passent par `carouselTransform`.
+       * Le relâchement se joue en deux images, et rien de plus n'est demandé au fil principal.
        *
-       * La lecture d'`offsetWidth` entre les deux n'est pas une précaution : elle est la
-       * correction. Rendre la transition et changer la transformation dans le même bloc ne
-       * produit qu'un seul recalcul de style, où le navigateur voit d'un coup une transition
-       * active *et* une valeur déjà changée — il n'a donc rien à interpoler et pose l'affiche
-       * cible d'un trait. C'est la coupure sèche au relâchement. Ce coup d'œil sur la mise en
-       * page force le recalcul intermédiaire : la transition part de là où le doigt a laissé la
-       * piste, et le mouvement se termine tout seul.
+       * Rendre la transition et changer la transformation dans le même bloc ne produit qu'un
+       * seul recalcul de style : le navigateur y voit d'un coup une transition active *et* une
+       * valeur déjà changée, n'a donc rien à interpoler, et pose l'affiche cible d'un trait —
+       * la coupure sèche. Il lui faut un recalcul intermédiaire entre les deux.
+       *
+       * Une lecture de la mise en page le forcerait, mais elle coûte un calcul synchrone de
+       * toute la page, sur le fil principal, à l'instant précis où l'animation démarre — c'est
+       * l'à-coup qui restait. La frontière naturelle entre deux images fait le même travail
+       * gratuitement : la transition est rendue maintenant, la transformation à l'image
+       * suivante, et le recalcul a lieu entre les deux comme il le fait de toute façon.
+       *
+       * Le rendu de React est repoussé d'une image de plus : il n'a rien à corriger — la
+       * transformation d'arrivée est déjà écrite — et le faire tomber sur les premières images
+       * de l'animation était l'autre moitié de l'à-coup.
        */
       const track = trackRef.current;
-      if (track) {
-        track.style.transition = CAROUSEL_TRANSITION;
-        void track.offsetWidth;
-        track.style.transform = carouselTransform(next);
-      }
-      if (next !== index) onIndexChange(next);
+      if (track) track.style.transition = CAROUSEL_TRANSITION;
+      requestAnimationFrame(() => {
+        if (track) track.style.transform = carouselTransform(next);
+        if (next !== index) requestAnimationFrame(() => onIndexChange(next));
+      });
     },
     [count, index, onIndexChange, trackRef, onDragStateChange]
   );

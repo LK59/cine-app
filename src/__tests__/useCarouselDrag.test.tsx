@@ -82,26 +82,31 @@ describe("la traînée du carrousel", () => {
   });
 
   /**
-   * Sans le recalcul intermédiaire, le navigateur voit d'un coup une transition active et une
+   * Sans recalcul intermédiaire, le navigateur voit d'un coup une transition active et une
    * transformation déjà changée : il n'a rien à interpoler et pose l'affiche cible d'un trait.
-   * C'est la coupure sèche au relâchement.
+   * La frontière entre deux images le lui donne, sans le calcul synchrone de toute la page
+   * qu'une lecture de mise en page aurait coûté au moment où l'animation démarre.
    */
-  it("laisse au navigateur de quoi interpoler avant de poser l'arrivée", () => {
-    const seen: string[] = [];
-    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
-      configurable: true,
-      get(this: HTMLElement) {
-        if (this.dataset.testid === "track") seen.push(this.style.transition);
-        return 400;
-      },
+  it("rend la transition avant de changer la transformation, à une image d'intervalle", () => {
+    const seen: { transition: string; transform: string }[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      seen.push({ transition: track().style.transition, transform: track().style.transform });
+      cb(0);
+      return 1;
     });
     render(<Harness index={1} count={5} onIndexChange={vi.fn()} />);
     down();
     move(60);
+    // Les images demandées jusqu'ici sont celles du suivi du doigt ; seul le relâchement compte.
+    seen.length = 0;
     up(60);
-    // La transition est déjà rendue au moment où la mise en page est relue, et la piste est
+
+    // À l'entrée de l'image qui posera l'arrivée, la transition est déjà rendue et la piste est
     // encore là où le doigt l'a laissée.
-    expect(seen).toContain(CAROUSEL_TRANSITION);
+    expect(seen[0]).toEqual({
+      transition: CAROUSEL_TRANSITION,
+      transform: carouselTransform(1, -140),
+    });
   });
 
   it("passe au titre suivant quand on est allé assez loin", () => {
