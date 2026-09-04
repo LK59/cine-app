@@ -23,13 +23,13 @@
   "nav": {
     "overview": "Resumen",
     "watchlist": "Mi lista",
-    "timeline": "Actividad",
+    "timeline": "Actividad reciente",
     "calendar": "Calendario",
     "recommendations": "Recomendaciones",
     "discover": "Descubrir",
     "radarr": "Películas · Radarr",
     "sonarr": "Series · Sonarr",
-    "qbittorrent": "Descargas",
+    "qbittorrent": "Descargas · qBittorrent",
     "settings": "Ajustes",
     "stats": "Estadísticas",
     "bazarr": "Subtítulos · Bazarr",
@@ -46,11 +46,14 @@
       "series": "Series",
       "more": "Más",
       "search": "Buscar",
-      "searchHint": "Película, serie, actor…",
-      "sectionContent": "Contenido",
-      "sectionManage": "Gestión"
+      "searchHint": "Película, serie, actor…"
     },
-    "cinemaMode": "Modo cine"
+    "cinemaMode": "Modo cine",
+    "sections": {
+      "library": "Biblioteca",
+      "content": "Contenido",
+      "manage": "Gestión"
+    }
   },
   "common": {
     "loading": "Cargando...",
@@ -294,7 +297,8 @@
     "jsStatusProcessing": "Procesando",
     "jsStatusPartial": "Parcial",
     "jsStatusAvailable": "Disponible",
-    "minPerEp": "{n} min/ep."
+    "minPerEp": "{n} min/ep.",
+    "autoSearchSeries": "Búsqueda automática (todas las temporadas)"
   },
   "qbittorrent": {
     "pageTitle": "Descargas",
@@ -609,7 +613,7 @@
     "empty": "Sin eventos este mes."
   },
   "timeline": {
-    "pageTitle": "Descargas",
+    "pageTitle": "Actividad reciente",
     "subtitle": "{n} eventos recientes — Radarr y Sonarr",
     "filters": {
       "all": "Todo ({n})",

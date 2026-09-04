@@ -9,6 +9,14 @@ export interface SheetAction {
   onClick: () => void;
   variant?: "default" | "danger" | "accent";
   disabled?: boolean;
+  /**
+   * Intitulé du groupe auquel cette action appartient.
+   *
+   * Rendu une seule fois, au-dessus de la première action qui le porte : une feuille qui
+   * enchaîne dix entrées de nature différente se lit comme une liste de courses. Les actions
+   * sans intitulé restent en tête, sans en-tête au-dessus d'elles.
+   */
+  section?: string;
 }
 
 interface Props {
@@ -99,7 +107,7 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-60 flex items-end" style={{ touchAction: "none" }}>
+    <div data-action-sheet className="fixed inset-0 z-60 flex items-end" style={{ touchAction: "none" }}>
       {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${show ? "opacity-100" : "opacity-0"}`}
@@ -145,8 +153,13 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
         {/* Actions */}
         <div className="py-1.5">
           {actions.map((action, i) => (
+            <div key={i}>
+            {action.section && action.section !== actions[i - 1]?.section && (
+              <p className="px-5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                {action.section}
+              </p>
+            )}
             <button
-              key={i}
               disabled={action.disabled}
               onClick={() => { action.onClick(); onClose(); }}
               className={`flex w-full items-center gap-4 px-5 py-3.5 text-sm font-medium transition-colors active:bg-white/5 disabled:opacity-40 ${
@@ -166,6 +179,7 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
               )}
               {action.label}
             </button>
+            </div>
           ))}
         </div>
 

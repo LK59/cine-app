@@ -111,7 +111,27 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
   }
 
   // ActionSheet actions for mobile
+  // Même grammaire que la carte d'affiche partagée : ce qu'on vient faire d'abord, les statuts
+  // de liste ensuite sous leur propre intitulé, et rien qui ne corresponde à l'état réel du film.
   const sheetActions: SheetAction[] = [
+    ...(libraryHref
+      ? [{ label: t('recommendations.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
+      : []),
+    ...(!m.inLibrary
+      ? [{
+          label: requested ? t('recommendations.requestSent') : requesting ? t('recommendations.requesting') : t('recommendations.request'),
+          icon: <CirclePlus size={16} />,
+          onClick: () => doRequest(),
+          disabled: requested || requesting,
+          variant: (requested ? "accent" : "default") as "accent" | "default",
+        }]
+      : []),
+    ...(isAdmin && !m.inLibrary ? [{
+      label: t('recommendations.interactiveSearch'),
+      icon: <Telescope size={16} />,
+      onClick: () => doInteractiveSearch(),
+      disabled: addingSearch,
+    }] : []),
     ...ALL_STATUSES.map((s) => {
       const meta = STATUS_META[s];
       const Icon = meta.icon;
@@ -121,24 +141,9 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
         onClick: () => addToWatchlist(s),
         variant: (addedStatus === s ? "accent" : "default") as "accent" | "default",
         disabled: addedStatus === s,
+        section: t('watchlist.pageTitle'),
       };
     }),
-    ...(libraryHref
-      ? [{ label: t('recommendations.viewSheet'), icon: <ExternalLink size={16} />, onClick: () => router.push(libraryHref) }]
-      : [{
-          label: requested ? t('recommendations.requestSent') : requesting ? t('recommendations.requesting') : t('recommendations.request'),
-          icon: <CirclePlus size={16} />,
-          onClick: () => doRequest(),
-          disabled: requested || requesting,
-          variant: requested ? "accent" as const : "default" as const,
-        }]
-    ),
-    ...(isAdmin && !m.inLibrary ? [{
-      label: t('recommendations.interactiveSearch'),
-      icon: <Telescope size={16} />,
-      onClick: () => doInteractiveSearch(),
-      disabled: addingSearch,
-    }] : []),
   ];
 
   const AddedIcon = addedStatus ? STATUS_META[addedStatus].icon : null;
@@ -219,7 +224,7 @@ function MovieCard({ m, watchlistStatus }: { m: RecommendedMovie; watchlistStatu
                 >
                   <ExternalLink size={9} /> {t('recommendations.viewSheet')}
                 </Link>
-              ) : (
+              ) : m.inLibrary ? null : (
                 <button
                   onClick={(e) => doRequest(e)}
                   disabled={requested || requesting}

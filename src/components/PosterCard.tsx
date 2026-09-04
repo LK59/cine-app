@@ -138,29 +138,28 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
     }
   }
 
+  /**
+   * Les actions d'abord, les statuts de liste ensuite — et rien qui n'ait de sens ici.
+   *
+   * La feuille s'ouvrait sur les cinq statuts, ce qui reléguait « voir la fiche » en sixième
+   * position alors que c'est ce que l'on vient chercher neuf fois sur dix. Et elle proposait
+   * « Demander » à tout coup, y compris pour un titre déjà présent dans la bibliothèque : au
+   * survol, la même carte propose l'un *ou* l'autre depuis toujours, jamais les deux.
+   */
   const sheetActions: SheetAction[] = [
-    ...ALL_STATUSES.map((s) => {
-      const meta = STATUS_META[s];
-      const Icon = meta.icon;
-      return {
-        label: meta.label,
-        icon: <Icon size={16} />,
-        onClick: () => addToWatchlist(s),
-        variant: (addedStatus === s ? "accent" : "default") as "accent" | "default",
-        disabled: addedStatus === s,
-      };
-    }),
     ...(item.libraryHref
       ? [{ label: t("recommendations.viewSheet"), icon: <ExternalLink size={16} />, onClick: () => router.push(item.libraryHref!) }]
       : []
     ),
-    {
-      label: requested ? t("recommendations.requestSent") : t("recommendations.request"),
-      icon: <CirclePlus size={16} />,
-      onClick: () => setRequestModalOpen(true),
-      disabled: requested,
-      variant: requested ? "accent" as const : "default" as const,
-    },
+    ...(!item.inLibrary
+      ? [{
+          label: requested || item.pending ? t("recommendations.requestSent") : t("recommendations.request"),
+          icon: <CirclePlus size={16} />,
+          onClick: () => setRequestModalOpen(true),
+          disabled: requested || item.pending === true,
+          variant: (requested || item.pending ? "accent" : "default") as "accent" | "default",
+        }]
+      : []),
     ...(isAdmin && mediaType === "movie" && !item.inLibrary ? [{
       label: t("recommendations.interactiveSearch"),
       icon: <Telescope size={16} />,
@@ -173,6 +172,18 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
       onClick: () => addSeriesToLibrary(),
       disabled: addingSearch,
     }] : []),
+    ...ALL_STATUSES.map((s) => {
+      const meta = STATUS_META[s];
+      const Icon = meta.icon;
+      return {
+        label: meta.label,
+        icon: <Icon size={16} />,
+        onClick: () => addToWatchlist(s),
+        variant: (addedStatus === s ? "accent" : "default") as "accent" | "default",
+        disabled: addedStatus === s,
+        section: t("watchlist.pageTitle"),
+      };
+    }),
   ];
 
   const AddedIcon = addedStatus ? STATUS_META[addedStatus].icon : null;
@@ -264,16 +275,16 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
                 >
                   <ExternalLink size={9} /> {t("recommendations.viewSheet")}
                 </Link>
-              ) : (
+              ) : item.inLibrary ? null : (
                 <button
                   onClick={(e) => { e.stopPropagation(); setRequestModalOpen(true); }}
-                  disabled={requested}
+                  disabled={requested || item.pending}
                   className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors ${
-                    requested ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
+                    requested || item.pending ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white hover:bg-white/20"
                   }`}
                 >
                   <CirclePlus size={9} />
-                  {requested ? t("recommendations.requested") : t("recommendations.request")}
+                  {requested || item.pending ? t("recommendations.requested") : t("recommendations.request")}
                 </button>
               )}
               {isAdmin && mediaType === "movie" && !item.inLibrary && (

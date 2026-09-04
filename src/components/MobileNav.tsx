@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { enterCinema } from "@/lib/leaveCinema";
-import { LogOut, MonitorPlay, MoreHorizontal, Search, LayoutDashboard, Film, Tv, Bookmark, Download, Telescope, CalendarDays, Clock, Sparkles, BarChart2, Captions, ListChecks, PlayCircle, Activity, Settings, RefreshCw } from "lucide-react";
+import { LogOut, MonitorPlay, MoreHorizontal, Search, RefreshCw } from "lucide-react";
 import { prefetchRoute } from "@/lib/prefetch";
+import { NAV_GROUPS, NAV_ITEMS, NAV_BAR_HREFS } from "@/components/navItems";
 import { useT } from "@/components/TranslationProvider";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
 
@@ -58,30 +59,26 @@ export function MobileNav() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const t = useT();
 
-  const PINNED = [
-    { href: "/",          label: t('nav.mobile.home'),    icon: LayoutDashboard },
-    { href: "/radarr",    label: t('nav.mobile.movies'),  icon: Film },
-    { href: "/sonarr",    label: t('nav.mobile.series'),  icon: Tv },
-    { href: "/watchlist", label: t('nav.watchlist'),      icon: Bookmark },
-  ];
+  // Les entrées viennent de navItems : la barre du bas garde ses libellés courts, tout le reste
+  // suit les groupes partagés avec la barre latérale, dans le même ordre.
+  const MOBILE_LABELS: Record<string, string> = {
+    "/": t('nav.mobile.home'),
+    "/radarr": t('nav.mobile.movies'),
+    "/sonarr": t('nav.mobile.series'),
+  };
 
-  const SECTION_CONTENT = [
-    { href: "/discover",        label: t('nav.discover'),         icon: Telescope },
-    { href: "/recommendations", label: t('nav.recommendations'),  icon: Sparkles },
-    { href: "/calendar",        label: t('nav.calendar'),         icon: CalendarDays },
-    { href: "/timeline",        label: t('nav.timeline'),         icon: Clock },
-    { href: "/stats",           label: t('nav.stats'),            icon: BarChart2 },
-  ];
+  const PINNED = NAV_BAR_HREFS.map((href) => {
+    const item = NAV_ITEMS.find((i) => i.href === href)!;
+    return { href, label: MOBILE_LABELS[href] ?? t(item.navKey), icon: item.icon };
+  });
 
-  const SECTION_GESTION = [
-    { href: "/qbittorrent",  label: t('nav.qbittorrent'),  icon: Download },
-    { href: "/parametres",   label: t('nav.settings'),     icon: Settings },
-    { href: "/bazarr",       label: t('nav.bazarr'),       icon: Captions },
-    { href: "/jackett",      label: t('nav.jackett'),      icon: Search },
-    { href: "/jellyfin",     label: t('nav.jellyfin'),     icon: PlayCircle },
-    { href: "/jellyseerr",   label: t('nav.jellyseerr'),   icon: ListChecks },
-    { href: "/health",       label: t('nav.health'),       icon: Activity },
-  ];
+  // Les groupes de la feuille, moins ce que la barre du bas montre déjà.
+  const SHEET_GROUPS = NAV_GROUPS.map((group) => ({
+    title: t(group.titleKey),
+    items: group.items
+      .filter((i) => !NAV_BAR_HREFS.includes(i.href))
+      .map((i) => ({ href: i.href, label: t(i.navKey), icon: i.icon })),
+  })).filter((group) => group.items.length > 0);
 
   // Close on navigation back
   useEffect(() => {
@@ -296,8 +293,9 @@ export function MobileNav() {
             {t("nav.cinemaMode")}
           </button>
 
-          <SheetSection title={t('nav.mobile.sectionContent')} items={SECTION_CONTENT} isActive={isActive} onClose={() => setOpen(false)} />
-          <SheetSection title={t('nav.mobile.sectionManage')} items={SECTION_GESTION} isActive={isActive} onClose={() => setOpen(false)} />
+          {SHEET_GROUPS.map((group) => (
+            <SheetSection key={group.title} title={group.title} items={group.items} isActive={isActive} onClose={() => setOpen(false)} />
+          ))}
 
           {/* Refresh + Logout */}
           <div className="mt-2 flex items-center gap-2">

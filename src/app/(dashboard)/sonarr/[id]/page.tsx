@@ -40,7 +40,8 @@ import type { JellyfinItem } from "@/lib/clients/jellyfin";
 import { posterUrl } from "@/lib/images";
 import { formatResumeTicks } from "@/lib/format";
 import { useRole } from "@/lib/useRole";
-import { canAutoSearchSeason } from "@/lib/mediaPermissions";
+import { canAutoSearchSeason, canAutoSearchSeries } from "@/lib/mediaPermissions";
+import { MoreMenu } from "@/components/MoreMenu";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import { apiAction } from "@/lib/apiAction";
@@ -123,6 +124,7 @@ export default function SonarrSeriesDetailPage() {
   const [openSeasons, setOpenSeasons] = useState<Set<number>>(new Set());
   const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
   const [autoSearching, setAutoSearching] = useState<number | null>(null);
+  const [seriesSearching, setSeriesSearching] = useState(false);
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -286,6 +288,20 @@ export default function SonarrSeriesDetailPage() {
     }
   }
 
+  // La recherche automatique de la série entière — l'équivalent de celle de la fiche film, qui
+  // n'existait ici qu'au niveau d'une saison.
+  async function triggerSeriesAutoSearch() {
+    setSeriesSearching(true);
+    try {
+      await apiAction(`/api/sonarr/series/${id}/search`, { method: "POST" });
+      toast.success(t('sonarr.searchLaunched'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.unknown'));
+    } finally {
+      setSeriesSearching(false);
+    }
+  }
+
   async function toggleSeasonMonitored(seasonNumber: number, value: boolean) {
     if (!series?.seasons) return;
     const seasons = series.seasons.map((s) =>
@@ -372,7 +388,12 @@ export default function SonarrSeriesDetailPage() {
   const backdrop = info?.tmdb?.backdropUrl;
   const jfItem = jfData?.item;
   const isWatched = jfItem?.UserData?.Played ?? false;
-  const canRequest = !jsData || jsData.status === 1;
+  const fileCount = series.statistics?.episodeFileCount ?? 0;
+  const episodeCount = series.statistics?.episodeCount ?? 0;
+  // Une série déjà complète n'est pas à demander. Le bouton restait proposé quel que soit ce
+  // qu'il y avait sur le disque, alors que la fiche film s'en préoccupait depuis toujours.
+  const isComplete = episodeCount > 0 && fileCount >= episodeCount;
+  const canRequest = !isComplete && (!jsData || jsData.status === 1);
 
   return (
     <div className="relative -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 md:-mx-8 md:-mt-6">
@@ -513,14 +534,29 @@ export default function SonarrSeriesDetailPage() {
             <PlayCircle size={16} /> {t('common.trailer')}
           </button>
         )}
-        {!isGuest && (
-          <button
-            className="btn-primary"
-            onClick={() => setActiveSearch({ title: t('sonarr.seriesSearch', { title: series.title }), endpoint: `/api/sonarr/series/${id}/releases` })}
-          >
-            <Search size={16} /> {t('common.interactiveSearch')}
-          </button>
-        )}
+        {/* Comme sur la fiche film : tout ce qui est technique passe derrière un seul bouton
+            plutôt qu'à côté des autres. La recherche interactive était ici un *second* primaire,
+            dans la même couleur que Lecture — deux actions principales, donc aucune. */}
+        <MoreMenu
+          label={t('common.moreOptions')}
+          items={[
+            ...(canAutoSearchSeries(isGuest, fileCount, episodeCount)
+              ? [{
+                  label: t('sonarr.autoSearchSeries'),
+                  icon: <RefreshCw size={16} className={seriesSearching ? "animate-spin" : ""} />,
+                  onSelect: triggerSeriesAutoSearch,
+                  disabled: seriesSearching,
+                }]
+              : []),
+            ...(!isGuest
+              ? [{
+                  label: t('common.interactiveSearch'),
+                  icon: <Search size={16} />,
+                  onSelect: () => setActiveSearch({ title: t('sonarr.seriesSearch', { title: series.title }), endpoint: `/api/sonarr/series/${id}/releases` }),
+                }]
+              : []),
+          ]}
+        />
       </div>
 
       {/* ── Mobile tab bar ─────────────────────────────────────── */}

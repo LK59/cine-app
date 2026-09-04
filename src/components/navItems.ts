@@ -17,21 +17,56 @@ import {
   Settings,
 } from "lucide-react";
 
-export const NAV_ITEMS = [
-  { href: "/", navKey: "nav.overview", icon: LayoutDashboard, primary: true },
-  { href: "/watchlist", navKey: "nav.watchlist", icon: Bookmark, primary: true },
-  { href: "/timeline", navKey: "nav.timeline", icon: Clock, primary: true },
-  { href: "/calendar", navKey: "nav.calendar", icon: CalendarDays, primary: true },
-  { href: "/recommendations", navKey: "nav.recommendations", icon: Sparkles, primary: true },
-  { href: "/discover", navKey: "nav.discover", icon: Telescope, primary: true },
-  { href: "/radarr", navKey: "nav.radarr", icon: Film, primary: true },
-  { href: "/sonarr", navKey: "nav.sonarr", icon: Tv, primary: true },
-  { href: "/qbittorrent", navKey: "nav.qbittorrent", icon: Download, primary: true },
-  { href: "/parametres", navKey: "nav.settings", icon: Settings, primary: true },
-  { href: "/stats", navKey: "nav.stats", icon: BarChart2, primary: true },
-  { href: "/bazarr", navKey: "nav.bazarr", icon: Captions, primary: false },
-  { href: "/jackett", navKey: "nav.jackett", icon: Search, primary: false },
-  { href: "/jellyfin", navKey: "nav.jellyfin", icon: PlayCircle, primary: false },
-  { href: "/jellyseerr", navKey: "nav.jellyseerr", icon: ListChecks, primary: false },
-  { href: "/health", navKey: "nav.health", icon: Activity, primary: false },
+export interface NavItem {
+  href: string;
+  navKey: string;
+  icon: React.ElementType;
+}
+
+/**
+ * Une seule description de la navigation, pour les deux coquilles.
+ *
+ * Le téléphone et le bureau tenaient chacun leur liste, et elles avaient divergé : Films et
+ * Séries en 7ᵉ et 8ᵉ position d'un côté, en 2ᵉ et 3ᵉ de l'autre ; Timeline avant Calendrier ici,
+ * après là ; et Paramètres au milieu de la liste du bureau, sans que rien ne l'explique. Les
+ * deux lisent maintenant les mêmes groupes, dans le même ordre.
+ */
+export const NAV_GROUPS: { titleKey: string; items: NavItem[] }[] = [
+  {
+    titleKey: "nav.sections.library",
+    items: [
+      { href: "/", navKey: "nav.overview", icon: LayoutDashboard },
+      { href: "/radarr", navKey: "nav.radarr", icon: Film },
+      { href: "/sonarr", navKey: "nav.sonarr", icon: Tv },
+      { href: "/watchlist", navKey: "nav.watchlist", icon: Bookmark },
+    ],
+  },
+  {
+    titleKey: "nav.sections.content",
+    items: [
+      { href: "/discover", navKey: "nav.discover", icon: Telescope },
+      { href: "/recommendations", navKey: "nav.recommendations", icon: Sparkles },
+      { href: "/calendar", navKey: "nav.calendar", icon: CalendarDays },
+      { href: "/timeline", navKey: "nav.timeline", icon: Clock },
+      { href: "/stats", navKey: "nav.stats", icon: BarChart2 },
+    ],
+  },
+  {
+    titleKey: "nav.sections.manage",
+    items: [
+      { href: "/qbittorrent", navKey: "nav.qbittorrent", icon: Download },
+      { href: "/bazarr", navKey: "nav.bazarr", icon: Captions },
+      { href: "/jackett", navKey: "nav.jackett", icon: Search },
+      { href: "/jellyfin", navKey: "nav.jellyfin", icon: PlayCircle },
+      { href: "/jellyseerr", navKey: "nav.jellyseerr", icon: ListChecks },
+      { href: "/health", navKey: "nav.health", icon: Activity },
+      // Dernier, comme partout ailleurs : c'est là qu'on va le chercher, pas au milieu.
+      { href: "/parametres", navKey: "nav.settings", icon: Settings },
+    ],
+  },
 ];
+
+/** La barre du bas sur téléphone — les quatre destinations qui portent tout le reste. */
+export const NAV_BAR_HREFS = ["/", "/radarr", "/sonarr", "/watchlist"];
+
+export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);

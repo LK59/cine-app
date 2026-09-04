@@ -11,3 +11,10 @@ export function canAutoSearchMovie(isGuest: boolean, hasFile: boolean): boolean 
 export function canAutoSearchSeason(isGuest: boolean, fileCount: number, episodeCount: number): boolean {
   return !isGuest || fileCount < episodeCount;
 }
+
+// Même règle au niveau de la série entière : un compte ordinaire ne cherche pas ce qui est
+// déjà complet. `episodeCount` à zéro (une série que Sonarr n'a pas encore inventoriée) compte
+// comme incomplète — il n'y a rien sur le disque à opposer à la recherche.
+export function canAutoSearchSeries(isGuest: boolean, fileCount: number, episodeCount: number): boolean {
+  return !isGuest || fileCount < episodeCount || episodeCount === 0;
+}

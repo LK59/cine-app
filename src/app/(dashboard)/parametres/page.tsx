@@ -287,6 +287,11 @@ export default function ParametresPage() {
           <PwaUpdateCard />
         </section>
 
+        {/* Open to everyone: the remux path is the ordinary way this player reads a file now,
+            not an experiment to keep behind the admin account. Still off until each person
+            turns it on, and still refused server-side for anyone who hasn't. */}
+        <LegacyPlayerSection />
+
         {role === "admin" && (
           <section>
             <div className="mb-4 flex items-center gap-3">
@@ -313,10 +318,6 @@ export default function ParametresPage() {
           </section>
         )}
 
-        {/* Open to everyone: the remux path is the ordinary way this player reads a file now,
-            not an experiment to keep behind the admin account. Still off until each person
-            turns it on, and still refused server-side for anyone who hasn't. */}
-        <LegacyPlayerSection />
 
       </div>
     </div>

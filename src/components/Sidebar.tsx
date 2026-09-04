@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Clapperboard, LogOut, MonitorPlay, Search } from "lucide-react";
-import { NAV_ITEMS } from "@/components/navItems";
+import { NAV_GROUPS } from "@/components/navItems";
 import { useRole } from "@/lib/useRole";
 import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
@@ -75,8 +75,16 @@ export function Sidebar() {
           } as React.CSSProperties
         }
       >
-        <div className="space-y-0.5 pb-2">
-          {NAV_ITEMS.map(({ href, navKey, icon: Icon }) => {
+        {/* Les mêmes groupes que le téléphone, avec leur intitulé : seize entrées d'affilée sans
+            respiration, c'est une liste où l'on cherche au lieu de reconnaître. */}
+        <div className="pb-2">
+          {NAV_GROUPS.map((group, groupIndex) => (
+          <div key={group.titleKey} className={groupIndex > 0 ? "mt-4" : ""}>
+          <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+            {t(group.titleKey)}
+          </p>
+          <div className="space-y-0.5">
+          {group.items.map(({ href, navKey, icon: Icon }) => {
             const active = pathname === href;
             return (
               <Link
@@ -100,6 +108,9 @@ export function Sidebar() {
               </Link>
             );
           })}
+          </div>
+          </div>
+          ))}
         </div>
       </nav>
 
