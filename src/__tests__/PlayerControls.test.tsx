@@ -62,6 +62,29 @@ function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
 
+describe("PlayerControls — un seul matériau", () => {
+  it("habille les boutons et les panneaux de la même surface", async () => {
+    // Three surface systems used to sit on the same screen — a white-translucent cluster,
+    // black-translucent transport buttons, an opaque slate menu — across four corner radii.
+    // Nothing wrong on its own; together it is what makes a player look home-made.
+    stubMediaFetches();
+    const { container } = render(<Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={1} />);
+    await act(async () => {});
+
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((b) => ["captions", "more", "minimize", "close", "playpause", "skip-back", "skip-fwd"].includes(b.getAttribute("data-player-nav") ?? ""));
+    expect(buttons.length).toBeGreaterThanOrEqual(6);
+    for (const button of buttons) {
+      expect(button.className).toContain("player-glass");
+      expect(button.className).toContain("rounded-full");
+    }
+
+    await act(async () => void fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-player-nav") === "more")!));
+    expect(container.querySelector(".player-panel")).not.toBeNull();
+  });
+});
+
 describe("PlayerControls — le menu", () => {
   it("ne défile jamais horizontalement, quelle que soit la longueur des libellés", async () => {
     // The subtitle offset row asks for a label and three controls side by side; too narrow a box
@@ -84,7 +107,8 @@ describe("PlayerControls — le menu", () => {
 
 describe("PlayerControls — l'attente d'un saut", () => {
   /** The spinner and the centre buttons are exclusive: one replaces the other. */
-  const spinning = (container: HTMLElement) => !!container.querySelector(".animate-spin");
+  /** The thread that runs across the top while the player is working. */
+  const spinning = (container: HTMLElement) => !!container.querySelector(".player-loading-line");
 
   it("montre que ça travaille quand un saut prend du temps", async () => {
     // Without this the pause button simply stayed where it was while the player went and
@@ -158,7 +182,11 @@ describe("PlayerControls", () => {
 
     // Starts paused -> shows the Play icon as the center button (no accessible name on the
     // icon-only button, so target it by its position among the three center buttons).
-    const centerButtons = screen.getAllByRole("button").filter((b) => b.className.includes("rounded-full") && b.className.includes("bg-black/40"));
+    // Targeted by their data attribute rather than by their styling — which is what broke this
+    // when the three surface systems on screen were unified into one.
+    const centerButtons = screen
+      .getAllByRole("button")
+      .filter((b) => ["skip-back", "playpause", "skip-fwd"].includes(b.getAttribute("data-player-nav") ?? ""));
     expect(centerButtons).toHaveLength(3);
     const [, playPause] = centerButtons;
 

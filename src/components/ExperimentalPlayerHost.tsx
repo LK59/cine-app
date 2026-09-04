@@ -1126,16 +1126,24 @@ export function ExperimentalPlayerHost({
       {/* Both surfaces are mounted from the start, because the element that shows the picture is
           only known once the file has been examined and the remux path needs a <video> to attach
           to before it can begin. The unused one holds nothing and is hidden. */}
+      {/* Fondu depuis le noir sur la première image. La toute première frame d'une MediaSource
+          arrive rarement seule et proprement — il y a un battement entre l'élément qui se
+          déclare prêt et l'image qui s'installe. Trois cents millisecondes de fondu couvrent
+          ce battement et, surtout, donnent une intention à ce qui ressemblait à un à-coup. */}
       <video
         ref={videoElRef}
         playsInline
         hidden={!onElement}
-        className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}
+        className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
+          ready ? "opacity-100" : "opacity-0"
+        }`}
       />
       <canvas
         ref={canvasRef}
         hidden={onElement}
-        className={isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}
+        className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
+          ready ? "opacity-100" : "opacity-0"
+        }`}
       />
 
       {subtitle && !isMini && (
@@ -1221,7 +1229,7 @@ export function ExperimentalPlayerHost({
           session, and there is no transcode session here — everything below is what the browser
           is actually doing. */}
       {showInfo && !isMini && (
-        <div className="absolute right-4 top-16 z-20 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/90 p-4 text-xs text-slate-300 backdrop-blur-sm">
+        <div className="player-panel absolute right-4 top-16 z-20 max-h-[70vh] w-80 origin-top-right animate-fade-in-scale overflow-y-auto rounded-2xl p-4 text-xs text-slate-300">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-white">{t("player.experimental.badge")}</p>
             {/* The panel sits over the controls, so without this the only way out was to close

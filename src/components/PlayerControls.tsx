@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
 export interface Track {
@@ -848,9 +848,14 @@ export function PlayerControls({
       {/* Always visible regardless of the auto-hide controls fade below —
           otherwise a rebuffer that happens while controls are hidden looks
           like a silent freeze instead of a loading state. */}
+      {/* Un fil qui court en haut plutôt qu'une roue au centre : une roue au milieu de l'écran
+          dit « bloqué », un fil dit « ça travaille » — ce qui est la vérité, et ce qui n'occupe
+          pas le centre de l'image pendant qu'on regarde un film. Au-dessus de tout, y compris
+          des contrôles cachés, pour la même raison qu'avant : une remise en tampon pendant que
+          les contrôles ont disparu ne doit pas ressembler à un gel silencieux. */}
       {(loading || buffering) && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Loader2 size={40} className="animate-spin text-white/80" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10">
+          <div className="player-loading-line h-full w-full bg-accent-500" />
         </div>
       )}
 
@@ -874,7 +879,7 @@ export function PlayerControls({
 
       {showNextUp && nextEpisode && (
         <div
-          className="pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] rounded-xl bg-slate-900/95 p-4 shadow-2xl ring-1 ring-white/10"
+          className="player-panel pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] animate-fade-in-scale rounded-2xl p-4"
           style={{
             bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
             right: "max(1rem, env(safe-area-inset-right))",
@@ -906,7 +911,9 @@ export function PlayerControls({
             plus extra clearance for the Dynamic Island / translucent status
             bar in portrait, which sits below the strict safe-area edge. */}
         <div
-          className="pointer-events-auto flex items-center justify-between p-4"
+          className={`pointer-events-auto flex items-center justify-between p-4 transition-transform duration-300 ease-out ${
+            visible ? "translate-y-0" : "-translate-y-2"
+          }`}
           // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
           // the old timer never got reset by button use — capture fires on the way DOWN, before
           // any child handler, so every top-bar interaction reliably re-arms the long timer.
@@ -917,7 +924,23 @@ export function PlayerControls({
             paddingRight: "max(1rem, env(safe-area-inset-right))",
           }}
         >
-          <p className="truncate pr-4 text-sm font-medium text-white">{title}</p>
+          {/* "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur : la série
+              passe au-dessus, discrète, et l'épisode garde la ligne forte. Un titre qui ne
+              suit pas cette forme — un film — reste sur une ligne, inchangé. */}
+          <div className="min-w-0 pr-4">
+            {(() => {
+              const cut = title.indexOf(" — ");
+              if (cut === -1) return <p className="truncate text-sm font-medium text-white">{title}</p>;
+              return (
+                <>
+                  <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-white/55">
+                    {title.slice(0, cut)}
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">{title.slice(cut + 3)}</p>
+                </>
+              );
+            })()}
+          </div>
           {/* Only the controls used constantly (subtitles/audio) plus navigation (minimize/
               close) stay directly on the bar — on a portrait phone, 9 icons in a row was too
               much. Everything else (info, chapters, speed, AirPlay, PiP) lives one tap deeper
@@ -930,7 +953,7 @@ export function PlayerControls({
                   e.stopPropagation();
                   setMenu(menu === "subtitles" ? null : "subtitles");
                 }}
-                className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "subtitles" ? "bg-white/20" : "bg-white/10"}`}
+                className={`player-glass rounded-full p-2.5 text-white ${menu === "subtitles" ? "player-glass-on" : ""}`}
               >
                 <Captions size={18} />
               </button>
@@ -942,7 +965,7 @@ export function PlayerControls({
                   e.stopPropagation();
                   setMenu(menu === "audio" ? null : "audio");
                 }}
-                className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "audio" ? "bg-white/20" : "bg-white/10"}`}
+                className={`player-glass rounded-full p-2.5 text-white ${menu === "audio" ? "player-glass-on" : ""}`}
               >
                 <AudioLines size={18} />
               </button>
@@ -954,7 +977,7 @@ export function PlayerControls({
                 setMenu(menu === "more" ? null : "more");
               }}
               title={t('player.moreOptions')}
-              className={`rounded-lg p-2 text-white hover:bg-white/20 ${menu === "more" ? "bg-white/20" : "bg-white/10"}`}
+              className={`player-glass rounded-full p-2.5 text-white ${menu === "more" ? "player-glass-on" : ""}`}
             >
               <EllipsisVertical size={18} />
             </button>
@@ -965,7 +988,7 @@ export function PlayerControls({
                 handleMinimizeClick();
               }}
               title={t('player.minimize')}
-              className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
+              className="player-glass rounded-full p-2.5 text-white"
             >
               <ChevronDown size={20} />
             </button>
@@ -975,7 +998,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 handleCloseClick();
               }}
-              className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20"
+              className="player-glass rounded-full p-2.5 text-white"
             >
               <X size={20} />
             </button>
@@ -990,7 +1013,7 @@ export function PlayerControls({
                and a box that scrolls in one direction scrolls in both, which is where the
                horizontal bar came from. Wide enough that the row fits and "Taille sous-titres"
                stops wrapping onto two lines with it. */
-            className="pointer-events-auto absolute w-72 max-h-[60vh] overflow-y-auto overflow-x-hidden overscroll-contain rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+            className="player-panel pointer-events-auto absolute w-72 max-h-[60vh] origin-top-right animate-fade-in-scale overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl"
             style={{
               // `bottom` deliberately not set here: an absolutely-positioned element with both
               // `top` and `bottom` stretches to fill the space between them regardless of
@@ -1183,7 +1206,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 skip(-10);
               }}
-              className="rounded-full bg-black/40 p-3 text-white hover:bg-black/60"
+              className="player-glass player-glass-back rounded-full p-3 text-white"
               title={t('player.rewind10')}
             >
               <RotateCcw size={22} />
@@ -1194,7 +1217,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 togglePlay();
               }}
-              className="rounded-full bg-black/40 p-4 text-white hover:bg-black/60"
+              className="player-glass rounded-full p-4 text-white"
             >
               {playing ? <Pause size={28} /> : <Play size={28} />}
             </button>
@@ -1204,7 +1227,7 @@ export function PlayerControls({
                 e.stopPropagation();
                 skip(10);
               }}
-              className="rounded-full bg-black/40 p-3 text-white hover:bg-black/60"
+              className="player-glass player-glass-fwd rounded-full p-3 text-white"
               title={t('player.forward10')}
             >
               <RotateCw size={22} />
@@ -1214,7 +1237,9 @@ export function PlayerControls({
 
         {/* Bottom bar */}
         <div
-          className="pointer-events-auto flex flex-col gap-2 p-4"
+          className={`pointer-events-auto flex flex-col gap-2 p-4 transition-transform duration-300 ease-out ${
+            visible ? "translate-y-0" : "translate-y-2"
+          }`}
           onClick={(e) => e.stopPropagation()}
           onClickCapture={() => showControls(10000)}
           style={{
@@ -1225,7 +1250,7 @@ export function PlayerControls({
         >
           <div
             ref={seekBarRef}
-            className="relative"
+            className="group relative"
             // Same treatment as the top-bar buttons (see showControls' comment) but stronger:
             // holdControls() suspends auto-hide entirely for as long as the pointer is anywhere
             // on the bar — hovering to preview a thumbnail, or dragging — rather than merely
@@ -1256,7 +1281,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25"
+                className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-2"
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -1277,7 +1302,7 @@ export function PlayerControls({
               chapters.map((ch, i) => (
                 <div
                   key={i}
-                  className="pointer-events-none absolute top-1/2 h-1 w-px -translate-y-1/2 bg-black/50"
+                  className="pointer-events-none absolute top-1/2 h-1 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-150 ease-out group-hover:h-2"
                   style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}
@@ -1394,7 +1419,7 @@ export function PlayerControls({
               // default margin in some engines' UA stylesheets that isn't reset by Tailwind's
               // own base styles — left in place, that margin would throw off centering the
               // buffered/chapter overlays on this taller box (see their top-1/2 above).
-              className="m-0 block h-5 w-full cursor-pointer accent-accent-500"
+              className="player-seek m-0 block h-5 w-full cursor-pointer text-accent-500 accent-accent-500"
               style={{ WebkitTouchCallout: "none" }}
             />
           </div>
