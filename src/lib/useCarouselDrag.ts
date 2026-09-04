@@ -145,12 +145,23 @@ export function useCarouselDrag({
       const wanted = index + (moved < 0 ? 1 : -1);
       const next = (far || thrown) && wanted >= 0 && wanted < count ? wanted : index;
 
-      // La transformation d'arrivée est écrite ici, avec la transition rendue : le geste se
-      // poursuit sans attendre le rendu de React. Celui-ci écrira ensuite la même chaîne, ce qui
-      // ne se voit pas — c'est pourquoi les deux côtés passent par `carouselTransform`.
+      /**
+       * La transformation d'arrivée est écrite ici, avec la transition rendue : le geste se
+       * poursuit sans attendre le rendu de React. Celui-ci écrira ensuite la même chaîne, ce qui
+       * ne se voit pas — c'est pourquoi les deux côtés passent par `carouselTransform`.
+       *
+       * La lecture d'`offsetWidth` entre les deux n'est pas une précaution : elle est la
+       * correction. Rendre la transition et changer la transformation dans le même bloc ne
+       * produit qu'un seul recalcul de style, où le navigateur voit d'un coup une transition
+       * active *et* une valeur déjà changée — il n'a donc rien à interpoler et pose l'affiche
+       * cible d'un trait. C'est la coupure sèche au relâchement. Ce coup d'œil sur la mise en
+       * page force le recalcul intermédiaire : la transition part de là où le doigt a laissé la
+       * piste, et le mouvement se termine tout seul.
+       */
       const track = trackRef.current;
       if (track) {
         track.style.transition = CAROUSEL_TRANSITION;
+        void track.offsetWidth;
         track.style.transform = carouselTransform(next);
       }
       if (next !== index) onIndexChange(next);

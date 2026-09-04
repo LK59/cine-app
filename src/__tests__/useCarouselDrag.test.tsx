@@ -79,6 +79,29 @@ describe("la traînée du carrousel", () => {
     expect(onRender).not.toHaveBeenCalled();
   });
 
+  /**
+   * Sans le recalcul intermédiaire, le navigateur voit d'un coup une transition active et une
+   * transformation déjà changée : il n'a rien à interpoler et pose l'affiche cible d'un trait.
+   * C'est la coupure sèche au relâchement.
+   */
+  it("laisse au navigateur de quoi interpoler avant de poser l'arrivée", () => {
+    const seen: string[] = [];
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.dataset.testid === "track") seen.push(this.style.transition);
+        return 400;
+      },
+    });
+    render(<Harness index={1} count={5} onIndexChange={vi.fn()} />);
+    down();
+    move(60);
+    up(60);
+    // La transition est déjà rendue au moment où la mise en page est relue, et la piste est
+    // encore là où le doigt l'a laissée.
+    expect(seen).toContain(CAROUSEL_TRANSITION);
+  });
+
   it("passe au titre suivant quand on est allé assez loin", () => {
     const onIndexChange = vi.fn();
     render(<Harness index={1} count={5} onIndexChange={onIndexChange} />);
