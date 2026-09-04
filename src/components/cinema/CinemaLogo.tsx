@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Le logo d'un titre, à une taille qui ne dépend pas de la forme du logo.
@@ -48,6 +48,16 @@ const SURFACES = {
 /** En dessous, la fenêtre est trop courte pour la hauteur généreuse. */
 const ROOMY_FROM = 760;
 
+/**
+ * Les proportions déjà mesurées, gardées d'une carte à l'autre.
+ *
+ * La hauteur d'un logo dépend de sa forme, et sa forme ne se connaît qu'une fois l'image
+ * chargée : la première fois, il s'affichait donc à la hauteur par défaut puis se corrigeait
+ * sous les yeux. Une image déjà vue — c'est le cas dès qu'on repasse sur un titre — n'a plus à
+ * repasser par là.
+ */
+const KNOWN_RATIOS = new Map<string, number>();
+
 export function CinemaLogo({
   src,
   alt,
@@ -61,8 +71,9 @@ export function CinemaLogo({
   className?: string;
   onError?: () => void;
 }) {
-  const [ratio, setRatio] = useState<number | null>(null);
+  const [ratio, setRatio] = useState<number | null>(() => KNOWN_RATIOS.get(src) ?? null);
   const [roomy, setRoomy] = useState(true);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     const measure = () => setRoomy(window.innerHeight >= ROOMY_FROM);
@@ -70,6 +81,14 @@ export function CinemaLogo({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
+
+  // Une image déjà en cache est parfois complète avant même que React n'ait posé son `onLoad` :
+  // sans ce rattrapage, elle resterait invisible, attendant un événement qui a déjà eu lieu.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img?.complete || !img.naturalHeight) return;
+    remember(src, img.naturalWidth / img.naturalHeight, setRatio);
+  }, [src]);
 
   const { compact, roomy: tall, maxWidth } = SURFACES[surface];
   const maxHeight = (roomy ? tall : compact) * heightFactor(ratio);
@@ -80,11 +99,22 @@ export function CinemaLogo({
       src={src}
       alt={alt}
       onError={onError}
+      ref={imgRef}
       onLoad={(e) => {
         const img = e.currentTarget;
-        if (img.naturalHeight > 0) setRatio(img.naturalWidth / img.naturalHeight);
+        if (img.naturalHeight > 0) remember(src, img.naturalWidth / img.naturalHeight, setRatio);
       }}
-      style={{ maxHeight, maxWidth, filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))" }}
+      style={{
+        maxHeight,
+        maxWidth,
+        filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))",
+        // Rien n'est montré avant que la forme soit connue : le logo apparaissait à la hauteur
+        // par défaut puis se corrigeait sous les yeux, ce qui se voyait comme un sursaut. Il
+        // paraît maintenant déjà à sa taille — la mesure prend une image, l'apparition en prend
+        // trois, et l'une couvre l'autre.
+        opacity: ratio === null ? 0 : 1,
+        transition: "opacity 180ms ease-out",
+      }}
       /**
        * `self-start` : sans lui, l'image s'étirait à la largeur de sa colonne.
        *
@@ -99,4 +129,10 @@ export function CinemaLogo({
       className={`w-auto self-start object-contain ${className}`}
     />
   );
+}
+
+/** Retient la proportion mesurée, pour cette image et pour les prochaines fois. */
+function remember(src: string, ratio: number, apply: (value: number) => void): void {
+  KNOWN_RATIOS.set(src, ratio);
+  apply(ratio);
 }

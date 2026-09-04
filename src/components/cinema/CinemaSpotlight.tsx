@@ -38,8 +38,16 @@ export function CinemaSpotlight({
     // -1 : la bannière montre un titre qui n'est pas dans cette rangée (une carte désignée plus
     // bas). Rien à amener sous les yeux, et rien à allumer.
     if (activeIndex < 0) return;
-    const card = rail.current?.children[activeIndex];
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    const track = rail.current;
+    const card = track?.children[activeIndex] as HTMLElement | undefined;
+    if (!track || !card) return;
+    // `scrollLeft` et non `scrollIntoView` : celui-ci fait défiler *tous* les ancêtres qui en ont
+    // besoin, y compris le panneau vertical — la rotation déplaçait donc la page sous les pieds
+    // de qui parcourait les rangées plus bas. Ici seul ce rail bouge, sur son seul axe.
+    track.scrollTo({
+      left: card.offsetLeft - (track.clientWidth - card.clientWidth) / 2,
+      behavior: "smooth",
+    });
   }, [activeIndex]);
 
   if (count === 0) return null;

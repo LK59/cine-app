@@ -5,11 +5,13 @@ import userEvent from "@testing-library/user-event";
 
 import { CinemaSpotlight } from "@/components/cinema/CinemaSpotlight";
 
-const scrollIntoView = vi.fn();
+const railScroll = vi.fn();
 
 beforeEach(() => {
-  Element.prototype.scrollIntoView = scrollIntoView;
-  scrollIntoView.mockClear();
+  // jsdom n'implémente ni l'un ni l'autre : c'est ce que la rangée appelle qui nous intéresse.
+  Element.prototype.scrollTo = railScroll;
+  Element.prototype.scrollIntoView = vi.fn();
+  railScroll.mockClear();
 });
 afterEach(() => cleanup());
 
@@ -46,9 +48,15 @@ describe("la rangée à la une", () => {
    * tours un titre dont la carte est sortie de l'écran, et la section dirait le contraire de ce
    * qu'elle montre.
    */
-  it("amène la carte en cours sous les yeux", () => {
+  /**
+   * Seul le rail bouge, et sur son seul axe : `scrollIntoView` aurait fait défiler tous les
+   * ancêtres qui en ont besoin — dont le panneau vertical — et la rotation aurait déplacé la
+   * page sous les pieds de qui parcourait les rangées plus bas.
+   */
+  it("amène la carte en cours sous les yeux, sans toucher au reste de la page", () => {
     renderRail(2);
-    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ inline: "center" }));
+    expect(railScroll).toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+    expect(railScroll.mock.calls[0][0]).not.toHaveProperty("top");
   });
 
   it("ne s'affiche pas quand il n'y a rien à mettre en avant", () => {
@@ -79,6 +87,6 @@ describe("la rangée à la une", () => {
 
   it("ne fait rien défiler dans ce cas non plus", () => {
     renderRail(-1);
-    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(railScroll).not.toHaveBeenCalled();
   });
 });

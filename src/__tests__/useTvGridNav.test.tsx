@@ -28,18 +28,24 @@ function press(key: string) {
 }
 
 describe("useTvGridNav", () => {
-  it("ArrowDown from nothing focused jumps into the first card of the first (topmost) row", () => {
-    const r2c0 = makeCard("row-b", 0, 100);
-    makeCard("row-a", 0, 0); // added second but should sort first (top: 0)
+  /**
+   * L'ordre des rangées est celui du document, et non une mesure d'écran.
+   *
+   * Il venait de `getBoundingClientRect().top`, ce qui suppose la page au repos — elle ne l'est
+   * jamais ici, entre le défilement doux d'un changement de rangée et celui de la rotation de la
+   * rangée « À la une ». Une touche pressée entre les deux lisait des positions en cours
+   * d'animation. Ces rangées sont empilées en colonne : leur ordre dans le document *est* celui
+   * de l'écran, et il ne dépend d'aucun instant.
+   */
+  it("ArrowDown from nothing focused jumps into the first card of the first row", () => {
+    const first = makeCard("row-a", 0, 0);
+    const second = makeCard("row-b", 0, 100);
     renderHook(() => useTvGridNav());
 
     press("ArrowDown");
 
-    // First row is the one with the smaller top, i.e. "row-a" — but since we only asserted
-    // r2c0 isn't focused, re-derive the expected element directly for clarity.
-    const rowA0 = document.querySelector('[data-tv-row="row-a"][data-tv-col="0"]');
-    expect(document.activeElement).toBe(rowA0);
-    expect(document.activeElement).not.toBe(r2c0);
+    expect(document.activeElement).toBe(first);
+    expect(document.activeElement).not.toBe(second);
   });
 
   it("ArrowRight moves focus to the next card in the same row, without wrapping past the end", () => {

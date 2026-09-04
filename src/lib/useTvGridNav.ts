@@ -30,9 +30,22 @@ function getRows(): HTMLElement[][] {
   for (const cards of byRow.values()) {
     cards.sort((a, b) => Number(a.dataset.tvCol) - Number(b.dataset.tvCol));
   }
-  // Ordered by actual on-screen position, not insertion order — a row conditionally absent
-  // this render (e.g. no resume items) just doesn't appear, no gap-in-sequence bookkeeping needed.
-  return [...byRow.values()].sort((a, b) => a[0].getBoundingClientRect().top - b[0].getBoundingClientRect().top);
+  /**
+   * Ordonnées par leur position dans le document, et non par une mesure d'écran.
+   *
+   * Elles l'étaient par `getBoundingClientRect().top`, ce qui suppose que la page soit au repos.
+   * Elle ne l'est jamais ici : un changement de rangée lance un défilement doux, la rotation de
+   * la rangée « À la une » en lance un autre de son côté, et une touche pressée entre les deux
+   * lisait des positions en cours d'animation — d'où un ordre qui n'était pas celui de l'écran,
+   * et une flèche qui sautait des rangées entières.
+   *
+   * L'ordre du document est celui de l'affichage — ces rangées sont empilées en colonne — et il
+   * ne dépend d'aucun instant. Une rangée absente ce rendu-là (pas de reprises, par exemple)
+   * n'apparaît simplement pas, sans numérotation à tenir.
+   */
+  return [...byRow.values()].sort((a, b) =>
+    a[0].compareDocumentPosition(b[0]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+  );
 }
 
 /**
