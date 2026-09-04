@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 /**
  * La mise en scène d'une fiche en mode cinéma : les voiles, la colonne, la barre de progression.
  *
@@ -46,28 +49,6 @@ export const MENU_STYLE = { width: "min(26rem, 100%)" } as const;
 export const LOGO_STYLE = { filter: "drop-shadow(0 6px 20px rgb(0 0 0 / 0.6))" } as const;
 
 /**
- * Où l'on en est, montré plutôt qu'écrit.
- *
- * « 1h34 restants » était sur le bouton, et rien ne le montrait : on lisait le temps qui reste
- * sans jamais voir la part déjà vue.
- */
-export function CinemaProgressBar({
-  resumeTicks,
-  runtimeTicks,
-}: {
-  resumeTicks: number | null | undefined;
-  runtimeTicks: number | null | undefined;
-}) {
-  if (!resumeTicks || !runtimeTicks || runtimeTicks <= 0) return null;
-  const pct = Math.min(100, Math.max(1, (resumeTicks / runtimeTicks) * 100));
-  return (
-    <div className="h-1 w-48 max-w-full overflow-hidden rounded-full bg-white/25">
-      <div className="h-full rounded-full bg-accent-500" style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
-
-/**
  * La première page tient dans l'écran, quel que soit l'écran.
  *
  * Elle était `min-h-full` : sur un 13 pouces, le logo, le synopsis et cinq lignes de menu
@@ -80,20 +61,73 @@ export function CinemaProgressBar({
  * de compter sur une largeur qui ne dit rien de la place verticale disponible.
  */
 export const SECTION_CLASS =
-  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-10 pt-16 " +
-  "[@media(min-height:820px)]:pb-16 [@media(min-height:820px)]:pt-28";
+  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-10 pt-14 " +
+  "[@media(min-height:820px)]:pb-14 [@media(min-height:820px)]:pt-20";
 
 /** Le logo : plus discret quand l'écran est court, sans jamais disparaître. */
 export const LOGO_CLASS =
   "mb-1 max-h-14 w-auto max-w-full object-contain " +
   "[@media(min-height:700px)]:max-h-20 [@media(min-height:900px)]:max-h-28";
 
-/** Le synopsis : trois lignes quand il y a la place, deux sinon. */
-export const OVERVIEW_CLASS =
-  "line-clamp-2 text-sm text-white/90 drop-shadow-sm sm:text-base [@media(min-height:760px)]:line-clamp-3";
 
-/** La distribution : la première chose qu'on sacrifie quand la place manque. */
-export const CAST_CLASS = "hidden truncate text-xs text-white/60 [@media(min-height:700px)]:block";
+
+/** La distribution reste, quelle que soit la hauteur : elle tient sur une ligne tronquée. */
+export const CAST_CLASS = "truncate text-xs text-white/60";
 
 /** L'espacement de la colonne, resserré sur un écran court. */
 export const COLUMN_GAP = "gap-3 [@media(min-height:820px)]:gap-4";
+
+/**
+ * Le synopsis, en deux lignes, dépliable.
+ *
+ * Trois lignes tronquées prennent la place de trois lignes sans donner le texte ; deux lignes et
+ * un moyen de lire la suite donnent les deux. La ligne rejoint le parcours des flèches — elle
+ * porte `data-detail-menu` comme les actions — mais son repère de position reste translucide :
+ * le blanc est réservé à ce qui se déclenche, et lire n'est pas déclencher.
+ */
+export function CinemaOverview({ text, readMore, readLess }: { text: string; readMore: string; readLess: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const bodyRef = useRef<HTMLParagraphElement>(null);
+
+  // Mesuré plutôt que deviné : la longueur qui tient en deux lignes dépend de la largeur de la
+  // colonne, donc de la fenêtre. Relu à chaque redimensionnement, pour la même raison.
+  useEffect(() => {
+    const measure = () => {
+      const el = bodyRef.current;
+      if (el) setClamped(el.scrollHeight - el.clientHeight > 2);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [text, expanded]);
+
+  const canExpand = clamped || expanded;
+
+  return (
+    <button
+      type="button"
+      data-detail-menu
+      aria-expanded={expanded}
+      onClick={() => canExpand && setExpanded((open) => !open)}
+      className={`group -mx-2 rounded-lg px-2 py-1 text-left transition-colors focus-visible:outline-none focus-visible:bg-white/12 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/20 ${
+        canExpand ? "cursor-pointer hover:bg-white/8" : "cursor-default"
+      }`}
+    >
+      <p
+        ref={bodyRef}
+        // Sélectionnable : c'est du texte, on doit pouvoir le copier même s'il est dans un bouton.
+        className={`select-text text-sm text-white/90 drop-shadow-sm sm:text-base ${
+          expanded ? "max-h-44 overflow-y-auto pr-1 scrollbar-thin" : "line-clamp-2"
+        }`}
+      >
+        {text}
+      </p>
+      {canExpand && (
+        <span className="mt-0.5 inline-block text-xs font-medium text-white/60 group-hover:text-white/90">
+          {expanded ? readLess : readMore}
+        </span>
+      )}
+    </button>
+  );
+}

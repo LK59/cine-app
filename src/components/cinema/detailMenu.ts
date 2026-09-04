@@ -14,7 +14,8 @@
  * supérieure et l'emporte donc de façon prévisible.
  */
 export const MENU_ROW =
-  "group flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left transition-all duration-200 focus-visible:outline-none";
+  "group relative flex w-full items-center gap-3 rounded-lg px-4 py-2 text-left transition-all duration-200 " +
+  "focus-visible:outline-none [@media(min-height:820px)]:py-2.5";
 
 /**
  * Le sélecteur.
@@ -37,7 +38,8 @@ export const MENU_ROW_INACTIVE =
  * sur une ligne au repos et sombre sur le sélecteur blanc, sans que rien n'ait à le prévoir.
  */
 export const MENU_BADGE =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-current/15 transition-all duration-200";
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/15 transition-all duration-200 " +
+  "[@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**
  * La pastille d'une action déjà accomplie : dans ma liste, déjà vu.
@@ -46,4 +48,5 @@ export const MENU_BADGE =
  * et reste donc lisible aussi bien au repos que sous le sélecteur.
  */
 export const MENU_BADGE_ACTIVE =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-500/35 ring-1 ring-accent-400/40 transition-all duration-200";
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-500/35 ring-1 ring-accent-400/40 " +
+  "transition-all duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";

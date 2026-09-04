@@ -1266,6 +1266,8 @@
     "newBadge": "New",
     "similar": "More like this",
     "inMyList": "In my list",
-    "watchedState": "Watched"
+    "watchedState": "Watched",
+    "readMore": "Show more",
+    "readLess": "Show less"
   }
 }

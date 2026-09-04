@@ -22,7 +22,7 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, OVERVIEW_CLASS, CAST_CLASS, COLUMN_GAP, CinemaProgressBar } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -251,11 +251,11 @@ export function CinemaSeriesDetail({
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
-          <CinemaProgressBar resumeTicks={nextEpisode?.resumeTicks} runtimeTicks={nextEpisode?.runtimeTicks} />
-
-          <p className={OVERVIEW_CLASS}>
-            {info?.tmdb?.overview || item.overview}
-          </p>
+          <CinemaOverview
+            text={info?.tmdb?.overview || item.overview || ""}
+            readMore={t("cinema.readMore")}
+            readLess={t("cinema.readLess")}
+          />
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
             <p className={CAST_CLASS}>

@@ -92,12 +92,21 @@ export function PlayButton({
       {variant === "primary" && progressPct !== null && (
         <span className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${progressPct}%` }} />
       )}
+      {/* Où l'on en est, dans le bouton qui reprend — et nulle part ailleurs.
+          Une barre posée au-dessus, dans la colonne, flottait entre le titre et le synopsis sans
+          se rattacher à rien. Ici elle épouse le bas de la ligne : lisible sur le fond sombre du
+          repos comme sous le sélecteur blanc, puisqu'elle porte sa propre couleur. */}
+      {variant === "row" && progressPct !== null && (
+        <span className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-current/15">
+          <span className="block h-full bg-accent-500" style={{ width: `${progressPct}%` }} />
+        </span>
+      )}
       {variant === "row" ? (
         <>
           {/* `bg-current/15` et non `bg-white/10` : la pastille se teinte de la couleur du texte de la
               ligne, donc elle reste visible aussi bien sur une ligne sombre que sur la ligne
               blanche de l'action principale, sans que l'appelant ait à s'en occuper. */}
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-current/15">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/15 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8">
             <Icon size={iconSize} />
           </span>
           <span className="text-sm font-medium">{label}</span>
