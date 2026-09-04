@@ -512,7 +512,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
                     onClick={() => setLang(l)}
                     className={[
                       "rounded-full px-3 py-2 text-xs font-semibold transition",
-                      lang === l ? "bg-amber-300 text-slate-950 shadow-lg shadow-amber-300/20" : "text-white/55 hover:text-white",
+                      lang === l ? "bg-amber-300 text-ink shadow-lg shadow-amber-300/20" : "text-white/55 hover:text-white",
                     ].join(" ")}
                   >
                     {langLabels[l]}

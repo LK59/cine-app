@@ -13,7 +13,7 @@ export default function PublicStatusPage() {
   const t = useT();
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-8 sm:px-6">
+    <main className="min-h-screen bg-ink px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-3">

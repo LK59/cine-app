@@ -43,6 +43,7 @@ import { useRole } from "@/lib/useRole";
 import { canAutoSearchSeason } from "@/lib/mediaPermissions";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
@@ -50,6 +51,7 @@ import { SimilarMedia } from "@/components/SimilarMedia";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface SeriesInfo {
+  logoUrl: string | null;
   trailerKey: string | null;
   tmdb: {
     overview: string;
@@ -377,7 +379,7 @@ export default function SonarrSeriesDetailPage() {
                 "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)",
             }}
           />
-          <div className="absolute inset-0 bg-linear-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-r from-ink/60 via-ink/10 to-transparent" />
         </div>
       )}
 
@@ -413,10 +415,13 @@ export default function SonarrSeriesDetailPage() {
             </div>
           </div>
           <div className="min-w-0 flex-1 pb-1">
-            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl font-display">
-              {series.title}
-              <span className="ml-2 text-base font-normal text-white/60 md:text-lg">({series.year})</span>
-            </h1>
+            <TitleLogo
+              logoUrl={info?.logoUrl}
+              title={series.title}
+              year={series.year}
+              className="mb-1 text-xl sm:text-2xl md:text-3xl"
+              logoClassName="max-h-14 sm:max-h-16 md:max-h-20"
+            />
             <div className="flex flex-wrap items-center gap-2">
               {info?.imdbRating && (
                 <span className="flex items-center gap-1 rounded-sm bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">

@@ -186,7 +186,7 @@ export function CinemaSeriesDetail({
   return createPortal(
     <div
       ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : "animate-fade-in"}`}
       style={{ zIndex: 46 }}
     >
       {item.backdropUrl && (
@@ -201,8 +201,8 @@ export function CinemaSeriesDetail({
           WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
         }}
       />
-      <div className="absolute inset-0 bg-linear-to-t from-slate-950/85 via-slate-950/15 to-transparent" />
-      <div className="absolute inset-0 bg-linear-to-r from-slate-950/70 via-slate-950/15 to-transparent" />
+      <div className="absolute inset-0 bg-linear-to-t from-ink/85 via-ink/15 to-transparent" />
+      <div className="absolute inset-0 bg-linear-to-r from-ink/70 via-ink/15 to-transparent" />
 
       <button
         onClick={requestClose}

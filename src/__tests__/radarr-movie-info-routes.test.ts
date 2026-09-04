@@ -8,6 +8,11 @@ vi.mock("@/lib/clients/bazarr", () => ({ bazarr: mockBazarr }));
 const mockOmdb = { isEnabled: vi.fn(() => false), getRating: vi.fn() };
 vi.mock("@/lib/clients/omdb", () => ({ omdb: mockOmdb }));
 const mockTmdb = { isEnabled: vi.fn(() => true), getMovie: vi.fn(), getMovieVideos: vi.fn(), movieRecommendations: vi.fn() };
+// Le logo du titre est résolu par son propre module, qui a son cache et son client TMDB à
+// lui — ces tests portent sur la bande-annonce, la note et la file d'attente.
+const mockTitleLogo = vi.fn(async (_tmdbId: number, _kind: string) => "https://image.tmdb.org/logo.png");
+vi.mock("@/lib/title-logo", () => ({ getTitleLogo: (id: number, kind: string) => mockTitleLogo(id, kind) }));
+
 vi.mock("@/lib/clients/tmdb", () => ({
   createTmdbClient: () => mockTmdb,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
@@ -128,5 +133,16 @@ describe("GET /api/radarr/movies/[id]/similar", () => {
     const res = await GET(fakeReq(), params("1"));
     const body = await res.json();
     expect(body.items).toHaveLength(0);
+  });
+
+  it("renvoie le logo du titre, résolu par le même module que le mode cinéma", async () => {
+    // Donc par le même cache : l'image demandée pour une carte du mode cinéma sert à la fiche,
+    // et inversement. C'est ce qui permet à la fiche d'afficher le titre tel que ses propres
+    // graphistes l'ont dessiné, et de retomber sur la typo quand il n'y en a pas.
+    mockRadarr.getMovie.mockResolvedValue({ id: 1, tmdbId: 42 });
+    const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
+    const body = await (await GET(fakeReq(), params("1"))).json();
+    expect(body.logoUrl).toBe("https://image.tmdb.org/logo.png");
+    expect(mockTitleLogo).toHaveBeenCalledWith(42, "movie");
   });
 });

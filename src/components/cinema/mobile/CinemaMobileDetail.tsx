@@ -169,7 +169,7 @@ export function CinemaMobileDetail({
       // inline style, so the sheet wouldn't follow the finger at all), and letting it back in on
       // release made the sheet replay its whole entrance every time a drag sprang back — which
       // is what the "weird animation on release" was.
-      className={`app-viewport fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-slate-950 ${
+      className={`app-viewport fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
         swipe.touched ? "" : closing ? "animate-fade-out" : "animate-slide-up"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
@@ -210,7 +210,7 @@ export function CinemaMobileDetail({
         ) : (
           <div className="absolute inset-0 bg-slate-900" />
         )}
-        <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/20 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
@@ -248,7 +248,7 @@ export function CinemaMobileDetail({
           <button
             type="button"
             onClick={() => play()}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-slate-950 transition-transform active:scale-95"
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
           >
             <Play size={18} fill="currentColor" />
             {formatContinueLabel(
@@ -318,7 +318,7 @@ export function CinemaMobileDetail({
                       type="button"
                       onClick={() => setSelectedSeason(season.seasonNumber)}
                       className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                        active ? "bg-white text-slate-950 font-medium" : "bg-white/10 text-white/80"
+                        active ? "bg-white text-ink font-medium" : "bg-white/10 text-white/80"
                       }`}
                     >
                       {season.seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: season.seasonNumber })}

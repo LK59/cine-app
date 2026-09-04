@@ -74,7 +74,7 @@ function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
   );
 }
 
-const TV_NAV_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+const TV_NAV_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
 
 function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
   const router = useRouter();

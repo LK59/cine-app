@@ -46,7 +46,7 @@ interface CinemaResumeItem {
 }
 
 const TV_NAV_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
 
 // w-24→xl:w-36 (96px→144px), down from the original w-40/sm:w-48 (160/192px) fixed pair — that
 // fixed size overflowed the row on anything shorter than a large desktop window, pushing the row
@@ -458,7 +458,7 @@ export function CinemaClient() {
     // into is already on screen, so the load reads as content filling in rather than a blank
     // screen swapping for a full one.
     return createPortal(
-      <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={zLayer}>
+      <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={zLayer}>
         <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
           <div className="flex h-full max-w-2xl flex-col justify-end gap-4 px-8 pb-10 sm:px-12">
             <div className="skeleton h-12 w-72 rounded-lg sm:h-16" />
@@ -484,7 +484,7 @@ export function CinemaClient() {
 
   if (moviesError) {
     return createPortal(
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center" style={zLayer}>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={zLayer}>
         <p className="max-w-sm text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>
         {exitButton}
       </div>,
@@ -494,7 +494,7 @@ export function CinemaClient() {
 
   if (movies && movies.spotlight.length === 0) {
     return createPortal(
-      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center" style={zLayer}>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={zLayer}>
         <p className="max-w-sm text-sm text-slate-400">{t("cinema.empty")}</p>
         {exitButton}
       </div>,
@@ -503,7 +503,7 @@ export function CinemaClient() {
   }
 
   return createPortal(
-    <div className="fixed inset-0 animate-fade-in overflow-hidden bg-slate-950" style={zLayer}>
+    <div className="fixed inset-0 animate-fade-in overflow-hidden bg-ink" style={zLayer}>
       <button
         onClick={() => leaveCinema(router)}
         className="fixed left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-sm font-medium text-white backdrop-blur-xs transition-colors hover:bg-black/70"
@@ -560,7 +560,7 @@ export function CinemaClient() {
               alt=""
               className="absolute inset-0 h-full w-full scale-110 animate-fade-in object-cover object-top blur-2xl"
             />
-            <div className="absolute inset-0 bg-slate-950/55" />
+            <div className="absolute inset-0 bg-ink/55" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               key={debouncedHeroKey}
@@ -583,8 +583,8 @@ export function CinemaClient() {
             )}
           </>
         )}
-        <div className="absolute inset-0 bg-linear-to-r from-slate-950/85 via-slate-950/35 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b from-transparent to-slate-950" />
+        <div className="absolute inset-0 bg-linear-to-r from-ink/85 via-ink/35 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b from-transparent to-ink" />
       </div>
 
       {/* Split-screen TV layout: the top pane is a live, non-scrolling preview of whatever card

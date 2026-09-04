@@ -14,6 +14,11 @@ const mockTmdb = {
   getTvVideos: vi.fn(),
   tvRecommendations: vi.fn(),
 };
+// Le logo du titre est résolu par son propre module, qui a son cache et son client TMDB à
+// lui — ces tests portent sur la bande-annonce, la note et la file d'attente.
+const mockTitleLogo = vi.fn(async (_tmdbId: number, _kind: string) => "https://image.tmdb.org/logo.png");
+vi.mock("@/lib/title-logo", () => ({ getTitleLogo: (id: number, kind: string) => mockTitleLogo(id, kind) }));
+
 vi.mock("@/lib/clients/tmdb", () => ({
   createTmdbClient: () => mockTmdb,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",

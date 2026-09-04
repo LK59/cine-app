@@ -158,7 +158,7 @@ export function CinemaMobileClient() {
             ? playSeriesNextEpisode(playback, hero)
             : playback.play({ itemId: hero.jellyfinItemId, title: hero.title })
         }
-        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-slate-950 transition-transform active:scale-95"
+        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
       >
         <Play size={16} fill="currentColor" />
         {t("common.play")}
@@ -178,7 +178,7 @@ export function CinemaMobileClient() {
   // real screen, where the viewport iOS lays the app out in at first is short — see the note in
   // globals.css.
   return createPortal(
-    <div className="app-viewport fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-slate-950" style={{ zIndex: 45 }}>
+    <div className="app-viewport fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ zIndex: 45 }}>
       {/* Sticky chrome: exit on the left, the two library tabs as Netflix-style filter pills. */}
       {/* The safe-area inset alone puts this flush against the status bar, which iOS then dims
           and blurs over in a standalone PWA — the pills came out half-hidden. An explicit gap on
@@ -186,7 +186,7 @@ export function CinemaMobileClient() {
           content scrolls under is one of the most reliable ways to make scrolling stutter on
           iOS, and a solid bar reads the same here. */}
       <header
-        className="flex shrink-0 items-center gap-3 bg-slate-950 px-4 pb-3"
+        className="flex shrink-0 items-center gap-3 bg-ink px-4 pb-3"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.25rem)" }}
       >
         <button
@@ -205,7 +205,7 @@ export function CinemaMobileClient() {
               onClick={() => setMediaType(type)}
               className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
                 mediaType === type
-                  ? "border-white bg-white text-slate-950 font-medium"
+                  ? "border-white bg-white text-ink font-medium"
                   : "border-white/25 text-white/80"
               }`}
             >
@@ -287,7 +287,7 @@ export function CinemaMobileClient() {
             ) : (
               <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
                 <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
-                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950 via-slate-950/70 to-transparent p-4 pt-16">
+                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                   {hero.logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={hero.logoUrl} alt={hero.title} className="mx-auto mb-2 max-h-14 w-auto max-w-full object-contain drop-shadow-lg" />

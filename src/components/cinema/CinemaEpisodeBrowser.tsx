@@ -120,7 +120,7 @@ export function CinemaEpisodeBrowser({
   return createPortal(
     <div
       ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : "animate-fade-in"}`}
       style={{ zIndex: 48 }}
     >
       <button

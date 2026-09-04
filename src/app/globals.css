@@ -10,6 +10,12 @@
   --color-accent-600: rgb(var(--accent-600));
   --color-accent-700: rgb(var(--accent-700));
 
+  /* Le noir de l'app, nommé une fois.
+     Le fond était #020617 — slate-950, un noir bleu — et une douzaine d'endroits le répétaient
+     à la main : le mode cinéma, ses vignettes, ses dégradés, les anneaux de focus. Changer le
+     fond sans changer ceux-là aurait laissé deux noirs différents se toucher. */
+  --color-ink: #0a0a0c;
+
   /* Une ombre, pas une lueur.
      Une lueur colorée sous chaque carte et chaque bouton primaire est la
      signature du tableau de bord générique : elle teinte le noir autour d'elle

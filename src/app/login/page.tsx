@@ -47,7 +47,7 @@ function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-ink px-4">
       <div className="card w-full max-w-sm p-8">
         <div className="mb-6 flex items-center gap-3">
           <div className="rounded-lg bg-accent-600/20 p-2 text-accent-400">

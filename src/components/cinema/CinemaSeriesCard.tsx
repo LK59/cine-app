@@ -5,7 +5,7 @@ import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
 const TV_NAV_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
 
 // Series-typed mirror of CinemaCard — see its own doc comment for the reasoning (deliberately
 // not PosterCard, data-tv-* grid convention, onSelectItem escalates to the detail overlay). Kept

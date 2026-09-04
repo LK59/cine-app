@@ -11,7 +11,7 @@ import { useIsMobile } from "@/lib/useIsMobile";
 // which makes it the containing block for any `fixed` descendant instead of the viewport.
 function loadingPortal() {
   return createPortal(
-    <div className="fixed inset-0 flex items-center justify-center bg-slate-950" style={{ zIndex: 200 }}>
+    <div className="fixed inset-0 flex items-center justify-center bg-ink" style={{ zIndex: 200 }}>
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
     </div>,
     document.body

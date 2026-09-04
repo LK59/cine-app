@@ -39,7 +39,10 @@ const TOP_CROP_PX = 64;
 // surrounding background rather than being cut off by a hard rectangle. Off-center toward the
 // right/upper area on purpose: the title/synopsis text sits bottom-left, so that's where this
 // should already be darkest.
-const VIGNETTE = "radial-gradient(ellipse 80% 75% at 64% 36%, transparent 35%, transparent 52%, rgba(2,6,23,0.6) 78%, rgb(2,6,23) 100%)";
+// Le même noir que le fond de l'app, écrit ici en rgb() parce qu'un dégradé ne prend pas de
+// classe. Il valait 2,6,23 — l'ancien noir bleu — ce qui faisait une vignette qui virait au bleu
+// sur un fond qui, lui, ne le fait plus.
+const VIGNETTE = "radial-gradient(ellipse 80% 75% at 64% 36%, transparent 35%, transparent 52%, rgba(10,10,12,0.6) 78%, rgb(10,10,12) 100%)";
 
 // Netflix's own browse-hero behavior: once focus has rested on a title for DWELL_MS, its trailer
 // takes over the persistent backdrop banner itself — same role, same full-screen footprint

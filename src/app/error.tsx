@@ -16,7 +16,7 @@ export default function RootError({
 
   return (
     <html lang="fr" className="dark">
-      <body className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+      <body className="flex min-h-screen items-center justify-center bg-ink text-white">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="rounded-full bg-red-500/10 p-5">
             <AlertTriangle size={40} className="text-red-400" />

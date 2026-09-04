@@ -92,7 +92,7 @@ export function CinemaSearchOverlay({
   return createPortal(
     <div
       ref={containerRef}
-      className={`app-viewport fixed inset-x-0 top-0 flex flex-col bg-slate-950 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`app-viewport fixed inset-x-0 top-0 flex flex-col bg-ink ${closing ? "animate-fade-out" : "animate-fade-in"}`}
       // Above the browse screen (45) and the detail sheets (46/48), below the player (80). It was
       // 44 — i.e. *under* the opaque browse screen: the field was really there and really focused
       // (the keyboard came up) but every pixel of it was painted over, so the search looked dead.

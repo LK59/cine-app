@@ -4,7 +4,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 
 const TV_NAV_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
 
 // One entry of the numbered Top 10 rail: an oversized outlined rank digit with the poster tucked
 // against it, which is the single most recognizable shape on a Netflix home screen.
@@ -58,7 +58,7 @@ export function CinemaTop10Card({
           the glyph in it pulled every number tight against its poster, which read as cramped. */}
       <span
         aria-hidden
-        className="shrink-0 select-none font-black leading-none text-slate-950"
+        className="shrink-0 select-none font-black leading-none text-ink"
         style={{
           fontSize: numberFontSize,
           // 1, not a tighter value: the row clips its own vertical overflow (it has to, or a

@@ -342,7 +342,7 @@ export function GlobalSearch() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]" onClick={() => setOpen(false)}>
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs" />
+      <div className="absolute inset-0 bg-ink/80 backdrop-blur-xs" />
 
       <div
         className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl"

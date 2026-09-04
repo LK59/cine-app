@@ -49,7 +49,7 @@ export function CinemaModeToggle({
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "movies" ? "true" : undefined}
         className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
-          mode === "movies" ? "bg-white text-slate-950" : "text-white/70 hover:text-white"
+          mode === "movies" ? "bg-white text-ink" : "text-white/70 hover:text-white"
         }`}
       >
         {t("cinema.moviesTab")}
@@ -60,7 +60,7 @@ export function CinemaModeToggle({
         onKeyDown={onKeyDown}
         data-tv-escape-up={mode === "series" ? "true" : undefined}
         className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
-          mode === "series" ? "bg-white text-slate-950" : "text-white/70 hover:text-white"
+          mode === "series" ? "bg-white text-ink" : "text-white/70 hover:text-white"
         }`}
       >
         {t("cinema.seriesTab")}

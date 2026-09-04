@@ -43,6 +43,7 @@ import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { canAutoSearchMovie } from "@/lib/mediaPermissions";
 import { useT } from "@/components/TranslationProvider";
+import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { MediaRatings } from "@/components/MediaRatings";
@@ -50,6 +51,7 @@ import { SimilarMedia } from "@/components/SimilarMedia";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface MovieInfo {
+  logoUrl: string | null;
   trailerKey: string | null;
   tmdb: {
     overview: string;
@@ -295,7 +297,7 @@ export default function RadarrMovieDetailPage() {
             }}
           />
           {/* Left vignette for text contrast */}
-          <div className="absolute inset-0 bg-linear-to-r from-slate-950/60 via-slate-950/10 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-r from-ink/60 via-ink/10 to-transparent" />
         </div>
       )}
 
@@ -331,10 +333,13 @@ export default function RadarrMovieDetailPage() {
             </div>
           </div>
           <div className="min-w-0 flex-1 pb-1">
-            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl font-display">
-              {movie.title}
-              <span className="ml-2 text-base font-normal text-white/60 md:text-lg">({movie.year})</span>
-            </h1>
+            <TitleLogo
+              logoUrl={info?.logoUrl}
+              title={movie.title}
+              year={movie.year}
+              className="mb-1 text-xl sm:text-2xl md:text-3xl"
+              logoClassName="max-h-14 sm:max-h-16 md:max-h-20"
+            />
             <div className="flex flex-wrap items-center gap-2">
               {info?.imdbRating && (
                 <span className="flex items-center gap-1 rounded-sm bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">

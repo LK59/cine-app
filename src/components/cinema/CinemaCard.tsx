@@ -5,7 +5,7 @@ import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
 const TV_NAV_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
 
 // Deliberately not PosterCard — no watchlist-status chrome, no ActionSheet, no click-to-navigate.
 // A card's only job here is to report "I'm focused" (mouse hover or keyboard arrow-nav, both via

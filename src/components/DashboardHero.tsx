@@ -94,7 +94,7 @@ export function DashboardHero({ items }: { items: HeroItem[] }) {
             style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
           />
         )}
-        <div className="absolute inset-0 bg-linear-to-r from-slate-950/70 via-slate-950/20 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-r from-ink/70 via-ink/20 to-transparent" />
       </div>
 
       <div className="relative flex h-[46vw] min-h-[280px] max-h-[420px] flex-col justify-end gap-3 p-4 xl:max-h-[480px] sm:p-6 md:p-8">

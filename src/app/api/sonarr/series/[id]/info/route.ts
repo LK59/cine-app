@@ -4,6 +4,7 @@ import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
+import { getTitleLogo } from "@/lib/title-logo";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -17,12 +18,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     ? await tmdb.findTvByTvdbId(series.tvdbId).then((r) => r.tv_results[0]?.id ?? null).catch(() => null)
     : null;
 
-  const [tmdbInfo, tmdbVideos, rating, episodeSubtitles, queue] = await Promise.all([
+  const [tmdbInfo, tmdbVideos, rating, episodeSubtitles, queue, logoUrl] = await Promise.all([
     tmdbTvId ? tmdb.getTv(tmdbTvId).catch(() => null) : Promise.resolve(null),
     tmdbTvId ? tmdb.getTvVideos(tmdbTvId).catch(() => ({ results: [] })) : Promise.resolve({ results: [] }),
     omdb.isEnabled() && series.imdbId ? omdb.getRating(series.imdbId).catch(() => null) : Promise.resolve(null),
     bazarr.getEpisodesDetails(id).catch(() => []),
     sonarr.getQueue().catch(() => ({ records: [] as any[] })),
+    // Voir la route des films : le même logo, la même mise en cache, la même raison.
+    tmdbTvId ? getTitleLogo(tmdbTvId, "series") : Promise.resolve(null),
   ]);
 
   const activeDownloads = queue.records.filter((r: any) => r.seriesId === id);
@@ -32,6 +35,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   ) ?? tmdbVideos.results.find((v) => v.type === "Trailer" && v.site === "YouTube") ?? null;
 
   return NextResponse.json({
+    logoUrl,
     trailerKey: trailer?.key ?? null,
     tmdb: tmdbInfo
       ? {
