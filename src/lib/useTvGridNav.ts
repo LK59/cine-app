@@ -35,8 +35,27 @@ function getRows(): HTMLElement[][] {
   return [...byRow.values()].sort((a, b) => a[0].getBoundingClientRect().top - b[0].getBoundingClientRect().top);
 }
 
-function focusCard(el: HTMLElement) {
-  el.focus();
+/**
+ * Amener une carte sous les yeux — et, quand on change de rangée, la rangée entière.
+ *
+ * `block: "nearest"` ne déplace rien tant que l'élément est ne serait-ce que partiellement
+ * visible : descendre d'une rangée amenait donc la carte suivante juste assez pour toucher le
+ * bord bas de l'écran, affiches coupées et intitulé hors champ. Et comme aucun défilement
+ * n'avait lieu, l'accrochage n'avait rien à corriger.
+ *
+ * Un changement de rangée fait donc défiler la *rangée* — son intitulé compris — jusqu'en haut
+ * du panneau. Un déplacement à l'intérieur d'une rangée garde le comportement discret : on ne
+ * veut pas que chaque flèche gauche/droite fasse sauter la page.
+ */
+function focusCard(el: HTMLElement, movedRow = false): void {
+  // `preventScroll` : le navigateur amène de lui-même un élément focalisé sous les yeux, avec
+  // ses propres règles — qui se disputeraient celles d'en dessous.
+  el.focus({ preventScroll: true });
+  if (movedRow) {
+    const row = el.closest<HTMLElement>("[data-tv-rowroot]") ?? el;
+    row.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   el.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
 }
 
@@ -62,7 +81,7 @@ export function useTvGridNav(enabled = true) {
       if (activeRowIdx === -1) {
         if (e.key === "ArrowDown" || e.key === "ArrowRight") {
           e.preventDefault();
-          focusCard(rows[0][0]);
+          focusCard(rows[0][0], true);
         }
         return;
       }
@@ -79,7 +98,7 @@ export function useTvGridNav(enabled = true) {
       } else if (e.key === "ArrowUp" && activeRowIdx > 0) {
         e.preventDefault();
         const target = rows[activeRowIdx - 1];
-        focusCard(target[Math.min(colIdx, target.length - 1)]);
+        focusCard(target[Math.min(colIdx, target.length - 1)], true);
       } else if (e.key === "ArrowUp" && activeRowIdx === 0) {
         // Top row: nowhere left to go within the grid — hand off to whatever wants to sit
         // above it (Cinema Mode's Films/Séries toggle marks itself with this attribute).
@@ -91,7 +110,7 @@ export function useTvGridNav(enabled = true) {
       } else if (e.key === "ArrowDown" && activeRowIdx < rows.length - 1) {
         e.preventDefault();
         const target = rows[activeRowIdx + 1];
-        focusCard(target[Math.min(colIdx, target.length - 1)]);
+        focusCard(target[Math.min(colIdx, target.length - 1)], true);
       }
     }
 

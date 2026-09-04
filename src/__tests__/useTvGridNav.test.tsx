@@ -141,3 +141,56 @@ describe("useTvGridNav", () => {
     expect(removeSpy).toHaveBeenCalledWith("keydown", expect.any(Function));
   });
 });
+
+/**
+ * Descendre d'une rangée doit amener la rangée entière — intitulé compris — en haut du panneau.
+ *
+ * `block: "nearest"` ne déplace rien tant que l'élément est ne serait-ce que partiellement
+ * visible : la rangée suivante venait donc toucher le bord bas de l'écran, affiches coupées, et
+ * comme aucun défilement n'avait lieu l'accrochage n'avait rien à corriger.
+ */
+describe("useTvGridNav — ce qu'on amène sous les yeux", () => {
+  /** Une carte dans une rangée qui se déclare comme telle, avec ses défilements observables. */
+  function rowWithCard(row: string, col: number, rowTop: number) {
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-tv-rowroot", "");
+    wrapper.scrollIntoView = vi.fn();
+    const card = makeCard(row, col, rowTop);
+    wrapper.appendChild(card);
+    document.body.appendChild(wrapper);
+    card.scrollIntoView = vi.fn();
+    return { wrapper, card };
+  }
+
+  it("fait défiler la rangée quand on change de rangée", () => {
+    const first = rowWithCard("row-a", 0, 0);
+    const second = rowWithCard("row-b", 0, 100);
+    renderHook(() => useTvGridNav());
+    first.card.focus();
+
+    press("ArrowDown");
+
+    expect(document.activeElement).toBe(second.card);
+    expect(second.wrapper.scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "start" }));
+  });
+
+  it("reste discret quand on se déplace dans la même rangée", () => {
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-tv-rowroot", "");
+    wrapper.scrollIntoView = vi.fn();
+    document.body.appendChild(wrapper);
+    const c0 = makeCard("row-a", 0, 0);
+    const c1 = makeCard("row-a", 1, 0);
+    wrapper.append(c0, c1);
+    c0.scrollIntoView = vi.fn();
+    c1.scrollIntoView = vi.fn();
+    renderHook(() => useTvGridNav());
+    c0.focus();
+
+    press("ArrowRight");
+
+    expect(document.activeElement).toBe(c1);
+    expect(wrapper.scrollIntoView).not.toHaveBeenCalled();
+    expect(c1.scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "nearest" }));
+  });
+});

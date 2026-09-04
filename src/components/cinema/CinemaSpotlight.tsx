@@ -35,6 +35,9 @@ export function CinemaSpotlight({
   // titre dont la carte est sortie de l'écran par la gauche — la section dirait alors le
   // contraire de ce qu'elle montre.
   useEffect(() => {
+    // -1 : la bannière montre un titre qui n'est pas dans cette rangée (une carte désignée plus
+    // bas). Rien à amener sous les yeux, et rien à allumer.
+    if (activeIndex < 0) return;
     const card = rail.current?.children[activeIndex];
     card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [activeIndex]);
@@ -42,7 +45,7 @@ export function CinemaSpotlight({
   if (count === 0) return null;
 
   return (
-    <div className="mb-6 animate-fade-in-up snap-start">
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <div className="mb-2 flex items-center gap-4 px-8 sm:px-12">
         <h2 className="text-sm font-medium text-white/70">{label}</h2>
         {/* Des barres, pas des points : elles disent aussi la place occupée dans la série, et

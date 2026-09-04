@@ -43,7 +43,7 @@ export function CinemaTop10Row<T extends Top10Item>({
   if (items.length === 0) return null;
 
   return (
-    <div className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>
       <div className="scrollbar-thin flex scroll-smooth items-end gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (

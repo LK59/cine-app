@@ -48,7 +48,7 @@ export const CinemaRow = memo(function CinemaRow({
   return (
     // snap-start: the scroll pane above (CinemaClient) is snap-y/snap-mandatory — this makes
     // THIS row's top edge (the label) one of the valid rest positions.
-    <div className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       {/* Thin, small, muted — a section label, not a heading competing with the poster row
           beneath it. */}
       <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>

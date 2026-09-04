@@ -65,4 +65,20 @@ describe("la rangée à la une", () => {
     expect(screen.getByText("Un")).toBeInTheDocument();
     expect(screen.getByText("Trois")).toBeInTheDocument();
   });
+
+  /**
+   * La bannière suit le survol, la rotation compte dans son coin : les deux se séparent, et une
+   * barre allumée annonçait alors un titre que personne n'avait sous les yeux.
+   */
+  it("n'allume aucune barre quand la bannière montre un titre d'ailleurs", () => {
+    renderRail(-1);
+    for (const bar of screen.getAllByLabelText(/À la une \d\/3/)) {
+      expect(bar).toHaveAttribute("aria-current", "false");
+    }
+  });
+
+  it("ne fait rien défiler dans ce cas non plus", () => {
+    renderRail(-1);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
 });

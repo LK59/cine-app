@@ -304,6 +304,16 @@ export function CinemaClient() {
   const movieCarousel = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
   const [movieCarouselIndex, setMovieCarouselIndex] = useRotatingIndex(movieCarousel.length, focusedItem !== null);
   const heroItem = focusedItem ?? movieCarousel[movieCarouselIndex] ?? null;
+  /**
+   * La barre allumée est celle du titre que la bannière montre — pas celle de la rotation.
+   *
+   * Les deux se séparent dès qu'une carte est désignée ailleurs : la bannière suit le survol, la
+   * rotation continue de compter dans son coin, et les barres annonçaient alors un titre que
+   * personne n'avait sous les yeux. Aucune barre n'est allumée quand la bannière montre un titre
+   * qui n'est pas dans cette rangée — dire « le quatrième » d'une rangée où il ne figure pas
+   * serait pire que ne rien dire.
+   */
+  const movieSpotlightIndex = heroItem ? movieCarousel.findIndex((m) => m.radarrId === heroItem.radarrId) : -1;
 
   // Series' own parallel focus/selection state — kept entirely separate from the movie state
   // above (not touched) so each tab remembers its own position independently when you switch
@@ -313,6 +323,9 @@ export function CinemaClient() {
   const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
   const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
+  const seriesSpotlightIndex = seriesHeroItem
+    ? seriesCarousel.findIndex((sh) => sh.sonarrId === seriesHeroItem.sonarrId)
+    : -1;
 
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
   // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
@@ -692,7 +705,7 @@ export function CinemaClient() {
               <CinemaSpotlight
                 label={t("cinema.spotlight")}
                 count={movieCarousel.length}
-                activeIndex={movieCarouselIndex}
+                activeIndex={movieSpotlightIndex}
                 onPick={(i) => {
                   // La bannière doit repartir sur la rotation : tant qu'une carte est retenue,
                   // c'est elle qui commande, et les barres ne changeraient rien à l'écran.
@@ -715,7 +728,7 @@ export function CinemaClient() {
               </CinemaSpotlight>
 
               {resumeMovies.length > 0 && (
-                <div className="mb-6 animate-fade-in-up snap-start">
+                <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
                   <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
                     {resumeMovies.map((item, i) => (
@@ -806,7 +819,7 @@ export function CinemaClient() {
               <CinemaSpotlight
                 label={t("cinema.spotlight")}
                 count={seriesCarousel.length}
-                activeIndex={seriesCarouselIndex}
+                activeIndex={seriesSpotlightIndex}
                 onPick={(i) => {
                   setSeriesFocusedItem(null);
                   setSeriesCarouselIndex(i);
@@ -827,7 +840,7 @@ export function CinemaClient() {
               </CinemaSpotlight>
 
               {continueSeries.length > 0 && (
-                <div className="mb-6 animate-fade-in-up snap-start">
+                <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
                   <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
                   <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
                     {continueSeries.map((item, i) => (
