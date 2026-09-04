@@ -71,6 +71,35 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     return () => setWatchingFullScreen(false);
   }, [mode]);
 
+  /**
+   * The manifest asks for portrait, and it is right to: everything except a film is a list to
+   * scroll. A film is the exception, and on Android that lock applies to it as well — the page
+   * would simply refuse to turn. iOS ignores the manifest's orientation entirely, which is why
+   * this only ever mattered on the platform nobody here can test on.
+   *
+   * So the lock is lifted for as long as a film has the whole screen, and asked for again after.
+   * Every call is guarded: Safari implements none of this, and a refusal is not a reason for a
+   * film to stop.
+   */
+  useEffect(() => {
+    // Typed by hand: the orientation lock is not in the DOM library this project builds against,
+    // being a proposal Safari has never implemented — which is exactly the platform where every
+    // call below has to be allowed to be missing.
+    const orientation = (typeof screen === "undefined" ? undefined : screen.orientation) as
+      | (ScreenOrientation & { lock?: (to: string) => Promise<void>; unlock?: () => void })
+      | undefined;
+    if (!orientation) return;
+    const ask = (what: "free" | "portrait") => {
+      try {
+        if (what === "free") orientation.unlock?.();
+        else void orientation.lock?.("portrait-primary")?.catch(() => {});
+      } catch {
+        // Unsupported, or refused outside fullscreen. Nothing here is worth an interruption.
+      }
+    };
+    ask(mode === "full" ? "free" : "portrait");
+  }, [mode]);
+
   // Speculative, fire-and-forget: detectCodecSupport() already caches its result in
   // localStorage per browser/device (not per session, not per film) — this just moves that
   // one-time cost (a few hundred ms, the very first time ever on a given device) off the
