@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { Check, ChevronDown, Play, Plus, RotateCcw, Video, X } from "lucide-react";
+import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, Video, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
@@ -294,13 +294,20 @@ export function CinemaMobileDetail({
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing
             with the primary white one above. */}
         <div className="mb-6 flex items-start gap-8">
+          {/* Deux coches identiques côte à côte, dont l'une servait à la fois d'« ajouter » et
+              d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. Un plus qui
+              devient un marque-page coché se lit d'un coup d'œil, et le libellé dit l'état. */}
           <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
-            {inList ? <Check size={22} className="text-accent-400" /> : <Plus size={22} className="text-white" />}
-            <span className="text-center text-xs leading-tight text-white/70">{t("watchlist.statuses.toWatch")}</span>
+            {inList ? <BookmarkCheck size={22} className="text-accent-400" /> : <Plus size={22} className="text-white" />}
+            <span className="text-center text-xs leading-tight text-white/70">
+              {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
+            </span>
           </button>
           <button type="button" onClick={toggleWatched} aria-pressed={watched} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
-            <Check size={22} className={watched ? "text-accent-400" : "text-white"} />
-            <span className="text-center text-xs leading-tight text-white/70">{t("cinema.markWatched")}</span>
+            {watched ? <CircleCheck size={22} className="text-accent-400" /> : <Check size={22} className="text-white" />}
+            <span className="text-center text-xs leading-tight text-white/70">
+              {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
+            </span>
           </button>
         </div>
 

@@ -926,7 +926,9 @@
       "available": "Available",
       "alreadyInList": "Already in list",
       "addLabel": "Add:"
-    }
+    },
+    "addedToast": "Added to my list",
+    "removedToast": "Removed from my list"
   },
   "person": {
     "back": "Back",
@@ -1262,6 +1264,8 @@
     "recentlyAdded": "Recently added",
     "top10": "Top 10 in your library",
     "newBadge": "New",
-    "similar": "More like this"
+    "similar": "More like this",
+    "inMyList": "In my list",
+    "watchedState": "Watched"
   }
 }

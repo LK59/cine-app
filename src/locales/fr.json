@@ -926,7 +926,9 @@
       "available": "Dispo",
       "alreadyInList": "Déjà en liste",
       "addLabel": "Ajouter :"
-    }
+    },
+    "addedToast": "Ajouté à ma liste",
+    "removedToast": "Retiré de ma liste"
   },
   "person": {
     "back": "Retour",
@@ -1262,6 +1264,8 @@
     "recentlyAdded": "Récemment ajoutés",
     "top10": "Top 10 dans votre bibliothèque",
     "newBadge": "Nouveau",
-    "similar": "Titres similaires"
+    "similar": "Titres similaires",
+    "inMyList": "Dans ma liste",
+    "watchedState": "Vu"
   }
 }

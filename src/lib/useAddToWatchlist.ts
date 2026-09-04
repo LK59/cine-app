@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 import { useT } from "@/components/TranslationProvider";
 import type { WatchlistStatus } from "@/lib/db";
 
@@ -43,15 +44,13 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     const previous = addedStatus;
     setAddedStatus(status);
     try {
-      const res = await fetch("/api/watchlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, status }),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
+      await apiAction("/api/watchlist", { method: "POST", body: JSON.stringify({ ...payload, status }) });
+      // Dit à voix haute, et pas seulement montré : en mode cinéma le bouton est une ligne parmi
+      // d'autres dans un menu, et un changement d'icône à cet endroit passe inaperçu.
+      toast.success(t("watchlist.addedToast"));
+    } catch (error) {
       setAddedStatus(previous);
-      toast.error(t("watchlist.addFailed"));
+      toast.error(error instanceof Error ? error.message : t("watchlist.addFailed"));
     }
   }
 
@@ -63,15 +62,11 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     const previous = addedStatus;
     setAddedStatus(null);
     try {
-      const res = await fetch("/api/watchlist", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
+      await apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify(payload) });
+      toast.success(t("watchlist.removedToast"));
+    } catch (error) {
       setAddedStatus(previous);
-      toast.error(t("watchlist.addFailed"));
+      toast.error(error instanceof Error ? error.message : t("watchlist.addFailed"));
     }
   }
 

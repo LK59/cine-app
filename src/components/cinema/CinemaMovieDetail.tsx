@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, Video, Bookmark, BookmarkCheck, Plus, Check, RotateCcw } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, RotateCcw, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -317,26 +317,36 @@ export function CinemaMovieDetail({
               data-detail-menu
               onClick={toggleWatched}
               aria-pressed={watched}
-              className={`${MENU_ROW} ${watched ? MENU_ROW_ACTIVE : MENU_ROW_INACTIVE}`}
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
             >
               <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                {watched ? <Check size={14} /> : <BookmarkCheck size={14} />}
+                {watched ? <CircleCheck size={16} /> : <Check size={14} />}
               </span>
-              <span className="text-sm font-medium">{t("cinema.markWatched")}</span>
+              <span className="text-sm font-medium">
+                {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
+              </span>
             </button>
 
+            {/* L'état tient dans la pastille, et non dans la ligne entière.
+                Une ligne pleine d'accent criait plus fort que le repère de sélection lui-même :
+                sur un menu parcouru à la télécommande, la ligne « déjà dans ma liste » avait donc
+                l'air d'être celle qu'on venait de désigner. La pastille change de forme (un plus
+                devient un marque-page coché) et de couleur ; la ligne, elle, reste disponible
+                pour dire ce qu'elle a toujours dit : où l'on se trouve. */}
             <button
               data-detail-menu
               onClick={toggleAddToList}
               aria-pressed={inList}
-              className={`${MENU_ROW} ${inList ? MENU_ROW_ACTIVE : MENU_ROW_INACTIVE}`}
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
             >
               <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                {inList ? <Bookmark size={14} /> : <Plus size={14} />}
+                {inList ? <BookmarkCheck size={16} /> : <Plus size={14} />}
               </span>
-              {/* "watchlist.statuses.toWatch" ("À voir"), not the more ambiguous "Ma liste" —
-                  this is exactly the status the click sets, so the label should say so. */}
-              <span className="text-sm font-medium">{t("watchlist.statuses.toWatch")}</span>
+              {/* Le libellé dit l'état, pas le geste : « À voir » ne distinguait pas un titre
+                  déjà enregistré d'un titre qui ne l'était pas. L'icône, elle, dit le geste. */}
+              <span className="text-sm font-medium">
+                {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
+              </span>
             </button>
           </div>
 
