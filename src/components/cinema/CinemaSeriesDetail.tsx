@@ -22,7 +22,7 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -64,6 +64,7 @@ export function CinemaSeriesDetail({
   /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
   const userMovedFocus = useRef(false);
   const [showTrailer, setShowTrailer] = useState(false);
+  const [showSynopsis, setShowSynopsis] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
   // this sheet instead of leaving the mode (see lib/cinemaRoute).
   const showEpisodes = useCinemaRoute().episodes;
@@ -97,7 +98,7 @@ export function CinemaSeriesDetail({
     // Tant que le spectateur n'a pas bougé lui-même — voir la fiche film pour le détail.
     const frame = requestAnimationFrame(() => {
       if (userMovedFocus.current) return;
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode]);
@@ -109,7 +110,7 @@ export function CinemaSeriesDetail({
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
     if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
   }, [playerOwnsKeyboard]);
@@ -254,7 +255,7 @@ export function CinemaSeriesDetail({
           <CinemaOverview
             text={info?.tmdb?.overview || item.overview || ""}
             readMore={t("cinema.readMore")}
-            readLess={t("cinema.readLess")}
+            onOpen={() => setShowSynopsis(true)}
           />
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
@@ -264,7 +265,7 @@ export function CinemaSeriesDetail({
           )}
 
           {/* Plus étroit que le texte au-dessus, sans être une colonne à part — voir MENU_STYLE. */}
-          <div className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
+          <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             {nextEpisode && (
               <PlayButton
                 itemId={nextEpisode.itemId}
@@ -399,6 +400,21 @@ export function CinemaSeriesDetail({
             requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
           }}
           onPlayEpisode={playEpisode}
+        />
+      )}
+
+      {showSynopsis && (
+        <CinemaSynopsisModal
+          title={item.title}
+          text={info?.tmdb?.overview || item.overview || ""}
+          closeLabel={t("common.close")}
+          onClose={() => {
+            setShowSynopsis(false);
+            // Rendre le focus à la ligne qui a ouvert la fenêtre, comme le fait la bande-annonce.
+            requestAnimationFrame(() =>
+              containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus()
+            );
+          }}
         />
       )}
     </div>,

@@ -20,7 +20,7 @@ import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, LOGO_STYLE, SECTION_CLASS, LOGO_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -61,6 +61,7 @@ export function CinemaMovieDetail({
   /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
   const userMovedFocus = useRef(false);
   const [showTrailer, setShowTrailer] = useState(false);
+  const [showSynopsis, setShowSynopsis] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   // CinemaMovie (the /api/cinema/movies payload) carries no per-user watch progress at all
   // (Radarr/TMDB fields only, shared across every viewer) — without this, Lecture always started
@@ -113,7 +114,7 @@ export function CinemaMovieDetail({
      */
     const frame = requestAnimationFrame(() => {
       if (userMovedFocus.current) return;
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [playerEnabled, info?.trailerKey]);
@@ -130,7 +131,7 @@ export function CinemaMovieDetail({
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
     if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-actions] [data-detail-menu]")?.focus();
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
   }, [playerOwnsKeyboard]);
@@ -143,7 +144,7 @@ export function CinemaMovieDetail({
       // without this guard, Escape while the trailer is open closed BOTH it and this whole
       // detail overlay at once, since nothing stops this listener from also firing on the same
       // keypress.
-      if (showTrailer) return;
+      if (showTrailer || showSynopsis) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         requestClose();
@@ -164,7 +165,7 @@ export function CinemaMovieDetail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, playerOwnsKeyboard]);
+  }, [requestClose, showTrailer, showSynopsis, playerOwnsKeyboard]);
 
   // Independent on/off toggles, not "reassign to the other status" — un-toggling either one
   // goes back to no status at all (removeFromWatchlist), not to whatever the other button
@@ -277,7 +278,7 @@ export function CinemaMovieDetail({
           <CinemaOverview
             text={info?.tmdb?.overview || item.overview || ""}
             readMore={t("cinema.readMore")}
-            readLess={t("cinema.readLess")}
+            onOpen={() => setShowSynopsis(true)}
           />
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
@@ -288,7 +289,7 @@ export function CinemaMovieDetail({
 
           {/* Plus étroit que le texte au-dessus, sans être une colonne à part : deux tiers de
               la largeur du bloc — voir MENU_STYLE. */}
-          <div className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
+          <div data-detail-actions className="mt-2 flex flex-col gap-1" style={MENU_STYLE}>
             <PlayButton
               itemId={item.jellyfinItemId}
               title={item.title}
@@ -393,6 +394,21 @@ export function CinemaMovieDetail({
             // wasted keypress before arrow-nav does anything again. Same class of bug already
             // fixed for the player's own menu-close case.
             requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus());
+          }}
+        />
+      )}
+
+      {showSynopsis && (
+        <CinemaSynopsisModal
+          title={item.title}
+          text={info?.tmdb?.overview || item.overview || ""}
+          closeLabel={t("common.close")}
+          onClose={() => {
+            setShowSynopsis(false);
+            // Rendre le focus à la ligne qui a ouvert la fenêtre, comme le fait la bande-annonce.
+            requestAnimationFrame(() =>
+              containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus()
+            );
           }}
         />
       )}
