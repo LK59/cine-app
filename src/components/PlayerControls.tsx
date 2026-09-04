@@ -1166,7 +1166,7 @@ export function PlayerControls({
                     </span>
                     <button
                       onClick={cycleSubtitleSize}
-                      className="shrink-0 rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                      className="btn btn-ghost btn-sm shrink-0"
                     >
                       {t(`player.${SUBTITLE_SIZES.find((s) => s.value === subtitleSize)?.labelKey ?? "subtitleSizeNormal"}`)}
                     </button>
@@ -1561,7 +1561,7 @@ export function PlayerControls({
             <span className="text-white/40">/</span>
             <span className="tabular-nums">{formatTime(duration)}</span>
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={toggleMute} className="rounded-lg p-1.5 hover:bg-white/10">
+              <button onClick={toggleMute} className="btn btn-ghost btn-icon p-1.5">
                 {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
               {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
@@ -1582,7 +1582,7 @@ export function PlayerControls({
                 />
               )}
               {fullscreenSupported && (
-                <button data-player-nav="fullscreen" onClick={toggleFullscreen} className="rounded-lg p-1.5 hover:bg-white/10">
+                <button data-player-nav="fullscreen" onClick={toggleFullscreen} className="btn btn-ghost btn-icon p-1.5">
                   {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
                 </button>
               )}

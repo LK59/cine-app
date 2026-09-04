@@ -106,7 +106,7 @@ export function ExperimentalPlayerReport({ input }: { input: ReportInput }) {
         <button
           type="button"
           onClick={copy}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/20"
+          className="btn btn-ghost btn-sm"
         >
           {copied ? <ClipboardCheck size={14} /> : <Copy size={14} />}
           {copied ? "Copié" : "Copier"}

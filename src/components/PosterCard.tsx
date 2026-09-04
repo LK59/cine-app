@@ -204,12 +204,12 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
             </div>
           )}
 
-          {/* La note ne s'affiche plus au repos. Elle était sur *chaque* affiche d'une grille de
-              trente, ce qui est trente petites boîtes ambre qui se disputent l'attention avec les
-              affiches — et deux flous d'arrière-plan par carte, recalculés à chaque image, pendant
-              qu'on fait défiler. Elle reste au survol, et sur la fiche. */}
+          {/* La note reste visible en permanence : elle l'est partout ailleurs dans l'app, et une
+              information qui n'apparaît qu'au survol n'existe pas sur un écran tactile. Ce qui a
+              disparu, c'est son flou d'arrière-plan — recalculé par carte et par image pendant le
+              défilement, pour un fond déjà opaque aux trois quarts. */}
           {item.rating > 0 && (
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">
               <Star size={7} className="fill-current" /> {item.rating.toFixed(1)}
             </div>
           )}

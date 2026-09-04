@@ -57,7 +57,7 @@ export function MoreMenu({ items, label }: { items: MoreMenuItem[]; label: strin
       </button>
 
       {open && (
-        <div className="glass-panel animate-fade-in-scale absolute right-0 top-full z-30 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl py-1 shadow-2xl">
+        <div className="menu-panel animate-fade-in-scale absolute right-0 top-full z-30 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl py-1">
           {items.map((item) => (
             <button
               key={item.label}

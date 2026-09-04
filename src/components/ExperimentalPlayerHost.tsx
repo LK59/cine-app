@@ -1198,7 +1198,7 @@ export function ExperimentalPlayerHost({
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+              className="btn btn-ghost px-4 py-2"
             >
               {t("common.close")}
             </button>
@@ -1216,7 +1216,7 @@ export function ExperimentalPlayerHost({
             <button type="button" onClick={() => onFallback(error ?? "demandé par le spectateur")} className="btn-primary">
               {t("player.experimental.switchToStable")}
             </button>
-            <button type="button" onClick={handleClose} className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20">
+            <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
               {t("common.close")}
             </button>
           </div>

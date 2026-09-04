@@ -1034,7 +1034,7 @@ function ActivePlayer({
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+                    className="btn btn-ghost px-4 py-2"
                   >
                     {t('player.quit')}
                   </button>

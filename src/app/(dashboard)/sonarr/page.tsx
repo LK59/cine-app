@@ -39,6 +39,11 @@ function decadeOf(year: number): DecadeFilter {
 
 import { relDate } from "@/lib/format";
 
+/** La clé sous laquelle la note d'une série est demandée, et retrouvée. Une seule définition. */
+function ratingKey(show: { tmdbId?: number | null; tvdbId?: number | null }): string {
+  return show.tmdbId ? `series:${show.tmdbId}` : `tvdb:${show.tvdbId}`;
+}
+
 export default function SonarrPage() {
   const { mutate } = useSWRConfig();
   const { isGuest } = useRole();
@@ -102,7 +107,12 @@ export default function SonarrPage() {
   // catalog only in the deliberate "rating" sort case), and memoizing it would need the same
   // ids-as-a-string trick either way since a plain array/object dep is never referentially
   // stable across renders.
-  const ratingsIds = ratingsSource.filter((s) => s.tmdbId).map((s) => `series:${s.tmdbId}`);
+  // Sonarr has a `tmdbId` field and, on a TVDB-backed instance, never fills it — so the badge
+  // had a component, a route and a cache behind it and no id to ask about. The id it does have
+  // works, one hop further on.
+  const ratingsIds = ratingsSource
+    .map((s) => (s.tmdbId ? `series:${s.tmdbId}` : s.tvdbId ? `tvdb:${s.tvdbId}` : null))
+    .filter((k): k is string => k !== null);
   const ratingsKey = ratingsIds.length > 0 ? `/api/watchlist/ratings?items=${ratingsIds.join(",")}` : null;
   const { data: ratingsMap } = useSWR<Record<string, string | null>>(ratingsKey, fetcher, { revalidateOnFocus: false });
 
@@ -115,8 +125,8 @@ export default function SonarrPage() {
         return (b.statistics?.episodeFileCount ?? 0) - (a.statistics?.episodeFileCount ?? 0);
       }
       if (sort === "rating") {
-        const ra = a.tmdbId ? Number(ratingsMap?.[`series:${a.tmdbId}`] ?? 0) : 0;
-        const rb = b.tmdbId ? Number(ratingsMap?.[`series:${b.tmdbId}`] ?? 0) : 0;
+        const ra = Number(ratingsMap?.[ratingKey(a)] ?? 0);
+        const rb = Number(ratingsMap?.[ratingKey(b)] ?? 0);
         return rb - ra;
       }
       return 0;
@@ -258,7 +268,7 @@ export default function SonarrPage() {
                     >
                       <PosterImage src={poster(show)} alt={show.title} />
                       {show.tmdbId != null && (
-                        <ImdbBadge rating={ratingsMap?.[`series:${show.tmdbId}`]} className="absolute left-2 top-2 shadow" />
+                        <ImdbBadge rating={ratingsMap?.[ratingKey(show)]} className="absolute left-2 top-2 shadow" />
                       )}
                       <div className="p-2">
                         <p className="truncate text-xs font-medium text-white">{show.title}</p>
@@ -313,7 +323,7 @@ export default function SonarrPage() {
                         <p className="text-xs text-slate-500">{show.year}</p>
                       </div>
                       <div className="hidden items-center gap-3 sm:flex">
-                        {show.tmdbId != null && <ImdbBadge rating={ratingsMap?.[`series:${show.tmdbId}`]} />}
+                        <ImdbBadge rating={ratingsMap?.[ratingKey(show)]} />
                         <span className={`badge ${complete ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>
                           {show.statistics?.episodeFileCount ?? 0}/{show.statistics?.episodeCount ?? 0} ép.
                         </span>
