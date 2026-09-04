@@ -11,6 +11,11 @@ interface PosterImageProps {
   // Next's image optimizer proxies local images through an internal request that
   // doesn't forward cookies, so auth-gated routes (e.g. /api/jellyfin/image) 404/400
   // there. Skip optimization for those and let the browser fetch it directly.
+  //
+  // Déduit de l'adresse plutôt que laissé à l'appelant : une image servie par une route de
+  // cette app est authentifiée par construction, donc jamais optimisable. L'oubli de ce drapeau
+  // en déplaçant une carte a suffi à vider « Continuer à regarder » de toutes ses images — un
+  // drapeau qu'il faut penser à porter est un drapeau qui finit par tomber.
   unoptimized?: boolean;
   // A calm static placeholder instead of the shared shimmer animation — opt-in, default
   // behavior everywhere else unchanged. Cinema Mode's rows can have a dozen+ small cards
@@ -39,6 +44,7 @@ export function PosterImage({
 }: PosterImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
+  const skipOptimizer = unoptimized || (typeof src === "string" && src.startsWith("/api/"));
 
   if (!src || errored) {
     return (
@@ -55,7 +61,7 @@ export function PosterImage({
         src={src}
         alt={alt}
         fill
-        unoptimized={unoptimized}
+        unoptimized={skipOptimizer}
         sizes={sizes}
         priority={priority}
         className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
