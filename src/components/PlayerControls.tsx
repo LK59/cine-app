@@ -110,28 +110,42 @@ export function PlayerControls({
   const [volumeSettable, setVolumeSettable] = useState(true);
 
   /**
-   * Asks the platform whether it will let a page set the volume, by trying and putting it back.
+   * Whether this platform will let a page set the volume of a media element.
    *
-   * Asked again once the element has media, which is the whole point: on iOS a `volume` written
-   * to an element that has not loaded anything can read back as though it took, and only once
-   * there is something to play does it become the no-op it really is. Probed only at mount — as
-   * this was — the answer came from the one moment it is not yet true, so the control stayed on
-   * screen and behaved as a mute switch with nothing in between.
+   * Asked of the platform's name, which is not how anything else here is decided — and the
+   * exception is earned. Trying it and reading it back, which is what this did, cannot work:
+   * iOS *stores* the value written to `video.volume` and hands it back unchanged, while the
+   * output ignores it entirely. The probe therefore answered "yes" every time, the control
+   * stayed on screen, and it behaved as a mute switch with nothing in between — which is what
+   * was reported, twice. A measurement whose subject lies is not a measurement.
+   *
+   * Narrow on purpose. Only a real media element is affected: the canvas pipeline puts its sound
+   * through a gain node of its own, which obeys on an iPhone like anywhere else — so the control
+   * stays where it works and goes where it does not.
    */
   const probeVolume = useCallback((video: HTMLVideoElement) => {
     if (probedVolumeOn.current === video) return;
+    probedVolumeOn.current = video;
+
+    const agent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+    const iPadPretendingToBeAMac =
+      typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    const readOnlyThere = /iPad|iPhone|iPod/.test(agent) || iPadPretendingToBeAMac;
+    if (readOnlyThere && video instanceof HTMLMediaElement) {
+      setVolumeSettable(false);
+      return;
+    }
+
+    // Everywhere else the question can still be answered by asking, and is: a platform nobody
+    // thought of that ignores the write takes the control off the screen too.
     const before = video.volume;
     try {
       video.volume = before > 0.5 ? before - 0.1 : before + 0.1;
       const took = video.volume !== before;
       video.volume = before;
       setVolumeSettable(took);
-      // Only an element with media has given its real answer; before that the question is asked
-      // again on the next event that says it has some.
-      if (video.readyState > 0) probedVolumeOn.current = video;
     } catch {
       setVolumeSettable(false);
-      probedVolumeOn.current = video;
     }
   }, []);
   const [muted, setMuted] = useState(false);
@@ -1286,7 +1300,8 @@ export function PlayerControls({
         >
           <div
             ref={seekBarRef}
-            className="group relative"
+            className="group relative select-none"
+            style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
             // Same treatment as the top-bar buttons (see showControls' comment) but stronger:
             // holdControls() suspends auto-hide entirely for as long as the pointer is anywhere
             // on the bar — hovering to preview a thumbnail, or dragging — rather than merely
@@ -1310,6 +1325,10 @@ export function PlayerControls({
               updatePreview(e.touches[0].clientX);
             }}
           >
+            {/* The rail at rest. Painted here rather than left to the native track, which cannot
+                be sized at all without giving up `accent-color` — and giving that up is what
+                lets the bar answer to a finger as well as to a pointer. */}
+            <div className="pointer-events-none absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-white/15 transition-[height] duration-150 ease-out group-hover:h-2 group-active:h-2" />
             {/* Buffered range — deliberately subtle (a slightly lighter track, not a bold
                 second color): its only job is "can I scrub ahead without waiting", not
                 competing for attention with the actual playback position. Sits under the
@@ -1317,7 +1336,7 @@ export function PlayerControls({
                 portion — exactly the part worth showing. */}
             {duration > 0 && bufferedEnd > 0 && (
               <div
-                className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-2"
+                className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-2 group-active:h-2"
                 // Both pointer-events-none (blocks click/drag) AND the two -webkit- properties
                 // (blocks the native long-press "Look Up / Copy / Writing Tools" callout menu,
                 // which iOS can still trigger on an element even with pointer-events: none —
@@ -1338,7 +1357,7 @@ export function PlayerControls({
               chapters.map((ch, i) => (
                 <div
                   key={i}
-                  className="pointer-events-none absolute top-1/2 h-1 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-150 ease-out group-hover:h-2"
+                  className="pointer-events-none absolute top-1/2 h-1 w-px -translate-y-1/2 bg-black/50 transition-[height] duration-150 ease-out group-hover:h-2 group-active:h-2"
                   style={{ left: `${(ch.start / duration) * 100}%`, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
                 />
               ))}
@@ -1455,8 +1474,12 @@ export function PlayerControls({
               // default margin in some engines' UA stylesheets that isn't reset by Tailwind's
               // own base styles — left in place, that margin would throw off centering the
               // buffered/chapter overlays on this taller box (see their top-1/2 above).
-              className="player-seek m-0 block h-5 w-full cursor-pointer text-accent-500 accent-accent-500"
-              style={{ WebkitTouchCallout: "none" }}
+              className="player-seek relative m-0 block h-5 w-full cursor-pointer text-accent-500"
+              style={{
+                // La part lue, que la piste native ne peut plus peindre elle-même.
+                ["--played" as string]: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%`,
+                WebkitTouchCallout: "none",
+              }}
             />
           </div>
           <div className="flex items-center gap-3 text-xs text-white/80">

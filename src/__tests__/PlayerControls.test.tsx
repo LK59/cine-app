@@ -62,6 +62,39 @@ function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
 
+describe("PlayerControls — le volume", () => {
+  const asIphone = () => {
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15",
+      configurable: true,
+    });
+  };
+  const asDesktop = () => {
+    Object.defineProperty(navigator, "userAgent", { value: "Mozilla/5.0 (X11; Linux x86_64)", configurable: true });
+    Object.defineProperty(navigator, "platform", { value: "Linux x86_64", configurable: true });
+  };
+
+  it("retire le curseur là où la plateforme ne le laisse pas agir", async () => {
+    // iOS *stores* the value written to video.volume and hands it back unchanged while ignoring
+    // it for output, so trying it and reading it back answers yes every time — and the control
+    // stayed on screen behaving as a mute switch with nothing in between.
+    asIphone();
+    stubMediaFetches();
+    render(<Harness />);
+    await act(async () => {});
+    expect(screen.queryByLabelText("player.volume")).toBeNull();
+    asDesktop();
+  });
+
+  it("le garde partout où il fonctionne", async () => {
+    asDesktop();
+    stubMediaFetches();
+    render(<Harness />);
+    await act(async () => {});
+    expect(screen.queryByLabelText("player.volume")).not.toBeNull();
+  });
+});
+
 describe("PlayerControls — un seul matériau", () => {
   it("habille les boutons et les panneaux de la même surface", async () => {
     // Three surface systems used to sit on the same screen — a white-translucent cluster,

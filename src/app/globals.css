@@ -379,16 +379,36 @@
 
 /* ─── La barre de progression ─────────────────────────────────────────────────
    L'élément le plus regardé et le plus touché d'un lecteur, et c'était quatre
-   pixels avec une pastille permanente. Elle s'épaissit sous le doigt, et la
-   pastille n'apparaît qu'à ce moment-là : au repos, une ligne propre.
+   pixels avec une pastille permanente.
 
-   Les couleurs restent à `accent-color`, qui remplit la partie lue toute seule —
-   les régler ici voudrait dire les reproduire, et deux sources de vérité pour la
-   même couleur finissent toujours par diverger. */
+   Elle est peinte entièrement ici. `accent-color` remplissait la partie lue
+   toute seule, ce qui était commode — mais il exclut `appearance: none`, sans
+   lequel WebKit ignore purement et simplement toute hauteur de piste demandée :
+   la barre ne s'épaississait donc pas, et sur iOS elle ne le pouvait pas non
+   plus faute de survol. La partie lue est maintenant un dégradé piloté par une
+   variable, et la barre réagit au doigt comme au curseur.
+
+   Trois couches empilées, qui grandissent ensemble : le rail au repos, ce qui
+   est déjà chargé, puis ce qui est lu. */
+
+.player-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  /* iOS propose sa loupe et ses « outils d'écriture » sur un appui long, même
+     ici, où il n'y a pas un caractère à sélectionner. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+.player-seek:focus { outline: none; }
+.player-seek:focus-visible { outline: 2px solid rgb(255 255 255 / 0.6); outline-offset: 4px; border-radius: 999px; }
 
 .player-seek::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
+  background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
   transition: height 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .player-seek:hover::-webkit-slider-runnable-track,
@@ -417,17 +437,25 @@
   margin-top: -3px;
 }
 
-.player-seek::-moz-range-track { height: 4px; border-radius: 999px; transition: height 140ms ease-out; }
-.player-seek:hover::-moz-range-track { height: 8px; }
+.player-seek::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
+  transition: height 140ms ease-out;
+}
+.player-seek:hover::-moz-range-track,
+.player-seek:active::-moz-range-track { height: 8px; }
 .player-seek::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border: none;
   border-radius: 999px;
+  background: currentColor;
   opacity: 0;
   transition: opacity 140ms ease-out;
 }
-.player-seek:hover::-moz-range-thumb { opacity: 1; }
+.player-seek:hover::-moz-range-thumb,
+.player-seek:active::-moz-range-thumb { opacity: 1; }
 
 /* ─── L'attente, pendant la lecture ───────────────────────────────────────────
    Une roue au centre de l'écran dit « bloqué ». Un fil qui court en haut dit

@@ -290,6 +290,7 @@ export class MseSource {
     this.video.addEventListener("pause", this.guard.paused);
     this.video.addEventListener("play", this.onPlay);
     this.video.addEventListener("playing", this.request);
+    this.video.addEventListener("playing", this.onResumed);
     this.lastAppendAt = Date.now();
     this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
 
@@ -311,13 +312,22 @@ export class MseSource {
     void this.fill();
   };
 
-  private readonly onPlay = () => {
-    // A resume is movement. Without this the frozen-clock check could be part-way through its
-    // count when playback started again, and push the playhead of an element that had just been
-    // given back to the viewer — which is both wrong and exactly what the pause machinery above
-    // spends its time getting right.
+  /**
+   * A clock is only frozen relative to the last time the element said it was running.
+   *
+   * Both events reset it, and both matter: `play` is fired the moment playback is *asked* for,
+   * `playing` when it actually gets going, and between the two sits the whole of the resume
+   * machinery putting the position back where the viewer left it. Counting through that window
+   * meant the frozen-clock check could push the playhead of an element that had just been handed
+   * back — which is precisely what that machinery spends its time getting right.
+   */
+  private readonly onResumed = () => {
     this.frozenSince = null;
     this.lastClockAt = -1;
+  };
+
+  private readonly onPlay = () => {
+    this.onResumed();
     this.guard.playing();
     void this.fill();
   };
@@ -1061,6 +1071,7 @@ export class MseSource {
     this.video.removeEventListener("pause", this.guard.paused);
     this.video.removeEventListener("play", this.onPlay);
     this.video.removeEventListener("playing", this.request);
+    this.video.removeEventListener("playing", this.onResumed);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
     this.video.removeEventListener("error", this.onElementError);
