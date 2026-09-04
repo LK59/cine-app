@@ -171,13 +171,20 @@ export class HttpByteSource implements ByteSource {
   // first because it costs nothing; some proxies answer it without Content-Length, in which case
   // a one-byte ranged GET gets the total out of Content-Range instead.
   static async open(url: string): Promise<HttpByteSource> {
-    const head = await fetch(url, { method: "HEAD" });
+    // Named for what it is. A file that cannot be opened because there is no network is not a
+    // file this player cannot play, and handing it to a player needing the same network is the
+    // one answer that helps nobody.
+    const head = await fetch(url, { method: "HEAD" }).catch((cause: unknown) => {
+      throw new NetworkUnavailable(cause instanceof Error ? cause.message : "réseau indisponible");
+    });
     const headLength = Number(head.headers.get("Content-Length"));
     if (head.ok && Number.isFinite(headLength) && headLength > 0) {
       return HttpByteSource.warmed(url, headLength);
     }
 
-    const probe = await fetch(url, { headers: { Range: "bytes=0-0" } });
+    const probe = await fetch(url, { headers: { Range: "bytes=0-0" } }).catch((cause: unknown) => {
+      throw new NetworkUnavailable(cause instanceof Error ? cause.message : "réseau indisponible");
+    });
     const contentRange = probe.headers.get("Content-Range");
     const total = contentRange ? Number(contentRange.split("/")[1]) : NaN;
     if (!Number.isFinite(total) || total <= 0) {

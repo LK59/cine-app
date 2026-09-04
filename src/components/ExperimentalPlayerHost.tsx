@@ -17,6 +17,7 @@ import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade"
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { describePath } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
+import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -819,7 +820,15 @@ export function ExperimentalPlayerHost({
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        fallToStable(cause instanceof Error ? cause.message : "Le fichier n'a pas pu être ouvert.");
+        const message = cause instanceof Error ? cause.message : "Le fichier n'a pas pu être ouvert.";
+        // A file that could not even be opened because there is no network is not a file this
+        // player cannot play. It gets the waiting screen, like a cut that happens mid-film.
+        if (isNetworkFailure(cause)) {
+          trace(`réseau : ouverture impossible — ${message}`);
+          setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
+          return;
+        }
+        fallToStable(message);
       });
 
     return () => {
@@ -896,13 +905,17 @@ export function ExperimentalPlayerHost({
   // changes, so there is nothing to react to. On a timer rather than derived from the clock, so
   // stepping aside happens on its own account and not in the middle of a render.
   useEffect(() => {
-    if (ready || runtimeError) return;
+    // Never while waiting on the network. The whole point of that screen is that the film is not
+    // lost and nothing about this file or this browser is wrong; giving up into the stable
+    // player — which needs the very same network — would abandon hardware decoding for a reason
+    // that has nothing to do with it, and after thirty-five seconds of an outage, silently.
+    if (ready || runtimeError || networkLost) return;
     const id = setTimeout(
       () => fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`),
       Math.max(0, openedAt + GIVE_UP_AFTER_MS - Date.now())
     );
     return () => clearTimeout(id);
-  }, [ready, runtimeError, openedAt, fallToStable]);
+  }, [ready, runtimeError, networkLost, openedAt, fallToStable]);
 
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant

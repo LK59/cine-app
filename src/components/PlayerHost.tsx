@@ -326,6 +326,12 @@ function ActivePlayer({
       let video = videoRef.current;
       if (!video) return;
 
+      // Dropped before the request that will replace it. Advancing to the next episode keeps
+      // this component mounted, so the previous episode's name stayed across the top until the
+      // server answered — and what the caller passed, which is already the right episode, was
+      // sitting behind it unused.
+      setServerTitle(null);
+
       // Per-browser learned exclusions (see AUDIO_FALLBACK_RUNGS) merged with this call's own —
       // so a codec this device already proved it can't play is excluded from the very first
       // negotiation, not rediscovered through a failure on every playback.

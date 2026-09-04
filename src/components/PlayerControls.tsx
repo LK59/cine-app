@@ -91,6 +91,8 @@ export function PlayerControls({
   const [buffering, setBuffering] = useState(false);
   /** Pending "this seek is taking long enough to say so". */
   const seekSpinner = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The element whose volume has already been probed, so it is probed once and not per render. */
+  const probedVolumeOn = useRef<HTMLVideoElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -194,7 +196,11 @@ export function PlayerControls({
     setSpeed(video.playbackRate || 1);
 
     // Asked by trying, and put back immediately: a platform that ignores the write is a platform
-    // where this control is furniture.
+    // where this control is furniture. Once per element, not once per render — on the canvas
+    // path this ref is a fresh object every time, so the effect runs constantly and this would
+    // be poking the gain node twice for each of them.
+    if (probedVolumeOn.current === video) return;
+    probedVolumeOn.current = video;
     const before = video.volume;
     let settable = false;
     try {

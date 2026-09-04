@@ -25,8 +25,14 @@ const TARGET_BUFFER_SECONDS = 30;
 /** How long a clock may stand still, while playing with media ahead of it, before it is pushed. */
 const FROZEN_CLOCK_MS = 1500;
 
-/** How far it is pushed — inside the media rather than onto its edge, which is what froze it. */
-const FROZEN_STEP = 0.05;
+/**
+ * How far it is pushed — inside the media rather than onto its edge, which is what froze it.
+ *
+ * Deliberately larger than the movement threshold above: a step exactly the size of it reads as
+ * not having moved on the next tick, so a clock that had just been unstuck was still counted as
+ * frozen and pushed again.
+ */
+const FROZEN_STEP = 0.08;
 
 /** And how many times, before leaving an element alone with whatever it is doing. */
 const MAX_FROZEN_NUDGES = 3;
@@ -826,8 +832,11 @@ export class MseSource {
     if (this.destroyed || this.ended || !this.videoBuffer || this.video.paused) return;
 
     const now = this.video.currentTime;
-    // On media, or a seek already on its way to it: nothing to do.
-    if (this.isBufferedAt(now) || this.requestedSeek !== null) return this.watchForFrozenClock(now);
+    // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
+    // would be this player seeking against itself.
+    if (this.requestedSeek !== null) return;
+    // On media: the only stall left is a clock that has stopped anyway, which is its own check.
+    if (this.isBufferedAt(now)) return this.watchForFrozenClock(now);
 
     // A read is in progress, so media is on its way; whether it is on its way to the right place
     // is the read loop's own business, and it checks. Waiting on a clock instead would mean

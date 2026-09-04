@@ -299,6 +299,32 @@ describe("une coupure réseau", () => {
     expect(probes[1].startSeconds).toBeCloseTo(3725, 1);
   });
 
+  it("montre l'écran d'attente quand le fichier ne s'ouvre même pas, faute de réseau", async () => {
+    // A file that could not be opened because there is no network is not a file this player
+    // cannot play.
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    const offline = Object.assign(new Error("Failed to fetch"), { network: true });
+    nextProbe = () => {
+      throw offline;
+    };
+    // Faked from before the player exists, so the give-up timer below is one of the timers
+    // being advanced rather than a real one left running beside them.
+    vi.useFakeTimers();
+    mount();
+    await act(async () => {});
+
+    expect(screen.getByText("Connexion perdue")).toBeTruthy();
+    expect(onFallback).not.toHaveBeenCalled();
+
+    // And it keeps waiting. The give-up timer had no idea the network was out, so an outage
+    // lasting more than thirty-five seconds handed the film to the player that needs the very
+    // same network — silently, and against the whole point of this screen.
+    await act(async () => void vi.advanceTimersByTime(60_000));
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(screen.getByText("Connexion perdue")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
   it("repart tout seul quand le réseau revient, sans rien demander", async () => {
     vi.useFakeTimers();
     Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
