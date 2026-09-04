@@ -61,6 +61,8 @@ export function CinemaSeriesDetail({
 }) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
+  /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
+  const userMovedFocus = useRef(false);
   const [showTrailer, setShowTrailer] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
   // this sheet instead of leaving the mode (see lib/cinemaRoute).
@@ -92,11 +94,10 @@ export function CinemaSeriesDetail({
   // see the doc comment above) resolve, same race this fixed on the movie side: landing before
   // either does otherwise freezes focus on whatever row happened to be first at that moment.
   useEffect(() => {
-    // Après peinture, et seulement si personne n'a déjà pris le clavier — voir la fiche film.
+    // Tant que le spectateur n'a pas bougé lui-même — voir la fiche film pour le détail.
     const frame = requestAnimationFrame(() => {
-      const menu = containerRef.current;
-      if (!menu || menu.contains(document.activeElement)) return;
-      menu.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+      if (userMovedFocus.current) return;
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode]);
@@ -128,6 +129,7 @@ export function CinemaSeriesDetail({
       if (similarRowKeyNav(e, containerRef.current)) return;
 
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      userMovedFocus.current = true;
       const rows = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>("[data-detail-menu]") ?? []);
       if (rows.length === 0) return;
       e.preventDefault();

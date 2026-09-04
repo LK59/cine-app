@@ -58,6 +58,8 @@ export function CinemaMovieDetail({
 }) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
+  /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
+  const userMovedFocus = useRef(false);
   const [showTrailer, setShowTrailer] = useState(false);
   const { data: info } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   // CinemaMovie (the /api/cinema/movies payload) carries no per-user watch progress at all
@@ -99,14 +101,19 @@ export function CinemaMovieDetail({
   // row is now actually first, catching that race instead of freezing on its initial guess.
   const playerEnabled = usePlayerEnabled();
   useEffect(() => {
-    // Après peinture, et seulement si personne n'a déjà pris le clavier : le premier passage a
-    // lieu avant que `usePlayerEnabled` ait répondu, donc avant que la ligne de lecture existe,
-    // et l'effet est rejoué. Sans cette garde, ce second passage reprenait le focus à qui était
-    // déjà descendu d'une ou deux lignes entre-temps.
+    /**
+     * Le premier passage a lieu avant que `usePlayerEnabled` ait répondu, donc avant que la
+     * ligne de lecture existe : le focus tombe alors sur « Recommencer » ou « Bande-annonce »,
+     * et l'effet est rejoué pour le rattraper une fois la ligne apparue.
+     *
+     * La garde ne peut donc pas être « quelqu'un a déjà le focus dans le menu » — c'est vrai
+     * précisément dans le cas qu'il s'agit de rattraper, et la correction ne se faisait jamais.
+     * Elle est « quelqu'un a bougé lui-même » : tant que personne n'a touché aux flèches ni
+     * cliqué, la première ligne reste la bonne cible.
+     */
     const frame = requestAnimationFrame(() => {
-      const menu = containerRef.current;
-      if (!menu || menu.contains(document.activeElement)) return;
-      menu.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+      if (userMovedFocus.current) return;
+      containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [playerEnabled, info?.trailerKey]);
@@ -147,6 +154,7 @@ export function CinemaMovieDetail({
       if (similarRowKeyNav(e, containerRef.current)) return;
 
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      userMovedFocus.current = true;
       const rows = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>("[data-detail-menu]") ?? []);
       if (rows.length === 0) return;
       e.preventDefault();
