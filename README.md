@@ -534,6 +534,26 @@ docker compose up -d
 
 Disable again with `PLAYER_ENABLED=false` (or removing the variable) and restarting.
 
+#### The second player: no server work at all
+
+Behind an opt-in setting there is a second playback path that asks the server for
+nothing beyond the file itself - no transcoding, no stream negotiation, no HLS.
+The browser fetches the `.mkv` by byte ranges and everything else happens in the
+tab: the file is repackaged into fragmented MP4 and handed to a real `<video>`,
+so the picture is decoded in hardware and HDR is displayed natively. Where the
+codecs make that impossible it decodes with WebCodecs onto a canvas instead, and
+an `.mp4` is simply handed to the browser untouched.
+
+It is the answer to the paragraph above: the transcoding cost is not reduced, it
+is not incurred. On this library it plays 4K Dolby Vision + HDR10+ HEVC with
+E-AC3 Atmos, on an iPhone, with nothing running on the server.
+
+**[Full technical documentation](src/lib/webcodecs/README.md)** - the three
+paths, how the remuxer reconstructs decode times, what a keyframe really is in
+Matroska (and why trusting the container is the single largest source of crashes
+this player had), how audio is delivered or re-encoded, what the server is still
+told about playback, and every trap that only real files revealed.
+
 ---
 
 ## Security
