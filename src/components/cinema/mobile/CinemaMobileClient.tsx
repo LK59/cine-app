@@ -292,7 +292,7 @@ export function CinemaMobileClient() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={hero.logoUrl} alt={hero.title} className="mx-auto mb-2 max-h-14 w-auto max-w-full object-contain drop-shadow-lg" />
                   ) : (
-                    <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg">{hero.title}</h1>
+                    <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{hero.title}</h1>
                   )}
                   {hero.genres.length > 0 && (
                     <p className="mb-3 text-center text-xs text-white/70">{hero.genres.slice(0, 3).join(" · ")}</p>

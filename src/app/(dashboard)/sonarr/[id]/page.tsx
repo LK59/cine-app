@@ -413,7 +413,7 @@ export default function SonarrSeriesDetailPage() {
             </div>
           </div>
           <div className="min-w-0 flex-1 pb-1">
-            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl">
+            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl font-display">
               {series.title}
               <span className="ml-2 text-base font-normal text-white/60 md:text-lg">({series.year})</span>
             </h1>

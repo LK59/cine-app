@@ -232,7 +232,7 @@ export function CinemaMobileDetail({
             className="mb-3 max-h-16 w-auto max-w-full object-contain object-left drop-shadow-lg"
           />
         ) : (
-          <h1 className="mb-3 text-2xl font-bold leading-tight text-white">{item.title}</h1>
+          <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">

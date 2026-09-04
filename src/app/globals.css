@@ -10,9 +10,15 @@
   --color-accent-600: rgb(var(--accent-600));
   --color-accent-700: rgb(var(--accent-700));
 
+  /* Une ombre, pas une lueur.
+     Une lueur colorée sous chaque carte et chaque bouton primaire est la
+     signature du tableau de bord générique : elle teinte le noir autour d'elle
+     et ajoute une couleur là où il n'y en avait pas à mettre. Ce qu'une carte
+     doit dire, c'est qu'elle est *au-dessus* — et une élévation se dit avec de
+     l'ombre, pas avec de la lumière. */
   --shadow-glow:
-    0 0 0 1px rgb(var(--accent-500) / 0.15),
-    0 8px 24px -8px rgb(var(--accent-500) / 0.25);
+    0 0 0 1px rgb(255 255 255 / 0.06),
+    0 12px 32px -12px rgb(0 0 0 / 0.7);
 
   --animate-fade-in: fade-in 0.25s ease-out both;
   --animate-fade-in-up: fade-in-up 0.35s ease-out both;
@@ -195,12 +201,22 @@
   }
 }
 
+/**
+ * Les titres. Appliqué à la main plutôt qu'à `h1, h2` : une balise dit la structure du document,
+ * pas la place d'un texte à l'écran — et la moitié des `h2` de cette app sont des libellés de
+ * carte, qui doivent rester en Inter.
+ */
+@utility font-display {
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
 @utility card {
-  @apply rounded-xl border border-white/10 bg-slate-900/28 backdrop-blur-xl shadow-glow;
+  @apply rounded-xl border border-white/8 bg-white/4 backdrop-blur-xl shadow-glow;
 }
 
 @utility glass-panel {
-  @apply border border-white/10 bg-slate-950/45 backdrop-blur-2xl;
+  @apply border border-white/10 bg-[#0a0a0c]/72 backdrop-blur-2xl;
 }
 
 /**
@@ -440,12 +456,18 @@
 
   body {
     @apply text-slate-100 antialiased;
-    background-color: #020617;
-    background-image:
-      radial-gradient(circle at 15% 0%, rgba(124, 92, 255, 0.16), transparent 45%),
-      radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.1), transparent 40%),
-      radial-gradient(circle at 50% 100%, rgba(124, 92, 255, 0.08), transparent 50%);
-    background-attachment: fixed;
+    /* ─── Le noir d'une salle, pas le bleu d'un tableau de bord ────────────────
+       Ici, le contenu ce sont des affiches : des images déjà saturées,
+       contrastées, dirigées par des professionnels. Elles n'ont besoin d'aucune
+       aide — elles ont besoin qu'on leur fiche la paix. Le fond précédent leur
+       faisait concurrence : un noir bleuté (slate-950) et trois halos radiaux,
+       violet et bleu, par-dessus lesquels une affiche de Peaky Blinders doit se
+       défendre.
+
+       Un noir neutre à peine tiède. Il ne se voit pas, c'est tout son travail :
+       ce qui se voit, c'est ce qu'il y a dessus. */
+    background-color: #0a0a0c;
+    background-image: none;
     overscroll-behavior-y: contain;
   }
 }

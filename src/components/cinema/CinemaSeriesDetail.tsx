@@ -235,7 +235,7 @@ export function CinemaSeriesDetail({
               className="max-h-20 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-28"
             />
           ) : (
-            <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">{item.title}</h1>
+            <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
           )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">

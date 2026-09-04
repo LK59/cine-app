@@ -224,7 +224,7 @@ function TimelineSection({ items }: { items: NonNullable<import("@/lib/vip-perso
     <section className="mb-16">
       <div className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Parcours</p>
-        <h2 className="mt-2 text-3xl font-bold text-white">Carrière</h2>
+        <h2 className="mt-2 text-3xl font-bold text-white font-display">Carrière</h2>
       </div>
       <div className="relative ml-4 border-l border-white/10 pl-8 sm:ml-8 sm:pl-10">
         {items.map((item, i) => (
@@ -254,12 +254,12 @@ function QuotesSection({ quotes }: { quotes: NonNullable<import("@/lib/vip-perso
     <section className="mb-16">
       <div className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">En sus palabras</p>
-        <h2 className="mt-2 text-3xl font-bold text-white">Citas</h2>
+        <h2 className="mt-2 text-3xl font-bold text-white font-display">Citas</h2>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         {quotes.map((q, i) => (
           <blockquote key={i} className="relative rounded-2xl border border-white/10 bg-white/4 p-6">
-            <span className="absolute -top-3 left-5 font-serif text-5xl leading-none text-amber-300/40 select-none">&ldquo;</span>
+            <span className="absolute -top-3 left-5 font-serif text-5xl leading-none text-amber-300/40 select-none font-display">&ldquo;</span>
             <p className="relative text-sm italic leading-8 text-slate-200/85 sm:text-base">{q.text}</p>
             {q.context && <footer className="mt-4 text-xs text-white/35">— {q.context}</footer>}
           </blockquote>
@@ -321,7 +321,7 @@ function NewsSection() {
     <section className="mb-10">
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Presse</p>
-        <h2 className="mt-2 text-3xl font-bold text-white">Actualités</h2>
+        <h2 className="mt-2 text-3xl font-bold text-white font-display">Actualités</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {articles.map((a, i) => {
@@ -423,7 +423,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
 
         <div className="mx-auto grid min-h-[680px] max-w-[1720px] grid-cols-1 items-end gap-8 px-4 pb-10 pt-24 sm:min-h-[720px] sm:px-6 lg:min-h-[800px] lg:grid-cols-[minmax(0,1fr)_500px] lg:px-10 lg:pb-16 lg:pt-24 2xl:grid-cols-[minmax(0,1fr)_560px] 2xl:px-14">
           <div className="max-w-4xl">
-            <h1 className="text-5xl font-black leading-[0.92] tracking-normal text-white drop-shadow-2xl sm:text-7xl lg:text-8xl">
+            <h1 className="text-5xl font-black leading-[0.92] tracking-normal text-white drop-shadow-2xl sm:text-7xl lg:text-8xl font-display">
               Clara<br />Galle
             </h1>
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-white/70">
@@ -442,15 +442,15 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
             </p>
             <div className="mt-8 grid grid-cols-3 gap-2 sm:max-w-xl sm:gap-3">
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                <p className="text-2xl font-bold text-white">{files.length}</p>
+                <p className="text-2xl font-bold text-white font-display">{files.length}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.18em] text-white/50">photos</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                <p className="text-2xl font-bold text-white">{movies.length}</p>
+                <p className="text-2xl font-bold text-white font-display">{movies.length}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.18em] text-white/50">films</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                <p className="text-2xl font-bold text-white">{tvShows.length}</p>
+                <p className="text-2xl font-bold text-white font-display">{tvShows.length}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.18em] text-white/50">series</p>
               </div>
             </div>
@@ -503,7 +503,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/80">Portrait</p>
-                <h2 className="mt-2 text-2xl font-bold text-white">Biographie</h2>
+                <h2 className="mt-2 text-2xl font-bold text-white font-display">Biographie</h2>
               </div>
               <div className="grid grid-cols-3 rounded-full border border-white/10 bg-black/20 p-1">
                 {(["fr", "es", "en"] as Lang[]).map((l) => (
@@ -582,7 +582,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Galerie</p>
-                <h2 className="mt-2 text-3xl font-bold text-white">Galería</h2>
+                <h2 className="mt-2 text-3xl font-bold text-white font-display">Galería</h2>
 
               </div>
               <p className="text-sm font-medium text-white/50">{visibleFiles.length} / {files.length} visibles</p>
@@ -633,7 +633,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           <section className="mb-10">
             <div className="mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">TMDb</p>
-              <h2 className="mt-1 text-2xl font-bold text-white">Photos</h2>
+              <h2 className="mt-1 text-2xl font-bold text-white font-display">Photos</h2>
             </div>
             <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory">
               {tmdbPhotos.map((photo, i) => (
@@ -690,7 +690,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           <section className="mb-16">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Médias</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Interviews & Vidéos</h2>
+              <h2 className="mt-2 text-3xl font-bold text-white font-display">Interviews & Vidéos</h2>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {vip.videos.map((v) => <VideoCard key={v.id} videoId={v.id} title={v.title} />)}
@@ -812,7 +812,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <h1 className="mb-1 text-2xl font-bold text-white">{data.name}</h1>
+          <h1 className="mb-1 text-2xl font-bold text-white font-display">{data.name}</h1>
           <div className="mb-3 flex flex-wrap gap-3 text-sm text-slate-400">
             {data.knownFor && (
               <span className="flex items-center gap-1.5">

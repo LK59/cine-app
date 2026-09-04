@@ -1155,7 +1155,7 @@ export function ExperimentalPlayerHost({
       {subtitle && !isMini && (
         <div className="pointer-events-none absolute inset-x-0 bottom-24 z-10 flex justify-center px-8">
           <p
-            className="max-w-4xl whitespace-pre-line text-center text-lg font-medium leading-snug text-white sm:text-2xl"
+            className="max-w-4xl whitespace-pre-line text-center text-lg font-medium leading-snug text-white sm:text-2xl font-display"
             // Drawn with a shadow rather than a box: a background plate is heavier over a moving
             // picture, and this is what every player converges on.
             style={{ textShadow: "0 2px 6px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,1)" }}

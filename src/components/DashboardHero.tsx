@@ -103,7 +103,7 @@ export function DashboardHero({ items }: { items: HeroItem[] }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={item.logoUrl} alt={item.title} className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24" />
           ) : (
-            <h2 className="text-2xl font-bold leading-tight text-white drop-shadow-sm sm:text-3xl md:text-4xl">{item.title}</h2>
+            <h2 className="text-2xl font-bold leading-tight text-white drop-shadow-sm sm:text-3xl md:text-4xl font-display">{item.title}</h2>
           )}
         </Link>
 

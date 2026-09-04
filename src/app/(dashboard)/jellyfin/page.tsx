@@ -231,7 +231,7 @@ export default function JellyfinPage() {
                     <Film size={24} />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-white">{playback.counts.moviesPlayed}</p>
+                    <p className="text-2xl font-bold text-white font-display">{playback.counts.moviesPlayed}</p>
                     <p className="text-xs text-slate-500">{t('jellyfin.moviesWatched')}</p>
                   </div>
                 </div>
@@ -240,7 +240,7 @@ export default function JellyfinPage() {
                     <Tv size={24} />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-white">{playback.counts.episodesPlayed}</p>
+                    <p className="text-2xl font-bold text-white font-display">{playback.counts.episodesPlayed}</p>
                     <p className="text-xs text-slate-500">{t('jellyfin.episodesWatched')}</p>
                   </div>
                 </div>

@@ -331,7 +331,7 @@ export default function RadarrMovieDetailPage() {
             </div>
           </div>
           <div className="min-w-0 flex-1 pb-1">
-            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl">
+            <h1 className="mb-1 text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl md:text-3xl font-display">
               {movie.title}
               <span className="ml-2 text-base font-normal text-white/60 md:text-lg">({movie.year})</span>
             </h1>

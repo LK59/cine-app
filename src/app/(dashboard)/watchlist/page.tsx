@@ -696,15 +696,15 @@ export default function WatchlistPage() {
       {allItems.length > 0 && (
         <div className="mb-6 grid grid-cols-3 gap-3">
           <div className="rounded-xl border border-white/5 bg-slate-900/80 p-3 sm:p-4">
-            <p className="text-2xl font-bold text-white">{allItems.length}</p>
+            <p className="text-2xl font-bold text-white font-display">{allItems.length}</p>
             <p className="mt-0.5 text-xs text-slate-500">{t('watchlist.stats.total')}</p>
           </div>
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 sm:p-4">
-            <p className="text-2xl font-bold text-emerald-400">{availableCount}</p>
+            <p className="text-2xl font-bold text-emerald-400 font-display">{availableCount}</p>
             <p className="mt-0.5 text-xs text-slate-500">{t('watchlist.stats.available')}</p>
           </div>
           <div className="rounded-xl border border-white/5 bg-slate-900/80 p-3 sm:p-4">
-            <p className="text-2xl font-bold text-white">{counts["watched"] ?? 0}</p>
+            <p className="text-2xl font-bold text-white font-display">{counts["watched"] ?? 0}</p>
             <p className="mt-0.5 text-xs text-slate-500">{t('watchlist.stats.watched')}</p>
           </div>
         </div>

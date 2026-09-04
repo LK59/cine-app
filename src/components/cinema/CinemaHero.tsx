@@ -80,7 +80,7 @@ export function CinemaHero({
           className="max-h-16 w-auto max-w-full object-contain drop-shadow-lg sm:max-h-24"
         />
       ) : (
-        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl">{item.title}</h1>
+        <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
