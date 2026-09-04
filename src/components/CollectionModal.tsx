@@ -7,6 +7,7 @@ import { Modal } from "@/components/Modal";
 import { Film, Library, Loader2, ListPlus } from "lucide-react";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 import { useT } from "@/components/TranslationProvider";
 import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -64,11 +65,13 @@ export function CollectionModal({
     if (bulkAdding || missing.length === 0) return;
     setBulkAdding(true);
     try {
-      await Promise.all(
+      // `Promise.all` abandonnait à la première réponse fâcheuse, et `fetch` ne levant pas sur un
+      // 4xx, elle ne venait de toute façon jamais : la saga entière s'annonçait ajoutée même
+      // quand rien ne l'était. On attend maintenant chaque réponse et on compte les refus.
+      const outcomes = await Promise.allSettled(
         missing.map((p) =>
-          fetch("/api/watchlist", {
+          apiAction("/api/watchlist", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               tmdbId: p.tmdbId,
               mediaType: "movie",
@@ -81,9 +84,9 @@ export function CollectionModal({
           })
         )
       );
-      toast.success(t("collection.bulkAddedToast", { n: missing.length }));
-    } catch {
-      toast.error(t("watchlist.addFailed"));
+      const added = outcomes.filter((o) => o.status === "fulfilled").length;
+      if (added > 0) toast.success(t("collection.bulkAddedToast", { n: added }));
+      if (added < missing.length) toast.error(t("watchlist.addFailed"));
     } finally {
       setBulkAdding(false);
     }

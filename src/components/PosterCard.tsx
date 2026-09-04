@@ -13,6 +13,7 @@ import { RequestFlowModal } from "@/components/RequestFlowModal";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useRole } from "@/lib/useRole";
 import { useToast } from "@/components/Toast";
+import { apiAction } from "@/lib/apiAction";
 import { useT } from "@/components/TranslationProvider";
 import type { WatchlistStatus } from "@/lib/db";
 
@@ -79,21 +80,29 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
   // Movies only — series no longer pair an add with an immediate interactive search a user can
   // abandon without picking anything (reported live as leaving a monitored, endlessly-re-searched
   // empty entry). discover/add now adds a movie unmonitored; grabbing a release flips it back.
+  //
+  // `onAdded` n'est volontairement pas prévenu ici, mais à la fermeture de la fenêtre de
+  // recherche. Le parent s'en sert pour reclasser la carte parmi les titres déjà présents,
+  // c'est-à-dire pour la déplacer dans une *autre* grille : React démonte alors cette carte
+  // et en remonte une neuve ailleurs, ce qui emporte son état — dont la fenêtre qu'on vient
+  // d'ouvrir. Depuis la fiche d'un film, « Saga » puis « recherche interactive » ajoutait donc
+  // bien le film à Radarr, mais la fenêtre de recherche disparaissait avant d'être peinte.
   async function doInteractiveSearch(e?: React.MouseEvent) {
     e?.preventDefault(); e?.stopPropagation();
     setAddingSearch(true);
     try {
-      const res = await fetch("/api/discover/add", {
+      const data = (await apiAction("/api/discover/add", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "movie", tmdbId: item.tmdbId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast.error(data.error || t("common.unknown")); return; }
-      if (data.radarrId) {
-        onAdded?.(item.tmdbId);
+      })) as { radarrId?: number } | null;
+      if (data?.radarrId) {
         setReleaseModal({ searchEndpoint: `/api/radarr/movies/${data.radarrId}/releases`, grabEndpoint: `/api/radarr/releases`, mediaId: data.radarrId });
+      } else {
+        // Ajouté sans identifiant exploitable : rien à chercher, mais le parent doit le savoir.
+        onAdded?.(item.tmdbId);
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.unknown"));
     } finally {
       setAddingSearch(false);
     }
@@ -106,17 +115,16 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
     e?.preventDefault(); e?.stopPropagation();
     setAddingSearch(true);
     try {
-      const res = await fetch("/api/discover/add", {
+      const data = (await apiAction("/api/discover/add", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "series", tmdbId: item.tmdbId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast.error(data.error || t("common.unknown")); return; }
-      if (data.sonarrId) {
-        onAdded?.(item.tmdbId);
+      })) as { sonarrId?: number } | null;
+      if (data?.sonarrId) {
         toast.success(t("watchlist.addedToLibrary"));
+        onAdded?.(item.tmdbId);
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.unknown"));
     } finally {
       setAddingSearch(false);
     }
@@ -315,7 +323,10 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
           searchEndpoint={releaseModal.searchEndpoint}
           grabEndpoint={releaseModal.grabEndpoint}
           mediaId={releaseModal.mediaId}
-          onClose={() => setReleaseModal(null)}
+          onClose={() => {
+            setReleaseModal(null);
+            onAdded?.(item.tmdbId);
+          }}
         />
       )}
 
