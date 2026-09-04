@@ -18,9 +18,12 @@ import { isVip, isClaraGalleryEnabled } from "@/lib/vip-persons";
 import type { NewsArticle } from "@/app/api/news/clara/route";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
-import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { Rail } from "@/components/Rail";
 import { selectBio } from "@/lib/format";
 import { InstagramIcon } from "@/components/BrandIcons";
+import { MediaCard } from "@/components/MediaCard";
+import { DetailSkeleton } from "@/components/DetailSkeleton";
+import { RatingBadge } from "@/components/RatingBadge";
 import { apiAction } from "@/lib/apiAction";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
@@ -78,27 +81,18 @@ function CreditCard({ c }: { c: PersonCredit }) {
   }
 
   const content = (
-    <div className="card group flex flex-col overflow-hidden">
-      <div className="relative aspect-2/3 shrink-0 bg-slate-800">
-        {poster ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={poster} alt={c.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            {c.mediaType === "movie" ? <Film size={32} className="text-slate-700" /> : <Tv size={32} className="text-slate-700" />}
-          </div>
-        )}
+    <MediaCard
+      posterUrl={poster}
+      alt={c.title}
+      className="group flex flex-col"
+      overlay={
+        <>
         {c.inLibrary && (
           <div className="absolute right-1.5 top-1.5 rounded-sm bg-emerald-600/90 p-1">
             <BookCheck size={9} className="text-white" />
           </div>
         )}
-        {c.voteAverage > 0 && (
-          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
-            <Star size={8} className="fill-amber-400" />
-            {c.voteAverage.toFixed(1)}
-          </div>
-        )}
+        <RatingBadge value={c.voteAverage} className="absolute bottom-1.5 left-1.5" />
         {!c.inLibrary && (
           <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-slate-900/95 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 gap-1.5">
             <WatchlistButton
@@ -120,13 +114,15 @@ function CreditCard({ c }: { c: PersonCredit }) {
             </button>
           </div>
         )}
-      </div>
+        </>
+      }
+    >
       <div className="flex flex-1 flex-col gap-1 p-2">
         <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{c.title}</p>
         {c.character && <p className="line-clamp-1 text-[11px] text-slate-500 italic">{c.character}</p>}
         {c.year && <p className="text-[11px] text-slate-600">{c.year}</p>}
       </div>
-    </div>
+    </MediaCard>
   );
 
   if (c.libraryHref) return <Link href={c.libraryHref}>{content}</Link>;
@@ -647,7 +643,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">TMDb</p>
               <h2 className="mt-1 text-2xl font-bold text-white font-display">{t('person.photos')}</h2>
             </div>
-            <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory">
+            <Rail>
               {tmdbPhotos.map((photo, i) => (
                 <button
                   key={photo.filePath}
@@ -664,7 +660,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
                   />
                 </button>
               ))}
-            </HorizontalCarousel>
+            </Rail>
           </section>
         )}
 
@@ -951,7 +947,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 export default function PersonPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useSWR<PersonData>(`/api/tmdb/person/${id}`, fetcher);
-  if (isLoading) return <LoadingState label="Chargement de la fiche personne…" />;
+  if (isLoading) return <DetailSkeleton />;
   if (error || !data) return <ErrorState message="Impossible de charger cette fiche." />;
 
   const numId = Number(id);

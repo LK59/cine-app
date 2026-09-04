@@ -5,8 +5,8 @@ import Link from "next/link";
 import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { PageHeader } from "@/components/PageHeader";
-import { LoadingState, ErrorState } from "@/components/StateViews";
-import { Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, RefreshCw, AlertTriangle, type LucideIcon } from "lucide-react";
+import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
+import { BarChart2, Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, RefreshCw, AlertTriangle, type LucideIcon } from "lucide-react";
 import type { LibraryStats } from "@/app/api/stats/library/route";
 import type { PeopleStats } from "@/app/api/stats/people/route";
 import type { StorageStats } from "@/app/api/stats/storage/route";
@@ -416,6 +416,10 @@ export default function StatsPage() {
 
       {isLoading && <LoadingState label={t('stats.loading')} />}
       {libError && <ErrorState message={t('stats.error')} onRetry={() => retryLib()} />}
+      {/* Ni chargement, ni erreur, ni chiffres : la page ne disait rien du tout. */}
+      {!isLoading && !libError && !lib && (
+        <EmptyState icon={<BarChart2 size={24} />} label={t('stats.empty')} hint={t('stats.emptyHint')} />
+      )}
 
       {lib && (
         <>

@@ -28,11 +28,30 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-export function EmptyState({ label }: { label: string }) {
+/**
+ * Rien à montrer — et une phrase pour dire pourquoi.
+ *
+ * Cinq écrans n'en avaient aucun : quand il n'y avait rien, il n'y avait *rien*. Un calendrier
+ * sans sortie à venir ressemblait à un calendrier cassé. `hint` porte la raison, et `action`
+ * la sortie quand il y en a une.
+ */
+export function EmptyState({
+  label,
+  hint,
+  icon,
+  action,
+}: {
+  label: string;
+  hint?: string;
+  icon?: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="card flex flex-col items-center gap-2 p-10 text-sm text-slate-500">
-      <Inbox size={24} />
-      {label}
+    <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
+      <span className="text-slate-600">{icon ?? <Inbox size={24} />}</span>
+      <p className="text-slate-400">{label}</p>
+      {hint && <p className="max-w-sm text-xs leading-5 text-slate-600">{hint}</p>}
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }

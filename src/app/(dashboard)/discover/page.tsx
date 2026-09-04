@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { PosterSkeletonGrid } from "@/components/SkeletonCard";
-import { ErrorState } from "@/components/StateViews";
+import { EmptyState, ErrorState } from "@/components/StateViews";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { Film, Tv, Sparkles, SearchIcon, X } from "lucide-react";
 import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
@@ -107,7 +107,7 @@ function DiscoverGrid({ type }: { type: "movie" | "tv" }) {
       )}
 
       {filtered.length === 0 && (
-        <p className="text-sm text-slate-500">{t('discover.noResultsGenre')}</p>
+        <EmptyState label={t('discover.noResultsGenre')} hint={t('discover.noResultsGenreHint')} />
       )}
 
       <div className="poster-grid">

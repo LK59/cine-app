@@ -12,7 +12,7 @@ import { useRole } from "@/lib/useRole";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
-import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { Rail } from "@/components/Rail";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { useT } from "@/components/TranslationProvider";
 
@@ -219,9 +219,9 @@ export default function JellyfinPage() {
               </div>
               <div>
                 <div className="mb-3 h-4 w-40 rounded-sm bg-slate-800 animate-pulse" />
-                <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                <Rail>
                   <CarouselSkeleton count={5} width="w-32" />
-                </HorizontalCarousel>
+                </Rail>
               </div>
             </div>
           )}
@@ -256,7 +256,7 @@ export default function JellyfinPage() {
                     <Film size={14} className="text-accent-400" />
                     {t('jellyfin.recentMovies')}
                   </h3>
-                  <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+                  <Rail>
                     {playback.recentMovies.map((m) => (
                       <div
                         key={m.id}
@@ -306,7 +306,7 @@ export default function JellyfinPage() {
                       </a>
                       </div>
                     ))}
-                  </HorizontalCarousel>
+                  </Rail>
                 </div>
               )}
 

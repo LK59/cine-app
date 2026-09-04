@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
-import { LoadingState } from "@/components/StateViews";
+import { EmptyState, LoadingState } from "@/components/StateViews";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import type { CalendarEvent } from "@/app/api/calendar/route";
 import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, CirclePlus, X } from "lucide-react";
@@ -423,7 +423,7 @@ export default function CalendarPage() {
       )}
       {!isLoading && view === "list" && (
         monthEvents.length === 0
-          ? <p className="py-12 text-center text-sm text-slate-500">{t('calendar.empty')}</p>
+          ? <EmptyState icon={<CalendarDays size={24} />} label={t('calendar.empty')} hint={t('calendar.emptyHint')} />
           : <ListView events={monthEvents} today={today} dateLocale={dateLocale} />
       )}
     </div>

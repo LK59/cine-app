@@ -131,7 +131,8 @@
     "moreOptions": "Plus d'options",
     "missing": "Manquant",
     "online": "En ligne",
-    "offline": "Hors ligne"
+    "offline": "Hors ligne",
+    "downloaded": "Téléchargé"
   },
   "dashboard": {
     "resumeWatching": "Continuer à regarder",
@@ -579,7 +580,9 @@
       "forecastInsufficientData": "Historique insuffisant pour une prévision — revient dans quelques jours",
       "forecastAdminOnly": "Réservé aux administrateurs",
       "monthlyGrowthLabel": "Go ajoutés par mois (12 derniers mois)"
-    }
+    },
+    "empty": "Aucune statistique à afficher",
+    "emptyHint": "Les chiffres arrivent dès que Radarr, Sonarr et Jellyfin ont répondu au moins une fois."
   },
   "calendar": {
     "pageTitle": "Calendrier",
@@ -616,7 +619,8 @@
     "loading": "Chargement du calendrier…",
     "empty": "Aucun événement ce mois-ci.",
     "prevMonth": "Mois précédent",
-    "nextMonth": "Mois suivant"
+    "nextMonth": "Mois suivant",
+    "emptyHint": "Les sorties suivies par Radarr et Sonarr apparaissent ici dès qu'une date est connue."
   },
   "timeline": {
     "pageTitle": "Activité récente",
@@ -817,7 +821,8 @@
     "viewSheet": "Voir la fiche",
     "request": "Demander",
     "requested": "Demandé ✓",
-    "interactiveSearch": "Recherche interactive"
+    "interactiveSearch": "Recherche interactive",
+    "noResultsGenreHint": "Aucun titre de ce genre dans cette sélection. Essayez un autre genre ou une autre source."
   },
   "settings": {
     "pageTitle": "Paramètres",

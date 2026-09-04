@@ -13,11 +13,12 @@ import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Im
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
+import { MediaCard, CARD_WIDTH } from "@/components/MediaCard";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { DashboardHero } from "@/components/DashboardHero";
 import { RequestButton } from "@/components/RequestButton";
 import { RequestFlowModal } from "@/components/RequestFlowModal";
-import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { Rail } from "@/components/Rail";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLongPress } from "@/hooks/useLongPress";
@@ -85,56 +86,46 @@ function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
   const playLabel =
     item.positionTicks > 0 ? `${t('common.resume')} - ${formatResumeTicks(item.positionTicks)}` : t('common.play');
 
-  // Shared by both the Link and div branches below — kept as a single JSX block rather than a
-  // separate component so the two wrapper cases can't drift out of sync with each other.
-  const cardBody = (
+  const overlay = (
     <>
-      <div className="relative">
-        <PosterImage
-          src={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-          alt={item.name}
-          unoptimized
-        />
-        {item.imdbRating && <ImdbBadge rating={item.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
-        {/* A dark gradient behind the bar guarantees contrast against any poster art —
-            the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
-            Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
-            not just the filled one. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/80 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/25">
-          <div className="h-full bg-accent-500 shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ width: `${item.progress}%` }} />
-        </div>
-      </div>
-      <div className="p-2">
-        <p className="truncate text-xs font-medium text-white">{item.name}</p>
-        {item.subtitle && <p className="truncate text-[11px] text-slate-500">{item.subtitle}</p>}
-        <div className="mt-1.5 flex gap-1">
-          <PlayButton
-            itemId={item.id}
-            title={item.name}
-            resumeTicks={item.positionTicks}
-            runtimeTicks={item.runtimeTicks}
-            variant="icon"
-            iconSize={13}
-            className="rounded-sm bg-accent-600/80 px-2 py-1 text-white hover:bg-accent-600"
-          />
-          {/* A plain <a> here would nest an anchor inside the card's own Link below — browsers
-              auto-close the outer anchor when they hit a nested one, breaking its navigation
-              entirely. A button + window.open() (identical to the ActionSheet's own "Jellyfin"
-              action just below) sidesteps that without changing the visible behavior at all. */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank");
-            }}
-            className="flex-1 rounded-sm bg-accent-600/20 px-2 py-1 text-center text-[11px] text-accent-400 hover:bg-accent-600/30"
-          >
-            Jellyfin
-          </button>
-        </div>
+      {item.imdbRating && <ImdbBadge rating={item.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
+      {/* A dark gradient behind the bar guarantees contrast against any poster art —
+          the previous bar (h-1, bg-black/50) could nearly disappear over a light poster.
+          Track lightened (white/25 vs. black/50) so the unfilled portion reads clearly too,
+          not just the filled one. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/80 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/25">
+        <div className="h-full bg-accent-500 shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ width: `${item.progress}%` }} />
       </div>
     </>
+  );
+
+  const actions = (
+    <div className="flex gap-1 px-2 pb-2">
+      <PlayButton
+        itemId={item.id}
+        title={item.name}
+        resumeTicks={item.positionTicks}
+        runtimeTicks={item.runtimeTicks}
+        variant="icon"
+        iconSize={13}
+        className="btn btn-ghost btn-sm btn-on"
+      />
+      {/* A plain <a> here would nest an anchor inside the card's own Link below — browsers
+          auto-close the outer anchor when they hit a nested one, breaking its navigation
+          entirely. A button + window.open() (identical to the ActionSheet's own "Jellyfin"
+          action just below) sidesteps that without changing the visible behavior at all. */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          window.open(`/api/jellyfin/redirect?itemId=${item.id}`, "_blank");
+        }}
+        className="btn btn-ghost btn-sm btn-on flex-1"
+      >
+        Jellyfin
+      </button>
+    </div>
   );
 
   return (
@@ -143,25 +134,18 @@ function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
           is gone, its destination is now just clicking the card. Only when a Radarr/Sonarr
           mapping actually exists (cinemaHref): a pure-Jellyfin item with no such mapping has
           nowhere else to navigate to and stays a plain, non-navigating div, same as before. */}
-      {item.cinemaHref ? (
-        <Link
-          {...lp}
-          href={item.cinemaHref}
-          data-tv-card
-          data-tv-row="resume"
-          data-tv-col={index}
-          className={`card-solid w-36 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 sm:w-40 touch-manipulation select-none ${TV_NAV_RING}`}
-        >
-          {cardBody}
-        </Link>
-      ) : (
-        <div
-          {...lp}
-          className="card-solid w-36 shrink-0 overflow-hidden sm:w-40 touch-manipulation select-none"
-        >
-          {cardBody}
-        </div>
-      )}
+      <MediaCard
+        href={item.cinemaHref ?? null}
+        posterUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
+        alt={item.name}
+        title={item.name}
+        subtitle={item.subtitle}
+        overlay={overlay}
+        width={CARD_WIDTH.lg}
+        anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "resume", "data-tv-col": index }}
+      >
+        {actions}
+      </MediaCard>
       <ActionSheet
         open={open}
         onClose={() => setOpen(false)}
@@ -184,24 +168,21 @@ function RecentMovieCard({ m, index }: { m: RecentItem; index: number }) {
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link
-        {...lp}
+      <MediaCard
         href={`/radarr/${m.id}`}
-        data-tv-card
-        data-tv-row="recent-movies"
-        data-tv-col={index}
-        className={`card-solid w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
-      >
-        <div className="relative">
-          <PosterImage src={m.posterUrl} alt={m.title} />
-          {m.imdbRating && <ImdbBadge rating={m.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
-          {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
-        </div>
-        <div className="p-2">
-          <p className="truncate text-xs font-medium text-white">{m.title}</p>
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(m.added!, t)}</div>
-        </div>
-      </Link>
+        posterUrl={m.posterUrl}
+        alt={m.title}
+        title={m.title}
+        subtitle={<span className="flex items-center gap-1"><Clock size={9} />{relativeTime(m.added!, t)}</span>}
+        width={CARD_WIDTH.md}
+        anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "recent-movies", "data-tv-col": index }}
+        overlay={
+          <>
+            {m.imdbRating && <ImdbBadge rating={m.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
+            {m.hasFile && <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" title={t('dashboard.downloadedTooltip')} />}
+          </>
+        }
+      />
       <ActionSheet
         open={open}
         onClose={() => setOpen(false)}
@@ -222,23 +203,16 @@ function RecentSeriesCard({ s, index }: { s: RecentItem; index: number }) {
   const lp = useLongPress(() => setOpen(true));
   return (
     <>
-      <Link
-        {...lp}
+      <MediaCard
         href={`/sonarr/${s.id}`}
-        data-tv-card
-        data-tv-row="recent-series"
-        data-tv-col={index}
-        className={`card-solid w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-sky-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
-      >
-        <div className="relative">
-          <PosterImage src={s.posterUrl} alt={s.title} />
-          {s.imdbRating && <ImdbBadge rating={s.imdbRating} className="absolute left-1.5 top-1.5 shadow" />}
-        </div>
-        <div className="p-2">
-          <p className="truncate text-xs font-medium text-white">{s.title}</p>
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><Clock size={9} />{relativeTime(s.added!, t)}</div>
-        </div>
-      </Link>
+        posterUrl={s.posterUrl}
+        alt={s.title}
+        title={s.title}
+        subtitle={<span className="flex items-center gap-1"><Clock size={9} />{relativeTime(s.added!, t)}</span>}
+        width={CARD_WIDTH.md}
+        anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "recent-series", "data-tv-col": index }}
+        overlay={s.imdbRating ? <ImdbBadge rating={s.imdbRating} className="absolute left-1.5 top-1.5 shadow" /> : null}
+      />
       <ActionSheet
         open={open}
         onClose={() => setOpen(false)}
@@ -256,18 +230,18 @@ function SkeletonSection() {
   return (
     <>
       <div className="mb-3 h-4 w-44 rounded-md bg-slate-800 animate-pulse" />
-      <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+      <Rail className="mb-8">
         <CarouselSkeleton count={4} width="w-36" />
-      </HorizontalCarousel>
+      </Rail>
       <div className="mb-3 h-4 w-52 rounded-md bg-slate-800 animate-pulse" />
       <div className="mb-2 h-3 w-10 rounded-sm bg-slate-800 animate-pulse" />
-      <HorizontalCarousel className="mb-5 flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+      <Rail className="mb-5">
         <CarouselSkeleton count={6} width="w-28" />
-      </HorizontalCarousel>
+      </Rail>
       <div className="mb-2 h-3 w-10 rounded-sm bg-slate-800 animate-pulse" />
-      <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+      <Rail className="mb-8">
         <CarouselSkeleton count={6} width="w-28" />
-      </HorizontalCarousel>
+      </Rail>
     </>
   );
 }
@@ -278,9 +252,9 @@ function ResumeSection({ items }: { items: ResumeItem[] }) {
   return (
     <>
       <h2 className="mb-3 text-sm font-semibold text-white">{t('dashboard.resumeWatching')}</h2>
-      <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+      <Rail className="mb-8">
         {items.map((item, i) => <ResumeCard key={item.id} item={item} index={i} />)}
-      </HorizontalCarousel>
+      </Rail>
     </>
   );
 }
@@ -299,9 +273,9 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
               {t('dashboard.seeAll')} <ChevronRight size={13} />
             </Link>
           </div>
-          <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+          <Rail>
             {movies.map((m, i) => <RecentMovieCard key={m.id} m={m} index={i} />)}
-          </HorizontalCarousel>
+          </Rail>
         </div>
       )}
       {series && series.length > 0 && (
@@ -312,9 +286,9 @@ function RecentSection({ movies, series }: { movies: RecentItem[] | null; series
               {t('dashboard.seeAll')} <ChevronRight size={13} />
             </Link>
           </div>
-          <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+          <Rail>
             {series.map((s, i) => <RecentSeriesCard key={s.id} s={s} index={i} />)}
-          </HorizontalCarousel>
+          </Rail>
         </div>
       )}
     </>
@@ -345,15 +319,16 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
   // wish-list entry with nothing downloaded yet has no sheet of its own to open, same fallback
   // as ResumeCard for items without a cinemaHref.
   return href ? (
-    <Link
+    <MediaCard
       href={href}
-      data-tv-card
-      data-tv-row="watchlist"
-      data-tv-col={index}
-      className={`card-solid w-28 shrink-0 overflow-hidden transition-shadow hover:ring-1 hover:ring-accent-500/40 touch-manipulation select-none ${TV_NAV_RING}`}
-    >
-      {body}
-    </Link>
+      posterUrl={poster}
+      alt={item.title}
+      title={item.title}
+      subtitle={item.year}
+      width={CARD_WIDTH.md}
+      anchorProps={{ "data-tv-card": true, "data-tv-row": "watchlist", "data-tv-col": index }}
+      overlay={imdbRating ? <ImdbBadge rating={imdbRating} className="absolute left-1.5 top-1.5 shadow" /> : null}
+    />
   ) : (
     // Not in the library yet — a static, unclickable poster here was dead weight (nothing to
     // open). Desktop keeps the hover overlay (real :hover, plus group-focus-within as the Tab-key
@@ -366,7 +341,7 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
     <>
       <div
         onClick={() => setSheetOpen(true)}
-        className="group card relative w-28 shrink-0 overflow-hidden touch-manipulation select-none"
+        className="group card-solid relative w-28 shrink-0 overflow-hidden touch-manipulation select-none"
       >
         {body}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 backdrop-blur-xs transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
@@ -428,7 +403,7 @@ function WatchlistSection() {
           {t('dashboard.seeAll')} <ChevronRight size={13} />
         </Link>
       </div>
-      <HorizontalCarousel className="mb-8 flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+      <Rail className="mb-8">
         {items.slice(0, 20).map((item, i) => {
           const id = item.mediaType === "movie" ? libMap?.movieMap[item.tmdbId] : libMap?.seriesMap[item.tmdbId];
           const href = id ? (item.mediaType === "movie" ? `/radarr/${id}` : `/sonarr/${id}`) : null;
@@ -442,7 +417,7 @@ function WatchlistSection() {
             />
           );
         })}
-      </HorizontalCarousel>
+      </Rail>
     </>
   );
 }

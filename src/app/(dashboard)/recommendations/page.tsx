@@ -11,7 +11,7 @@ import type { RecommendationGroup, RecommendedMovie } from "@/app/api/recommenda
 import {
   Star, CirclePlus, ExternalLink, Eye, Heart, X, Clock, CircleCheck, BookCheck, Telescope,
 } from "lucide-react";
-import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { Rail } from "@/components/Rail";
 import { CarouselSkeleton } from "@/components/SkeletonCard";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import type { WatchlistStatus } from "@/lib/db";
@@ -290,9 +290,9 @@ function RecommendationRow({ group, statusMap }: { group: RecommendationGroup; s
         <span className="text-xs text-slate-500">{t('recommendations.becauseYouWatched')}</span>
         <span className="text-sm font-semibold text-white">{group.seedTitle}</span>
       </div>
-      <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: "none" }}>
+      <Rail>
         {group.movies.map((m) => <MovieCard key={m.tmdbId} m={m} watchlistStatus={statusMap[`movie:${m.tmdbId}`]} />)}
-      </HorizontalCarousel>
+      </Rail>
     </div>
   );
 }
@@ -323,9 +323,9 @@ export default function RecommendationsPage() {
                 <div className="h-3 w-32 animate-pulse rounded-sm bg-slate-800" />
                 <div className="h-4 w-40 animate-pulse rounded-sm bg-slate-700" />
               </div>
-              <HorizontalCarousel className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+              <Rail>
                 <CarouselSkeleton count={5} width="w-32" />
-              </HorizontalCarousel>
+              </Rail>
             </div>
           ))}
         </div>

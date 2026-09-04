@@ -131,7 +131,8 @@
     "moreOptions": "More options",
     "missing": "Missing",
     "online": "Online",
-    "offline": "Offline"
+    "offline": "Offline",
+    "downloaded": "Downloaded"
   },
   "dashboard": {
     "resumeWatching": "Continue watching",
@@ -579,7 +580,9 @@
       "forecastInsufficientData": "Not enough history for a forecast yet — check back in a few days",
       "forecastAdminOnly": "Admins only",
       "monthlyGrowthLabel": "GB added per month (last 12 months)"
-    }
+    },
+    "empty": "Nothing to show yet",
+    "emptyHint": "The figures arrive once Radarr, Sonarr and Jellyfin have answered at least once."
   },
   "calendar": {
     "pageTitle": "Calendar",
@@ -616,7 +619,8 @@
     "loading": "Loading calendar…",
     "empty": "No events this month.",
     "prevMonth": "Previous month",
-    "nextMonth": "Next month"
+    "nextMonth": "Next month",
+    "emptyHint": "Releases tracked by Radarr and Sonarr show up here as soon as a date is known."
   },
   "timeline": {
     "pageTitle": "Recent activity",
@@ -817,7 +821,8 @@
     "viewSheet": "View details",
     "request": "Request",
     "requested": "Requested ✓",
-    "interactiveSearch": "Interactive search"
+    "interactiveSearch": "Interactive search",
+    "noResultsGenreHint": "No title of that genre in this selection. Try another genre or another source."
   },
   "settings": {
     "pageTitle": "Settings",

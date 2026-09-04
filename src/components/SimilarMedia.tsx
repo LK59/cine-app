@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
-import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { Rail } from "@/components/Rail";
 import { PosterCard, type PosterCardItem } from "@/components/PosterCard";
 import { useT } from "@/components/TranslationProvider";
 import type { SimilarMovie } from "@/app/api/radarr/movies/[id]/similar/route";
@@ -48,13 +48,13 @@ export function SimilarMedia({ apiUrl, type }: Props) {
   return (
     <div className="mt-6">
       <h3 className="mb-3 text-sm font-semibold text-white">{t("similar.title")}</h3>
-      <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+      <Rail>
         {items.map((item) => (
           <div key={item.tmdbId} className="snap-start">
             <PosterCard item={toPosterCardItem(item, type, statusMap[`${type}:${item.tmdbId}`])} mediaType={type} size="carousel" />
           </div>
         ))}
-      </HorizontalCarousel>
+      </Rail>
     </div>
   );
 }

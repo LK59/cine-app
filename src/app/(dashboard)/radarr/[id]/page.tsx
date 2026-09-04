@@ -7,6 +7,7 @@ import useSWR, { useSWRConfig } from "swr";
 import useSWRImmutable from "swr/immutable";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
+import { DetailSkeleton } from "@/components/DetailSkeleton";
 import { Toggle } from "@/components/Toggle";
 import dynamic from "next/dynamic";
 const ReleaseSearchModal = dynamic(() => import("@/components/ReleaseSearchModal").then((m) => m.ReleaseSearchModal), { ssr: false });
@@ -49,7 +50,7 @@ import { useT } from "@/components/TranslationProvider";
 import { apiAction } from "@/lib/apiAction";
 import { TitleLogo } from "@/components/TitleLogo";
 import { WatchlistButton } from "@/components/WatchlistButton";
-import { HorizontalCarousel } from "@/components/HorizontalCarousel";
+import { Rail } from "@/components/Rail";
 import { MediaRatings } from "@/components/MediaRatings";
 import { SimilarMedia } from "@/components/SimilarMedia";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -268,7 +269,7 @@ export default function RadarrMovieDetailPage() {
     }
   }
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <DetailSkeleton />;
   if (error || !movie) return <ErrorState message={error?.message || t('radarr.movieNotFound')} />;
 
   const overview = info?.tmdb?.overview || movie.overview;
@@ -638,7 +639,7 @@ export default function RadarrMovieDetailPage() {
       <div className={activeTab !== "casting" ? "hidden md:block" : ""}>
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
         <Collapsible title={t('radarr.tabCasting')} badge={info.tmdb.cast.length} icon={<Film size={15} className="text-accent-400" />}>
-          <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto p-3 scroll-px-3 snap-x snap-mandatory">
+          <Rail>
             {info.tmdb.cast.map((actor) => {
               const isVip = actor.tmdbId === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
               return (
@@ -662,7 +663,7 @@ export default function RadarrMovieDetailPage() {
                 </button>
               );
             })}
-          </HorizontalCarousel>
+          </Rail>
         </Collapsible>
       )}
 

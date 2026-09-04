@@ -6,6 +6,8 @@ import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { Modal } from "@/components/Modal";
+import { MediaCard } from "@/components/MediaCard";
+import { RatingBadge } from "@/components/RatingBadge";
 import {
   Film, Tv, BookCheck, Plus, Loader2, Star, MapPin, Calendar,
   ExternalLink, Globe, ChevronLeft, ChevronRight, X,
@@ -135,26 +137,21 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
   }
 
   const inner = (
-    <div className="card-solid flex flex-col overflow-hidden transition hover:ring-1 hover:ring-accent-500/40">
-      <div className="relative aspect-2/3 bg-slate-800">
-        {credit.posterPath ? (
-          <Image src={`${TMDB_IMAGE_BASE}/w185${credit.posterPath}`} alt={credit.title} fill sizes="120px" className="object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-slate-600">
-            {credit.mediaType === "movie" ? <Film size={28} /> : <Tv size={28} />}
-          </div>
-        )}
-        {isInLib && (
-          <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-sm bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-xs">
-            <BookCheck size={9} /> {t('modals.actor.libraryBadge')}
-          </div>
-        )}
-        {credit.voteAverage > 0 && (
-          <div className="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 backdrop-blur-xs">
-            <Star size={9} className="fill-amber-400" /> {credit.voteAverage.toFixed(1)}
-          </div>
-        )}
-      </div>
+    <MediaCard
+      posterUrl={credit.posterPath ? `${TMDB_IMAGE_BASE}/w185${credit.posterPath}` : null}
+      alt={credit.title}
+      className="flex flex-col"
+      overlay={
+        <>
+          {isInLib && (
+            <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-sm bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              <BookCheck size={9} /> {t('modals.actor.libraryBadge')}
+            </div>
+          )}
+          <RatingBadge value={credit.voteAverage} className="absolute bottom-1.5 left-1.5" />
+        </>
+      }
+    >
       <div className="flex flex-1 flex-col gap-1.5 p-2">
         <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{credit.title}</p>
         {credit.year && <p className="text-[11px] text-slate-500">{credit.year}</p>}
@@ -167,7 +164,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
           </button>
         )}
       </div>
-    </div>
+    </MediaCard>
   );
 
   if (isInLib && credit.libraryHref) {

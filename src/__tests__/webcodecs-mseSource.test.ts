@@ -850,21 +850,26 @@ describe("MseSource", () => {
     // held plays on, and the clock reports that half-second at the moment of resuming. Nothing
     // was skipped — it was heard while the picture stood still — so pulling it back would replay
     // it and show the wrong frame for a moment.
-    setTime(12.49);
-    (video as unknown as { paused: boolean }).paused = false;
-    video.dispatchEvent(new Event("play"));
-    await flush();
+    // Le temps est figé le temps de la reprise, et lui seul.
+    //
+    // L'horloge de cet élément n'avance jamais toute seule — rien dans une vidéo simulée ne le
+    // fait — donc dès qu'il joue avec du média devant lui, il est indiscernable d'un élément
+    // réellement bloqué : les surveillances de la source ont le droit de le pousser, et sur une
+    // machine chargée elles en ont le temps. Le test devenait alors rouge pour la raison même
+    // qu'il ne teste pas. Avec des minuteurs simulés, aucune d'elles ne se déclenche, et ce qui
+    // reste mesuré est ce qui était visé : la reprise ne recule pas.
+    vi.useFakeTimers();
+    try {
+      setTime(12.49);
+      (video as unknown as { paused: boolean }).paused = false;
+      video.dispatchEvent(new Event("play"));
+      await vi.advanceTimersByTimeAsync(0);
 
-    // A range, not a value. This element's clock never advances on its own — nothing in a fake
-    // video does — so once it is playing with media in front of it, it is indistinguishable from
-    // a genuinely stuck one, and the frozen-clock check is entitled to push it forward eighty
-    // milliseconds at a time. On a fast machine the test is over long before that; on a loaded
-    // one it is not. What is under test is the direction: a resume must not be pulled *back* to
-    // where the pause was. A range says that exactly, where the tolerance said it badly —
-    // eighty milliseconds of nudge is wider than the fifty a precision of 1 allows, so the
-    // loosening did not even cover the case it was written for.
-    expect(video.currentTime).toBeGreaterThanOrEqual(12.49);
-    expect(video.currentTime).toBeLessThan(12.8);
+      expect(video.currentTime).toBeGreaterThanOrEqual(12.49);
+      expect(video.currentTime).toBeLessThan(12.8);
+    } finally {
+      vi.useRealTimers();
+    }
     // The behaviour under test is that the resume is not pulled *back* to where the pause was.
     // Asserting that nothing in the whole source asked for any seek at all made this fail on a
     // loaded machine for a reason that had nothing to do with it — the watchdog doing its job.

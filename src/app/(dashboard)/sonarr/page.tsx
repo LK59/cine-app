@@ -17,6 +17,7 @@ import { prefetchSeriesDetail } from "@/lib/prefetch";
 import { useListKeyNav } from "@/lib/useListKeyNav";
 import { useToast } from "@/components/Toast";
 import { PosterImage } from "@/components/PosterImage";
+import { MediaCard } from "@/components/MediaCard";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
 
@@ -259,24 +260,25 @@ export default function SonarrPage() {
               <div className="poster-grid">
                 {visible.map((show, i) => (
                   <div key={show.id} className="group/card relative [content-visibility:auto] [contain-intrinsic-size:0_320px]">
-                    <Link
+                    <MediaCard
                       href={`/sonarr/${show.id}`}
-                      data-nav-idx={i}
-                      onMouseEnter={() => prefetchSeriesDetail(show.id)}
-                      onFocus={() => prefetchSeriesDetail(show.id)}
-                      className={`card-solid group relative block overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-glow ${navCursor === i ? "ring-2 ring-accent-500" : ""}`}
-                    >
-                      <PosterImage src={poster(show)} alt={show.title} />
-                      {show.tmdbId != null && (
-                        <ImdbBadge rating={ratingsMap?.[ratingKey(show)]} className="absolute left-2 top-2 shadow" />
-                      )}
-                      <div className="p-2">
-                        <p className="truncate text-xs font-medium text-white">{show.title}</p>
-                        <p className="text-xs text-slate-500">
-                          {t('sonarr.episodesCount', { file: show.statistics?.episodeFileCount ?? 0, total: show.statistics?.episodeCount ?? 0 })}
-                        </p>
-                      </div>
-                    </Link>
+                      posterUrl={poster(show)}
+                      alt={show.title}
+                      title={show.title}
+                      subtitle={t('sonarr.episodesCount', { file: show.statistics?.episodeFileCount ?? 0, total: show.statistics?.episodeCount ?? 0 })}
+                      selected={navCursor === i}
+                      className="group"
+                      anchorProps={{
+                        "data-nav-idx": i,
+                        onMouseEnter: () => prefetchSeriesDetail(show.id),
+                        onFocus: () => prefetchSeriesDetail(show.id),
+                      }}
+                      overlay={
+                        show.tmdbId != null
+                          ? <ImdbBadge rating={ratingsMap?.[ratingKey(show)]} className="absolute left-2 top-2 shadow" />
+                          : null
+                      }
+                    />
                     {(show.overview || (show.genres?.length ?? 0) > 0) && (
                       <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-900/95 p-3 opacity-0 shadow-xl backdrop-blur-xs transition-opacity duration-150 group-hover/card:opacity-100 [@media(hover:hover)]:block">
                         <p className="mb-0.5 text-xs font-semibold leading-tight text-white">{show.title}</p>
