@@ -21,16 +21,10 @@ import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
-const MENU_ROW =
-  "flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-white transition-all duration-300 focus-visible:outline-none";
-const MENU_ROW_INACTIVE = "hover:bg-white/10 focus-visible:bg-white/10";
-const MENU_ROW_ACTIVE = "bg-accent-600/25 ring-1 ring-accent-500/50 hover:bg-accent-600/30";
-const MENU_BADGE = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 transition-all duration-300";
-const MENU_BADGE_ACTIVE =
-  "flex h-8 w-8 shrink-0 scale-110 items-center justify-center rounded-full bg-accent-500/30 text-accent-300 transition-all duration-300";
 
 interface SonarrCastMember {
   tmdbId: number;
@@ -97,7 +91,13 @@ export function CinemaSeriesDetail({
   // see the doc comment above) resolve, same race this fixed on the movie side: landing before
   // either does otherwise freezes focus on whatever row happened to be first at that moment.
   useEffect(() => {
-    containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+    // Après peinture, et seulement si personne n'a déjà pris le clavier — voir la fiche film.
+    const frame = requestAnimationFrame(() => {
+      const menu = containerRef.current;
+      if (!menu || menu.contains(document.activeElement)) return;
+      menu.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode]);
 
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so

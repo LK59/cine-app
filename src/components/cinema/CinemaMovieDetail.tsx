@@ -19,20 +19,10 @@ import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
-// A row is "active" (already Vu / déjà dans Ma liste) once toggled — background + ring + accent
-// icon color, not just an icon swap, so the click has an unmistakable visual result. The earlier
-// icon-only version (Plus↔Bookmark, both thin 16px outlines) read as "nothing happened" even
-// though the request had gone through.
-const MENU_ROW =
-  "flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-white transition-all duration-300 focus-visible:outline-none";
-const MENU_ROW_INACTIVE = "hover:bg-white/10 focus-visible:bg-white/10";
-const MENU_ROW_ACTIVE = "bg-accent-600/25 ring-1 ring-accent-500/50 hover:bg-accent-600/30";
-const MENU_BADGE = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 transition-all duration-300";
-const MENU_BADGE_ACTIVE =
-  "flex h-8 w-8 shrink-0 scale-110 items-center justify-center rounded-full bg-accent-500/30 text-accent-300 transition-all duration-300";
 
 interface RadarrCastMember {
   tmdbId: number;
@@ -108,7 +98,16 @@ export function CinemaMovieDetail({
   // row is now actually first, catching that race instead of freezing on its initial guess.
   const playerEnabled = usePlayerEnabled();
   useEffect(() => {
-    containerRef.current?.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+    // Après peinture, et seulement si personne n'a déjà pris le clavier : le premier passage a
+    // lieu avant que `usePlayerEnabled` ait répondu, donc avant que la ligne de lecture existe,
+    // et l'effet est rejoué. Sans cette garde, ce second passage reprenait le focus à qui était
+    // déjà descendu d'une ou deux lignes entre-temps.
+    const frame = requestAnimationFrame(() => {
+      const menu = containerRef.current;
+      if (!menu || menu.contains(document.activeElement)) return;
+      menu.querySelector<HTMLButtonElement>("[data-detail-menu]")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [playerEnabled, info?.trailerKey]);
 
   // Stays open underneath the player instead of closing when Lecture starts, so dismissing the
