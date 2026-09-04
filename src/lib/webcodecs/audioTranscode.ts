@@ -419,17 +419,33 @@ export class AudioTranscoder {
     this.pending.push(frame);
   }
 
+  private closed = false;
+
   private fail(message: string): void {
     this.failure = `Encodage audio interrompu : ${message}`;
   }
 
+  /**
+   * Releases the decoder and the encoder. Safe to call twice.
+   *
+   * The decoder's close was unguarded while the encoder's was: closing an already-closed decoder
+   * throws, and the throw happened *before* the encoder was reached — so a second close, or a
+   * close after the decoder had already failed, leaked an encoder that nothing would ever come
+   * back for. Both are guarded now, and each is only ever asked once.
+   */
   close(): void {
+    if (this.closed) return;
+    this.closed = true;
     void this.generator?.return?.(undefined);
-    this.decoder.close();
+    try {
+      this.decoder.close();
+    } catch {
+      // Already closed by an error it reported earlier.
+    }
     try {
       this.encoder.close();
     } catch {
-      // Already closed by an error it reported earlier.
+      // Likewise.
     }
   }
 }

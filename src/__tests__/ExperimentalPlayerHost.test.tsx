@@ -372,6 +372,25 @@ describe("une source perdue", () => {
     expect(probes[2].startSeconds).toBeCloseTo(112, 1);
   });
 
+  it("rend son budget de reconstructions quand la lecture a tenu entre-temps", async () => {
+    // Three hiccups an hour apart are not the fault the limit exists to stop. Without a window,
+    // a two-hour film exhausted the budget by accident and handed itself over mid-viewing.
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    remux.lost = true;
+
+    for (let hiccup = 0; hiccup < 6; hiccup++) {
+      act(() => probes[probes.length - 1].onError("morte"));
+      await act(async () => {});
+      // Time passes, and the film plays through all of it.
+      vi.setSystemTime(Date.now() + 10 * 60_000);
+    }
+
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(probes.length).toBeGreaterThan(4);
+    vi.useRealTimers();
+  });
+
   it("finit par céder la main plutôt que de reconstruire sans fin", async () => {
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));

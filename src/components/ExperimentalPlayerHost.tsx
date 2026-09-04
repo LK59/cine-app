@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
@@ -62,6 +62,14 @@ const WARNING_MS = 6000;
 
 /** How many times a lost source is rebuilt before the loss is reported as a fault. */
 const MAX_REBUILDS = 3;
+
+/**
+ * And how long a run of them counts as one run.
+ *
+ * A budget that never decays is a budget a long film exhausts by accident: three hiccups an hour
+ * apart are not the fault that limit exists to stop.
+ */
+const REBUILD_WINDOW_MS = 180_000;
 
 /**
  * How far past a position that has already killed the source a rebuild resumes.
@@ -297,6 +305,18 @@ export function ExperimentalPlayerHost({
   // Two of the three paths put a real <video> on screen and are driven through it; only the
   // WebCodecs one paints a canvas and needs the façade in front of it.
   const onElement = path === "remux" || path === "direct";
+  /**
+   * The façade dressed as a ref, kept stable while the façade is.
+   *
+   * Rebuilt inline it was a fresh object on every render, and the controls key their whole
+   * mount-time synchronisation off the identity of this — so that effect ran again for every
+   * render of the player, on the one path where the picture is already being painted frame by
+   * frame in JavaScript.
+   */
+  const facadeRefObject = useMemo(
+    () => ({ current: facade ? asVideoElement(facade) : null }),
+    [facade]
+  );
   useEffect(() => {
     pathRef.current = path;
   }, [path]);
@@ -307,6 +327,24 @@ export function ExperimentalPlayerHost({
   const rebuildAtRef = useRef<number | null>(null);
   // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
   const rebuildsRef = useRef(0);
+  const lastRebuildAtTimeRef = useRef(0);
+  /**
+   * Spends one of the rebuilds a session is allowed, or refuses.
+   *
+   * The budget decays, which it did not: three losses spread across a two-hour film exhausted it
+   * as surely as three in nine seconds, and the fourth — an hour after the third, with everything
+   * having worked in between — handed the film to the stable player mid-viewing. A loss that
+   * keeps happening is a fault; one that happened once, was repaired, and did not come back for
+   * several minutes is not the same fault, and the source below already reasons this way about
+   * its own recoveries.
+   */
+  const spendRebuild = useCallback(() => {
+    if (Date.now() - lastRebuildAtTimeRef.current > REBUILD_WINDOW_MS) rebuildsRef.current = 0;
+    if (rebuildsRef.current >= MAX_REBUILDS) return false;
+    rebuildsRef.current += 1;
+    lastRebuildAtTimeRef.current = Date.now();
+    return true;
+  }, []);
   const lastRebuildAtRef = useRef<number | null>(null);
   /**
    * What the viewer chose, so a restart gives it back to them.
@@ -838,8 +876,7 @@ export function ExperimentalPlayerHost({
         // seek, sometimes at a change of track — and everything that follows is wreckage. The
         // machinery for the sleep case already knows how to come back at the right position, so
         // it is used here too, and only a loss that keeps happening is finally reported.
-        if (remuxRef.current?.lost && rebuildsRef.current < MAX_REBUILDS) {
-          rebuildsRef.current += 1;
+        if (remuxRef.current?.lost && spendRebuild()) {
           const where = remuxRef.current.position || positionRef.current;
           // The same place twice means the media there is what the platform cannot take. Reading
           // it again would fail again, identically — the record shows three rebuilds doing
@@ -905,7 +942,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle]);
+  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle, spendRebuild]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -915,8 +952,7 @@ export function ExperimentalPlayerHost({
     const check = () => {
       const playback = remuxRef.current;
       if (!playback?.lost || rebuildAtRef.current !== null) return;
-      if (rebuildsRef.current >= MAX_REBUILDS) return;
-      rebuildsRef.current += 1;
+      if (!spendRebuild()) return;
       restart(playback.position || positionRef.current, "la plateforme a fermé la source");
     };
     const onVisible = () => {
@@ -926,7 +962,7 @@ export function ExperimentalPlayerHost({
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [path, restart]);
+  }, [path, restart, spendRebuild]);
 
   // Watched only while something is waiting on it: an idle player has no use for the news.
   useEffect(() => {
@@ -1251,7 +1287,7 @@ export function ExperimentalPlayerHost({
           <PlayerControls
             // On the remux path this is a real media element, so seeking, volume and rate are the
             // browser's own; the facade exists only to give the canvas pipeline the same shape.
-            videoRef={onElement ? videoElRef : { current: facade ? asVideoElement(facade) : null }}
+            videoRef={onElement ? videoElRef : facadeRefObject}
             containerRef={containerRef}
             itemId={itemId}
             title={title}

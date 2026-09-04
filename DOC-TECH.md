@@ -225,6 +225,11 @@ qui déplace du média. Elle lui tend une vue étroite d'elle-même
   inverse et rien ne pouvait le voir : en lecture, tête sur le média, 20 s en
   avance, et 0:00 à l'écran. Détecté maintenant, et traité de la même façon —
   on redemande la position, un peu plus loin.
+- **Le budget de reconstructions décroît.** Trois pertes de source espacées d'une
+  heure ne sont pas la panne que la limite existe pour arrêter : au-delà de trois
+  minutes sans incident, le compteur repart de zéro. Sans ça, un film de deux
+  heures épuisait son budget par accident et se cédait au lecteur stable en
+  pleine séance.
 - **Démarrage repris** : une mise en pause qui arrive *avant la première image*
   d'une lecture demandée n'est pas le spectateur qui met en pause, c'est
   l'élément qui renonce. Quand le média arrive enfin, on repose la tête dessus

@@ -472,7 +472,11 @@ export class MseSource {
 
         if (!segment) {
           this.ended = true;
-          if (this.source.readyState === "open") this.source.endOfStream();
+          // Through the queue, for the same reason as the duration above: ending a stream while
+          // a buffer is updating throws, and here the throw would be read as a refused append —
+          // the film would be recovered from, at its own end, instead of simply finishing.
+          if (this.videoOps) await this.videoOps.enqueue(() => this.endStream()).catch(() => this.endStream());
+          else this.endStream();
           break;
         }
 
@@ -480,8 +484,17 @@ export class MseSource {
         // account for it: the media now ends that much later than the file does.
         if (this.delaySeconds === 0) {
           this.delaySeconds = this.remuxer.diagnostics().presentationDelaySeconds;
-          if (this.source.readyState === "open" && this.plan.durationSeconds > 0) {
-            this.source.duration = this.plan.durationSeconds + this.delaySeconds;
+          const duration = this.plan.durationSeconds + this.delaySeconds;
+          // Guarded rather than assumed. Setting a MediaSource's duration throws outright while
+          // any of its buffers is updating, and eviction queues a removal without waiting for
+          // it — so this could land in that window and abort a fill loop that had nothing wrong
+          // with it. What it costs when it fails is the far end of the scrub bar, briefly.
+          if (this.source.readyState === "open" && duration > 0 && Number.isFinite(duration)) {
+            try {
+              this.source.duration = duration;
+            } catch {
+              // Busy. The next segment sets it, and nothing depends on it being set now.
+            }
           }
         }
 
@@ -586,6 +599,15 @@ export class MseSource {
     }
   }
 
+
+  /** Declares the stream over, if it still can be. Never throws. */
+  private endStream(): void {
+    try {
+      if (this.source.readyState === "open") this.source.endOfStream();
+    } catch {
+      // Already ended, or torn down under us.
+    }
+  }
 
   private evict(): void {
     const until = this.video.currentTime - KEEP_BEHIND_SECONDS;

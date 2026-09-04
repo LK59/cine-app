@@ -220,7 +220,22 @@ export class PlaybackEngine {
   private activeCue: SubtitleCue | null = null;
   private subtitleLookup: Map<number, MatroskaTrack> | null = null;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {}
+  constructor(private readonly canvas: HTMLCanvasElement) {
+    // A lost GPU context is the one failure on this path that looks like nothing at all: the
+    // renderer stops painting, the sound plays on, and the picture simply stands still. Nothing
+    // reported it and nothing could recover it — the decoders, the textures and the shader all
+    // died with the context. Said out loud, it becomes an ordinary failure, which this player
+    // already answers by handing the film to the one that does not need a GPU context of its own.
+    this.canvas.addEventListener("webglcontextlost", this.onContextLost);
+  }
+
+  private readonly onContextLost = (event: Event) => {
+    // Default-prevented so the browser will offer a restored context to anything that asks —
+    // this player does not, but refusing the restore outright is a needless one-way door.
+    event.preventDefault();
+    if (this.destroyed) return;
+    this.fail("Le contexte graphique a été perdu (l'appareil a repris la mémoire du GPU).");
+  };
 
   // ── events ────────────────────────────────────────────────────────────────
 
@@ -426,6 +441,7 @@ export class PlaybackEngine {
 
   destroy(): void {
     this.destroyed = true;
+    this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
     this.playing = false;
     if (this.rafHandle !== null) cancelAnimationFrame(this.rafHandle);
     for (const frame of this.frames) frame.close();
