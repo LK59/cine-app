@@ -985,7 +985,12 @@ export function PlayerControls({
         {menu && (
           <div
             ref={menuRef}
-            className="pointer-events-auto absolute w-56 max-h-[60vh] overflow-y-auto overscroll-contain rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
+            /* w-72 rather than w-56: the subtitle offset row asks for a label and three controls
+               side by side, which came to about two hundred and sixty pixels — so it overflowed,
+               and a box that scrolls in one direction scrolls in both, which is where the
+               horizontal bar came from. Wide enough that the row fits and "Taille sous-titres"
+               stops wrapping onto two lines with it. */
+            className="pointer-events-auto absolute w-72 max-h-[60vh] overflow-y-auto overflow-x-hidden overscroll-contain rounded-lg bg-slate-900/95 shadow-2xl ring-1 ring-white/10"
             style={{
               // `bottom` deliberately not set here: an absolutely-positioned element with both
               // `top` and `bottom` stretches to fill the space between them regardless of
@@ -1036,12 +1041,14 @@ export function PlayerControls({
                 )}
                 {subtitleTracks.length > 0 && (
                   <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-2 text-sm text-white">
-                    <span className="flex items-center gap-3">
-                      <Captions size={16} /> {t('player.subtitleSize')}
+                    {/* The label is what gives way — a longer translation wraps rather than
+                        pushing the control out of the box. */}
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Captions size={16} className="shrink-0" /> {t('player.subtitleSize')}
                     </span>
                     <button
                       onClick={cycleSubtitleSize}
-                      className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                      className="shrink-0 rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
                     >
                       {t(`player.${SUBTITLE_SIZES.find((s) => s.value === subtitleSize)?.labelKey ?? "subtitleSizeNormal"}`)}
                     </button>
@@ -1049,10 +1056,10 @@ export function PlayerControls({
                 )}
                 {subtitleTracks.length > 0 && currentSubtitleId !== null && (
                   <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
-                    <span className="flex items-center gap-3">
-                      <Captions size={16} /> {t('player.subtitleOffset')}
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Captions size={16} className="shrink-0" /> {t('player.subtitleOffset')}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() => shiftSubtitles(-0.5)}
                         className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"

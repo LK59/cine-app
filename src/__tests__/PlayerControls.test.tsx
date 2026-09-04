@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, act, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef, type RefObject } from "react";
 
@@ -61,6 +61,26 @@ function Harness(props: Partial<React.ComponentProps<typeof PlayerControls>> & {
 function stubMediaFetches() {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
 }
+
+describe("PlayerControls — le menu", () => {
+  it("ne défile jamais horizontalement, quelle que soit la longueur des libellés", async () => {
+    // The subtitle offset row asks for a label and three controls side by side; too narrow a box
+    // overflowed, and a box that scrolls in one direction scrolls in both — which is how a
+    // horizontal bar turned up under a menu nobody had asked to scroll.
+    stubMediaFetches();
+    const { container } = render(
+      <Harness subtitleTracks={[{ id: 1, label: "Français" }]} currentSubtitleId={1} />
+    );
+    await act(async () => {});
+
+    const more = container.querySelector('[data-player-nav="more"]') ?? screen.getAllByRole("button").at(-1)!;
+    await act(async () => void fireEvent.click(more));
+
+    const menu = container.querySelector(".max-h-\\[60vh\\]");
+    expect(menu).not.toBeNull();
+    expect(menu!.className).toContain("overflow-x-hidden");
+  });
+});
 
 describe("PlayerControls — l'attente d'un saut", () => {
   /** The spinner and the centre buttons are exclusive: one replaces the other. */
