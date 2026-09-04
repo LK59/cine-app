@@ -203,6 +203,12 @@ qui déplace du média. Elle lui tend une vue étroite d'elle-même
 - **Boucle de remplissage** : vise 30 s d'avance, avec un **plancher de 8 s**
   fetché quoi qu'il arrive. Obéir sans condition à `ManagedMediaSource.streaming`
   laissait le tampon vide pour toujours quand le système disait stop.
+- **Tampon plein** : le navigateur refuse, on vide ce qui est **derrière** la
+  tête — sauf qu'au tout début d'un film il n'y a rien derrière. Dans ce cas la
+  **cible descend** (à 75 % de ce qui tient vraiment, plancher à 8 s) au lieu de
+  jeter des segments en silence : huit refus d'affilée et la boucle concluait que
+  le navigateur ne retenait rien, diagnostic sans rapport avec la cause. Mesuré,
+  pas deviné, et sans effet sur un navigateur qui ne refuse jamais rien.
 - **Chien de garde** : si la tête de lecture n'a rien sous elle et que rien
   n'arrive, on se replace. *Un tampon vide n'est pas un lecteur égaré* — les
   plages de l'élément sont l'**intersection** des deux tampons, donc vider
@@ -225,6 +231,12 @@ qui déplace du média. Elle lui tend une vue étroite d'elle-même
   inverse et rien ne pouvait le voir : en lecture, tête sur le média, 20 s en
   avance, et 0:00 à l'écran. Détecté maintenant, et traité de la même façon —
   on redemande la position, un peu plus loin.
+- **Le chemin canvas se reconstruit aussi**, avec la même machinerie et le même
+  budget que le chemin natif — mais seulement pour une panne survenue **après**
+  que l'image ait commencé à bouger. Un fichier que l'appareil ne sait pas
+  décoder échoue avant de démarrer : réessayer, c'est trois roues qui tournent
+  pour la même réponse. Un décodeur ou un contexte GPU repris par la plateforme
+  en pleine séance, lui, ne dit rien du fichier.
 - **Le budget de reconstructions décroît.** Trois pertes de source espacées d'une
   heure ne sont pas la panne que la limite existe pour arrêter : au-delà de trois
   minutes sans incident, le compteur repart de zéro. Sans ça, un film de deux
@@ -306,6 +318,12 @@ ne peut pas casser la lecture.
 ---
 
 ## Diagnostic
+
+Le déroulé est **glissant** : les 120 premières étapes sont gardées pour de bon
+— l'ouverture est ce qui explique comment le film jouait — et les 280 dernières
+suivent le présent. Entre les deux, une ligne dit combien d'étapes ont été
+retirées. Tronquer, ce qu'il faisait avant, voulait dire qu'un film qui dure
+cesse d'enregistrer : la panne intéressante était celle qui manquait à coup sûr.
 
 Sans console sur un téléphone, **aucune de ces pannes n'était diagnosticable par
 le raisonnement**. Trois outils, tous nés de ça :

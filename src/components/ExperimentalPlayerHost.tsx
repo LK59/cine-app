@@ -799,6 +799,15 @@ export function ExperimentalPlayerHost({
       await element.play().catch(() => {});
     };
 
+    /**
+     * Whether this engine ever got as far as playing.
+     *
+     * The line between a file this device cannot decode — which fails on the way up, and for
+     * which retrying is three spinners and the same answer — and a decoder the platform took
+     * away mid-film, which is worth rebuilding for.
+     */
+    let engineStarted = false;
+
     const startEngine = async (reason: string | null) => {
       setPathReason(reason);
       // Only now is this refusal real. The native path would have shown this file's HDR without
@@ -818,13 +827,31 @@ export function ExperimentalPlayerHost({
       unsubscribes = [
         // The engine distinguishes the two itself, rather than the host guessing from the
         // wording: a warning is degraded playback that continues, an error stops it.
-        engine.on("error", (payload) => fallToStable(typeof payload === "string" ? payload : "Lecture interrompue.")),
+        engine.on("error", (payload) => {
+          const message = typeof payload === "string" ? payload : "Lecture interrompue.";
+          // Rebuilt rather than given up on, exactly as a lost source is on the other path —
+          // the machinery is the same and was simply never wired to this one. But only for a
+          // failure that happened *after* the picture was running: a file this device cannot
+          // decode fails before it ever starts, and retrying that is three spinners and the same
+          // answer. What is worth retrying is a decoder the platform took away mid-film, or a
+          // GPU context it reclaimed — neither of which says anything about the file.
+          if (engineStarted && spendRebuild()) {
+            reportPlayback("rebuild", { ...describeFileRef.current(), reason: message, at: positionRef.current });
+            showWarning("Reprise de la lecture après une interruption.");
+            restart(positionRef.current, `le moteur s'est arrêté (${message})`);
+            return;
+          }
+          fallToStable(message);
+        }),
         engine.on("warning", (payload) => showWarning(typeof payload === "string" ? payload : null)),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
           if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);
         }),
-        engine.on("playing", () => setPlaying(true)),
+        engine.on("playing", () => {
+          engineStarted = true;
+          setPlaying(true);
+        }),
         engine.on("pause", () => setPlaying(false)),
         engine.on("ended", () => setPlaying(false)),
         engine.on("subtitle", (payload) => {

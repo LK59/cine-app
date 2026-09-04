@@ -506,6 +506,34 @@ describe("MseSource", () => {
     expect(video.currentTime).toBeGreaterThan(before);
   });
 
+  it("baisse sa cible quand le navigateur refuse, au lieu de jeter des segments en silence", async () => {
+    // Refused media used to be dropped and nothing more. That works while there is something
+    // behind the playhead to free — and in the first half-minute of a film there never is, so
+    // every segment was refused, dropped, and after eight of them the loop concluded the browser
+    // was keeping nothing at all. The cause and the diagnosis had nothing to do with each other.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    const source = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+
+    const inner = source as unknown as { targetBuffer: number; quotaHit: () => void; lead: number };
+    expect(inner.targetBuffer).toBe(30);
+    inner.quotaHit();
+
+    expect(inner.targetBuffer).toBeLessThan(30);
+    // Never below the floor the film needs to play at all.
+    expect(inner.targetBuffer).toBeGreaterThanOrEqual(8);
+  });
+
+  it("ne touche à rien tant que le navigateur accepte ce qu'on lui donne", async () => {
+    // Which is every browser tested here: the cost of the rule above is zero until it is needed.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    const source = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    expect((source as unknown as { targetBuffer: number }).targetBuffer).toBe(30);
+  });
+
   it("stops pretending when the refusals do not let up", async () => {
     const video = fakeVideo();
     const onError = vi.fn();

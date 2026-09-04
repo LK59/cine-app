@@ -1,75 +1,48 @@
-import { describe, expect, it, beforeEach } from "vitest";
-import { trace, traceKeepAcrossReset, traceReset, traceSteps, traceText } from "@/lib/webcodecs/trace";
-import { buildReport } from "@/components/ExperimentalPlayerReport";
+import { describe, it, expect, beforeEach } from "vitest";
+import { trace, traceReset, traceText } from "@/lib/webcodecs/trace";
 
-describe("trace", () => {
-  beforeEach(() => traceReset());
+// The record a report is built from. What matters is that a fault two hours into a film still
+// has its own context — and that the opening, which is what says how the film was ever playing,
+// is never the part that gets thrown away.
 
-  it("keeps the steps in order, with the time each happened", () => {
-    trace("un");
-    trace("deux");
-    const steps = traceSteps();
-    expect(steps.map((s) => s.step)).toEqual(["un", "deux"]);
-    expect(steps[0].at).toBeGreaterThanOrEqual(0);
-    expect(steps[1].at).toBeGreaterThanOrEqual(steps[0].at);
+beforeEach(() => traceReset());
+
+describe("la trace", () => {
+  it("garde tout d'une lecture ordinaire", () => {
+    for (let i = 0; i < 50; i++) trace(`étape ${i}`);
+    expect(traceText()).toContain("étape 0");
+    expect(traceText()).toContain("étape 49");
+    expect(traceText()).not.toContain("retirées");
   });
 
-  it("stops growing, so a loop cannot fill memory with its own symptoms", () => {
+  it("garde l'ouverture et le présent, et jette le milieu", () => {
+    // Truncating instead — which is what this did at three hundred steps — meant a film that ran
+    // long simply stopped recording, so the fault worth reading about was the one guaranteed to
+    // be missing.
+    for (let i = 0; i < 3000; i++) trace(`étape ${i}`);
+    const text = traceText();
+
+    expect(text).toContain("étape 0"); // how the film opened
+    expect(text).toContain("étape 2999"); // what just happened
+    expect(text).not.toContain("étape 1500"); // the middle of a long, uneventful run
+    expect(text).toContain("retirées");
+  });
+
+  it("dit combien de marches manquent plutôt que de laisser un trou", () => {
+    // The count and what is left must add up to what happened: a record that loses steps
+    // without saying how many is a record nobody can reason about.
     for (let i = 0; i < 1000; i++) trace(`étape ${i}`);
-    expect(traceSteps().length).toBeLessThanOrEqual(300);
+    const text = traceText();
+    const missing = Number(/⋯\s+(\d+) étapes/.exec(text)![1]);
+    const kept = text.split("\n").length - 1; // every line but the one announcing the gap
+    expect(missing + kept).toBe(1000);
   });
 
-  it("forgets the previous attempt when a new one starts", () => {
-    trace("de l'essai précédent");
-    traceReset();
-    expect(traceText()).toBe("(aucune étape enregistrée)");
-  });
-});
-
-describe("buildReport", () => {
-  const input = {
-    error: "Le navigateur a refusé une opération sur le tampon.",
-    elapsedMs: 4200,
-    title: "Utopia S01E01",
-    itemId: "abc",
-    file: { container: "mkv", streamUrl: "https://example/Videos/abc?api_key=SECRET" },
-    pathReason: "remultiplexage → lecteur natif",
-    diagnostics: { "Tampon vidéo": "vide" },
-  };
-
-  it("carries the failure, the decision and the pipeline's own reading", () => {
-    const text = buildReport(input, { "AAC 6 canaux": "oui" });
-    expect(text).toContain("Le navigateur a refusé une opération sur le tampon.");
-    expect(text).toContain("remultiplexage → lecteur natif");
-    expect(text).toContain("Tampon vidéo: vide");
-    expect(text).toContain("AAC 6 canaux: oui");
-    expect(text).toContain("4.2 s");
-  });
-
-  it("leaves the stream URL out: this text is written to be pasted somewhere", () => {
-    const text = buildReport(input, null);
-    expect(text).not.toContain("SECRET");
-    expect(text).toContain("container: mkv");
-  });
-
-  it("says so plainly when nothing failed and the wait simply never ended", () => {
-    expect(buildReport({ ...input, error: null }, null)).toContain("le chargement n'aboutit pas");
-  });
-});
-
-describe("traceKeepAcrossReset", () => {
-  it("carries the record through the rebuild that follows a lost source", () => {
-    // The player rebuilds itself when the platform takes the source away, and rebuilding runs the
-    // probe again, which starts a new record. Without this the fault and its aftermath land in
-    // different accounts and the report shows the innocent one.
-    traceReset();
-    trace("la source a été fermée");
-    traceKeepAcrossReset();
-    traceReset();
-    expect(traceText()).toContain("la source a été fermée");
-
-    // And only the once: the next fresh start is a fresh start.
-    traceReset();
-    expect(traceText()).toBe("(aucune étape enregistrée)");
+  it("ne recopie pas la trace à chaque marche une fois pleine", () => {
+    // Trimmed from the middle in batches, so a long run costs one splice every few hundred
+    // steps rather than one per step — this loop is the hot path of every seek and every append.
+    const at = Date.now();
+    for (let i = 0; i < 20000; i++) trace(`étape ${i}`);
+    expect(Date.now() - at).toBeLessThan(1000);
   });
 });

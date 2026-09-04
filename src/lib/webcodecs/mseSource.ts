@@ -152,6 +152,8 @@ export class MseSource {
   private lastRecoveryAt = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   /** For the frozen-clock check: where the clock was, since when, and how often it was pushed. */
+  /** How far ahead to fill. Lowered, for this file only, if the browser says it cannot hold it. */
+  private targetBuffer = TARGET_BUFFER_SECONDS;
   private lastClockAt = -1;
   private frozenSince: number | null = null;
   private frozenNudges = 0;
@@ -443,7 +445,7 @@ export class MseSource {
     try {
       while (!this.destroyed && this.generation === generation) {
         const lead = this.lead;
-        if (lead >= TARGET_BUFFER_SECONDS) break;
+        if (lead >= this.targetBuffer) break;
         // Above the floor the system's word is final; below it, the media is needed to play at
         // all and a refusal would strand the player with an empty buffer and a spinner.
         if (lead >= MIN_BUFFER_SECONDS && !this.streamingWanted) break;
@@ -592,7 +594,7 @@ export class MseSource {
       // The buffer is full rather than broken: drop what is behind the playhead and try again
       // on the next pass.
       if (error instanceof DOMException && error.name === "QuotaExceededError") {
-        this.evict();
+        this.quotaHit();
         return;
       }
       throw error;
@@ -609,8 +611,35 @@ export class MseSource {
     }
   }
 
+  /**
+   * The browser has taken all it will hold.
+   *
+   * Two things follow, and only the first of them was being done. Media behind the playhead is
+   * dropped, which frees room — *unless* the playhead has not travelled far enough for there to
+   * be any, which in the first half-minute of a film is always. In that case every segment sent
+   * is refused and silently dropped, and after eight of them the fill loop concludes the browser
+   * is keeping nothing at all and hands the film away. The cause and the diagnosis would have
+   * had nothing to do with each other.
+   *
+   * So the target comes down instead, to a little less than what is actually being held. That is
+   * measured rather than guessed, it costs nothing on a browser that never refuses anything —
+   * which is every browser tested here — and it lasts only as long as this MediaSource.
+   */
+  private quotaHit(): void {
+    const held = this.lead;
+    this.evict();
+    const room = Math.max(MIN_BUFFER_SECONDS, Math.floor(held * 0.75));
+    if (room < this.targetBuffer) {
+      trace(`tampon plein à ${held.toFixed(1)} s : on vise ${room} s pour ce fichier`);
+      this.targetBuffer = room;
+    }
+  }
+
   private evict(): void {
     const until = this.video.currentTime - KEEP_BEHIND_SECONDS;
+    // Traced either way, including when there is nothing to free: whether this ever happens on a
+    // real device was, until now, unknowable from the record.
+    trace(`éviction demandée à ${this.video.currentTime.toFixed(1)} s — ${until <= 0 ? "rien derrière la tête" : `jusqu'à ${until.toFixed(1)} s`}`);
     if (until <= 0) return;
     for (const queue of [this.videoOps, this.audioOps]) {
       const buffer = queue?.buffer;

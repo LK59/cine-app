@@ -673,6 +673,31 @@ describe("le chemin canvas", () => {
     vi.useRealTimers();
   });
 
+  it("reconstruit un moteur qui s'arrête en cours de film, au lieu de céder la main", async () => {
+    // The rebuild machinery is the same one the native path uses for a lost source; it was
+    // simply never wired to this one. A decoder the platform took away mid-film says nothing
+    // about the file.
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    emit("playing"); // the picture is actually running
+
+    emit("error", "Le contexte graphique a été perdu.");
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+
+  it("ne s'acharne pas sur un fichier que l'appareil ne sait pas décoder", async () => {
+    // That one fails on the way up, and retrying it is three spinners and the same answer.
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+
+    emit("error", "Aucun décodeur disponible pour l'audio DTS.");
+    await waitFor(() => expect(onFallback).toHaveBeenCalledWith("Aucun décodeur disponible pour l'audio DTS."));
+    expect(probes).toHaveLength(1);
+  });
+
   it("distingue un avertissement, qui laisse jouer, d'une erreur, qui arrête", async () => {
     nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
     mount();
@@ -682,6 +707,8 @@ describe("le chemin canvas", () => {
     expect(screen.getByText("son dégradé")).toBeTruthy();
     expect(onFallback).not.toHaveBeenCalled();
 
+    // Nothing has played yet, so this one is answered by handing the file over rather than by
+    // trying the same thing again.
     emit("error", "décodage impossible");
     expect(onFallback).toHaveBeenCalledWith("décodage impossible");
   });
