@@ -855,11 +855,16 @@ describe("MseSource", () => {
     video.dispatchEvent(new Event("play"));
     await flush();
 
-    // Close to, not exactly: on a machine slow enough for this test to run for more than a
-    // second and a half, the frozen-clock check is entitled to nudge a playhead that has media
-    // in front of it and is not moving. What is under test is that the resume was not pulled
-    // *back* to where the pause was.
-    expect(video.currentTime).toBeCloseTo(12.49, 1);
+    // A range, not a value. This element's clock never advances on its own — nothing in a fake
+    // video does — so once it is playing with media in front of it, it is indistinguishable from
+    // a genuinely stuck one, and the frozen-clock check is entitled to push it forward eighty
+    // milliseconds at a time. On a fast machine the test is over long before that; on a loaded
+    // one it is not. What is under test is the direction: a resume must not be pulled *back* to
+    // where the pause was. A range says that exactly, where the tolerance said it badly —
+    // eighty milliseconds of nudge is wider than the fifty a precision of 1 allows, so the
+    // loosening did not even cover the case it was written for.
+    expect(video.currentTime).toBeGreaterThanOrEqual(12.49);
+    expect(video.currentTime).toBeLessThan(12.8);
     // The behaviour under test is that the resume is not pulled *back* to where the pause was.
     // Asserting that nothing in the whole source asked for any seek at all made this fail on a
     // loaded machine for a reason that had nothing to do with it — the watchdog doing its job.
@@ -911,11 +916,11 @@ describe("MseSource", () => {
     setTime(19);
     video.dispatchEvent(new Event("playing"));
     await flush();
-    // Close to twelve rather than exactly twelve: on a machine slow enough for this test to run
-    // for more than a second and a half, the frozen-clock check is entitled to nudge a playhead
-    // that has media in front of it and is not moving — by eighty milliseconds. What is under
-    // test is that the position was put back at all rather than left at nineteen.
-    expect(video.currentTime).toBeCloseTo(12, 1);
+    // Same range and same reason as above: what is under test is that the position was put back
+    // at all rather than left at nineteen, and the frozen-clock check may have pushed it on a
+    // little while the test was still running.
+    expect(video.currentTime).toBeGreaterThanOrEqual(12);
+    expect(video.currentTime).toBeLessThan(12.5);
   });
 
   it("lets playback simply carry on after resuming, without pulling it back", async () => {
