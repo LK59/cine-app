@@ -11,6 +11,7 @@ import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
+import { useHorizontalSwipe } from "@/lib/useHorizontalSwipe";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -136,6 +137,18 @@ export function CinemaMobileClient() {
     if (serie) return cinemaNavigate({ tab: "series", serie: Number(serie[1]), film: null });
     play();
   }, []);
+
+  /**
+   * Le balayage sur l'affiche : c'est le geste qu'on fait sans y penser devant un carrousel.
+   *
+   * Il n'y avait que les barres — atteignables, mais minuscules, et personne ne les vise sur un
+   * téléphone. Un balayage change de titre et, du même coup, relance le compte à rebours de la
+   * rotation, puisque celle-ci repart de l'index qu'on vient de poser.
+   */
+  const heroSwipe = useHorizontalSwipe((direction) => {
+    if (heroItems.length < 2) return;
+    setHeroIndex((heroIndex + direction + heroItems.length) % heroItems.length);
+  });
 
   const exit = () => leaveCinema(router);
 
@@ -283,7 +296,11 @@ export function CinemaMobileClient() {
         {hero && (
           <section className="px-4 pt-2">
             {short ? (
-              <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
+              <div
+                {...heroSwipe.handlers}
+                style={heroSwipe.style}
+                className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50"
+              >
                 <div className="w-24 shrink-0 overflow-hidden rounded-lg">
                   <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="120px" />
                 </div>
@@ -301,7 +318,11 @@ export function CinemaMobileClient() {
                 </div>
               </div>
             ) : (
-              <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
+              <div
+                {...heroSwipe.handlers}
+                style={heroSwipe.style}
+                className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50"
+              >
                 <PosterImage src={hero.posterUrl} alt={hero.title} subtle unoptimized priority sizes="100vw" />
                 <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                   {hero.logoUrl ? (
