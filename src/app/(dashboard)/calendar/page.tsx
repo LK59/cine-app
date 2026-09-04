@@ -67,9 +67,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
         <button
           onClick={doRequest}
           disabled={requesting || requested}
-          className={`flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium transition-colors ${
-            requested ? "bg-emerald-500/20 text-emerald-400" : "bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
-          }`}
+          className={`btn btn-ghost btn-sm ${requested ? "btn-on" : ""}`}
         >
           <CirclePlus size={9} />
           {requested ? t('calendar.actionRequested') : requesting ? "…" : t('calendar.actionRequest')}
@@ -84,9 +82,7 @@ function EventActions({ ev, compact = false }: { ev: CalendarEvent; compact?: bo
       <button
         onClick={doRequest}
         disabled={requesting || requested}
-        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-          requested ? "bg-emerald-500/15 text-emerald-400" : "bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
-        }`}
+        className={`btn btn-ghost btn-sm ${requested ? "btn-on" : ""}`}
       >
         <CirclePlus size={12} />
         {requested ? t('calendar.actionRequested') : requesting ? t('calendar.actionRequesting') : t('calendar.actionRequest')}
@@ -124,7 +120,7 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
           }
         </div>
       </div>
-      <button onClick={onClose} className="shrink-0 text-slate-500 hover:text-white transition-colors">
+      <button onClick={onClose} aria-label={t('common.close')} className="btn btn-ghost btn-icon shrink-0">
         <X size={14} />
       </button>
     </div>
@@ -208,7 +204,7 @@ function MonthGrid({ year, month, eventsByDate, today, selectedEvent, onSelectEv
                   {evs.length > MAX_SHOWN && (
                     <button
                       onClick={() => onSelectEvent(evs[MAX_SHOWN])}
-                      className="pl-1 text-[10px] text-slate-500 hover:text-slate-300"
+                      className="btn btn-ghost btn-sm px-1.5 text-[10px]"
                     >
                       {t('calendar.moreItems', { n: evs.length - MAX_SHOWN })}
                     </button>
@@ -373,11 +369,11 @@ export default function CalendarPage() {
       {/* Controls row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
-          <button onClick={prevMonth} className="rounded-lg border border-white/10 p-1.5 text-slate-400 hover:text-white hover:border-white/20 transition-colors">
+          <button onClick={prevMonth} aria-label={t('calendar.prevMonth')} className="btn btn-ghost btn-icon">
             <ChevronLeft size={14} />
           </button>
           <span className="min-w-[130px] text-center text-sm font-semibold text-white capitalize">{monthLabel}</span>
-          <button onClick={nextMonth} className="rounded-lg border border-white/10 p-1.5 text-slate-400 hover:text-white hover:border-white/20 transition-colors">
+          <button onClick={nextMonth} aria-label={t('calendar.nextMonth')} className="btn btn-ghost btn-icon">
             <ChevronRight size={14} />
           </button>
         </div>
@@ -388,7 +384,7 @@ export default function CalendarPage() {
           <div className="flex rounded-lg border border-white/10 overflow-hidden">
             {([["month", <CalendarDays size={13} key="m" />], ["list", <LayoutList size={13} key="l" />]] as [ViewMode, React.ReactNode][]).map(([v, icon]) => (
               <button key={v} onClick={() => { setView(v); setSelectedEvent(null); }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${view === v ? "bg-accent-600/20 text-accent-400" : "text-slate-500 hover:text-slate-300"}`}>
+                className={`btn btn-ghost btn-sm rounded-none ${view === v ? "btn-on" : ""}`}>
                 {icon}{v === "month" ? t('calendar.viewMonth') : t('calendar.viewList')}
               </button>
             ))}
@@ -400,7 +396,7 @@ export default function CalendarPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {FILTERS.map(({ key, label, icon }) => (
           <button key={key} onClick={() => setFilter(key)}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`chip ${
               filter === key ? "border-accent-500/40 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-slate-300"
             }`}>
             {icon}{label}

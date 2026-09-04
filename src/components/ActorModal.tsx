@@ -54,11 +54,11 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: string[]; star
   return createPortal(
     <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/90 backdrop-blur-xs" onClick={onClose}>
       <button onClick={(e) => { e.stopPropagation(); prev(); }}
-        className="absolute left-4 top-1/2 z-10 -translate-y-1/2 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
+        className="btn-overlay absolute left-4 top-1/2 z-10 -translate-y-1/2">
         <ChevronLeft size={20} />
       </button>
       <button onClick={(e) => { e.stopPropagation(); next(); }}
-        className="absolute right-4 top-1/2 z-10 -translate-y-1/2 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
+        className="btn-overlay absolute right-4 top-1/2 z-10 -translate-y-1/2">
         <ChevronRight size={20} />
       </button>
       <button onClick={onClose}
@@ -92,7 +92,7 @@ function Biography({ text, source }: { text: string; source: "wikipedia" | "tmdb
       </p>
       <div className="mt-1.5 flex items-center justify-between">
         {text.length > limit && (
-          <button onClick={() => setExpanded((v) => !v)} className="text-xs text-accent-400 hover:text-accent-300">
+          <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-300">
             {expanded ? t('modals.actor.collapse') : t('modals.actor.readMore')}
           </button>
         )}
@@ -161,7 +161,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
         {credit.character && <p className="line-clamp-1 text-[10px] italic text-slate-600">{credit.character}</p>}
         {!isInLib && (
           <button onClick={handleAdd} disabled={adding}
-            className="mt-auto flex items-center justify-center gap-1 rounded-sm bg-accent-600/20 py-1 text-[11px] text-accent-400 transition-colors hover:bg-accent-600/30 disabled:opacity-50">
+            className="btn btn-ghost btn-sm btn-on mt-auto w-full">
             {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
             {adding ? t('modals.actor.adding') : t('modals.actor.add')}
           </button>

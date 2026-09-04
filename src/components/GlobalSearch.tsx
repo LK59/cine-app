@@ -380,7 +380,7 @@ export function GlobalSearch() {
             className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-hidden"
           />
           {remoteLoading && <Loader2 size={14} className="shrink-0 animate-spin text-slate-500" />}
-          <button onClick={() => setOpen(false)} className="shrink-0 text-slate-500 hover:text-white">
+          <button onClick={() => setOpen(false)} aria-label={t('common.close')} className="btn btn-ghost btn-icon shrink-0">
             <X size={16} />
           </button>
         </div>
@@ -418,12 +418,12 @@ export function GlobalSearch() {
                       <SourceBadge source={r.type === "movie" ? "radarr" : "sonarr"} />
                       <button
                         onClick={() => navigate(r.href)}
-                        className="rounded-sm bg-white/5 p-1.5 text-slate-400 hover:bg-white/10"
+                        className="btn btn-ghost btn-icon p-1.5"
                         title={t('search.viewSheet')}
                       ><Film size={12} /></button>
                       <button
                         onClick={() => toggleWatchlist(r)}
-                        className={`rounded-sm p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
+                        className={`btn btn-ghost btn-icon p-1.5 ${inList ? "btn-on" : ""}`}
                         title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
@@ -518,7 +518,7 @@ export function GlobalSearch() {
                       <button
                         onClick={() => requestMedia(r)}
                         disabled={isRequesting}
-                        className="flex items-center gap-1 rounded-sm bg-accent-500/20 px-2 py-1 text-[11px] text-accent-400 hover:bg-accent-500/30 disabled:opacity-50"
+                        className="btn btn-ghost btn-sm btn-on"
                         title={t('search.requestViaJellyseerr')}
                       >
                         <Send size={10} />
@@ -526,7 +526,7 @@ export function GlobalSearch() {
                       </button>
                       <button
                         onClick={() => toggleWatchlist(r)}
-                        className={`rounded-sm p-1.5 transition-colors ${inList ? "bg-accent-500/20 text-accent-400" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
+                        className={`btn btn-ghost btn-icon p-1.5 ${inList ? "btn-on" : ""}`}
                         title={inList ? t('search.removeFromList') : t('search.addToList')}
                       >
                         {inList ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}

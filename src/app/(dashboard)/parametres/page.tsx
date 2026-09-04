@@ -362,7 +362,7 @@ function LanguageSection() {
             </p>
             <button
               onClick={apply}
-              className="shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90"
+              className="btn btn-sm shrink-0 bg-amber-500 text-black hover:bg-amber-400"
             >
               {t('settings.language.apply')}
             </button>
@@ -417,7 +417,7 @@ function SessionsCard() {
         <button
           onClick={revokeOthers}
           disabled={revoking || count === 0 || revoked}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn btn-ghost btn-sm shrink-0 text-red-400"
         >
           {revoking ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />}
           {revoked ? t('settings.security.revoked') : t('settings.security.revokeAll')}

@@ -425,7 +425,7 @@ export default function SonarrSeriesDetailPage() {
       <div className="relative h-[32vw] min-h-[180px] max-h-[380px] xl:max-h-[520px]">
         <button
           onClick={() => router.back()}
-          className="absolute left-4 top-4 sm:left-6 md:left-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-black/60"
+          className="btn-overlay absolute left-4 top-4 gap-1.5 px-3 py-1.5 text-xs sm:left-6 md:left-8"
         >
           <ArrowLeft size={14} /> {t('common.back')}
         </button>
@@ -434,7 +434,7 @@ export default function SonarrSeriesDetailPage() {
             href={`/api/jellyfin/redirect?itemId=${jfItem.Id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute right-4 top-4 sm:right-6 md:right-8 flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-black/60"
+            className="btn-overlay absolute right-4 top-4 gap-1.5 px-3 py-1.5 text-xs sm:right-6 md:right-8"
           >
             <ExternalLink size={14} /> {t('sonarr.viewOnJellyfin')}
           </a>
@@ -565,9 +565,8 @@ export default function SonarrSeriesDetailPage() {
           <button
             key={tab}
             onClick={() => { setActiveTab(tab); haptic(30); }}
-            className={`flex-1 rounded-lg py-1.5 text-xs font-medium capitalize transition-colors ${
-              activeTab === tab ? "bg-white/15 text-white" : "text-slate-500 hover:text-slate-300"
-            }`}
+            className={`btn btn-sm flex-1 justify-center capitalize ${activeTab === tab ? "btn-on" : "text-slate-500"}`}
+            aria-pressed={activeTab === tab}
           >
             {tab === "infos" ? t('sonarr.tabInfos') : tab === "casting" ? t('sonarr.tabCasting') : t('sonarr.tabSeasons')}
           </button>
@@ -619,7 +618,7 @@ export default function SonarrSeriesDetailPage() {
           <button
             onClick={() => setShowDeleteConfirm(true)}
             disabled={deletingFromSonarr}
-            className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red-400/70 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+            className="btn btn-ghost btn-sm ml-auto text-red-400/80"
           >
             <Trash2 size={12} /> {t('sonarr.deleteFromSonarr')}
           </button>

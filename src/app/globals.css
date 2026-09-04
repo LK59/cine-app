@@ -330,6 +330,26 @@
   @apply gap-0 rounded-full p-2;
 }
 
+/**
+ * Un bouton posé sur une image ou une vidéo.
+ *
+ * Une flèche de visionneuse, une croix sur une affiche : ces boutons-là ne peuvent pas prendre
+ * le fond de l'app puisqu'ils n'ont pas de fond — ils sont sur une photo dont on ignore tout.
+ * D'où le contour clair et le flou, qui sont ici nécessaires à la lisibilité et non décoratifs :
+ * il y en a deux ou trois par écran, jamais des rangées, contrairement aux boutons ordinaires
+ * d'où le flou a été retiré.
+ */
+@utility btn-overlay {
+  @apply btn rounded-full border border-white/20 bg-black/45 p-2.5 text-white;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+@media (hover: hover) {
+  .btn-overlay:hover:not(:disabled) {
+    @apply border-white/30 bg-black/65;
+  }
+}
+
 /* ─── Les puces ───────────────────────────────────────────────────────────────
    Un filtre, un genre, un segment : le même geste, et jusqu'ici trois formes
    selon la page. Actif = plein, sans bordure. Inactif = presque rien. Une puce

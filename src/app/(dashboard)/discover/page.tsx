@@ -245,7 +245,7 @@ export default function DiscoverPage() {
         {rawQuery && (
           <button
             onClick={() => { setRawQuery(""); setQuery(""); inputRef.current?.focus(); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+            className="btn btn-ghost btn-icon absolute right-2 top-1/2 -translate-y-1/2 p-1.5"
           >
             <X size={15} />
           </button>

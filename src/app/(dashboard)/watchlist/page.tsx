@@ -83,11 +83,11 @@ function NoteModal({ item, onSave, onClose }: {
         <div className="mt-3 flex gap-2">
           <button onClick={onClose} className="chip flex-1 justify-center rounded-xl py-2">{t('watchlist.noteModal.cancel')}</button>
           {item.note && (
-            <button onClick={() => { onSave(""); onClose(); }} className="rounded-xl border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+            <button onClick={() => { onSave(""); onClose(); }} className="btn btn-ghost text-red-400">
               <Trash2 size={14} />
             </button>
           )}
-          <button onClick={() => { onSave(text); onClose(); }} className="flex-1 rounded-xl bg-accent-500 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">
+          <button onClick={() => { onSave(text); onClose(); }} className="btn btn-primary flex-1">
             {t('watchlist.noteModal.save')}
           </button>
         </div>
@@ -117,7 +117,7 @@ function ConfirmDeleteModal({ title, onConfirm, onClose }: {
           </button>
           <button
             onClick={() => { onConfirm(); onClose(); }}
-            className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors"
+            className="btn btn-danger flex-1"
           >
             {t('watchlist.confirmDelete.confirm')}
           </button>
@@ -222,7 +222,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
               <button
                 key={tabType}
                 onClick={() => setType(tabType)}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${type === tabType ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"}`}
+                className={`chip ${type === tabType ? "chip-on" : ""}`}
               >
                 <Icon size={11} /> {label}
               </button>
@@ -291,7 +291,8 @@ function AddModal({ existingKeys, onClose, onAdded }: {
                             key={s}
                             onClick={() => addItem(r, s)}
                             title={t(m.labelKey)}
-                            className={`flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-black/30 ${m.textColor} transition-colors hover:bg-white/10 hover:border-white/30`}
+                            aria-label={t(m.labelKey)}
+                            className={`btn btn-icon border border-white/10 bg-black/30 p-1 ${m.textColor}`}
                           >
                             <Icon size={10} />
                           </button>
@@ -473,10 +474,12 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                     key={s}
                     onClick={(e) => { e.stopPropagation(); onStatusChange(s); }}
                     title={t(meta.labelKey)}
-                    className={`flex h-6 w-6 items-center justify-center rounded-full border transition duration-150 ${
+                    aria-label={t(meta.labelKey)}
+                    aria-pressed={active}
+                    className={`btn btn-icon border p-1 ${
                       active
-                        ? `${meta.bgSolid} border-white/30 text-white shadow-md scale-110`
-                        : "border-white/15 bg-black/40 text-white/60 hover:border-white/30 hover:bg-white/15 hover:text-white hover:scale-105"
+                        ? `${meta.bgSolid} border-white/30 text-white shadow-md`
+                        : "border-white/15 bg-black/40 text-white/60"
                     }`}
                   >
                     <Icon size={10} />
@@ -495,7 +498,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
               <button
                 onClick={(e) => { e.stopPropagation(); onNoteEdit(); }}
                 title={item.note ? t('watchlist.editNote') : t('watchlist.addNote')}
-                className={`flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${item.note ? "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30" : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"}`}
+                className={`btn btn-ghost btn-icon p-1 ${item.note ? "btn-on text-amber-300" : ""}`}
               >
                 <MessageSquare size={9} />
               </button>
@@ -504,7 +507,7 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                   onClick={(e) => doInteractiveSearch(e)}
                   disabled={addingSearch}
                   title={t('common.interactiveSearch')}
-                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                  className="btn btn-ghost btn-icon p-1"
                 >
                   <Telescope size={9} />
                 </button>
@@ -514,14 +517,14 @@ function WatchlistCard({ item, libraryHref, isAvailable, imdbRating, onStatusCha
                   onClick={(e) => addSeriesToLibrary(e)}
                   disabled={addingSearch}
                   title={t('watchlist.addToLibrary')}
-                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
+                  className="btn btn-ghost btn-icon p-1"
                 >
                   <Plus size={9} />
                 </button>
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); setPendingDelete(true); }}
-                className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
+                className="btn btn-ghost btn-icon p-1 text-red-400"
               >
                 <Trash2 size={9} />
               </button>
@@ -743,7 +746,7 @@ export default function WatchlistPage() {
         </select>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex shrink-0 items-center gap-1.5 rounded-xl border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-sm font-medium text-accent-400 transition-colors hover:bg-accent-500/20"
+          className="btn btn-ghost btn-on shrink-0"
         >
           <Plus size={14} /> <span className="hidden sm:inline">{t('common.add')}</span>
         </button>
@@ -753,9 +756,7 @@ export default function WatchlistPage() {
       <div className="mb-5 flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
         <button
           onClick={() => setActiveStatus("all")}
-          className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-            activeStatus === "all" ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-white/10 text-slate-500 hover:text-white"
-          }`}
+          className={`chip shrink-0 ${activeStatus === "all" ? "chip-on" : ""}`}
         >
           {t('watchlist.tabAll')} · {counts.all}
         </button>
@@ -766,9 +767,7 @@ export default function WatchlistPage() {
             <button
               key={s}
               onClick={() => setActiveStatus(s)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeStatus === s ? `${meta.textColor} border-current/50 bg-white/5` : "border-white/10 text-slate-500 hover:text-white"
-              }`}
+              className={`chip shrink-0 ${activeStatus === s ? `chip-on ${meta.textColor}` : ""}`}
             >
               <Icon size={11} /> {t(meta.labelKey)} <span className="opacity-60">· {counts[s] ?? 0}</span>
             </button>
@@ -782,7 +781,7 @@ export default function WatchlistPage() {
       {!isLoading && allItems.length === 0 && (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
           <p className="text-slate-500">{t('watchlist.empty')}</p>
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 rounded-xl bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">
+          <button onClick={() => setShowAdd(true)} className="btn btn-primary">
             <Plus size={14} /> {t('watchlist.addTitle')}
           </button>
         </div>

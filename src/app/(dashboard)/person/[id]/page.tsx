@@ -113,12 +113,10 @@ function CreditCard({ c }: { c: PersonCredit }) {
             <button
               onClick={doRequest}
               disabled={requesting || requested}
-              className={`flex w-full items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium transition-colors ${
-                requested ? "bg-emerald-500/20 text-emerald-400" : "bg-sky-500/20 text-sky-300 hover:bg-sky-500/30"
-              }`}
+              className={`btn btn-ghost btn-sm w-full ${requested ? "btn-on" : ""}`}
             >
-              <CirclePlus size={9} />
-              {requested ? "Demandé" : requesting ? "…" : "Demander"}
+              <CirclePlus size={11} />
+              {requested ? t('common.requested') : requesting ? t('common.requesting') : t('common.request')}
             </button>
           </div>
         )}
@@ -146,6 +144,7 @@ function GalleryLightbox({
   startIndex: number;
   onClose: () => void;
 }) {
+  const t = useT();
   const [idx, setIdx] = useState(startIndex);
   const [mounted, setMounted] = useState(false);
 
@@ -181,22 +180,22 @@ function GalleryLightbox({
       <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-linear-to-b from-amber-400/10 to-transparent" />
       <button
         onClick={(e) => { e.stopPropagation(); prev(); }}
-        aria-label="Photo precedente"
-        className="absolute left-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white shadow-2xl backdrop-blur-md transition hover:bg-white/20 sm:left-6"
+        aria-label={t('person.prevPhoto')}
+        className="btn-overlay absolute left-3 top-1/2 z-10 -translate-y-1/2 sm:left-6"
       >
         <ChevronLeft size={24} />
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); next(); }}
-        aria-label="Photo suivante"
-        className="absolute right-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white shadow-2xl backdrop-blur-md transition hover:bg-white/20 sm:right-6"
+        aria-label={t('person.nextPhoto')}
+        className="btn-overlay absolute right-3 top-1/2 z-10 -translate-y-1/2 sm:right-6"
       >
         <ChevronRight size={24} />
       </button>
       <button
         onClick={onClose}
-        aria-label="Fermer"
-        className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white shadow-2xl backdrop-blur-md transition hover:bg-white/20 sm:right-6 sm:top-6"
+        aria-label={t('person.closeAria')}
+        className="btn-overlay absolute right-3 top-3 z-10 sm:right-6 sm:top-6"
       >
         <X size={20} />
       </button>
@@ -222,6 +221,7 @@ function GalleryLightbox({
 // ─── VIP timeline & quotes ────────────────────────────────────────────────────
 
 function TimelineSection({ items }: { items: NonNullable<import("@/lib/vip-persons").VipPerson["timeline"]> }) {
+  const t = useT();
   const tagColors: Record<string, string> = {
     Netflix: "bg-red-500/20 text-red-300 border-red-500/30",
     Série: "bg-violet-500/20 text-violet-300 border-violet-500/30",
@@ -233,8 +233,8 @@ function TimelineSection({ items }: { items: NonNullable<import("@/lib/vip-perso
   return (
     <section className="mb-16">
       <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Parcours</p>
-        <h2 className="mt-2 text-3xl font-bold text-white font-display">Carrière</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">{t('person.career')}</p>
+        <h2 className="mt-2 text-3xl font-bold text-white font-display">{t('person.careerSection')}</h2>
       </div>
       <div className="relative ml-4 border-l border-white/10 pl-8 sm:ml-8 sm:pl-10">
         {items.map((item, i) => (
@@ -319,6 +319,7 @@ function VideoCard({ videoId, title }: { videoId: string; title: string }) {
 }
 
 function NewsSection() {
+  const t = useT();
   const { data } = useSWR<{ articles: NewsArticle[] }>(
     "/api/news/clara",
     fetcher,
@@ -331,7 +332,7 @@ function NewsSection() {
     <section className="mb-10">
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Presse</p>
-        <h2 className="mt-2 text-3xl font-bold text-white font-display">Actualités</h2>
+        <h2 className="mt-2 text-3xl font-bold text-white font-display">{t('person.news')}</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {articles.map((a, i) => {
@@ -372,6 +373,7 @@ function NewsSection() {
 type Lang = "fr" | "es" | "en";
 
 function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
+  const t = useT();
   const router = useRouter();
   const { data: vip } = useSWR<VipPerson>(`/api/vip/${id}`, fetcher, { revalidateOnFocus: false });
   const { data: galleryData } = useSWR<{ files: string[] }>("/api/gallery/clara", fetcher, { revalidateOnFocus: false });
@@ -426,7 +428,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
 
         <button
           onClick={() => router.back()}
-          className="absolute left-4 top-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 text-sm font-medium text-white/90 shadow-xl backdrop-blur-md transition hover:bg-white/10 hover:text-white sm:left-8 sm:top-8"
+          className="btn-overlay absolute left-4 top-4 z-20 gap-2 px-4 sm:left-8 sm:top-8"
         >
           <ArrowLeft size={15} /> Retour
         </button>
@@ -512,8 +514,8 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-7">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/80">Portrait</p>
-                <h2 className="mt-2 text-2xl font-bold text-white font-display">Biographie</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/80">{t('person.portrait')}</p>
+                <h2 className="mt-2 text-2xl font-bold text-white font-display">{t('person.biography')}</h2>
               </div>
               <div className="grid grid-cols-3 rounded-full border border-white/10 bg-black/20 p-1">
                 {(["fr", "es", "en"] as Lang[]).map((l) => (
@@ -643,7 +645,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           <section className="mb-10">
             <div className="mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">TMDb</p>
-              <h2 className="mt-1 text-2xl font-bold text-white font-display">Photos</h2>
+              <h2 className="mt-1 text-2xl font-bold text-white font-display">{t('person.photos')}</h2>
             </div>
             <HorizontalCarousel className="scrollbar-thin flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory">
               {tmdbPhotos.map((photo, i) => (
@@ -700,7 +702,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
           <section className="mb-16">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">Médias</p>
-              <h2 className="mt-2 text-3xl font-bold text-white font-display">Interviews & Vidéos</h2>
+              <h2 className="mt-2 text-3xl font-bold text-white font-display">{t('person.interviewsVideos')}</h2>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {vip.videos.map((v) => <VideoCard key={v.id} videoId={v.id} title={v.title} />)}
@@ -733,6 +735,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
 }
 
 function TmdbPhotoLightbox({ photos, startIndex, onClose }: { photos: PersonPhoto[]; startIndex: number; onClose: () => void }) {
+  const t = useT();
   const [idx, setIdx] = useState(startIndex);
   const prev = useCallback(() => setIdx((i) => (i - 1 + photos.length) % photos.length), [photos.length]);
   const next = useCallback(() => setIdx((i) => (i + 1) % photos.length), [photos.length]);
@@ -743,9 +746,9 @@ function TmdbPhotoLightbox({ photos, startIndex, onClose }: { photos: PersonPhot
   }, [onClose, prev, next]);
   return (
     <div className="fixed inset-0 z-9999 grid place-items-center overflow-hidden bg-[#05040a]/95 p-4 backdrop-blur-xl sm:p-6" onClick={onClose}>
-      <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:left-6"><ChevronLeft size={24} /></button>
-      <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:right-6"><ChevronRight size={24} /></button>
-      <button onClick={onClose} className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20 sm:right-6 sm:top-6"><X size={20} /></button>
+      <button onClick={(e) => { e.stopPropagation(); prev(); }} aria-label={t('person.prevPhoto')} className="btn-overlay absolute left-3 top-1/2 z-10 -translate-y-1/2 sm:left-6"><ChevronLeft size={24} /></button>
+      <button onClick={(e) => { e.stopPropagation(); next(); }} aria-label={t('person.nextPhoto')} className="btn-overlay absolute right-3 top-1/2 z-10 -translate-y-1/2 sm:right-6"><ChevronRight size={24} /></button>
+      <button onClick={onClose} aria-label={t('person.closeAria')} className="btn-overlay absolute right-3 top-3 z-10 sm:right-6 sm:top-6"><X size={20} /></button>
       <figure className="relative grid max-h-[calc(100vh-2rem)] w-full max-w-[min(92vw,1000px)] place-items-center gap-4" onClick={(e) => e.stopPropagation()}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photos[idx].fullPath} alt={`Photo ${idx + 1}`} className="max-h-[calc(100vh-7rem)] max-w-full rounded-2xl object-contain shadow-[0_30px_90px_rgba(0,0,0,0.65)] ring-1 ring-white/10" decoding="async" />
@@ -766,7 +769,7 @@ function ExpandableBio({ text, source }: { text: string; source: "wikipedia" | "
       </p>
       <div className="mt-1.5 flex items-center gap-3">
         {text.length > limit && (
-          <button onClick={() => setExpanded((v) => !v)} className="text-xs text-accent-400 hover:text-accent-300">
+          <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-300">
             {expanded ? "Réduire" : "Lire la suite"}
           </button>
         )}
@@ -777,6 +780,7 @@ function ExpandableBio({ text, source }: { text: string; source: "wikipedia" | "
 }
 
 function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
+  const t = useT();
   const router = useRouter();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { data: enriched } = useSWR<EnrichedPersonData>(
@@ -802,7 +806,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
     <div className="mx-auto max-w-6xl">
       <button
         onClick={() => router.back()}
-        className="mb-6 flex items-center gap-1.5 text-sm text-slate-400 hover:text-white"
+        className="btn btn-ghost btn-sm mb-6"
       >
         <ArrowLeft size={14} /> Retour
       </button>
@@ -876,7 +880,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
       {/* Photo strip */}
       {photos.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Photos</h2>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">{t('person.photos')}</h2>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {photos.map((src, i) => (
               <button key={src} onClick={() => setLightboxIndex(i)}
@@ -916,15 +920,18 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
       {lightboxIndex !== null && photos.length > 0 && createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/90 backdrop-blur-xs" onClick={() => setLightboxIndex(null)}>
           <button onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => ((i ?? 0) - 1 + photos.length) % photos.length); }}
-            className="absolute left-4 top-1/2 z-10 -translate-y-1/2 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
+            aria-label={t('person.prevPhoto')}
+            className="btn-overlay absolute left-4 top-1/2 z-10 -translate-y-1/2">
             <ChevronLeft size={20} />
           </button>
           <button onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => ((i ?? 0) + 1) % photos.length); }}
-            className="absolute right-4 top-1/2 z-10 -translate-y-1/2 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
+            aria-label={t('person.nextPhoto')}
+            className="btn-overlay absolute right-4 top-1/2 z-10 -translate-y-1/2">
             <ChevronRight size={20} />
           </button>
           <button onClick={() => setLightboxIndex(null)}
-            className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20">
+            aria-label={t('person.closeAria')}
+            className="btn-overlay absolute right-4 top-4 z-10">
             <X size={16} />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}

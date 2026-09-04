@@ -614,7 +614,9 @@
     "viewList": "List",
     "today": "Today",
     "loading": "Loading calendar…",
-    "empty": "No events this month."
+    "empty": "No events this month.",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month"
   },
   "timeline": {
     "pageTitle": "Recent activity",

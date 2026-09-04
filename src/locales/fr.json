@@ -614,7 +614,9 @@
     "viewList": "Liste",
     "today": "Aujourd'hui",
     "loading": "Chargement du calendrier…",
-    "empty": "Aucun événement ce mois-ci."
+    "empty": "Aucun événement ce mois-ci.",
+    "prevMonth": "Mois précédent",
+    "nextMonth": "Mois suivant"
   },
   "timeline": {
     "pageTitle": "Activité récente",
