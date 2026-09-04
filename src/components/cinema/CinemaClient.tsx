@@ -150,6 +150,7 @@ function ContinueCard({
   rowKey,
   index,
   onOpen,
+  onFocus,
 }: {
   itemId: string;
   title: string;
@@ -167,6 +168,16 @@ function ContinueCard({
    * La fiche porte les deux, et « Reprendre » y est la première ligne.
    */
   onOpen: () => void;
+  /**
+   * Ce que la bannière doit montrer quand cette carte est désignée.
+   *
+   * Ces cartes n'y participaient pas : leur charge utile — la file de reprise de Jellyfin — ne
+   * porte ni fond, ni genres, ni synopsis, donc il n'y avait rien à afficher. Mais le titre,
+   * lui, est dans la bibliothèque déjà chargée : il suffit de l'y retrouver. Sans quoi la
+   * bannière garde le titre précédent pendant qu'on parcourt la rangée, et annonce autre chose
+   * que ce qu'on désigne.
+   */
+  onFocus: () => void;
 }) {
   const t = useT();
   return (
@@ -176,6 +187,8 @@ function ContinueCard({
       data-tv-row={rowKey}
       data-tv-col={index}
       onClick={onOpen}
+      onFocus={onFocus}
+      onMouseEnter={onFocus}
       className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 overflow-visible rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
       <div className="relative overflow-hidden rounded-lg">
@@ -448,6 +461,15 @@ export function CinemaClient() {
   useEffect(() => {
     rowsPaneRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [mediaType]);
+
+  /** Le film de la bibliothèque désigné par un lien de reprise, s'il y est. */
+  const matchRadarr = useCallback(
+    (href: string | null) => {
+      const film = href?.match(/^\/radarr\/(\d+)$/);
+      return film ? moviesById.get(Number(film[1])) : undefined;
+    },
+    [moviesById]
+  );
 
   const openResume = useCallback(
     (href: string | null, play: () => void) => {
@@ -742,6 +764,10 @@ export function CinemaClient() {
                         runtimeTicks={item.runtimeTicks}
                         rowKey="continue-movies"
                         index={i}
+                        onFocus={() => {
+                          const inLibrary = matchRadarr(item.cinemaHref);
+                          if (inLibrary) setFocusedItem(inLibrary);
+                        }}
                         onOpen={() =>
                           openResume(item.cinemaHref, () =>
                             playback.play({
@@ -858,6 +884,10 @@ export function CinemaClient() {
                         episodeNumber={item.episodeNumber}
                         rowKey="continue-series"
                         index={i}
+                        onFocus={() => {
+                          const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
+                          if (inLibrary) setSeriesFocusedItem(inLibrary);
+                        }}
                         onOpen={() =>
                           openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
                             playback.play({
