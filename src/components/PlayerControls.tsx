@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
 export interface Track {
@@ -93,6 +93,7 @@ export function PlayerControls({
   const seekSpinner = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The element whose volume has already been probed, so it is probed once and not per render. */
   const probedVolumeOn = useRef<HTMLVideoElement | null>(null);
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -107,6 +108,32 @@ export function PlayerControls({
    * which works everywhere, including on the phone where the element does not.
    */
   const [volumeSettable, setVolumeSettable] = useState(true);
+
+  /**
+   * Asks the platform whether it will let a page set the volume, by trying and putting it back.
+   *
+   * Asked again once the element has media, which is the whole point: on iOS a `volume` written
+   * to an element that has not loaded anything can read back as though it took, and only once
+   * there is something to play does it become the no-op it really is. Probed only at mount — as
+   * this was — the answer came from the one moment it is not yet true, so the control stayed on
+   * screen and behaved as a mute switch with nothing in between.
+   */
+  const probeVolume = useCallback((video: HTMLVideoElement) => {
+    if (probedVolumeOn.current === video) return;
+    const before = video.volume;
+    try {
+      video.volume = before > 0.5 ? before - 0.1 : before + 0.1;
+      const took = video.volume !== before;
+      video.volume = before;
+      setVolumeSettable(took);
+      // Only an element with media has given its real answer; before that the question is asked
+      // again on the next event that says it has some.
+      if (video.readyState > 0) probedVolumeOn.current = video;
+    } catch {
+      setVolumeSettable(false);
+      probedVolumeOn.current = video;
+    }
+  }, []);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
   const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
@@ -195,23 +222,8 @@ export function PlayerControls({
     setMuted(video.muted);
     setSpeed(video.playbackRate || 1);
 
-    // Asked by trying, and put back immediately: a platform that ignores the write is a platform
-    // where this control is furniture. Once per element, not once per render — on the canvas
-    // path this ref is a fresh object every time, so the effect runs constantly and this would
-    // be poking the gain node twice for each of them.
-    if (probedVolumeOn.current === video) return;
-    probedVolumeOn.current = video;
-    const before = video.volume;
-    let settable = false;
-    try {
-      video.volume = before > 0.5 ? before - 0.1 : before + 0.1;
-      settable = video.volume !== before;
-      video.volume = before;
-    } catch {
-      settable = false;
-    }
-    setVolumeSettable(settable);
-  }, [videoRef]);
+    probeVolume(video);
+  }, [videoRef, probeVolume]);
 
   // Chapters — fetched once per item, same shape/lifecycle as the trickplay metadata below.
   useEffect(() => {
@@ -233,14 +245,23 @@ export function PlayerControls({
     const video = videoRef.current;
     if (!video) return;
     const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      // And anything already on its way is called off: the pause may well arrive first.
+      if (seekSpinner.current) clearTimeout(seekSpinner.current);
+      seekSpinner.current = null;
+      setBuffering(false);
+    };
     // Suppressed while dragging the seek bar — otherwise the real (not-yet-seeked) playback
     // position keeps overwriting the dragged thumb position on every tick, fighting the user's
     // own drag mid-gesture.
     const onTime = () => {
       if (!seekingRef.current) setCurrentTime(video.currentTime);
     };
-    const onDuration = () => setDuration(video.duration || 0);
+    const onDuration = () => {
+      setDuration(video.duration || 0);
+      probeVolume(video);
+    };
     const onVolume = () => {
       setVolume(video.volume);
       setMuted(video.muted);
@@ -272,9 +293,15 @@ export function PlayerControls({
      */
     const onSeeking = () => {
       if (seekSpinner.current) clearTimeout(seekSpinner.current);
+      // Never while paused. Pausing *is* a seek here — the position is re-stated at the button
+      // to flush the sound iOS still holds queued (see PlaybackGuard.paused) — so pressing pause
+      // announced itself as work: the three centre buttons vanished and the loading thread ran,
+      // as though stopping the film needed fetching. A paused player is not working, whatever
+      // the element is doing about its own clock.
+      if (video.paused) return;
       seekSpinner.current = setTimeout(() => {
         seekSpinner.current = null;
-        if (video.seeking) setBuffering(true);
+        if (video.seeking && !video.paused) setBuffering(true);
       }, SEEK_SPINNER_MS);
     };
     const onSeeked = () => onPlaying();
@@ -348,7 +375,7 @@ export function PlayerControls({
       video.removeEventListener("ratechange", onRateChange);
       video.removeEventListener("progress", onProgress);
     };
-  }, [videoRef]);
+  }, [videoRef, probeVolume]);
 
   useEffect(() => {
     function onFsChange() {
@@ -588,6 +615,10 @@ export function PlayerControls({
     if (!video) return;
     video.volume = value;
     video.muted = value === 0;
+    // The last word belongs to what actually happened. If the platform ignored the write, the
+    // control has just proved itself useless and takes itself off the screen — rather than
+    // staying there as a bar with nothing between its two ends.
+    if (value > 0 && value < 1 && video.volume !== value) setVolumeSettable(false);
   }
 
   async function toggleFullscreen() {
@@ -854,9 +885,14 @@ export function PlayerControls({
           des contrôles cachés, pour la même raison qu'avant : une remise en tampon pendant que
           les contrôles ont disparu ne doit pas ressembler à un gel silencieux. */}
       {(loading || buffering) && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10">
-          <div className="player-loading-line h-full w-full bg-accent-500" />
-        </div>
+        <>
+          <div className="player-wait-thread pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10">
+            <div className="player-loading-line h-full w-full bg-accent-500" />
+          </div>
+          <div className="player-wait-wheel pointer-events-none absolute inset-0 z-20 items-center justify-center">
+            <Loader2 size={40} className="animate-spin text-white/80" />
+          </div>
+        </>
       )}
 
       {/* Skip-intro and next-up prompts stay visible even when the rest of the

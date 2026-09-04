@@ -440,3 +440,15 @@
   100% { transform: translateX(120%) scaleX(0.35); }
 }
 .player-loading-line { animation: player-loading-sweep 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+
+/* Sauf sur un téléphone tenu à la verticale, où le haut de l'écran ne nous appartient pas :
+   dans la PWA, l'encoche et la Dynamic Island passent par-dessus, et un fil de deux pixels calé
+   tout en haut disparaît dessous. Le descendre sous la zone sûre le laisserait flotter à
+   soixante pixels du bord, ce qui n'est pas mieux — donc à la verticale, une roue au centre,
+   qui est visible partout et n'a rien à négocier avec le matériel. */
+.player-wait-thread { display: block; }
+.player-wait-wheel { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .player-wait-thread { display: none; }
+  .player-wait-wheel { display: flex; }
+}

@@ -121,6 +121,7 @@ describe("PlayerControls — l'attente d'un saut", () => {
     await act(async () => {});
     expect(spinning(container)).toBe(false);
 
+    Object.defineProperty(element!, "paused", { value: false, configurable: true });
     Object.defineProperty(element!, "seeking", { value: true, configurable: true });
     await act(async () => void element!.dispatchEvent(new Event("seeking")));
     await act(async () => void vi.advanceTimersByTime(200));
@@ -128,6 +129,44 @@ describe("PlayerControls — l'attente d'un saut", () => {
 
     Object.defineProperty(element!, "seeking", { value: false, configurable: true });
     await act(async () => void element!.dispatchEvent(new Event("seeked")));
+    expect(spinning(container)).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("ne fait pas passer une mise en pause pour un chargement", async () => {
+    // Pausing *is* a seek here: the position is re-stated at the button to flush the sound iOS
+    // still holds queued. So pressing pause announced itself as work — the three centre buttons
+    // vanished and the loading thread ran, as though stopping the film needed fetching.
+    vi.useFakeTimers();
+    stubMediaFetches();
+    let element: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (element = v)} />);
+    await act(async () => {});
+
+    Object.defineProperty(element!, "paused", { value: true, configurable: true });
+    Object.defineProperty(element!, "seeking", { value: true, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("seeking")));
+    await act(async () => void vi.advanceTimersByTime(500));
+
+    expect(spinning(container)).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("range ce qu'il montrait si la pause arrive pendant le saut", async () => {
+    vi.useFakeTimers();
+    stubMediaFetches();
+    let element: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (element = v)} />);
+    await act(async () => {});
+
+    Object.defineProperty(element!, "paused", { value: false, configurable: true });
+    Object.defineProperty(element!, "seeking", { value: true, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("seeking")));
+    await act(async () => void vi.advanceTimersByTime(200));
+    expect(spinning(container)).toBe(true);
+
+    Object.defineProperty(element!, "paused", { value: true, configurable: true });
+    await act(async () => void element!.dispatchEvent(new Event("pause")));
     expect(spinning(container)).toBe(false);
     vi.useRealTimers();
   });
