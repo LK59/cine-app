@@ -88,6 +88,23 @@ async function request<T>(path: string, init: RequestInit = {}, _retried = false
   return (await res.text()) as unknown as T;
 }
 
+/** Sends one torrent command, falling back to an older name for it on a 404. */
+async function command(names: [string, string], hashes: string[]): Promise<void> {
+  const body = `hashes=${hashes.join("|")}`;
+  const send = (name: string) =>
+    request<void>(`/api/v2/torrents/${name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+  try {
+    return await send(names[0]);
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) return send(names[1]);
+    throw error;
+  }
+}
+
 export interface QbTorrent {
   hash: string;
   name: string;
@@ -118,18 +135,19 @@ export const qbittorrent = {
     alltime_dl: number;
     alltime_ul: number;
   }>("/api/v2/transfer/info"),
-  pause: (hashes: string[]) =>
-    request<void>("/api/v2/torrents/pause", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `hashes=${hashes.join("|")}`,
-    }),
-  resume: (hashes: string[]) =>
-    request<void>("/api/v2/torrents/resume", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `hashes=${hashes.join("|")}`,
-    }),
+  /**
+   * Stop / start, and pause / resume behind them.
+   *
+   * qBittorrent 5.0 renamed both endpoints — `torrents/pause` and `torrents/resume` are gone and
+   * answer 404. Measured on this instance, which runs v5.2.3: the two buttons had been dead
+   * since the upgrade, and silently, because the failure never reached the page.
+   *
+   * The new name is tried first and the old one only if the server does not know it, so this
+   * works against either generation without having to ask the server its version first — and
+   * without a version test that would itself go stale.
+   */
+  pause: (hashes: string[]) => command(["stop", "pause"], hashes),
+  resume: (hashes: string[]) => command(["start", "resume"], hashes),
   remove: (hashes: string[], deleteFiles: boolean) =>
     request<void>("/api/v2/torrents/delete", {
       method: "POST",

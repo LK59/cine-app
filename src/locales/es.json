@@ -327,7 +327,9 @@
     },
     "filterStatusAll": "Todos los estados",
     "filterCategoryAll": "Todas las categorías",
-    "filterTrackerAll": "Todos los indexadores"
+    "filterTrackerAll": "Todos los indexadores",
+    "paused": "Torrent en pausa",
+    "resumed": "Torrent reanudado"
   },
   "health": {
     "pageTitle": "Estado del sistema",

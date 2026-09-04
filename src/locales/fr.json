@@ -327,7 +327,9 @@
     },
     "filterStatusAll": "Tous les statuts",
     "filterCategoryAll": "Toutes les catégories",
-    "filterTrackerAll": "Tous les indexeurs"
+    "filterTrackerAll": "Tous les indexeurs",
+    "paused": "Torrent mis en pause",
+    "resumed": "Torrent relancé"
   },
   "health": {
     "pageTitle": "Santé système",

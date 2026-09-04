@@ -327,7 +327,9 @@
     },
     "filterStatusAll": "Alle Status",
     "filterCategoryAll": "Alle Kategorien",
-    "filterTrackerAll": "Alle Tracker"
+    "filterTrackerAll": "Alle Tracker",
+    "paused": "Torrent pausiert",
+    "resumed": "Torrent fortgesetzt"
   },
   "health": {
     "pageTitle": "Systemstatus",

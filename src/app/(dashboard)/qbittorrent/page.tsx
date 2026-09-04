@@ -13,6 +13,8 @@ import { useEffect, useMemo, useState } from "react";
 import { TorrentDetailModal } from "@/components/TorrentDetailModal";
 
 import { fmtSize as formatBytes, fmtEta } from "@/lib/format";
+import { apiAction } from "@/lib/apiAction";
+import { useToast } from "@/components/Toast";
 
 const PAGE_SIZE = 20;
 
@@ -57,6 +59,7 @@ function sortTorrents(torrents: QbTorrent[]): QbTorrent[] {
 }
 
 export default function QbittorrentPage() {
+  const toast = useToast();
   const { mutate } = useSWRConfig();
   const { isGuest } = useRole();
   const t = useT();
@@ -105,25 +108,51 @@ export default function QbittorrentPage() {
     setVisibleCount(PAGE_SIZE);
   }, [query, statusFilter, categoryFilter, trackerFilter, torrents?.length]);
 
+  /**
+   * Toutes les actions de cette page passent par ici, et disent quand elles échouent.
+   *
+   * Elles ne le disaient pas : `await fetch(...)` puis rafraîchissement de la liste, ce qui rend
+   * une requête refusée indiscernable d'une requête acceptée — rien ne bouge, rien n'est dit.
+   * C'est ainsi que le bouton pause est resté mort à travers une montée de version de
+   * qBittorrent sans que personne puisse savoir pourquoi.
+   */
+  async function run(work: Promise<unknown>, done?: string) {
+    try {
+      await work;
+      if (done) toast.success(done);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      mutate("/api/qbittorrent/torrents");
+    }
+  }
+
   async function action(hash: string, action: "pause" | "resume") {
-    await fetch(`/api/qbittorrent/torrents/${hash}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    mutate("/api/qbittorrent/torrents");
+    const paused = action === "pause";
+    await run(
+      apiAction(`/api/qbittorrent/torrents/${hash}`, { method: "POST", body: JSON.stringify({ action }) }),
+      paused ? t('qbittorrent.paused') : t('qbittorrent.resumed')
+    );
+    // Écrit tout de suite, puis revalidé. qBittorrent met un instant à refléter l'ordre qu'on
+    // vient de lui donner, et le rafraîchissement qui suit renvoie donc souvent l'ancien état :
+    // le bouton restait sur « Pause » alors que la mise en pause avait réussi, jusqu'au sondage
+    // suivant, cinq secondes plus tard.
+    mutate(
+      "/api/qbittorrent/torrents",
+      (current?: QbTorrent[]) =>
+        current?.map((x) => (x.hash === hash ? { ...x, state: paused ? "pausedDL" : "downloading" } : x)),
+      { revalidate: false }
+    );
   }
 
   async function remove(hash: string) {
     if (!confirm(t('qbittorrent.confirmDelete'))) return;
-    await fetch(`/api/qbittorrent/torrents/${hash}?deleteFiles=false`, { method: "DELETE" });
-    mutate("/api/qbittorrent/torrents");
+    await run(apiAction(`/api/qbittorrent/torrents/${hash}?deleteFiles=false`, { method: "DELETE" }));
   }
 
   async function removeWithFiles(hash: string, deleteFiles: boolean) {
-    await fetch(`/api/qbittorrent/torrents/${hash}?deleteFiles=${deleteFiles}`, { method: "DELETE" });
+    await run(apiAction(`/api/qbittorrent/torrents/${hash}?deleteFiles=${deleteFiles}`, { method: "DELETE" }));
     setSelectedHash(null);
-    mutate("/api/qbittorrent/torrents");
   }
 
   return (
