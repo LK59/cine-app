@@ -17,23 +17,29 @@ import { useEffect, useState } from "react";
  * une dimension, c'est l'encombrement apparent.
  */
 
-/** Les proportions rencontrées, et ce qu'elles valent en hauteur relative. */
+/**
+ * Les proportions rencontrées, et ce qu'elles valent en hauteur relative.
+ *
+ * L'écart entre les extrêmes reste ce qui égalise l'encombrement apparent ; c'est le niveau
+ * général qui était trop bas — corriger la hauteur d'un logo long revenait à rapetisser tout le
+ * monde, puisque le plafond de base était celui d'un logo carré.
+ */
 function heightFactor(ratio: number | null): number {
   if (ratio === null) return 1;
-  if (ratio >= 5.5) return 0.6; // une ligne très longue : « MISSION: IMPOSSIBLE »
-  if (ratio >= 3.5) return 0.76; // une ligne ordinaire : « SUNSHINE »
+  if (ratio >= 5.5) return 0.72; // une ligne très longue : « MISSION: IMPOSSIBLE »
+  if (ratio >= 3.5) return 0.85; // une ligne ordinaire : « SUNSHINE »
   if (ratio >= 2) return 1; // un mot large ou deux lignes courtes
-  return 1.3; // empilé ou presque carré : « CASINO ROYALE »
+  return 1.25; // empilé ou presque carré : « CASINO ROYALE »
 }
 
 /** Les trois surfaces qui portent un logo, et la hauteur qu'elles lui accordent. */
 const SURFACES = {
   /** La bannière du haut, sur l'écran de parcours. */
-  hero: { compact: 56, roomy: 92, maxWidth: "min(100%, 34rem)" },
+  hero: { compact: 72, roomy: 124, maxWidth: "min(100%, 40rem)" },
   /** La fiche plein écran. */
-  sheet: { compact: 52, roomy: 92, maxWidth: "min(100%, 26rem)" },
+  sheet: { compact: 64, roomy: 112, maxWidth: "min(100%, 30rem)" },
   /** Le téléphone, où la place est comptée dans les deux sens. */
-  phone: { compact: 40, roomy: 56, maxWidth: "min(100%, 18rem)" },
+  phone: { compact: 48, roomy: 68, maxWidth: "min(100%, 20rem)" },
 } as const;
 
 /** En dessous, la fenêtre est trop courte pour la hauteur généreuse. */
