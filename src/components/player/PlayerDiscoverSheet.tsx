@@ -61,8 +61,15 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   const close = () => cinemaClose({ discover: null, person: null });
 
   // Le focus part sur la première action, jamais sur le résumé : c'est ce qu'on est venu faire.
+  //
+  // Une seule fois, à l'arrivée des données. Sans le garde-fou, chaque revalidation SWR — un
+  // retour sur l'onglet suffit — reprenait le focus des mains de la personne en train de lire la
+  // distribution.
+  const focusPlaced = useRef(false);
   useEffect(() => {
-    if (data) focusFirstAction(containerRef.current);
+    if (!data || focusPlaced.current) return;
+    focusPlaced.current = true;
+    focusFirstAction(containerRef.current);
   }, [data]);
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
@@ -43,6 +43,9 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
           body: JSON.stringify(field === "played" ? { itemId, played: next } : { itemId, favorite: next }),
         });
         void mutate();
+        // « Ma liste » lit ces deux états depuis sa propre vue agrégée : sans ça, on coche
+        // « vu » sur une fiche et l'onglet d'à côté l'ignore jusqu'au prochain chargement.
+        void globalMutate("/api/player/lists");
       } catch (err) {
         void mutate(data, { revalidate: false });
         toast.error(err instanceof Error ? err.message : t("common.unknown"));

@@ -58,6 +58,12 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     episodes: false,
     discover: null,
     person: null,
+    // Le tiroir du téléphone se referme dans le *même* mouvement.
+    //
+    // Il se fermait juste avant, par un `cinemaClose` séparé — donc un `history.back()`, qui est
+    // asynchrone : la navigation suivante était empilée avant que le retour ait eu lieu, et le
+    // retour l'annulait ensuite. On choisissait « Ma liste » et on retombait sur la grille.
+    menu: false,
   } satisfies Partial<CinemaRoute>;
 
   if (panel === "home") {

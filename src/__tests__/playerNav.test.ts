@@ -46,6 +46,16 @@ describe("openPanel", () => {
     expect(patch).toMatchObject({ film: null, serie: null, episodes: false, person: null, discover: null });
   });
 
+  // Le tiroir du téléphone se referme dans la même écriture. Le fermer séparément voulait dire un
+  // `history.back()` asynchrone, empilé sous la navigation suivante puis l'annulant : on
+  // choisissait « Ma liste » et on retombait sur la grille.
+  it("closes the phone drawer in the same history write", async () => {
+    const { openPanel } = await import("@/components/player/playerNav");
+    openPanel("list", { ...EMPTY, menu: true });
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate.mock.calls[0][0]).toMatchObject({ menu: false, list: true });
+  });
+
   it("does nothing when the panel asked for is already the open one", async () => {
     const { openPanel } = await import("@/components/player/playerNav");
     openPanel("account", { ...EMPTY, account: true });

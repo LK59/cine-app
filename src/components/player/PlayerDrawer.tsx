@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Clapperboard, X } from "lucide-react";
-import { useCinemaRoute } from "@/lib/cinemaRoute";
+import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PLAYER_NAV, MANAGE_ITEM, activePanel, openPanel } from "./playerNav";
 
@@ -41,9 +41,12 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onOpenChange]);
 
-  function choose(fn: () => void) {
-    onOpenChange(false);
-    fn();
+  // Ouvrir un panneau referme le tiroir dans la même écriture d'historique — voir `openPanel`.
+  // Quitter vers la gestion, en revanche, n'y passe pas : on efface le tiroir de l'entrée
+  // courante (`replace`, donc pas de retour à consommer) avant de changer de page.
+  function leaveToManagement() {
+    cinemaNavigate({ menu: false }, "replace");
+    router.push(MANAGE_ITEM.href);
   }
 
   return (
@@ -97,7 +100,7 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
                 <button
                   key={panel}
                   type="button"
-                  onClick={() => choose(() => openPanel(panel, route))}
+                  onClick={() => openPanel(panel, route)}
                   aria-current={isActive ? "page" : undefined}
                   className={`relative flex h-12 items-center gap-4 rounded-xl pl-4 pr-3 text-left text-[15px] font-medium transition-colors ${
                     isActive
@@ -115,7 +118,7 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
           <div className="border-t border-white/10 px-3 py-3">
             <button
               type="button"
-              onClick={() => choose(() => router.push(MANAGE_ITEM.href))}
+              onClick={leaveToManagement}
               className="flex h-10 w-full items-center gap-4 rounded-xl px-4 text-left text-xs text-slate-500 active:bg-white/5"
             >
               <MANAGE_ITEM.icon size={17} className="shrink-0" />

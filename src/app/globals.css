@@ -690,11 +690,26 @@
 }
 /* Replié, le rail est une bande opaque et le contenu se décale d'exactement sa largeur : pas de
    dégradé à raccorder, pas d'affiche coupée. Déployé, il passe par-dessus — une ombre portée
-   suffit à dire qu'il flotte, et le décalage du contenu ne bouge pas d'un pixel. */
+   suffit à dire qu'il flotte, et le décalage du contenu ne bouge pas d'un pixel.
+
+   Le petit délai au survol n'est pas de la coquetterie : la souris traverse forcément le rail
+   pour atteindre la première affiche de chaque ligne, et sans lui, le menu se dépliait pour
+   recouvrir exactement ce qu'on visait. Au clavier, l'ouverture reste immédiate — d'où la règle
+   `focus-within` posée après, qui l'emporte quand les deux s'appliquent. */
 .player-rail:hover,
 .player-rail:focus-within {
   width: 15rem;
   box-shadow: 0 0 3rem rgb(0 0 0 / 0.55);
+}
+.player-rail:hover {
+  transition-delay: 140ms;
+}
+.player-rail:hover .player-rail-label {
+  transition-delay: 140ms;
+}
+.player-rail:focus-within,
+.player-rail:focus-within .player-rail-label {
+  transition-delay: 0ms;
 }
 .player-rail-label {
   opacity: 0;

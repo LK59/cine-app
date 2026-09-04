@@ -12,6 +12,10 @@ const mockJellyfin = {
 };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+// Remplacement complet : le vrai module importe tous les clients, dont chacun déstructure sa
+// propre section de config au chargement (même raison que dans cinema-movies-route).
+const mockInvalidateKey = vi.fn();
+vi.mock("@/lib/server-cache", () => ({ invalidateKey: (...a: unknown[]) => mockInvalidateKey(...a) }));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
 let playerEnabled = true;
@@ -162,5 +166,25 @@ describe("GET /api/jellyfin/redirect", () => {
     const location = res.headers.get("location");
     expect(location).toContain("/web/index.html#!/details?id=abc123");
     expect(location).not.toContain("api_key");
+  });
+});
+
+describe("POST /api/jellyfin/played — cache", () => {
+  // « Ma liste » lit « vu » et « favori » depuis la bibliothèque Jellyfin mise en cache deux
+  // minutes. Sans cette invalidation, on coche « vu » et l'onglet continue de dire le contraire
+  // pendant deux minutes — juste après le geste censé le changer.
+  it("drops the caller's own cached library so Ma liste reflects the change at once", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-louis" });
+    mockJellyfin.markPlayed.mockResolvedValue(undefined);
+
+    const { POST } = await import("@/app/api/jellyfin/played/route");
+    const res = await POST({
+      cookies: { get: () => ({ value: "t" }) },
+      json: async () => ({ itemId: "abc", played: true }),
+    } as unknown as NextRequest);
+
+    expect(res.status).toBe(200);
+    expect(mockInvalidateKey).toHaveBeenCalledWith("jf:movies:jf-louis");
+    expect(mockInvalidateKey).toHaveBeenCalledWith("jf:series:jf-louis");
   });
 });

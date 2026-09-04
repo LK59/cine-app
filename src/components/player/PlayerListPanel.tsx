@@ -32,7 +32,10 @@ export function PlayerListPanel() {
     revalidateOnFocus: false,
   });
   const { busy, cancelRequest } = usePlayerTitleActions(null);
-  const [segment, setSegment] = useState<Segment>("requests");
+  // Aucun onglet n'est choisi d'avance : on ouvre sur le premier qui a quelque chose à montrer,
+  // en commençant par les demandes. Atterrir sur un écran vide alors que trois onglets plus loin
+  // il y a quarante titres, c'est donner l'impression que la page est cassée.
+  const [chosen, setChosen] = useState<Segment | null>(null);
 
   const counts = useMemo(
     () => ({
@@ -47,6 +50,10 @@ export function PlayerListPanel() {
 
   // Ce qui vient d'arriver : c'est la seule chose de cet écran qui mérite qu'on la signale.
   const arrived = data?.requests.filter((r) => r.state === "available").length ?? 0;
+
+  // Déduit au rendu, jamais corrigé dans un effet : la valeur suit l'arrivée des données sans
+  // provoquer de rendu en cascade, et un choix explicite l'emporte pour toujours.
+  const segment: Segment = chosen ?? SEGMENTS.find((key) => counts[key] > 0) ?? "requests";
 
   function openTitle(item: PlayerListItem) {
     if (item.libraryId === null) {
@@ -67,7 +74,7 @@ export function PlayerListPanel() {
             <button
               key={key}
               type="button"
-              onClick={() => setSegment(key)}
+              onClick={() => setChosen(key)}
               aria-pressed={segment === key}
               className={segment === key ? "chip chip-on" : "chip"}
             >

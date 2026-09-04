@@ -33,9 +33,18 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
+  // Toutes les vues de listes, quelle que soit leur source : la watchlist locale (dont la clé
+  // porte le statut demandé), la vue agrégée du lecteur, et la fiche ouverte s'il y en a une.
+  // Oublier la vue agrégée était le bug le plus prévisible de ce lot : on ajoutait un titre à
+  // « À voir » et l'onglet d'à côté continuait de dire qu'il n'y avait rien.
   const refreshLists = useCallback(() => {
-    // Toutes les vues de listes, quel que soit leur filtre — la clé porte le statut demandé.
-    void mutate((key) => typeof key === "string" && key.startsWith("/api/watchlist"));
+    void mutate(
+      (key) =>
+        typeof key === "string" &&
+        (key.startsWith("/api/watchlist") ||
+          key === "/api/player/lists" ||
+          key.startsWith("/api/player/title/"))
+    );
   }, []);
 
   const setStatus = useCallback(
@@ -83,14 +92,14 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
         body: JSON.stringify({ type: ref.type, tmdbId: ref.tmdbId }),
       });
       toast.success(t("player.actions.requested", { title: ref.title }));
+      refreshLists();
       void mutate("/api/player/requests");
-      void mutate((key) => typeof key === "string" && key.startsWith("/api/player/title/"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.unknown"));
     } finally {
       setBusy(false);
     }
-  }, [ref, busy, toast, t]);
+  }, [ref, busy, toast, t, refreshLists]);
 
   const cancelRequest = useCallback(
     async (requestId: number) => {
@@ -99,6 +108,7 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
       try {
         await apiAction(`/api/player/requests/${requestId}`, { method: "DELETE" });
         toast.success(t("player.actions.requestCancelled"));
+        refreshLists();
         void mutate("/api/player/requests");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t("common.unknown"));
@@ -106,7 +116,7 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
         setBusy(false);
       }
     },
-    [busy, toast, t]
+    [busy, toast, t, refreshLists]
   );
 
   return { busy, setStatus, request, cancelRequest };
