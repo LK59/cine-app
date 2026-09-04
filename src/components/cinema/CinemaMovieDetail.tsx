@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, RotateCcw, Video } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Heart, Plus, RotateCcw, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -15,10 +15,11 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
-import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -69,7 +70,12 @@ export function CinemaMovieDetail({
   // (Radarr/TMDB fields only, shared across every viewer) — without this, Lecture always started
   // a partly-watched movie over from 0 unless the movie happened to be opened via the Continue
   // Watching row instead (a different endpoint, with its own resume point already attached).
-  const { data: progress } = useSWR<CinemaProgressPayload>(`/api/cinema/progress/${item.jellyfinItemId}`, fetcher);
+  //
+  // La même réponse porte « vu » et « favori », qui vivent chez Jellyfin et non dans la base
+  // locale — voir useJellyfinItemState pour pourquoi une seconde copie finissait toujours par
+  // mentir.
+  const { progress, watched, favorite, busy: flagsBusy, toggleWatched, toggleFavorite } =
+    useJellyfinItemState(item.jellyfinItemId);
   const hasResume = !!progress?.resumeTicks && progress.resumeTicks > 0;
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
   // watchlist — useAddToWatchlist only reflects whatever status is handed to it as initialStatus
@@ -177,21 +183,9 @@ export function CinemaMovieDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [requestClose, showTrailer, showSynopsis, playerOwnsKeyboard]);
 
-  // Independent on/off toggles, not "reassign to the other status" — un-toggling either one
-  // goes back to no status at all (removeFromWatchlist), not to whatever the other button
-  // represents. Clicking the OTHER button while one is active still switches the single
-  // underlying status field (the schema only holds one status per item, never both at once —
-  // that part is inherent, not a bug), but a button no longer forcibly re-adds the item under a
-  // different status just because you were trying to turn it off.
-  function toggleWatched() {
-    if (watched) removeFromWatchlist({ tmdbId: item.tmdbId, mediaType: "movie" });
-    else
-      addToWatchlist(
-        { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "watched"
-      );
-  }
-
+  // « À voir » reste local : c'est une intention, et rien d'autre ne la connaît. « Vu » et
+  // « Favori » sont partis chez Jellyfin (voir plus haut). Un titre peut donc être à la fois dans
+  // la liste et marqué vu, ce que l'ancien schéma — un seul statut par titre — interdisait.
   function toggleAddToList() {
     if (inList) removeFromWatchlist({ tmdbId: item.tmdbId, mediaType: "movie" });
     else
@@ -203,7 +197,6 @@ export function CinemaMovieDetail({
 
   if (typeof document === "undefined") return null;
 
-  const watched = addedStatus === "watched";
   const inList = addedStatus === "to_watch";
 
   return createPortal(
@@ -294,8 +287,27 @@ export function CinemaMovieDetail({
           />
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
+            /* Chaque nom mène à sa fiche, sans quitter le lecteur. C'était une ligne de texte
+               mort au milieu d'un écran où tout le reste s'ouvre ; et une filmographie est
+               souvent la meilleure façon de trouver quoi regarder ensuite.
+
+               Volontairement hors du parcours des flèches (pas de `data-detail-menu`) : le menu
+               est une colonne d'actions, et y intercaler cinq noms ferait descendre de six crans
+               pour atteindre la ligne suivante. La tabulation, elle, y va. */
             <p className={CAST_CLASS}>
-              {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
+              {t("cinema.cast")}{" "}
+              {info.tmdb.cast.slice(0, 5).map((c, i) => (
+                <span key={c.tmdbId}>
+                  {i > 0 && ", "}
+                  <button
+                    type="button"
+                    onClick={() => cinemaNavigate({ person: c.tmdbId })}
+                    className="rounded transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                  >
+                    {c.name}
+                  </button>
+                </span>
+              ))}
             </p>
           )}
 
@@ -346,6 +358,7 @@ export function CinemaMovieDetail({
             <button
               data-detail-menu
               onClick={toggleWatched}
+              disabled={flagsBusy}
               aria-pressed={watched}
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
             >
@@ -354,6 +367,24 @@ export function CinemaMovieDetail({
               </span>
               <span className="text-sm font-medium">
                 {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
+              </span>
+            </button>
+
+            {/* Le favori part chez Jellyfin, donc il se retrouve aussi sur la télé et le
+                téléphone. Il n'existe que pour un titre qu'on possède — ce qui est toujours le
+                cas ici, cette fiche étant celle de la bibliothèque. */}
+            <button
+              data-detail-menu
+              onClick={toggleFavorite}
+              disabled={flagsBusy}
+              aria-pressed={favorite}
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+            >
+              <span className={favorite ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                <Heart size={14} />
+              </span>
+              <span className="text-sm font-medium">
+                {favorite ? t("player.discover.favoriteOn") : t("player.discover.favorite")}
               </span>
             </button>
 

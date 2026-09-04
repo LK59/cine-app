@@ -91,7 +91,11 @@ describe("checkWatchlistAvailability", () => {
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
 
-    expect(mockSendPushToAll).toHaveBeenCalledWith(expect.objectContaining({ url: "/sonarr" }));
+    // La notification mène au lecteur, sur la fiche du titre : elle s'adresse à quelqu'un à qui
+    // on annonce qu'une série est arrivée, pas à quelqu'un qui vient administrer Sonarr.
+    expect(mockSendPushToAll).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "/player#decouverte=7&type=series" })
+    );
   });
 
   it("swallows cachedMovies/cachedSeries failures instead of throwing", async () => {

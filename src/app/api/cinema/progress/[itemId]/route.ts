@@ -6,6 +6,16 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 export interface CinemaProgressPayload {
   resumeTicks: number | null;
   runtimeTicks: number | null;
+  /**
+   * « Vu » et « Favori » viennent d'ici, et non de la base locale.
+   *
+   * Chaque liste est stockée là où vit sa vérité : Jellyfin tient déjà ces deux états pour ses
+   * propres applications, et une seconde copie chez nous finirait par diverger — un épisode
+   * regardé sur la télé, un favori ajouté depuis le téléphone. Ils arrivent dans la même réponse
+   * que la progression, qui lit déjà exactement le même objet UserData.
+   */
+  played: boolean;
+  favorite: boolean;
 }
 
 // A movie's own Jellyfin watch progress — CinemaMovie (the /api/cinema/movies payload) carries no
@@ -18,12 +28,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const { itemId } = await props.params;
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
-  if (!session?.jfId) return NextResponse.json({ resumeTicks: null, runtimeTicks: null });
+  if (!session?.jfId) {
+    return NextResponse.json({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false });
+  }
 
   const item = await jellyfin.getItemUserData(session.jfId, itemId).catch(() => null);
   const payload: CinemaProgressPayload = {
     resumeTicks: item?.UserData?.PlaybackPositionTicks ?? null,
     runtimeTicks: item?.RunTimeTicks ?? null,
+    played: Boolean(item?.UserData?.Played),
+    favorite: Boolean(item?.UserData?.IsFavorite),
   };
   return NextResponse.json(payload);
 }

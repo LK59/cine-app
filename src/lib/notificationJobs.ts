@@ -3,6 +3,20 @@ import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { logError } from "@/lib/logger";
 import { sendPushToAll, sendPushToUser } from "@/lib/push";
 
+/**
+ * Où mène une notification.
+ *
+ * Elle envoyait vers `/radarr` ou `/sonarr` — c'est-à-dire dans l'outillage, avec ses profils de
+ * qualité et ses boutons de recherche, pour quelqu'un à qui on annonce simplement qu'un film est
+ * arrivé. Elle mène maintenant au lecteur, et directement sur la fiche du titre quand on a son
+ * identifiant TMDB : la fiche sait dire « ouvrir » si le titre est là, et l'attente sinon.
+ */
+function playerUrl(mediaType: "movie" | "series", tmdbId?: number | null): string {
+  if (!tmdbId) return "/player";
+  return `/player#decouverte=${tmdbId}${mediaType === "series" ? "&type=series" : ""}`;
+}
+
+
 export async function checkWatchlistAvailability(): Promise<void> {
   try {
     const db = getDb();
@@ -33,7 +47,7 @@ export async function checkWatchlistAvailability(): Promise<void> {
       await sendPushToAll({
         title: "🎬 Disponible maintenant",
         body: `${item.title} est disponible dans ta bibliothèque`,
-        url: item.media_type === "movie" ? "/radarr" : "/sonarr",
+        url: playerUrl(item.media_type === "movie" ? "movie" : "series", item.tmdb_id),
         tag: "watchlist-available",
         category: "watchlist-available",
       });
@@ -66,7 +80,7 @@ export async function checkNewEpisodes(): Promise<void> {
       await sendPushToAll({
         title: "📺 Nouvel épisode",
         body: `${ev.title}${ev.detail ? ` — ${ev.detail}` : ""} est disponible`,
-        url: "/sonarr",
+        url: "/player",
         tag: "new-episode",
         category: "new-episode",
       });
@@ -124,7 +138,7 @@ export async function checkRequestAvailability(): Promise<void> {
       await sendPushToUser(req.userId, {
         title: "🎬 Ta demande est disponible",
         body: `${title} est maintenant disponible`,
-        url: req.mediaType === "movie" ? "/radarr" : "/sonarr",
+        url: playerUrl(req.mediaType === "movie" ? "movie" : "series", req.tmdbId),
         tag: `request-available-${req.mediaType}-${req.tmdbId}`,
         category: "request-available",
       });

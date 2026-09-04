@@ -9,6 +9,9 @@ const PREFETCH_MAP: Record<string, string[]> = {
   // to point at /api/status + /api/activity from before that consolidation, which the dashboard
   // hasn't called since. Hovering "Accueil" was warming a cache entry the page never reads.
   "/": ["/api/dashboard"],
+  // La même charge utile : `/gestion` est l'adresse définitive du tableau de bord, et c'est par
+  // elle qu'on y arrive depuis le rail du lecteur.
+  "/gestion": ["/api/dashboard"],
   "/radarr": ["/api/radarr/movies"],
   "/sonarr": ["/api/sonarr/series"],
   "/qbittorrent": ["/api/qbittorrent/torrents", "/api/qbittorrent/transfer"],

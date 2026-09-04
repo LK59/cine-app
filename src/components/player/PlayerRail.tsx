@@ -28,10 +28,39 @@ export function PlayerRail() {
   const t = useT();
   const active = activePanel(route);
 
+  /**
+   * Les flèches, dans le rail.
+   *
+   * Haut et bas parcourent ses entrées ; droite en sort et rend la main à la grille, qui a sa
+   * propre navigation (useTvGridNav) — laquelle ignore désormais ce qui se passe ici, sans quoi
+   * une flèche vers le bas quitterait le rail dès la première pression.
+   */
+  function onKeyDown(e: React.KeyboardEvent<HTMLElement>) {
+    if (!["ArrowUp", "ArrowDown", "ArrowRight"].includes(e.key)) return;
+    const nav = e.currentTarget;
+    const items = Array.from(nav.querySelectorAll<HTMLButtonElement>("button"));
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === "ArrowRight") {
+      const firstCard = document.querySelector<HTMLElement>("[data-tv-card]");
+      if (!firstCard) return;
+      e.preventDefault();
+      firstCard.focus();
+      return;
+    }
+    if (index === -1) return;
+    const next = e.key === "ArrowDown" ? index + 1 : index - 1;
+    if (next < 0 || next >= items.length) return;
+    e.preventDefault();
+    items[next].focus();
+  }
+
   return (
     <nav
       aria-label={t("player.nav.label")}
       className="player-rail fixed inset-y-0 left-0 z-50 hidden flex-col md:flex"
+      data-player-nav
+      onKeyDown={onKeyDown}
     >
       <div className="flex h-16 shrink-0 items-center gap-3 overflow-hidden px-[1.35rem]">
         <Clapperboard size={22} className="shrink-0 text-accent-400" />

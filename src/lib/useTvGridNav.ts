@@ -82,6 +82,11 @@ export function useTvGridNav(enabled = true) {
     function onKeyDown(e: KeyboardEvent) {
       if (isInputFocused()) return;
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+      // Le rail du lecteur navigue à ses propres flèches. Sans cette garde, une flèche vers le
+      // bas depuis « Recherche » sautait dans la grille au lieu de descendre sur « Ma liste » :
+      // la branche « rien de focalisé dans la grille » ci-dessous ne distingue pas « nulle part »
+      // de « ailleurs, exprès ».
+      if ((document.activeElement as HTMLElement | null)?.closest("[data-player-nav]")) return;
 
       const rows = getRows();
       if (rows.length === 0) return;

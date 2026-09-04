@@ -1300,7 +1300,8 @@
       "inList": "Dans ma liste",
       "favorite": "Favori",
       "favoriteDisabledHint": "Les favoris ne concernent que les titres présents dans la bibliothèque.",
-      "castTitle": "Distribution"
+      "castTitle": "Distribution",
+      "favoriteOn": "Dans mes favoris"
     },
     "person": {
       "less": "Réduire",

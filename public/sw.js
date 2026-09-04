@@ -1,7 +1,10 @@
 // v9: flushes the HTML documents earlier versions stored. They are no longer cached at all — see
 // the fetch handler — and the ones already saved have to go with them, or a client would keep
 // being handed a page built by a previous deploy.
-const CACHE_NAME = "cine-app-v9";
+// v10 : le lecteur a changé d'adresse (/cinema → /player) et la coquille de gestion a
+// gagné la sienne (/gestion). Un cache d'une version précédente peut contenir des pages qui
+// pointent encore vers les anciennes ; le bump les évince toutes d'un coup.
+const CACHE_NAME = "cine-app-v10";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {

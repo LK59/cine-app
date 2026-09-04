@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, ListVideo, Plus, RotateCcw, Video } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Heart, ListVideo, Plus, RotateCcw, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
@@ -17,6 +17,7 @@ import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -74,6 +75,9 @@ export function CinemaSeriesDetail({
     open ? cinemaNavigate({ episodes: true }) : cinemaClose({ episodes: false });
   const { data: info } = useSWR<SonarrInfo>(`/api/sonarr/series/${item.sonarrId}/info`, fetcher);
   const { data: episodesData } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
+  // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
+  // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
+  const { watched, favorite, busy: flagsBusy, toggleWatched, toggleFavorite } = useJellyfinItemState(item.jellyfinItemId);
   // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
   // un-toggled even for a series already on the watchlist. item.tmdbId can be null (Sonarr
   // doesn't always resolve one) — bulk-status has nothing to look up then, same as toggleWatched/
@@ -152,15 +156,8 @@ export function CinemaSeriesDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [requestClose, showTrailer, showEpisodes, playerOwnsKeyboard]);
 
-  function toggleWatched() {
-    if (watched) removeFromWatchlist({ tmdbId: item.tmdbId ?? 0, mediaType: "series" });
-    else
-      addToWatchlist(
-        { tmdbId: item.tmdbId ?? 0, mediaType: "series", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "watched"
-      );
-  }
-
+  // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
+  // local : c'est une intention, et rien d'autre ne la connaît.
   function toggleAddToList() {
     if (inList) removeFromWatchlist({ tmdbId: item.tmdbId ?? 0, mediaType: "series" });
     else
@@ -192,7 +189,6 @@ export function CinemaSeriesDetail({
 
   if (typeof document === "undefined") return null;
 
-  const watched = addedStatus === "watched";
   const inList = addedStatus === "to_watch";
   const nextEpisode = episodesData?.nextEpisode;
   const hasResume = !!nextEpisode?.resumeTicks && nextEpisode.resumeTicks > 0;
@@ -271,8 +267,27 @@ export function CinemaSeriesDetail({
           />
 
           {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
+            /* Chaque nom mène à sa fiche, sans quitter le lecteur. C'était une ligne de texte
+               mort au milieu d'un écran où tout le reste s'ouvre ; et une filmographie est
+               souvent la meilleure façon de trouver quoi regarder ensuite.
+
+               Volontairement hors du parcours des flèches (pas de `data-detail-menu`) : le menu
+               est une colonne d'actions, et y intercaler cinq noms ferait descendre de six crans
+               pour atteindre la ligne suivante. La tabulation, elle, y va. */
             <p className={CAST_CLASS}>
-              {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
+              {t("cinema.cast")}{" "}
+              {info.tmdb.cast.slice(0, 5).map((c, i) => (
+                <span key={c.tmdbId}>
+                  {i > 0 && ", "}
+                  <button
+                    type="button"
+                    onClick={() => cinemaNavigate({ person: c.tmdbId })}
+                    className="rounded transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                  >
+                    {c.name}
+                  </button>
+                </span>
+              ))}
             </p>
           )}
 
@@ -341,6 +356,7 @@ export function CinemaSeriesDetail({
             <button
               data-detail-menu
               onClick={toggleWatched}
+              disabled={flagsBusy}
               aria-pressed={watched}
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
             >
@@ -349,6 +365,21 @@ export function CinemaSeriesDetail({
               </span>
               <span className="text-sm font-medium">
                 {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
+              </span>
+            </button>
+
+            <button
+              data-detail-menu
+              onClick={toggleFavorite}
+              disabled={flagsBusy}
+              aria-pressed={favorite}
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+            >
+              <span className={favorite ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                <Heart size={14} />
+              </span>
+              <span className="text-sm font-medium">
+                {favorite ? t("player.discover.favoriteOn") : t("player.discover.favorite")}
               </span>
             </button>
 

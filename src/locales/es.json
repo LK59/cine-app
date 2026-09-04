@@ -1300,7 +1300,8 @@
       "inList": "En mi lista",
       "favorite": "Favorito",
       "favoriteDisabledHint": "Los favoritos solo se aplican a los títulos que ya están en la biblioteca.",
-      "castTitle": "Reparto"
+      "castTitle": "Reparto",
+      "favoriteOn": "En mis favoritos"
     },
     "person": {
       "less": "Ver menos",

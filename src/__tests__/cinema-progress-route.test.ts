@@ -20,8 +20,21 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis" });
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
     const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
-    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null });
+    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false });
     expect(mockGetItemUserData).not.toHaveBeenCalled();
+  });
+
+  // « Vu » et « Favori » sortent du même objet UserData que la progression : ils vivent chez
+  // Jellyfin, et cette route est le seul endroit d'où la fiche les lit.
+  it("carries the Jellyfin watched and favourite flags alongside the progress", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    mockGetItemUserData.mockResolvedValue({ UserData: { Played: true, IsFavorite: true } });
+
+    const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+
+    expect(body.played).toBe(true);
+    expect(body.favorite).toBe(true);
   });
 
   it("maps an item's resume position and runtime", async () => {
@@ -31,7 +44,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
     const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
 
-    expect(body).toEqual({ resumeTicks: 300_000_000, runtimeTicks: 1_200_000_000 });
+    expect(body).toEqual({ resumeTicks: 300_000_000, runtimeTicks: 1_200_000_000, played: false, favorite: false });
   });
 
   it("returns nulls for an item with no watch history", async () => {
@@ -51,6 +64,6 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
     const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
 
-    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null });
+    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false });
   });
 });

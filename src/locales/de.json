@@ -1300,7 +1300,8 @@
       "inList": "In meiner Liste",
       "favorite": "Favorit",
       "favoriteDisabledHint": "Favoriten gelten nur für Titel, die schon in der Bibliothek sind.",
-      "castTitle": "Besetzung"
+      "castTitle": "Besetzung",
+      "favoriteOn": "In meinen Favoriten"
     },
     "person": {
       "less": "Weniger",

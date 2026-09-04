@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
@@ -26,6 +26,12 @@ const RAIL_WIDTH = "4.5rem";
  * aux neuf cents lignes de la grille, et la grille doit pouvoir s'ouvrir sans coquille (c'est ce
  * qui se passait avant ce chantier).
  */
+/**
+ * `useLayoutEffect` côté navigateur, `useEffect` au rendu serveur — où il n'y a pas de mise en
+ * page à mesurer, et où React avertit qu'on lui en demande une.
+ */
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 export function PlayerShell() {
   const isMobile = useIsMobile();
   const route = useCinemaRoute();
@@ -33,7 +39,10 @@ export function PlayerShell() {
   // La variable vit sur l'élément racine parce que c'est le seul ancêtre commun entre le rail et
   // un écran porté dans document.body. Elle est remise à zéro sur téléphone, où la navigation est
   // un tiroir et ne réserve rien.
-  useEffect(() => {
+  //
+  // Avant la peinture, et non après : posée dans un effet ordinaire, la grille s'affichait une
+  // image entière collée au bord gauche avant de sauter de soixante-douze pixels.
+  useIsomorphicLayoutEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--player-rail", isMobile ? "0px" : RAIL_WIDTH);
     return () => {

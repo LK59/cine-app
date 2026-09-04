@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
-import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
+import { NextRequest, NextResponse } from "next/server";
+import { cachedSeries, cachedJellyfinSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleLogo } from "@/lib/title-logo";
 import { getImdbRating } from "@/lib/imdb-rating";
@@ -66,8 +68,17 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
 // downloaded episode AND a resolved Jellyfin match — a series with neither isn't playable, so
 // it's skipped entirely rather than shown inert. Season/episode-level Cinema Mode (browsing what
 // episodes actually exist) is a separate route — this one is just the browse grid.
-export async function GET() {
-  const [series, jellyfinSeries] = await Promise.all([cachedSeries(), cachedJellyfinSeriesAdmin()]);
+
+/**
+ * La bibliothèque de la personne connectée, et non celle de l'administrateur — voir la note
+ * jumelle dans la route des films.
+ */
+export async function GET(req: NextRequest) {
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  const [series, jellyfinSeries] = await Promise.all([
+    cachedSeries(),
+    session?.jfId ? cachedJellyfinSeries(session.jfId) : cachedJellyfinSeriesAdmin(),
+  ]);
 
   const downloaded = series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0);
   const matched = downloaded

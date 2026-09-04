@@ -1300,7 +1300,8 @@
       "inList": "In my list",
       "favorite": "Favourite",
       "favoriteDisabledHint": "Favourites only apply to titles already in the library.",
-      "castTitle": "Cast"
+      "castTitle": "Cast",
+      "favoriteOn": "In my favourites"
     },
     "person": {
       "less": "Show less",

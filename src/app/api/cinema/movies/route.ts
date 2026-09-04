@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
-import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
+import { NextRequest, NextResponse } from "next/server";
+import { cachedMovies, cachedJellyfinMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
+import { SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionFull } from "@/lib/session";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleLogo } from "@/lib/title-logo";
 import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
@@ -60,8 +62,24 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
 // Cinema Mode is library-only and movies-only for now (series + their own season/episode
 // screen are a follow-up) — every item returned here must already be playable, so items
 // without a resolved Jellyfin match are skipped entirely rather than shown inert.
-export async function GET() {
-  const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
+
+/**
+ * La bibliothèque de la personne connectée, et non celle de l'administrateur.
+ *
+ * Ces deux routes lisaient `cachedJellyfin*Admin()`, c'est-à-dire la vue d'un compte qui voit
+ * tout. Tant que toutes les bibliothèques sont ouvertes à tout le monde, ça ne se voit pas ; le
+ * jour où l'une est restreinte, la personne verrait les titres au catalogue et se prendrait un
+ * refus au moment de lancer la lecture — un défaut silencieux, jusqu'à ce qu'il ne le soit plus.
+ *
+ * La vue administrateur reste le repli pour la connexion locale, qui n'a pas de compte Jellyfin
+ * associé et n'aurait donc aucune bibliothèque à consulter.
+ */
+export async function GET(req: NextRequest) {
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  const [movies, jellyfinMovies] = await Promise.all([
+    cachedMovies(),
+    session?.jfId ? cachedJellyfinMovies(session.jfId) : cachedJellyfinMoviesAdmin(),
+  ]);
 
   const downloaded = movies.filter((m) => m.hasFile);
   const matched = downloaded

@@ -65,6 +65,7 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
           role="dialog"
           aria-modal={open}
           aria-label={t("player.nav.label")}
+          data-player-nav
           className="absolute inset-y-0 left-0 flex w-72 max-w-[82vw] flex-col bg-ink shadow-2xl"
           style={{
             transform: open ? "none" : "translateX(-100%)",
