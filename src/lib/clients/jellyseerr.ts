@@ -30,6 +30,8 @@ export interface JellyseerrRequest {
   media: { title?: string; tmdbId?: number; mediaType: string; posterPath?: string; status?: number };
   type: string;
   createdAt: string;
+  /** Bougé à chaque changement d'état — c'est donc lui qui date l'arrivée du fichier. */
+  updatedAt?: string;
   requestedBy: { id?: number; displayName?: string; username?: string };
   /** Jellyseerr dit lui-même si le compte courant a le droit de retirer cette demande. */
   canRemove?: boolean;

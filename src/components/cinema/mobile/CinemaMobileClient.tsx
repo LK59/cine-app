@@ -404,7 +404,8 @@ export function CinemaMobileClient() {
         })}
       </div>
 
-      {selected && (
+      {/* Même règle que sur grand écran : une seule fiche à la fois. */}
+      {selected && route.discover === null && route.person === null && (
         <CinemaMobileDetail
           /**
            * Une fiche par titre.

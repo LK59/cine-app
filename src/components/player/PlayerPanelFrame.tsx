@@ -39,12 +39,30 @@ export function PlayerPanelFrame({
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   // Une fiche ouverte par-dessus ce panneau écoute Échap elle aussi. `stopPropagation` n'y change
   // rien : deux écouteurs posés sur la même cible se déclenchent tous les deux, et une seule
   // touche remontait alors de deux crans dans l'historique — la fiche *et* le panneau. Le panneau
   // se tait tant qu'il n'est pas l'écran du dessus.
   const covered =
     route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+
+  /**
+   * Le focus entre dans l'écran qui vient de s'ouvrir.
+   *
+   * Sans cela il restait sur le bouton du rail : un lecteur d'écran n'annonçait rien, et une
+   * tabulation repartait dans la navigation au lieu d'entrer dans le contenu.
+   *
+   * On ne le prend que s'il est encore dehors : les effets des enfants s'exécutent avant celui du
+   * parent, donc la recherche a déjà placé le sien sur son champ, et le lui reprendre serait
+   * exactement le contraire de ce qu'on veut.
+   */
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || root.contains(document.activeElement)) return;
+    headingRef.current?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     if (covered) return;
@@ -63,6 +81,7 @@ export function PlayerPanelFrame({
 
   return createPortal(
     <div
+      ref={rootRef}
       className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink"
       style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
     >
@@ -90,7 +109,11 @@ export function PlayerPanelFrame({
         )}
 
         <div className="min-w-0 flex-1">
-          <h1 className={`truncate font-display font-semibold text-white ${short ? "text-xl" : "text-2xl sm:text-3xl"}`}>
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className={`truncate font-display font-semibold text-white outline-none ${short ? "text-xl" : "text-2xl sm:text-3xl"}`}
+          >
             {title}
           </h1>
           {subtitle && !short && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}

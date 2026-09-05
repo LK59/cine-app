@@ -49,8 +49,12 @@ export function PlayerListPanel() {
     [data]
   );
 
-  // Ce qui vient d'arriver : c'est la seule chose de cet écran qui mérite qu'on la signale.
-  const arrived = data?.requests.filter((r) => r.state === "available").length ?? 0;
+  // Ce qui vient d'arriver, et rien d'autre.
+  //
+  // La pastille comptait toutes les demandes abouties : au bout de quelques mois elle affichait
+  // « 44 » en permanence, c'est-à-dire plus rien du tout. La fenêtre de sept jours est calculée
+  // côté serveur (voir `justArrived`), où « maintenant » a une valeur stable.
+  const arrived = data?.requests.filter((r) => r.justArrived).length ?? 0;
 
   // Déduit au rendu, jamais corrigé dans un effet : la valeur suit l'arrivée des données sans
   // provoquer de rendu en cascade, et un choix explicite l'emporte pour toujours.

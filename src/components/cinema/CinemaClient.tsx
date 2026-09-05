@@ -437,6 +437,8 @@ export function CinemaClient() {
   // (recherche, Ma liste, compte) la recouvre, et sans cette garde on déplaçait le focus dans des
   // affiches invisibles pendant qu'on lisait autre chose.
   const panelOpen = searchOpen || route.list || route.account;
+  /** Une fiche TMDB ou une fiche personne est ouverte par-dessus celles de la bibliothèque. */
+  const sheetAbove = route.discover !== null || route.person !== null;
   useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen);
 
   // Same three conditions gate the trailer preview below — anything opaque covering the browse
@@ -1009,8 +1011,15 @@ export function CinemaClient() {
         </div>
       </div>
 
-      {selectedItem && <CinemaMovieDetail item={selectedItem} onClose={closeDetail} onSelectSimilar={openDetail} />}
-      {seriesSelectedItem && <CinemaSeriesDetail item={seriesSelectedItem} onClose={closeSeriesDetail} onSelectSimilar={openSeriesDetail} />}
+      {/* Effacées tant qu'une fiche TMDB ou une fiche personne est ouverte par-dessus : elles
+          partagent le même plan, et deux fiches montées ensemble écoutent Échap toutes les deux.
+          L'adresse les garde, le retour les rouvre. */}
+      {!sheetAbove && selectedItem && (
+        <CinemaMovieDetail item={selectedItem} onClose={closeDetail} onSelectSimilar={openDetail} />
+      )}
+      {!sheetAbove && seriesSelectedItem && (
+        <CinemaSeriesDetail item={seriesSelectedItem} onClose={closeSeriesDetail} onSelectSimilar={openSeriesDetail} />
+      )}
     </div>,
     document.body
   );

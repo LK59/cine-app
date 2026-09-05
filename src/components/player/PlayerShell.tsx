@@ -63,8 +63,18 @@ export function PlayerShell() {
       {route.search && <PlayerSearchPanel />}
       {route.list && <PlayerListPanel />}
       {route.account && <PlayerAccountPanel />}
-      {route.discover !== null && <PlayerDiscoverSheet tmdbId={route.discover} mediaType={route.discoverType} />}
-      {route.person !== null && <PlayerPersonSheet tmdbId={route.person} />}
+      {/* Une seule fiche à la fois, la plus profonde. Elles partagent le même plan (47) : deux
+          rendues ensemble se recouvraient dans l'ordre de montage, et surtout écoutaient Échap
+          toutes les deux — une touche remontait alors de deux crans. L'historique garde la
+          précédente, et le retour la rouvre.
+
+          L'ordre dit la profondeur : depuis une fiche de titre on ouvre un acteur, et depuis un
+          acteur une autre fiche de titre. La personne est donc toujours au-dessus. */}
+      {route.person !== null ? (
+        <PlayerPersonSheet tmdbId={route.person} />
+      ) : route.discover !== null ? (
+        <PlayerDiscoverSheet tmdbId={route.discover} mediaType={route.discoverType} />
+      ) : null}
     </>
   );
 }

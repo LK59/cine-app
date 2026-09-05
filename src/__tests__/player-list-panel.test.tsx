@@ -78,13 +78,18 @@ describe("PlayerListPanel", () => {
     renderWith({
       ...EMPTY_LISTS,
       requests: [
-        { id: 1, tmdbId: 1, type: "movie", title: "Arrivé", poster: null, year: 2020, state: "available", requestedAt: "", canCancel: true, libraryId: 7 },
-        { id: 2, tmdbId: 2, type: "movie", title: "En route", poster: null, year: 2021, state: "processing", requestedAt: "", canCancel: true, libraryId: null },
+        { id: 1, tmdbId: 1, type: "movie", title: "Arrivé", poster: null, year: 2020, state: "available", requestedAt: "", changedAt: "", justArrived: true, canCancel: true, libraryId: 7 },
+        { id: 2, tmdbId: 2, type: "movie", title: "En route", poster: null, year: 2021, state: "processing", requestedAt: "", changedAt: "", justArrived: false, canCancel: true, libraryId: null },
+        // Arrivée il y a des mois : elle compte dans la liste, pas dans la pastille.
+        { id: 3, tmdbId: 3, type: "movie", title: "Arrivé depuis longtemps", poster: null, year: 2019, state: "available", requestedAt: "", changedAt: "", justArrived: false, canCancel: false, libraryId: 9 },
       ],
     });
 
-    expect(await screen.findByLabelText("player.lists.arrivedBadge")).toBeTruthy();
-    expect(screen.getByText("player.requests.state.available")).toBeTruthy();
+    // La pastille ne compte que ce qui vient d'arriver : sans quoi, au bout de quelques mois,
+    // elle affiche le total de toutes les demandes abouties — c'est-à-dire plus rien du tout.
+    expect(await screen.findByLabelText("player.lists.arrivedBadge")).toHaveTextContent("1");
+    // Les trois demandes sont bien là — seule la pastille fait le tri.
+    expect(screen.getAllByText("player.requests.state.available")).toHaveLength(2);
     expect(screen.getByText("player.requests.state.processing")).toBeTruthy();
   });
 
@@ -92,7 +97,7 @@ describe("PlayerListPanel", () => {
     renderWith({
       ...EMPTY_LISTS,
       requests: [
-        { id: 1, tmdbId: 603, type: "movie", title: "Arrivé", poster: null, year: 2020, state: "available", requestedAt: "", canCancel: true, libraryId: 7 },
+        { id: 1, tmdbId: 603, type: "movie", title: "Arrivé", poster: null, year: 2020, state: "available", requestedAt: "", changedAt: "", justArrived: true, canCancel: true, libraryId: 7 },
       ],
     });
 
