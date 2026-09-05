@@ -216,8 +216,18 @@ export function CinemaMobileDetail({
       // inline style, so the sheet wouldn't follow the finger at all), and letting it back in on
       // release made the sheet replay its whole entrance every time a drag sprang back — which
       // is what the "weird animation on release" was.
+      // La classe d'animation ne dépend pas de `inert`, et c'est délibéré.
+      //
+      // Elle en dépendait, et c'était le « micro rechargement » : une fiche recouverte perdait sa
+      // classe d'entrée, la retrouvait en redevenant celle du dessus, et le navigateur rejouait
+      // donc l'animation — une fiche qui n'avait jamais été fermée se remettait à s'ouvrir. En la
+      // laissant en place, rien ne change au moment où la carte du dessus s'en va : l'animation a
+      // déjà eu lieu, il y a longtemps, et sa classe ne bouge plus.
+      //
+      // Une fiche recouverte ne peut de toute façon être ni tirée ni fermée — ses gestes sont
+      // débranchés —, donc les deux autres branches restent fausses pour elle.
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        inert ? "" : swipe.touched ? "" : closing ? "sheet-out" : revealed ? "" : "sheet-in"
+        swipe.touched ? "" : closing ? "sheet-out" : revealed ? "" : "sheet-in"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close

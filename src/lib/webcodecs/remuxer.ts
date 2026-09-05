@@ -267,6 +267,42 @@ export function unifiedAudioCodec(file: MatroskaFile): string | null {
 }
 
 /**
+ * La disposition de canaux que toutes les pistes audio de ce fichier partageront — ou `null`
+ * quand chacune peut garder la sienne.
+ *
+ * C'est le pendant, longtemps manquant, de {@link unifiedAudioCodec}. Celui-ci retire la
+ * transition de *codec* au milieu d'un tampon audio ; il ne disait rien du nombre de canaux, qui
+ * fait pourtant partie de la même configuration. Un fichier dont les deux pistes sont déjà
+ * livrées dans le même codec — deux pistes E-AC3 ré-encodées en Opus, le cas courant — ne
+ * déclenchait donc aucune unification, et changer de langue faisait passer le tampon de huit
+ * canaux à six.
+ *
+ * Mesuré : Firefox 154 sous Linux accepte ce nouveau segment d'initialisation, continue de lire
+ * l'image, et ne sort plus aucun son. « Mourir peut attendre » — piste française en 7.1 Atmos,
+ * anglaise en 5.1 — se lit en français et devient muet en anglais. Le même fichier fonctionne
+ * dans les deux langues sur iPhone, qui, lui, encaisse le changement.
+ *
+ * Le repli va donc vers le **plus petit** compte du fichier, et pas l'inverse : `fold` sait
+ * descendre un 7.1 en 5.1 (les arrières repliés sur les côtés à −3 dB) et un 5.1 en stéréo
+ * (matrice BS.775) ; remonter demanderait d'inventer où placer des canaux absents, c'est-à-dire
+ * de deviner d'où viendra le son. Deux canaux d'ambiance en moins sur la piste la plus riche,
+ * contre une piste entière muette.
+ *
+ * Ne s'applique que là où le tampon ne peut pas être remplacé : ailleurs, chaque piste garde sa
+ * disposition et le tampon est reconstruit.
+ */
+export function unifiedAudioChannels(file: MatroskaFile): number | null {
+  if (rebuildable) return null;
+
+  const carried = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
+  if (carried.length < 2) return null;
+
+  const counts = carried.map((t) => t.audio?.channels ?? 2);
+  const min = Math.min(...counts);
+  return counts.some((n) => n !== min) ? min : null;
+}
+
+/**
  * Asked of the browser, not answered from a list.
  *
  * Which codecs a player takes inside a MediaSource is not a property of the codec: an iPhone
@@ -486,7 +522,9 @@ export class Remuxer {
     // A track that cannot ride in the container is decoded and encoded again on the way through,
     // and the encoder — not the file — is then what describes it.
     const transcoder =
-      audioTrack && audioDelivery(audioTrack, file) === "transcode" ? await AudioTranscoder.open(source, audioTrack) : null;
+      audioTrack && audioDelivery(audioTrack, file) === "transcode"
+        ? await AudioTranscoder.open(source, audioTrack, 0, unifiedAudioChannels(file) ?? undefined)
+        : null;
     if (transcoder) assertContainerTakes(transcoder);
     const audioInfo = audioTrack
       ? transcoder
@@ -549,7 +587,7 @@ export class Remuxer {
       // Primed where the viewer is, not at the beginning of the film: two hours in, the opening
       // is long out of the byte source's cache, and fetching it back to read one header is
       // network traffic spent on nothing.
-      const next = await AudioTranscoder.open(this.source, track, at);
+      const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file) ?? undefined);
       // Before anything is released: a refusal here has to leave the working track working — and
       // has to hand back the decoder and the encoder the refused track had already opened, which
       // nothing else will ever come back for.
@@ -845,7 +883,7 @@ export class Remuxer {
     const at = this.segmentStartUs / TIMESCALE;
     trace(`transcodage audio : encodeur en échec, reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
     const previous = this.transcoder;
-    const next = await AudioTranscoder.open(this.source, track, at);
+    const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file) ?? undefined);
     assertContainerTakes(next);
     if (previous && next.codecString !== previous.codecString) {
       // The buffer decodes by an initialisation segment already sent; a replacement that

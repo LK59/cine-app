@@ -211,7 +211,18 @@ export class AudioTranscoder {
    * once it has encoded something. So a little sound is pushed through here and kept, which is
    * also the earliest point at which a browser that cannot do this at all will say so.
    */
-  static async open(source: ByteSource, track: MatroskaTrack, fromSeconds = 0): Promise<AudioTranscoder> {
+  static async open(
+    source: ByteSource,
+    track: MatroskaTrack,
+    fromSeconds = 0,
+    /**
+     * Plafond imposé de l'extérieur, quand toutes les pistes du fichier doivent sortir avec la
+     * même disposition — voir `unifiedAudioChannels`. Sans lui, chaque piste choisit la sienne,
+     * et le nombre de canaux change au milieu d'un tampon audio qui, sur certains navigateurs,
+     * n'en accepte qu'un.
+     */
+    maxChannels?: number
+  ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
 
@@ -219,10 +230,14 @@ export class AudioTranscoder {
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId);
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
-    const plan = await chooseTranscodePlan(sampleRate, numberOfChannels);
+    const wanted = maxChannels ? Math.min(numberOfChannels, maxChannels) : numberOfChannels;
+    if (wanted !== numberOfChannels) {
+      trace(`transcodage audio : disposition unifiée du fichier — ${numberOfChannels} canaux repliés en ${wanted}`);
+    }
+    const plan = await chooseTranscodePlan(sampleRate, wanted);
     if (!plan) {
       decoder.close();
-      throw new Error(`Ce navigateur ne sait produire aucun codec audio en ${numberOfChannels} canaux.`);
+      throw new Error(`Ce navigateur ne sait produire aucun codec audio en ${wanted} canaux.`);
     }
     const target = plan.codec;
     const outChannels = plan.channels;
