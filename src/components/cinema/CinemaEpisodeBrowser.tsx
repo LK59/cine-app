@@ -7,7 +7,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort } from "@/lib/format";
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useSheetBehind } from "@/lib/cinemaRoute";
+import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { useT } from "@/components/TranslationProvider";
@@ -73,6 +73,9 @@ export function CinemaEpisodeBrowser({
   // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
   // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
   // Voir `useSheetBehind`.
+  // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
+  // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
+  const [revealed] = useState(() => arrivedByBack());
   const sheetBehind = useSheetBehind();
   const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
 
@@ -141,7 +144,7 @@ export function CinemaEpisodeBrowser({
   return createPortal(
     <div
       ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : revealed ? "" : "animate-fade-in"}`}
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
@@ -157,7 +160,7 @@ export function CinemaEpisodeBrowser({
 
       {/* No position:fixed descendants here (the back button above is a sibling) — safe to
           transform, unlike the outer root (see globals.css's own note on this pitfall). */}
-      <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
+      <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : revealed ? "" : "animate-slide-in-right"}`}>
         <div className="scrollbar-thin w-56 shrink-0 overflow-y-auto border-r border-white/10 px-3 pb-8 sm:w-64">
           <p className="mb-3 truncate px-2 text-sm font-medium text-white/60">{title}</p>
           {seasonNumbers.map((seasonNumber) => {

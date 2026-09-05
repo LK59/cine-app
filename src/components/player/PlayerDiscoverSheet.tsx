@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, Users, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -121,6 +121,9 @@ export function PlayerDiscoverSheet({
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
   const swipe = useSwipeToDismiss(close);
+  // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
+  // `arrivedByBack`. Lu une seule fois, au montage.
+  const [revealed] = useState(() => arrivedByBack());
 
   // Le focus part sur la première action, jamais sur le résumé : c'est ce qu'on est venu faire.
   //
@@ -169,7 +172,7 @@ export function PlayerDiscoverSheet({
   const mobileSheet = (
     <div
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        swipe.touched ? "" : leaving ? "animate-fade-out" : "animate-slide-up"
+        swipe.touched ? "" : leaving ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
       }`}
       style={{
         zIndex: 47,
@@ -307,7 +310,9 @@ export function PlayerDiscoverSheet({
     ) : (
     <div
       ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${leaving ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`fixed inset-0 overflow-hidden bg-ink ${
+        leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
+      }`}
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
       style={{

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, ChevronLeft, ChevronRight, User, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
@@ -180,6 +180,9 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
   // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
   // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
   const swipe = useSwipeToDismiss(close);
+  // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
+  // `arrivedByBack`. Lu une seule fois, au montage.
+  const [revealed] = useState(() => arrivedByBack());
 
   useEffect(() => {
     // Silencieux tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
@@ -211,7 +214,13 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       // pendant qu'on tire empêcherait la fiche de suivre le doigt, et la laisser revenir après
       // un retour en place rejouerait toute l'entrée.
       className={`fixed inset-0 overflow-hidden bg-ink ${
-        swipe.touched ? "" : leaving ? "animate-fade-out-down md:animate-fade-out" : "animate-slide-up md:animate-fade-in"
+        swipe.touched
+          ? ""
+          : leaving
+            ? "animate-fade-out-down md:animate-fade-out"
+            : revealed
+              ? ""
+              : "animate-slide-up md:animate-fade-in"
       }`}
       style={{
         zIndex: 47,

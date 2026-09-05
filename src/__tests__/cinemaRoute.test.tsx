@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -159,5 +159,24 @@ describe("useSheetBehind", () => {
     act(() => openLibraryTitle("movie", 2));
     act(() => cinemaNavigate({ tab: "series" }, "replace"));
     expect(result.current).toBe(true);
+  });
+});
+
+describe("arrivedByBack", () => {
+  // Un écran qui se monte parce qu'on revient dessus ne doit pas rejouer son ouverture : il
+  // n'ouvre rien, il se découvre. Sans cette distinction, fermer Film 2 donnait l'impression que
+  // Film 1 se rouvrait, alors qu'il n'avait jamais été fermé pour de bon.
+  it("is false for a deliberate navigation and true right after a back", () => {
+    act(() => openLibraryTitle("movie", 1));
+    expect(arrivedByBack()).toBe(false);
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(arrivedByBack()).toBe(true);
+
+    // Et la navigation suivante le fait retomber, sans attendre l'image d'après.
+    act(() => openLibraryTitle("movie", 2));
+    expect(arrivedByBack()).toBe(false);
   });
 });

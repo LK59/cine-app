@@ -8,7 +8,7 @@ import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, 
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useSheetBehind } from "@/lib/cinemaRoute";
+import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -65,6 +65,9 @@ export function CinemaMobileDetail({
   // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
   // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
   // Voir `useSheetBehind`.
+  // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
+  // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
+  const [revealed] = useState(() => arrivedByBack());
   const sheetBehind = useSheetBehind();
   const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
   const similar = useCinemaSimilar(item, mediaType);
@@ -193,7 +196,7 @@ export function CinemaMobileDetail({
       // release made the sheet replay its whole entrance every time a drag sprang back — which
       // is what the "weird animation on release" was.
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        swipe.touched ? "" : closing ? "animate-fade-out" : "animate-slide-up"
+        swipe.touched ? "" : closing ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close

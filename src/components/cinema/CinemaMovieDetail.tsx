@@ -15,7 +15,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
-import { cinemaNavigate, useSheetBehind } from "@/lib/cinemaRoute";
+import { cinemaNavigate, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
@@ -96,6 +96,9 @@ export function CinemaMovieDetail({
   // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
   // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
   // Voir `useSheetBehind`.
+  // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
+  // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
+  const [revealed] = useState(() => arrivedByBack());
   const sheetBehind = useSheetBehind();
   const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
 
@@ -210,7 +213,7 @@ export function CinemaMovieDetail({
     // player to end up on TOP of this, not hidden behind it (see CinemaClient's z-index note).
     <div
       ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      className={`fixed inset-0 overflow-hidden bg-ink ${closing ? "animate-fade-out" : revealed ? "" : "animate-fade-in"}`}
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.

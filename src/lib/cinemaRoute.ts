@@ -140,6 +140,34 @@ function getSnapshot(): CinemaRoute {
   return cachedRoute;
 }
 
+/**
+ * Est-on arrivé ici par un retour en arrière ?
+ *
+ * Un écran qui se monte parce qu'on revient dessus ne doit pas rejouer son animation d'ouverture :
+ * il n'ouvre rien, il se découvre. Sans cette distinction, fermer Film 2 donnait l'impression que
+ * Film 1 se rouvrait, alors qu'il n'avait jamais été fermé pour de bon.
+ *
+ * L'écouteur est posé au chargement du module, donc avant ceux que React installe au montage des
+ * composants : les écouteurs `popstate` se déclenchent dans leur ordre d'inscription, et le
+ * drapeau est donc déjà à jour quand l'arbre se redessine. Il est remis à zéro à l'image suivante,
+ * pour ne concerner que les montages provoqués par ce retour-là.
+ */
+let cameBack = false;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    cameBack = true;
+    requestAnimationFrame(() => {
+      cameBack = false;
+    });
+  });
+}
+
+/** À lire une seule fois, au montage : voir `cameBack`. */
+export function arrivedByBack(): boolean {
+  return cameBack;
+}
+
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -200,6 +228,9 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
     // savoir. Un `replace` ne change pas ce qui est en dessous, donc il garde la valeur en place.
     [BEHIND_KEY]: mode === "push" ? hasSheet(getSnapshot()) : (window.history.state?.[BEHIND_KEY] ?? false),
   };
+  // Une navigation volontaire n'est jamais un retour : le drapeau retombe avant que qui que ce
+  // soit ne se monte.
+  cameBack = false;
   if (mode === "push") window.history.pushState(state, "", url);
   else window.history.replaceState(state, "", url);
   emit();
