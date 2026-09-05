@@ -9,6 +9,7 @@ import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
   HORIZONTAL_VEIL,
@@ -92,7 +93,15 @@ function CastRow({
   );
 }
 
-export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; mediaType: "movie" | "series" }) {
+export function PlayerDiscoverSheet({
+  tmdbId,
+  mediaType,
+  leaving = false,
+}: {
+  tmdbId: number;
+  mediaType: "movie" | "series";
+  leaving?: boolean;
+}) {
   const t = useT();
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +118,9 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   );
 
   const close = () => cinemaClose({ discover: null, person: null });
+  // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
+  // la bannière vers le bas pour refermer.
+  const swipe = useSwipeToDismiss(close);
 
   // Le focus part sur la première action, jamais sur le résumé : c'est ce qu'on est venu faire.
   //
@@ -156,13 +168,39 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   // tout le reste dans une colonne qui défile.
   const mobileSheet = (
     <div
-      className="app-viewport safe-x fixed inset-x-0 top-0 animate-slide-up overflow-y-auto overscroll-contain bg-ink"
-      style={{ zIndex: 47, paddingTop: "env(safe-area-inset-top, 0px)" }}
+      className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
+        swipe.touched ? "" : leaving ? "animate-fade-out" : "animate-slide-up"
+      }`}
+      style={{
+        zIndex: 47,
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+        // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
+        // elle *est* où il est. C'est le relâchement qu'on adoucit — le retour en place comme le
+        // reste du chemin vers le bas.
+        transition: swipe.dragging
+          ? "none"
+          : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 200ms ease-out",
+        // Opaque jusqu'au bout : la faire disparaître en fondu transformait le geste en effet
+        // d'écran à travers lequel on voit la grille. C'est un panneau plein qu'on écarte, donc il
+        // reçoit ce que reçoit un panneau qui décolle du bord — des coins et une ombre, l'un comme
+        // l'autre proportionnels au chemin parcouru.
+        borderTopLeftRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        borderTopRightRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
+      }}
     >
       {/* Même plafond que les fiches de bibliothèque : en 16:9 pleine largeur, une bannière fait
           475 px de haut pour 390 px de fenêtre couchée — un écran entier d'image avant d'avoir
           appris qu'il y a un titre dessous. */}
-      <div className="relative aspect-video w-full" style={{ maxHeight: "52svh" }}>
+      <div
+        className="relative aspect-video w-full"
+        {...swipe.handlers}
+        // `touch-action: none` : le navigateur ne doit pas réclamer ce geste pour son propre
+        // défilement, sinon il vole le flux de pointeurs au milieu du glissement. Seul ce bloc y
+        // renonce ; le reste de la fiche défile normalement.
+        style={{ maxHeight: "52svh", touchAction: "none" }}
+      >
         {data?.backdrop ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -269,7 +307,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
     ) : (
     <div
       ref={containerRef}
-      className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
+      className={`fixed inset-0 overflow-hidden bg-ink ${leaving ? "animate-fade-out" : "animate-fade-in"}`}
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
       style={{

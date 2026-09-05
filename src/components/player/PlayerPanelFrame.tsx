@@ -27,11 +27,14 @@ export function PlayerPanelFrame({
   title,
   subtitle,
   actions,
+  leaving = false,
   children,
 }: {
   title: string;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
+  /** Piloté par la coquille : l'écran est en train de sortir — voir useExitDelay. */
+  leaving?: boolean;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -84,7 +87,9 @@ export function PlayerPanelFrame({
       ref={rootRef}
       // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
       // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
-      className="fixed inset-0 flex animate-slide-up flex-col overflow-hidden bg-ink md:animate-fade-in"
+      className={`fixed inset-0 flex flex-col overflow-hidden bg-ink ${
+        leaving ? "animate-fade-out-down md:animate-fade-out" : "animate-slide-up md:animate-fade-in"
+      }`}
       style={{
         zIndex: 46,
         // Le retrait du rail et la marge de l'encoche s'additionnent : le premier vaut zéro sur

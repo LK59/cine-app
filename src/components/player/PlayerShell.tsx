@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
 import { PlayerDrawer } from "./PlayerDrawer";
 
@@ -17,6 +18,22 @@ const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) =
 
 /** La largeur que le rail replié occupe, réservée par le contenu. Voir globals.css. */
 const RAIL_WIDTH = "4.5rem";
+
+/** La durée des animations de sortie — celle de `--animate-fade-out`, à la milliseconde près. */
+const EXIT_MS = 200;
+
+/**
+ * Retient la dernière valeur non nulle : un écran qui sort garde ce qu'il montrait.
+ *
+ * En état et non en référence — une référence ne se lit pas pendant un rendu, et c'est bien
+ * pendant le rendu qu'on en a besoin. L'ajustement en cours de rendu est la forme que React
+ * recommande pour dériver un état d'une entrée.
+ */
+function useLastValue(value: number | null): number | null {
+  const [last, setLast] = useState(value);
+  if (value !== null && value !== last) setLast(value);
+  return value ?? last;
+}
 
 /**
  * La coquille du lecteur : la navigation, et les écrans qu'elle ouvre.
@@ -50,6 +67,17 @@ export function PlayerShell() {
     };
   }, [isMobile]);
 
+  const search = useExitDelay(route.search, EXIT_MS);
+  const list = useExitDelay(route.list, EXIT_MS);
+  const account = useExitDelay(route.account, EXIT_MS);
+  const person = useExitDelay(route.person !== null, EXIT_MS);
+  const discover = useExitDelay(route.discover !== null, EXIT_MS);
+
+  // L'identifiant survit à sa disparition de l'adresse, le temps que la fiche finisse de sortir :
+  // sans lui, elle se viderait de son contenu avant de s'en aller.
+  const lastPerson = useLastValue(route.person);
+  const lastDiscover = useLastValue(route.discover);
+
   // Les trois panneaux arrivent en chargement différé (voir plus haut) : la toute première
   // ouverture payait donc un aller-retour réseau, ce qui, sur données mobiles, se sent comme un
   // écran qui met du temps à répondre. On va les chercher dès que le fil d'exécution est libre —
@@ -81,9 +109,12 @@ export function PlayerShell() {
       ) : (
         <PlayerRail />
       )}
-      {route.search && <PlayerSearchPanel />}
-      {route.list && <PlayerListPanel />}
-      {route.account && <PlayerAccountPanel />}
+      {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
+          suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
+          glissant. Voir useExitDelay. */}
+      {search.render && <PlayerSearchPanel leaving={search.leaving} />}
+      {list.render && <PlayerListPanel leaving={list.leaving} />}
+      {account.render && <PlayerAccountPanel leaving={account.leaving} />}
       {/* Une seule fiche à la fois, la plus profonde. Elles partagent le même plan (47) : deux
           rendues ensemble se recouvraient dans l'ordre de montage, et surtout écoutaient Échap
           toutes les deux — une touche remontait alors de deux crans. L'historique garde la
@@ -91,10 +122,10 @@ export function PlayerShell() {
 
           L'ordre dit la profondeur : depuis une fiche de titre on ouvre un acteur, et depuis un
           acteur une autre fiche de titre. La personne est donc toujours au-dessus. */}
-      {route.person !== null ? (
-        <PlayerPersonSheet tmdbId={route.person} />
-      ) : route.discover !== null ? (
-        <PlayerDiscoverSheet tmdbId={route.discover} mediaType={route.discoverType} />
+      {person.render && lastPerson !== null ? (
+        <PlayerPersonSheet tmdbId={lastPerson} leaving={person.leaving} />
+      ) : discover.render && lastDiscover !== null ? (
+        <PlayerDiscoverSheet tmdbId={lastDiscover} mediaType={route.discoverType} leaving={discover.leaving} />
       ) : null}
     </>
   );

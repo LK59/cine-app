@@ -33,7 +33,7 @@ const DEBOUNCE_MS = 260;
  * d'avoir cherché oblige à savoir ce qu'on cherche, et la moitié du temps on ne sait pas si le
  * titre qu'on a en tête est un film ou une série.
  */
-export function PlayerSearchPanel() {
+export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   const t = useT();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -104,7 +104,7 @@ export function PlayerSearchPanel() {
   ];
 
   return (
-    <PlayerPanelFrame title={t("player.nav.search")}>
+    <PlayerPanelFrame title={t("player.nav.search")} leaving={leaving}>
       <div className="mx-auto w-full max-w-5xl">
         <div className="relative">
           <SearchIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />

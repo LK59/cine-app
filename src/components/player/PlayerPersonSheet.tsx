@@ -10,6 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
+import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 
 interface PersonCredit {
   tmdbId: number;
@@ -160,7 +161,7 @@ const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
  * qu'on le possède ou non, au lieu de renvoyer vers une page d'outillage. C'est ce qui fait que
  * l'on ne sort jamais de l'interface.
  */
-export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
+export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number; leaving?: boolean }) {
   const t = useT();
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
@@ -176,6 +177,9 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
   const photos = photoData?.photos ?? [];
 
   const close = () => cinemaClose({ person: null });
+  // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
+  // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
+  const swipe = useSwipeToDismiss(close);
 
   useEffect(() => {
     // Silencieux tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
@@ -203,11 +207,30 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
+      // L'animation d'entrée pilote la même propriété que le geste : la laisser tourner
+      // pendant qu'on tire empêcherait la fiche de suivre le doigt, et la laisser revenir après
+      // un retour en place rejouerait toute l'entrée.
+      className={`fixed inset-0 overflow-hidden bg-ink ${
+        swipe.touched ? "" : leaving ? "animate-fade-out-down md:animate-fade-out" : "animate-slide-up md:animate-fade-in"
+      }`}
       style={{
         zIndex: 47,
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
+        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+        // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
+        // elle *est* où il est. C'est le relâchement qu'on adoucit — le retour en place comme le
+        // reste du chemin vers le bas.
+        transition: swipe.dragging
+          ? "none"
+          : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 200ms ease-out",
+        // Opaque jusqu'au bout : la faire disparaître en fondu transformait le geste en effet
+        // d'écran à travers lequel on voit la grille. C'est un panneau plein qu'on écarte, donc il
+        // reçoit ce que reçoit un panneau qui décolle du bord — des coins et une ombre, l'un comme
+        // l'autre proportionnels au chemin parcouru.
+        borderTopLeftRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        borderTopRightRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
+        boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
       }}
     >
       {/* `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone elle
@@ -255,7 +278,14 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
             <>
               {/* `pr-12` sur téléphone : la croix flotte dans ce coin, et le nom passait dessous
                   dès qu'il tenait sur la même ligne que le portrait — c'est-à-dire couché. */}
-              <div className={`flex gap-6 ${short ? "flex-row items-start" : "flex-col sm:flex-row sm:items-start"} ${isMobile ? "pr-12" : ""}`}>
+              {/* La poignée du geste : `touch-action: none` pour que le navigateur ne réclame
+                  pas ce mouvement pour son propre défilement, sinon il vole le flux de pointeurs
+                  au milieu du glissement. Le reste de la fiche défile normalement. */}
+              <div
+                {...(isMobile ? swipe.handlers : {})}
+                style={isMobile ? { touchAction: "none" } : undefined}
+                className={`flex gap-6 ${short ? "flex-row items-start" : "flex-col sm:flex-row sm:items-start"} ${isMobile ? "pr-12" : ""}`}
+              >
                 <div
                   className={`shrink-0 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 ${
                     short ? "h-28 w-28" : "h-36 w-36 sm:h-44 sm:w-44"

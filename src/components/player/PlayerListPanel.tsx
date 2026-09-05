@@ -27,7 +27,7 @@ const SEGMENTS: Segment[] = ["requests", "toWatch", "watched", "abandoned", "fav
  * Chaque segment lit sa propre source (voir /api/player/lists), mais rien de tout ça ne se voit :
  * cinq onglets, la même carte partout, et deux phrases pour dire ce qui a besoin d'être dit.
  */
-export function PlayerListPanel() {
+export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
   const t = useT();
   const { data, isLoading } = useSWR<PlayerListsPayload>("/api/player/lists", fetcher, {
     revalidateOnFocus: false,
@@ -80,6 +80,7 @@ export function PlayerListPanel() {
 
   return (
     <PlayerPanelFrame
+      leaving={leaving}
       title={t("player.nav.myList")}
       // Ajouter un titre, c'est le chercher : le bouton ouvre la recherche plutôt que d'installer
       // un second champ ici. Elle trouve déjà tout — la bibliothèque, le reste du monde, les
