@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, Play, Users } from "lucide-react";
+import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, Play, Users, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
   HORIZONTAL_VEIL,
@@ -20,7 +21,7 @@ import {
   CinemaOverview,
   CinemaSynopsisModal,
 } from "@/components/cinema/CinemaDetailLayout";
-import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/route";
+import type { PlayerTitlePayload, PlayerTitleCast } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
@@ -43,8 +44,56 @@ const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
  * Les deux gestes restent indépendants : ajouter à une liste n'envoie rien, demander ne range
  * rien. Chacun écrit là où vit sa vérité.
  */
+/**
+ * La distribution, en pastilles rondes qui mènent chacune à sa fiche.
+ *
+ * Partagée par les deux mises en page de cette fiche — celle du grand écran et celle du
+ * téléphone : c'est le même contenu, et le seul endroit d'où l'on part vers un acteur.
+ */
+function CastRow({
+  cast,
+  label,
+  className = "",
+}: {
+  cast: PlayerTitleCast[];
+  label: string;
+  className?: string;
+}) {
+  if (cast.length === 0) return null;
+  return (
+    <div className={className}>
+      <p className="mb-2 flex items-center gap-1.5 text-xs text-white/50">
+        <Users size={12} /> {label}
+      </p>
+      <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-2">
+        {cast.slice(0, 12).map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => cinemaNavigate({ person: c.id })}
+            className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center focus-visible:outline-none"
+          >
+            <span className="h-16 w-16 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+              {c.profilePath ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.profilePath} alt="" loading="lazy" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-white/30">
+                  <Users size={16} />
+                </span>
+              )}
+            </span>
+            <span className="line-clamp-2 text-[10px] leading-tight text-white/70">{c.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; mediaType: "movie" | "series" }) {
   const t = useT();
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSynopsis, setShowSynopsis] = useState(false);
 
@@ -67,10 +116,12 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   // distribution.
   const focusPlaced = useRef(false);
   useEffect(() => {
-    if (!data || focusPlaced.current) return;
+    // Seulement dans la mise en page « télécommande » : sur téléphone, on fait défiler avec le
+    // doigt et un focus déplacé fait sauter la page vers le bas dès l'ouverture.
+    if (isMobile || !data || focusPlaced.current) return;
     focusPlaced.current = true;
     focusFirstAction(containerRef.current);
-  }, [data]);
+  }, [data, isMobile]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -91,7 +142,130 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
   if (typeof document === "undefined") return null;
 
+
+  // La fiche d'un titre absent, sur téléphone.
+  //
+  // Elle empruntait jusqu'ici la mise en page du grand écran — « une page tient dans un écran »,
+  // colonne calée en bas. Couché, un téléphone n'a que ~390 px de haut : le titre, le synopsis et
+  // les trois actions débordaient par le *haut* d'un conteneur aligné en bas, donc rognés et
+  // hors d'atteinte, sans même une barre de défilement pour y aller. Et debout, elle ne
+  // ressemblait à aucune autre fiche de l'application.
+  //
+  // Elle prend donc la forme des fiches de bibliothèque du téléphone : une bannière en haut, puis
+  // tout le reste dans une colonne qui défile.
+  const mobileSheet = (
+    <div
+      className="app-viewport fixed inset-x-0 top-0 animate-slide-up overflow-y-auto overscroll-contain bg-ink"
+      style={{ zIndex: 47, paddingTop: "env(safe-area-inset-top, 0px)" }}
+    >
+      {/* Même plafond que les fiches de bibliothèque : en 16:9 pleine largeur, une bannière fait
+          475 px de haut pour 390 px de fenêtre couchée — un écran entier d'image avant d'avoir
+          appris qu'il y a un titre dessous. */}
+      <div className="relative aspect-video w-full" style={{ maxHeight: "52svh" }}>
+        {data?.backdrop ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-slate-900" />
+        )}
+        <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
+        <button
+          type="button"
+          onClick={close}
+          aria-label={t("cinema.back")}
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+        </div>
+      )}
+
+      {error && !data && (
+        <p className="px-4 py-10 text-center text-sm text-red-400">
+          {error instanceof Error ? error.message : t("common.unknown")}
+        </p>
+      )}
+
+      {data && (
+        <div className="-mt-6 px-4 pb-16">
+          <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{data.title}</h1>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
+            {data.year && <span>{data.year}</span>}
+            {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
+            {data.genres.length > 0 && <span className="truncate">{data.genres.slice(0, 3).join(" · ")}</span>}
+          </div>
+
+          {/* La première action, pleine largeur et en blanc : la même place et le même poids que
+              « Lire » sur une fiche de bibliothèque. Seul le mot change. */}
+          {data.libraryId !== null ? (
+            <button
+              type="button"
+              onClick={() => openLibraryTitle(mediaType, data.libraryId!, { discover: null })}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
+            >
+              <Play size={18} fill="currentColor" />
+              {t("player.discover.open")}
+            </button>
+          ) : data.requestState ? (
+            <div className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white/80">
+              <StateIcon size={16} />
+              {t(`player.requests.state.${data.requestState}`)}
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void request()}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95 disabled:opacity-60"
+            >
+              <Plus size={18} />
+              {t("player.discover.request")}
+            </button>
+          )}
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void setStatus(inList ? null : "to_watch")}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
+          >
+            {inList ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+            {inList ? t("player.discover.inList") : t("player.discover.addToList")}
+          </button>
+
+          {/* Les favoris vivent chez Jellyfin : ils n'existent que pour un titre qu'on possède.
+              Le bouton reste, et dit pourquoi juste en dessous — au survol il n'y a personne, sur
+              un téléphone. */}
+          <button
+            type="button"
+            disabled
+            className="mb-1 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-md bg-white/5 px-4 py-3 text-sm font-medium text-white/35"
+          >
+            <Heart size={16} />
+            {t("player.discover.favorite")}
+          </button>
+          <p className="mb-5 text-center text-[11px] leading-4 text-white/35">
+            {t("player.discover.favoriteDisabledHint")}
+          </p>
+
+          {data.overview && <p className="mb-4 text-sm leading-6 text-white/90">{data.overview}</p>}
+
+          <CastRow cast={data.cast} label={t("player.discover.castTitle")} />
+        </div>
+      )}
+    </div>
+  );
+
   return createPortal(
+    isMobile ? (
+      mobileSheet
+    ) : (
     <div
       ref={containerRef}
       className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
@@ -236,35 +410,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
                 </p>
               </div>
 
-              {data.cast.length > 0 && (
-                <div className="mt-4">
-                  <p className="mb-2 flex items-center gap-1.5 text-xs text-white/50">
-                    <Users size={12} /> {t("player.discover.castTitle")}
-                  </p>
-                  <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-2">
-                    {data.cast.slice(0, 12).map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => cinemaNavigate({ person: c.id })}
-                        className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center focus-visible:outline-none"
-                      >
-                        <span className="h-16 w-16 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10 transition group-hover:ring-white/30">
-                          {c.profilePath ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={c.profilePath} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center text-white/30">
-                              <Users size={16} />
-                            </span>
-                          )}
-                        </span>
-                        <span className="line-clamp-2 text-[10px] leading-tight text-white/70">{c.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <CastRow cast={data.cast} label={t("player.discover.castTitle")} className="mt-4" />
             </div>
           </div>
         </div>
@@ -278,7 +424,8 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
           onClose={() => setShowSynopsis(false)}
         />
       )}
-    </div>,
+    </div>
+    ),
     document.body
   );
 }

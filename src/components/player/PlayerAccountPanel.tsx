@@ -23,8 +23,10 @@ import type { PlayerPreferences } from "@/app/api/player/account/preferences/rou
  */
 function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-white/10 py-7 first:border-t-0 first:pt-0">
-      <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white">
+    // `py-7` debout, moitié moins couché : cinq sections à sept rems d'écart font descendre
+    // « Déconnexion » très loin sur un écran de 390 px.
+    <section className="border-t border-white/10 py-7 first:border-t-0 first:pt-0 [@media(max-height:500px)]:py-4">
+      <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
         <Icon size={16} className="text-slate-500" />
         {title}
       </h2>

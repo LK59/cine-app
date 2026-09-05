@@ -190,8 +190,10 @@ export function CinemaMobileClient() {
           content scrolls under is one of the most reliable ways to make scrolling stutter on
           iOS, and a solid bar reads the same here. */}
       <header
-        className="flex shrink-0 items-center gap-3 bg-ink px-4 pb-3"
-        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.25rem)" }}
+        className={`flex shrink-0 items-center gap-3 bg-ink px-4 ${short ? "pb-2" : "pb-3"}`}
+        // Couché, l'écran fait ~390 px de haut : la barre en prenait un sixième avant la
+        // première affiche.
+        style={{ paddingTop: `calc(env(safe-area-inset-top, 0px) + ${short ? "0.6rem" : "1.25rem"})` }}
       >
         {/* Le menu remplace la flèche de sortie : un seul bouton dans ce coin, qui mène à tout —
             l'accueil, la recherche, les listes, le compte, et la gestion tout en bas. La sortie
@@ -519,8 +521,10 @@ function DiscoveryRow({
 
 function MobileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section className="mt-6" style={ROW_CONTAINMENT}>
-      <h2 className="mb-2 px-4 text-sm font-semibold text-white">{label}</h2>
+    // `mt-6` debout, `mt-4` couché : sur ~390 px de haut, six rems entre chaque rangée font qu'on
+    // ne voit jamais deux rangées à la fois.
+    <section className="mt-6 [@media(max-height:500px)]:mt-4" style={ROW_CONTAINMENT}>
+      <h2 className="mb-2 px-4 text-sm font-semibold text-white [@media(max-height:500px)]:mb-1.5">{label}</h2>
       <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">{children}</div>
     </section>
   );

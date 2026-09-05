@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, User, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerResultCard } from "./PlayerResultCard";
+import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 
 interface PersonCredit {
   tmdbId: number;
@@ -46,6 +47,8 @@ const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
  */
 export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
   const t = useT();
+  const isMobile = useIsMobile();
+  const short = useIsShortViewport();
   const [expanded, setExpanded] = useState(false);
   const { data, isLoading } = useSWR<PersonPayload>(`/api/tmdb/person/${tmdbId}`, fetcher, {
     revalidateOnFocus: false,
@@ -78,21 +81,39 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
       className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
-      <button
-        onClick={close}
-        // `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone
-        // elle s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à
-        // elle plutôt qu'à la fenêtre, ce qui rend le placement dépendant de l'animation. En
-        // absolu, il se cale sur la boîte de contenu, rail déjà déduit.
-        className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
-        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
+      {/* `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone elle
+          s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à elle
+          plutôt qu'à la fenêtre. En absolu, il se cale sur la boîte de contenu, rail déjà déduit.
+
+          Deux formes pour un même geste, chacune là où on la cherche : sur téléphone, la croix en
+          haut à droite, comme sur toutes les autres fiches ; sur grand écran, le bouton Retour à
+          gauche, comme sur celles de la bibliothèque. */}
+      {isMobile ? (
+        <button
+          type="button"
+          onClick={close}
+          aria-label={t("cinema.back")}
+          className="absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
+          style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
+        >
+          <X size={18} />
+        </button>
+      ) : (
+        <button
+          onClick={close}
+          className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
+          style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+        >
+          <ArrowLeft size={16} /> {t("cinema.back")}
+        </button>
+      )}
 
       <div
         className="scrollbar-thin h-full overflow-y-auto px-5 pb-16 sm:px-10"
-        style={{ paddingTop: "calc(4.5rem + env(safe-area-inset-top))" }}
+        // Sur téléphone, la croix flotte au-dessus du contenu et n'a pas besoin qu'on lui
+        // réserve toute une bande : le portrait commence plus haut, ce qui compte sur les
+        // ~390 px d'un écran couché.
+        style={{ paddingTop: `calc(${isMobile ? "1rem" : "4.5rem"} + env(safe-area-inset-top))` }}
       >
         <div className="mx-auto w-full max-w-6xl">
           {isLoading && (
@@ -103,8 +124,14 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
 
           {data && (
             <>
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-                <div className="h-36 w-36 shrink-0 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 sm:h-44 sm:w-44">
+              {/* `pr-12` sur téléphone : la croix flotte dans ce coin, et le nom passait dessous
+                  dès qu'il tenait sur la même ligne que le portrait — c'est-à-dire couché. */}
+              <div className={`flex gap-6 ${short ? "flex-row items-start" : "flex-col sm:flex-row sm:items-start"} ${isMobile ? "pr-12" : ""}`}>
+                <div
+                  className={`shrink-0 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 ${
+                    short ? "h-28 w-28" : "h-36 w-36 sm:h-44 sm:w-44"
+                  }`}
+                >
                   {data.profilePath ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={`${TMDB_PROFILE}${data.profilePath}`} alt="" className="h-full w-full object-cover" />
@@ -116,7 +143,9 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h1 className="font-display text-3xl font-semibold text-white sm:text-4xl">{data.name}</h1>
+                  <h1 className={`font-display font-semibold text-white ${short ? "text-2xl" : "text-3xl sm:text-4xl"}`}>
+                    {data.name}
+                  </h1>
                   <p className="mt-1.5 text-sm text-slate-400">
                     {[
                       data.knownFor,
@@ -129,7 +158,11 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
 
                   {data.biography && (
                     <>
-                      <p className={`mt-4 max-w-3xl select-text text-sm leading-7 text-slate-300 ${expanded ? "" : "line-clamp-4"}`}>
+                      <p
+                        className={`mt-4 max-w-3xl select-text text-sm leading-7 text-slate-300 ${
+                          expanded ? "" : short ? "line-clamp-2" : "line-clamp-4"
+                        }`}
+                      >
                         {data.biography}
                       </p>
                       <button
@@ -144,7 +177,7 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
                 </div>
               </div>
 
-              <div className="mt-10">
+              <div className={short ? "mt-6" : "mt-10"}>
                 <h2 className="font-display text-lg font-semibold text-white">
                   {t("player.person.filmography")}
                   <span className="ml-2 text-sm font-normal text-slate-500">

@@ -14,6 +14,7 @@ import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
+import { useIsShortViewport } from "@/lib/useIsMobile";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -54,6 +55,7 @@ export function CinemaMobileDetail({
   onSelectSimilar?: (item: CinemaMovie | CinemaSeries) => void;
 }) {
   const t = useT();
+  const short = useIsShortViewport();
   const playback = usePlayback();
   const playerEnabled = usePlayerEnabled();
   const [showTrailer, setShowTrailer] = useState(false);
@@ -239,7 +241,10 @@ export function CinemaMobileDetail({
         </button>
       </div>
 
-      <div className="-mt-6 px-4 pb-16">
+      {/* Couché, l'écran fait ~844 px de large : des boutons pleine largeur y traversent tout
+          l'écran et le texte court sur des lignes trop longues. Une colonne centrée règle les
+          deux, sans changer quoi que ce soit debout. */}
+      <div className={`-mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
         {item.logoUrl && !logoErrored ? (
           <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" onError={() => setLogoErrored(true)} className="mb-3 object-left" />
         ) : (
