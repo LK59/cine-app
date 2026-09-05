@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -178,5 +178,39 @@ describe("arrivedByBack", () => {
     // Et la navigation suivante le fait retomber, sans attendre l'image d'après.
     act(() => openLibraryTitle("movie", 2));
     expect(arrivedByBack()).toBe(false);
+  });
+});
+
+describe("useRouteBehind", () => {
+  // Ce qu'il faut pour dessiner la fiche précédente *sous* celle qu'on tire vers le bas : sans
+  // elle, le geste découvrait la grille et la précédente n'apparaissait qu'une fois l'animation
+  // finie — alors que tout le mouvement dit qu'on remonte d'un cran.
+  it("names the sheet the current entry covers", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    expect(result.current).toBeNull();
+
+    act(() => openLibraryTitle("movie", 1));
+    expect(result.current).toBeNull(); // la grille, pas une fiche
+
+    act(() => openLibraryTitle("movie", 2));
+    expect(result.current).toEqual({ film: 1, serie: null, tab: "movies" });
+  });
+
+  it("carries the tab, since each one resolves only its own ids", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    act(() => openLibraryTitle("series", 50));
+    act(() => openLibraryTitle("movie", 42));
+    expect(result.current).toEqual({ film: null, serie: 50, tab: "series" });
+  });
+
+  // useSyncExternalStore exige une identité stable entre deux changements ; l'objet vient de
+  // history.state, recréé à chaque lecture.
+  it("keeps a stable identity between changes", () => {
+    const { result, rerender } = renderHook(() => useRouteBehind());
+    act(() => openLibraryTitle("movie", 1));
+    act(() => openLibraryTitle("movie", 2));
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
   });
 });

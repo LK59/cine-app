@@ -223,7 +223,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
               : "animate-slide-up md:animate-fade-in"
       }`}
       style={{
-        zIndex: 47,
+        zIndex: 48,
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
         transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,

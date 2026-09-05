@@ -49,6 +49,7 @@ export function CinemaMobileDetail({
   mediaType,
   onClose,
   onSelectSimilar,
+  underneath = false,
 }: {
   item: CinemaMovie | CinemaSeries;
   mediaType: "movies" | "series";
@@ -56,6 +57,13 @@ export function CinemaMobileDetail({
   // Swaps this sheet's subject when a "Titres similaires" poster is tapped, rather than stacking
   // a second sheet on top of it.
   onSelectSimilar?: (item: CinemaMovie | CinemaSeries) => void;
+  /**
+   * Cette instance est dessinée *sous* une autre, pour qu'on la voie pendant qu'on tire celle du
+   * dessus vers le bas. Elle est décorative : pas de geste, pas de clavier, pas de fermeture
+   * automatique, et rien qui réponde au doigt — sans quoi deux fiches se disputeraient les mêmes
+   * touches et le même pointeur.
+   */
+  underneath?: boolean;
 }) {
   const t = useT();
   const short = useIsShortViewport();
@@ -74,6 +82,8 @@ export function CinemaMobileDetail({
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.
   const swipe = useSwipeToDismiss(requestClose);
+  // Une fiche du dessous ne se ferme pas : elle attend qu'on la découvre.
+  const inert = underneath;
 
   const isSeries = mediaType === "series";
   const infoUrl = isSeries
@@ -122,13 +132,16 @@ export function CinemaMobileDetail({
   // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and
   // desktop browsers emulating a phone viewport, both reach this screen.
   useEffect(() => {
+    // La fiche du dessous n'écoute rien : deux écouteurs pour la même touche fermeraient les
+    // deux d'un coup, ce qui remonterait de deux crans dans l'historique.
+    if (inert) return;
     function onKey(e: KeyboardEvent) {
       if (showTrailer) return;
       if (e.key === "Escape") requestClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer]);
+  }, [requestClose, showTrailer, inert]);
 
   // Deliberately stays open underneath the player: dismissing the player should land back on
   // the sheet you started from, not on the browse grid behind it.
@@ -196,17 +209,20 @@ export function CinemaMobileDetail({
       // release made the sheet replay its whole entrance every time a drag sprang back — which
       // is what the "weird animation on release" was.
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        swipe.touched ? "" : closing ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
+        inert ? "" : swipe.touched ? "" : closing ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
       // button lands in the murk.
       style={{
-        // Au-dessus des panneaux du rail (46) : une fiche ouverte depuis la recherche ou Ma liste
-        // les recouvre sans les refermer, pour qu'un retour y ramène.
-        zIndex: 47,
+        // Les plans, de bas en haut : la grille (45), les panneaux du rail (46) — qu'une fiche
+        // recouvre sans les refermer —, la fiche du dessous (47) et celle du dessus (48).
+        zIndex: inert ? 47 : 48,
+        // Inerte : elle ne fait que se laisser voir. Sans ça, le doigt qui tire la fiche du dessus
+        // finirait par la traverser et atteindre celle d'en dessous.
+        pointerEvents: inert ? "none" : undefined,
         paddingTop: "env(safe-area-inset-top, 0px)",
-        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+        transform: !inert && swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // No transition while the finger is down: the sheet is not animating towards the finger,
         // it is where the finger is. On release the spring back (or the rest of the way out) is
         // what gets eased.
@@ -226,7 +242,7 @@ export function CinemaMobileDetail({
           edge — the same treatment the desktop sheet uses, scaled to a phone. */}
       <div
         className="relative aspect-video w-full"
-        {...swipe.handlers}
+        {...(inert ? {} : swipe.handlers)}
         // touch-action none: the browser must not claim this gesture for its own scrolling, or
         // it steals the pointer stream halfway through the drag. Only this block gives that up —
         // the rest of the sheet scrolls natively.

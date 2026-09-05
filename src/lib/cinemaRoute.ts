@@ -77,9 +77,22 @@ const DEPTH_KEY = "cinemaDepth";
  */
 const BEHIND_KEY = "cinemaSheetBehind";
 
+/** Ce qu'une entrée recouvre : de quoi le redessiner, pas seulement savoir qu'il existe. */
+export interface SheetRef {
+  film: number | null;
+  serie: number | null;
+  tab: "movies" | "series";
+}
+
 /** Un titre, une personne : quelque chose est ouvert par-dessus la grille. */
 function hasSheet(route: CinemaRoute): boolean {
   return route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+}
+
+/** La fiche que cette route affiche, réduite à ce qu'il faut pour la retrouver. */
+function sheetRef(route: CinemaRoute): SheetRef | null {
+  if (route.film === null && route.serie === null) return null;
+  return { film: route.film, serie: route.serie, tab: route.tab };
 }
 
 function readNumber(params: URLSearchParams, key: string): number | null {
@@ -191,8 +204,41 @@ export function useCinemaRoute(): CinemaRoute {
   return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY);
 }
 
+function readBehind(): SheetRef | boolean {
+  const value = (window.history.state as Record<string, unknown> | null)?.[BEHIND_KEY];
+  return (value as SheetRef | boolean) ?? false;
+}
+
 function readSheetBehind(): boolean {
-  return Boolean((window.history.state as Record<string, unknown> | null)?.[BEHIND_KEY]);
+  return Boolean(readBehind());
+}
+
+// useSyncExternalStore exige une identité stable entre deux changements : l'objet lu dans
+// history.state est recréé à chaque lecture, donc on le met en cache contre son propre contenu.
+let cachedBehindKey: string | null = null;
+let cachedBehind: SheetRef | null = null;
+
+function readBehindSheet(): SheetRef | null {
+  const value = readBehind();
+  const next = typeof value === "object" && value !== null ? value : null;
+  const key = next ? `${next.film}:${next.serie}:${next.tab}` : "";
+  if (key !== cachedBehindKey) {
+    cachedBehindKey = key;
+    cachedBehind = next;
+  }
+  return cachedBehind;
+}
+
+/**
+ * La fiche que l'écran courant recouvre, quand il y en a une.
+ *
+ * Elle sert à la dessiner *dessous* pendant qu'on tire la fiche du dessus vers le bas : sans
+ * elle, le geste découvrait la grille, et la fiche précédente n'apparaissait qu'une fois
+ * l'animation terminée — on voyait donc le fond au milieu d'un mouvement qui, lui, disait qu'on
+ * remontait d'un cran.
+ */
+export function useRouteBehind(): SheetRef | null {
+  return useSyncExternalStore(subscribe, readBehindSheet, () => null);
 }
 
 /**
@@ -226,7 +272,12 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
     [DEPTH_KEY]: mode === "push" ? depth + 1 : depth,
     // Ce qu'on laisse derrière soi, retenu au moment où on l'empile — la seule occasion de le
     // savoir. Un `replace` ne change pas ce qui est en dessous, donc il garde la valeur en place.
-    [BEHIND_KEY]: mode === "push" ? hasSheet(getSnapshot()) : (window.history.state?.[BEHIND_KEY] ?? false),
+    [BEHIND_KEY]:
+      mode === "push"
+        ? hasSheet(getSnapshot())
+          ? sheetRef(getSnapshot()) ?? true
+          : false
+        : (window.history.state?.[BEHIND_KEY] ?? false),
   };
   // Une navigation volontaire n'est jamais un retour : le drapeau retombe avant que qui que ce
   // soit ne se monte.

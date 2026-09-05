@@ -175,7 +175,7 @@ export function PlayerDiscoverSheet({
         swipe.touched ? "" : leaving ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
       }`}
       style={{
-        zIndex: 47,
+        zIndex: 48,
         paddingTop: "env(safe-area-inset-top, 0px)",
         transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
@@ -316,7 +316,7 @@ export function PlayerDiscoverSheet({
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
       style={{
-        zIndex: 47,
+        zIndex: 48,
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
       }}

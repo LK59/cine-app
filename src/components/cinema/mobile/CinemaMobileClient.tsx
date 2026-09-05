@@ -5,7 +5,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info, Menu, Play, Plus, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
@@ -130,6 +130,27 @@ export function CinemaMobileClient() {
     const item = byId.get(id);
     return item ? { item, mediaType } : null;
   }, [isSeries, route.serie, route.film, byId, mediaType]);
+
+  /**
+   * La fiche que celle du dessus recouvre.
+   *
+   * Sans elle, tirer une fiche ouverte depuis « Titres similaires » découvrait la grille : la
+   * précédente n'apparaissait qu'une fois l'animation terminée, alors que tout le geste dit qu'on
+   * remonte d'un cran. Elle est dessinée dessous, inerte, et ne coûte rien à charger — ses
+   * données sont encore dans le cache de SWR, elle en revient.
+   *
+   * Elle n'est rendue que si son onglet est celui qu'on affiche : les deux écrans ont chacun leur
+   * charge utile, et celle de l'autre onglet n'est pas forcément chargée.
+   */
+  const behind = useRouteBehind();
+  const behindSelected = useMemo(() => {
+    if (!behind || !byId || !selected) return null;
+    if (behind.tab !== mediaType) return null;
+    const id = isSeries ? behind.serie : behind.film;
+    if (id === null) return null;
+    const item = byId.get(id);
+    return item ? { item, mediaType } : null;
+  }, [behind, byId, selected, isSeries, mediaType]);
   // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
@@ -459,6 +480,17 @@ export function CinemaMobileClient() {
           return <PosterRow key={genre} label={genre} items={items} itemId={itemId} onSelect={openHero} />;
         })}
       </div>
+
+      {/* La fiche recouverte, dessinée dessous et inerte — voir `behindSelected`. */}
+      {behindSelected && route.discover === null && route.person === null && (
+        <CinemaMobileDetail
+          key={`behind-${itemId(behindSelected.item)}`}
+          item={behindSelected.item}
+          mediaType={behindSelected.mediaType}
+          onClose={() => {}}
+          underneath
+        />
+      )}
 
       {/* Même règle que sur grand écran : une seule fiche à la fois. */}
       {selected && route.discover === null && route.person === null && (
