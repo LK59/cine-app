@@ -62,6 +62,16 @@ describe("openPanel", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  // Depuis une fiche ouverte au-dessus de Ma liste, cliquer « Ma liste » dans le rail doit
+  // refermer la fiche et redescendre sur la liste. Sans cette nuance, le clic ne faisait rien du
+  // tout — le panneau était déjà « actif », alors qu'on ne le voyait pas.
+  it("closes a sheet covering the panel instead of ignoring the click", async () => {
+    const { openPanel } = await import("@/components/player/playerNav");
+    openPanel("list", { ...EMPTY, list: true, film: 42 });
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate.mock.calls[0][0]).toMatchObject({ film: null, list: true });
+  });
+
   it("goes home by closing everything, and replaces the entry when already home", async () => {
     const { openPanel } = await import("@/components/player/playerNav");
     openPanel("home", { ...EMPTY, list: true });

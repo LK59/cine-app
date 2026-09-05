@@ -52,7 +52,8 @@ describe("GET /api/tmdb/collection/[id]", () => {
         { id: 1, title: "Part 1", release_date: "2010-01-01", poster_path: null, vote_average: 7 },
       ],
     });
-    mockCachedMovies.mockResolvedValue([{ tmdbId: 1, id: 55 }]);
+    // `hasFile` : la filmographie ne relie que ce qui est ouvrable, pas ce que Radarr surveille.
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 1, id: 55, hasFile: true }]);
     const { GET } = await import("@/app/api/tmdb/collection/[id]/route");
     const res = await GET(fakeReq(), params("10"));
     const body = await res.json();
@@ -91,7 +92,7 @@ describe("GET /api/tmdb/person/[id]", () => {
         { id: 2, media_type: "movie", title: "In library", popularity: 1, vote_average: 2, poster_path: null, release_date: "2020-01-01" },
       ],
     });
-    mockCachedMovies.mockResolvedValue([{ tmdbId: 2, id: 77 }]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 2, id: 77, hasFile: true }]);
     const { GET } = await import("@/app/api/tmdb/person/[id]/route");
     const res = await GET(fakeReq(), params("5"));
     const body = await res.json();

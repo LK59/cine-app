@@ -61,7 +61,14 @@ export function PlayerRequestCard({
       >
         <div className="aspect-[2/3]">
           {request.poster ? (
-            <PosterImage src={request.poster} alt={request.title} />
+            // Même raison que PlayerResultCard : le CDN TMDB sert déjà la bonne taille.
+            <PosterImage
+              src={request.poster}
+              alt={request.title}
+              subtle
+              unoptimized
+              sizes="(max-width: 640px) 30vw, (max-width: 1024px) 18vw, 150px"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-600">
               <Icon size={26} />

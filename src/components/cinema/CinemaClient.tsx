@@ -433,17 +433,25 @@ export function CinemaClient() {
   // browsing the grid underneath it should still work normally, only a full-screen player
   // actively capturing the keyboard needs this stepping aside. Both selectedItem and
   // seriesSelectedItem gate this now — either detail sheet owns the keyboard the same way.
-  useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !searchOpen);
+  // Les flèches ne pilotent la grille que lorsqu'elle est l'écran du dessus : un panneau du rail
+  // (recherche, Ma liste, compte) la recouvre, et sans cette garde on déplaçait le focus dans des
+  // affiches invisibles pendant qu'on lisait autre chose.
+  const panelOpen = searchOpen || route.list || route.account;
+  useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen);
 
   // Same three conditions gate the trailer preview below — anything opaque covering the browse
   // screen means the preview has nothing to preview for.
-  const trailerSuspended = selectedItem !== null || seriesSelectedItem !== null || playback.mode === "full" || searchOpen;
+  // La bande-annonce de fond se met en pause dès qu'un écran la recouvre — un panneau du rail
+  // compris : la laisser tourner derrière « Ma liste » consomme du réseau pour une image que
+  // personne ne voit.
+  const trailerSuspended =
+    selectedItem !== null || seriesSelectedItem !== null || playback.mode === "full" || panelOpen;
 
   // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
   // and the reason the button itself can stay a small icon rather than a full-width field.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key !== "/" || searchOpen) return;
+      if (e.key !== "/" || panelOpen) return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName ?? "";
       if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
       if (selectedItem || seriesSelectedItem || playback.mode === "full") return;
@@ -452,7 +460,7 @@ export function CinemaClient() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [searchOpen, selectedItem, seriesSelectedItem, playback.mode, setSearchOpen]);
+  }, [panelOpen, selectedItem, seriesSelectedItem, playback.mode, setSearchOpen]);
 
   // All four are useCallback'd for one specific reason: the row components below are memo'd, and
   // a fresh function identity on every render would defeat that entirely — the rows (and every

@@ -728,3 +728,13 @@
     transition: none;
   }
 }
+
+/* Les grilles du lecteur — recherche, Ma liste, filmographie.
+   Une filmographie fait deux cents cartes, et une liste peut en faire autant : `content-visibility`
+   laisse le navigateur sauter entièrement la mise en page et le dessin de ce qui est hors écran.
+   La taille de substitution évite que la barre de défilement saute pendant qu'on descend — c'est
+   le même réglage que les rangées de l'écran mobile, à la hauteur d'une carte près. */
+.player-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
+}

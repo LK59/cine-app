@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
-import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { playableLibrary, playableId } from "@/lib/playerLibrary";
 import { getTmdbLocale, LOCALE_COOKIE } from "@/lib/i18n";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -79,8 +79,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       : null;
 
     if (type === "movie") {
-      const [detail, movies] = await Promise.all([tmdb.getMovie(tmdbId), cachedMovies().catch(() => [])]);
-      const libraryId = movies.find((m) => m.tmdbId === tmdbId)?.id ?? null;
+      const [detail, lib] = await Promise.all([tmdb.getMovie(tmdbId), playableLibrary()]);
+      // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
+      // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
+      const libraryId = playableId(lib, "movie", tmdbId);
       return build({
         tmdbId,
         type,
@@ -100,8 +102,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       });
     }
 
-    const [detail, series] = await Promise.all([tmdb.getTv(tmdbId), cachedSeries().catch(() => [])]);
-    const libraryId = series.find((s) => s.tmdbId === tmdbId)?.id ?? null;
+    const [detail, lib] = await Promise.all([tmdb.getTv(tmdbId), playableLibrary()]);
+    const libraryId = playableId(lib, "series", tmdbId);
     return build({
       tmdbId,
       type,

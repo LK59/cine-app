@@ -25,9 +25,14 @@ vi.mock("@/lib/clients/tmdb", () => ({
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
 
+// `hasFile` / `episodeFileCount` comptent : la bibliothèque n'indexe que ce qui est réellement
+// ouvrable, pas ce que Radarr et Sonarr se contentent de surveiller (voir playerLibrary).
 vi.mock("@/lib/server-cache", () => ({
-  cachedMovies: async () => [{ id: 42, tmdbId: 603 }],
-  cachedSeries: async () => [{ id: 7, tmdbId: 1399 }],
+  cachedMovies: async () => [
+    { id: 42, tmdbId: 603, hasFile: true },
+    { id: 99, tmdbId: 700, hasFile: false },
+  ],
+  cachedSeries: async () => [{ id: 7, tmdbId: 1399, statistics: { episodeFileCount: 10 } }],
   cachedJellyfinMovies: async () => [
     { Id: "jf1", Name: "Vu", ProviderIds: { Tmdb: "603" }, ProductionYear: 1999, UserData: { Played: true, IsFavorite: false, PlayCount: 1 } },
     { Id: "jf2", Name: "Favori", ProviderIds: { Tmdb: "999" }, ProductionYear: 2001, UserData: { Played: false, IsFavorite: true, PlayCount: 0 } },
@@ -222,5 +227,34 @@ describe("GET /api/player/lists — posters", () => {
     const { GET } = await import("@/app/api/player/lists/route");
     const body = await (await GET(req())).json();
     expect(body.toWatch.map((i: { title: string }) => i.title).sort()).toEqual(["Rangé à demander", "Rangé à voir"]);
+  });
+});
+
+describe("what counts as being in the library", () => {
+  // Radarr et Sonarr connaissent aussi ce qu'ils surveillent sans l'avoir. Les indexer comme
+  // « on l'a » donnait un identifiant de fiche à un titre qu'aucun écran ne sait afficher : la
+  // carte perdait sa pastille « Pas encore là » et le clic ne faisait rien.
+  it("does not hand a library id to a title Radarr merely watches", async () => {
+    tmdbClient.getMovie.mockResolvedValue({
+      title: "Surveillé", release_date: "2020-01-01", overview: "", genres: [], runtime: null,
+      vote_average: 0, poster_path: null, backdrop_path: null, credits: { cast: [] },
+    });
+    jellyseerr.getMovieMedia.mockResolvedValue({});
+
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "700" }) })).json();
+    expect(body.libraryId).toBeNull();
+  });
+
+  it("hands one to a title that actually has its file", async () => {
+    tmdbClient.getMovie.mockResolvedValue({
+      title: "Téléchargé", release_date: "1999-03-31", overview: "", genres: [], runtime: null,
+      vote_average: 0, poster_path: null, backdrop_path: null, credits: { cast: [] },
+    });
+    jellyseerr.getMovieMedia.mockResolvedValue({});
+
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
+    expect(body.libraryId).toBe(42);
   });
 });

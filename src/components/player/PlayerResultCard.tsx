@@ -45,7 +45,18 @@ export function PlayerResultCard({
       <div className="relative overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition duration-200 group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-accent-500">
         <div className={kind === "person" ? "aspect-[2/3]" : "aspect-[2/3]"}>
           {poster ? (
-            <PosterImage src={poster} alt={title} />
+            /* `unoptimized` : ces adresses sont déjà des images TMDB demandées à la taille de la
+               carte. Les faire passer par l'optimiseur de Next revenait à faire retranscoder des
+               centaines d'affiches par ce serveur pendant qu'on fait défiler la grille — la cause
+               n°1 des à-coups de défilement identifiée sur les rangées du mode cinéma. Le CDN
+               fait ce travail mieux, et gratuitement. */
+            <PosterImage
+              src={poster}
+              alt={title}
+              subtle
+              unoptimized
+              sizes="(max-width: 640px) 30vw, (max-width: 1024px) 18vw, 150px"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-600">
               <Icon size={26} />

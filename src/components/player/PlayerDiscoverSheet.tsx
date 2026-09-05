@@ -94,7 +94,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   return createPortal(
     <div
       ref={containerRef}
-      className="fixed inset-0 animate-fade-in overflow-hidden bg-ink"
+      className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
@@ -116,8 +116,12 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
 
       <button
         onClick={close}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
+        // `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone
+        // elle s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à
+        // elle plutôt qu'à la fenêtre, ce qui rend le placement dépendant de l'animation. En
+        // absolu, il se cale sur la boîte de contenu, rail déjà déduit.
+        className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
+        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
       >
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>

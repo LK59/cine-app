@@ -1,5 +1,6 @@
 import { jellyseerr, type JellyseerrRequest } from "@/lib/clients/jellyseerr";
-import { cachedMovieInfo, cachedTvInfo, cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { cachedMovieInfo, cachedTvInfo } from "@/lib/server-cache";
+import { playableLibrary, playableId } from "@/lib/playerLibrary";
 import { resolveRequestState, isReleased, type PlayerRequestState } from "@/lib/playerRequestState";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -62,17 +63,14 @@ async function decorate(requests: JellyseerrRequest[]): Promise<PlayerRequest[]>
     else tvIds.add(tmdbId);
   }
 
-  const [movieInfos, tvInfos, movies, series] = await Promise.all([
+  const [movieInfos, tvInfos, lib] = await Promise.all([
     Promise.allSettled([...movieIds].map((id) => cachedMovieInfo(id).then((d) => [id, d] as const))),
     Promise.allSettled([...tvIds].map((id) => cachedTvInfo(id).then((d) => [id, d] as const))),
-    cachedMovies().catch(() => []),
-    cachedSeries().catch(() => []),
+    playableLibrary(),
   ]);
 
   const movieInfo = new Map(movieInfos.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
   const tvInfo = new Map(tvInfos.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
-  const movieLibrary = new Map(movies.map((m) => [m.tmdbId, m.id]));
-  const seriesLibrary = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
 
   return requests.map((r): PlayerRequest => {
     const tmdbId = r.media?.tmdbId ?? null;
@@ -104,7 +102,9 @@ async function decorate(requests: JellyseerrRequest[]): Promise<PlayerRequest[]>
       // suppose que oui, c'est la sienne. L'annulation ne touche jamais à Radarr — voir
       // `deleteRequest` dans le client.
       canCancel: r.canRemove !== false,
-      libraryId: tmdbId ? (type === "movie" ? movieLibrary.get(tmdbId) : seriesLibrary.get(tmdbId)) ?? null : null,
+      // « Disponible » veut dire ouvrable : une demande que Jellyseerr croit terminée mais dont
+      // le fichier n'est pas là garde `libraryId: null` et retombe sur la fiche TMDB.
+      libraryId: playableId(lib, type, tmdbId),
     };
   });
 }

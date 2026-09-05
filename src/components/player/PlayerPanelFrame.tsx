@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
-import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 
 /**
@@ -34,19 +34,25 @@ export function PlayerPanelFrame({
   children: React.ReactNode;
 }) {
   const t = useT();
+  const route = useCinemaRoute();
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Une fiche ouverte par-dessus ce panneau écoute Échap elle aussi. `stopPropagation` n'y change
+  // rien : deux écouteurs posés sur la même cible se déclenchent tous les deux, et une seule
+  // touche remontait alors de deux crans dans l'historique — la fiche *et* le panneau. Le panneau
+  // se tait tant qu'il n'est pas l'écran du dessus.
+  const covered =
+    route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
 
   useEffect(() => {
+    if (covered) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // capture + stopPropagation : l'écran cinéma écoute Échap lui aussi, et sans ça une seule
-      // touche fermerait le panneau *et* la fiche ouverte derrière.
       e.stopPropagation();
       cinemaClose({ search: false, list: false, account: false });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  }, [covered]);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.

@@ -75,13 +75,17 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 animate-fade-in overflow-hidden bg-ink"
+      className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
       <button
         onClick={close}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
+        // `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone
+        // elle s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à
+        // elle plutôt qu'à la fenêtre, ce qui rend le placement dépendant de l'animation. En
+        // absolu, il se cale sur la boîte de contenu, rail déjà déduit.
+        className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
+        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
       >
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
@@ -148,7 +152,7 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
                   </span>
                 </h2>
 
-                <div className="mt-5 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                <div className="player-grid mt-5 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {credits.map((c) => {
                     const type = c.mediaType === "movie" ? "movie" : "series";
                     return (

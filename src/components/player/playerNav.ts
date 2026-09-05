@@ -71,6 +71,13 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     cinemaNavigate(closed, alreadyHome ? "replace" : "push");
     return;
   }
-  if (activePanel(current) === panel) return;
+  // Sur le panneau demandé, et rien par-dessus : il n'y a rien à faire, et empiler une entrée
+  // d'historique pour un clic sans effet ferait qu'un retour ne semblerait rien faire non plus.
+  //
+  // Mais si une fiche le recouvre, le même clic doit la refermer et redescendre sur le panneau —
+  // c'est ce qu'on attend d'un rail : y retourner. Sans cette nuance, le clic ne faisait rien.
+  const covered =
+    current.film !== null || current.serie !== null || current.discover !== null || current.person !== null;
+  if (activePanel(current) === panel && !covered) return;
   cinemaNavigate({ ...closed, ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }) });
 }

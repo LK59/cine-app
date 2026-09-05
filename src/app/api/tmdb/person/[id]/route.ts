@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
-import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { playableLibrary } from "@/lib/playerLibrary";
 import { withErrorHandling } from "@/lib/api-helpers";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -12,11 +12,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   if (!tmdb.isEnabled()) return NextResponse.json({ credits: [] });
 
   return withErrorHandling(async () => {
-    const [personFr, { cast }, movies, series] = await Promise.all([
+    const [personFr, { cast }, lib] = await Promise.all([
       tmdb.getPersonDetails(personId).catch(() => null),
       tmdb.getPersonCredits(personId),
-      cachedMovies().catch(() => []),
-      cachedSeries().catch(() => []),
+      // Ouvrable, et pas seulement connu de Radarr/Sonarr : une filmographie est pleine de titres
+      // surveillés sans fichier, et les annoncer comme présents menait à un clic qui ne faisait
+      // rien. Voir playableLibrary.
+      playableLibrary(),
     ]);
 
     // If TMDB has no French biography, fall back to English
@@ -25,8 +27,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         ? personFr
         : await tmdb.getPersonDetails(personId).catch(() => personFr);
 
-    const movieByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
-    const seriesByTmdb = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
+    const movieByTmdb = new Map([...lib.movies].map(([tmdbId, m]) => [tmdbId, m.id]));
+    const seriesByTmdb = new Map([...lib.series].map(([tmdbId, s]) => [tmdbId, s.id]));
 
     // Deduplicate (same title can appear as multiple roles), keep highest popularity
     const seen = new Map<string, (typeof cast)[0]>();

@@ -262,7 +262,10 @@ export function CinemaMobileClient() {
             underneath are untouched in both orientations. */}
         <CinemaMobileHero
           items={heroItems}
-          paused={selected !== null || searchOpen}
+          // En pause dès qu'un écran la recouvre — les panneaux du rail compris : laisser une
+          // bande-annonce tourner derrière « Ma liste » consomme des données mobiles pour une
+          // image que personne ne voit.
+          paused={selected !== null || searchOpen || route.list || route.account || route.menu}
           short={short}
           onPlay={playHero}
           onOpen={openHero}

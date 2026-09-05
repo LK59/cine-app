@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { cachedMovies, cachedSeries, withCache, TTL, getProviderIdCI } from "@/lib/server-cache";
+import { withCache, TTL, getProviderIdCI } from "@/lib/server-cache";
+import { playableLibrary } from "@/lib/playerLibrary";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { getTmdbLocale, LOCALE_COOKIE } from "@/lib/i18n";
 import { SESSION_COOKIE } from "@/lib/auth";
@@ -106,16 +107,17 @@ export async function GET(req: NextRequest) {
   return withErrorHandling(async () => {
     // Les tendances sont les mêmes pour tout le monde et changent une fois par semaine : un cache
     // partagé évite de refaire l'appel pour chaque personne qui ouvre l'accueil.
-    const [movies, tv, library, seriesLibrary, recommended] = await Promise.all([
+    const [movies, tv, lib, recommended] = await Promise.all([
       withCache(`tmdb:trending:movie:${locale}`, TTL.LONG, () => tmdb.trendingMovies()).catch(() => ({ results: [] })),
       withCache(`tmdb:trending:tv:${locale}`, TTL.LONG, () => tmdb.trendingTv()).catch(() => ({ results: [] })),
-      cachedMovies().catch(() => []),
-      cachedSeries().catch(() => []),
+      playableLibrary(),
       recommendedFor(session.jfId ?? null, tmdb, locale).catch(() => []),
     ]);
 
-    const movieLibrary = new Map(library.map((m) => [m.tmdbId, m.id]));
-    const tvLibrary = new Map(seriesLibrary.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
+    // Seulement ce qui est ouvrable : un titre surveillé sans fichier doit porter la pastille et
+    // mener à sa fiche TMDB, pas à une fiche de bibliothèque qui n'existe pas.
+    const movieLibrary = new Map([...lib.movies].map(([tmdbId, m]) => [tmdbId, m.id]));
+    const tvLibrary = new Map([...lib.series].map(([tmdbId, s]) => [tmdbId, s.id]));
 
     const rows: DiscoveryRow[] = [
       {

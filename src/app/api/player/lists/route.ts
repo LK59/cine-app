@@ -2,13 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { watchlistDb } from "@/lib/db";
-import {
-  cachedJellyfinMovies,
-  cachedJellyfinSeries,
-  cachedMovies,
-  cachedSeries,
-  getProviderIdCI,
-} from "@/lib/server-cache";
+import { cachedJellyfinMovies, cachedJellyfinSeries, getProviderIdCI } from "@/lib/server-cache";
+import { playableLibrary } from "@/lib/playerLibrary";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
 import { posterUrl } from "@/lib/images";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
@@ -77,16 +72,16 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   return withErrorHandling(async () => {
-    const [movies, series, jfMovies, jfSeries, requests] = await Promise.all([
-      cachedMovies().catch(() => []),
-      cachedSeries().catch(() => []),
+    const [lib, jfMovies, jfSeries, requests] = await Promise.all([
+      playableLibrary(),
       session.jfId ? cachedJellyfinMovies(session.jfId).catch(() => []) : Promise.resolve([]),
       session.jfId ? cachedJellyfinSeries(session.jfId).catch(() => []) : Promise.resolve([]),
       config.jellyseerr.apiKey ? getPlayerRequests(session).catch(() => []) : Promise.resolve([]),
     ]);
 
-    const movieLibrary = new Map(movies.map((m) => [m.tmdbId, m]));
-    const seriesLibrary = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s]));
+    // Seulement ce que la bibliothèque peut vraiment ouvrir — voir playableLibrary.
+    const movieLibrary = lib.movies;
+    const seriesLibrary = lib.series;
 
     const local = watchlistDb.getAll(userId);
     const fromWatchlist = (statuses: string[]): PlayerListItem[] =>
