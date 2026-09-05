@@ -1366,6 +1366,11 @@
       "stateNative": "Ahora mismo: la imagen viene del navegador.",
       "stateTonemap": "Ahora mismo: conversión completa, a partir de los valores HDR reales.",
       "stateRecovery": "Ahora mismo: contraste y color restituidos tras una conversión ya hecha."
+    },
+    "hdrLook": {
+      "message": "Este navegador parece mostrar mal el HDR.",
+      "switch": "Reproducción estándar",
+      "dismiss": "No proponerlo más"
     }
   },
   "cinema": {
