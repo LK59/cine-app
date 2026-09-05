@@ -3,7 +3,7 @@ import { cachedMovies, cachedJellyfinMovies, cachedJellyfinMoviesAdmin, findJell
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
-import { getTitleLogo } from "@/lib/title-logo";
+import { getTitleArt } from "@/lib/title-art";
 import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
@@ -16,6 +16,14 @@ export interface CinemaMovie {
   posterUrl: string | null;
   backdropUrl: string | null;
   logoUrl: string | null;
+  /**
+   * L'affiche sans le titre imprimé dessus, quand TMDB en a une.
+   *
+   * Elle ne remplace l'affiche ordinaire que là où l'on pose déjà notre propre logo par-dessus —
+   * la bannière du téléphone. Ailleurs (les rangées), le titre écrit sur l'affiche est justement
+   * ce qui permet de la reconnaître, et on garde l'affiche ordinaire.
+   */
+  posterTextlessUrl: string | null;
   overview: string | null;
   imdbRating: string | null;
   genres: string[];
@@ -41,6 +49,9 @@ export interface CinemaMoviesPayload {
 // cold cache pays the full TMDB round-trip for the whole library at once — every request after
 // that, including this one, is cache reads only.
 async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<CinemaMovie> {
+  // Le logo et l'affiche sans texte viennent de la même réponse TMDB et de la même entrée de
+  // cache : la seconde ne coûte donc pas un appel de plus.
+  const art = await getTitleArt(m.tmdbId, "movie");
   return {
     radarrId: m.id,
     jellyfinItemId,
@@ -49,7 +60,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
     year: m.year,
     posterUrl: posterUrl(m.images, "thumb"),
     backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
-    logoUrl: await getTitleLogo(m.tmdbId, "movie"),
+    logoUrl: art.logoUrl,
+    posterTextlessUrl: art.posterTextlessUrl,
     overview: m.overview ?? null,
     // Radarr already resolves this itself at add/refresh time (Skyhook) — free, no
     // OMDb/TMDB round trip needed, same field fetchHero() in the dashboard route uses.

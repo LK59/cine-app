@@ -55,7 +55,7 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
        n'existait pas la frame d'avant n'a rien d'où glisser. `pointer-events` le rend inerte
        quand il est fermé, et `visibility` le sort de l'ordre de tabulation. */
     <div
-      className={`fixed inset-0 z-50 md:hidden ${open ? "" : "pointer-events-none"}`}
+      className={`fixed inset-0 z-50 ${open ? "" : "pointer-events-none"}`}
       aria-hidden={!open}
     >
       <div

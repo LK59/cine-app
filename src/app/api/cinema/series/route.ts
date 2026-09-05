@@ -3,7 +3,7 @@ import { cachedSeries, cachedJellyfinSeries, cachedJellyfinSeriesAdmin, findJell
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
-import { getTitleLogo } from "@/lib/title-logo";
+import { getTitleArt } from "@/lib/title-art";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
@@ -18,6 +18,8 @@ export interface CinemaSeries {
   posterUrl: string | null;
   backdropUrl: string | null;
   logoUrl: string | null;
+  /** Voir la note jumelle dans la route des films. */
+  posterTextlessUrl: string | null;
   overview: string | null;
   imdbRating: string | null;
   genres: string[];
@@ -43,8 +45,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
   // Independent lookups (different upstreams, different cache keys) — run concurrently rather
   // than one after the other, halving the cold-cache latency per series that hasn't been seen
   // by either cache before (steady state is unaffected either way, both are cache reads then).
-  const [logoUrl, imdbRating] = await Promise.all([
-    getTitleLogo(s.tmdbId ?? 0, "series"),
+  const [art, imdbRating] = await Promise.all([
+    getTitleArt(s.tmdbId ?? 0, "series"),
     s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null),
   ]);
   return {
@@ -56,7 +58,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
     year: s.year,
     posterUrl: posterUrl(s.images, "thumb"),
     backdropUrl: tmdbResize(backdropUrl(s.images, "full"), "w1280"),
-    logoUrl,
+    logoUrl: art.logoUrl,
+    posterTextlessUrl: art.posterTextlessUrl,
     overview: s.overview ?? null,
     imdbRating,
     genres: s.genres ?? [],

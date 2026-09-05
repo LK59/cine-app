@@ -78,6 +78,19 @@ export interface TmdbMovie {
   belongs_to_collection?: { id: number; name: string; poster_path: string | null } | null;
 }
 
+export interface TmdbImage {
+  file_path: string;
+  iso_639_1: string | null;
+  vote_average: number;
+  width?: number;
+  height?: number;
+}
+
+export interface TmdbImages {
+  logos?: TmdbImage[];
+  posters?: TmdbImage[];
+}
+
 export interface TmdbCollection {
   id: number;
   name: string;
@@ -202,12 +215,15 @@ function createTmdbClient(lang = "fr-FR") {
     // "logos" are TMDB's title-treatment images (transparent PNGs with the film/show's actual
     // logo/wordmark) — distinct from posters/backdrops, used for the home hero's Netflix-style
     // title art instead of plain text where one's available.
+    // `posters` arrive dans la même réponse et n'étaient simplement pas déclarés. C'est ce qui
+    // permet de récupérer une affiche sans texte — `iso_639_1: null` chez TMDB — sans un seul
+    // appel de plus : `include_image_language` demande déjà « fr, en, et sans langue ».
     getMovieImages: (tmdbId: number) =>
-      fetchJson<{ logos: { file_path: string; iso_639_1: string | null; vote_average: number }[] }>(
+      fetchJson<TmdbImages>(
         `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${videoLangs}`
       ),
     getTvImages: (tmdbTvId: number) =>
-      fetchJson<{ logos: { file_path: string; iso_639_1: string | null; vote_average: number }[] }>(
+      fetchJson<TmdbImages>(
         `${BASE}/tv/${tmdbTvId}/images?api_key=${apiKey}&include_image_language=${videoLangs}`
       ),
     getPersonDetails: (personId: number) =>

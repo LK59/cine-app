@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info, Menu, Play, Plus, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -53,6 +53,17 @@ const ROW_ITEM_LIMIT = 24;
 // (a hero that follows focus, arrow-key grid nav, a dwell-triggered trailer) — none of which has
 // a meaning on touch. This is the Netflix-mobile shape instead: one scrolling column, a poster
 // hero with its actions inline, and rows you flick through. Desktop is untouched.
+/**
+ * Les deux charges utiles n'identifient pas leurs éléments de la même façon ; chaque rangée a
+ * simplement besoin d'*un* identifiant stable.
+ *
+ * Hors du composant : c'est une fonction pure, et la recréer à chaque rendu suffisait à défaire
+ * la mémoïsation de toutes les rangées auxquelles elle est passée.
+ */
+function itemId(item: CinemaMovie | CinemaSeries): number {
+  return "radarrId" in item ? item.radarrId : item.sonarrId;
+}
+
 export function CinemaMobileClient() {
   const t = useT();
   const playback = usePlayback();
@@ -70,13 +81,13 @@ export function CinemaMobileClient() {
     revalidateOnFocus: false,
   });
 
-  function openDiscovery(item: DiscoveryItem) {
+  const openDiscovery = useCallback((item: DiscoveryItem) => {
     if (item.libraryId !== null) {
       openLibraryTitle(item.type, item.libraryId);
       return;
     }
     cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
-  }
+  }, []);
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
@@ -116,11 +127,14 @@ export function CinemaMobileClient() {
   // same cadence as the dashboard's own hero, kept in this screen's own visual language (poster
   // key art, Lire / Plus d'infos). L'index et la rotation vivent dans CinemaMobileHero : ils ne
   // regardent que lui, et les y laisser faisait redessiner tout cet écran à chaque changement.
-  const heroItems = (payload?.recentlyAdded?.length ? payload.recentlyAdded : payload?.spotlight ?? []).slice(0, 8);
+  // `useMemo` : sans lui, une nouvelle référence de tableau à chaque rendu de cet écran défaisait
+  // la mémoïsation de la bannière, qu'on avait justement extraite pour qu'elle ne se redessine
+  // pas au moindre battement.
+  const heroItems = useMemo(
+    () => (payload?.recentlyAdded?.length ? payload.recentlyAdded : payload?.spotlight ?? []).slice(0, 8),
+    [payload]
+  );
   const myList = isSeries ? myListSeries : myListMovies;
-  // The two payloads key their items differently; every rail below just needs *a* stable id.
-  const itemId = (item: CinemaMovie | CinemaSeries) =>
-    "radarrId" in item ? item.radarrId : item.sonarrId;
 
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
     cinemaNavigate(
@@ -376,14 +390,14 @@ export function CinemaMobileClient() {
                 widthClassName={POSTER_WIDTH}
                 showNewBadge={false}
                 numberFontSize="4.5rem"
-                onSelectItem={() => openDetail(item, mediaType)}
+                onSelectItem={() => openHero(item)}
               />
             ))}
           </MobileRow>
         )}
 
-        <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} showNewBadge={false} />
-        <PosterRow label={t("cinema.myList")} items={myList} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />
+        <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={openHero} showNewBadge={false} />
+        <PosterRow label={t("cinema.myList")} items={myList} itemId={itemId} onSelect={openHero} />
 
         {(discovery?.rows ?? [])
           .filter((row) =>
@@ -402,7 +416,7 @@ export function CinemaMobileClient() {
         {payload?.genres.map((genre) => {
           const items = (payload.rows[genre] ?? []).slice(0, ROW_ITEM_LIMIT);
           if (items.length === 0) return null;
-          return <PosterRow key={genre} label={genre} items={items} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />;
+          return <PosterRow key={genre} label={genre} items={items} itemId={itemId} onSelect={openHero} />;
         })}
       </div>
 
@@ -447,7 +461,16 @@ const ROW_CONTAINMENT = {
 // One rail of posters — the shape every mobile row except Continue Watching and Top 10 uses.
 // Generic over the item type so the movie and series tabs share it; returns nothing when empty,
 // which is what lets the curated rails be dropped in unconditionally above.
-function PosterRow<T extends { title: string; posterUrl: string | null; addedAt: string | null }>({
+/**
+ * Mémoïsées, et c'est ce qui rend la navigation fluide.
+ *
+ * Cet écran s'abonne à l'adresse : ouvrir un panneau, en fermer un, ouvrir une fiche le redessine
+ * entièrement. Sans mémoïsation, chaque passage d'un écran à l'autre reparcourait toutes les
+ * rangées et toutes leurs affiches — d'où les à-coups. Leurs entrées sont maintenant stables
+ * (`items` vient de la charge utile SWR, `itemId` est hors composant, les rappels sont
+ * `useCallback`), donc React saute simplement le sous-arbre.
+ */
+function PosterRowInner<T extends { title: string; posterUrl: string | null; addedAt: string | null }>({
   label,
   items,
   itemId,
@@ -478,12 +501,16 @@ function PosterRow<T extends { title: string; posterUrl: string | null; addedAt:
   );
 }
 
+// `memo` perd la généricité de la fonction ; le cast la rend aux appelants sans rien changer à
+// l'exécution.
+const PosterRow = memo(PosterRowInner) as typeof PosterRowInner;
+
 /**
  * Une rangée de découverte : les mêmes affiches, avec une pastille sur ce qu'on n'a pas encore.
  * Ce qui est là ouvre sa fiche, le reste ouvre la fiche TMDB, où « Lire » est devenu
  * « Demander » — un seul catalogue, une seule grammaire.
  */
-function DiscoveryRow({
+const DiscoveryRow = memo(function DiscoveryRow({
   label,
   items,
   missingLabel,
@@ -517,7 +544,7 @@ function DiscoveryRow({
       ))}
     </MobileRow>
   );
-}
+});
 
 function MobileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (

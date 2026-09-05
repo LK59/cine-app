@@ -82,7 +82,9 @@ export function PlayerPanelFrame({
   return createPortal(
     <div
       ref={rootRef}
-      className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink"
+      // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
+      // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
+      className="fixed inset-0 flex animate-slide-up flex-col overflow-hidden bg-ink md:animate-fade-in"
       style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
     >
       <header

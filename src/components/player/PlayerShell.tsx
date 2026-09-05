@@ -50,6 +50,27 @@ export function PlayerShell() {
     };
   }, [isMobile]);
 
+  // Les trois panneaux arrivent en chargement différé (voir plus haut) : la toute première
+  // ouverture payait donc un aller-retour réseau, ce qui, sur données mobiles, se sent comme un
+  // écran qui met du temps à répondre. On va les chercher dès que le fil d'exécution est libre —
+  // après l'affichage des affiches, jamais pendant.
+  useEffect(() => {
+    type Preloadable = { preload?: () => void };
+    const warm = () => {
+      (PlayerSearchPanel as Preloadable).preload?.();
+      (PlayerListPanel as Preloadable).preload?.();
+      (PlayerAccountPanel as Preloadable).preload?.();
+    };
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    if (idle) {
+      idle(warm);
+      return;
+    }
+    // Safari n'a pas `requestIdleCallback` — un délai suffit à laisser passer le premier rendu.
+    const timer = setTimeout(warm, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <>
       {isMobile ? (

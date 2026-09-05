@@ -738,3 +738,20 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 240px;
 }
+
+/* Le mouvement, quand on n'en veut pas.
+   Les animations d'entrée de cette application sont courtes et servent à situer les écrans les
+   uns par rapport aux autres ; pour qui a demandé moins de mouvement — et sur les appareils qui
+   peinent, où ce réglage est souvent activé — elles se contentent d'apparaître. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-slide-up,
+  .animate-fade-in-scale,
+  .animate-slide-in-right,
+  .animate-fade-out-down,
+  .animate-fade-out-scale,
+  .animate-slide-out-right {
+    animation-name: fade-in;
+    animation-duration: 0.15s;
+  }
+}

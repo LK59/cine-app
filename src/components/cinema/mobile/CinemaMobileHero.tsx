@@ -22,6 +22,20 @@ type Item = CinemaMovie | CinemaSeries;
  * L'index est ici, et le composant est mémoïsé : un changement de titre ne redessine que la
  * bannière — trois affiches et une rangée de barres.
  */
+/**
+ * L'affiche de la bannière : sans texte quand on a un logo à poser dessus.
+ *
+ * La bannière du téléphone superpose notre propre logo à l'affiche. Quand celle-ci porte déjà le
+ * titre peint dedans — ce qui est le cas de la plupart des séries — le nom apparaissait deux fois,
+ * une fois dans l'image et une fois écrit par nous juste en dessous.
+ *
+ * Sans logo, en revanche, l'affiche est la seule chose qui nomme le titre : on garde alors celle
+ * qui le porte. Et si TMDB n'a pas de version sans texte, l'affiche ordinaire fait l'affaire.
+ */
+function heroPoster(item: { posterUrl: string | null; posterTextlessUrl?: string | null; logoUrl: string | null }): string | null {
+  return item.logoUrl ? item.posterTextlessUrl ?? item.posterUrl : item.posterUrl;
+}
+
 export const CinemaMobileHero = memo(function CinemaMobileHero({
   items,
   paused,
@@ -100,7 +114,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
               {Math.abs(i - index) > 1 ? null : short ? (
                 <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
-                    <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === index} sizes="120px" />
+                    <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="120px" />
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-center">
                     {item.logoUrl ? (
@@ -116,7 +130,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                 </div>
               ) : (
                 <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
-                  <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
+                  <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
                       <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mx-auto mb-2" />
