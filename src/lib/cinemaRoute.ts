@@ -168,6 +168,32 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
   emit();
 }
 
+/**
+ * Ouvrir la fiche d'un titre de la bibliothèque.
+ *
+ * L'onglet fait partie de l'adresse, et il doit suivre : les deux écrans (films et séries) sont
+ * distincts, chacun ne sait résoudre que son propre identifiant. Ouvrir une série alors que
+ * l'onglet est resté sur « Films » ne résolvait donc rien du tout — la fiche ne s'ouvrait pas, et
+ * comme le geste refermait au passage l'écran d'où l'on venait, on se retrouvait brutalement sur
+ * l'accueil. C'était le cas de tous les liens partant de Ma liste, de la recherche et des fiches
+ * personnes, où l'on clique par nature sur des titres des deux sortes.
+ *
+ * `extra` sert à emporter ce qui doit changer en même temps — jamais à refermer l'écran d'origine :
+ * la recherche et Ma liste restent ouvertes *sous* la fiche, pour qu'un retour y ramène avec la
+ * requête et l'onglet intacts.
+ */
+export function openLibraryTitle(
+  type: "movie" | "series",
+  libraryId: number,
+  extra: Partial<CinemaRoute> = {}
+): void {
+  cinemaNavigate(
+    type === "series"
+      ? { ...extra, tab: "series", serie: libraryId, film: null }
+      : { ...extra, tab: "movies", film: libraryId, serie: null }
+  );
+}
+
 // Closing a layer. Stepping back is what keeps Forward meaningful and avoids piling up an entry
 // per open/close; but with nothing of ours behind (a deep link straight into a title), back would
 // leave the app, so that case rewrites the current entry instead.

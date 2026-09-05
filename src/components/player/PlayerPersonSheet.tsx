@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, User } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerResultCard } from "./PlayerResultCard";
 
@@ -76,7 +76,7 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
   return createPortal(
     <div
       className="fixed inset-0 animate-fade-in overflow-hidden bg-ink"
-      style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
       <button
         onClick={close}
@@ -159,14 +159,13 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
                         subtitle={c.year ? String(c.year) : c.character || null}
                         poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
                         missing={!c.inLibrary}
+                        // Par-dessus la fiche personne, pas à sa place : le retour ramène à la
+                        // filmographie. Et l'onglet suit le type, sans quoi une série ouverte
+                        // depuis un acteur ne se résolvait pas.
                         onOpen={() =>
                           c.libraryId !== null
-                            ? cinemaNavigate(
-                                type === "movie"
-                                  ? { person: null, film: c.libraryId }
-                                  : { person: null, serie: c.libraryId }
-                              )
-                            : cinemaNavigate({ person: null, discover: c.tmdbId, discoverType: type })
+                            ? openLibraryTitle(type, c.libraryId)
+                            : cinemaNavigate({ discover: c.tmdbId, discoverType: type })
                         }
                       />
                     );

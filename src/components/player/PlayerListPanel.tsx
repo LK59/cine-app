@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
-import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { Search } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
@@ -56,24 +56,19 @@ export function PlayerListPanel() {
   // provoquer de rendu en cascade, et un choix explicite l'emporte pour toujours.
   const segment: Segment = chosen ?? SEGMENTS.find((key) => counts[key] > 0) ?? "requests";
 
-  // Une demande arrivée mène à sa fiche. Il arrive qu'elle soit marquée disponible sans qu'on
-  // retrouve le titre dans la bibliothèque — supprimé depuis, ou identifiant qui ne correspond
-  // plus : la fiche TMDB prend alors le relais, plutôt qu'une carte qui ne fait rien quand on
-  // clique dessus.
-  function openRequest(r: { type: "movie" | "series"; libraryId: number | null; tmdbId: number | null }) {
-    if (r.libraryId !== null) {
-      cinemaNavigate(r.type === "movie" ? { list: false, film: r.libraryId } : { list: false, serie: r.libraryId });
+  // Une fiche s'ouvre *par-dessus* Ma liste, sans la refermer : le retour du navigateur ramène
+  // alors sur la liste, à son onglet, au lieu de sauter à l'accueil.
+  //
+  // Et `openLibraryTitle` emporte l'onglet films/séries avec l'identifiant — c'est ce qui manquait :
+  // une série ouverte depuis une liste consultée côté films ne se résolvait pas, donc rien ne
+  // s'ouvrait et on retombait sur l'accueil.
+  function open(item: { type: "movie" | "series"; libraryId: number | null; tmdbId: number | null }) {
+    if (item.libraryId !== null) {
+      openLibraryTitle(item.type, item.libraryId);
       return;
     }
-    if (r.tmdbId) cinemaNavigate({ list: false, discover: r.tmdbId, discoverType: r.type });
-  }
-
-  function openTitle(item: PlayerListItem) {
-    if (item.libraryId === null) {
-      if (item.tmdbId) cinemaNavigate({ list: false, discover: item.tmdbId, discoverType: item.type });
-      return;
-    }
-    cinemaNavigate(item.type === "movie" ? { list: false, film: item.libraryId } : { list: false, serie: item.libraryId });
+    // Absent de la bibliothèque : sa fiche TMDB, où « Lire » est devenu « Demander ».
+    if (item.tmdbId) cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
   }
 
   const items: PlayerListItem[] =
@@ -97,14 +92,16 @@ export function PlayerListPanel() {
       }
     >
       <div className="mx-auto w-full max-w-6xl">
-        <div className="flex flex-wrap gap-2">
+        {/* Une seule ligne qui défile plutôt que cinq pastilles réparties sur trois rangs : sur
+            téléphone, l'en-tête reprenait un tiers de l'écran avant la première affiche. */}
+        <div className="scrollbar-thin -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {SEGMENTS.map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => setChosen(key)}
               aria-pressed={segment === key}
-              className={segment === key ? "chip chip-on" : "chip"}
+              className={`shrink-0 whitespace-nowrap ${segment === key ? "chip chip-on" : "chip"}`}
             >
               {t(`player.lists.${key}`)}
               <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span>
@@ -149,7 +146,7 @@ export function PlayerListPanel() {
                 request={r}
                 busy={busy}
                 onCancel={() => void cancelRequest(r.id)}
-                onOpen={() => openRequest(r)}
+                onOpen={() => open(r)}
               />
             ))}
           </div>
@@ -165,7 +162,7 @@ export function PlayerListPanel() {
                 subtitle={item.year ? String(item.year) : null}
                 poster={item.poster}
                 missing={item.libraryId === null}
-                onOpen={() => openTitle(item)}
+                onOpen={() => open(item)}
               />
             ))}
           </div>

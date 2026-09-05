@@ -210,7 +210,7 @@ export function CinemaMovieDetail({
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
-      style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element

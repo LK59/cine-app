@@ -20,6 +20,8 @@ const mockNavigate = vi.fn();
 vi.mock("@/lib/cinemaRoute", () => ({
   cinemaNavigate: (...a: unknown[]) => mockNavigate(...a),
   cinemaClose: vi.fn(),
+  openLibraryTitle: (type: string, id: number, extra: Record<string, unknown> = {}) =>
+    mockNavigate(type === "series" ? { ...extra, tab: "series", serie: id, film: null } : { ...extra, tab: "movies", film: id, serie: null }),
 }));
 vi.mock("@/lib/usePlayerTitleActions", () => ({
   usePlayerTitleActions: () => ({ busy: false, cancelRequest: vi.fn(), setStatus: vi.fn(), request: vi.fn() }),
@@ -95,6 +97,30 @@ describe("PlayerListPanel", () => {
     });
 
     fireEvent.click(await screen.findByText("player.requests.state.available"));
-    expect(mockNavigate).toHaveBeenCalledWith({ list: false, film: 7 });
+    // Ma liste reste ouverte sous la fiche (pas de `list: false`) pour qu'un retour y ramène, et
+    // l'onglet suit le type.
+    expect(mockNavigate).toHaveBeenCalledWith({ tab: "movies", film: 7, serie: null });
+  });
+
+  // Le bug signalé : une série cliquée depuis Ma liste renvoyait brutalement à l'accueil, parce
+  // que l'onglet restait sur « Films » et que l'écran ne savait donc pas quoi ouvrir.
+  it("carries the series tab when opening a series from the list", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      toWatch: [{ tmdbId: 1399, type: "series", title: "Game of Thrones", year: 2011, poster: null, libraryId: 50, jellyfinId: null }],
+    });
+
+    fireEvent.click(await screen.findByText("Game of Thrones"));
+    expect(mockNavigate).toHaveBeenCalledWith({ tab: "series", serie: 50, film: null });
+  });
+
+  it("opens a title we do not have on its TMDB sheet", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      toWatch: [{ tmdbId: 693134, type: "movie", title: "Dune", year: 2024, poster: null, libraryId: null, jellyfinId: null }],
+    });
+
+    fireEvent.click(await screen.findByText("Dune"));
+    expect(mockNavigate).toHaveBeenCalledWith({ discover: 693134, discoverType: "movie" });
   });
 });

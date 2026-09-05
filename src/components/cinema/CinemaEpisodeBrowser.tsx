@@ -124,7 +124,7 @@ export function CinemaEpisodeBrowser({
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
-      style={{ zIndex: 48, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)" }}
     >
       <button
         onClick={requestClose}

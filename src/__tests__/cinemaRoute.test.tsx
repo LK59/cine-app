@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -103,5 +103,35 @@ describe("cinemaRoute", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     expect(result.current.film).toBeNull();
+  });
+});
+
+describe("openLibraryTitle", () => {
+  // L'onglet fait partie de l'adresse, et les deux écrans (films, séries) ne savent résoudre que
+  // leur propre identifiant. Ouvrir une série en laissant l'onglet sur « Films » ne résolvait
+  // donc rien : la fiche ne s'ouvrait pas et, le geste ayant refermé l'écran d'origine, on
+  // retombait sur l'accueil. C'était le cas de tous les liens de Ma liste, de la recherche et des
+  // fiches personnes.
+  it("switches to the tab that can resolve the id", () => {
+    act(() => openLibraryTitle("series", 50));
+    expect(window.location.hash).toBe("#tab=series&serie=50");
+
+    act(() => openLibraryTitle("movie", 42));
+    expect(window.location.hash).toBe("#film=42");
+  });
+
+  it("clears the other kind's id so only one sheet can be open", () => {
+    act(() => cinemaNavigate({ film: 7 }, "replace"));
+    act(() => openLibraryTitle("series", 50));
+    expect(window.location.hash).toBe("#tab=series&serie=50");
+  });
+
+  // Elle n'a pas à refermer l'écran d'où l'on vient : c'est ce qui permet au retour de ramener sur
+  // la recherche ou sur Ma liste, avec la requête et l'onglet intacts.
+  it("leaves the panel it was opened from alone", () => {
+    act(() => cinemaNavigate({ search: true }, "replace"));
+    act(() => openLibraryTitle("movie", 42));
+    expect(window.location.hash).toContain("recherche=1");
+    expect(window.location.hash).toContain("film=42");
   });
 });

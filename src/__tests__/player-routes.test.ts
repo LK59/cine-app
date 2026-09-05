@@ -185,3 +185,42 @@ describe("GET /api/player/lists", () => {
     expect((await GET(req(null))).status).toBe(401);
   });
 });
+
+describe("GET /api/player/lists — posters", () => {
+  // Le bug visible à l'écran : les entrées absentes de la bibliothèque s'affichaient « No image ».
+  // La colonne `poster_path` a deux formats selon l'écran qui a écrit la ligne — un chemin TMDB nu
+  // pour le tableau de bord, une adresse complète pour le lecteur — et le chemin nu partait tel
+  // quel dans `src`, donc lu comme une adresse de notre propre serveur.
+  it("turns a bare TMDB path into a real URL, and leaves a full one alone", async () => {
+    watchlistDb.getAll.mockReturnValue([
+      { tmdbId: 111, mediaType: "movie", title: "Chemin nu", year: 2015, posterPath: "/abc.jpg", status: "to_watch" },
+      { tmdbId: 222, mediaType: "movie", title: "Adresse complète", year: 2016, posterPath: "https://image.tmdb.org/t/p/w342/d.jpg", status: "to_watch" },
+      { tmdbId: 333, mediaType: "movie", title: "Sans affiche", year: 2017, posterPath: null, status: "to_watch" },
+    ]);
+    jellyseerr.getMe.mockResolvedValue({ id: 5 });
+    jellyseerr.getRequestsByUser.mockResolvedValue({ results: [] });
+
+    const { GET } = await import("@/app/api/player/lists/route");
+    const body = await (await GET(req())).json();
+    const byTitle = Object.fromEntries(body.toWatch.map((i: { title: string; poster: string | null }) => [i.title, i.poster]));
+
+    expect(byTitle["Chemin nu"]).toBe("https://image.tmdb.org/t/p/w342/abc.jpg");
+    expect(byTitle["Adresse complète"]).toBe("https://image.tmdb.org/t/p/w342/d.jpg");
+    expect(byTitle["Sans affiche"]).toBeNull();
+  });
+
+  // « À demander » a disparu du lecteur mais la colonne reste, et le tableau de bord s'en sert :
+  // ces lignes rejoignent « À voir » plutôt que de devenir invisibles.
+  it("folds the legacy to_request rows into À voir", async () => {
+    watchlistDb.getAll.mockReturnValue([
+      { tmdbId: 1, mediaType: "movie", title: "Rangé à voir", year: 2020, posterPath: null, status: "to_watch" },
+      { tmdbId: 2, mediaType: "movie", title: "Rangé à demander", year: 2021, posterPath: null, status: "to_request" },
+    ]);
+    jellyseerr.getMe.mockResolvedValue({ id: 5 });
+    jellyseerr.getRequestsByUser.mockResolvedValue({ results: [] });
+
+    const { GET } = await import("@/app/api/player/lists/route");
+    const body = await (await GET(req())).json();
+    expect(body.toWatch.map((i: { title: string }) => i.title).sort()).toEqual(["Rangé à demander", "Rangé à voir"]);
+  });
+});

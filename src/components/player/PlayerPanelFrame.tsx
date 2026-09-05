@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-import { cinemaClose } from "@/lib/cinemaRoute";
+import { Menu, X } from "lucide-react";
+import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 
 /**
@@ -14,9 +14,13 @@ import { useT } from "@/components/TranslationProvider";
  * porte de `transform`), le décalage du rail, et la fermeture — Échap, la croix, et le retour du
  * navigateur, qui doivent toutes les trois faire exactement la même chose.
  *
- * Le panneau se glisse *entre* l'écran cinéma (z-45) et le rail (z-50) : la grille disparaît
- * derrière, mais la navigation reste utilisable, donc on passe d'un écran à l'autre sans jamais
- * devoir fermer celui où l'on est.
+ * L'ordre des plans, de bas en haut : la grille (45), les panneaux (46), les fiches de titre et
+ * de personne (47), les fenêtres qu'une fiche ouvre — synopsis, épisodes (49) — et le rail (50),
+ * toujours au-dessus, parce que la navigation ne doit jamais être hors d'atteinte.
+ *
+ * Ce qui compte ici : une fiche passe **par-dessus** un panneau et ne le referme pas. C'est ce
+ * qui fait qu'un retour depuis un film ouvert en cherchant ramène sur la recherche, avec la
+ * requête intacte, au lieu de sauter à l'accueil.
  */
 export function PlayerPanelFrame({
   title,
@@ -50,18 +54,33 @@ export function PlayerPanelFrame({
 
   return createPortal(
     <div
-      className="fixed inset-0 flex flex-col overflow-hidden bg-ink animate-fade-in"
-      style={{ zIndex: 48, paddingLeft: "var(--player-rail, 0px)" }}
+      className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink"
+      style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
     >
       <header
-        className="flex shrink-0 items-start justify-between gap-4 px-5 pb-4 sm:px-10"
+        className="flex shrink-0 items-start gap-3 px-5 pb-4 sm:gap-4 sm:px-10"
         style={{ paddingTop: "calc(1.5rem + env(safe-area-inset-top))" }}
       >
-        <div className="min-w-0">
+        {/* Le même bouton qu'à l'accueil, à la même place.
+            Sur téléphone, l'accueil se navigue par le menu en haut à gauche et ces écrans ne se
+            fermaient que par une croix en haut à droite : deux façons d'aller ailleurs selon
+            l'écran où l'on se trouvait. Le menu est ici aussi ; la croix reste, parce que fermer
+            en un geste vaut mieux que passer par « Accueil ». Sur grand écran, le rail est
+            toujours là, donc le bouton n'a pas lieu d'être. */}
+        <button
+          type="button"
+          onClick={() => cinemaNavigate({ menu: true })}
+          aria-label={t("player.nav.label")}
+          className="-ml-1 mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-300 transition-colors active:bg-white/10 md:hidden"
+        >
+          <Menu size={20} />
+        </button>
+
+        <div className="min-w-0 flex-1">
           <h1 className="truncate font-display text-2xl font-semibold text-white sm:text-3xl">{title}</h1>
           {subtitle && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {actions}
           <button
             type="button"
@@ -74,7 +93,14 @@ export function PlayerPanelFrame({
         </div>
       </header>
 
-      <div ref={bodyRef} className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10">
+      {/* L'animation est portée par le contenu et non par la racine : `fade-in-up` laisse un
+          `transform` en place une fois terminée, ce qui ferait de la racine le bloc conteneur de
+          tout descendant `fixed` — le piège exact qui a coûté un portage dans document.body à
+          l'écran cinéma. Ici, rien de fixe n'en descend, mais la règle vaut d'être tenue. */}
+      <div
+        ref={bodyRef}
+        className="scrollbar-thin flex-1 animate-fade-in-up overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
+      >
         {children}
       </div>
     </div>,

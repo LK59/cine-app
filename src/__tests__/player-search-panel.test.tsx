@@ -15,6 +15,8 @@ const mockNavigate = vi.fn();
 vi.mock("@/lib/cinemaRoute", () => ({
   cinemaNavigate: (...a: unknown[]) => mockNavigate(...a),
   cinemaClose: vi.fn(),
+  openLibraryTitle: (type: string, id: number, extra: Record<string, unknown> = {}) =>
+    mockNavigate(type === "series" ? { ...extra, tab: "series", serie: id, film: null } : { ...extra, tab: "movies", film: id, serie: null }),
 }));
 vi.mock("@/components/player/PlayerPanelFrame", () => ({
   PlayerPanelFrame: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -25,6 +27,10 @@ import { PlayerSearchPanel } from "@/components/player/PlayerSearchPanel";
 const OWNED = {
   tmdbId: 603, title: "Matrix", year: 1999, posterPath: null, type: "movie",
   overview: "", rating: 8, radarrId: 42, sonarrId: null, inLibrary: true, sources: ["radarr"],
+};
+const OWNED_SERIES = {
+  tmdbId: 1399, title: "Game of Thrones", year: 2011, posterPath: null, type: "series",
+  overview: "", rating: 8, radarrId: null, sonarrId: 50, inLibrary: true, sources: ["sonarr"],
 };
 const MISSING = {
   tmdbId: 693134, title: "Dune", year: 2024, posterPath: null, type: "movie",
@@ -66,10 +72,25 @@ describe("PlayerSearchPanel", () => {
     await type("matrix");
 
     fireEvent.click(await screen.findByText("Matrix"));
-    expect(mockNavigate).toHaveBeenCalledWith({ search: false, film: 42 });
+    // L'onglet fait partie de l'adresse et doit suivre le type, sinon l'écran cinéma ne résout
+    // pas l'identifiant et rien ne s'ouvre. Et la recherche n'est PAS refermée : la fiche passe
+    // par-dessus, pour qu'un retour ramène aux résultats.
+    expect(mockNavigate).toHaveBeenCalledWith({ tab: "movies", film: 42, serie: null });
+    expect(mockNavigate.mock.calls[0][0]).not.toHaveProperty("search");
 
     fireEvent.click(screen.getByText("Dune"));
-    expect(mockNavigate).toHaveBeenCalledWith({ search: false, discover: 693134, discoverType: "movie" });
+    expect(mockNavigate).toHaveBeenCalledWith({ discover: 693134, discoverType: "movie" });
+  });
+
+  // La régression même : une série ouverte depuis un écran resté sur l'onglet « Films » ne se
+  // résolvait pas, donc rien ne s'ouvrait — et comme le geste refermait la recherche, on
+  // retombait sur l'accueil.
+  it("carries the series tab when opening a series", async () => {
+    payload = { library: [OWNED_SERIES], tmdb: [], persons: [] };
+    await type("game of thrones");
+
+    fireEvent.click(await screen.findByText("Game of Thrones"));
+    expect(mockNavigate).toHaveBeenCalledWith({ tab: "series", serie: 50, film: null });
   });
 
   it("sends a person to their own sheet", async () => {
@@ -77,7 +98,7 @@ describe("PlayerSearchPanel", () => {
     await type("keanu");
 
     fireEvent.click(await screen.findByText("Keanu Reeves"));
-    expect(mockNavigate).toHaveBeenCalledWith({ search: false, person: 6384 });
+    expect(mockNavigate).toHaveBeenCalledWith({ person: 6384 });
   });
 
   // Les filtres apparaissent après les résultats, jamais avant : choisir un type avant d'avoir

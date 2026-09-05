@@ -7,7 +7,7 @@ import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
-import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -320,7 +320,7 @@ export function CinemaClient() {
 
   const openDiscovery = useCallback((item: DiscoveryItem) => {
     if (item.libraryId !== null) {
-      cinemaNavigate(item.type === "movie" ? { film: item.libraryId } : { serie: item.libraryId });
+      openLibraryTitle(item.type, item.libraryId);
       return;
     }
     cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });

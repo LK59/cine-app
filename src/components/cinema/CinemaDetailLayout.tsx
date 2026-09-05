@@ -165,7 +165,7 @@ export function CinemaSynopsisModal({
   return createPortal(
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/70 p-6 animate-fade-in"
-      style={{ zIndex: 47, backdropFilter: "blur(6px)" }}
+      style={{ zIndex: 49, backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
       <div

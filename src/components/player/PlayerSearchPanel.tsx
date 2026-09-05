@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
@@ -83,14 +83,13 @@ export function PlayerSearchPanel() {
   const shownPersons = filter === "all" || filter === "person" ? persons : [];
   const empty = debounced && !isLoading && counts.all === 0;
 
+  // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
+  // ramène sur les résultats, avec la requête tapée et le filtre choisi — au lieu de renvoyer à
+  // l'accueil comme si l'on n'avait rien cherché.
   function openTitle(result: UnifiedSearchResult) {
-    if (result.type === "movie" && result.radarrId) {
-      cinemaNavigate({ search: false, film: result.radarrId });
-    } else if (result.type === "series" && result.sonarrId) {
-      cinemaNavigate({ search: false, serie: result.sonarrId });
-    } else {
-      cinemaNavigate({ search: false, discover: result.tmdbId, discoverType: result.type });
-    }
+    const libraryId = result.type === "movie" ? result.radarrId : result.sonarrId;
+    if (libraryId) openLibraryTitle(result.type, libraryId);
+    else cinemaNavigate({ discover: result.tmdbId, discoverType: result.type });
   }
 
   const FILTERS: { key: Filter; label: string }[] = [
@@ -166,7 +165,7 @@ export function PlayerSearchPanel() {
                 title={p.name}
                 subtitle={p.libraryCount > 0 ? t("player.search.personTitles", { n: p.libraryCount }) : null}
                 poster={p.profilePath}
-                onOpen={() => cinemaNavigate({ search: false, person: p.id })}
+                onOpen={() => cinemaNavigate({ person: p.id })}
               />
             ))}
           </div>

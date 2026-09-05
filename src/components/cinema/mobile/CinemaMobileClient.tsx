@@ -5,7 +5,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info, Menu, Play, Plus, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
@@ -72,7 +72,7 @@ export function CinemaMobileClient() {
 
   function openDiscovery(item: DiscoveryItem) {
     if (item.libraryId !== null) {
-      cinemaNavigate(item.type === "movie" ? { film: item.libraryId } : { serie: item.libraryId });
+      openLibraryTitle(item.type, item.libraryId);
       return;
     }
     cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });

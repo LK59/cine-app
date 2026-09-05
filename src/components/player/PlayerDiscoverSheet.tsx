@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, Play, Users } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
@@ -97,7 +97,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
       className="fixed inset-0 animate-fade-in overflow-hidden bg-ink"
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
-      style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
       {data?.backdrop && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -169,13 +169,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
                 {data.libraryId !== null ? (
                   <button
                     data-detail-menu
-                    onClick={() =>
-                      cinemaNavigate(
-                        mediaType === "movie"
-                          ? { discover: null, film: data.libraryId! }
-                          : { discover: null, serie: data.libraryId! }
-                      )
-                    }
+                    onClick={() => openLibraryTitle(mediaType, data.libraryId!, { discover: null })}
                     className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
                   >
                     <span className={MENU_BADGE}>
@@ -248,7 +242,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => cinemaNavigate({ discover: null, person: c.id })}
+                        onClick={() => cinemaNavigate({ person: c.id })}
                         className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center focus-visible:outline-none"
                       >
                         <span className="h-16 w-16 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10 transition group-hover:ring-white/30">

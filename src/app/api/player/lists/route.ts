@@ -10,11 +10,28 @@ import {
   getProviderIdCI,
 } from "@/lib/server-cache";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
+import { posterUrl } from "@/lib/images";
+import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { config } from "@/lib/config";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * L'affiche d'une entrée de liste, quelle que soit la façon dont elle a été enregistrée.
+ *
+ * La colonne `poster_path` de la watchlist a deux formats selon l'écran qui a écrit la ligne :
+ * un chemin TMDB nu (`/abc.jpg`), tel que TMDB le renvoie, pour tout ce qui vient du tableau de
+ * bord ; une adresse complète pour ce qui vient du lecteur. Le chemin nu partait tel quel dans
+ * `src` et le navigateur le lisait comme une adresse de notre propre serveur : d'où les cartes
+ * « No image » sur tout ce qui n'était pas dans la bibliothèque.
+ */
+function watchlistPoster(stored: string | null): string | null {
+  if (!stored) return null;
+  if (/^https?:\/\//.test(stored) || stored.startsWith("/api/")) return stored;
+  return `${TMDB_IMAGE_BASE}/w342${stored.startsWith("/") ? "" : "/"}${stored}`;
+}
 
 export interface PlayerListItem {
   tmdbId: number | null;
@@ -72,19 +89,24 @@ export async function GET(req: NextRequest) {
     const seriesLibrary = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s]));
 
     const local = watchlistDb.getAll(userId);
-    const fromWatchlist = (status: string): PlayerListItem[] =>
+    const fromWatchlist = (statuses: string[]): PlayerListItem[] =>
       local
-        .filter((w) => w.status === status)
-        .map((w) => ({
-          tmdbId: w.tmdbId,
-          type: w.mediaType === "series" ? ("series" as const) : ("movie" as const),
-          title: w.title,
-          year: w.year,
-          poster: w.posterPath,
-          libraryId:
-            (w.mediaType === "series" ? seriesLibrary.get(w.tmdbId)?.id : movieLibrary.get(w.tmdbId)?.id) ?? null,
-          jellyfinId: null,
-        }));
+        .filter((w) => statuses.includes(w.status))
+        .map((w) => {
+          const entry = w.mediaType === "series" ? seriesLibrary.get(w.tmdbId) : movieLibrary.get(w.tmdbId);
+          return {
+            tmdbId: w.tmdbId,
+            type: w.mediaType === "series" ? ("series" as const) : ("movie" as const),
+            title: w.title,
+            year: w.year,
+            // L'affiche de la bibliothèque quand on l'a : c'est celle que le reste de l'interface
+            // montre, et elle est à jour. Celle enregistrée dans la liste sert de repli — pour un
+            // titre qu'on ne possède pas, c'est la seule.
+            poster: (entry ? posterUrl(entry.images) : null) ?? watchlistPoster(w.posterPath),
+            libraryId: entry?.id ?? null,
+            jellyfinId: null,
+          };
+        });
 
     const fromJellyfin = (items: JellyfinItem[], type: "movie" | "series", pick: (i: JellyfinItem) => boolean) =>
       items.filter(pick).map((item): PlayerListItem => {
@@ -108,8 +130,12 @@ export async function GET(req: NextRequest) {
 
     return {
       requests,
-      toWatch: fromWatchlist("to_watch"),
-      abandoned: fromWatchlist("abandoned"),
+      // « À demander » n'existe plus dans le lecteur, mais la colonne reste et le tableau de bord
+      // s'en sert encore. Ces lignes sont des intentions comme les autres : les cacher aurait fait
+      // disparaître une quarantaine de titres que Louis avait rangés là. Elles rejoignent « À
+      // voir », qui dit exactement la même chose de ce côté-ci.
+      toWatch: fromWatchlist(["to_watch", "to_request"]),
+      abandoned: fromWatchlist(["abandoned"]),
       watched: [
         ...fromJellyfin(jfMovies, "movie", (i) => Boolean(i.UserData?.Played)),
         ...fromJellyfin(jfSeries, "series", (i) => Boolean(i.UserData?.Played)),

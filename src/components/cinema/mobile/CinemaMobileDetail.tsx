@@ -178,7 +178,9 @@ export function CinemaMobileDetail({
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
       // button lands in the murk.
       style={{
-        zIndex: 46,
+        // Au-dessus des panneaux du rail (46) : une fiche ouverte depuis la recherche ou Ma liste
+        // les recouvre sans les refermer, pour qu'un retour y ramène.
+        zIndex: 47,
         paddingTop: "env(safe-area-inset-top, 0px)",
         transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // No transition while the finger is down: the sheet is not animating towards the finger,
