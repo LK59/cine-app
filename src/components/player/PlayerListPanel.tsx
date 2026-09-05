@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { Search } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
@@ -79,7 +80,22 @@ export function PlayerListPanel() {
     segment === "requests" ? [] : (data?.[segment] ?? []);
 
   return (
-    <PlayerPanelFrame title={t("player.nav.myList")}>
+    <PlayerPanelFrame
+      title={t("player.nav.myList")}
+      // Ajouter un titre, c'est le chercher : le bouton ouvre la recherche plutôt que d'installer
+      // un second champ ici. Elle trouve déjà tout — la bibliothèque, le reste du monde, les
+      // gens — et ce qu'elle ne trouve pas chez nous, sa fiche propose de le demander.
+      actions={
+        <button
+          type="button"
+          onClick={() => cinemaNavigate({ list: false, search: true })}
+          className="btn btn-ghost btn-sm"
+        >
+          <Search size={15} />
+          <span className="hidden sm:inline">{t("player.lists.addTitle")}</span>
+        </button>
+      }
+    >
       <div className="mx-auto w-full max-w-6xl">
         <div className="flex flex-wrap gap-2">
           {SEGMENTS.map((key) => (

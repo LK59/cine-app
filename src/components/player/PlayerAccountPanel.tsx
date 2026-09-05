@@ -37,6 +37,10 @@ export function PlayerAccountPanel() {
   const t = useT();
   const router = useRouter();
   const { data: me } = useSWR<{ username: string; jfUser: string | null }>("/api/auth/me", fetcher);
+  // La connexion locale (celle de l'administrateur) n'a pas de compte Jellyfin derrière elle :
+  // ni préférences de lecture, ni mot de passe à changer de ce côté. Le dire une fois vaut mieux
+  // que trois listes déroulantes grisées sans explication.
+  const hasJellyfin = me?.jfUser != null;
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -50,7 +54,7 @@ export function PlayerAccountPanel() {
     >
       <div className="mx-auto w-full max-w-2xl">
         <LanguageSection />
-        <PlaybackSection />
+        {hasJellyfin && <PlaybackSection />}
 
         <Section icon={Bell} title={t("player.account.notifications")}>
           <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
@@ -62,7 +66,13 @@ export function PlayerAccountPanel() {
           </div>
         </Section>
 
-        <PasswordSection />
+        {hasJellyfin ? (
+          <PasswordSection />
+        ) : (
+          <Section icon={KeyRound} title={t("player.account.password")}>
+            <p className="text-sm text-slate-400">{t("player.account.localAccountHint")}</p>
+          </Section>
+        )}
         <SessionsSection />
 
         <Section icon={LogOut} title={t("player.account.signOut")}>

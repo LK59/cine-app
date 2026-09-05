@@ -1269,7 +1269,8 @@
         "watched": "Nothing finished yet.",
         "abandoned": "Nothing dropped. Good.",
         "favorites": "No favourites yet. The heart on a title adds one."
-      }
+      },
+      "addTitle": "Add a title"
     },
     "requests": {
       "state": {
@@ -1349,7 +1350,8 @@
       "signOutOthers": "Sign the others out",
       "devicesRevoked": "The other devices have been signed out",
       "signOut": "Sign out",
-      "signOutAction": "Sign out"
+      "signOutAction": "Sign out",
+      "localAccountHint": "This account isn’t linked to Jellyfin, so playback preferences and the password live elsewhere."
     }
   },
   "cinema": {

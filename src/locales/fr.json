@@ -1269,7 +1269,8 @@
         "watched": "Rien de terminé pour le moment.",
         "abandoned": "Rien d’abandonné. Tant mieux.",
         "favorites": "Aucun favori. Le cœur sur une fiche en ajoute un."
-      }
+      },
+      "addTitle": "Ajouter un titre"
     },
     "requests": {
       "state": {
@@ -1349,7 +1350,8 @@
       "signOutOthers": "Déconnecter les autres",
       "devicesRevoked": "Les autres appareils ont été déconnectés",
       "signOut": "Déconnexion",
-      "signOutAction": "Se déconnecter"
+      "signOutAction": "Se déconnecter",
+      "localAccountHint": "Ce compte n’est pas relié à Jellyfin : les préférences de lecture et le mot de passe se gèrent ailleurs."
     }
   },
   "cinema": {

@@ -1269,7 +1269,8 @@
         "watched": "Noch nichts zu Ende geschaut.",
         "abandoned": "Nichts abgebrochen. Umso besser.",
         "favorites": "Keine Favoriten. Das Herz auf einer Seite fügt einen hinzu."
-      }
+      },
+      "addTitle": "Titel hinzufügen"
     },
     "requests": {
       "state": {
@@ -1349,7 +1350,8 @@
       "signOutOthers": "Andere abmelden",
       "devicesRevoked": "Die anderen Geräte wurden abgemeldet",
       "signOut": "Abmelden",
-      "signOutAction": "Abmelden"
+      "signOutAction": "Abmelden",
+      "localAccountHint": "Dieses Konto ist nicht mit Jellyfin verknüpft — Wiedergabe-Einstellungen und Passwort werden anderswo verwaltet."
     }
   },
   "cinema": {
