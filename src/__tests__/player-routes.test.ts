@@ -53,7 +53,8 @@ vi.mock("@/lib/server-cache", () => ({
   getProviderIdCI: (ids: Record<string, string> | undefined, key: string) =>
     ids ? ids[key] ?? ids[key[0].toUpperCase() + key.slice(1)] : undefined,
   withCache: async (_k: string, _t: number, fn: () => unknown) => fn(),
-  TTL: { LONG: 1, MEDIUM: 1, MEDIA_INFO: 1 },
+  TTL: { LONG: 1, MEDIUM: 1, SHORT: 1, MEDIA_INFO: 1 },
+  invalidateKey: () => {},
 }));
 
 const watchlistDb = { get: vi.fn(), getAll: vi.fn() };

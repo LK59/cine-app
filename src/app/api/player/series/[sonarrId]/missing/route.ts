@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { sonarr } from "@/lib/clients/sonarr";
+import { withCache, TTL } from "@/lib/server-cache";
 import { withErrorHandling } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ sonarrId:
 
   return withErrorHandling(async () => {
     const now = Date.now();
-    const episodes = await sonarr.getEpisodes(seriesId);
+    // Mise en cache : cette liste est demandée à chaque ouverture d'une fiche de série, et elle
+    // ne bouge qu'au rythme des téléchargements. Quinze secondes suffisent à ce qu'un aller-retour
+    // entre deux fiches ne réinterroge pas Sonarr.
+    const episodes = await withCache(`sonarr:episodes:${seriesId}`, TTL.SHORT, () =>
+      sonarr.getEpisodes(seriesId)
+    );
 
     const bySeason = new Map<number, MissingEpisode[]>();
     for (const ep of episodes) {

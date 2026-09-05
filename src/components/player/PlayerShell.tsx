@@ -81,6 +81,11 @@ export function PlayerShell() {
   // sans lui, elle se viderait de son contenu avant de s'en aller.
   const lastPerson = useLastValue(route.person);
   const lastDiscover = useLastValue(route.discover);
+  // Le type suit l'identifiant : sans lui, une fiche de série en train de sortir repassait sur
+  // « film » — l'adresse ayant repris sa valeur par défaut — et allait rechercher le mauvais
+  // titre pendant son animation.
+  const [lastDiscoverType, setLastDiscoverType] = useState(route.discoverType);
+  if (route.discover !== null && route.discoverType !== lastDiscoverType) setLastDiscoverType(route.discoverType);
 
   // Les trois panneaux arrivent en chargement différé (voir plus haut) : la toute première
   // ouverture payait donc un aller-retour réseau, ce qui, sur données mobiles, se sent comme un
@@ -129,7 +134,7 @@ export function PlayerShell() {
       {person.render && lastPerson !== null ? (
         <PlayerPersonSheet tmdbId={lastPerson} leaving={person.leaving} />
       ) : discover.render && lastDiscover !== null ? (
-        <PlayerDiscoverSheet tmdbId={lastDiscover} mediaType={route.discoverType} leaving={discover.leaving} />
+        <PlayerDiscoverSheet tmdbId={lastDiscover} mediaType={lastDiscoverType} leaving={discover.leaving} />
       ) : null}
     </>
   );

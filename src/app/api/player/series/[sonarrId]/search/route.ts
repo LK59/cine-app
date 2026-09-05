@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { sonarr } from "@/lib/clients/sonarr";
+import { invalidateKey } from "@/lib/server-cache";
 import { withErrorHandling } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
@@ -45,8 +46,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ sonarrId
     const episodes = await sonarr.getEpisodes(seriesId);
     // La cible, telle que Sonarr la connaît : c'est elle qui dit ce qui est diffusé et ce qui
     // manque, pas ce que le client a bien voulu envoyer.
-    const targets = episodes.filter((e) =>
-      wantsEpisode ? e.id === episodeId : e.seasonNumber === seasonNumber && !e.hasFile
+    // Uniquement ce qui manque, dans les deux cas : cette route sert à combler des trous, pas à
+    // relancer une recherche sur un épisode qu'on possède déjà.
+    const targets = episodes.filter(
+      (e) => !e.hasFile && (wantsEpisode ? e.id === episodeId : e.seasonNumber === seasonNumber)
     );
     if (targets.length === 0) {
       return { ok: true, searched: 0 };
@@ -74,6 +77,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ sonarrId
     if (wantsSeason) await sonarr.triggerSearch(seriesId, seasonNumber);
     else await sonarr.triggerEpisodeSearch(airable.map((e) => e.id));
 
+    // La surveillance vient de changer : la prochaine lecture de la liste doit la voir.
+    invalidateKey(`sonarr:episodes:${seriesId}`);
     return { ok: true, searched: airable.length };
   }, "player-series-search");
 }
