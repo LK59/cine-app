@@ -1031,6 +1031,15 @@ export class MseSource {
     return this.video.currentTime;
   }
 
+  /** Images perdues sur images rendues, telles que l'élément lui-même les compte. */
+  private frameQuality(): string {
+    const quality = this.video.getVideoPlaybackQuality?.();
+    if (!quality) return "non mesurable ici";
+    const { droppedVideoFrames: dropped, totalVideoFrames: total } = quality;
+    if (total === 0) return "aucune image rendue";
+    return `${dropped} / ${total} (${((dropped / total) * 100).toFixed(1)} %)`;
+  }
+
   get debug(): Record<string, string> {
     // Reading a buffer whose source has closed throws, and the whole panel used to come back as
     // one "invalid state" line — at exactly the moment there was most to learn from it.
@@ -1051,6 +1060,10 @@ export class MseSource {
       // video buffer alone — and whether it is waiting on a seek that never resolved.
       "Lisible par l'élément": this.playableSpans(),
       "En cours de saut": this.video.seeking ? "oui" : "non",
+      // La seule mesure qui sépare « le décodeur n'y arrive pas » de « la cadence du film ne
+      // tombe pas juste sur celle de l'écran ». Sans elle, une lecture qui n'attend jamais et
+      // dont le tampon a trente secondes d'avance ne dit toujours rien sur ce qu'on voit.
+      "Images perdues": this.frameQuality(),
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
       "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
