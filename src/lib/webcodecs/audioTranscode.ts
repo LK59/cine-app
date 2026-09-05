@@ -241,8 +241,12 @@ export class AudioTranscoder {
     }
     const target = plan.codec;
     const outChannels = plan.channels;
-    if (outChannels !== numberOfChannels) {
-      trace(`transcodage audio : ${numberOfChannels} canaux non encodables, descente à ${outChannels}`);
+    // Comparé à ce qui a été *demandé*, pas à ce que la source portait : depuis que la
+    // disposition peut être imposée par le fichier, une piste 5.1 portée à 8 déclenchait un
+    // « 6 canaux non encodables, descente à 8 » qui ne veut rien dire. Le seul rabaissement qui
+    // mérite d'être signalé est celui que l'encodeur impose.
+    if (outChannels !== wanted) {
+      trace(`transcodage audio : ${wanted} canaux non encodables ici, descente à ${outChannels}`);
     }
 
     let description: Uint8Array | null = null;
