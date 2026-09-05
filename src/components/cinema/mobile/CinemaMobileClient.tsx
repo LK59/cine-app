@@ -142,6 +142,8 @@ export function CinemaMobileClient() {
    * Elle n'est rendue que si son onglet est celui qu'on affiche : les deux écrans ont chacun leur
    * charge utile, et celle de l'autre onglet n'est pas forcément chargée.
    */
+  const noop = useCallback(() => {}, []);
+  const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
   const behind = useRouteBehind();
   const behindSelected = useMemo(() => {
     if (!behind || !byId || !selected) return null;
@@ -151,6 +153,12 @@ export function CinemaMobileClient() {
     const item = byId.get(id);
     return item ? { item, mediaType } : null;
   }, [behind, byId, selected, isSeries, mediaType]);
+
+  /** La pile, du dessous vers le dessus. Une seule fiche la plupart du temps. */
+  const stack = useMemo(
+    () => (selected ? (behindSelected ? [behindSelected, selected] : [selected]) : []),
+    [selected, behindSelected]
+  );
   // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
@@ -481,37 +489,33 @@ export function CinemaMobileClient() {
         })}
       </div>
 
-      {/* La fiche recouverte, dessinée dessous et inerte — voir `behindSelected`. */}
-      {behindSelected && route.discover === null && route.person === null && (
-        <CinemaMobileDetail
-          key={`behind-${itemId(behindSelected.item)}`}
-          item={behindSelected.item}
-          mediaType={behindSelected.mediaType}
-          onClose={() => {}}
-          underneath
-        />
-      )}
+      {/* La pile des fiches, rendue comme une liste et non comme deux blocs séparés.
+          
+          C'est la clé qui fait tout : une fiche gardée dans la liste garde son instance, donc son
+          défilement, sa saison choisie, tout ce qu'elle tenait. Quand la fiche du dessus se ferme,
+          la liste passe de [F1, F2] à [F1] — React reconnaît F1 par sa clé, ne le remonte pas, et
+          se contente de lui rendre le dessus. On revenait sinon en haut de la page à chaque fois,
+          alors que les titres similaires sont tout en bas.
 
-      {/* Même règle que sur grand écran : une seule fiche à la fois. */}
-      {selected && route.discover === null && route.person === null && (
-        <CinemaMobileDetail
-          /**
-           * Une fiche par titre.
-           *
-           * Sans cette clé, ouvrir un titre similaire ne faisait que changer les propriétés de la
-           * même fiche : le contenu se remplaçait sur place, sans animation d'ouverture — et tout
-           * ce que la fiche gardait par-devers elle restait en place avec lui. Le défilement
-           * d'abord, mais aussi la saison choisie, l'échec de chargement d'un logo, et surtout
-           * l'état du geste de fermeture : une fiche qu'on venait de tirer vers le bas rouvrait
-           * la suivante déjà décalée, ce qui explique les gestes qui « réagissent bizarrement ».
-           */
-          key={"radarrId" in selected.item ? `film-${selected.item.radarrId}` : `serie-${selected.item.sonarrId}`}
-          item={selected.item}
-          mediaType={selected.mediaType}
-          onClose={() => cinemaClose({ film: null, serie: null })}
-          onSelectSimilar={(item) => openDetail(item, selected.mediaType)}
-        />
-      )}
+          Une clé par titre reste indispensable : sans elle, ouvrir un titre similaire changerait
+          les propriétés de la fiche courante plutôt que d'en ouvrir une — le contenu se
+          remplacerait sur place, sans animation, en gardant l'état du geste de fermeture de la
+          précédente. */}
+      {route.discover === null &&
+        route.person === null &&
+        stack.map((entry, i) => {
+          const top = i === stack.length - 1;
+          return (
+            <CinemaMobileDetail
+              key={itemId(entry.item)}
+              item={entry.item}
+              mediaType={entry.mediaType}
+              underneath={!top}
+              onClose={top ? closeSheet : noop}
+              onSelectSimilar={top ? (next) => openDetail(next, entry.mediaType) : undefined}
+            />
+          );
+        })}
     </div>,
     document.body
   );
