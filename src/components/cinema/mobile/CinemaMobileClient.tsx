@@ -512,7 +512,11 @@ export function CinemaMobileClient() {
               mediaType={entry.mediaType}
               underneath={!top}
               onClose={top ? closeSheet : noop}
-              onSelectSimilar={top ? (next) => openDetail(next, entry.mediaType) : undefined}
+              // Passée même dessous : la rangée « Titres similaires » n'est rendue que si elle
+              // existe, et la retirer la démontait — on revenait sur une fiche intacte dont la
+              // rangée, elle, se reconstruisait. La fiche du dessous est inerte, personne ne
+              // peut la déclencher.
+              onSelectSimilar={(next) => openDetail(next, entry.mediaType)}
             />
           );
         })}

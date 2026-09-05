@@ -441,7 +441,7 @@ export function CinemaMovieDetail({
             empty backdrop. */}
         {hasSimilar && (
           <div data-snap-section className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
-            <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar!(next as CinemaMovie)} />
+            <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaMovie)} />
           </div>
         )}
       </div>

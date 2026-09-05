@@ -1040,7 +1040,7 @@ export function CinemaClient() {
               item={film}
               underneath={!top}
               onClose={top ? closeDetail : noop}
-              onSelectSimilar={top ? openDetail : undefined}
+              onSelectSimilar={openDetail}
             />
           );
         })}
@@ -1053,7 +1053,7 @@ export function CinemaClient() {
               item={serie}
               underneath={!top}
               onClose={top ? closeSeriesDetail : noop}
-              onSelectSimilar={top ? openSeriesDetail : undefined}
+              onSelectSimilar={openSeriesDetail}
             />
           );
         })}
