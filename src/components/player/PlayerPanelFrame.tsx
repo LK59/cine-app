@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 
 /**
@@ -35,6 +36,8 @@ export function PlayerPanelFrame({
 }) {
   const t = useT();
   const route = useCinemaRoute();
+  const isMobile = useIsMobile();
+  const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   // Une fiche ouverte par-dessus ce panneau écoute Échap elle aussi. `stopPropagation` n'y change
   // rien : deux écouteurs posés sur la même cible se déclenchent tous les deux, et une seule
@@ -64,8 +67,10 @@ export function PlayerPanelFrame({
       style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
     >
       <header
-        className="flex shrink-0 items-start gap-3 px-5 pb-4 sm:gap-4 sm:px-10"
-        style={{ paddingTop: "calc(1.5rem + env(safe-area-inset-top))" }}
+        className={`flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10 ${short ? "pb-2" : "pb-4"}`}
+        // Un téléphone couché n'a que ~400 px de haut : un titre de trois rem et deux rems de
+        // marge en mangeaient le quart avant la première affiche.
+        style={{ paddingTop: `calc(${short ? "0.75rem" : "1.5rem"} + env(safe-area-inset-top))` }}
       >
         {/* Le même bouton qu'à l'accueil, à la même place.
             Sur téléphone, l'accueil se navigue par le menu en haut à gauche et ces écrans ne se
@@ -73,18 +78,22 @@ export function PlayerPanelFrame({
             l'écran où l'on se trouvait. Le menu est ici aussi ; la croix reste, parce que fermer
             en un geste vaut mieux que passer par « Accueil ». Sur grand écran, le rail est
             toujours là, donc le bouton n'a pas lieu d'être. */}
-        <button
-          type="button"
-          onClick={() => cinemaNavigate({ menu: true })}
-          aria-label={t("player.nav.label")}
-          className="-ml-1 mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-300 transition-colors active:bg-white/10 md:hidden"
-        >
-          <Menu size={20} />
-        </button>
+        {isMobile && (
+          <button
+            type="button"
+            onClick={() => cinemaNavigate({ menu: true })}
+            aria-label={t("player.nav.label")}
+            className="-ml-1 mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-300 transition-colors active:bg-white/10"
+          >
+            <Menu size={20} />
+          </button>
+        )}
 
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-2xl font-semibold text-white sm:text-3xl">{title}</h1>
-          {subtitle && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}
+          <h1 className={`truncate font-display font-semibold text-white ${short ? "text-xl" : "text-2xl sm:text-3xl"}`}>
+            {title}
+          </h1>
+          {subtitle && !short && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {actions}

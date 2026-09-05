@@ -206,7 +206,11 @@ export function CinemaMobileDetail({
         // touch-action none: the browser must not claim this gesture for its own scrolling, or
         // it steals the pointer stream halfway through the drag. Only this block gives that up —
         // the rest of the sheet scrolls natively.
-        style={{ touchAction: "none" }}
+        //
+        // maxHeight : téléphone couché, une bannière en 16:9 pleine largeur fait 475 px de haut
+        // pour 400 px de fenêtre. On arrivait donc sur une image qui remplissait tout l'écran, et
+        // il fallait défiler pour découvrir qu'il y avait un titre et des boutons dessous.
+        style={{ touchAction: "none", maxHeight: "52svh" }}
       >
         {/* Un échec de chargement retombe sur le fond uni, comme une absence d'image.
             Sans cela le navigateur dessinait sa propre vignette d'image cassée — un « ? » en

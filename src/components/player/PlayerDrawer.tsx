@@ -93,7 +93,10 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-1 px-3 pt-3">
+        {/* Défilant : un téléphone couché n'a que ~400 px de haut, et l'en-tête, quatre entrées
+            et le pied de page y tiennent tout juste. Mieux vaut pouvoir descendre que voir la
+            dernière entrée coupée. */}
+        <div className="scrollbar-thin flex flex-1 flex-col gap-1 overflow-y-auto px-3 pt-3">
           {PLAYER_NAV.map(({ panel, labelKey, icon: Icon }) => {
             const isActive = active === panel;
             return (

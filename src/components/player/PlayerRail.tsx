@@ -58,7 +58,12 @@ export function PlayerRail() {
   return (
     <nav
       aria-label={t("player.nav.label")}
-      className="player-rail fixed inset-y-0 left-0 z-50 hidden flex-col md:flex"
+      // Pas de `hidden md:flex` : c'est PlayerShell qui décide, avec `useIsMobile` — dont la
+      // définition n'est pas celle de la barre `md` de Tailwind (un téléphone couché fait
+      // ~844 px de large et franchit `md`, tout en restant un téléphone). Deux définitions
+      // concurrentes du même « est-ce un mobile » laissaient l'écran sans navigation du tout en
+      // paysage : le composant rendait le tiroir, et la classe `md:hidden` le cachait.
+      className="player-rail fixed inset-y-0 left-0 z-50 flex flex-col"
       data-player-nav
       onKeyDown={onKeyDown}
     >
