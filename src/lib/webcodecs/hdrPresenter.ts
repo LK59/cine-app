@@ -30,7 +30,16 @@ import { trace } from "./trace";
 export type HdrPresentation = "tonemap" | "recovery";
 
 export interface HdrProbe {
-  /** L'espace de l'image, tel qu'elle le déclare. Repris tel quel dans le relevé. */
+  /**
+   * Ce que l'image dit d'elle-même, repris tel quel dans le relevé.
+   *
+   * L'espace colorimétrique d'abord, mais pas seulement : Firefox sous Linux construit bien une
+   * image à partir de l'élément et n'en déclare aucun — les trois champs reviennent nuls, ce qui
+   * veut dire « je ne sais pas » et non « sRGB ». La question reste alors entière, et c'est le
+   * format qui la tranche : des plans 10 bits sont ceux du décodeur, donc encore en BT.2020/PQ,
+   * là où du RGBA a forcément traversé une conversion. La taille d'allocation dit la dernière
+   * chose qui manque — si les octets sont seulement lisibles.
+   */
   colorSpace: string;
   presentation: HdrPresentation;
 }
@@ -49,12 +58,19 @@ export function probeFrame(video: HTMLVideoElement): HdrProbe | null {
   try {
     frame = new Frame(video);
     const space = frame.colorSpace;
+    const format = frame.format ?? "format non déclaré";
+    let readable: string;
+    try {
+      readable = `${frame.allocationSize()} o lisibles`;
+    } catch (error) {
+      readable = `octets illisibles (${error instanceof Error ? error.message : String(error)})`;
+    }
     // Typé en `string` volontairement : la définition de lib.dom livrée avec ce TypeScript ne
     // connaît que bt709/sRGB/smpte170m et ignore « pq » et « hlg », qui sont pourtant les seules
     // valeurs qui nous intéressent ici. Comparer contre l'énumération périmée ne compilerait pas.
     const transfer: string = space.transfer ?? "?";
     return {
-      colorSpace: `${space.primaries ?? "?"} · ${transfer} · ${space.matrix ?? "?"}`,
+      colorSpace: `${space.primaries ?? "?"} · ${transfer} · ${space.matrix ?? "?"} · ${format} · ${readable}`,
       // « pq » est le nom que la spécification donne à la courbe SMPTE ST 2084 ; certaines
       // implémentations rendent l'autre. Les deux disent la même chose.
       presentation: transfer === "pq" || transfer === "smpte2084" ? "tonemap" : "recovery",
