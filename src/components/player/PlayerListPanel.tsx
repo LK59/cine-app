@@ -165,7 +165,11 @@ export function PlayerListPanel() {
                 title={item.title}
                 subtitle={item.year ? String(item.year) : null}
                 poster={item.poster}
-                missing={item.libraryId === null}
+                // Ce qui vient de Jellyfin est dans la bibliothèque par construction : lui coller
+                // « Pas encore là » sur un film qu'on vient de finir n'aurait aucun sens, même
+                // dans le cas rare où Radarr ne le connaît pas et où la fiche n'est donc pas
+                // ouvrable.
+                missing={item.libraryId === null && item.jellyfinId === null}
                 onOpen={() => open(item)}
               />
             ))}

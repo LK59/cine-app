@@ -115,3 +115,19 @@ describe("PlayerSearchPanel", () => {
     expect(screen.queryByText("Matrix")).toBeNull();
   });
 });
+
+describe("PlayerSearchPanel — clearing the field", () => {
+  // `keepPreviousData` garde les derniers résultats quand la clé change : c'est ce qu'on veut en
+  // tapant, et le contraire de ce qu'on veut en effaçant — le champ redevenait vide, l'invitation
+  // réapparaissait, et la grille précédente restait affichée dessous.
+  it("empties the grid when the query is cleared", async () => {
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+    expect(await screen.findByText("Matrix")).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    await waitFor(() => expect(screen.queryByText("Matrix")).toBeNull());
+    expect(screen.getByText("player.search.hint")).toBeTruthy();
+    expect(screen.queryByText("player.search.filterAll")).toBeNull();
+  });
+});

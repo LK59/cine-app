@@ -79,5 +79,12 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
   const covered =
     current.film !== null || current.serie !== null || current.discover !== null || current.person !== null;
   if (activePanel(current) === panel && !covered) return;
-  cinemaNavigate({ ...closed, ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }) });
+
+  // Depuis le tiroir du téléphone, on remplace au lieu d'empiler : le tiroir est une étape vers
+  // un écran, pas un écran en soi. Sans ça, un retour depuis « Ma liste » rouvrait le tiroir, et
+  // il fallait appuyer deux fois pour revenir à l'accueil.
+  cinemaNavigate(
+    { ...closed, ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }) },
+    current.menu ? "replace" : "push"
+  );
 }

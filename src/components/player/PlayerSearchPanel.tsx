@@ -79,8 +79,12 @@ export function PlayerSearchPanel() {
   // s'applique sur la frame où le résultat change, sans rendu en cascade.
   const filter: Filter = requested !== "all" && counts[requested] === 0 ? "all" : requested;
 
-  const shownTitles = filter === "person" ? [] : titles.filter((r) => filter === "all" || r.type === filter);
-  const shownPersons = filter === "all" || filter === "person" ? persons : [];
+  // Rien tant qu'il n'y a rien de cherché. `keepPreviousData` garde les derniers résultats quand
+  // la clé change — ce qui est ce qu'on veut en tapant, et pas du tout ce qu'on veut quand on
+  // efface : le champ redevenait vide, l'invitation réapparaissait, et la grille précédente
+  // restait affichée dessous.
+  const shownTitles = !debounced || filter === "person" ? [] : titles.filter((r) => filter === "all" || r.type === filter);
+  const shownPersons = debounced && (filter === "all" || filter === "person") ? persons : [];
   const empty = debounced && !isLoading && counts.all === 0;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
@@ -117,7 +121,7 @@ export function PlayerSearchPanel() {
           />
         </div>
 
-        {counts.all > 0 && (
+        {debounced && counts.all > 0 && (
           <div className="mt-5 flex flex-wrap gap-2">
             {FILTERS.map(({ key, label }) => {
               if (key !== "all" && counts[key] === 0) return null;
