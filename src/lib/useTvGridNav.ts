@@ -110,6 +110,18 @@ export function useTvGridNav(enabled = true) {
       if (e.key === "ArrowLeft" && colIdx > 0) {
         e.preventDefault();
         focusCard(row[colIdx - 1]);
+      } else if (e.key === "ArrowLeft" && colIdx === 0) {
+        // Première colonne : à gauche il y a le rail, et rien d'autre. C'est le pendant du
+        // renvoi vers le haut ci-dessous — sans lui, la navigation aux flèches ne pouvait
+        // jamais quitter la grille, et le menu latéral n'était atteignable qu'à la souris ou en
+        // tabulant à travers toute la page.
+        const rail = document.querySelector<HTMLElement>("[data-tv-escape-left]");
+        const entry =
+          rail?.querySelector<HTMLElement>('button[aria-current="page"]') ??
+          rail?.querySelector<HTMLElement>("button");
+        if (!entry) return;
+        e.preventDefault();
+        entry.focus();
       } else if (e.key === "ArrowRight" && colIdx < row.length - 1) {
         e.preventDefault();
         focusCard(row[colIdx + 1]);

@@ -8,7 +8,7 @@ import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, 
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
+import { arrivedByBack } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -44,6 +44,14 @@ interface DetailInfo {
 // and local (which /info endpoint to read, and whether an episode list follows), so splitting it
 // would mean two near-identical 300-line files rather than the genuinely diverging layouts the
 // desktop split exists for.
+/**
+ * La durée de `sheet-out` — et, à dessein, celle du retour du geste dans `useSwipeToDismiss`.
+ *
+ * Les deux façons de refermer une fiche, le bouton et le doigt, doivent mettre exactement le même
+ * temps : sinon l'une des deux démonte la carte avant qu'elle n'ait fini de descendre.
+ */
+const SHEET_OUT_MS = 280;
+
 export function CinemaMobileDetail({
   item,
   mediaType,
@@ -70,14 +78,14 @@ export function CinemaMobileDetail({
   const playback = usePlayback();
   const playerEnabled = usePlayerEnabled();
   const [showTrailer, setShowTrailer] = useState(false);
-  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
-  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
-  // Voir `useSheetBehind`.
   // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
   // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
-  const sheetBehind = useSheetBehind();
-  const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
+  // La sortie est de nouveau animée, y compris quand une autre fiche attend derrière : elle en
+  // découvrait l'accueil quand la fiche du dessous n'était pas dessinée, ce qui n'est plus le cas
+  // (voir la pile dans CinemaMobileClient). La carte redescend donc par où elle est venue, et ce
+  // qu'elle recouvrait apparaît sous elle au fur et à mesure.
+  const { closing, requestClose } = useDelayedClose(onClose, SHEET_OUT_MS);
   const similar = useCinemaSimilar(item, mediaType);
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.
@@ -209,7 +217,7 @@ export function CinemaMobileDetail({
       // release made the sheet replay its whole entrance every time a drag sprang back — which
       // is what the "weird animation on release" was.
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        inert ? "" : swipe.touched ? "" : closing ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
+        inert ? "" : swipe.touched ? "" : closing ? "sheet-out" : revealed ? "" : "sheet-in"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close

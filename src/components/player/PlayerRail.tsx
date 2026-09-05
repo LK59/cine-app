@@ -65,6 +65,9 @@ export function PlayerRail() {
       // paysage : le composant rendait le tiroir, et la classe `md:hidden` le cachait.
       className="player-rail fixed inset-y-0 left-0 z-50 flex flex-col"
       data-player-nav
+      // La grille renvoie ici quand on va à gauche depuis sa première colonne — voir
+      // useTvGridNav, qui a déjà le même renvoi vers le haut pour la bascule Films/Séries.
+      data-tv-escape-left
       onKeyDown={onKeyDown}
     >
       <div className="flex h-16 shrink-0 items-center gap-3 overflow-hidden px-[1.35rem]">

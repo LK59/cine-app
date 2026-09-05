@@ -765,3 +765,42 @@
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
+
+/* La pile de fiches.
+   ─────────────────
+   Une fiche ouverte par-dessus une autre monte depuis le bas de l'écran et redescend par où elle
+   est venue. C'est le même mouvement que le geste du doigt, et c'est ce qui fait lire une pile
+   plutôt qu'une succession d'écrans.
+
+   Deux choses la rendent fluide, et elles comptent autant que la courbe :
+
+   1. `transform` seul. L'ancienne entrée mêlait un déplacement de vingt-quatre pixels à un fondu
+      d'opacité : sur une surface plein écran, l'opacité force la composition d'un calque et le
+      mélange de tout ce qu'il y a dessous à chaque image, là où une translation ne coûte qu'un
+      décalage de calque. Le résultat se lisait comme un sursaut, pas comme un glissement.
+   2. `will-change`, le temps de l'animation seulement — poser le calque à l'avance plutôt qu'au
+      premier pixel de mouvement, et le laisser repartir ensuite.
+
+   La courbe est celle du relâchement du geste (useSwipeToDismiss) : le doigt et l'animation
+   doivent décélérer de la même façon, sinon les deux façons de fermer ne se ressemblent pas. */
+@keyframes sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes sheet-out {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+@utility sheet-in {
+  animation: sheet-in 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform;
+}
+@utility sheet-out {
+  animation: sheet-out 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-in, .sheet-out { animation-name: fade-in; animation-duration: 0.15s; }
+}

@@ -29,7 +29,6 @@ import { CinemaDiscoveryRow } from "@/components/cinema/CinemaDiscoveryRow";
 import { useCinemaMyList } from "@/lib/useCinemaMyList";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
-import { CinemaTrailerBackdrop } from "@/components/cinema/CinemaTrailerBackdrop";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
@@ -392,19 +391,6 @@ export function CinemaClient() {
   const debouncedHeroItem = debouncedHero.item;
   const debouncedHeroKey = debouncedHero.key;
 
-  // Reported up by whichever hero component is currently mounted (CinemaHero or
-  // CinemaSeriesHero — only one at a time, so a single piece of state covers both) via
-  // onTrailerKeyChange — see CinemaHero's own doc comment on why this is a lifted callback
-  // rather than a second parallel fetch here. Reset synchronously during render (not an effect —
-  // this project's react-hooks/set-state-in-effect rule) whenever the active item itself
-  // changes, so a stale key from the previous title can't briefly pair with the new one.
-  const [heroTrailerKey, setHeroTrailerKey] = useState<string | null>(null);
-  const [trailerResetKey, setTrailerResetKey] = useState(activeHeroKey);
-  if (activeHeroKey !== trailerResetKey) {
-    setTrailerResetKey(activeHeroKey);
-    setHeroTrailerKey(null);
-  }
-
   // Whatever card was focused (mouse click also focuses a <button> natively) right before
   // CinemaMovieDetail opened — restored on close so arrow-nav resumes exactly where the user
   // left it instead of snapping back to the first card (useTvGridNav treats "nothing focused"
@@ -440,14 +426,6 @@ export function CinemaClient() {
   /** Une fiche TMDB ou une fiche personne est ouverte par-dessus celles de la bibliothèque. */
   const sheetAbove = route.discover !== null || route.person !== null;
   useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen);
-
-  // Same three conditions gate the trailer preview below — anything opaque covering the browse
-  // screen means the preview has nothing to preview for.
-  // La bande-annonce de fond se met en pause dès qu'un écran la recouvre — un panneau du rail
-  // compris : la laisser tourner derrière « Ma liste » consomme du réseau pour une image que
-  // personne ne voit.
-  const trailerSuspended =
-    selectedItem !== null || seriesSelectedItem !== null || playback.mode === "full" || panelOpen;
 
   // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
   // and the reason the button itself can stay a small icon rather than a full-width field.
@@ -663,9 +641,15 @@ export function CinemaClient() {
                 detail sheet or the real player. Hiding alone would leave a YouTube player running
                 behind a full-screen overlay — burning CPU on frames nobody sees, and, if the user
                 had unmuted the preview, still audible underneath the film they just started. */}
-            {!trailerSuspended && (
-              <CinemaTrailerBackdrop itemKey={debouncedHeroKey ?? ""} trailerKey={heroTrailerKey} />
-            )}
+            {/* La bande-annonce de fond est désactivée sur grand écran, à la demande.
+                
+                Retirée d'ici plutôt que mise en pause : c'est ce qui garantit que l'API YouTube
+                n'est jamais chargée et qu'aucune image n'est décodée pour un fond que personne ne
+                regardait. Le visuel du titre reste, et c'est lui que la page est venue montrer.
+                
+                Tout ce qui l'alimentait — la clé de la bande-annonce remontée par la bannière, le
+                calcul de sa suspension — a disparu avec elle ; il faudra le refaire pour la
+                rallumer, et ce sera plus propre que de garder un composant mort en réserve. */}
           </>
         )}
         <div className="absolute inset-0 bg-linear-to-r from-ink/85 via-ink/35 to-transparent" />
@@ -701,8 +685,8 @@ export function CinemaClient() {
             dit qu'on peut descendre. Six points de hauteur suffisent à l'obtenir. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "44%" }}>
           {mediaType === "movies"
-            ? heroItem && <CinemaHero item={heroItem} onTrailerKeyChange={setHeroTrailerKey} />
-            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} onTrailerKeyChange={setHeroTrailerKey} />}
+            ? heroItem && <CinemaHero item={heroItem} />
+            : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}
         </div>
 
         {/* min-h-80 (320px): comfortably fits one full row — label, a card at its largest
