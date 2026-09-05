@@ -37,6 +37,10 @@ export function PlayerRail() {
    */
   function onKeyDown(e: React.KeyboardEvent<HTMLElement>) {
     if (!["ArrowUp", "ArrowDown", "ArrowRight"].includes(e.key)) return;
+    // `stopPropagation` : la navigation de la grille écoute sur `window`, donc après ce
+    // gestionnaire. Elle voyait le focus déjà posé sur la première affiche et appliquait sa propre
+    // flèche droite par-dessus — on atterrissait sur la deuxième. Ici, l'événement s'arrête.
+    e.stopPropagation();
     const nav = e.currentTarget;
     const items = Array.from(nav.querySelectorAll<HTMLButtonElement>("button"));
     const index = items.indexOf(document.activeElement as HTMLButtonElement);

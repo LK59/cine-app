@@ -16,6 +16,19 @@ const MIN_QUERY = 2;
 const DEBOUNCE_MS = 260;
 
 /**
+ * Ce qu'on avait tapé la dernière fois, retenu pour la durée de la visite.
+ *
+ * Ouvrir un titre trouvé par la recherche garde le panneau monté dessous, donc la requête y
+ * survit déjà — mais pas si l'on repasse par l'accueil entre-temps, et pas si le panneau se
+ * remonte pour une raison ou une autre. Hors du composant, elle survit à tout, et retrouver sa
+ * recherche en revenant dessus est ce qu'on attend d'une recherche.
+ *
+ * Volontairement en mémoire et non dans l'adresse : la requête change à chaque frappe, et
+ * l'écrire dans l'historique remplirait le bouton retour de lettres.
+ */
+let lastQuery = "";
+
+/**
  * La recherche du lecteur.
  *
  * Elle interroge exactement le même moteur que la recherche de la gestion — `/api/search`, avec
@@ -35,17 +48,23 @@ const DEBOUNCE_MS = 260;
  */
 export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   const t = useT();
-  const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
+  const [query, setQuery] = useState(lastQuery);
+  const [debounced, setDebounced] = useState(lastQuery.length >= MIN_QUERY ? lastQuery : "");
   const [requested, setFilter] = useState<Filter>("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    // Le curseur à la fin de ce qui est déjà là, pas devant : on revient pour continuer, ou pour
+    // effacer d'un geste, jamais pour taper au milieu.
+    input.setSelectionRange(input.value.length, input.value.length);
   }, []);
 
   useEffect(() => {
     const term = query.trim();
+    lastQuery = term;
     const timer = setTimeout(() => setDebounced(term.length >= MIN_QUERY ? term : ""), DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
