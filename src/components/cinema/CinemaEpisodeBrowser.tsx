@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort } from "@/lib/format";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
+import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
 import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
@@ -20,12 +22,15 @@ import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jelly
 export function CinemaEpisodeBrowser({
   title,
   seasons,
+  sonarrId,
   nextEpisodeId,
   onClose,
   onPlayEpisode,
 }: {
   title: string;
   seasons: CinemaSeason[];
+  /** Ce qui permet de savoir ce qui manque, et de le demander. */
+  sonarrId?: number;
   // The series' own "Lire"/"Reprendre" target (CinemaSeriesDetail's nextEpisode) — badged here
   // too so it's obvious at a glance which episode picking "Plus d'épisodes" would have landed on
   // anyway, without having to cross-reference against the detail sheet underneath.
@@ -35,6 +40,17 @@ export function CinemaEpisodeBrowser({
 }) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
+  const missing = usePlayerSeriesRequests(sonarrId);
+
+  // La liste des saisons vient de Jellyfin, donc de ce qu'on possède : une saison entière absente
+  // n'y figurait pas du tout. On voyait quatre saisons d'une série qui en compte cinq, sans rien
+  // qui le dise. Les deux listes sont réunies ici.
+  const seasonNumbers = useMemo(() => {
+    const all = new Set<number>(seasons.map((s) => s.seasonNumber));
+    for (const s of missing.seasons) all.add(s.seasonNumber);
+    return [...all].sort((a, b) => a - b);
+  }, [seasons, missing.seasons]);
+
   const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.seasonNumber ?? 0);
 
   // Same debounce-before-crossfade pattern CinemaClient's own hero backdrop uses (see its doc
@@ -139,20 +155,30 @@ export function CinemaEpisodeBrowser({
       <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <div className="scrollbar-thin w-56 shrink-0 overflow-y-auto border-r border-white/10 px-3 pb-8 sm:w-64">
           <p className="mb-3 truncate px-2 text-sm font-medium text-white/60">{title}</p>
-          {seasons.map((season) => {
-            const active = season.seasonNumber === selectedSeason;
+          {seasonNumbers.map((seasonNumber) => {
+            const active = seasonNumber === selectedSeason;
+            const gap = missing.seasonOf(seasonNumber)?.episodes.length ?? 0;
             return (
               <button
-                key={season.seasonNumber}
+                key={seasonNumber}
                 data-episode-season="true"
-                data-season={season.seasonNumber}
-                onFocus={() => setSelectedSeason(season.seasonNumber)}
-                onMouseEnter={() => setSelectedSeason(season.seasonNumber)}
-                className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none ${
+                data-season={seasonNumber}
+                onFocus={() => setSelectedSeason(seasonNumber)}
+                onMouseEnter={() => setSelectedSeason(seasonNumber)}
+                className={`mb-1 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none ${
                   active ? "bg-accent-600/25 text-white ring-1 ring-accent-500/50" : "text-white/80 hover:bg-white/10"
                 }`}
               >
-                {season.seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: season.seasonNumber })}
+                <span className="truncate">
+                  {seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: seasonNumber })}
+                </span>
+                {/* Le compte de ce qui manque, à côté de la saison : c'est ce qu'on cherche à
+                    savoir en parcourant cette colonne. */}
+                {gap > 0 && (
+                  <span className="shrink-0 rounded-full bg-white/10 px-1.5 text-[11px] tabular-nums text-white/50">
+                    {gap}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -206,6 +232,14 @@ export function CinemaEpisodeBrowser({
                 </div>
               </button>
             ))}
+
+            <CinemaMissingEpisodes
+              season={missing.seasonOf(displayedSeason)}
+              asked={missing.asked}
+              busy={missing.busy}
+              onRequestSeason={missing.requestSeason}
+              onRequestEpisode={missing.requestEpisode}
+            />
           </div>
         </div>
       </div>

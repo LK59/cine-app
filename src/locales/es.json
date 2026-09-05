@@ -1398,6 +1398,15 @@
       "trendingMovies": "Tendencias — películas",
       "trendingSeries": "Tendencias — series",
       "recommended": "Recomendado para ti"
+    },
+    "missing": {
+      "count": "{n} episodio(s) que faltan",
+      "requestSeason": "Pedir la temporada",
+      "requested": "Pedido",
+      "notAired": "Este episodio aún no se ha emitido.",
+      "notAiredShort": "Próximamente",
+      "seasonRequested": "Temporada {n} pedida",
+      "episodeRequested": "{label} pedido"
     }
   }
 }

@@ -19,6 +19,14 @@ const jellyseerr = {
 };
 vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr }));
 
+const sonarr = {
+  getEpisodes: vi.fn(),
+  updateEpisode: vi.fn(),
+  triggerSearch: vi.fn(),
+  triggerEpisodeSearch: vi.fn(),
+};
+vi.mock("@/lib/clients/sonarr", () => ({ sonarr }));
+
 const tmdbClient = { isEnabled: () => true, getMovie: vi.fn(), getTv: vi.fn() };
 vi.mock("@/lib/clients/tmdb", () => ({
   createTmdbClient: () => tmdbClient,
@@ -258,5 +266,67 @@ describe("what counts as being in the library", () => {
     const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
     const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
     expect(body.libraryId).toBe(42);
+  });
+});
+
+describe("a series that is only partly here", () => {
+  const episodes = [
+    { id: 1, seriesId: 151, seasonNumber: 0, episodeNumber: 1, title: "Bonus", hasFile: false, monitored: true, airDateUtc: "2020-01-01T00:00:00Z" },
+    { id: 2, seriesId: 151, seasonNumber: 4, episodeNumber: 1, title: "Là", hasFile: true, monitored: true, airDateUtc: "2024-01-01T00:00:00Z" },
+    { id: 3, seriesId: 151, seasonNumber: 5, episodeNumber: 1, title: "Sorti", hasFile: false, monitored: false, airDateUtc: "2026-07-08T04:00:00Z" },
+    { id: 4, seriesId: 151, seasonNumber: 5, episodeNumber: 2, title: "À venir", hasFile: false, monitored: true, airDateUtc: "2099-01-01T00:00:00Z" },
+  ];
+
+  beforeEach(() => {
+    sonarr.getEpisodes.mockResolvedValue(episodes);
+    sonarr.updateEpisode.mockResolvedValue({});
+    sonarr.triggerSearch.mockResolvedValue(undefined);
+    sonarr.triggerEpisodeSearch.mockResolvedValue(undefined);
+  });
+
+  it("lists only what is missing, tells released from upcoming, and drops the specials", async () => {
+    const { GET } = await import("@/app/api/player/series/[sonarrId]/missing/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ sonarrId: "151" }) })).json();
+
+    expect(body.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)).toEqual([5]);
+    expect(body.seasons[0].requestable).toBe(true);
+    expect(body.seasons[0].episodes.map((e: { released: boolean }) => e.released)).toEqual([true, false]);
+  });
+
+  // La demande n'est pas une demande Jellyseerr : la série est là, ce sont des fichiers qui
+  // manquent, et c'est Sonarr qui va les chercher.
+  it("monitors and searches a single episode, never touching Jellyseerr", async () => {
+    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
+    const res = await POST(jsonReq({ episodeId: 3 }), { params: Promise.resolve({ sonarrId: "151" }) });
+
+    expect((await res.json()).searched).toBe(1);
+    // Il n'était pas surveillé : Sonarr ne récupère pas ce qu'il ne surveille pas.
+    expect(sonarr.updateEpisode).toHaveBeenCalledWith(3, expect.objectContaining({ monitored: true }));
+    expect(sonarr.triggerEpisodeSearch).toHaveBeenCalledWith([3]);
+    expect(jellyseerr.createRequest).not.toHaveBeenCalled();
+  });
+
+  // Une saison part en une seule commande : Sonarr applique alors ses règles de lot plutôt que de
+  // ramener huit fichiers séparés.
+  it("asks Sonarr for the whole season in one command", async () => {
+    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
+    await POST(jsonReq({ seasonNumber: 5 }), { params: Promise.resolve({ sonarrId: "151" }) });
+
+    expect(sonarr.triggerSearch).toHaveBeenCalledWith(151, 5);
+    expect(sonarr.triggerEpisodeSearch).not.toHaveBeenCalled();
+  });
+
+  // Le garde-fou : c'est Sonarr qui dit ce qui est diffusé, pas ce que le client a envoyé.
+  it("refuses to search for an episode that has not aired", async () => {
+    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
+    const res = await POST(jsonReq({ episodeId: 4 }), { params: Promise.resolve({ sonarrId: "151" }) });
+
+    expect((await res.json()).searched).toBe(0);
+    expect(sonarr.triggerEpisodeSearch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body naming neither an episode nor a season", async () => {
+    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
+    expect((await POST(jsonReq({}), { params: Promise.resolve({ sonarrId: "151" }) })).status).toBe(400);
   });
 });

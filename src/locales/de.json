@@ -1398,6 +1398,15 @@
       "trendingMovies": "Im Trend — Filme",
       "trendingSeries": "Im Trend — Serien",
       "recommended": "Für dich empfohlen"
+    },
+    "missing": {
+      "count": "{n} Folge(n) fehlen",
+      "requestSeason": "Staffel anfragen",
+      "requested": "Angefragt",
+      "notAired": "Diese Folge ist noch nicht erschienen.",
+      "notAiredShort": "Demnächst",
+      "seasonRequested": "Staffel {n} angefragt",
+      "episodeRequested": "{label} angefragt"
     }
   }
 }

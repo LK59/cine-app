@@ -435,6 +435,7 @@ export function CinemaSeriesDetail({
         <CinemaEpisodeBrowser
           title={item.title}
           seasons={episodesData.seasons}
+          sonarrId={item.sonarrId}
           nextEpisodeId={nextEpisode?.itemId}
           onClose={() => {
             setShowEpisodes(false);

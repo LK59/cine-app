@@ -1398,6 +1398,15 @@
       "trendingMovies": "Trending movies",
       "trendingSeries": "Trending series",
       "recommended": "Recommended for you"
+    },
+    "missing": {
+      "count": "{n} episode(s) missing",
+      "requestSeason": "Request the season",
+      "requested": "Requested",
+      "notAired": "This episode hasn't aired yet.",
+      "notAiredShort": "Upcoming",
+      "seasonRequested": "Season {n} requested",
+      "episodeRequested": "{label} requested"
     }
   }
 }

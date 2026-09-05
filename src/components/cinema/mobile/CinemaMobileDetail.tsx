@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
@@ -15,6 +15,8 @@ import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { useIsShortViewport } from "@/lib/useIsMobile";
+import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
+import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -92,9 +94,21 @@ export function CinemaMobileDetail({
 
   const [logoErrored, setLogoErrored] = useState(false);
   const [backdropFailed, setBackdropFailed] = useState(false);
-  const seasons = episodesData?.seasons ?? [];
+  const seasons = useMemo(() => episodesData?.seasons ?? [], [episodesData]);
+  // Ce qui manque à la série — pour Sonarr, pas pour Jellyseerr : la série est là, ce sont des
+  // fichiers qui manquent. Voir CinemaMissingEpisodes.
+  const missing = usePlayerSeriesRequests(isSeries ? (item as { sonarrId?: number }).sonarrId : null);
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
-  const activeSeason = selectedSeason ?? seasons[0]?.seasonNumber ?? null;
+
+  // Les deux listes réunies : une saison entière absente n'existe pas côté Jellyfin, et n'avait
+  // donc aucune pastille — on voyait quatre saisons d'une série qui en compte cinq.
+  const seasonNumbers = useMemo(() => {
+    const all = new Set<number>(seasons.map((s) => s.seasonNumber));
+    for (const s of missing.seasons) all.add(s.seasonNumber);
+    return [...all].sort((a, b) => a - b);
+  }, [seasons, missing.seasons]);
+
+  const activeSeason = selectedSeason ?? seasonNumbers[0] ?? null;
   const episodes = seasons.find((s) => s.seasonNumber === activeSeason)?.episodes ?? [];
 
   // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and
@@ -327,24 +341,32 @@ export function CinemaMobileDetail({
           </button>
         </div>
 
-        {isSeries && seasons.length > 0 && (
+        {isSeries && seasonNumbers.length > 0 && (
           <>
             {/* Horizontal season pills rather than Netflix's dropdown: same job, one tap instead
                 of two, and no popover to position/dismiss on a small screen. */}
-            {seasons.length > 1 && (
+            {seasonNumbers.length > 1 && (
               <div className="scrollbar-thin -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
-                {seasons.map((season) => {
-                  const active = season.seasonNumber === activeSeason;
+                {seasonNumbers.map((seasonNumber) => {
+                  const active = seasonNumber === activeSeason;
+                  const gap = missing.seasonOf(seasonNumber)?.episodes.length ?? 0;
                   return (
                     <button
-                      key={season.seasonNumber}
+                      key={seasonNumber}
                       type="button"
-                      onClick={() => setSelectedSeason(season.seasonNumber)}
+                      onClick={() => setSelectedSeason(seasonNumber)}
                       className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${
                         active ? "bg-white text-ink font-medium" : "bg-white/10 text-white/80"
                       }`}
                     >
-                      {season.seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: season.seasonNumber })}
+                      {seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: seasonNumber })}
+                      {/* Ce qui manque, dit sur la pastille elle-même : c'est ce qu'on cherche en
+                          parcourant cette rangée. */}
+                      {gap > 0 && (
+                        <span className={`tabular-nums text-[11px] ${active ? "text-ink/50" : "text-white/40"}`}>
+                          {gap}
+                        </span>
+                      )}
                       {active && <ChevronDown size={14} />}
                     </button>
                   );
@@ -401,6 +423,15 @@ export function CinemaMobileDetail({
                 </button>
               ))}
             </div>
+
+            <CinemaMissingEpisodes
+              season={activeSeason !== null ? missing.seasonOf(activeSeason) : undefined}
+              asked={missing.asked}
+              busy={missing.busy}
+              onRequestSeason={missing.requestSeason}
+              onRequestEpisode={missing.requestEpisode}
+              compact
+            />
           </>
         )}
 

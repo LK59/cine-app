@@ -135,6 +135,15 @@ export const sonarr = {
   // Standard automatic search — Sonarr's own normal search+grab pipeline (quality profile rules,
   // best-match auto-pick), no manual release list involved. Distinct from the interactive one
   // above (grabRelease), which requires a human to pick a specific release themselves.
+  // La même recherche automatique, mais sur un épisode précis. C'est la commande que Sonarr
+  // déclenche lui-même quand on clique sur la loupe d'une ligne d'épisode dans son interface.
+  triggerEpisodeSearch: (episodeIds: number[]) =>
+    fetchJson<void>(`${url}/api/v3/command`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "EpisodeSearch", episodeIds }),
+    }),
+
   triggerSearch: (seriesId: number, seasonNumber?: number) =>
     fetchJson<void>(`${url}/api/v3/command`, {
       method: "POST",

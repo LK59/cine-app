@@ -56,7 +56,36 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/watchlist",
   "DELETE /api/watchlist",
   "PATCH /api/watchlist/item",
+  // Le lecteur : ce que chacun fait sur son propre compte et sur ses propres listes.
+  //
+  // Ces routes ont été écrites après cette liste et n'y avaient pas été ajoutées : côté
+  // utilisateur, « Demander », le cœur des favoris, la langue des sous-titres et le changement de
+  // mot de passe répondaient tous 403. Invisible en administrateur, c'est-à-dire invisible pour
+  // celui qui teste.
+  "POST /api/player/requests",
+  "POST /api/jellyfin/favorite",
+  "POST /api/player/account/preferences",
+  "POST /api/player/account/password",
 ]);
+
+/**
+ * Les mêmes, quand l'adresse porte un identifiant.
+ *
+ * Un ensemble de chaînes ne peut pas les décrire : annuler la demande n° 328 s'écrit
+ * `DELETE /api/player/requests/328`. Ces motifs restent volontairement étroits — un identifiant
+ * numérique, rien d'autre — pour qu'ils ne s'élargissent pas tout seuls à un sous-chemin voisin.
+ */
+const GUEST_ALLOWED_PATTERNS: RegExp[] = [
+  // Retirer sa propre demande — côté Jellyseerr seulement, jamais côté Radarr.
+  /^DELETE \/api\/player\/requests\/\d+$/,
+  // Demander un épisode ou une saison qui manque : une recherche Sonarr, et rien d'autre.
+  /^POST \/api\/player\/series\/\d+\/search$/,
+];
+
+function isAllowedForEveryone(method: string, pathname: string): boolean {
+  const signature = `${method} ${pathname}`;
+  return GUEST_ALLOWED_MUTATIONS.has(signature) || GUEST_ALLOWED_PATTERNS.some((re) => re.test(signature));
+}
 
 /**
  * Le mode cinéma est devenu le lecteur, avec sa propre coquille et sa propre adresse. L'ancienne
@@ -107,7 +136,7 @@ export async function proxy(req: NextRequest) {
     session.role !== "admin" &&
     pathname.startsWith("/api/") &&
     req.method !== "GET" &&
-    !GUEST_ALLOWED_MUTATIONS.has(`${req.method} ${pathname}`)
+    !isAllowedForEveryone(req.method, pathname)
   ) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
   }
