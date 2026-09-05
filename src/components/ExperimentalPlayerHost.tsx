@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
@@ -20,6 +20,8 @@ import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
+import { HdrToneFilter, HDR_TONE_FILTER_ID } from "@/components/player/HdrToneFilter";
+import { toneLevelStore, displayRangeStore, toneMappingApplies, type ToneLevel } from "@/lib/hdrToSdr";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -229,6 +231,19 @@ export function ExperimentalPlayerHost({
    * repeat of the same sentence a new notice rather than an unchanged value that re-arms nothing.
    */
   const [warning, setWarning] = useState<{ text: string; at: number } | null>(null);
+
+  /** La correction HDR → écran standard : le niveau choisi, et ce que l'écran sait afficher. */
+  const toneLevel = useSyncExternalStore(
+    toneLevelStore.subscribe,
+    toneLevelStore.snapshot,
+    toneLevelStore.serverSnapshot
+  );
+  const screenRange = useSyncExternalStore(
+    displayRangeStore.subscribe,
+    displayRangeStore.snapshot,
+    displayRangeStore.serverSnapshot
+  );
+  const chooseToneLevel = useCallback((level: ToneLevel) => toneLevelStore.set(level), []);
   const showWarning = useCallback((text: string | null) => {
     setWarning(text ? { text, at: Date.now() } : null);
   }, []);
@@ -415,6 +430,9 @@ export function ExperimentalPlayerHost({
   const title = info?.title ?? openedAs;
 
   /** The file, as every entry in the server's record wants it described. */
+  const toneAvailable = toneMappingApplies(info?.video?.isHdr ?? false, screenRange);
+  const toneActive = toneAvailable && toneLevel !== "off";
+
   const describeFile = useCallback(
     () => ({
       itemId,
@@ -1075,10 +1093,16 @@ export function ExperimentalPlayerHost({
           arrive rarement seule et proprement — il y a un battement entre l'élément qui se
           déclare prêt et l'image qui s'installe. Trois cents millisecondes de fondu couvrent
           ce battement et, surtout, donnent une intention à ce qui ressemblait à un à-coup. */}
+      {toneActive && <HdrToneFilter level={toneLevel} />}
       <video
         ref={videoElRef}
         playsInline
         hidden={!onElement}
+        // Le filtre est posé sur l'élément, donc appliqué par le compositeur : le décodage reste
+        // matériel et aucune image ne transite par JavaScript. Le prix possible est ailleurs — un
+        // élément filtré peut perdre le chemin de composition le plus direct — et c'est le
+        // compteur d'images perdues du relevé qui le dit.
+        style={toneActive ? { filter: `url(#${HDR_TONE_FILTER_ID})` } : undefined}
         className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
           ready ? "opacity-100" : "opacity-0"
         }`}
@@ -1273,6 +1297,9 @@ export function ExperimentalPlayerHost({
             creditsStart={info?.creditsStart ?? null}
             nextEpisode={nextEpisode}
             onAdvance={handleAdvance}
+            toneAvailable={toneAvailable}
+            toneLevel={toneLevel}
+            onChangeToneLevel={chooseToneLevel}
           />
         )
       )}

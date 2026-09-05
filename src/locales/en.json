@@ -1354,6 +1354,14 @@
       "signOut": "Sign out",
       "signOutAction": "Sign out",
       "localAccountHint": "This account isn’t linked to Jellyfin, so playback preferences and the password live elsewhere."
+    },
+    "hdrTone": {
+      "title": "Fit HDR to this screen",
+      "hint": "This file is HDR and this screen is not. The correction brings back contrast and colour; it is tuned by eye, not measured.",
+      "off": "None",
+      "light": "Light",
+      "medium": "Medium",
+      "strong": "Strong"
     }
   },
   "cinema": {

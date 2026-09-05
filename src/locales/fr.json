@@ -1354,6 +1354,14 @@
       "signOut": "Déconnexion",
       "signOutAction": "Se déconnecter",
       "localAccountHint": "Ce compte n’est pas relié à Jellyfin : les préférences de lecture et le mot de passe se gèrent ailleurs."
+    },
+    "hdrTone": {
+      "title": "Adapter le HDR à l'écran",
+      "hint": "Ce fichier est en HDR, cet écran ne l'est pas. La correction rend le contraste et la couleur ; elle est réglée à l'œil, pas mesurée.",
+      "off": "Aucune",
+      "light": "Légère",
+      "medium": "Moyenne",
+      "strong": "Forte"
     }
   },
   "cinema": {

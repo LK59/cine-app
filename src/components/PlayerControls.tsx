@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, SunMedium } from "lucide-react";
+import { TONE_LEVELS, type ToneLevel } from "@/lib/hdrToSdr";
 import { useT } from "@/components/TranslationProvider";
 import { useMediaSession } from "@/lib/useMediaSession";
 
@@ -37,6 +38,14 @@ interface PlayerControlsProps {
   creditsStart: number | null;
   nextEpisode: { itemId: string; title: string } | null;
   onAdvance: () => void;
+  /**
+   * La correction HDR n'est proposée que là où elle a un sens : un fichier HDR, un écran qui ne
+   * l'est pas, et le chemin natif. Ailleurs l'entrée n'existe pas — un réglage sans effet dans un
+   * menu est pire qu'un réglage absent, parce qu'on l'essaie.
+   */
+  toneAvailable?: boolean;
+  toneLevel?: ToneLevel;
+  onChangeToneLevel?: (level: ToneLevel) => void;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -86,6 +95,9 @@ export function PlayerControls({
   creditsStart,
   nextEpisode,
   onAdvance,
+  toneAvailable = false,
+  toneLevel = "off",
+  onChangeToneLevel,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -151,7 +163,7 @@ export function PlayerControls({
   }, []);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "tone" | "more">(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -803,7 +815,7 @@ export function PlayerControls({
   };
 
   // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more" };
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", tone: "more" };
 
   // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
   // only focuses THAT button (native click behavior), never moves focus into the popup that
@@ -1216,6 +1228,14 @@ export function PlayerControls({
                 >
                   <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
+                {toneAvailable && (
+                  <button
+                    onClick={() => setMenu("tone")}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <SunMedium size={16} /> {t('player.hdrTone.title')} · {t(`player.hdrTone.${toneLevel}`)}
+                  </button>
+                )}
                 {castSupported && (
                   <button
                     onClick={() => {
@@ -1269,7 +1289,7 @@ export function PlayerControls({
                 )}
               </>
             )}
-            {(menu === "chapters" || menu === "speed") && (
+            {(menu === "chapters" || menu === "speed" || menu === "tone") && (
               <button
                 onClick={() => setMenu("more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -1305,6 +1325,24 @@ export function PlayerControls({
               >
                 {t('player.none')}
               </button>
+            )}
+            {menu === "tone" && (
+              <>
+                <p className="border-b border-white/10 px-3 py-2 text-xs leading-5 text-white/50">
+                  {t('player.hdrTone.hint')}
+                </p>
+                {TONE_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => onChangeToneLevel?.(level)}
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                      toneLevel === level ? "text-accent-400" : "text-white"
+                    }`}
+                  >
+                    {t(`player.hdrTone.${level}`)}
+                  </button>
+                ))}
+              </>
             )}
             {menu === "speed" &&
               PLAYBACK_SPEEDS.map((rate) => (

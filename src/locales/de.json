@@ -1354,6 +1354,14 @@
       "signOut": "Abmelden",
       "signOutAction": "Abmelden",
       "localAccountHint": "Dieses Konto ist nicht mit Jellyfin verknüpft — Wiedergabe-Einstellungen und Passwort werden anderswo verwaltet."
+    },
+    "hdrTone": {
+      "title": "HDR an den Bildschirm anpassen",
+      "hint": "Diese Datei ist HDR, dieser Bildschirm nicht. Die Korrektur bringt Kontrast und Farbe zurück; sie ist nach Augenmaß eingestellt, nicht gemessen.",
+      "off": "Keine",
+      "light": "Leicht",
+      "medium": "Mittel",
+      "strong": "Stark"
     }
   },
   "cinema": {
