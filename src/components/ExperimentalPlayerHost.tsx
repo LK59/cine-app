@@ -20,7 +20,7 @@ import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
-import { hdrModeStore, displayRangeStore, hdrModeApplies, shouldPresentHdr, type HdrMode } from "@/lib/hdrToSdr";
+import { hdrModeStore, displayRangeStore, hdrModeApplies, shouldPresentHdr, HDR_PRESENTER_ENABLED, type HdrMode } from "@/lib/hdrToSdr";
 import { HdrPresenter, type HdrPresentation } from "@/lib/webcodecs/hdrPresenter";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
@@ -430,8 +430,8 @@ export function ExperimentalPlayerHost({
   // convertit, et il n'y a rien à reprendre. Un réglage sans effet dans un menu est pire qu'un
   // réglage absent.
   const fileIsHdr = info?.video?.isHdr ?? false;
-  const toneAvailable = hdrModeApplies(fileIsHdr, onElement);
-  const wantHdrPresenter = shouldPresentHdr(fileIsHdr, onElement, hdrMode, screenRange);
+  const toneAvailable = HDR_PRESENTER_ENABLED && hdrModeApplies(fileIsHdr, onElement);
+  const wantHdrPresenter = HDR_PRESENTER_ENABLED && shouldPresentHdr(fileIsHdr, onElement, hdrMode, screenRange);
 
   /**
    * Reprendre l'affichage, ou le rendre.

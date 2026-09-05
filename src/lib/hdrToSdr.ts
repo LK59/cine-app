@@ -18,6 +18,16 @@
  * réellement savoir — ce que l'écran déclare — et laisse le dernier mot à qui regarde l'image.
  */
 
+/**
+ * La reprise d'affichage est en sommeil.
+ *
+ * Mise de côté le temps d'être éprouvée, à la demande — rien n'est supprimé : le présentateur, le
+ * shader et les décisions ci-dessous restent en place et testés, et cette constante est le seul
+ * geste à refaire pour les rallumer. Tant qu'elle est fausse, l'entrée de menu n'apparaît pas et
+ * l'image reste exactement celle que le navigateur produit, sur toutes les plateformes.
+ */
+export const HDR_PRESENTER_ENABLED = false;
+
 /** Quand reprendre l'affichage. Trois réponses, une seule question : faut-il le faire. */
 export type HdrMode = "auto" | "always" | "never";
 
