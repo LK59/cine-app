@@ -110,16 +110,26 @@ export function CinemaMobileClient() {
   // The open sheet is read back out of the URL rather than held in state — that's what lets the
   // back-swipe close it. Nothing resolves until the payload is in, so a cold deep link simply
   // opens the sheet the moment the data lands.
-  const selected = useMemo(() => {
-    const id = isSeries ? route.serie : route.film;
-    if (id === null || !payload) return null;
+  // L'index ne dépend que de la charge utile ; la recherche, elle, ne dépend que de l'adresse.
+  //
+  // Les deux étaient dans le même `useMemo`, donc ouvrir ou fermer un écran — n'importe lequel —
+  // aplatissait un millier d'éléments et reconstruisait l'index à chaque fois. C'est exactement le
+  // genre de travail qui se paie en à-coups sur un téléphone, pour un résultat identique.
+  const byId = useMemo(() => {
+    if (!payload) return null;
     const all = uniqueById(
       [...payload.spotlight, ...Object.values(payload.rows).flat()],
       (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
     );
-    const item = all.find((x) => ("radarrId" in x ? x.radarrId : x.sonarrId) === id);
+    return new Map(all.map((item) => [itemId(item), item] as const));
+  }, [payload]);
+
+  const selected = useMemo(() => {
+    const id = isSeries ? route.serie : route.film;
+    if (id === null || !byId) return null;
+    const item = byId.get(id);
     return item ? { item, mediaType } : null;
-  }, [isSeries, route.serie, route.film, payload, mediaType]);
+  }, [isSeries, route.serie, route.film, byId, mediaType]);
   // Same rail as desktop: watchlist ∩ library, so every card is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
   const myListSeries = useCinemaMyList("series", series);
