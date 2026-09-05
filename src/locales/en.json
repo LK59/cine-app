@@ -1356,14 +1356,16 @@
       "localAccountHint": "This account isn’t linked to Jellyfin, so playback preferences and the password live elsewhere."
     },
     "hdrTone": {
-      "title": "Fit HDR to this screen",
-      "hint": "This file is HDR and this screen is not. The correction brings back contrast and colour; it is tuned by eye, not measured.",
-      "hintHdrScreen": "This screen reports itself as HDR, so there should be nothing to correct. Turn this on only if the picture still looks washed out.",
-      "hintUnknownScreen": "This browser cannot say whether the screen is HDR. Turn this on only if the picture looks washed out.",
-      "off": "None",
-      "light": "Light",
-      "medium": "Medium",
-      "strong": "Strong"
+      "title": "HDR display",
+      "auto": "Automatic",
+      "always": "Always take over",
+      "never": "Leave it to the browser",
+      "hint": "This file is HDR and this screen is not. The display is taken over to convert the picture properly.",
+      "hintHdrScreen": "This screen reports itself as HDR: the browser shows it natively, and automatic leaves it alone.",
+      "hintUnknownScreen": "This browser cannot say whether the screen is HDR. Automatic leaves it alone.",
+      "stateNative": "Right now: the picture comes from the browser.",
+      "stateTonemap": "Right now: full conversion, from the real HDR values.",
+      "stateRecovery": "Right now: contrast and colour put back after a conversion already made."
     }
   },
   "cinema": {

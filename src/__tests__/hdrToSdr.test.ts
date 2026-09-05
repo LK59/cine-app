@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { displayRange, toneMappingApplies, TONE_CURVES, TONE_LEVELS, readToneLevel } from "@/lib/hdrToSdr";
+import { displayRange, shouldPresentHdr, hdrModeApplies, HDR_MODES } from "@/lib/hdrToSdr";
 
 function answerWith(answers: Record<string, boolean> | null) {
   if (answers === null) {
-    // Un navigateur sans matchMedia du tout.
     Object.defineProperty(window, "matchMedia", { value: undefined, configurable: true });
     return;
   }
@@ -28,8 +27,8 @@ describe("displayRange", () => {
   });
 
   // Le cas qui justifie de poser les deux questions : un navigateur qui ne connaît pas
-  // `dynamic-range` répond faux aux deux. Le confondre avec un écran standard ferait corriger
-  // l'image d'un vrai écran HDR, ce qui est la seule façon d'aggraver les choses.
+  // `dynamic-range` répond faux aux deux. Le confondre avec un écran standard ferait reprendre
+  // l'affichage d'un vrai écran HDR — c'est-à-dire remplacer du HDR par du standard.
   it("does not mistake an unanswered question for a standard screen", () => {
     answerWith({});
     expect(displayRange()).toBe("unknown");
@@ -38,60 +37,43 @@ describe("displayRange", () => {
   });
 });
 
-// Depuis que le défaut est « aucune », la détection ne décide plus d'appliquer quoi que ce soit :
-// l'option est offerte à tout fichier HDR, et ce que l'écran répond ne sert qu'à le dire. Un écran
-// HDR dont le système a coupé le mode HDR, ou un navigateur qui ne connaît pas la question, ne
-// doivent pas se retrouver privés du réglage.
-describe("toneMappingApplies", () => {
-  it("offers the setting for any HDR file, and never for an SDR one", () => {
-    expect(toneMappingApplies(true)).toBe(true);
-    expect(toneMappingApplies(false)).toBe(false);
+describe("shouldPresentHdr", () => {
+  it("takes over an HDR file on a screen that says it is standard", () => {
+    expect(shouldPresentHdr(true, true, "auto", "standard")).toBe(true);
   });
-});
 
-describe("TONE_CURVES", () => {
-  it("has a curve for every level but « off »", () => {
-    for (const level of TONE_LEVELS) {
-      if (level === "off") continue;
-      expect(TONE_CURVES[level]).toBeTruthy();
+  // Le seul faux positif qui abîmerait vraiment quelque chose : reprendre l'affichage sur un
+  // écran HDR revient à remplacer du HDR natif par une conversion vers le standard.
+  it("never takes over an HDR screen on its own", () => {
+    expect(shouldPresentHdr(true, true, "auto", "high")).toBe(false);
+  });
+
+  // Un écran dont on ne sait rien peut être HDR : dans le doute, on ne touche à rien.
+  it("abstains when the screen cannot answer", () => {
+    expect(shouldPresentHdr(true, true, "auto", "unknown")).toBe(false);
+  });
+
+  it("leaves an SDR file and the canvas path alone whatever the mode", () => {
+    for (const mode of HDR_MODES) {
+      expect(shouldPresentHdr(false, true, mode, "standard")).toBe(false);
+      expect(shouldPresentHdr(true, false, mode, "standard")).toBe(false);
     }
   });
 
-  // Les trois forces doivent aller dans le même sens, sinon « forte » ne veut rien dire.
-  it("grows monotonically from light to strong", () => {
-    const { light, medium, strong } = TONE_CURVES;
-    expect(light.exponent).toBeLessThan(medium.exponent);
-    expect(medium.exponent).toBeLessThan(strong.exponent);
-    expect(light.saturation).toBeLessThan(medium.saturation);
-    expect(medium.saturation).toBeLessThan(strong.saturation);
-  });
-
-  // Un exposant supérieur à 1 assombrit tout, y compris les hautes lumières : l'amplitude est là
-  // pour les rattraper. Sans elle, la correction rendrait le contraste en éteignant l'image.
-  it("lifts the highlights the gamma would otherwise take with it", () => {
-    for (const curve of Object.values(TONE_CURVES)) {
-      expect(curve.exponent).toBeGreaterThan(1);
-      expect(curve.amplitude).toBeGreaterThan(1);
-    }
+  // Les deux échappatoires, dans les deux sens : « toujours » couvre l'écran HDR dont le système
+  // a coupé le mode HDR et le navigateur qui ne sait pas répondre ; « jamais » couvre celui à qui
+  // la reprise coûte plus qu'elle ne rapporte.
+  it("obeys the viewer over the detection, both ways", () => {
+    expect(shouldPresentHdr(true, true, "always", "high")).toBe(true);
+    expect(shouldPresentHdr(true, true, "always", "unknown")).toBe(true);
+    expect(shouldPresentHdr(true, true, "never", "standard")).toBe(false);
   });
 });
 
-// Le défaut est « aucune », et c'est le cœur du réglage : un écran standard ne dit pas que le
-// navigateur n'a rien fait. Chrome sous Windows convertit déjà, et corriger d'office y durcirait
-// une image juste.
-describe("readToneLevel", () => {
-  it("corrects nothing until someone asks", () => {
-    window.localStorage.clear();
-    expect(readToneLevel()).toBe("off");
-  });
-
-  it("keeps a level that was chosen", () => {
-    window.localStorage.setItem("cine.player.hdrTone", "strong");
-    expect(readToneLevel()).toBe("strong");
-  });
-
-  it("ignores a stored value that means nothing", () => {
-    window.localStorage.setItem("cine.player.hdrTone", "extrême");
-    expect(readToneLevel()).toBe("off");
+describe("hdrModeApplies", () => {
+  it("offers the setting only where it could act", () => {
+    expect(hdrModeApplies(true, true)).toBe(true);
+    expect(hdrModeApplies(false, true)).toBe(false);
+    expect(hdrModeApplies(true, false)).toBe(false);
   });
 });

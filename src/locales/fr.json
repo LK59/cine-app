@@ -1356,14 +1356,16 @@
       "localAccountHint": "Ce compte n’est pas relié à Jellyfin : les préférences de lecture et le mot de passe se gèrent ailleurs."
     },
     "hdrTone": {
-      "title": "Adapter le HDR à l'écran",
-      "hint": "Ce fichier est en HDR, cet écran ne l'est pas. La correction rend le contraste et la couleur ; elle est réglée à l'œil, pas mesurée.",
-      "hintHdrScreen": "Cet écran se déclare HDR : il ne devrait y avoir rien à corriger. À n'activer que si l'image paraît malgré tout délavée.",
-      "hintUnknownScreen": "Ce navigateur ne sait pas dire si l'écran est HDR. À n'activer que si l'image paraît délavée.",
-      "off": "Aucune",
-      "light": "Légère",
-      "medium": "Moyenne",
-      "strong": "Forte"
+      "title": "Affichage HDR",
+      "auto": "Automatique",
+      "always": "Toujours reprendre",
+      "never": "Laisser au navigateur",
+      "hint": "Ce fichier est en HDR, cet écran ne l'est pas. L'affichage est repris pour convertir l'image correctement.",
+      "hintHdrScreen": "Cet écran se déclare HDR : le navigateur l'affiche nativement, et en automatique on n'y touche pas.",
+      "hintUnknownScreen": "Ce navigateur ne sait pas dire si l'écran est HDR. En automatique on n'y touche pas.",
+      "stateNative": "En ce moment : l'image vient du navigateur.",
+      "stateTonemap": "En ce moment : conversion complète, à partir des vraies valeurs HDR.",
+      "stateRecovery": "En ce moment : contraste et couleur remis après une conversion déjà faite."
     }
   },
   "cinema": {

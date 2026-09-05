@@ -1,58 +1,37 @@
 /**
- * Rattraper une image HDR affichée sur un écran qui ne l'est pas.
+ * Reprendre l'affichage d'un film HDR sur un écran qui ne l'est pas.
  *
  * Sur le chemin natif, c'est le navigateur qui décode et qui compose : aucun pixel ne passe par
- * JavaScript, et c'est précisément ce qui rend ce chemin bon marché. Mais quand le fichier est
- * masterisé en HDR10 — primaires BT.2020, courbe PQ — et que l'écran ne l'est pas, certains
- * navigateurs se contentent d'envoyer ces valeurs à un écran standard. Le résultat est l'image
- * délavée, grise et sans contraste qu'on connaît : la courbe PQ lue comme du sRGB éclaircit tout
- * le bas de l'échelle, et les primaires larges lues comme des étroites désaturent les couleurs.
+ * JavaScript, et c'est ce qui rend ce chemin bon marché. La plupart des plateformes convertissent
+ * alors correctement une source HDR pour un écran ordinaire — Chrome sous Windows, Safari sous
+ * macOS. Certaines ne le font pas, et le film sort gris et délavé : la courbe PQ lue comme du sRGB
+ * éclaircit tout le bas de l'échelle, et des primaires larges rendues sur des étroites ternissent
+ * les couleurs.
  *
- * On ne peut pas convertir proprement : l'image qu'on récupérerait d'un canevas a déjà subi cette
- * conversion, et ce qui a été écrasé l'est pour de bon. Le seul décodage qui donnerait accès aux
- * vraies valeurs PQ est logiciel — c'est le chemin canevas, qu'on paie en CPU et que Firefox ne
- * peut de toute façon pas emprunter pour du HEVC.
+ * Ce qu'on fait alors est une vraie conversion et non plus une correction à l'estime : l'image est
+ * reprise à l'élément et passée dans le shader écrit pour ça, puis peinte sur un canevas posé
+ * par-dessus. Le décodage reste matériel, le son et l'horloge restent à l'élément — voir
+ * `hdrPresenter`.
  *
- * Ce qui reste est une correction, pas une conversion : une vraie courbe de transfert par canal
- * plus une resaturation, appliquées par le compositeur via un filtre SVG. L'élément reste natif,
- * le décodage reste matériel, rien ne passe par une boucle JavaScript. En échange, ce n'est pas
- * juste au sens colorimétrique — c'est réglé à l'œil, et c'est pour ça que le niveau se choisit.
+ * Reste la question que rien ne permet de poser : ce navigateur a-t-il déjà fait le travail ? Il
+ * n'existe aucune API pour la lui poser. Ce module choisit donc à partir de ce qu'on peut
+ * réellement savoir — ce que l'écran déclare — et laisse le dernier mot à qui regarde l'image.
  */
 
-export type ToneLevel = "off" | "light" | "medium" | "strong";
+/** Quand reprendre l'affichage. Trois réponses, une seule question : faut-il le faire. */
+export type HdrMode = "auto" | "always" | "never";
 
-export const TONE_LEVELS: ToneLevel[] = ["off", "light", "medium", "strong"];
-
-/** Les paramètres du filtre. `out = amplitude × in^exponent`, puis resaturation. */
-export interface ToneCurve {
-  exponent: number;
-  amplitude: number;
-  saturation: number;
-}
-
-/**
- * Trois forces plutôt qu'un réglage continu.
- *
- * L'exposant assombrit le bas de l'échelle — c'est lui qui rend le contraste — et l'amplitude
- * rattrape les hautes lumières qu'il vient d'emporter avec le reste. La saturation compense des
- * primaires larges rendues sur des primaires étroites, ce qui ternit toujours dans ce sens.
- */
-export const TONE_CURVES: Record<Exclude<ToneLevel, "off">, ToneCurve> = {
-  light: { exponent: 1.5, amplitude: 1.08, saturation: 1.15 },
-  medium: { exponent: 1.9, amplitude: 1.16, saturation: 1.3 },
-  strong: { exponent: 2.3, amplitude: 1.26, saturation: 1.45 },
-};
+export const HDR_MODES: HdrMode[] = ["auto", "always", "never"];
 
 export type DisplayRange = "high" | "standard" | "unknown";
 
 /**
  * Ce que l'écran sait afficher, demandé plutôt que supposé.
  *
- * Les deux requêtes sont posées, pas une seule : un navigateur qui ne connaît pas
- * `dynamic-range` répond faux aux deux, ce qui se distingue d'un écran standard — qui répond vrai
- * à l'une. Sans cette distinction, une version trop ancienne pour la question ferait passer un
- * vrai écran HDR pour un écran ordinaire, et on corrigerait une image qui n'a rien à se faire
- * corriger.
+ * Les deux requêtes sont posées, pas une seule : un navigateur qui ne connaît pas `dynamic-range`
+ * répond faux aux deux, ce qui se distingue d'un écran standard — qui répond vrai à l'une. Sans
+ * cette distinction, une version trop ancienne pour la question ferait passer un vrai écran HDR
+ * pour un écran ordinaire.
  */
 export function displayRange(): DisplayRange {
   if (typeof window === "undefined" || !window.matchMedia) return "unknown";
@@ -62,93 +41,83 @@ export function displayRange(): DisplayRange {
 }
 
 /**
- * À qui l'option est offerte.
+ * Faut-il reprendre l'affichage.
  *
- * À tout fichier HDR joué sur l'élément natif, sans condition d'écran — et c'est un revirement
- * assumé. Tant que la détection décidait d'appliquer la correction, se tromper coûtait une image
- * abîmée, et il fallait qu'elle soit sûre. Depuis que le défaut est « aucune », elle ne décide
- * plus que de l'apparition d'une ligne de menu : la garder comme condition ne protégeait plus de
- * rien et privait deux cas réels du réglage dont ils ont besoin — un écran HDR dont le système a
- * désactivé le mode HDR, et un navigateur trop ancien pour connaître la question.
+ * En automatique, uniquement sur un écran qui s'est déclaré standard. Les deux autres réponses
+ * sont des abstentions, et chacune pour une raison qui lui est propre :
  *
- * Ce que l'écran répond sert donc à renseigner celui qui choisit, pas à choisir à sa place.
+ *   * `high` — l'écran est HDR et le navigateur l'affiche nativement en HDR. Reprendre reviendrait
+ *     à remplacer du vrai HDR par une conversion vers le standard : la seule façon de dégrader une
+ *     image qui était juste. C'est l'écueil à ne jamais franchir tout seul.
+ *   * `unknown` — le navigateur ne sait pas répondre, et l'écran peut être HDR. Dans le doute on
+ *     ne touche à rien, plutôt que de risquer le cas précédent.
+ *
+ * Reste le cas d'un écran standard sur un navigateur qui convertissait déjà bien : on remplace
+ * alors une conversion correcte par une autre conversion correcte. Ça coûte du GPU et ne casse
+ * rien — c'est la raison pour laquelle l'automatique peut se permettre d'être franc ici, là où la
+ * correction manuelle qui a précédé aurait, elle, corrigé deux fois.
  */
-export function toneMappingApplies(fileIsHdr: boolean): boolean {
-  return fileIsHdr;
+export function shouldPresentHdr(
+  fileIsHdr: boolean,
+  onNativeElement: boolean,
+  mode: HdrMode,
+  range: DisplayRange
+): boolean {
+  if (!fileIsHdr || !onNativeElement || mode === "never") return false;
+  if (mode === "always") return true;
+  return range === "standard";
 }
 
-const STORAGE_KEY = "cine.player.hdrTone";
+/** L'option n'a de sens que là où elle pourrait agir : un fichier HDR, sur l'élément natif. */
+export function hdrModeApplies(fileIsHdr: boolean, onNativeElement: boolean): boolean {
+  return fileIsHdr && onNativeElement;
+}
 
-/**
- * Le niveau retenu, ou celui par défaut — qui est « aucune », et c'est délibéré.
- *
- * Savoir que l'écran est standard ne dit pas que le navigateur n'a rien fait. Chrome sous Windows
- * et Safari sous macOS convertissent déjà correctement une vidéo HDR vers un écran qui ne l'est
- * pas, et aucune API ne permet de leur demander s'ils l'ont fait. Corriger d'office reviendrait
- * donc à corriger deux fois là où tout allait bien, et à durcir une image juste — un défaut plus
- * visible que celui qu'on répare, infligé à ceux qui n'avaient rien demandé.
- *
- * L'entrée du menu apparaît dès que la question se pose ; c'est celui qui voit l'image qui
- * tranche, une fois, et son choix est retenu.
- */
-export function readToneLevel(): ToneLevel {
+const STORAGE_KEY = "cine.player.hdrMode";
+
+function readHdrMode(): HdrMode {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored && (TONE_LEVELS as string[]).includes(stored)) return stored as ToneLevel;
+    if (stored && (HDR_MODES as string[]).includes(stored)) return stored as HdrMode;
   } catch {
-    // Navigation privée, cookies bloqués : on repart du défaut, ce qui est exactement le bon
-    // comportement.
+    // Navigation privée, cookies bloqués : l'automatique est le bon défaut de toute façon.
   }
-  return "off";
-}
-
-function writeToneLevel(level: ToneLevel): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, level);
-  } catch {
-    // Voir readToneLevel : rien à rattraper.
-  }
+  return "auto";
 }
 
 /**
- * Le niveau et l'écran, lus par `useSyncExternalStore` plutôt que posés dans un effet.
+ * Le mode, lu par `useSyncExternalStore` plutôt que posé dans un effet.
  *
- * Les deux ont la même forme : une valeur que le serveur ne peut pas connaître — le stockage
- * local et `matchMedia` n'existent que dans le navigateur — et qui doit malgré tout être stable
- * entre le rendu serveur et le premier rendu client. Un `useState` rempli depuis un effet dirait
- * la même chose, en repeignant une fois de plus et en écrivant un état pendant un effet, ce que
- * le compilateur React refuse à raison.
- *
- * L'instantané est mis en cache contre lui-même : `useSyncExternalStore` réclame une identité
- * stable tant que rien n'a changé, et une chaîne relue à chaque rendu la lui donne déjà — mais le
- * stockage, lui, n'a pas à être relu à chaque fois.
+ * Le stockage local n'existe pas sur le serveur, et la valeur doit malgré tout être stable entre
+ * le rendu serveur et le premier rendu client. Un `useState` rempli depuis un effet dirait la même
+ * chose en repeignant une fois de plus, et en écrivant un état pendant un effet — ce que le
+ * compilateur React refuse à raison.
  */
-let cachedLevel: ToneLevel | null = null;
-const levelListeners = new Set<() => void>();
+let cached: HdrMode | null = null;
+const listeners = new Set<() => void>();
 
-function levelSnapshot(): ToneLevel {
-  if (cachedLevel === null) cachedLevel = readToneLevel();
-  return cachedLevel;
-}
-
-export const toneLevelStore = {
+export const hdrModeStore = {
   subscribe(listener: () => void): () => void {
-    levelListeners.add(listener);
-    return () => levelListeners.delete(listener);
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   },
-  snapshot: levelSnapshot,
-  serverSnapshot: (): ToneLevel => "off",
-  set(level: ToneLevel): void {
-    cachedLevel = level;
-    writeToneLevel(level);
-    for (const listener of levelListeners) listener();
+  snapshot(): HdrMode {
+    if (cached === null) cached = readHdrMode();
+    return cached;
+  },
+  serverSnapshot: (): HdrMode => "auto",
+  set(mode: HdrMode): void {
+    cached = mode;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, mode);
+    } catch {
+      // Voir readHdrMode : rien à rattraper.
+    }
+    for (const listener of listeners) listener();
   },
 };
 
-/**
- * L'écran, qui peut changer : une fenêtre déplacée d'un moniteur HDR vers un moniteur ordinaire
- * ne pose plus la même question.
- */
+/** L'écran, qui change si la fenêtre passe d'un moniteur à l'autre. */
 export const displayRangeStore = {
   subscribe(listener: () => void): () => void {
     if (typeof window === "undefined" || !window.matchMedia) return () => {};

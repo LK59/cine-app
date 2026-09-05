@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, SunMedium } from "lucide-react";
-import { TONE_LEVELS, type ToneLevel, type DisplayRange } from "@/lib/hdrToSdr";
+import { HDR_MODES, type HdrMode, type DisplayRange } from "@/lib/hdrToSdr";
 import { useT } from "@/components/TranslationProvider";
 import { useMediaSession } from "@/lib/useMediaSession";
 
@@ -46,8 +46,10 @@ interface PlayerControlsProps {
   toneAvailable?: boolean;
   /** Ce que l'écran répond, pour le dire à qui choisit — jamais pour choisir à sa place. */
   toneScreen?: DisplayRange;
-  toneLevel?: ToneLevel;
-  onChangeToneLevel?: (level: ToneLevel) => void;
+  hdrMode?: HdrMode;
+  onChangeHdrMode?: (mode: HdrMode) => void;
+  /** Ce que l'affichage repris fait en ce moment, ou null s'il n'a pas été repris. */
+  hdrPresentation?: "tonemap" | "recovery" | null;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -99,8 +101,9 @@ export function PlayerControls({
   onAdvance,
   toneAvailable = false,
   toneScreen = "unknown",
-  toneLevel = "off",
-  onChangeToneLevel,
+  hdrMode = "auto",
+  onChangeHdrMode,
+  hdrPresentation = null,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -1236,7 +1239,7 @@ export function PlayerControls({
                     onClick={() => setMenu("tone")}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
-                    <SunMedium size={16} /> {t('player.hdrTone.title')} · {t(`player.hdrTone.${toneLevel}`)}
+                    <SunMedium size={16} /> {t('player.hdrTone.title')} · {t(`player.hdrTone.${hdrMode}`)}
                   </button>
                 )}
                 {castSupported && (
@@ -1340,15 +1343,26 @@ export function PlayerControls({
                         : 'player.hdrTone.hintUnknownScreen'
                   )}
                 </p>
-                {TONE_LEVELS.map((level) => (
+                {/* Ce qui se passe réellement, pas seulement ce qui a été demandé : « automatique »
+                    ne dit pas si l'affichage a été repris, ni ce qu'il a pu faire une fois repris. */}
+                <p className="border-b border-white/10 px-3 py-2 text-xs leading-5 text-white/40">
+                  {t(
+                    hdrPresentation === "tonemap"
+                      ? 'player.hdrTone.stateTonemap'
+                      : hdrPresentation === "recovery"
+                        ? 'player.hdrTone.stateRecovery'
+                        : 'player.hdrTone.stateNative'
+                  )}
+                </p>
+                {HDR_MODES.map((mode) => (
                   <button
-                    key={level}
-                    onClick={() => onChangeToneLevel?.(level)}
+                    key={mode}
+                    onClick={() => onChangeHdrMode?.(mode)}
                     className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                      toneLevel === level ? "text-accent-400" : "text-white"
+                      hdrMode === mode ? "text-accent-400" : "text-white"
                     }`}
                   >
-                    {t(`player.hdrTone.${level}`)}
+                    {t(`player.hdrTone.${mode}`)}
                   </button>
                 ))}
               </>

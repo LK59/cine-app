@@ -20,8 +20,8 @@ import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
-import { HdrToneFilter, HDR_TONE_FILTER_ID } from "@/components/player/HdrToneFilter";
-import { toneLevelStore, displayRangeStore, toneMappingApplies, type ToneLevel } from "@/lib/hdrToSdr";
+import { hdrModeStore, displayRangeStore, hdrModeApplies, shouldPresentHdr, type HdrMode } from "@/lib/hdrToSdr";
+import { HdrPresenter, type HdrPresentation } from "@/lib/webcodecs/hdrPresenter";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -232,18 +232,14 @@ export function ExperimentalPlayerHost({
    */
   const [warning, setWarning] = useState<{ text: string; at: number } | null>(null);
 
-  /** La correction HDR → écran standard : le niveau choisi, et ce que l'écran sait afficher. */
-  const toneLevel = useSyncExternalStore(
-    toneLevelStore.subscribe,
-    toneLevelStore.snapshot,
-    toneLevelStore.serverSnapshot
-  );
+  /** L'affichage HDR repris : ce qui a été demandé, et ce que l'écran sait afficher. */
+  const hdrMode = useSyncExternalStore(hdrModeStore.subscribe, hdrModeStore.snapshot, hdrModeStore.serverSnapshot);
   const screenRange = useSyncExternalStore(
     displayRangeStore.subscribe,
     displayRangeStore.snapshot,
     displayRangeStore.serverSnapshot
   );
-  const chooseToneLevel = useCallback((level: ToneLevel) => toneLevelStore.set(level), []);
+  const chooseHdrMode = useCallback((mode: HdrMode) => hdrModeStore.set(mode), []);
   const showWarning = useCallback((text: string | null) => {
     setWarning(text ? { text, at: Date.now() } : null);
   }, []);
@@ -430,11 +426,42 @@ export function ExperimentalPlayerHost({
   const title = info?.title ?? openedAs;
 
   /** The file, as every entry in the server's record wants it described. */
-  // `onElement` compte autant que le reste : sur le chemin canevas, c'est le shader qui convertit
-  // le HDR pour de vrai, et le filtre — posé sur un élément vidéo alors caché — ne toucherait
-  // rien. Un réglage sans effet dans un menu est pire qu'un réglage absent.
-  const toneAvailable = onElement && toneMappingApplies(info?.video?.isHdr ?? false);
-  const toneActive = toneAvailable && toneLevel !== "off";
+  // `onElement` compte autant que le reste : sur le chemin canevas, c'est déjà le shader qui
+  // convertit, et il n'y a rien à reprendre. Un réglage sans effet dans un menu est pire qu'un
+  // réglage absent.
+  const fileIsHdr = info?.video?.isHdr ?? false;
+  const toneAvailable = hdrModeApplies(fileIsHdr, onElement);
+  const wantHdrPresenter = shouldPresentHdr(fileIsHdr, onElement, hdrMode, screenRange);
+
+  /**
+   * Reprendre l'affichage, ou le rendre.
+   *
+   * L'élément n'est jamais caché ni arrêté : il décode, porte le son et mène l'horloge exactement
+   * comme avant. Le canevas se pose par-dessus, et se retire dès que le présentateur renonce —
+   * l'image en dessous est restée là tout du long, il n'y a jamais de noir à traverser.
+   *
+   * Dépend de `ready` : avant la première image décodée, il n'y a rien à interroger, et la
+   * question « dans quel espace es-tu » n'a pas encore de réponse.
+   */
+  const hdrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [hdrPresentation, setHdrPresentation] = useState<HdrPresentation | null>(null);
+  useEffect(() => {
+    if (!wantHdrPresenter || !ready) return;
+    const video = videoElRef.current;
+    const canvas = hdrCanvasRef.current;
+    if (!video || !canvas) return;
+    const presenter = HdrPresenter.start(video, canvas, {
+      onState: (state) => setHdrPresentation(state?.presentation ?? null),
+      onDowngrade: (reason) => trace(`affichage HDR : conversion complète abandonnée — ${reason}`),
+    });
+    // L'état retombe à l'arrêt et non au démarrage : posé dans le corps de l'effet, il
+    // provoquerait un rendu en cascade à chaque passage, pour une valeur que le présentateur
+    // rectifie dans la foulée.
+    return () => {
+      presenter?.stop();
+      setHdrPresentation(null);
+    };
+  }, [wantHdrPresenter, ready, itemId]);
 
   const describeFile = useCallback(
     () => ({
@@ -1096,19 +1123,21 @@ export function ExperimentalPlayerHost({
           arrive rarement seule et proprement — il y a un battement entre l'élément qui se
           déclare prêt et l'image qui s'installe. Trois cents millisecondes de fondu couvrent
           ce battement et, surtout, donnent une intention à ce qui ressemblait à un à-coup. */}
-      {toneActive && <HdrToneFilter level={toneLevel} />}
       <video
         ref={videoElRef}
         playsInline
         hidden={!onElement}
-        // Le filtre est posé sur l'élément, donc appliqué par le compositeur : le décodage reste
-        // matériel et aucune image ne transite par JavaScript. Le prix possible est ailleurs — un
-        // élément filtré peut perdre le chemin de composition le plus direct — et c'est le
-        // compteur d'images perdues du relevé qui le dit.
-        style={toneActive ? { filter: `url(#${HDR_TONE_FILTER_ID})` } : undefined}
         className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
           ready ? "opacity-100" : "opacity-0"
         }`}
+      />
+      {/* Posé par-dessus l'élément plutôt qu'à sa place : un élément vidéo caché — `hidden`,
+          `display:none` — peut cesser de présenter des images sur certaines plateformes, et c'est
+          justement de ses images qu'on a besoin. Il reste donc affiché, simplement recouvert. */}
+      <canvas
+        ref={hdrCanvasRef}
+        hidden={hdrPresentation === null}
+        className={`absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}`}
       />
       <canvas
         ref={canvasRef}
@@ -1302,8 +1331,9 @@ export function ExperimentalPlayerHost({
             onAdvance={handleAdvance}
             toneAvailable={toneAvailable}
             toneScreen={screenRange}
-            toneLevel={toneLevel}
-            onChangeToneLevel={chooseToneLevel}
+            hdrMode={hdrMode}
+            onChangeHdrMode={chooseHdrMode}
+            hdrPresentation={hdrPresentation}
           />
         )
       )}

@@ -14,6 +14,7 @@ import { isNetworkFailure } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
+import { probeFrame } from "./hdrPresenter";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
 // moving where they live should not mean touching a dozen call sites.
@@ -1034,11 +1035,11 @@ export class MseSource {
   /**
    * L'espace colorimétrique d'une image telle que l'élément la rend, demandé une seule fois.
    *
-   * La question vaut une réponse : si `VideoFrame` rend l'image avec ses primaires et sa courbe
-   * d'origine — BT.2020, PQ — alors les vraies valeurs HDR sont accessibles malgré le décodage
-   * matériel, et le shader du chemin canevas peut faire une vraie conversion au lieu de la
-   * correction approximative qu'on applique aujourd'hui. Si elle revient déjà en sRGB, la
-   * conversion a eu lieu avant qu'on puisse la voir et il n'y a rien à récupérer.
+   * C'est la réponse qui décide de tout côté HDR : une image en `pq` porte encore les vraies
+   * valeurs malgré le décodage matériel, et peut donc être convertie pour de bon ; une image déjà
+   * en sRGB a été convertie avant qu'on puisse la voir. La même sonde sert au présentateur — voir
+   * `hdrPresenter` — et elle est posée ici pour que le relevé la porte même quand personne n'a
+   * repris l'affichage.
    *
    * Une seule fois, et le résultat gardé : construire une image 4K à chaque rafraîchissement du
    * panneau pour lire trois champs coûterait bien plus que ce qu'elle apprend.
@@ -1047,25 +1048,10 @@ export class MseSource {
 
   private frameColorSpace(): string {
     if (this.colorProbe) return this.colorProbe;
-    const Frame = (globalThis as { VideoFrame?: new (source: CanvasImageSource) => VideoFrame }).VideoFrame;
-    if (!Frame) return "VideoFrame absent";
-    // Avant la première image, il n'y a rien à interroger — et la question se repose au prochain
-    // passage, donc rien n'est perdu.
-    if (this.video.readyState < 2) return "pas encore d'image";
-    let frame: VideoFrame | null = null;
-    try {
-      frame = new Frame(this.video);
-      const space = frame.colorSpace;
-      this.colorProbe = `${space.primaries ?? "?"} · ${space.transfer ?? "?"} · ${space.matrix ?? "?"}`;
-      return this.colorProbe;
-    } catch (error) {
-      // Un navigateur qui refuse de capturer une image protégée, ou qui n'accepte pas un élément
-      // média comme source : c'est une réponse aussi, et elle ferme la même porte.
-      this.colorProbe = `refusé (${error instanceof Error ? error.message : String(error)})`;
-      return this.colorProbe;
-    } finally {
-      frame?.close();
-    }
+    const probe = probeFrame(this.video);
+    if (!probe) return "pas encore lisible";
+    this.colorProbe = probe.colorSpace;
+    return this.colorProbe;
   }
 
   /** Images perdues sur images rendues, telles que l'élément lui-même les compte. */

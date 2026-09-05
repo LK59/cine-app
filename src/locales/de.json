@@ -1356,14 +1356,16 @@
       "localAccountHint": "Dieses Konto ist nicht mit Jellyfin verknüpft — Wiedergabe-Einstellungen und Passwort werden anderswo verwaltet."
     },
     "hdrTone": {
-      "title": "HDR an den Bildschirm anpassen",
-      "hint": "Diese Datei ist HDR, dieser Bildschirm nicht. Die Korrektur bringt Kontrast und Farbe zurück; sie ist nach Augenmaß eingestellt, nicht gemessen.",
-      "hintHdrScreen": "Dieser Bildschirm meldet sich als HDR, es sollte also nichts zu korrigieren geben. Nur einschalten, wenn das Bild trotzdem flau wirkt.",
-      "hintUnknownScreen": "Dieser Browser kann nicht sagen, ob der Bildschirm HDR ist. Nur einschalten, wenn das Bild flau wirkt.",
-      "off": "Keine",
-      "light": "Leicht",
-      "medium": "Mittel",
-      "strong": "Stark"
+      "title": "HDR-Darstellung",
+      "auto": "Automatisch",
+      "always": "Immer übernehmen",
+      "never": "Dem Browser überlassen",
+      "hint": "Diese Datei ist HDR, dieser Bildschirm nicht. Die Darstellung wird übernommen, um das Bild korrekt zu konvertieren.",
+      "hintHdrScreen": "Dieser Bildschirm meldet sich als HDR: der Browser zeigt ihn nativ, automatisch bleibt es unberührt.",
+      "hintUnknownScreen": "Dieser Browser kann nicht sagen, ob der Bildschirm HDR ist. Automatisch bleibt es unberührt.",
+      "stateNative": "Gerade: das Bild kommt vom Browser.",
+      "stateTonemap": "Gerade: vollständige Konvertierung aus den echten HDR-Werten.",
+      "stateRecovery": "Gerade: Kontrast und Farbe nach einer bereits erfolgten Konvertierung wiederhergestellt."
     }
   },
   "cinema": {
