@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cachedSeries, cachedJellyfinSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
-import { SESSION_COOKIE } from "@/lib/auth";
-import { verifySessionFull } from "@/lib/session";
+import { NextResponse } from "next/server";
+import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { getImdbRating } from "@/lib/imdb-rating";
@@ -73,15 +71,11 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
 // episodes actually exist) is a separate route — this one is just the browse grid.
 
 /**
- * La bibliothèque de la personne connectée, et non celle de l'administrateur — voir la note
- * jumelle dans la route des films.
+ * La vue serveur, et non celle d'un compte — voir la note jumelle dans la route des films, où le
+ * comptage est écrit.
  */
-export async function GET(req: NextRequest) {
-  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
-  const [series, jellyfinSeries] = await Promise.all([
-    cachedSeries(),
-    session?.jfId ? cachedJellyfinSeries(session.jfId) : cachedJellyfinSeriesAdmin(),
-  ]);
+export async function GET() {
+  const [series, jellyfinSeries] = await Promise.all([cachedSeries(), cachedJellyfinSeriesAdmin()]);
 
   const downloaded = series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0);
   const matched = downloaded

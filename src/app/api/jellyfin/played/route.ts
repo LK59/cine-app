@@ -5,12 +5,12 @@ import { verifySessionFull } from "@/lib/session";
 import { invalidateKey } from "@/lib/server-cache";
 
 
-// Le cache de la bibliothèque de cette personne porte `UserData`, donc « vu » et « favori » : le
-// laisser tel quel ferait mentir « Ma liste » pendant les deux minutes de son TTL, juste après le
-// geste qui l'a changée. Deux clés, celles de cette personne seule.
+// « Ma liste » lit « vu » et « favoris » depuis deux requêtes ciblées, mises en cache : les
+// vider ici évite qu'elle contredise, pendant la durée du cache, le geste qui vient de la
+// changer. Deux clés, celles de cette personne seule.
 function invalidateOwnLibrary(userId: string) {
-  invalidateKey(`jf:movies:${userId}`);
-  invalidateKey(`jf:series:${userId}`);
+  invalidateKey(`jf:played:${userId}`);
+  invalidateKey(`jf:favorites:${userId}`);
 }
 
 export async function POST(req: NextRequest) {

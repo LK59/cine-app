@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cachedMovies, cachedJellyfinMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
-import { SESSION_COOKIE } from "@/lib/auth";
-import { verifySessionFull } from "@/lib/session";
+import { NextResponse } from "next/server";
+import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
@@ -75,23 +73,22 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
 // screen are a follow-up) — every item returned here must already be playable, so items
 // without a resolved Jellyfin match are skipped entirely rather than shown inert.
 
+
 /**
- * La bibliothèque de la personne connectée, et non celle de l'administrateur.
+ * La bibliothèque, vue par le serveur et non par un compte.
  *
- * Ces deux routes lisaient `cachedJellyfin*Admin()`, c'est-à-dire la vue d'un compte qui voit
- * tout. Tant que toutes les bibliothèques sont ouvertes à tout le monde, ça ne se voit pas ; le
- * jour où l'une est restreinte, la personne verrait les titres au catalogue et se prendrait un
- * refus au moment de lancer la lecture — un défaut silencieux, jusqu'à ce qu'il ne le soit plus.
+ * Cette route a lu un temps `/Users/{id}/Items` pour ne montrer à chacun que ce qu'il peut voir.
+ * Mesuré sur cette installation : cet endpoint renvoie 546 films là où la vue serveur en compte
+ * 674 — et pour un compte **administrateur, avec accès à toutes les bibliothèques**. Ce n'est donc
+ * pas une question de droits : le parcours à partir des vues d'un utilisateur ne descend pas dans
+ * tout l'arbre. Cent vingt-huit films disparaissaient du catalogue, dont un que Louis était en
+ * train de regarder — sa reprise ouvrait une fiche introuvable, donc rien.
  *
- * La vue administrateur reste le repli pour la connexion locale, qui n'a pas de compte Jellyfin
- * associé et n'aurait donc aucune bibliothèque à consulter.
+ * Le filtrage par personne reviendra le jour où il servira vraiment, et il devra alors passer par
+ * des requêtes ciblées (`Filters=…`), pas par une énumération : celles-ci répondent juste.
  */
-export async function GET(req: NextRequest) {
-  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
-  const [movies, jellyfinMovies] = await Promise.all([
-    cachedMovies(),
-    session?.jfId ? cachedJellyfinMovies(session.jfId) : cachedJellyfinMoviesAdmin(),
-  ]);
+export async function GET() {
+  const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
 
   const downloaded = movies.filter((m) => m.hasFile);
   const matched = downloaded

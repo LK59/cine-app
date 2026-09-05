@@ -189,6 +189,14 @@ export const cachedJellyfinSeries = (userId: string, opts?: { forceRefresh?: boo
 export const cachedJellyfinSeriesAdmin = (opts?: { forceRefresh?: boolean }) =>
   withCache("jf:series:admin", TTL.LONG, () => jellyfin.getAllSeriesAdmin(), opts);
 
+// « Vu » et « Favoris » : deux requêtes ciblées par personne, courtes et exactes — voir la note
+// du client Jellyfin sur pourquoi elles ne passent pas par un balayage de la bibliothèque.
+export const cachedJellyfinPlayed = (userId: string, opts?: { forceRefresh?: boolean }) =>
+  withCache(`jf:played:${userId}`, TTL.SHORT, () => jellyfin.getPlayedItems(userId), opts);
+
+export const cachedJellyfinFavorites = (userId: string, opts?: { forceRefresh?: boolean }) =>
+  withCache(`jf:favorites:${userId}`, TTL.SHORT, () => jellyfin.getFavorites(userId), opts);
+
 export const cachedMovieInfo = (tmdbId: number, opts?: { forceRefresh?: boolean }) =>
   withCache(`js:movie:${tmdbId}`, TTL.MEDIA_INFO, () => jellyseerr.getMovieMedia(tmdbId), opts);
 

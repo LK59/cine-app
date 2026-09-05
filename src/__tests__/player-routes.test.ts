@@ -33,11 +33,13 @@ vi.mock("@/lib/server-cache", () => ({
     { id: 99, tmdbId: 700, hasFile: false },
   ],
   cachedSeries: async () => [{ id: 7, tmdbId: 1399, statistics: { episodeFileCount: 10 } }],
-  cachedJellyfinMovies: async () => [
-    { Id: "jf1", Name: "Vu", ProviderIds: { Tmdb: "603" }, ProductionYear: 1999, UserData: { Played: true, IsFavorite: false, PlayCount: 1 } },
-    { Id: "jf2", Name: "Favori", ProviderIds: { Tmdb: "999" }, ProductionYear: 2001, UserData: { Played: false, IsFavorite: true, PlayCount: 0 } },
+  // Deux requêtes ciblées : Jellyfin ne renvoie que ce qui correspond, on ne refiltre rien.
+  cachedJellyfinPlayed: async () => [
+    { Id: "jf1", Name: "Vu", Type: "Movie", ProviderIds: { Tmdb: "603" }, ProductionYear: 1999, UserData: { Played: true } },
   ],
-  cachedJellyfinSeries: async () => [],
+  cachedJellyfinFavorites: async () => [
+    { Id: "jf2", Name: "Favori", Type: "Movie", ProviderIds: { Tmdb: "999" }, ProductionYear: 2001, UserData: { IsFavorite: true } },
+  ],
   cachedMovieInfo: vi.fn(),
   cachedTvInfo: vi.fn(),
   getProviderIdCI: (ids: Record<string, string> | undefined, key: string) =>

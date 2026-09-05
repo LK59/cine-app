@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { watchlistDb } from "@/lib/db";
-import { cachedJellyfinMovies, cachedJellyfinSeries, getProviderIdCI } from "@/lib/server-cache";
+import { cachedJellyfinPlayed, cachedJellyfinFavorites, getProviderIdCI } from "@/lib/server-cache";
 import { playableLibrary } from "@/lib/playerLibrary";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
 import { posterUrl } from "@/lib/images";
@@ -72,10 +72,13 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   return withErrorHandling(async () => {
-    const [lib, jfMovies, jfSeries, requests] = await Promise.all([
+    // Deux requêtes ciblées plutôt qu'un balayage de la bibliothèque filtré ensuite : elles
+    // répondent juste là où l'énumération par compte est incomplète sur cette installation, et
+    // elles rapportent quelques dizaines d'éléments au lieu de plusieurs centaines.
+    const [lib, played, favorites, requests] = await Promise.all([
       playableLibrary(),
-      session.jfId ? cachedJellyfinMovies(session.jfId).catch(() => []) : Promise.resolve([]),
-      session.jfId ? cachedJellyfinSeries(session.jfId).catch(() => []) : Promise.resolve([]),
+      session.jfId ? cachedJellyfinPlayed(session.jfId).catch(() => []) : Promise.resolve([]),
+      session.jfId ? cachedJellyfinFavorites(session.jfId).catch(() => []) : Promise.resolve([]),
       config.jellyseerr.apiKey ? getPlayerRequests(session).catch(() => []) : Promise.resolve([]),
     ]);
 
@@ -103,8 +106,10 @@ export async function GET(req: NextRequest) {
           };
         });
 
-    const fromJellyfin = (items: JellyfinItem[], type: "movie" | "series", pick: (i: JellyfinItem) => boolean) =>
-      items.filter(pick).map((item): PlayerListItem => {
+    // Le type vient de l'élément lui-même : ces deux listes mélangent films et séries.
+    const fromJellyfin = (items: JellyfinItem[]) =>
+      items.map((item): PlayerListItem => {
+        const type: "movie" | "series" = item.Type === "Series" ? "series" : "movie";
         const tmdbRaw = getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "tmdb");
         const tmdbId = tmdbRaw ? Number.parseInt(tmdbRaw, 10) || null : null;
         const entry = tmdbId ? (type === "series" ? seriesLibrary.get(tmdbId) : movieLibrary.get(tmdbId)) : undefined;
@@ -131,14 +136,8 @@ export async function GET(req: NextRequest) {
       // voir », qui dit exactement la même chose de ce côté-ci.
       toWatch: fromWatchlist(["to_watch", "to_request"]),
       abandoned: fromWatchlist(["abandoned"]),
-      watched: [
-        ...fromJellyfin(jfMovies, "movie", (i) => Boolean(i.UserData?.Played)),
-        ...fromJellyfin(jfSeries, "series", (i) => Boolean(i.UserData?.Played)),
-      ].sort(byTitle),
-      favorites: [
-        ...fromJellyfin(jfMovies, "movie", (i) => Boolean(i.UserData?.IsFavorite)),
-        ...fromJellyfin(jfSeries, "series", (i) => Boolean(i.UserData?.IsFavorite)),
-      ].sort(byTitle),
+      watched: fromJellyfin(played).sort(byTitle),
+      favorites: fromJellyfin(favorites).sort(byTitle),
     } satisfies PlayerListsPayload;
   }, "player-lists");
 }

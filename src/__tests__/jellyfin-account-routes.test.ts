@@ -184,7 +184,7 @@ describe("POST /api/jellyfin/played — cache", () => {
     } as unknown as NextRequest);
 
     expect(res.status).toBe(200);
-    expect(mockInvalidateKey).toHaveBeenCalledWith("jf:movies:jf-louis");
-    expect(mockInvalidateKey).toHaveBeenCalledWith("jf:series:jf-louis");
+    expect(mockInvalidateKey).toHaveBeenCalledWith("jf:played:jf-louis");
+    expect(mockInvalidateKey).toHaveBeenCalledWith("jf:favorites:jf-louis");
   });
 });

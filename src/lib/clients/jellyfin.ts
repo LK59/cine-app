@@ -335,7 +335,21 @@ export const jellyfin = {
   unmarkFavorite: (userId: string, itemId: string) =>
     fetchJson<void>(`${url}/Users/${userId}/FavoriteItems/${itemId}`, { method: "DELETE", headers }),
 
-  // `Filters=IsFavorite` est le pendant exact de `IsPlayed` utilisé plus haut pour « déjà vu ».
+  /**
+   * Ce que cette personne a vu, et ce qu'elle a mis en favori.
+   *
+   * Des requêtes ciblées, et non un balayage de la bibliothèque filtré ensuite : l'énumération par
+   * compte (`/Users/{id}/Items` sans filtre) est incomplète sur cette installation — 546 films
+   * contre 674 vus par le serveur, pour un compte administrateur — alors que ces deux-ci
+   * répondent juste. Elles sont aussi bien plus légères : quelques dizaines d'éléments au lieu de
+   * plusieurs centaines.
+   */
+  getPlayedItems: (userId: string) =>
+    fetchJson<{ Items: JellyfinItem[] }>(
+      `${url}/Users/${userId}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,
+      { headers }
+    ).then((res) => res.Items),
+
   getFavorites: (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
       `${url}/Users/${userId}/Items?Filters=IsFavorite&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,

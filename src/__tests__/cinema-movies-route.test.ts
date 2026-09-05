@@ -1,20 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { NextRequest } from "next/server";
 
 const mockCachedMovies = vi.fn();
 const mockCachedJellyfinMoviesAdmin = vi.fn();
 const mockCachedJellyfinMovies = vi.fn();
-const mockVerifySessionFull = vi.fn();
 
-vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
-vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerifySessionFull(...a) }));
-
-// La route lit la bibliothèque du compte connecté, et retombe sur la vue administrateur pour une
-// session sans compte Jellyfin (la connexion locale). Ces tests couvrent les deux chemins.
-function req(session: Record<string, unknown> | null = null): NextRequest {
-  mockVerifySessionFull.mockResolvedValue(session);
-  return { cookies: { get: () => ({ value: "t" }) } } as unknown as NextRequest;
-}
 // Full replace, not importOriginal — the real module's other exports pull in every client
 // (radarr/sonarr/jellyseerr/...), each destructuring its own config.* section that a minimal
 // mock config wouldn't provide (same issue hit building the trickplay preview route earlier this
@@ -55,7 +44,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET(req())).json();
+    const body = await (await GET()).json();
 
     expect(body.genres).toEqual([]);
     expect(body.spotlight).toEqual([]);
@@ -66,7 +55,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([]); // no match
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET(req())).json();
+    const body = await (await GET()).json();
 
     expect(body.genres).toEqual([]);
   });
@@ -76,7 +65,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET(req())).json();
+    const body = await (await GET()).json();
 
     expect(body.genres.sort()).toEqual(["Action", "Comedy"]);
     expect(body.rows.Action).toHaveLength(1);
@@ -89,7 +78,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET(req())).json();
+    const body = await (await GET()).json();
 
     expect(body.rows.Action[0].imdbRating).toBe("8.0");
   });
@@ -99,7 +88,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "b".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET(req())).json();
+    const body = await (await GET()).json();
 
     expect(body.rows.Action[0].jellyfinItemId).toBe("b".repeat(32));
   });
@@ -115,7 +104,7 @@ describe("GET /api/cinema/movies", () => {
     );
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET(req())).json();
+    const body = await (await GET()).json();
 
     expect(body.spotlight).toHaveLength(10);
     // Most recently added (2024-01-12, tmdbId 111) comes first.
@@ -124,31 +113,20 @@ describe("GET /api/cinema/movies", () => {
   });
 });
 
-describe("GET /api/cinema/movies — whose library", () => {
-  const jfItem = { Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } };
-
-  it("reads the signed-in account's own library", async () => {
+describe("GET /api/cinema/movies — which Jellyfin view", () => {
+  // Mesuré sur l'installation : `/Users/{id}/Items` renvoie 546 films là où la vue serveur en
+  // compte 674, pour un compte administrateur ayant accès à tout — le parcours par vues ne
+  // descend pas dans tout l'arbre. Cent vingt-huit films manquaient au catalogue, dont un que
+  // Louis regardait : sa reprise ouvrait une fiche introuvable, donc rien.
+  it("reads the server-wide view, not a per-account one", async () => {
     mockCachedMovies.mockResolvedValue([radarrMovie()]);
-    mockCachedJellyfinMovies.mockResolvedValue([jfItem]);
-    mockCachedJellyfinMoviesAdmin.mockResolvedValue([]);
+    mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    await GET(req({ jfId: "jf-louis" }));
-
-    expect(mockCachedJellyfinMovies).toHaveBeenCalledWith("jf-louis");
-    expect(mockCachedJellyfinMoviesAdmin).not.toHaveBeenCalled();
-  });
-
-  // La connexion locale n'a pas de compte Jellyfin : sans ce repli, l'administrateur verrait un
-  // catalogue vide.
-  it("falls back to the admin view for a session with no Jellyfin account", async () => {
-    mockCachedMovies.mockResolvedValue([radarrMovie()]);
-    mockCachedJellyfinMoviesAdmin.mockResolvedValue([jfItem]);
-
-    const { GET } = await import("@/app/api/cinema/movies/route");
-    await GET(req({ role: "admin" }));
+    const body = await (await GET()).json();
 
     expect(mockCachedJellyfinMoviesAdmin).toHaveBeenCalled();
     expect(mockCachedJellyfinMovies).not.toHaveBeenCalled();
+    expect(body.spotlight).toHaveLength(1);
   });
 });
