@@ -115,11 +115,16 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   if (audioTrack && audioDelivery(audioTrack, file) === "transcode") {
     const rate = audioTrack.audio?.sampleRate ?? 48000;
     const channels = audioTrack.audio?.channels ?? 2;
-    trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on demande l'AAC en ${channels} canaux`);
+    trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on cherche un codec en ${channels} canaux`);
     const plan = await chooseTranscodePlan(rate, channels);
     if (!plan) {
       return `ce navigateur n'accepte pas ${audioTrack.codecId} et ne sait produire aucun codec de remplacement`;
     }
+    // Le codec retenu, pas celui qu'on aurait préféré : l'AAC vient en premier dans la liste des
+    // candidats, mais un navigateur qui ne sait pas l'encoder en multicanal repart avec l'Opus, et
+    // un relevé qui annonce l'AAC pour finir sur l'Opus laisse chercher une contradiction qui
+    // n'existe pas.
+    trace(`chemin : codec de remplacement retenu — ${plan.codec} en ${plan.channels} canaux`);
     if (plan.channels !== channels) {
       // Deux canaux d'ambiance en moins valent mieux que le chemin canevas, qui décode un 4K HDR
       // en logiciel et, sur une source Dolby Vision, ne sait pas convertir l'image.
