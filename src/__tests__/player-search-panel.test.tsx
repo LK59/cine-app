@@ -22,7 +22,7 @@ vi.mock("@/components/player/PlayerPanelFrame", () => ({
   PlayerPanelFrame: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-import { PlayerSearchPanel } from "@/components/player/PlayerSearchPanel";
+import { PlayerSearchPanel, forgetSearchQuery } from "@/components/player/PlayerSearchPanel";
 
 const OWNED = {
   tmdbId: 603, title: "Matrix", year: 1999, posterPath: null, type: "movie",
@@ -45,6 +45,7 @@ async function type(term: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  forgetSearchQuery();
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <PlayerSearchPanel />
@@ -129,5 +130,25 @@ describe("PlayerSearchPanel — clearing the field", () => {
     await waitFor(() => expect(screen.queryByText("Matrix")).toBeNull());
     expect(screen.getByText("player.search.hint")).toBeTruthy();
     expect(screen.queryByText("player.search.filterAll")).toBeNull();
+  });
+});
+
+// Ouvrir une fiche depuis les résultats puis revenir doit ramener la recherche telle quelle :
+// le panneau est démonté entre les deux, donc la requête vit en dehors du composant.
+describe("PlayerSearchPanel — remembering the query", () => {
+  it("restores the last query after being closed and reopened", async () => {
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+    expect(await screen.findByText("Matrix")).toBeTruthy();
+
+    cleanup();
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <PlayerSearchPanel />
+      </SWRConfig>
+    );
+
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("matrix");
+    expect(await screen.findByText("Matrix")).toBeTruthy();
   });
 });

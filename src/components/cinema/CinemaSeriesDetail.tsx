@@ -55,11 +55,22 @@ export function CinemaSeriesDetail({
   item,
   onClose,
   onSelectSimilar,
+  /**
+   * Cette fiche est recouverte par une autre.
+   *
+   * Elle reste montée, avec ses données et son défilement, pour qu'un retour la retrouve intacte
+   * plutôt que de la reconstruire — c'est ce qui faisait recharger la rangée « Titres similaires »
+   * en revenant du titre qu'on venait d'y ouvrir. Dessous, elle ne prend ni le clavier ni le
+   * focus : deux fiches montées ensemble écoutent Échap toutes les deux, et celle du dessous
+   * ramenait le focus sur son propre menu à chaque flèche.
+   */
+  underneath = false,
 }: {
   item: CinemaSeries;
   onClose: () => void;
   // Same role as CinemaMovieDetail's — swaps the subject instead of stacking sheets.
   onSelectSimilar?: (item: CinemaSeries) => void;
+  underneath?: boolean;
 }) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -118,11 +129,11 @@ export function CinemaSeriesDetail({
   useEffect(() => {
     // Tant que le spectateur n'a pas bougé lui-même — voir la fiche film pour le détail.
     const frame = requestAnimationFrame(() => {
-      if (userMovedFocus.current) return;
+      if (underneath || userMovedFocus.current) return;
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode, item.sonarrId]);
+  }, [playerEnabled, info?.trailerKey, episodesData?.nextEpisode, item.sonarrId, underneath]);
 
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
   // closing the player comes back here, and stands down from the keyboard while it's up there.
@@ -130,13 +141,14 @@ export function CinemaSeriesDetail({
   const playerOwnsKeyboard = playback.mode === "full";
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
-    if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
+    if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
       focusFirstAction(containerRef.current);
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
-  }, [playerOwnsKeyboard]);
+  }, [playerOwnsKeyboard, underneath]);
 
   useEffect(() => {
+    if (underneath) return;
     function onKey(e: KeyboardEvent) {
       // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
       // itself — same guard TrailerModal needed, for the same reason.
@@ -161,7 +173,7 @@ export function CinemaSeriesDetail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showEpisodes, playerOwnsKeyboard]);
+  }, [requestClose, showTrailer, showEpisodes, playerOwnsKeyboard, underneath]);
 
   // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
   // local : c'est une intention, et rien d'autre ne la connaît.
@@ -207,6 +219,8 @@ export function CinemaSeriesDetail({
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
+      inert={underneath}
+      aria-hidden={underneath || undefined}
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
       {item.backdropUrl && (

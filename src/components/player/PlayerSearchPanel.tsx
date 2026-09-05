@@ -28,6 +28,11 @@ const DEBOUNCE_MS = 260;
  */
 let lastQuery = "";
 
+/** Oublie la recherche mémorisée. N'existe que pour repartir d'une page blanche dans les tests. */
+export function forgetSearchQuery() {
+  lastQuery = "";
+}
+
 /**
  * La recherche du lecteur.
  *

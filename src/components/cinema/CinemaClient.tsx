@@ -7,7 +7,7 @@ import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -511,6 +511,39 @@ export function CinemaClient() {
     requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
+  /**
+   * La pile de fiches.
+   *
+   * Ouvrir un titre depuis « Titres similaires » n'échangeait que le sujet d'une fiche unique :
+   * en revenant, le composant remontait le titre de départ de zéro, et sa rangée de titres
+   * similaires se reconstruisait sous les yeux. La fiche recouverte reste donc montée, dessous
+   * et inerte, et le retour la retrouve telle qu'on l'avait laissée.
+   *
+   * `useRouteBehind` dit ce que l'entrée d'historique courante recouvre — la seule façon de le
+   * savoir après un rechargement, où rien de ce qui précède n'est monté.
+   *
+   * Un seul tableau, et une clé par titre : deux emplacements distincts feraient glisser la
+   * fiche du dessous d'un cran au retour, donc la démonteraient — exactement ce qu'on évite ici.
+   */
+  const noop = useCallback(() => {}, []);
+  const behind = useRouteBehind();
+  const movieStack = useMemo(() => {
+    if (!selectedItem) return [];
+    const under =
+      behind && behind.tab === "movies" && behind.film !== null && behind.film !== route.film
+        ? moviesById.get(behind.film) ?? null
+        : null;
+    return under ? [under, selectedItem] : [selectedItem];
+  }, [selectedItem, behind, moviesById, route.film]);
+  const seriesStack = useMemo(() => {
+    if (!seriesSelectedItem) return [];
+    const under =
+      behind && behind.tab === "series" && behind.serie !== null && behind.serie !== route.serie
+        ? seriesById.get(behind.serie) ?? null
+        : null;
+    return under ? [under, seriesSelectedItem] : [seriesSelectedItem];
+  }, [seriesSelectedItem, behind, seriesById, route.serie]);
+
   // Goes through leaveCinema rather than a bare router.push: playback has to survive the exit
   // (see the helper), and its fallback covers a click landing mid-redeploy.
   const exitButton = (
@@ -998,12 +1031,32 @@ export function CinemaClient() {
       {/* Effacées tant qu'une fiche TMDB ou une fiche personne est ouverte par-dessus : elles
           partagent le même plan, et deux fiches montées ensemble écoutent Échap toutes les deux.
           L'adresse les garde, le retour les rouvre. */}
-      {!sheetAbove && selectedItem && (
-        <CinemaMovieDetail item={selectedItem} onClose={closeDetail} onSelectSimilar={openDetail} />
-      )}
-      {!sheetAbove && seriesSelectedItem && (
-        <CinemaSeriesDetail item={seriesSelectedItem} onClose={closeSeriesDetail} onSelectSimilar={openSeriesDetail} />
-      )}
+      {!sheetAbove &&
+        movieStack.map((film, i) => {
+          const top = i === movieStack.length - 1;
+          return (
+            <CinemaMovieDetail
+              key={film.radarrId}
+              item={film}
+              underneath={!top}
+              onClose={top ? closeDetail : noop}
+              onSelectSimilar={top ? openDetail : undefined}
+            />
+          );
+        })}
+      {!sheetAbove &&
+        seriesStack.map((serie, i) => {
+          const top = i === seriesStack.length - 1;
+          return (
+            <CinemaSeriesDetail
+              key={serie.sonarrId}
+              item={serie}
+              underneath={!top}
+              onClose={top ? closeSeriesDetail : noop}
+              onSelectSimilar={top ? openSeriesDetail : undefined}
+            />
+          );
+        })}
     </div>,
     document.body
   );

@@ -51,12 +51,23 @@ export function CinemaMovieDetail({
   item,
   onClose,
   onSelectSimilar,
+  /**
+   * Cette fiche est recouverte par une autre.
+   *
+   * Elle reste montée, avec ses données et son défilement, pour qu'un retour la retrouve intacte
+   * plutôt que de la reconstruire — c'est ce qui faisait recharger la rangée « Titres similaires »
+   * en revenant du titre qu'on venait d'y ouvrir. Dessous, elle ne prend ni le clavier ni le
+   * focus : deux fiches montées ensemble écoutent Échap toutes les deux, et celle du dessous
+   * ramenait le focus sur son propre menu à chaque flèche.
+   */
+  underneath = false,
 }: {
   item: CinemaMovie;
   onClose: () => void;
   // Lets the "Titres similaires" row swap this sheet's subject for another title, rather than
   // stacking a second sheet on top of the first.
   onSelectSimilar?: (item: CinemaMovie) => void;
+  underneath?: boolean;
 }) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -136,11 +147,11 @@ export function CinemaMovieDetail({
      * cliqué, la première ligne reste la bonne cible.
      */
     const frame = requestAnimationFrame(() => {
-      if (userMovedFocus.current) return;
+      if (underneath || userMovedFocus.current) return;
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, info?.trailerKey, item.radarrId]);
+  }, [playerEnabled, info?.trailerKey, item.radarrId, underneath]);
 
   // Stays open underneath the player instead of closing when Lecture starts, so dismissing the
   // player lands you back on the sheet you started from rather than on the browse grid. What
@@ -153,13 +164,14 @@ export function CinemaMovieDetail({
   const playerOwnsKeyboard = playback.mode === "full";
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
-    if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
+    if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
       focusFirstAction(containerRef.current);
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
-  }, [playerOwnsKeyboard]);
+  }, [playerOwnsKeyboard, underneath]);
 
   useEffect(() => {
+    if (underneath) return;
     function onKey(e: KeyboardEvent) {
       // The player is on top and owns the keyboard — see above.
       if (playerOwnsKeyboard) return;
@@ -188,7 +200,7 @@ export function CinemaMovieDetail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showSynopsis, playerOwnsKeyboard]);
+  }, [requestClose, showTrailer, showSynopsis, playerOwnsKeyboard, underneath]);
 
   // « À voir » reste local : c'est une intention, et rien d'autre ne la connaît. « Vu » et
   // « Favori » sont partis chez Jellyfin (voir plus haut). Un titre peut donc être à la fois dans
@@ -217,6 +229,8 @@ export function CinemaMovieDetail({
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
+      inert={underneath}
+      aria-hidden={underneath || undefined}
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
     >
       {item.backdropUrl && (
