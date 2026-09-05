@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, SunMedium } from "lucide-react";
-import { TONE_LEVELS, type ToneLevel } from "@/lib/hdrToSdr";
+import { TONE_LEVELS, type ToneLevel, type DisplayRange } from "@/lib/hdrToSdr";
 import { useT } from "@/components/TranslationProvider";
 import { useMediaSession } from "@/lib/useMediaSession";
 
@@ -44,6 +44,8 @@ interface PlayerControlsProps {
    * menu est pire qu'un réglage absent, parce qu'on l'essaie.
    */
   toneAvailable?: boolean;
+  /** Ce que l'écran répond, pour le dire à qui choisit — jamais pour choisir à sa place. */
+  toneScreen?: DisplayRange;
   toneLevel?: ToneLevel;
   onChangeToneLevel?: (level: ToneLevel) => void;
 }
@@ -96,6 +98,7 @@ export function PlayerControls({
   nextEpisode,
   onAdvance,
   toneAvailable = false,
+  toneScreen = "unknown",
   toneLevel = "off",
   onChangeToneLevel,
 }: PlayerControlsProps) {
@@ -1329,7 +1332,13 @@ export function PlayerControls({
             {menu === "tone" && (
               <>
                 <p className="border-b border-white/10 px-3 py-2 text-xs leading-5 text-white/50">
-                  {t('player.hdrTone.hint')}
+                  {t(
+                    toneScreen === "high"
+                      ? 'player.hdrTone.hintHdrScreen'
+                      : toneScreen === "standard"
+                        ? 'player.hdrTone.hint'
+                        : 'player.hdrTone.hintUnknownScreen'
+                  )}
                 </p>
                 {TONE_LEVELS.map((level) => (
                   <button

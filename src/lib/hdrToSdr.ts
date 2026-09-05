@@ -61,9 +61,20 @@ export function displayRange(): DisplayRange {
   return "unknown";
 }
 
-/** La correction n'a de sens que sur un fichier HDR affiché sur un écran qui ne l'est pas. */
-export function toneMappingApplies(fileIsHdr: boolean, range: DisplayRange = displayRange()): boolean {
-  return fileIsHdr && range === "standard";
+/**
+ * À qui l'option est offerte.
+ *
+ * À tout fichier HDR joué sur l'élément natif, sans condition d'écran — et c'est un revirement
+ * assumé. Tant que la détection décidait d'appliquer la correction, se tromper coûtait une image
+ * abîmée, et il fallait qu'elle soit sûre. Depuis que le défaut est « aucune », elle ne décide
+ * plus que de l'apparition d'une ligne de menu : la garder comme condition ne protégeait plus de
+ * rien et privait deux cas réels du réglage dont ils ont besoin — un écran HDR dont le système a
+ * désactivé le mode HDR, et un navigateur trop ancien pour connaître la question.
+ *
+ * Ce que l'écran répond sert donc à renseigner celui qui choisit, pas à choisir à sa place.
+ */
+export function toneMappingApplies(fileIsHdr: boolean): boolean {
+  return fileIsHdr;
 }
 
 const STORAGE_KEY = "cine.player.hdrTone";

@@ -38,12 +38,14 @@ describe("displayRange", () => {
   });
 });
 
+// Depuis que le défaut est « aucune », la détection ne décide plus d'appliquer quoi que ce soit :
+// l'option est offerte à tout fichier HDR, et ce que l'écran répond ne sert qu'à le dire. Un écran
+// HDR dont le système a coupé le mode HDR, ou un navigateur qui ne connaît pas la question, ne
+// doivent pas se retrouver privés du réglage.
 describe("toneMappingApplies", () => {
-  it("only corrects an HDR file on a screen known to be standard", () => {
-    expect(toneMappingApplies(true, "standard")).toBe(true);
-    expect(toneMappingApplies(true, "high")).toBe(false);
-    expect(toneMappingApplies(true, "unknown")).toBe(false);
-    expect(toneMappingApplies(false, "standard")).toBe(false);
+  it("offers the setting for any HDR file, and never for an SDR one", () => {
+    expect(toneMappingApplies(true)).toBe(true);
+    expect(toneMappingApplies(false)).toBe(false);
   });
 });
 

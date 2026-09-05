@@ -1358,6 +1358,8 @@
     "hdrTone": {
       "title": "Fit HDR to this screen",
       "hint": "This file is HDR and this screen is not. The correction brings back contrast and colour; it is tuned by eye, not measured.",
+      "hintHdrScreen": "This screen reports itself as HDR, so there should be nothing to correct. Turn this on only if the picture still looks washed out.",
+      "hintUnknownScreen": "This browser cannot say whether the screen is HDR. Turn this on only if the picture looks washed out.",
       "off": "None",
       "light": "Light",
       "medium": "Medium",

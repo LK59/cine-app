@@ -1358,6 +1358,8 @@
     "hdrTone": {
       "title": "Adapter le HDR à l'écran",
       "hint": "Ce fichier est en HDR, cet écran ne l'est pas. La correction rend le contraste et la couleur ; elle est réglée à l'œil, pas mesurée.",
+      "hintHdrScreen": "Cet écran se déclare HDR : il ne devrait y avoir rien à corriger. À n'activer que si l'image paraît malgré tout délavée.",
+      "hintUnknownScreen": "Ce navigateur ne sait pas dire si l'écran est HDR. À n'activer que si l'image paraît délavée.",
       "off": "Aucune",
       "light": "Légère",
       "medium": "Moyenne",

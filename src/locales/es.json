@@ -1358,6 +1358,8 @@
     "hdrTone": {
       "title": "Adaptar el HDR a la pantalla",
       "hint": "Este archivo es HDR y esta pantalla no lo es. La corrección devuelve contraste y color; está ajustada a ojo, no medida.",
+      "hintHdrScreen": "Esta pantalla se declara HDR: no debería haber nada que corregir. Actívalo solo si la imagen sigue pareciendo lavada.",
+      "hintUnknownScreen": "Este navegador no sabe si la pantalla es HDR. Actívalo solo si la imagen parece lavada.",
       "off": "Ninguna",
       "light": "Ligera",
       "medium": "Media",

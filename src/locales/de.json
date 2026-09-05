@@ -1358,6 +1358,8 @@
     "hdrTone": {
       "title": "HDR an den Bildschirm anpassen",
       "hint": "Diese Datei ist HDR, dieser Bildschirm nicht. Die Korrektur bringt Kontrast und Farbe zurück; sie ist nach Augenmaß eingestellt, nicht gemessen.",
+      "hintHdrScreen": "Dieser Bildschirm meldet sich als HDR, es sollte also nichts zu korrigieren geben. Nur einschalten, wenn das Bild trotzdem flau wirkt.",
+      "hintUnknownScreen": "Dieser Browser kann nicht sagen, ob der Bildschirm HDR ist. Nur einschalten, wenn das Bild flau wirkt.",
       "off": "Keine",
       "light": "Leicht",
       "medium": "Mittel",

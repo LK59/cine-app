@@ -433,7 +433,7 @@ export function ExperimentalPlayerHost({
   // `onElement` compte autant que le reste : sur le chemin canevas, c'est le shader qui convertit
   // le HDR pour de vrai, et le filtre — posé sur un élément vidéo alors caché — ne toucherait
   // rien. Un réglage sans effet dans un menu est pire qu'un réglage absent.
-  const toneAvailable = onElement && toneMappingApplies(info?.video?.isHdr ?? false, screenRange);
+  const toneAvailable = onElement && toneMappingApplies(info?.video?.isHdr ?? false);
   const toneActive = toneAvailable && toneLevel !== "off";
 
   const describeFile = useCallback(
@@ -1301,6 +1301,7 @@ export function ExperimentalPlayerHost({
             nextEpisode={nextEpisode}
             onAdvance={handleAdvance}
             toneAvailable={toneAvailable}
+            toneScreen={screenRange}
             toneLevel={toneLevel}
             onChangeToneLevel={chooseToneLevel}
           />
