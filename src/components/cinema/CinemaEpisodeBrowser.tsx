@@ -7,6 +7,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort } from "@/lib/format";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSheetBehind } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { useT } from "@/components/TranslationProvider";
@@ -69,7 +70,11 @@ export function CinemaEpisodeBrowser({
   // on slide-in-right/slide-out-right for why this gets a slide instead of every other Cinema
   // Mode overlay's plain fade: this is the one place a full screen genuinely replaces another
   // rather than layering on top of it.
-  const { closing, requestClose } = useDelayedClose(onClose, 220);
+  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
+  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
+  // Voir `useSheetBehind`.
+  const sheetBehind = useSheetBehind();
+  const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
 
   useEffect(() => {
     containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-season="true"]')?.focus();

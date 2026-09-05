@@ -15,7 +15,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
-import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaNavigate, useSheetBehind } from "@/lib/cinemaRoute";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
@@ -93,7 +93,11 @@ export function CinemaMovieDetail({
   // requested, instead of vanishing the instant onClose fires — see the hook's own doc comment.
   // Every close trigger below (Escape/Backspace, the back button, the auto-close-on-play effect)
   // calls requestClose() instead of onClose directly now.
-  const { closing, requestClose } = useDelayedClose(onClose, 220);
+  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
+  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
+  // Voir `useSheetBehind`.
+  const sheetBehind = useSheetBehind();
+  const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.

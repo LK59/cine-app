@@ -66,6 +66,22 @@ const EMPTY: CinemaRoute = {
 // behind" — where stepping back would leave the app entirely.
 const DEPTH_KEY = "cinemaDepth";
 
+/**
+ * Y avait-il déjà une fiche ouverte quand cette entrée a été empilée ?
+ *
+ * C'est la seule chose que l'historique ne dit pas de lui-même, et dont on a besoin pour fermer
+ * proprement : revenir d'une fiche vers *une autre fiche* ne doit pas jouer d'animation de
+ * sortie. Sinon l'écran du dessus s'efface, découvre l'accueil pendant deux dixièmes de seconde,
+ * et la fiche précédente entre par-dessus — on lisait donc « Film 2 → Accueil → Film 1 » là où il
+ * ne s'est rien passé d'autre qu'un retour.
+ */
+const BEHIND_KEY = "cinemaSheetBehind";
+
+/** Un titre, une personne : quelque chose est ouvert par-dessus la grille. */
+function hasSheet(route: CinemaRoute): boolean {
+  return route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+}
+
 function readNumber(params: URLSearchParams, key: string): number | null {
   const raw = params.get(key);
   if (!raw) return null;
@@ -147,6 +163,21 @@ export function useCinemaRoute(): CinemaRoute {
   return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY);
 }
 
+function readSheetBehind(): boolean {
+  return Boolean((window.history.state as Record<string, unknown> | null)?.[BEHIND_KEY]);
+}
+
+/**
+ * Vrai quand fermer l'écran courant en découvrira un autre du même genre.
+ *
+ * Les fiches s'en servent pour supprimer leur animation de sortie dans ce cas précis : le retour
+ * est alors instantané, et l'échange se fait dans un seul rendu — l'ancienne fiche s'en va et la
+ * précédente apparaît au même moment, sans que l'accueil n'apparaisse entre les deux.
+ */
+export function useSheetBehind(): boolean {
+  return useSyncExternalStore(subscribe, readSheetBehind, () => false);
+}
+
 function currentDepth(): number {
   const state = window.history.state as Record<string, unknown> | null;
   const depth = state?.[DEPTH_KEY];
@@ -162,7 +193,13 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
   const depth = currentDepth();
   // Spread whatever Next put in history.state rather than replacing it — its router reads its own
   // keys back on popstate.
-  const state = { ...(window.history.state ?? {}), [DEPTH_KEY]: mode === "push" ? depth + 1 : depth };
+  const state = {
+    ...(window.history.state ?? {}),
+    [DEPTH_KEY]: mode === "push" ? depth + 1 : depth,
+    // Ce qu'on laisse derrière soi, retenu au moment où on l'empile — la seule occasion de le
+    // savoir. Un `replace` ne change pas ce qui est en dessous, donc il garde la valeur en place.
+    [BEHIND_KEY]: mode === "push" ? hasSheet(getSnapshot()) : (window.history.state?.[BEHIND_KEY] ?? false),
+  };
   if (mode === "push") window.history.pushState(state, "", url);
   else window.history.replaceState(state, "", url);
   emit();

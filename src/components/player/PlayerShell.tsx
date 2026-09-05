@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind } from "@/lib/cinemaRoute";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
 import { PlayerDrawer } from "./PlayerDrawer";
@@ -70,8 +70,12 @@ export function PlayerShell() {
   const search = useExitDelay(route.search, EXIT_MS);
   const list = useExitDelay(route.list, EXIT_MS);
   const account = useExitDelay(route.account, EXIT_MS);
-  const person = useExitDelay(route.person !== null, EXIT_MS);
-  const discover = useExitDelay(route.discover !== null, EXIT_MS);
+  // Les fiches ne s'effacent pas quand une autre attend derrière : leur sortie découvrirait
+  // l'accueil le temps de l'animation, avant que la précédente n'entre par-dessus. Voir
+  // `useSheetBehind`.
+  const sheetExitMs = useSheetBehind() ? 0 : EXIT_MS;
+  const person = useExitDelay(route.person !== null, sheetExitMs);
+  const discover = useExitDelay(route.discover !== null, sheetExitMs);
 
   // L'identifiant survit à sa disparition de l'adresse, le temps que la fiche finisse de sortir :
   // sans lui, elle se viderait de son contenu avant de s'en aller.

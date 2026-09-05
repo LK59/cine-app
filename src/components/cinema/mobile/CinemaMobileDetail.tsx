@@ -8,6 +8,7 @@ import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, 
 import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSheetBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -61,7 +62,11 @@ export function CinemaMobileDetail({
   const playback = usePlayback();
   const playerEnabled = usePlayerEnabled();
   const [showTrailer, setShowTrailer] = useState(false);
-  const { closing, requestClose } = useDelayedClose(onClose, 220);
+  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
+  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
+  // Voir `useSheetBehind`.
+  const sheetBehind = useSheetBehind();
+  const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
   const similar = useCinemaSimilar(item, mediaType);
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.

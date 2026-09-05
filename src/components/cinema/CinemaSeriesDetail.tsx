@@ -9,7 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
-import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -89,7 +89,11 @@ export function CinemaSeriesDetail({
   const [logoErrored, setLogoErrored] = useState(false);
 
   // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
-  const { closing, requestClose } = useDelayedClose(onClose, 220);
+  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
+  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
+  // Voir `useSheetBehind`.
+  const sheetBehind = useSheetBehind();
+  const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -133,5 +133,31 @@ describe("openLibraryTitle", () => {
     act(() => openLibraryTitle("movie", 42));
     expect(window.location.hash).toContain("recherche=1");
     expect(window.location.hash).toContain("film=42");
+  });
+});
+
+describe("useSheetBehind", () => {
+  // Le symptôme rapporté : Accueil → Film 1 → Film 2, puis à la fermeture de Film 2 on voyait
+  // « Film 2 → Accueil → Film 1 ». L'accueil n'était que l'animation de sortie de Film 2, jouée
+  // avant le retour, pendant laquelle il n'y avait effectivement rien d'autre à l'écran.
+  it("knows whether closing lands on another sheet or on the grid", () => {
+    const { result } = renderHook(() => useSheetBehind());
+    expect(result.current).toBe(false);
+
+    act(() => openLibraryTitle("movie", 1));
+    expect(result.current).toBe(false); // derrière le premier film : la grille
+
+    act(() => openLibraryTitle("movie", 2));
+    expect(result.current).toBe(true); // derrière le second : le premier
+  });
+
+  // Un `replace` ne change pas ce qu'il y a en dessous — changer d'onglet ne doit pas faire
+  // croire qu'une fiche attend.
+  it("is untouched by a replace", () => {
+    const { result } = renderHook(() => useSheetBehind());
+    act(() => openLibraryTitle("movie", 1));
+    act(() => openLibraryTitle("movie", 2));
+    act(() => cinemaNavigate({ tab: "series" }, "replace"));
+    expect(result.current).toBe(true);
   });
 });
