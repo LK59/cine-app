@@ -137,12 +137,18 @@ export function CinemaMobileClient() {
   // same cadence as the dashboard's own hero, kept in this screen's own visual language (poster
   // key art, Lire / Plus d'infos). L'index et la rotation vivent dans CinemaMobileHero : ils ne
   // regardent que lui, et les y laisser faisait redessiner tout cet écran à chaque changement.
+  // Une liste par onglet, et les deux bannières restent montées — voir plus bas.
+  //
   // `useMemo` : sans lui, une nouvelle référence de tableau à chaque rendu de cet écran défaisait
   // la mémoïsation de la bannière, qu'on avait justement extraite pour qu'elle ne se redessine
   // pas au moindre battement.
-  const heroItems = useMemo(
-    () => (payload?.recentlyAdded?.length ? payload.recentlyAdded : payload?.spotlight ?? []).slice(0, 8),
-    [payload]
+  const heroMovies = useMemo(
+    () => (movies?.recentlyAdded?.length ? movies.recentlyAdded : movies?.spotlight ?? []).slice(0, 8),
+    [movies]
+  );
+  const heroSeries = useMemo(
+    () => (series?.recentlyAdded?.length ? series.recentlyAdded : series?.spotlight ?? []).slice(0, 8),
+    [series]
   );
   const myList = isSeries ? myListSeries : myListMovies;
 
@@ -289,21 +295,37 @@ export function CinemaMobileClient() {
             below the fold — the "broken banner". The same pieces laid out as a row (small poster,
             text and actions beside it) stay entirely on screen at any landscape height. The rows
             underneath are untouched in both orientations. */}
-        {/* `key` par onglet : la bannière tient son propre index et son propre minuteur (voir
-            useRotatingIndex), et une seule instance partagée faisait donc défiler les films et les
-            séries au même rythme, sur la même position. Deux instances, deux progressions — c'est
-            déjà ce que fait l'écran du bureau, avec deux états séparés. */}
-        <CinemaMobileHero
-          key={mediaType}
-          items={heroItems}
-          // En pause dès qu'un écran la recouvre — les panneaux du rail compris : laisser une
-          // bande-annonce tourner derrière « Ma liste » consomme des données mobiles pour une
-          // image que personne ne voit.
-          paused={selected !== null || searchOpen || route.list || route.account || route.menu}
-          short={short}
-          onPlay={playHero}
-          onOpen={openHero}
-        />
+        {/* Deux bannières montées en permanence, celle de l'onglet inactif simplement cachée.
+            Une seule instance partagée faisait défiler les films et les séries au même rythme, sur
+            la même position ; une `key` par onglet les aurait séparées mais en repartant de zéro à
+            chaque aller-retour. Montées toutes les deux, chacune garde son index — et le `paused`
+            arrête son minuteur pendant qu'on regarde l'autre : le défilement reprend là où il en
+            était.
+
+            Ça ne coûte rien tant qu'on n'a pas ouvert l'onglet Séries : sa charge utile est
+            différée, donc sa liste est vide et la bannière ne rend rien.
+
+            `hidden` plutôt qu'un démontage : les affiches déjà chargées le restent, le retour est
+            instantané, et rien n'est peint pendant ce temps. */}
+        {([
+          ["movies", heroMovies],
+          ["series", heroSeries],
+        ] as const).map(([tab, items]) => (
+          <div key={tab} hidden={mediaType !== tab}>
+            <CinemaMobileHero
+              items={items}
+              // En pause dès qu'un écran la recouvre — l'autre onglet, les panneaux du rail, une
+              // fiche : laisser une bande-annonce tourner derrière consomme des données mobiles
+              // pour une image que personne ne voit.
+              paused={
+                mediaType !== tab || selected !== null || searchOpen || route.list || route.account || route.menu
+              }
+              short={short}
+              onPlay={playHero}
+              onOpen={openHero}
+            />
+          </div>
+        ))}
 
         {/* Continue watching — landscape stills with a progress bar and the same resume wording
             the desktop cards use. */}

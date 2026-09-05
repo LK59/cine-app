@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Film, Tv, User } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { useT } from "@/components/TranslationProvider";
@@ -15,8 +16,11 @@ export type ResultKind = "movie" | "series" | "person";
  * portent le même nom.
  *
  * Aucun nom d'outil n'apparaît : « Film » et « Série », jamais la provenance.
+ *
+ * Mémoïsée : une filmographie en compte deux cents, et l'écran qui les porte se redessine à
+ * chaque changement d'adresse.
  */
-export function PlayerResultCard({
+export const PlayerResultCard = memo(function PlayerResultCard({
   kind,
   title,
   subtitle,
@@ -84,4 +88,4 @@ export function PlayerResultCard({
       {subtitle && <p className="mt-0.5 truncate text-[11px] text-slate-500">{subtitle}</p>}
     </button>
   );
-}
+});

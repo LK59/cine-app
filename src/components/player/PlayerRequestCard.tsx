@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, CalendarClock, CircleCheck, CircleAlert, X } from "lucide-react";
+import { Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, X } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { useT } from "@/components/TranslationProvider";
 import type { PlayerRequest } from "@/lib/playerRequests";
@@ -10,6 +10,7 @@ const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
   processing: Clock,
   available: CircleCheck,
+  removed: CircleSlash,
   failed: CircleAlert,
 };
 
@@ -17,6 +18,7 @@ const STATE_TONE: Record<PlayerRequestState, string> = {
   unreleased: "bg-white/10 text-slate-300",
   processing: "bg-accent-500/20 text-accent-300",
   available: "bg-emerald-500/15 text-emerald-300",
+  removed: "bg-white/10 text-slate-400",
   failed: "bg-red-500/15 text-red-300",
 };
 
@@ -86,7 +88,12 @@ export function PlayerRequestCard({
         </span>
       </button>
 
-      {request.canCancel && request.state !== "available" && (
+      {/* La croix apparaît partout où la demande peut être retirée — y compris une fois le titre
+          arrivé. Elle était cachée sur les demandes abouties, c'est-à-dire sur la quasi-totalité
+          de la liste : la croix semblait donc apparaître au hasard, et rien ne permettait de faire
+          le ménage. Les seules qui n'en ont pas sont celles que Jellyseerr refuse lui-même de
+          supprimer, et elles disent pourquoi juste au-dessus. */}
+      {request.canCancel && (
         <button
           type="button"
           onClick={onCancel}

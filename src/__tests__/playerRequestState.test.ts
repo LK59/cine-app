@@ -50,3 +50,24 @@ describe("isReleased", () => {
     expect(isReleased("pas une date", now)).toBe(true);
   });
 });
+
+describe("resolveRequestState — a title that was there and no longer is", () => {
+  // Trouvé en direct sur trois vieilles demandes affichées « En cours » depuis des mois :
+  // `media.status: 7` (supprimé chez Jellyseerr), demande marquée terminée, et les trois titres
+  // absents de Radarr. Aucune des deux énumérations ne le disait, et l'état retombait donc sur
+  // « en cours » — un chargement qui ne finit jamais.
+  it("says a deleted or blacklisted title is no longer available, not in progress", () => {
+    expect(resolveRequestState({ requestStatus: 5, mediaStatus: 7, released: true })).toBe("removed");
+    expect(resolveRequestState({ requestStatus: 2, mediaStatus: 6, released: true })).toBe("removed");
+  });
+
+  it("still prefers availability when both are somehow claimed", () => {
+    expect(resolveRequestState({ mediaStatus: 5, released: true })).toBe("available");
+  });
+
+  // Un titre supprimé mais pas encore sorti n'a pas de sens ; « plus disponible » reste la
+  // meilleure réponse, et surtout elle ne dépend pas d'une date.
+  it("reports removal before anything the release date could say", () => {
+    expect(resolveRequestState({ requestStatus: 5, mediaStatus: 7, released: false })).toBe("removed");
+  });
+});

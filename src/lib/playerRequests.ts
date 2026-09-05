@@ -134,7 +134,15 @@ async function decorate(requests: JellyseerrRequest[]): Promise<PlayerRequest[]>
   // les cinq demandes en cours se retrouvaient noyées au milieu de quarante titres déjà là. Or
   // c'est exactement l'inverse qu'on vient voir : « où en sont mes demandes ». À l'intérieur de
   // chaque groupe, le plus récemment bougé en premier.
-  const RANK: Record<PlayerRequestState, number> = { processing: 0, unreleased: 1, failed: 2, available: 3 };
+  // Ce qu'on attend, puis ce qui n'a pas marché, puis ce qui est arrivé : l'ordre des questions
+  // qu'on se pose en ouvrant cet écran.
+  const RANK: Record<PlayerRequestState, number> = {
+    processing: 0,
+    unreleased: 1,
+    failed: 2,
+    removed: 3,
+    available: 4,
+  };
   return decorated.sort((a, b) => {
     if (RANK[a.state] !== RANK[b.state]) return RANK[a.state] - RANK[b.state];
     return Date.parse(b.changedAt) - Date.parse(a.changedAt);

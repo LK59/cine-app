@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, User, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, User, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerResultCard } from "./PlayerResultCard";
+import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 
 interface PersonCredit {
@@ -34,6 +35,120 @@ interface PersonPayload {
 }
 
 const TMDB_PROFILE = "https://image.tmdb.org/t/p/w300";
+
+/**
+ * Les photos de la personne, en une rangée qu'on fait défiler.
+ *
+ * Elles existaient déjà côté gestion et n'avaient pas suivi ici. Elles arrivent d'une route à
+ * part, en chargement différé : la fiche s'affiche sans les attendre, et la rangée apparaît quand
+ * elles sont là — plutôt que de retarder la filmographie, qui est ce qu'on vient voir.
+ */
+function PhotoRow({ photos, onOpen, label }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string }) {
+  if (photos.length === 0) return null;
+  return (
+    <div className="mt-8">
+      <h2 className="mb-3 font-display text-lg font-semibold text-white">{label}</h2>
+      <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-2">
+        {photos.map((photo, i) => (
+          <button
+            key={photo.filePath}
+            type="button"
+            onClick={() => onOpen(i)}
+            className="h-44 shrink-0 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition hover:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:h-56"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo.filePath}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-auto object-cover"
+              style={{ aspectRatio: photo.aspectRatio || 2 / 3 }}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Une photo en grand.
+ *
+ * Portée dans document.body et au-dessus de tout le reste : c'est la seule chose à l'écran tant
+ * qu'elle est ouverte. Échap et les flèches, comme partout ailleurs dans cette application.
+ */
+function PhotoViewer({
+  photos,
+  index,
+  onIndex,
+  onClose,
+}: {
+  photos: PersonPhoto[];
+  index: number;
+  onIndex: (i: number) => void;
+  onClose: () => void;
+}) {
+  const prev = useCallback(() => onIndex((index - 1 + photos.length) % photos.length), [index, photos.length, onIndex]);
+  const next = useCallback(() => onIndex((index + 1) % photos.length), [index, photos.length, onIndex]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!["Escape", "Backspace", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "ArrowLeft") prev();
+      else if (e.key === "ArrowRight") next();
+      else onClose();
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [prev, next, onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 grid animate-fade-in place-items-center bg-black/95 p-4"
+      style={{ zIndex: 60 }}
+      onClick={onClose}
+    >
+      {photos.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); prev(); }}
+            className="btn-overlay absolute left-3 top-1/2 -translate-y-1/2"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); next(); }}
+            className="btn-overlay absolute right-3 top-1/2 -translate-y-1/2"
+          >
+            <ChevronRight size={22} />
+          </button>
+        </>
+      )}
+      <button type="button" onClick={onClose} className="btn-overlay absolute right-3 top-3">
+        <X size={20} />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photos[index].fullPath}
+        alt=""
+        decoding="async"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] max-w-full rounded-xl object-contain"
+      />
+      <span className="absolute bottom-5 rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+        {index + 1} / {photos.length}
+      </span>
+    </div>,
+    document.body
+  );
+}
 const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
 
 /**
@@ -50,13 +165,23 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const [expanded, setExpanded] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const { data, isLoading } = useSWR<PersonPayload>(`/api/tmdb/person/${tmdbId}`, fetcher, {
     revalidateOnFocus: false,
   });
+  // Une requête à part, qui ne retarde pas la fiche : la rangée apparaît quand elle arrive.
+  const { data: photoData } = useSWR<{ photos: PersonPhoto[] }>(`/api/tmdb/person/${tmdbId}/photos`, fetcher, {
+    revalidateOnFocus: false,
+  });
+  const photos = photoData?.photos ?? [];
 
   const close = () => cinemaClose({ person: null });
 
   useEffect(() => {
+    // Silencieux tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
+    // écouteurs posés sur la même cible se déclenchent tous les deux — une seule touche aurait
+    // fermé la photo *et* la fiche derrière.
+    if (photoIndex !== null) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape" && e.key !== "Backspace") return;
       e.preventDefault();
@@ -65,7 +190,7 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  }, [photoIndex]);
 
   // Ce qu'on possède d'abord : c'est ce qui se regarde ce soir. Le serveur trie déjà ainsi, on
   // garde son ordre et on se contente de retirer les entrées sans titre.
@@ -181,6 +306,8 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
                 </div>
               </div>
 
+              <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />
+
               <div className={short ? "mt-6" : "mt-10"}>
                 <h2 className="font-display text-lg font-semibold text-white">
                   {t("player.person.filmography")}
@@ -217,6 +344,15 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
           )}
         </div>
       </div>
+
+      {photoIndex !== null && photos.length > 0 && (
+        <PhotoViewer
+          photos={photos}
+          index={photoIndex}
+          onIndex={setPhotoIndex}
+          onClose={() => setPhotoIndex(null)}
+        />
+      )}
     </div>,
     document.body
   );

@@ -16,7 +16,7 @@
  * sortie. Sans lui, un film demandé six mois avant sa sortie reste « en cours » tout ce temps,
  * ce qui ressemble à une panne alors que tout va bien.
  */
-export type PlayerRequestState = "unreleased" | "processing" | "available" | "failed";
+export type PlayerRequestState = "unreleased" | "processing" | "available" | "removed" | "failed";
 
 /** Jellyseerr — statut de la demande. */
 const REQUEST_DECLINED = 3;
@@ -24,6 +24,17 @@ const REQUEST_FAILED = 4;
 /** Jellyseerr — statut du média. */
 const MEDIA_PARTIALLY_AVAILABLE = 4;
 const MEDIA_AVAILABLE = 5;
+/**
+ * 6 « sur liste noire », 7 « supprimé ».
+ *
+ * Le second est le cas qu'on rencontre pour de vrai : le titre est arrivé, puis a été retiré de
+ * la bibliothèque. Aucune des deux énumérations ne le disait, alors que la demande, elle, reste
+ * marquée « terminée » — trois vieilles demandes affichaient donc « En cours » depuis des mois
+ * pour des films qui ne sont plus là. Vérifié en direct : `media.status: 7`, et les trois titres
+ * absents de Radarr.
+ */
+const MEDIA_BLACKLISTED = 6;
+const MEDIA_DELETED = 7;
 
 export interface RequestStateInput {
   requestStatus?: number | null;
@@ -44,6 +55,9 @@ export function resolveRequestState(input: RequestStateInput): PlayerRequestStat
   // est arrivé, ni ce que dit encore la demande.
   if (input.mediaStatus === MEDIA_AVAILABLE || input.mediaStatus === MEDIA_PARTIALLY_AVAILABLE) {
     return "available";
+  }
+  if (input.mediaStatus === MEDIA_DELETED || input.mediaStatus === MEDIA_BLACKLISTED) {
+    return "removed";
   }
   if (input.requestStatus === REQUEST_DECLINED || input.requestStatus === REQUEST_FAILED) {
     return "failed";

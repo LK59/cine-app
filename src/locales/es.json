@@ -1277,7 +1277,8 @@
         "unreleased": "Aún no ha salido",
         "processing": "En camino",
         "available": "Disponible",
-        "failed": "No salió bien"
+        "failed": "No salió bien",
+        "removed": "Ya no está disponible"
       },
       "cancel": "Cancelar la petición de {title}",
       "cancelHint": "Quita la petición de tu lista."
@@ -1307,7 +1308,8 @@
     "person": {
       "less": "Ver menos",
       "filmography": "Filmografía",
-      "ownedCount": "{owned} de {total} disponibles"
+      "ownedCount": "{owned} de {total} disponibles",
+      "photos": "Fotos"
     },
     "account": {
       "language": "Idioma",

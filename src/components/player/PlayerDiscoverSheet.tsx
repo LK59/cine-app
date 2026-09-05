@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, Play, Users, X } from "lucide-react";
+import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, Users, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
@@ -28,6 +28,7 @@ const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
   processing: Clock,
   available: CircleCheck,
+  removed: CircleSlash,
   failed: CircleAlert,
 };
 
