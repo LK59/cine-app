@@ -19,8 +19,11 @@ describe("unifiedAudioChannels", () => {
   // Les deux sont ré-encodées dans le même codec, donc l'unification de codec ne se déclenchait
   // pas — et le tampon audio passait pourtant de huit canaux à six en changeant de langue.
   // Firefox 154 sous Linux accepte le nouveau segment, continue l'image, et ne sort plus un son.
-  it("folds every track to the smallest layout when they disagree", () => {
-    expect(unifiedAudioChannels(file([video(), audio(2, "A_EAC3", 8), audio(3, "A_EAC3", 6)]))).toBe(6);
+  //
+  // Vers le haut : la piste la plus riche garde ses huit canaux, la 5.1 reçoit deux arrières
+  // silencieux — un mixage 5.1 n'a rien à y mettre. Personne n'y perd.
+  it("lifts every track to the richest layout when they disagree", () => {
+    expect(unifiedAudioChannels(file([video(), audio(2, "A_EAC3", 8), audio(3, "A_EAC3", 6)]))).toBe(8);
   });
 
   it("asks for nothing when every track already agrees", () => {
@@ -41,5 +44,14 @@ describe("unifiedAudioChannels", () => {
   it("ignores tracks that cannot be carried at all", () => {
     const undeliverable = { number: 4, type: "audio", codecId: "A_TRUEHD", audio: { channels: 8 } } as unknown as MatroskaTrack;
     expect(unifiedAudioChannels(file([video(), audio(2, "A_EAC3", 6), undeliverable]))).toBeNull();
+  });
+});
+
+// `fold` n'est pas exporté : on l'exerce par le chemin public, en vérifiant que la disposition
+// demandée est bien celle qui ressort quel que soit le sens.
+describe("la disposition demandée à l'encodeur", () => {
+  it("is the file's richest layout, whichever track is playing", () => {
+    const mixed = file([video(), audio(2, "A_EAC3", 6), audio(3, "A_EAC3", 8), audio(4, "A_EAC3", 2)]);
+    expect(unifiedAudioChannels(mixed)).toBe(8);
   });
 });

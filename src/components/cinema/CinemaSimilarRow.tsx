@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
@@ -32,9 +32,27 @@ export function useCinemaSimilar(
   subject: CinemaMovie | CinemaSeries,
   mediaType: "movies" | "series"
 ): (CinemaMovie | CinemaSeries)[] {
-  const { data: movies } = useSWR<CinemaMoviesPayload>(mediaType === "movies" ? "/api/cinema/movies" : null, fetcher);
-  const { data: series } = useSWR<CinemaSeriesPayload>(mediaType === "series" ? "/api/cinema/series" : null, fetcher);
+  // Le catalogue est lu dans le cache, jamais redemandé.
+  //
+  // C'est la charge utile de neuf cents kilo-octets que l'écran d'accueil tient déjà à jour ;
+  // chaque ouverture de fiche la revalidait, et une revalidation rend un nouvel objet, ce qui
+  // faisait tout recalculer et redessiner ici — y compris sur la fiche du dessous, qui n'avait
+  // pourtant pas bougé.
+  const swrOptions = { revalidateOnMount: false, revalidateOnFocus: false, revalidateIfStale: false };
+  const { data: movies } = useSWR<CinemaMoviesPayload>(
+    mediaType === "movies" ? "/api/cinema/movies" : null,
+    fetcher,
+    swrOptions
+  );
+  const { data: series } = useSWR<CinemaSeriesPayload>(
+    mediaType === "series" ? "/api/cinema/series" : null,
+    fetcher,
+    swrOptions
+  );
 
+  // L'identifiant plutôt que l'objet : une revalidation du catalogue rend des objets neufs pour
+  // les mêmes titres, et dépendre de leur identité suffisait à refaire cette liste pour rien.
+  const subjectId = idOf(subject);
   return useMemo(() => {
     const payload = mediaType === "movies" ? movies : series;
     if (!payload) return [];
@@ -42,12 +60,18 @@ export function useCinemaSimilar(
       [...payload.spotlight, ...Object.values(payload.rows).flat()],
       idOf
     );
-    const subjectId = idOf(subject);
-    return similarInLibrary(subject, all, (candidate) => idOf(candidate) === subjectId);
-  }, [movies, series, mediaType, subject]);
+    const found = all.find((candidate) => idOf(candidate) === subjectId);
+    if (!found) return [];
+    return similarInLibrary(found, all, (candidate) => idOf(candidate) === subjectId);
+  }, [movies, series, mediaType, subjectId]);
 }
 
-export function CinemaSimilarRow({
+/**
+ * Mémoïsée : elle est en bas d'une fiche que le moindre changement d'adresse redessine, et elle
+ * porte une douzaine d'affiches. Ses entrées sont stables tant que le titre ne change pas — voir
+ * `useCinemaSimilar`, qui ne dépend plus de l'identité de l'objet.
+ */
+export const CinemaSimilarRow = memo(function CinemaSimilarRow({
   items,
   onSelect,
 }: {
@@ -80,7 +104,7 @@ export function CinemaSimilarRow({
       </div>
     </section>
   );
-}
+});
 
 // Arrow-key navigation for the row, called from each detail sheet's own keydown handler before
 // its vertical menu logic. Returns true when it handled the key, so the caller stops there.

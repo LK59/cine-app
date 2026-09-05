@@ -216,12 +216,12 @@ export class AudioTranscoder {
     track: MatroskaTrack,
     fromSeconds = 0,
     /**
-     * Plafond imposé de l'extérieur, quand toutes les pistes du fichier doivent sortir avec la
-     * même disposition — voir `unifiedAudioChannels`. Sans lui, chaque piste choisit la sienne,
-     * et le nombre de canaux change au milieu d'un tampon audio qui, sur certains navigateurs,
-     * n'en accepte qu'un.
+     * La disposition imposée de l'extérieur, quand toutes les pistes du fichier doivent sortir
+     * avec la même — voir `unifiedAudioChannels`. Sans elle, chaque piste choisit la sienne, et
+     * le nombre de canaux change au milieu d'un tampon audio qui, sur certains navigateurs, n'en
+     * accepte qu'un.
      */
-    maxChannels?: number
+    unifiedChannels?: number
   ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
@@ -230,9 +230,9 @@ export class AudioTranscoder {
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId);
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
-    const wanted = maxChannels ? Math.min(numberOfChannels, maxChannels) : numberOfChannels;
+    const wanted = unifiedChannels ?? numberOfChannels;
     if (wanted !== numberOfChannels) {
-      trace(`transcodage audio : disposition unifiée du fichier — ${numberOfChannels} canaux repliés en ${wanted}`);
+      trace(`transcodage audio : disposition unifiée du fichier — ${numberOfChannels} canaux portés à ${wanted}`);
     }
     const plan = await chooseTranscodePlan(sampleRate, wanted);
     if (!plan) {
@@ -523,7 +523,23 @@ function toFrame(chunk: EncodedAudioChunk): TranscodedFrame {
  */
 function fold(planes: Float32Array[], to: number): Float32Array[] {
   const from = planes.length;
-  if (to >= from) return planes;
+  if (to === from) return planes;
+
+  /**
+   * Compléter vers le haut : les canaux qui manquent sont ajoutés silencieux, à leur place.
+   *
+   * Ça n'a rien d'un remixage — il n'y a rien à inventer. L'ordre des canaux est celui que le
+   * repli ci-dessous lit déjà : L R C LFE Ls Rs Lrs Rrs. Passer d'un 5.1 à un 7.1 revient donc à
+   * ajouter les deux arrières, et un mixage 5.1 n'a par définition aucun contenu à y mettre : les
+   * six premiers sortent des mêmes enceintes qu'avant, les deux dernières se taisent.
+   *
+   * C'est ce qui permet d'unifier la disposition d'un fichier vers le **haut** : la piste la plus
+   * riche garde tous ses canaux, et c'est la plus pauvre qui s'adapte — sans rien perdre non plus.
+   */
+  if (to > from) {
+    const silence = Array.from({ length: to - from }, () => new Float32Array(planes[0]?.length ?? 0));
+    return [...planes, ...silence];
+  }
   const [L, R, C, , Ls, Rs, Lrs, Rrs] = planes;
   const mix = (...parts: [Float32Array | undefined, number][]) => {
     const out = new Float32Array(planes[0].length);

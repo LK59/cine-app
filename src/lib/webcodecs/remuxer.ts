@@ -282,11 +282,14 @@ export function unifiedAudioCodec(file: MatroskaFile): string | null {
  * anglaise en 5.1 — se lit en français et devient muet en anglais. Le même fichier fonctionne
  * dans les deux langues sur iPhone, qui, lui, encaisse le changement.
  *
- * Le repli va donc vers le **plus petit** compte du fichier, et pas l'inverse : `fold` sait
- * descendre un 7.1 en 5.1 (les arrières repliés sur les côtés à −3 dB) et un 5.1 en stéréo
- * (matrice BS.775) ; remonter demanderait d'inventer où placer des canaux absents, c'est-à-dire
- * de deviner d'où viendra le son. Deux canaux d'ambiance en moins sur la piste la plus riche,
- * contre une piste entière muette.
+ * L'unification va vers le **plus grand** compte du fichier, et personne n'y perd : l'ordre des
+ * canaux est L R C LFE Ls Rs Lrs Rrs, donc porter un 5.1 en 7.1 revient à ajouter deux arrières
+ * silencieux — un mixage 5.1 n'a de toute façon rien à y mettre. La piste la plus riche garde
+ * tous ses canaux, la plus pauvre sort des mêmes enceintes qu'avant.
+ *
+ * Le compte demandé reste un souhait : `chooseTranscodePlan` le rabaisse si l'encodeur du
+ * navigateur ne sait pas produire autant de canaux — un Chrome qui plafonne à six repliera alors
+ * les deux pistes en 5.1, ce qui les laisse unifiées quand même.
  *
  * Ne s'applique que là où le tampon ne peut pas être remplacé : ailleurs, chaque piste garde sa
  * disposition et le tampon est reconstruit.
@@ -298,8 +301,8 @@ export function unifiedAudioChannels(file: MatroskaFile): number | null {
   if (carried.length < 2) return null;
 
   const counts = carried.map((t) => t.audio?.channels ?? 2);
-  const min = Math.min(...counts);
-  return counts.some((n) => n !== min) ? min : null;
+  const max = Math.max(...counts);
+  return counts.some((n) => n !== max) ? max : null;
 }
 
 /**
