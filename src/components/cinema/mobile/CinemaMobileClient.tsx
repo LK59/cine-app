@@ -206,7 +206,10 @@ export function CinemaMobileClient() {
   // real screen, where the viewport iOS lays the app out in at first is short — see the note in
   // globals.css.
   return createPortal(
-    <div className="app-viewport fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ zIndex: 45 }}>
+    // `safe-x` : couché, l'encoche et la Dynamic Island mordent sur le bord gauche de l'écran
+    // (`viewport-fit=cover` laisse le contenu passer dessous). Le menu et la première affiche de
+    // chaque rangée s'y cachaient.
+    <div className="app-viewport safe-x fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ zIndex: 45 }}>
       {/* Sticky chrome: le menu à gauche, les deux onglets de bibliothèque en pastilles. */}
       {/* The safe-area inset alone puts this flush against the status bar, which iOS then dims
           and blurs over in a standalone PWA — the pills came out half-hidden. An explicit gap on
@@ -286,7 +289,12 @@ export function CinemaMobileClient() {
             below the fold — the "broken banner". The same pieces laid out as a row (small poster,
             text and actions beside it) stay entirely on screen at any landscape height. The rows
             underneath are untouched in both orientations. */}
+        {/* `key` par onglet : la bannière tient son propre index et son propre minuteur (voir
+            useRotatingIndex), et une seule instance partagée faisait donc défiler les films et les
+            séries au même rythme, sur la même position. Deux instances, deux progressions — c'est
+            déjà ce que fait l'écran du bureau, avec deux états séparés. */}
         <CinemaMobileHero
+          key={mediaType}
           items={heroItems}
           // En pause dès qu'un écran la recouvre — les panneaux du rail compris : laisser une
           // bande-annonce tourner derrière « Ma liste » consomme des données mobiles pour une

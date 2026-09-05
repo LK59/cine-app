@@ -79,7 +79,11 @@ export function PlayerPersonSheet({ tmdbId }: { tmdbId: number }) {
   return createPortal(
     <div
       className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{
+        zIndex: 47,
+        paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}
     >
       {/* `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone elle
           s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à elle

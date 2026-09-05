@@ -69,8 +69,13 @@ export function PlayerDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
         aria-modal={open}
         aria-label={t("player.nav.label")}
         data-player-nav
-        className="absolute inset-y-0 left-0 flex w-72 max-w-[82vw] flex-col bg-ink shadow-2xl"
+        className="absolute inset-y-0 flex w-72 max-w-[82vw] flex-col bg-ink shadow-2xl"
         style={{
+          // Le panneau commence après l'encoche, il ne se contente pas de s'y glisser dessous :
+          // couché, la Dynamic Island prend une soixantaine de pixels sur le bord gauche, et le
+          // tiroir y perdait son en-tête et le début de ses entrées. Fermé, il reste largement
+          // hors écran (soixante moins deux cent quatre-vingt-huit).
+          left: "env(safe-area-inset-left, 0px)",
           transform: open ? "none" : "translateX(-100%)",
           visibility: open ? "visible" : "hidden",
           transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1), visibility 320ms",

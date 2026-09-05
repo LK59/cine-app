@@ -755,3 +755,13 @@
     animation-duration: 0.15s;
   }
 }
+
+/* Les marges latérales sûres.
+   `viewport-fit=cover` laisse le contenu s'étendre sous l'encoche et la Dynamic Island. Debout
+   elles ne mordent que sur le haut, déjà traité partout ; couché, elles prennent une soixantaine
+   de pixels sur le bord gauche — assez pour avaler le bouton de menu et la première affiche de
+   chaque rangée. Ces deux marges valent zéro sur tout appareil qui n'en a pas. */
+@utility safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}

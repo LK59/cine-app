@@ -85,7 +85,13 @@ export function PlayerPanelFrame({
       // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
       // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
       className="fixed inset-0 flex animate-slide-up flex-col overflow-hidden bg-ink md:animate-fade-in"
-      style={{ zIndex: 46, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{
+        zIndex: 46,
+        // Le retrait du rail et la marge de l'encoche s'additionnent : le premier vaut zéro sur
+        // téléphone, la seconde vaut zéro partout ailleurs.
+        paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}
     >
       <header
         className={`flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10 ${short ? "pb-2" : "pb-4"}`}

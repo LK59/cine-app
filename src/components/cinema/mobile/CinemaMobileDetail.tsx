@@ -173,7 +173,7 @@ export function CinemaMobileDetail({
       // inline style, so the sheet wouldn't follow the finger at all), and letting it back in on
       // release made the sheet replay its whole entrance every time a drag sprang back — which
       // is what the "weird animation on release" was.
-      className={`app-viewport fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
+      className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
         swipe.touched ? "" : closing ? "animate-fade-out" : "animate-slide-up"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that

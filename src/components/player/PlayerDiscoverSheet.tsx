@@ -155,7 +155,7 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
   // tout le reste dans une colonne qui défile.
   const mobileSheet = (
     <div
-      className="app-viewport fixed inset-x-0 top-0 animate-slide-up overflow-y-auto overscroll-contain bg-ink"
+      className="app-viewport safe-x fixed inset-x-0 top-0 animate-slide-up overflow-y-auto overscroll-contain bg-ink"
       style={{ zIndex: 47, paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
       {/* Même plafond que les fiches de bibliothèque : en 16:9 pleine largeur, une bannière fait
@@ -271,7 +271,11 @@ export function PlayerDiscoverSheet({ tmdbId, mediaType }: { tmdbId: number; med
       className="fixed inset-0 animate-slide-up overflow-hidden bg-ink md:animate-fade-in"
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{
+        zIndex: 47,
+        paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}
     >
       {data?.backdrop && (
         // eslint-disable-next-line @next/next/no-img-element
