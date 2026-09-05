@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { displayRange, toneMappingApplies, TONE_CURVES, TONE_LEVELS } from "@/lib/hdrToSdr";
+import { displayRange, toneMappingApplies, TONE_CURVES, TONE_LEVELS, readToneLevel } from "@/lib/hdrToSdr";
 
 function answerWith(answers: Record<string, boolean> | null) {
   if (answers === null) {
@@ -71,5 +71,25 @@ describe("TONE_CURVES", () => {
       expect(curve.exponent).toBeGreaterThan(1);
       expect(curve.amplitude).toBeGreaterThan(1);
     }
+  });
+});
+
+// Le défaut est « aucune », et c'est le cœur du réglage : un écran standard ne dit pas que le
+// navigateur n'a rien fait. Chrome sous Windows convertit déjà, et corriger d'office y durcirait
+// une image juste.
+describe("readToneLevel", () => {
+  it("corrects nothing until someone asks", () => {
+    window.localStorage.clear();
+    expect(readToneLevel()).toBe("off");
+  });
+
+  it("keeps a level that was chosen", () => {
+    window.localStorage.setItem("cine.player.hdrTone", "strong");
+    expect(readToneLevel()).toBe("strong");
+  });
+
+  it("ignores a stored value that means nothing", () => {
+    window.localStorage.setItem("cine.player.hdrTone", "extrême");
+    expect(readToneLevel()).toBe("off");
   });
 });

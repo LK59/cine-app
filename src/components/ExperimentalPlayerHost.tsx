@@ -430,7 +430,10 @@ export function ExperimentalPlayerHost({
   const title = info?.title ?? openedAs;
 
   /** The file, as every entry in the server's record wants it described. */
-  const toneAvailable = toneMappingApplies(info?.video?.isHdr ?? false, screenRange);
+  // `onElement` compte autant que le reste : sur le chemin canevas, c'est le shader qui convertit
+  // le HDR pour de vrai, et le filtre — posé sur un élément vidéo alors caché — ne toucherait
+  // rien. Un réglage sans effet dans un menu est pire qu'un réglage absent.
+  const toneAvailable = onElement && toneMappingApplies(info?.video?.isHdr ?? false, screenRange);
   const toneActive = toneAvailable && toneLevel !== "off";
 
   const describeFile = useCallback(

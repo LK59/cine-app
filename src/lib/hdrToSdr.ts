@@ -68,7 +68,18 @@ export function toneMappingApplies(fileIsHdr: boolean, range: DisplayRange = dis
 
 const STORAGE_KEY = "cine.player.hdrTone";
 
-/** Le niveau retenu, ou celui par défaut. Un stockage indisponible n'est pas une erreur. */
+/**
+ * Le niveau retenu, ou celui par défaut — qui est « aucune », et c'est délibéré.
+ *
+ * Savoir que l'écran est standard ne dit pas que le navigateur n'a rien fait. Chrome sous Windows
+ * et Safari sous macOS convertissent déjà correctement une vidéo HDR vers un écran qui ne l'est
+ * pas, et aucune API ne permet de leur demander s'ils l'ont fait. Corriger d'office reviendrait
+ * donc à corriger deux fois là où tout allait bien, et à durcir une image juste — un défaut plus
+ * visible que celui qu'on répare, infligé à ceux qui n'avaient rien demandé.
+ *
+ * L'entrée du menu apparaît dès que la question se pose ; c'est celui qui voit l'image qui
+ * tranche, une fois, et son choix est retenu.
+ */
 export function readToneLevel(): ToneLevel {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -77,7 +88,7 @@ export function readToneLevel(): ToneLevel {
     // Navigation privée, cookies bloqués : on repart du défaut, ce qui est exactement le bon
     // comportement.
   }
-  return "medium";
+  return "off";
 }
 
 function writeToneLevel(level: ToneLevel): void {
@@ -115,7 +126,7 @@ export const toneLevelStore = {
     return () => levelListeners.delete(listener);
   },
   snapshot: levelSnapshot,
-  serverSnapshot: (): ToneLevel => "medium",
+  serverSnapshot: (): ToneLevel => "off",
   set(level: ToneLevel): void {
     cachedLevel = level;
     writeToneLevel(level);
