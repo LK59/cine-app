@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Info, Menu, Play, Search } from "lucide-react";
+import { Info, Menu, Play, Plus, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -20,6 +20,7 @@ import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetai
 import { CinemaMobileHero } from "@/components/cinema/mobile/CinemaMobileHero";
 import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
+import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
@@ -64,6 +65,18 @@ export function CinemaMobileClient() {
   const setSearchOpen = (open: boolean) =>
     open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false });
   const short = useIsShortViewport();
+  // Les mêmes rangées de découverte que sur grand écran, en bas de page — voir la route.
+  const { data: discovery } = useSWR<PlayerDiscoverPayload>("/api/player/discover", fetcher, {
+    revalidateOnFocus: false,
+  });
+
+  function openDiscovery(item: DiscoveryItem) {
+    if (item.libraryId !== null) {
+      cinemaNavigate(item.type === "movie" ? { film: item.libraryId } : { serie: item.libraryId });
+      return;
+    }
+    cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
+  }
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
@@ -367,6 +380,20 @@ export function CinemaMobileClient() {
         <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} showNewBadge={false} />
         <PosterRow label={t("cinema.myList")} items={myList} itemId={itemId} onSelect={(item) => openDetail(item, mediaType)} />
 
+        {(discovery?.rows ?? [])
+          .filter((row) =>
+            mediaType === "movies" ? row.key !== "trendingSeries" : row.key === "trendingSeries"
+          )
+          .map((row) => (
+            <DiscoveryRow
+              key={row.key}
+              label={t(`cinema.discovery.${row.key}`)}
+              items={row.items}
+              missingLabel={t("player.notInLibrary")}
+              onSelect={openDiscovery}
+            />
+          ))}
+
         {payload?.genres.map((genre) => {
           const items = (payload.rows[genre] ?? []).slice(0, ROW_ITEM_LIMIT);
           if (items.length === 0) return null;
@@ -439,6 +466,47 @@ function PosterRow<T extends { title: string; posterUrl: string | null; addedAt:
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
           {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
+        </button>
+      ))}
+    </MobileRow>
+  );
+}
+
+/**
+ * Une rangée de découverte : les mêmes affiches, avec une pastille sur ce qu'on n'a pas encore.
+ * Ce qui est là ouvre sa fiche, le reste ouvre la fiche TMDB, où « Lire » est devenu
+ * « Demander » — un seul catalogue, une seule grammaire.
+ */
+function DiscoveryRow({
+  label,
+  items,
+  missingLabel,
+  onSelect,
+}: {
+  label: string;
+  items: DiscoveryItem[];
+  missingLabel: string;
+  onSelect: (item: DiscoveryItem) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <MobileRow label={label}>
+      {items.map((item) => (
+        <button
+          key={`${item.type}-${item.tmdbId}`}
+          type="button"
+          onClick={() => onSelect(item)}
+          className={`${POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
+        >
+          <PosterImage src={item.poster} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
+          {item.libraryId === null && (
+            <span
+              aria-label={missingLabel}
+              className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white/80"
+            >
+              <Plus size={12} />
+            </span>
+          )}
         </button>
       ))}
     </MobileRow>
