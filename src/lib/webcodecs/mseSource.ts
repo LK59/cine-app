@@ -1031,6 +1031,43 @@ export class MseSource {
     return this.video.currentTime;
   }
 
+  /**
+   * L'espace colorimétrique d'une image telle que l'élément la rend, demandé une seule fois.
+   *
+   * La question vaut une réponse : si `VideoFrame` rend l'image avec ses primaires et sa courbe
+   * d'origine — BT.2020, PQ — alors les vraies valeurs HDR sont accessibles malgré le décodage
+   * matériel, et le shader du chemin canevas peut faire une vraie conversion au lieu de la
+   * correction approximative qu'on applique aujourd'hui. Si elle revient déjà en sRGB, la
+   * conversion a eu lieu avant qu'on puisse la voir et il n'y a rien à récupérer.
+   *
+   * Une seule fois, et le résultat gardé : construire une image 4K à chaque rafraîchissement du
+   * panneau pour lire trois champs coûterait bien plus que ce qu'elle apprend.
+   */
+  private colorProbe: string | null = null;
+
+  private frameColorSpace(): string {
+    if (this.colorProbe) return this.colorProbe;
+    const Frame = (globalThis as { VideoFrame?: new (source: CanvasImageSource) => VideoFrame }).VideoFrame;
+    if (!Frame) return "VideoFrame absent";
+    // Avant la première image, il n'y a rien à interroger — et la question se repose au prochain
+    // passage, donc rien n'est perdu.
+    if (this.video.readyState < 2) return "pas encore d'image";
+    let frame: VideoFrame | null = null;
+    try {
+      frame = new Frame(this.video);
+      const space = frame.colorSpace;
+      this.colorProbe = `${space.primaries ?? "?"} · ${space.transfer ?? "?"} · ${space.matrix ?? "?"}`;
+      return this.colorProbe;
+    } catch (error) {
+      // Un navigateur qui refuse de capturer une image protégée, ou qui n'accepte pas un élément
+      // média comme source : c'est une réponse aussi, et elle ferme la même porte.
+      this.colorProbe = `refusé (${error instanceof Error ? error.message : String(error)})`;
+      return this.colorProbe;
+    } finally {
+      frame?.close();
+    }
+  }
+
   /** Images perdues sur images rendues, telles que l'élément lui-même les compte. */
   private frameQuality(): string {
     const quality = this.video.getVideoPlaybackQuality?.();
@@ -1064,6 +1101,7 @@ export class MseSource {
       // tombe pas juste sur celle de l'écran ». Sans elle, une lecture qui n'attend jamais et
       // dont le tampon a trente secondes d'avance ne dit toujours rien sur ce qu'on voit.
       "Images perdues": this.frameQuality(),
+      "Couleurs de l'image": this.frameColorSpace(),
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
       "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
