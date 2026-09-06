@@ -1319,6 +1319,7 @@
       "subtitleMode": "Affichage des sous-titres",
       "subtitleModes": {
         "Default": "Par défaut",
+        "Smart": "Intelligent",
         "Always": "Toujours",
         "OnlyForced": "Seulement les forcés",
         "None": "Jamais"
@@ -1326,10 +1327,10 @@
       "playbackHint": "Ces réglages suivent votre compte : ils s’appliquent aussi dans les applications Jellyfin.",
       "langAny": "Peu importe",
       "lang": {
-        "fre": "Français",
+        "fra": "Français",
         "eng": "Anglais",
         "spa": "Espagnol",
-        "ger": "Allemand",
+        "deu": "Allemand",
         "ita": "Italien",
         "jpn": "Japonais"
       },

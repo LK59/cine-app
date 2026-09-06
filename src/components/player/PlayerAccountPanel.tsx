@@ -7,6 +7,7 @@ import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBu
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
@@ -129,9 +130,64 @@ function LanguageSection() {
   );
 }
 
-// Les codes que Jellyfin attend (ISO 639-2/B), et les mots qu'on affiche à la place.
-const AUDIO_CHOICES = ["", "fre", "eng", "spa", "ger", "ita", "jpn"] as const;
-const SUBTITLE_MODES = ["Default", "Always", "OnlyForced", "None"] as const;
+// Les codes sous lesquels Jellyfin range ces langues — la forme terminologique de l'ISO 639-2,
+// `fra` et non `fre`, vérifiée sur le serveur. Voir `toJellyfinLanguage`.
+const AUDIO_CHOICES = ["", "fra", "eng", "spa", "deu", "ita", "jpn"] as const;
+
+// `Smart` fait partie des modes de Jellyfin et manquait ici : un compte réglé dessus voyait
+// « Par défaut », c'est-à-dire le premier de la liste faute de correspondance.
+const SUBTITLE_MODES = ["Default", "Smart", "Always", "OnlyForced", "None"] as const;
+
+/**
+ * Les choix à afficher, la valeur enregistrée comprise.
+ *
+ * Un compte réglé sur une langue absente de cette courte liste — du russe, du coréen — ne doit
+ * pas voir « peu importe » : il croirait n'avoir rien choisi, et le premier réglage qu'il
+ * toucherait effacerait sa préférence. La valeur est donc ajoutée à la liste, sous son code, et
+ * survit à une visite.
+ */
+function choicesWith(current: string | null): readonly string[] {
+  if (!current || (AUDIO_CHOICES as readonly string[]).includes(current)) return AUDIO_CHOICES;
+  return [...AUDIO_CHOICES, current];
+}
+
+function LanguageSelect({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  disabled: boolean;
+  onChange: (code: string | null) => void;
+}) {
+  const t = useT();
+  const current = toJellyfinLanguage(value);
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs text-slate-400">{label}</span>
+      <select
+        className="select"
+        disabled={disabled}
+        value={current ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+      >
+        {choicesWith(current).map((code) => (
+          <option key={code || "none"} value={code}>
+            {/* Une langue hors liste s'affiche sous son code en capitales plutôt que sous une clé
+                de traduction manquante : c'est laid mais juste, et ça se reconnaît. */}
+            {!code
+              ? t("player.account.langAny")
+              : (AUDIO_CHOICES as readonly string[]).includes(code)
+                ? t(`player.account.lang.${code}`)
+                : code.toUpperCase()}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function PlaybackSection() {
   const t = useT();
@@ -158,37 +214,18 @@ function PlaybackSection() {
   return (
     <Section icon={Subtitles} title={t("player.account.playback")}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-slate-400">{t("player.account.audioLanguage")}</span>
-          <select
-            className="select"
-            disabled={saving || !data}
-            value={data?.audioLanguage ?? ""}
-            onChange={(e) => void save({ audioLanguage: e.target.value || null })}
-          >
-            {AUDIO_CHOICES.map((code) => (
-              <option key={code || "none"} value={code}>
-                {code ? t(`player.account.lang.${code}`) : t("player.account.langAny")}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-slate-400">{t("player.account.subtitleLanguage")}</span>
-          <select
-            className="select"
-            disabled={saving || !data}
-            value={data?.subtitleLanguage ?? ""}
-            onChange={(e) => void save({ subtitleLanguage: e.target.value || null })}
-          >
-            {AUDIO_CHOICES.map((code) => (
-              <option key={code || "none"} value={code}>
-                {code ? t(`player.account.lang.${code}`) : t("player.account.langAny")}
-              </option>
-            ))}
-          </select>
-        </label>
+        <LanguageSelect
+          label={t("player.account.audioLanguage")}
+          value={data?.audioLanguage ?? null}
+          disabled={saving || !data}
+          onChange={(code) => void save({ audioLanguage: code })}
+        />
+        <LanguageSelect
+          label={t("player.account.subtitleLanguage")}
+          value={data?.subtitleLanguage ?? null}
+          disabled={saving || !data}
+          onChange={(code) => void save({ subtitleLanguage: code })}
+        />
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-xs text-slate-400">{t("player.account.subtitleMode")}</span>

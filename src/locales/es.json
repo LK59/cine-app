@@ -1319,6 +1319,7 @@
       "subtitleMode": "Mostrar subtítulos",
       "subtitleModes": {
         "Default": "Por defecto",
+        "Smart": "Inteligente",
         "Always": "Siempre",
         "OnlyForced": "Solo forzados",
         "None": "Nunca"
@@ -1326,10 +1327,10 @@
       "playbackHint": "Estos ajustes van con tu cuenta: también se aplican en las apps de Jellyfin.",
       "langAny": "Cualquiera",
       "lang": {
-        "fre": "Francés",
+        "fra": "Francés",
         "eng": "Inglés",
         "spa": "Español",
-        "ger": "Alemán",
+        "deu": "Alemán",
         "ita": "Italiano",
         "jpn": "Japonés"
       },

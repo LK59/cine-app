@@ -1319,6 +1319,7 @@
       "subtitleMode": "Untertitel anzeigen",
       "subtitleModes": {
         "Default": "Standard",
+        "Smart": "Intelligent",
         "Always": "Immer",
         "OnlyForced": "Nur erzwungene",
         "None": "Nie"
@@ -1326,10 +1327,10 @@
       "playbackHint": "Diese Einstellungen gehören zum Konto und gelten auch in den Jellyfin-Apps.",
       "langAny": "Egal",
       "lang": {
-        "fre": "Französisch",
+        "fra": "Französisch",
         "eng": "Englisch",
         "spa": "Spanisch",
-        "ger": "Deutsch",
+        "deu": "Deutsch",
         "ita": "Italienisch",
         "jpn": "Japanisch"
       },

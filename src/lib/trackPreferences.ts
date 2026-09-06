@@ -91,6 +91,35 @@ export function isCommentary(track: NamedTrack): boolean {
 }
 
 /**
+ * Les codes que Jellyfin écrit, et à quoi les ramener.
+ *
+ * Jellyfin range ses préférences de langue sous le nom terminologique de l'ISO 639-2 — `fra`,
+ * `deu` — et pas sous le bibliographique — `fre`, `ger` — que la moitié des fichiers portent.
+ * Une liste de choix écrite dans l'autre convention ne peut donc jamais retrouver la préférence
+ * enregistrée : elle affiche « peu importe » à un compte qui a bel et bien choisi le français.
+ *
+ * Vérifié sur le serveur plutôt que supposé : `/Localization/Cultures` donne pour le français
+ * `ThreeLetterISOLanguageName: "fra"`, avec `["fra", "fre"]` comme formes acceptées.
+ */
+const JELLYFIN_CODES: Record<string, string> = {
+  fr: "fra", en: "eng", es: "spa", de: "deu", it: "ita", ja: "jpn",
+  pt: "por", ru: "rus", nl: "nld", zh: "zho", ko: "kor", ar: "ara", pl: "pol",
+};
+
+/**
+ * Le code sous lequel Jellyfin connaît cette langue, quelle que soit l'écriture reçue.
+ *
+ * `fre`, `fra`, `fr` et `fr-FR` reviennent tous « fra ». Une langue hors de la table revient
+ * telle qu'elle a été reçue, en minuscules : c'est ce qui permet de l'afficher et de la
+ * conserver plutôt que de l'effacer faute de la reconnaître.
+ */
+export function toJellyfinLanguage(tag: string | null | undefined): string | null {
+  const two = normaliseLanguage(tag);
+  if (!two) return null;
+  return JELLYFIN_CODES[two] ?? two;
+}
+
+/**
  * What language a track is in.
  *
  * The code is believed first and the name is only read when there is no code — a name is free

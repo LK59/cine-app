@@ -61,3 +61,48 @@ describe("PlayerAccountPanel — known issues", () => {
     expect(screen.getByText("gfx.color_management.hdr")).toBeTruthy();
   });
 });
+
+// Jellyfin range ses préférences sous le nom terminologique de l'ISO 639-2 — `fra`, `deu` — et la
+// liste de choix était écrite dans l'autre convention. Un compte réglé sur le français affichait
+// donc « peu importe », et le premier réglage touché aurait effacé sa préférence.
+describe("PlayerAccountPanel — playback preferences", () => {
+  it("shows the language Jellyfin actually stored", async () => {
+    payload = { username: "louis", jfUser: "louis", audioLanguage: "fra", subtitleLanguage: "fra", subtitleMode: "OnlyForced" };
+    render(<PlayerAccountPanel />);
+
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    const [audio, subtitles, mode] = selects.slice(-3);
+    expect(audio.value).toBe("fra");
+    expect(subtitles.value).toBe("fra");
+    expect(mode.value).toBe("OnlyForced");
+  });
+
+  // La même langue écrite par un autre client, dans la forme bibliographique.
+  it("recognises the other spelling of the same language", () => {
+    payload = { username: "louis", jfUser: "louis", audioLanguage: "fre", subtitleLanguage: "ger", subtitleMode: "Default" };
+    render(<PlayerAccountPanel />);
+
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    expect(selects.slice(-3)[0].value).toBe("fra");
+    expect(selects.slice(-3)[1].value).toBe("deu");
+  });
+
+  // Le mode « Smart » existe chez Jellyfin et manquait ici : un compte réglé dessus voyait le
+  // premier de la liste, faute de correspondance.
+  it("knows every subtitle mode Jellyfin can store", () => {
+    payload = { username: "louis", jfUser: "louis", audioLanguage: null, subtitleLanguage: null, subtitleMode: "Smart" };
+    render(<PlayerAccountPanel />);
+    expect((screen.getAllByRole("combobox").slice(-1)[0] as HTMLSelectElement).value).toBe("Smart");
+  });
+
+  // Une langue hors de la courte liste doit rester visible : sinon le compte croit n'avoir rien
+  // choisi, et l'efface en touchant autre chose.
+  it("keeps a language it does not have a word for", () => {
+    payload = { username: "louis", jfUser: "louis", audioLanguage: "rus", subtitleLanguage: null, subtitleMode: "Default" };
+    render(<PlayerAccountPanel />);
+
+    const audio = screen.getAllByRole("combobox").slice(-3)[0] as HTMLSelectElement;
+    expect(audio.value).toBe("rus");
+    expect(screen.getByText("RUS")).toBeTruthy();
+  });
+});
