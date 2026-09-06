@@ -38,6 +38,13 @@ export interface CinemaRoute {
   /** Une fiche personne, identifiée par son id TMDB. */
   person: number | null;
   /**
+   * La grille complète : un nom de genre, ou `*` pour toute la bibliothèque.
+   *
+   * Dans l'adresse comme le reste, pour que le retour ramène à la rangée d'où l'on vient et
+   * qu'une grille de genre se partage et se retrouve.
+   */
+  browse: string | null;
+  /**
    * Le tiroir de navigation, sur téléphone.
    *
    * Dans l'URL, contrairement au rail du bureau qui n'est qu'un survol : sur Android, le geste de
@@ -58,6 +65,7 @@ const EMPTY: CinemaRoute = {
   discover: null,
   discoverType: "movie",
   person: null,
+  browse: null,
   menu: false,
 };
 
@@ -115,6 +123,7 @@ function parse(hash: string): CinemaRoute {
     discover: readNumber(params, "decouverte"),
     discoverType: params.get("type") === "series" ? "series" : "movie",
     person: readNumber(params, "personne"),
+    browse: params.get("parcourir"),
     menu: params.get("menu") === "1",
   };
 }
@@ -133,6 +142,7 @@ function serialize(route: CinemaRoute): string {
     if (route.discoverType === "series") params.set("type", "series");
   }
   if (route.person) params.set("personne", String(route.person));
+  if (route.browse) params.set("parcourir", route.browse);
   if (route.menu) params.set("menu", "1");
   const query = params.toString();
   return query ? `#${query}` : "";

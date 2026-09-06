@@ -7,6 +7,8 @@ import { Info, Menu, Play, Plus, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
+import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -123,6 +125,14 @@ export function CinemaMobileClient() {
     );
     return new Map(all.map((item) => [itemId(item), item] as const));
   }, [payload]);
+
+  /**
+   * Toute la bibliothèque de l'onglet courant, une fois chacune.
+   *
+   * La charge utile répète un titre une fois par genre : l'index ci-dessus en tient déjà la
+   * version dédoublonnée, il n'y a donc rien de plus à calculer que de le lire comme une liste.
+   */
+  const catalogue = useMemo(() => (byId ? [...byId.values()] : []), [byId]);
 
   const selected = useMemo(() => {
     const id = isSeries ? route.serie : route.film;
@@ -483,10 +493,36 @@ export function CinemaMobileClient() {
           ))}
 
         {payload?.genres.map((genre) => {
-          const items = (payload.rows[genre] ?? []).slice(0, ROW_ITEM_LIMIT);
+          const all = payload.rows[genre] ?? [];
+          const items = all.slice(0, ROW_ITEM_LIMIT);
           if (items.length === 0) return null;
-          return <PosterRow key={genre} label={genre} items={items} itemId={itemId} onSelect={openHero} />;
+          return (
+            <PosterRow
+              key={genre}
+              label={genre}
+              items={items}
+              itemId={itemId}
+              onSelect={openHero}
+              // Seulement quand il y a plus à voir : un « voir tout » sur une rangée déjà entière
+              // promet une suite qui n'existe pas.
+              onSeeAll={all.length > items.length ? () => cinemaNavigate({ browse: genre }) : undefined}
+            />
+          );
         })}
+
+        {/* Le bout de la page : toute la bibliothèque, filtrable. C'est la sortie de secours de
+            quelqu'un qui a fait défiler jusqu'ici sans rien trouver. */}
+        {payload && (
+          <div className="mt-8 px-4 pb-4">
+            <button
+              type="button"
+              onClick={() => cinemaNavigate({ browse: BROWSE_ALL })}
+              className="btn btn-ghost w-full justify-center py-3"
+            >
+              {t(`player.browse.all.${mediaType}`)}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* La pile des fiches, rendue comme une liste et non comme deux blocs séparés.
@@ -501,6 +537,18 @@ export function CinemaMobileClient() {
           les propriétés de la fiche courante plutôt que d'en ouvrir une — le contenu se
           remplacerait sur place, sans animation, en gardant l'état du geste de fermeture de la
           précédente. */}
+      {route.browse !== null && payload && (
+        <CinemaBrowseSheet
+          genre={route.browse}
+          mediaType={mediaType}
+          items={catalogue}
+          genres={payload.genres}
+          idOf={itemId}
+          posterOf={(item) => item.posterUrl}
+          libraryIdOf={itemId}
+        />
+      )}
+
       {route.discover === null &&
         route.person === null &&
         stack.map((entry, i) => {
@@ -555,17 +603,20 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
   items,
   itemId,
   onSelect,
+  onSeeAll,
   showNewBadge = true,
 }: {
   label: string;
   items: T[];
   itemId: (item: T) => number;
   onSelect: (item: T) => void;
+  /** Ouvre la grille complète de cette rangée. Absent sur les rangées qui sont déjà complètes. */
+  onSeeAll?: () => void;
   showNewBadge?: boolean;
 }) {
   if (items.length === 0) return null;
   return (
-    <MobileRow label={label}>
+    <MobileRow label={label} onSeeAll={onSeeAll}>
       {items.map((item) => (
         <button
           key={itemId(item)}
@@ -626,12 +677,35 @@ const DiscoveryRow = memo(function DiscoveryRow({
   );
 });
 
-function MobileRow({ label, children }: { label: string; children: React.ReactNode }) {
+function MobileRow({
+  label,
+  onSeeAll,
+  children,
+}: {
+  label: string;
+  onSeeAll?: () => void;
+  children: React.ReactNode;
+}) {
+  const t = useT();
   return (
     // `mt-6` debout, `mt-4` couché : sur ~390 px de haut, six rems entre chaque rangée font qu'on
     // ne voit jamais deux rangées à la fois.
     <section className="mt-6 [@media(max-height:500px)]:mt-4" style={ROW_CONTAINMENT}>
-      <h2 className="mb-2 px-4 text-sm font-semibold text-white [@media(max-height:500px)]:mb-1.5">{label}</h2>
+      {/* « Voir tout » posé à côté du titre plutôt qu'au bout du défilement : une rangée s'arrête
+          à vingt-quatre affiches, et il fallait faire glisser vingt-quatre fois pour découvrir
+          qu'il y avait une suite. Ici il se voit avant qu'on commence. */}
+      <div className="mb-2 flex items-baseline justify-between gap-3 px-4 [@media(max-height:500px)]:mb-1.5">
+        <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
+        {onSeeAll && (
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="shrink-0 text-xs font-medium text-slate-400 transition-colors active:text-white"
+          >
+            {t("player.browse.seeAll")}
+          </button>
+        )}
+      </div>
       <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">{children}</div>
     </section>
   );

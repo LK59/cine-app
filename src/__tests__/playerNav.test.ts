@@ -15,6 +15,7 @@ const EMPTY: CinemaRoute = {
   discover: null,
   discoverType: "movie",
   person: null,
+  browse: null,
   menu: false,
 };
 

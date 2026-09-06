@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { useT } from "@/components/TranslationProvider";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 
@@ -27,6 +28,7 @@ export const CinemaRow = memo(function CinemaRow({
   cardWidthClassName,
   onFocusItem,
   onSelectItem,
+  onSeeAll,
   showNewBadge = true,
 }: {
   label: string;
@@ -42,7 +44,10 @@ export const CinemaRow = memo(function CinemaRow({
   showNewBadge?: boolean;
   onFocusItem: (item: CinemaMovie) => void;
   onSelectItem: (item: CinemaMovie) => void;
+  /** Ouvre la grille complète de cette rangée, avec ses tris et ses filtres. */
+  onSeeAll?: () => void;
 }) {
+  const t = useT();
   if (items.length === 0) return null;
 
   return (
@@ -51,7 +56,20 @@ export const CinemaRow = memo(function CinemaRow({
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
       {/* Thin, small, muted — a section label, not a heading competing with the poster row
           beneath it. */}
-      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>
+      {/* « Voir tout » vit à côté du titre : sur une rangée, tout ce qui est au bout du
+          défilement demande de faire défiler pour être découvert. */}
+      <div className="mb-2 flex items-baseline justify-between gap-4 px-8 sm:px-12">
+        <h2 className="min-w-0 truncate text-sm font-medium text-white/70">{label}</h2>
+        {onSeeAll && (
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="shrink-0 text-xs font-medium text-white/40 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          >
+            {t("player.browse.seeAll")}
+          </button>
+        )}
+      </div>
       {/* pt-3, not just pb-4: the row scroller forces overflow-y to `auto` too (any element
           with overflow-x:auto and no explicit overflow-y computes it that way per spec), so a
           hover/focus-scaled card with no room above it gets its top edge clipped by this same

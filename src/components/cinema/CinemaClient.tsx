@@ -16,6 +16,8 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
+import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
+import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { CinemaSpotlight } from "@/components/cinema/CinemaSpotlight";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
@@ -278,6 +280,17 @@ export function CinemaClient() {
     );
     return new Map(all.map((x) => [x.sonarrId, x]));
   }, [series]);
+
+  /**
+   * Toute la bibliothèque de l'onglet courant, une fois chacune — voir la grille complète.
+   *
+   * Typée en union plutôt qu'en `CinemaMovie[] | CinemaSeries[]` : la grille ne lit que ce que les
+   * deux ont en commun, et deux tableaux distincts obligeraient à la dupliquer pour rien.
+   */
+  const catalogue = useMemo<(CinemaMovie | CinemaSeries)[]>(
+    () => (mediaType === "series" ? [...seriesById.values()] : [...moviesById.values()]),
+    [mediaType, moviesById, seriesById]
+  );
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
   const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
   const continueSeries = nextUp?.items ?? [];
@@ -858,6 +871,7 @@ export function CinemaClient() {
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={setFocusedItem}
                   onSelectItem={openDetail}
+                  onSeeAll={() => cinemaNavigate({ browse: genre })}
                 />
               ))}
 
@@ -876,6 +890,14 @@ export function CinemaClient() {
                     onSelectItem={openDiscovery}
                   />
                 ))}
+
+              {/* Le bout des rangées : toute la bibliothèque, triable et filtrable. C'est la
+                  sortie de quelqu'un qui a tout parcouru sans rien trouver. */}
+              <div className="mb-10 mt-4 px-8 sm:px-12">
+                <button type="button" onClick={() => cinemaNavigate({ browse: BROWSE_ALL })} className="btn btn-ghost">
+                  {t(`player.browse.all.${mediaType}`)}
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -1004,6 +1026,7 @@ export function CinemaClient() {
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={setSeriesFocusedItem}
                   onSelectItem={openSeriesDetail}
+                  onSeeAll={() => cinemaNavigate({ browse: genre })}
                 />
               ))}
 
@@ -1022,6 +1045,13 @@ export function CinemaClient() {
                     onSelectItem={openDiscovery}
                   />
                 ))}
+
+              {/* Voir la note jumelle côté films. */}
+              <div className="mb-10 mt-4 px-8 sm:px-12">
+                <button type="button" onClick={() => cinemaNavigate({ browse: BROWSE_ALL })} className="btn btn-ghost">
+                  {t(`player.browse.all.${mediaType}`)}
+                </button>
+              </div>
             </>
           )}
           </div>
@@ -1031,6 +1061,20 @@ export function CinemaClient() {
       {/* Effacées tant qu'une fiche TMDB ou une fiche personne est ouverte par-dessus : elles
           partagent le même plan, et deux fiches montées ensemble écoutent Échap toutes les deux.
           L'adresse les garde, le retour les rouvre. */}
+      {/* La grille complète, sur l'onglet courant. Elle vit au même niveau que les panneaux du
+          rail : le retour ramène aux rangées, à l'endroit où on les avait laissées. */}
+      {route.browse !== null && catalogue.length > 0 && (
+        <CinemaBrowseSheet
+          genre={route.browse}
+          mediaType={mediaType}
+          items={catalogue}
+          genres={(mediaType === "series" ? series?.genres : movies?.genres) ?? []}
+          idOf={(item) => ("radarrId" in item ? item.radarrId : item.sonarrId)}
+          posterOf={(item) => item.posterUrl}
+          libraryIdOf={(item) => ("radarrId" in item ? item.radarrId : item.sonarrId)}
+        />
+      )}
+
       {!sheetAbove &&
         movieStack.map((film, i) => {
           const top = i === movieStack.length - 1;

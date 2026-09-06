@@ -72,7 +72,7 @@ export function PlayerPanelFrame({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
-      cinemaClose({ search: false, list: false, account: false });
+      cinemaClose({ search: false, list: false, account: false, browse: null });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -139,7 +139,7 @@ export function PlayerPanelFrame({
           {actions}
           <button
             type="button"
-            onClick={() => cinemaClose({ search: false, list: false, account: false })}
+            onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
             aria-label={t("common.close")}
             className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
           >

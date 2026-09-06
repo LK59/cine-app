@@ -58,6 +58,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     episodes: false,
     discover: null,
     person: null,
+    browse: null,
     // Le tiroir du téléphone se referme dans le *même* mouvement.
     //
     // Il se fermait juste avant, par un `cinemaClose` séparé — donc un `history.back()`, qui est
@@ -67,7 +68,13 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
   } satisfies Partial<CinemaRoute>;
 
   if (panel === "home") {
-    const alreadyHome = activePanel(current) === "home" && !current.film && !current.serie && !current.discover && !current.person;
+    const alreadyHome =
+      activePanel(current) === "home" &&
+      !current.film &&
+      !current.serie &&
+      !current.discover &&
+      !current.person &&
+      !current.browse;
     cinemaNavigate(closed, alreadyHome ? "replace" : "push");
     return;
   }
@@ -77,7 +84,11 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
   // Mais si une fiche le recouvre, le même clic doit la refermer et redescendre sur le panneau —
   // c'est ce qu'on attend d'un rail : y retourner. Sans cette nuance, le clic ne faisait rien.
   const covered =
-    current.film !== null || current.serie !== null || current.discover !== null || current.person !== null;
+    current.film !== null ||
+    current.serie !== null ||
+    current.discover !== null ||
+    current.person !== null ||
+    current.browse !== null;
   if (activePanel(current) === panel && !covered) return;
 
   // Depuis le tiroir du téléphone, on remplace au lieu d'empiler : le tiroir est une étape vers

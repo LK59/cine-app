@@ -1367,6 +1367,25 @@
         "copied": "Copié",
         "copyFailed": "Copie impossible — sélectionnez le texte à la main."
       }
+    },
+    "browse": {
+      "seeAll": "Voir tout",
+      "filter": "Filtrer…",
+      "sort": "Trier",
+      "decade": "Décennie",
+      "allDecades": "Toutes",
+      "nothing": "Rien ne correspond.",
+      "count": "{n} titres",
+      "sorts": {
+        "added": "Récemment ajoutés",
+        "title": "Titre",
+        "year": "Année",
+        "rating": "Note"
+      },
+      "all": {
+        "movies": "Voir tous les films",
+        "series": "Voir toutes les séries"
+      }
     }
   },
   "cinema": {

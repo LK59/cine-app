@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { useT } from "@/components/TranslationProvider";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -20,6 +21,7 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   cardWidthClassName,
   onFocusItem,
   onSelectItem,
+  onSeeAll,
   showNewBadge = true,
 }: {
   label: string;
@@ -30,12 +32,28 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   showNewBadge?: boolean;
   onFocusItem: (item: CinemaSeries) => void;
   onSelectItem: (item: CinemaSeries) => void;
+  /** Ouvre la grille complète de cette rangée, avec ses tris et ses filtres. */
+  onSeeAll?: () => void;
 }) {
+  const t = useT();
   if (items.length === 0) return null;
 
   return (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start" style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}>
-      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>
+      {/* « Voir tout » vit à côté du titre : sur une rangée, tout ce qui est au bout du
+          défilement demande de faire défiler pour être découvert. */}
+      <div className="mb-2 flex items-baseline justify-between gap-4 px-8 sm:px-12">
+        <h2 className="min-w-0 truncate text-sm font-medium text-white/70">{label}</h2>
+        {onSeeAll && (
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="shrink-0 text-xs font-medium text-white/40 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          >
+            {t("player.browse.seeAll")}
+          </button>
+        )}
+      </div>
       <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {items.map((item, i) => (
           <CinemaSeriesCard

@@ -26,6 +26,7 @@ describe("cinemaRoute", () => {
       discover: null,
       discoverType: "movie",
       person: null,
+      browse: null,
       menu: false,
     });
 
@@ -88,8 +89,26 @@ describe("cinemaRoute", () => {
       discover: null,
       discoverType: "movie",
       person: null,
+      browse: null,
       menu: false,
     });
+  });
+
+  // La grille complète est une adresse comme une autre : elle se partage, et le retour ramène à
+  // la rangée d'où l'on vient plutôt qu'à l'accueil.
+  it("carries the browse grid in the hash, genre included", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+
+    act(() => cinemaNavigate({ browse: "Science-Fiction" }));
+    expect(result.current.browse).toBe("Science-Fiction");
+    expect(window.location.hash).toContain("parcourir=Science-Fiction");
+
+    act(() => cinemaNavigate({ browse: "*" }));
+    expect(result.current.browse).toBe("*");
+
+    act(() => cinemaNavigate({ browse: null }));
+    expect(result.current.browse).toBeNull();
+    expect(window.location.hash).not.toContain("parcourir");
   });
 
   it("follows Back and Forward", () => {
