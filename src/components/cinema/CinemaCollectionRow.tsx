@@ -24,8 +24,15 @@ interface CollectionPayload {
   parts: CollectionPart[];
 }
 
+/**
+ * La réponse de la fiche Radarr, réduite à ce qu'on y cherche.
+ *
+ * La collection est rangée sous `tmdb`, avec le reste de ce qui vient de là — le synopsis, la
+ * distribution, la bande-annonce. La lire à la racine ne renvoyait jamais rien, et une rangée qui
+ * n'a pas d'identifiant ne demande rien : elle ne s'affichait donc nulle part, sans erreur.
+ */
 interface MovieInfo {
-  collection?: { id: number; name: string } | null;
+  tmdb?: { collection?: { id: number; name: string } | null } | null;
 }
 
 /**
@@ -54,7 +61,7 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Co
   const { data: info } = useSWR<MovieInfo>(`/api/radarr/movies/${radarrId}/info`, fetcher, {
     revalidateOnFocus: false,
   });
-  const collectionId = info?.collection?.id ?? null;
+  const collectionId = info?.tmdb?.collection?.id ?? null;
   const { data } = useSWR<CollectionPayload>(
     collectionId ? `/api/tmdb/collection/${collectionId}` : null,
     fetcher,

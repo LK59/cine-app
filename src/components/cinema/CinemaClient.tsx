@@ -18,6 +18,10 @@ import { CinemaHero } from "@/components/cinema/CinemaHero";
 import { CinemaRow } from "@/components/cinema/CinemaRow";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { useExitDelay } from "@/lib/useExitDelay";
+
+/** La durée de l'animation de sortie de la grille — celle de `--animate-fade-out`. */
+const BROWSE_EXIT_MS = 200;
 import { CinemaSpotlight } from "@/components/cinema/CinemaSpotlight";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
 import { CinemaSeriesCard } from "@/components/cinema/CinemaSeriesCard";
@@ -538,6 +542,11 @@ export function CinemaClient() {
    * Un seul tableau, et une clé par titre : deux emplacements distincts feraient glisser la
    * fiche du dessous d'un cran au retour, donc la démonteraient — exactement ce qu'on évite ici.
    */
+  /** La grille sort comme elle est entrée — voir la note jumelle de l'écran téléphone. */
+  const browseExit = useExitDelay(route.browse !== null, BROWSE_EXIT_MS);
+  const [lastBrowse, setLastBrowse] = useState<string | null>(route.browse);
+  if (route.browse !== null && route.browse !== lastBrowse) setLastBrowse(route.browse);
+
   const noop = useCallback(() => {}, []);
   const behind = useRouteBehind();
   const movieStack = useMemo(() => {
@@ -1063,9 +1072,10 @@ export function CinemaClient() {
           L'adresse les garde, le retour les rouvre. */}
       {/* La grille complète, sur l'onglet courant. Elle vit au même niveau que les panneaux du
           rail : le retour ramène aux rangées, à l'endroit où on les avait laissées. */}
-      {route.browse !== null && catalogue.length > 0 && (
+      {browseExit.render && lastBrowse !== null && catalogue.length > 0 && (
         <CinemaBrowseSheet
-          genre={route.browse}
+          leaving={browseExit.leaving}
+          genre={lastBrowse}
           mediaType={mediaType}
           items={catalogue}
           genres={(mediaType === "series" ? series?.genres : movies?.genres) ?? []}

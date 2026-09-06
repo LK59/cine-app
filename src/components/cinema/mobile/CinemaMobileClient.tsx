@@ -8,6 +8,7 @@ import { fetcher } from "@/lib/swr";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
@@ -49,6 +50,9 @@ const CONTINUE_WIDTH = "w-44 sm:w-48";
 // scrolling horizontally any further, and every extra card is DOM and decoded artwork the
 // browser carries for the whole session.
 const ROW_ITEM_LIMIT = 24;
+
+/** La durée de l'animation de sortie de la grille — celle de `--animate-fade-out`. */
+const BROWSE_EXIT_MS = 200;
 
 // The phone counterpart to CinemaClient. Deliberately a separate component rather than responsive
 // classes on that one: the desktop screen is a split-pane, keyboard-driven, hover-preview design
@@ -152,6 +156,18 @@ export function CinemaMobileClient() {
    * Elle n'est rendue que si son onglet est celui qu'on affiche : les deux écrans ont chacun leur
    * charge utile, et celle de l'autre onglet n'est pas forcément chargée.
    */
+  /**
+   * La grille sort comme elle est entrée.
+   *
+   * Elle s'ouvrait en glissant et disparaissait d'un coup : c'est l'adresse qui commande, et
+   * l'adresse change avant le composant. `useExitDelay` la garde montée le temps de l'animation,
+   * et `lastBrowse` retient le genre qu'elle montrait — sinon elle se viderait de son titre et de
+   * ses affiches avant de s'en aller.
+   */
+  const browseExit = useExitDelay(route.browse !== null, BROWSE_EXIT_MS);
+  const [lastBrowse, setLastBrowse] = useState<string | null>(route.browse);
+  if (route.browse !== null && route.browse !== lastBrowse) setLastBrowse(route.browse);
+
   const noop = useCallback(() => {}, []);
   const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
   const behind = useRouteBehind();
@@ -537,9 +553,10 @@ export function CinemaMobileClient() {
           les propriétés de la fiche courante plutôt que d'en ouvrir une — le contenu se
           remplacerait sur place, sans animation, en gardant l'état du geste de fermeture de la
           précédente. */}
-      {route.browse !== null && payload && (
+      {browseExit.render && lastBrowse !== null && payload && (
         <CinemaBrowseSheet
-          genre={route.browse}
+          leaving={browseExit.leaving}
+          genre={lastBrowse}
           mediaType={mediaType}
           items={catalogue}
           genres={payload.genres}
