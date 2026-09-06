@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
-import { Search, Bookmark, Inbox, Eye, CircleSlash, Heart } from "lucide-react";
+import { Search, Plus, Bookmark, Inbox, Eye, CircleSlash, Heart } from "lucide-react";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { filterByTitle, sortList, LIST_SORTS, type ListSort } from "@/lib/playerListSort";
 import { PlayerEmptyState } from "./PlayerEmptyState";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
@@ -51,15 +52,28 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
   // y a quarante titres, c'est donner l'impression que la page est cassée.
   const [chosen, setChosen] = useState<Segment | null>(null);
 
+  /**
+   * Chercher dans la liste, trier la liste.
+   *
+   * Deux réglages qui ne changent pas d'écran, donc qui ne vont pas dans l'adresse : les mettre
+   * dans l'historique ferait du bouton retour une machine à défaire des réglages. Ils survivent
+   * en revanche à un changement d'onglet, parce que « je cherche Batman » ne cesse pas d'être vrai
+   * en passant de « À voir » à « Vu ».
+   */
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ListSort>("added");
+
+  // Les comptes suivent la recherche : un onglet qui annonce huit titres et n'en montre aucun,
+  // parce qu'on filtre, dit quelque chose de faux au moment où on a le plus besoin d'y croire.
   const counts = useMemo(
     () => ({
-      requests: data?.requests.length ?? 0,
-      toWatch: data?.toWatch.length ?? 0,
-      watched: data?.watched.length ?? 0,
-      abandoned: data?.abandoned.length ?? 0,
-      favorites: data?.favorites.length ?? 0,
+      requests: filterByTitle(data?.requests ?? [], query).length,
+      toWatch: filterByTitle(data?.toWatch ?? [], query).length,
+      watched: filterByTitle(data?.watched ?? [], query).length,
+      abandoned: filterByTitle(data?.abandoned ?? [], query).length,
+      favorites: filterByTitle(data?.favorites ?? [], query).length,
     }),
-    [data]
+    [data, query]
   );
 
   // Ce qui vient d'arriver, et rien d'autre.
@@ -90,28 +104,83 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
     if (item.tmdbId) cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
   }
 
-  const items: PlayerListItem[] =
-    segment === "requests" ? [] : (data?.[segment] ?? []);
+  /**
+   * Les trois chiffres du haut.
+   *
+   * Ce qu'on veut savoir en arrivant : combien j'en ai mis de côté, combien je peux lancer tout
+   * de suite, combien j'ai déjà vu. Le deuxième est le seul actionnable — c'est lui qui a droit à
+   * la couleur.
+   */
+  const stats = useMemo(
+    () => ({
+      total: data?.toWatch.length ?? 0,
+      available: data?.toWatch.filter((i) => i.libraryId !== null).length ?? 0,
+      watched: data?.watched.length ?? 0,
+    }),
+    [data]
+  );
+
+  const items: PlayerListItem[] = useMemo(() => {
+    const source = segment === "requests" ? [] : (data?.[segment] ?? []);
+    return sortList(filterByTitle(source, query), sort);
+  }, [data, segment, query, sort]);
+
+  /** Les demandes suivent la même recherche : c'est le même écran, et la même question. */
+  const shownRequests = useMemo(
+    () => filterByTitle(data?.requests ?? [], query),
+    [data, query]
+  );
 
   return (
     <PlayerPanelFrame
       leaving={leaving}
       title={t("player.nav.myList")}
-      // Ajouter un titre, c'est le chercher : le bouton ouvre la recherche plutôt que d'installer
-      // un second champ ici. Elle trouve déjà tout — la bibliothèque, le reste du monde, les
-      // gens — et ce qu'elle ne trouve pas chez nous, sa fiche propose de le demander.
-      actions={
-        <button
-          type="button"
-          onClick={() => cinemaNavigate({ list: false, search: true })}
-          className="btn btn-ghost btn-sm"
-        >
-          <Search size={15} />
-          <span className="hidden sm:inline">{t("player.lists.addTitle")}</span>
-        </button>
-      }
+      subtitle={t("player.lists.subtitle")}
     >
       <div className="mx-auto w-full max-w-6xl">
+        {/* Trois chiffres avant tout le reste : on sait ce qu'on a avant de savoir où le trouver. */}
+        <div className="mb-4 grid grid-cols-3 gap-2.5">
+          <StatCard value={stats.total} label={t("player.lists.stats.inList")} />
+          <StatCard value={stats.available} label={t("player.lists.stats.available")} highlight />
+          <StatCard value={stats.watched} label={t("player.lists.stats.watched")} />
+        </div>
+
+        {/* Chercher, trier, ajouter — sur une ligne. Le « + » ouvre la recherche générale :
+            ajouter un titre, c'est le chercher, et cette recherche-ci ne fouille que la liste. */}
+        <div className="mb-4 flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("player.lists.searchInList")}
+              className="input h-10 w-full pl-9 text-sm"
+            />
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as ListSort)}
+            aria-label={t("player.lists.sort")}
+            className="select h-10 shrink-0 text-sm"
+          >
+            {LIST_SORTS.map((key) => (
+              <option key={key} value={key}>
+                {t(`player.lists.sorts.${key}`)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => cinemaNavigate({ list: false, search: true })}
+            aria-label={t("player.lists.addTitle")}
+            title={t("player.lists.addTitle")}
+            className="btn-primary h-10 w-10 shrink-0 justify-center p-0"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+
         {/* Une seule ligne qui défile plutôt que cinq pastilles réparties sur trois rangs : sur
             téléphone, l'en-tête reprenait un tiers de l'écran avant la première affiche.
 
@@ -181,7 +250,7 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
 
         {segment === "requests" && counts.requests > 0 && (
           <div className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-            {data?.requests.map((r) => (
+            {shownRequests.map((r) => (
               <PlayerRequestCard
                 key={r.id}
                 request={r}
@@ -214,5 +283,22 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
         )}
       </div>
     </PlayerPanelFrame>
+  );
+}
+
+
+/** Un chiffre et ce qu'il compte. Le seul actionnable — ce qu'on peut lancer — porte la couleur. */
+function StatCard({ value, label, highlight = false }: { value: number; label: string; highlight?: boolean }) {
+  return (
+    <div
+      className={`rounded-xl border px-3 py-3 ${
+        highlight && value > 0 ? "border-emerald-500/25 bg-emerald-500/5" : "border-white/10 bg-white/5"
+      }`}
+    >
+      <p className={`text-2xl font-semibold tabular-nums ${highlight && value > 0 ? "text-emerald-400" : "text-white"}`}>
+        {value}
+      </p>
+      <p className="mt-0.5 truncate text-xs text-slate-500">{label}</p>
+    </div>
   );
 }

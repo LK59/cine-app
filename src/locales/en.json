@@ -1270,7 +1270,20 @@
         "abandoned": "Nothing dropped. Good.",
         "favorites": "No favourites yet. The heart on a title adds one."
       },
-      "addTitle": "Add a title"
+      "addTitle": "Add a title",
+      "subtitle": "Films and series to follow, watch or request",
+      "searchInList": "Search this list…",
+      "sort": "Sort",
+      "sorts": {
+        "added": "Date added",
+        "title": "Title",
+        "year": "Year"
+      },
+      "stats": {
+        "inList": "in the list",
+        "available": "available",
+        "watched": "watched"
+      }
     },
     "requests": {
       "state": {

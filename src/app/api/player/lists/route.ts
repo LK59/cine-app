@@ -38,6 +38,14 @@ export interface PlayerListItem {
   libraryId: number | null;
   /** Présent pour ce qui vient de Jellyfin — c'est ce qui permet de retirer d'un clic. */
   jellyfinId: string | null;
+  /**
+   * Quand ce titre est entré dans la liste, pour ce qu'on y a rangé soi-même.
+   *
+   * Nul pour ce qui vient de Jellyfin : « vu » et « favori » y vivent, et Jellyfin ne dit pas
+   * quand un titre a été marqué. Un tri par date d'ajout retombe alors sur le titre plutôt que
+   * d'inventer un ordre.
+   */
+  addedAt: number | null;
 }
 
 export interface PlayerListsPayload {
@@ -103,6 +111,7 @@ export async function GET(req: NextRequest) {
             poster: (entry ? posterUrl(entry.images) : null) ?? watchlistPoster(w.posterPath),
             libraryId: entry?.id ?? null,
             jellyfinId: null,
+            addedAt: w.updatedAt,
           };
         });
 
@@ -123,6 +132,7 @@ export async function GET(req: NextRequest) {
           poster: item.ImageTags?.Primary ? `/api/jellyfin/image?itemId=${item.Id}&tag=${item.ImageTags.Primary}` : null,
           libraryId: entry?.id ?? null,
           jellyfinId: item.Id,
+          addedAt: null,
         };
       });
 

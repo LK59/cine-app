@@ -866,6 +866,7 @@ export function CinemaClient() {
                 rowIndex={RAIL_COUNT}
                 items={myListMovies}
                 cardWidthClassName={CARD_WIDTH}
+                onSeeAll={() => cinemaNavigate({ list: true })}
                 onFocusItem={setFocusedItem}
                 onSelectItem={openDetail}
               />
@@ -1021,6 +1022,7 @@ export function CinemaClient() {
                 rowIndex={RAIL_COUNT}
                 items={myListSeries}
                 cardWidthClassName={CARD_WIDTH}
+                onSeeAll={() => cinemaNavigate({ list: true })}
                 onFocusItem={setSeriesFocusedItem}
                 onSelectItem={openSeriesDetail}
               />

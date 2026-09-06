@@ -1270,7 +1270,20 @@
         "abandoned": "Rien d’abandonné. Tant mieux.",
         "favorites": "Aucun favori. Le cœur sur une fiche en ajoute un."
       },
-      "addTitle": "Ajouter un titre"
+      "addTitle": "Ajouter un titre",
+      "subtitle": "Films et séries à suivre, voir ou demander",
+      "searchInList": "Rechercher dans la liste…",
+      "sort": "Trier",
+      "sorts": {
+        "added": "Date d'ajout",
+        "title": "Titre",
+        "year": "Année"
+      },
+      "stats": {
+        "inList": "titres en liste",
+        "available": "disponibles",
+        "watched": "vus"
+      }
     },
     "requests": {
       "state": {

@@ -492,7 +492,15 @@ export function CinemaMobileClient() {
         )}
 
         <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={openHero} showNewBadge={false} />
-        <PosterRow label={t("cinema.myList")} items={myList} itemId={itemId} onSelect={openHero} />
+        <PosterRow
+          label={t("cinema.myList")}
+          items={myList}
+          itemId={itemId}
+          onSelect={openHero}
+          // Vers « Ma liste » et non vers une grille de genre : la rangée est un extrait
+          // d'un écran qui existe déjà, avec ses onglets, sa recherche et ses demandes.
+          onSeeAll={() => cinemaNavigate({ list: true })}
+        />
 
         {(discovery?.rows ?? [])
           .filter((row) =>

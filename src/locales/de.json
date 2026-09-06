@@ -1270,7 +1270,20 @@
         "abandoned": "Nichts abgebrochen. Umso besser.",
         "favorites": "Keine Favoriten. Das Herz auf einer Seite fügt einen hinzu."
       },
-      "addTitle": "Titel hinzufügen"
+      "addTitle": "Titel hinzufügen",
+      "subtitle": "Filme und Serien zum Verfolgen, Sehen oder Anfragen",
+      "searchInList": "In der Liste suchen…",
+      "sort": "Sortieren",
+      "sorts": {
+        "added": "Hinzugefügt am",
+        "title": "Titel",
+        "year": "Jahr"
+      },
+      "stats": {
+        "inList": "in der Liste",
+        "available": "verfügbar",
+        "watched": "gesehen"
+      }
     },
     "requests": {
       "state": {

@@ -143,6 +143,54 @@ describe("PlayerListPanel", () => {
     expect(screen.queryByText("player.browse.seeAll")).toBeNull();
   });
 
+  // La liste se fouille dès qu'elle dépasse la poignée de titres : la recherche interne filtre
+  // l'onglet ouvert, et les compteurs des onglets suivent — un onglet qui annonce huit titres et
+  // n'en montre aucun ment au moment où on a le plus besoin d'y croire.
+  it("filters the list on what is typed, counts included", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      toWatch: [
+        { tmdbId: 603, type: "movie", title: "Matrix", year: 1999, poster: null, libraryId: 42, jellyfinId: null, addedAt: 2 },
+        { tmdbId: 604, type: "movie", title: "Batman", year: 1989, poster: null, libraryId: null, jellyfinId: null, addedAt: 1 },
+      ],
+    });
+
+    await screen.findByText("Matrix");
+    fireEvent.change(screen.getByPlaceholderText("player.lists.searchInList"), { target: { value: "bat" } });
+
+    expect(screen.getByText("Batman")).toBeTruthy();
+    expect(screen.queryByText("Matrix")).toBeNull();
+    // L'onglet « À voir » ne compte plus que ce qui reste.
+    expect(screen.getByText(/player\.lists\.toWatch/).textContent).toContain("1");
+  });
+
+  // Les trois chiffres du haut décrivent la liste, pas l'onglet ouvert : « disponibles » est le
+  // seul actionnable, et c'est celui qu'on vient chercher.
+  it("counts what is in the list, what can be played now, and what has been seen", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      toWatch: [
+        { tmdbId: 1, type: "movie", title: "Ici", year: 2000, poster: null, libraryId: 7, jellyfinId: null, addedAt: 1 },
+        { tmdbId: 2, type: "movie", title: "Pas ici", year: 2001, poster: null, libraryId: null, jellyfinId: null, addedAt: 2 },
+      ],
+      watched: [{ tmdbId: 3, type: "movie", title: "Déjà vu", year: 1999, poster: null, libraryId: 9, jellyfinId: "j", addedAt: null }],
+    });
+
+    await screen.findByText("player.lists.stats.inList");
+    const stat = (label: string) => screen.getByText(label).previousElementSibling?.textContent;
+    expect(stat("player.lists.stats.inList")).toBe("2");
+    expect(stat("player.lists.stats.available")).toBe("1");
+    expect(stat("player.lists.stats.watched")).toBe("1");
+  });
+
+  // Le « + » ne cherche pas dans la liste : il ouvre la recherche générale, parce qu'ajouter un
+  // titre c'est le chercher ailleurs que là où il n'est pas encore.
+  it("sends the plus button to the general search", async () => {
+    renderWith({ ...EMPTY_LISTS });
+    fireEvent.click(await screen.findByLabelText("player.lists.addTitle"));
+    expect(mockNavigate).toHaveBeenCalledWith({ list: false, search: true });
+  });
+
   it("sends an arrived request to its library sheet, not to the TMDB one", async () => {
     renderWith({
       ...EMPTY_LISTS,

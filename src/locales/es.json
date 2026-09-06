@@ -1270,7 +1270,20 @@
         "abandoned": "Nada abandonado. Mejor así.",
         "favorites": "Sin favoritos. El corazón de una ficha añade uno."
       },
-      "addTitle": "Añadir un título"
+      "addTitle": "Añadir un título",
+      "subtitle": "Películas y series que seguir, ver o pedir",
+      "searchInList": "Buscar en la lista…",
+      "sort": "Ordenar",
+      "sorts": {
+        "added": "Fecha de adición",
+        "title": "Título",
+        "year": "Año"
+      },
+      "stats": {
+        "inList": "en la lista",
+        "available": "disponibles",
+        "watched": "vistos"
+      }
     },
     "requests": {
       "state": {
