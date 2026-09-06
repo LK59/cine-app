@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -438,6 +438,9 @@ export function ExperimentalPlayerHost({
   // second decoder, a second encoder, a second MediaSource, and the first one's read loop still
   // running against buffers its source had already released.
   const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher, {
+    // La description du fichier est ce qui décide du chemin de lecture : la mettre en pause parce
+    // qu'un film occupe l'écran, c'est attendre que le film commence pour savoir comment le lire.
+    ...playerBootstrapOptions,
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,

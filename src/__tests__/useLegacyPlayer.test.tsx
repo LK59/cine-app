@@ -5,7 +5,12 @@ import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 
 let respond: () => Promise<unknown> = async () => ({});
-vi.mock("@/lib/swr", () => ({ fetcher: () => respond() }));
+// Le module entier, moins son `fetcher` : il porte aussi les options d'amorçage du lecteur, sans
+// lesquelles le hook ne se configure plus. Un bouchon partiel plutôt qu'un remplacement.
+vi.mock("@/lib/swr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/swr")>()),
+  fetcher: () => respond(),
+}));
 
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 
 interface PreferencesPayload {
   legacyPlayer?: { enabled: boolean };
@@ -18,6 +18,8 @@ interface PreferencesPayload {
  */
 export function useLegacyPlayer(): { legacy: boolean | undefined } {
   const { data, error } = useSWR<PreferencesPayload>("/api/user/preferences", fetcher, {
+    // Sans quoi le lecteur attend une réponse que sa propre ouverture empêche d'arriver.
+    ...playerBootstrapOptions,
     // Réessayer vite : le cas courant d'échec est une réponse obtenue *avant* d'être connecté, et
     // la vraie valeur arrive dès la première nouvelle tentative.
     errorRetryInterval: 1500,
