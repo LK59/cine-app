@@ -34,7 +34,7 @@ vi.mock("@/components/player/PlayerPanelFrame", () => ({
 
 import { PlayerListPanel } from "@/components/player/PlayerListPanel";
 
-const EMPTY_LISTS = { requests: [], toWatch: [], watched: [], abandoned: [], favorites: [] };
+const EMPTY_LISTS = { requests: [], toWatch: [], watched: [] };
 
 function renderWith(lists: Record<string, unknown>) {
   payload = lists;
@@ -83,8 +83,8 @@ describe("PlayerListPanel", () => {
     });
 
     await screen.findByText("Matrix");
-    fireEvent.click(screen.getByText(/player\.lists\.abandoned/));
-    expect(screen.getByText("player.lists.empty.abandoned")).toBeTruthy();
+    fireEvent.click(screen.getByText(/player\.lists\.watched/));
+    expect(screen.getByText("player.lists.empty.watched")).toBeTruthy();
   });
 
   // Le point ne s'allume que pour ce qui vient d'arriver : c'est la seule chose de cet écran qui
@@ -128,19 +128,27 @@ describe("PlayerListPanel", () => {
     renderWith({ ...EMPTY_LISTS });
 
     expect(await screen.findByText("player.lists.empty.toWatch")).toBeTruthy();
-    fireEvent.click(screen.getByText("player.lists.addTitle"));
-    expect(mockNavigate).toHaveBeenCalledWith({ list: false, search: true });
+    expect(screen.getByText("player.lists.addTitle")).toBeTruthy();
   });
 
-  // Sauf celui-là : proposer d'ajouter quelque chose à « Abandonné » serait une drôle d'invitation.
-  it("proposes nothing for the one empty list that is good news", async () => {
+  // « Vu » se remplit tout seul au fil des lectures : y proposer un ajout à la main n'aurait pas
+  // de sens, on y renvoie donc vers la bibliothèque.
+  it("sends an empty Vu to the library rather than to an add form", async () => {
     renderWith({ ...EMPTY_LISTS });
 
     await screen.findByText("player.lists.empty.toWatch");
-    fireEvent.click(screen.getByText(/player\.lists\.abandoned/));
-    expect(screen.getByText("player.lists.empty.abandoned")).toBeTruthy();
-    expect(screen.queryByText("player.lists.addTitle")).toBeNull();
-    expect(screen.queryByText("player.browse.seeAll")).toBeNull();
+    fireEvent.click(screen.getByText(/player\.lists\.watched/));
+    expect(screen.getByText("player.lists.empty.watched")).toBeTruthy();
+    fireEvent.click(screen.getByText("player.browse.seeAll"));
+    expect(mockNavigate).toHaveBeenCalledWith({ list: false, browse: "*" });
+  });
+
+  // Et une liste « À voir » vide ouvre l'ajout sur place, sans quitter l'écran.
+  it("opens the add search from an empty À voir", async () => {
+    renderWith({ ...EMPTY_LISTS });
+
+    fireEvent.click(await screen.findByText("player.lists.addTitle"));
+    expect(screen.getByPlaceholderText("player.lists.addPlaceholder")).toBeTruthy();
   });
 
   // La liste se fouille dès qu'elle dépasse la poignée de titres : la recherche interne filtre

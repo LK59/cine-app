@@ -1257,18 +1257,13 @@
       "requests": "Anfragen",
       "toWatch": "Anschauen",
       "watched": "Gesehen",
-      "abandoned": "Abgebrochen",
-      "favorites": "Favoriten",
       "arrivedBadge": "{n} Titel angekommen",
       "requestsHint": "Über die Suche einen Titel anfragen. Er bleibt hier, bis er verfügbar ist.",
-      "favoritesHint": "Favoriten gelten nur für Titel, die schon in der Bibliothek sind. Sie werden mit Jellyfin synchronisiert.",
       "watchedHint": "Füllt sich beim Anschauen von selbst. Auf der Seite eines Titels lässt es sich korrigieren.",
       "empty": {
         "requests": "Noch keine Anfragen.",
         "toWatch": "Noch nichts vorgemerkt. Füge einen Titel von seiner Seite aus hinzu.",
-        "watched": "Noch nichts zu Ende geschaut.",
-        "abandoned": "Nichts abgebrochen. Umso besser.",
-        "favorites": "Keine Favoriten. Das Herz auf einer Seite fügt einen hinzu."
+        "watched": "Noch nichts zu Ende geschaut."
       },
       "addTitle": "Titel hinzufügen",
       "subtitle": "Filme und Serien zum Verfolgen, Sehen oder Anfragen",
@@ -1302,13 +1297,13 @@
       "cancelHint": "Entfernt die Anfrage aus deiner Liste."
     },
     "actions": {
-      "removedFromList": "Aus der Liste entfernt",
+      "removedFromList": "Aus „Meine Liste“ entfernt",
       "addedTo": {
-        "to_watch": "Zu „Anschauen“ hinzugefügt",
+        "to_watch": "Zu „Meine Liste“ hinzugefügt",
         "watched": "Als gesehen markiert",
         "abandoned": "Als abgebrochen markiert",
-        "favorite": "Zu den Favoriten hinzugefügt",
-        "to_request": "Zur Liste hinzugefügt"
+        "favorite": "Zu „Meine Liste“ hinzugefügt",
+        "to_request": "Zu „Meine Liste“ hinzugefügt"
       },
       "requested": "{title} wurde angefragt",
       "requestCancelled": "Anfrage zurückgezogen"
@@ -1477,7 +1472,8 @@
       "notAired": "Diese Folge ist noch nicht erschienen.",
       "notAiredShort": "Demnächst",
       "seasonRequested": "Staffel {n} angefragt",
-      "episodeRequested": "{label} angefragt"
+      "episodeRequested": "{label} angefragt",
+      "airsOn": "am {date}"
     }
   }
 }

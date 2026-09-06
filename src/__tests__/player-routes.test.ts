@@ -176,7 +176,12 @@ describe("GET /api/player/lists", () => {
   it("reads each list from the source that owns it", async () => {
     watchlistDb.getAll.mockReturnValue([
       { tmdbId: 603, mediaType: "movie", title: "À voir", year: 1999, posterPath: null, status: "to_watch" },
-      { tmdbId: 111, mediaType: "movie", title: "Laissé tomber", year: 2005, posterPath: null, status: "abandoned" },
+      // Un ancien favori local rejoint « À voir » : la liste a disparu, ce qu'on y avait rangé
+      // ne doit pas disparaître avec elle.
+      { tmdbId: 111, mediaType: "movie", title: "Ancien favori", year: 2005, posterPath: null, status: "favorite" },
+      // « Abandonné » n'a plus d'onglet et plus rien pour l'alimenter : ces lignes ne remontent
+      // dans aucune des trois listes.
+      { tmdbId: 222, mediaType: "movie", title: "Laissé tomber", year: 2005, posterPath: null, status: "abandoned" },
     ]);
     jellyseerr.getMe.mockResolvedValue({ id: 5 });
     jellyseerr.getRequestsByUser.mockResolvedValue({ results: [] });
@@ -184,15 +189,16 @@ describe("GET /api/player/lists", () => {
     const { GET } = await import("@/app/api/player/lists/route");
     const body = await (await GET(req())).json();
 
-    // Local : les intentions et les jugements.
-    expect(body.toWatch).toHaveLength(1);
+    // Local : les intentions.
+    expect(body.toWatch.map((i: { title: string }) => i.title)).toEqual(["À voir", "Ancien favori"]);
     expect(body.toWatch[0].libraryId).toBe(42);
-    expect(body.abandoned.map((i: { title: string }) => i.title)).toEqual(["Laissé tomber"]);
 
     // Jellyfin : ce qu'il sait déjà, et qu'on ne recopie donc pas.
     expect(body.watched.map((i: { title: string }) => i.title)).toEqual(["Vu"]);
-    expect(body.favorites.map((i: { title: string }) => i.title)).toEqual(["Favori"]);
     expect(body.watched[0].jellyfinId).toBe("jf1");
+
+    // Trois listes, et rien d'autre.
+    expect(Object.keys(body).sort()).toEqual(["requests", "toWatch", "watched"]);
   });
 
   it("refuses an anonymous caller", async () => {

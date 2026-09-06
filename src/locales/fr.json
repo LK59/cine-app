@@ -1257,18 +1257,13 @@
       "requests": "Demandes",
       "toWatch": "À voir",
       "watched": "Vu",
-      "abandoned": "Abandonné",
-      "favorites": "Favoris",
       "arrivedBadge": "{n} titre(s) arrivé(s)",
       "requestsHint": "Utilisez la recherche pour demander un titre. Il apparaîtra ici jusqu’à ce qu’il soit disponible.",
-      "favoritesHint": "Vos favoris ne concernent que les titres présents dans la bibliothèque. Ils sont synchronisés avec Jellyfin.",
       "watchedHint": "Rempli automatiquement au fil de vos lectures. Vous pouvez corriger depuis la fiche d’un titre.",
       "empty": {
         "requests": "Aucune demande pour le moment.",
         "toWatch": "Rien à voir pour l’instant. Ajoutez un titre depuis sa fiche.",
-        "watched": "Rien de terminé pour le moment.",
-        "abandoned": "Rien d’abandonné. Tant mieux.",
-        "favorites": "Aucun favori. Le cœur sur une fiche en ajoute un."
+        "watched": "Rien de terminé pour le moment."
       },
       "addTitle": "Ajouter un titre",
       "subtitle": "Films et séries à suivre, voir ou demander",
@@ -1302,13 +1297,13 @@
       "cancelHint": "Retire la demande de votre liste."
     },
     "actions": {
-      "removedFromList": "Retiré de la liste",
+      "removedFromList": "Retiré de « Ma liste »",
       "addedTo": {
-        "to_watch": "Ajouté à « À voir »",
+        "to_watch": "Ajouté à « Ma liste »",
         "watched": "Marqué comme vu",
         "abandoned": "Marqué comme abandonné",
-        "favorite": "Ajouté aux favoris",
-        "to_request": "Ajouté à la liste"
+        "favorite": "Ajouté à « Ma liste »",
+        "to_request": "Ajouté à « Ma liste »"
       },
       "requested": "{title} a été demandé",
       "requestCancelled": "Demande annulée"
@@ -1477,7 +1472,8 @@
       "notAired": "Cet épisode n'est pas encore diffusé.",
       "notAiredShort": "À venir",
       "seasonRequested": "Saison {n} demandée",
-      "episodeRequested": "{label} demandé"
+      "episodeRequested": "{label} demandé",
+      "airsOn": "le {date}"
     }
   }
 }

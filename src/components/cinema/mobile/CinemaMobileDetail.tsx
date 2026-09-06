@@ -479,7 +479,6 @@ export function CinemaMobileDetail({
               busy={missing.busy}
               onRequestSeason={missing.requestSeason}
               onRequestEpisode={missing.requestEpisode}
-              compact
             />
           </>
         )}

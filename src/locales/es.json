@@ -1257,18 +1257,13 @@
       "requests": "Peticiones",
       "toWatch": "Por ver",
       "watched": "Visto",
-      "abandoned": "Abandonado",
-      "favorites": "Favoritos",
       "arrivedBadge": "{n} título(s) disponible(s)",
       "requestsHint": "Usa la búsqueda para pedir un título. Se queda aquí hasta que esté disponible.",
-      "favoritesHint": "Los favoritos solo se aplican a los títulos que ya están en la biblioteca. Se sincronizan con Jellyfin.",
       "watchedHint": "Se rellena solo según lo que ves. Puedes corregirlo desde la ficha de un título.",
       "empty": {
         "requests": "Todavía no hay peticiones.",
         "toWatch": "Nada pendiente. Añade un título desde su ficha.",
-        "watched": "Nada terminado por ahora.",
-        "abandoned": "Nada abandonado. Mejor así.",
-        "favorites": "Sin favoritos. El corazón de una ficha añade uno."
+        "watched": "Nada terminado por ahora."
       },
       "addTitle": "Añadir un título",
       "subtitle": "Películas y series que seguir, ver o pedir",
@@ -1302,13 +1297,13 @@
       "cancelHint": "Quita la petición de tu lista."
     },
     "actions": {
-      "removedFromList": "Quitado de la lista",
+      "removedFromList": "Quitado de «Mi lista»",
       "addedTo": {
-        "to_watch": "Añadido a «Por ver»",
+        "to_watch": "Añadido a «Mi lista»",
         "watched": "Marcado como visto",
         "abandoned": "Marcado como abandonado",
-        "favorite": "Añadido a favoritos",
-        "to_request": "Añadido a la lista"
+        "favorite": "Añadido a «Mi lista»",
+        "to_request": "Añadido a «Mi lista»"
       },
       "requested": "Se ha pedido {title}",
       "requestCancelled": "Petición cancelada"
@@ -1477,7 +1472,8 @@
       "notAired": "Este episodio aún no se ha emitido.",
       "notAiredShort": "Próximamente",
       "seasonRequested": "Temporada {n} pedida",
-      "episodeRequested": "{label} pedido"
+      "episodeRequested": "{label} pedido",
+      "airsOn": "el {date}"
     }
   }
 }

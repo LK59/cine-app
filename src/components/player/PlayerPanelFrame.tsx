@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
-import { useIsShortViewport } from "@/lib/useIsMobile";
+import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 
@@ -40,6 +40,7 @@ export function PlayerPanelFrame({
 }) {
   const t = useT();
   const route = useCinemaRoute();
+  const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -121,14 +122,22 @@ export function PlayerPanelFrame({
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {actions}
-          <button
-            type="button"
-            onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
-            aria-label={t("common.close")}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-          >
-            <X size={20} />
-          </button>
+          {/* La croix ne survit que sur grand écran.
+              Sur téléphone, ces écrans sont devenus des onglets : on n'en « sort » plus, on va
+              ailleurs, et la barre du bas dit où. Une croix y proposait de fermer quelque chose
+              qui n'a plus de derrière — et laissait deux façons de faire la même chose, dont une
+              dans le coin le plus hors de portée du pouce. Le rail, lui, est un compagnon et non
+              une destination : la croix y garde son sens. */}
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
+              aria-label={t("common.close")}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
       </header>
 

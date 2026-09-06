@@ -26,15 +26,12 @@ export function CinemaMissingEpisodes({
   busy,
   onRequestSeason,
   onRequestEpisode,
-  compact = false,
 }: {
   season: MissingSeason | undefined;
   asked: Set<string>;
   busy: boolean;
   onRequestSeason: (seasonNumber: number) => void;
   onRequestEpisode: (episodeId: number, label: string) => void;
-  /** Sur téléphone : des lignes plus serrées, pas de colonne de dates. */
-  compact?: boolean;
 }) {
   const t = useT();
   if (!season || season.episodes.length === 0) return null;
@@ -69,10 +66,23 @@ export function CinemaMissingEpisodes({
           return (
             <li key={ep.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
               <span className="w-14 shrink-0 font-mono text-xs text-white/40">{label}</span>
-              <span className="min-w-0 flex-1 truncate text-sm text-white/70">{ep.title}</span>
-              {!compact && airs && (
-                <span className="shrink-0 text-xs text-white/35">{airs}</span>
-              )}
+              {/* La date de diffusion se lit partout, y compris sur téléphone où elle était
+                  masquée faute de largeur. Sur une saison en cours, c'est la seule information
+                  qui répond à la question qu'on se pose vraiment : quand ?
+
+                  Elle passe donc sous le titre quand la place manque, au lieu de disparaître —
+                  et elle est mise en avant sur ce qui n'est pas encore sorti, où « Pas encore
+                  diffusé » ne disait pas la moitié de ce qu'on voulait savoir. */}
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <span className="min-w-0 truncate text-sm text-white/70">{ep.title}</span>
+                {airs && (
+                  <span
+                    className={`shrink-0 text-xs ${ep.released ? "text-white/35" : "text-accent-300/80"} sm:ml-auto`}
+                  >
+                    {ep.released ? airs : t("cinema.missing.airsOn", { date: airs })}
+                  </span>
+                )}
+              </span>
               <button
                 type="button"
                 disabled={!ep.released || busy || episodeAsked}

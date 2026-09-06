@@ -120,6 +120,14 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
 
+    /* Ce qui a déjà été fait une fois et ne doit pas se refaire.
+       Une migration de données par compte ne peut pas s'appuyer sur le schéma : elle dépend de
+       comptes qui n'existent qu'une fois connectés. Il lui faut donc sa propre mémoire. */
+    CREATE TABLE IF NOT EXISTS migrations_done (
+      name    TEXT    PRIMARY KEY,
+      done_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS kv_cache (
       key        TEXT    PRIMARY KEY,
       value      TEXT    NOT NULL,
@@ -572,6 +580,16 @@ export interface StoredSession {
   createdAt: number;
   lastSeenAt: number;
 }
+
+/** Les migrations de données déjà passées, pour qu'elles ne repassent pas. */
+export const migrationDb = {
+  isDone(name: string): boolean {
+    return !!getDb().prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(name);
+  },
+  markDone(name: string): void {
+    getDb().prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(name, Date.now());
+  },
+};
 
 export const sessionDb = {
   create(jti: string, userId: string): void {

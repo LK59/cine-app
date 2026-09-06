@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
-import { Search, Plus, Bookmark, Inbox, Eye, CircleSlash, Heart } from "lucide-react";
+import { Search, Plus, Bookmark, Inbox, Eye } from "lucide-react";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { filterByTitle, sortList, LIST_SORTS, type ListSort } from "@/lib/playerListSort";
 import { PlayerEmptyState } from "./PlayerEmptyState";
@@ -16,17 +16,22 @@ import { PlayerResultCard } from "./PlayerResultCard";
 import { PlayerRequestCard } from "./PlayerRequestCard";
 import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/route";
 
-type Segment = "requests" | "toWatch" | "watched" | "abandoned" | "favorites";
+type Segment = "toWatch" | "requests" | "watched";
 
-const SEGMENTS: Segment[] = ["toWatch", "requests", "watched", "abandoned", "favorites"];
+/**
+ * Trois onglets, et c'est un choix de fond.
+ *
+ * « Abandonné » n'avait plus rien pour l'alimenter, et « Favoris » disait la même chose qu'« À
+ * voir » avec un autre mot. Ce qui reste répond aux trois seules questions qu'on se pose ici :
+ * qu'est-ce que je veux voir, qu'est-ce que j'ai vu, où en sont mes demandes.
+ */
+const SEGMENTS: Segment[] = ["toWatch", "requests", "watched"];
 
 /** Une image par vide : un écran qui ne porte qu'une phrase grise ressemble à un chargement raté. */
 const EMPTY_ICON: Record<Segment, React.ElementType> = {
   toWatch: Bookmark,
   requests: Inbox,
   watched: Eye,
-  abandoned: CircleSlash,
-  favorites: Heart,
 };
 
 /**
@@ -86,8 +91,6 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
       requests: filterByTitle(data?.requests ?? [], query).length,
       toWatch: filterByTitle(data?.toWatch ?? [], query).length,
       watched: filterByTitle(data?.watched ?? [], query).length,
-      abandoned: filterByTitle(data?.abandoned ?? [], query).length,
-      favorites: filterByTitle(data?.favorites ?? [], query).length,
     }),
     [data, query]
   );
@@ -245,9 +248,6 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
         {segment === "requests" && (
           <p className="mt-5 text-sm text-slate-400">{t("player.lists.requestsHint")}</p>
         )}
-        {segment === "favorites" && (
-          <p className="mt-5 text-sm text-slate-400">{t("player.lists.favoritesHint")}</p>
-        )}
         {segment === "watched" && (
           <p className="mt-5 text-sm text-slate-400">{t("player.lists.watchedHint")}</p>
         )}
@@ -263,13 +263,11 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
             icon={EMPTY_ICON[segment]}
             message={t(`player.lists.empty.${segment}`)}
             action={
-              // « Abandonné » est le seul vide qu'on ne cherche pas à remplir : proposer d'y
-              // ajouter quelque chose serait une drôle d'invitation.
-              segment === "abandoned"
-                ? null
-                : segment === "requests" || segment === "toWatch"
-                  ? { label: t("player.lists.addTitle"), onClick: () => cinemaNavigate({ list: false, search: true }) }
-                  : { label: t("player.browse.seeAll"), onClick: () => cinemaNavigate({ list: false, browse: BROWSE_ALL }) }
+              // « Vu » se remplit tout seul au fil des lectures : on y renvoie vers la
+              // bibliothèque, pas vers un ajout à la main.
+              segment === "watched"
+                ? { label: t("player.browse.seeAll"), onClick: () => cinemaNavigate({ list: false, browse: BROWSE_ALL }) }
+                : { label: t("player.lists.addTitle"), onClick: () => setAdding(true) }
             }
           />
         )}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { watchlistDb } from "@/lib/db";
+import { migrateFavoritesToWatchlist } from "@/lib/migrateFavorites";
 import { cachedJellyfinPlayed, cachedJellyfinFavorites, getProviderIdCI } from "@/lib/server-cache";
 import { playableLibrary } from "@/lib/playerLibrary";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
@@ -48,12 +49,18 @@ export interface PlayerListItem {
   addedAt: number | null;
 }
 
+/**
+ * Trois listes, et c'est tout.
+ *
+ * « Abandonné » n'avait plus rien pour l'alimenter — aucun écran ne permettait d'y ranger quoi que
+ * ce soit — et « Favoris » disait la même chose qu'« À voir » avec un autre mot, en tirant sa
+ * vérité d'ailleurs. Les favoris existants ont rejoint « À voir » (voir `migrateFavorites`) ; le
+ * cœur reste chez Jellyfin, où il veut dire quelque chose.
+ */
 export interface PlayerListsPayload {
   requests: PlayerRequest[];
   toWatch: PlayerListItem[];
   watched: PlayerListItem[];
-  abandoned: PlayerListItem[];
-  favorites: PlayerListItem[];
 }
 
 /**
@@ -80,15 +87,20 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   return withErrorHandling(async () => {
-    // Deux requêtes ciblées plutôt qu'un balayage de la bibliothèque filtré ensuite : elles
-    // répondent juste là où l'énumération par compte est incomplète sur cette installation, et
-    // elles rapportent quelques dizaines d'éléments au lieu de plusieurs centaines.
-    const [lib, played, favorites, requests] = await Promise.all([
+    // Une requête ciblée plutôt qu'un balayage de la bibliothèque filtré ensuite : elle répond
+    // juste là où l'énumération par compte est incomplète sur cette installation, et elle
+    // rapporte quelques dizaines d'éléments au lieu de plusieurs centaines.
+    const [lib, played, requests] = await Promise.all([
       playableLibrary(),
       session.jfId ? cachedJellyfinPlayed(session.jfId).catch(() => []) : Promise.resolve([]),
-      session.jfId ? cachedJellyfinFavorites(session.jfId).catch(() => []) : Promise.resolve([]),
       config.jellyseerr.apiKey ? getPlayerRequests(session).catch(() => []) : Promise.resolve([]),
     ]);
+
+    // Les favoris Jellyfin qui n'avaient pas encore de ligne dans la liste locale y entrent ici,
+    // une fois par compte. Voir `migrateFavoritesToWatchlist` : la migration se fait à la lecture
+    // parce que les favoris sont par compte, et qu'un compte n'existe pour nous qu'une fois qu'il
+    // s'est connecté.
+    if (session.jfId && userId) await migrateFavoritesToWatchlist(userId, session.jfId).catch(() => {});
 
     // Seulement ce que la bibliothèque peut vraiment ouvrir — voir playableLibrary.
     const movieLibrary = lib.movies;
@@ -144,10 +156,8 @@ export async function GET(req: NextRequest) {
       // s'en sert encore. Ces lignes sont des intentions comme les autres : les cacher aurait fait
       // disparaître une quarantaine de titres que Louis avait rangés là. Elles rejoignent « À
       // voir », qui dit exactement la même chose de ce côté-ci.
-      toWatch: fromWatchlist(["to_watch", "to_request"]),
-      abandoned: fromWatchlist(["abandoned"]),
+      toWatch: fromWatchlist(["to_watch", "to_request", "favorite"]),
       watched: fromJellyfin(played).sort(byTitle),
-      favorites: fromJellyfin(favorites).sort(byTitle),
     } satisfies PlayerListsPayload;
   }, "player-lists");
 }

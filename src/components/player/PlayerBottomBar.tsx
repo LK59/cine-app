@@ -41,6 +41,8 @@ export function PlayerBottomBar() {
   // flotterait au-dessus d'un contenu qu'elle ne commande pas.
   const covered = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
   const away = hidden || covered;
+  /** Ce qui sépare la barre du bord de l'écran — et donc ce qu'il faut franchir pour en sortir. */
+  const gap = `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`;
 
   return (
     <nav
@@ -48,10 +50,19 @@ export function PlayerBottomBar() {
       data-player-nav
       className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
       style={{
-        bottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`,
+        bottom: gap,
         // Transformer, jamais démonter : la barre garde sa place dans l'arbre et ne coûte qu'un
         // déplacement de calque, ce que le compositeur fait sans repeindre quoi que ce soit.
-        transform: away ? "translateY(calc(100% + 1.75rem))" : "none",
+        /**
+         * Assez bas pour sortir de l'écran, et pas seulement de sa propre hauteur.
+         *
+         * La barre flotte à quelques dizaines de pixels du bord — la zone sûre de l'indicateur
+         * d'accueil, plus sa marge. Ne la déplacer que de sa hauteur la laissait donc à cheval
+         * sur le bord : le mouvement s'arrêtait avec un bandeau encore visible, que `visibility`
+         * escamotait ensuite d'un coup. Ce qui se lisait comme une animation en deux temps
+         * n'était que ça — un mouvement trop court, suivi d'une coupure.
+         */
+        transform: away ? `translateY(calc(100% + ${gap} + 1rem))` : "none",
         opacity: covered ? 0 : 1,
         /**
          * `visibility` en dernier, et retardée à la sortie.
