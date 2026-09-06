@@ -7,6 +7,14 @@ import { useT } from "@/components/TranslationProvider";
 import { PLAYER_NAV, activePanel, openPanel } from "./playerNav";
 
 /**
+ * La durée du mouvement d'entrée et de sortie.
+ *
+ * Assez pour qu'on le voie — c'est ce qui distingue une barre qui s'écarte d'une barre qui
+ * clignote — et assez court pour qu'on ne l'attende jamais en revenant vers le haut.
+ */
+const AWAY_MS = 280;
+
+/**
  * La navigation du téléphone.
  *
  * Elle remplace le tiroir et son bouton hamburger. Ce n'était pas une question de nombre
@@ -32,6 +40,7 @@ export function PlayerBottomBar() {
   // Effacée pendant qu'une fiche est ouverte : elle recouvre l'écran entier, et la barre y
   // flotterait au-dessus d'un contenu qu'elle ne commande pas.
   const covered = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+  const away = hidden || covered;
 
   return (
     <nav
@@ -42,11 +51,21 @@ export function PlayerBottomBar() {
         bottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`,
         // Transformer, jamais démonter : la barre garde sa place dans l'arbre et ne coûte qu'un
         // déplacement de calque, ce que le compositeur fait sans repeindre quoi que ce soit.
-        transform: hidden || covered ? "translateY(calc(100% + 1.5rem))" : "none",
+        transform: away ? "translateY(calc(100% + 1.75rem))" : "none",
         opacity: covered ? 0 : 1,
-        transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms linear",
+        /**
+         * `visibility` en dernier, et retardée à la sortie.
+         *
+         * Elle ne s'interpole pas : appliquée en même temps que la translation, elle escamotait
+         * la barre à l'instant zéro et l'animation ne se voyait jamais — la barre semblait
+         * disparaître d'un coup. Retardée du temps du mouvement, elle attend qu'il soit fini ;
+         * à l'entrée elle repasse à « visible » sans délai, sinon c'est le retour qui manquerait.
+         */
+        transition: `transform ${AWAY_MS}ms cubic-bezier(0.32, 0.72, 0, 1), opacity 180ms linear, visibility 0s linear ${
+          away ? AWAY_MS : 0
+        }ms`,
         // Inerte une fois partie, pour qu'elle ne prenne pas un appui destiné à l'image.
-        visibility: hidden || covered ? "hidden" : "visible",
+        visibility: away ? "hidden" : "visible",
       }}
     >
       <div

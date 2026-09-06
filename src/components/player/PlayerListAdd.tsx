@@ -14,6 +14,9 @@ const TMDB_POSTER = "https://image.tmdb.org/t/p/w154";
 /** En dessous de deux lettres, une recherche rend le catalogue entier et n'apprend rien. */
 const MIN_QUERY = 2;
 
+/** La même attente que la recherche générale, et pour la même raison — voir son commentaire. */
+const DEBOUNCE_MS = 150;
+
 /**
  * Ajouter un titre sans quitter « Ma liste ».
  *
@@ -34,7 +37,7 @@ export function PlayerListAdd({ existing, onClose }: { existing: Set<string>; on
   const [debounced, setDebounced] = useState("");
 
   useEffect(() => {
-    const id = setTimeout(() => setDebounced(query.trim()), 250);
+    const id = setTimeout(() => setDebounced(query.trim()), DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [query]);
 

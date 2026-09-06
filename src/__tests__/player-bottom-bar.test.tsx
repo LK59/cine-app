@@ -10,7 +10,8 @@ let route = {
 vi.mock("@/lib/cinemaRoute", () => ({ useCinemaRoute: () => route }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsShortViewport: () => false }));
-vi.mock("@/lib/useHideOnScroll", () => ({ useHideOnScroll: () => false }));
+let scrolledAway = false;
+vi.mock("@/lib/useHideOnScroll", () => ({ useHideOnScroll: () => scrolledAway }));
 const mockOpenPanel = vi.fn();
 vi.mock("@/components/player/playerNav", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/player/playerNav")>();
@@ -21,6 +22,7 @@ import { PlayerBottomBar } from "@/components/player/PlayerBottomBar";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  scrolledAway = false;
   route = { ...route, search: false, list: false, account: false, film: null, discover: null, person: null };
 });
 afterEach(cleanup);
@@ -60,5 +62,20 @@ describe("PlayerBottomBar", () => {
   it("stays put the rest of the time", () => {
     render(<PlayerBottomBar />);
     expect(screen.getByLabelText("player.nav.label").style.visibility).toBe("visible");
+  });
+
+  // `visibility` ne s'interpole pas : appliquée en même temps que la translation, elle escamotait
+  // la barre à l'instant zéro et l'animation ne se voyait jamais. Elle attend donc la fin du
+  // mouvement pour sortir — et n'attend rien pour revenir.
+  it("waits for the slide to finish before going invisible, and not the other way round", () => {
+    scrolledAway = true;
+    const { rerender } = render(<PlayerBottomBar />);
+    const bar = screen.getByLabelText("player.nav.label");
+    expect(bar.style.transform).toContain("translateY");
+    expect(bar.style.transition).toMatch(/visibility 0s linear [1-9]\d*ms/);
+
+    scrolledAway = false;
+    rerender(<PlayerBottomBar />);
+    expect(screen.getByLabelText("player.nav.label").style.transition).toContain("visibility 0s linear 0ms");
   });
 });

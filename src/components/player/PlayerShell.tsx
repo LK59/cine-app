@@ -4,6 +4,8 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind } from "@/lib/cinemaRoute";
+import { preload } from "swr";
+import { fetcher } from "@/lib/swr";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
 import { PlayerBottomBar } from "./PlayerBottomBar";
@@ -102,9 +104,18 @@ export function PlayerShell() {
   useEffect(() => {
     type Preloadable = { preload?: () => void };
     const warm = () => {
+      // Les trois de la navigation d'abord : ce sont ceux qu'on ouvre, et souvent.
       (PlayerSearchPanel as Preloadable).preload?.();
       (PlayerListPanel as Preloadable).preload?.();
       (PlayerAccountPanel as Preloadable).preload?.();
+      // Puis les deux fiches, qui s'ouvrent depuis un résultat de recherche : leur première
+      // ouverture payait le même aller-retour, juste plus tard dans le parcours.
+      (PlayerDiscoverSheet as Preloadable).preload?.();
+      (PlayerPersonSheet as Preloadable).preload?.();
+      // Et la charge utile de « Ma liste », pour que l'écran arrive rempli plutôt que vide puis
+      // rempli. Elle est petite, et c'est la seule des quatre destinations qui attend une réponse
+      // avant d'avoir quoi que ce soit à montrer.
+      void preload("/api/player/lists", fetcher);
     };
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
     if (idle) {

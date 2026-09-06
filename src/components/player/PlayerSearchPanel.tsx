@@ -13,7 +13,15 @@ import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/ap
 type Filter = "all" | "movie" | "series" | "person";
 
 const MIN_QUERY = 2;
-const DEBOUNCE_MS = 260;
+/**
+ * L'attente avant d'interroger le serveur.
+ *
+ * Deux cent soixante millisecondes s'ajoutaient aux cent cinquante que met la recherche à
+ * répondre, et l'ensemble se sentait. Mesuré sur le serveur : `/api/search` rend en 140 à 280 ms,
+ * cache compris — l'attente n'a donc pas à protéger grand-chose, et cent cinquante suffisent à ne
+ * pas envoyer une requête par lettre.
+ */
+const DEBOUNCE_MS = 150;
 
 /**
  * Ce qu'on avait tapé la dernière fois, retenu pour la durée de la visite.
