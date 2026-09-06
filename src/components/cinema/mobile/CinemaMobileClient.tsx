@@ -4,7 +4,7 @@ import useSWR from "swr";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
@@ -114,8 +114,8 @@ export function CinemaMobileClient() {
    * l'application. « Reprendre » est personnel : il traverse les deux onglets, comme la rangée
    * du même nom chez Netflix.
    */
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>("/api/cinema/next-up", fetcher);
-  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>("/api/jellyfin/resume", fetcher);
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
+  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
 
   const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
   const continueSeries = nextUp?.items ?? [];

@@ -1,8 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { detectCodecSupport } from "@/lib/codecSupport";
+import { useSWRConfig } from "swr";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
+import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 
 export interface PlaybackSession {
   itemId: string;
@@ -64,12 +66,35 @@ export function usePlayback(): PlaybackContextValue {
 export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PlaybackSession | null>(null);
   const [mode, setMode] = useState<PlaybackMode>("closed");
+  const { mutate } = useSWRConfig();
 
   // Told to the rest of the app, which stops polling while the film has the whole screen.
   useEffect(() => {
     setWatchingFullScreen(mode === "full");
     return () => setWatchingFullScreen(false);
   }, [mode]);
+
+  /**
+   * Rouvrir « Reprendre » sur ce qu'on vient de faire, et non sur ce qu'on avait fait avant.
+   *
+   * La page reste montée derrière le lecteur : rien ne la remonte à la fermeture, et ses deux
+   * flux vivants sont justement ceux que la lecture vient de périmer — la position du film, et
+   * l'épisode suivant qui a peut-être changé d'épisode. On revenait donc sur une rangée qui
+   * décrivait la séance précédente.
+   *
+   * L'effet est placé après celui du dessus à dessein : il en dépend. `isPaused` bloque toute
+   * revalidation tant que le film tient l'écran, et les deux effets tournent dans le même commit,
+   * dans l'ordre où ils sont écrits — le drapeau est donc déjà retombé quand on demande ceci.
+   */
+  const wasPlaying = useRef(false);
+  useEffect(() => {
+    const playing = session !== null;
+    if (wasPlaying.current && !playing) {
+      void mutate(RESUME_KEY);
+      void mutate(NEXT_UP_KEY);
+    }
+    wasPlaying.current = playing;
+  }, [session, mutate]);
 
   /**
    * The manifest asks for portrait, and it is right to: everything except a film is a list to

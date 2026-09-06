@@ -15,6 +15,7 @@ import { describeJellyfinPlayback } from "@/lib/playbackPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT } from "@/components/TranslationProvider";
+import { useWakeLock } from "@/lib/useWakeLock";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -282,6 +283,9 @@ function ActivePlayer({
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Tant que ça joue, l'écran reste allumé — voir useWakeLock pour ce que chaque chemin
+  // obtient déjà tout seul et ce qu'il n'obtient pas.
+  useWakeLock(playing);
   const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
   const [playbackInfo, setPlaybackInfo] = useState<PlaybackInfoSummary | null>(null);
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);

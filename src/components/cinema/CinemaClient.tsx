@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { fetcher } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -261,7 +261,7 @@ export function CinemaClient() {
     mediaType === "series" ? "/api/cinema/series" : null,
     fetcher
   );
-  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>("/api/jellyfin/resume", fetcher);
+  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
   // "Ma liste": the watchlist entries that are actually in the library, so every card on that
   // rail is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
@@ -296,7 +296,7 @@ export function CinemaClient() {
     [mediaType, moviesById, seriesById]
   );
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? NEXT_UP_KEY : null, fetcher, liveFeedOptions);
   const continueSeries = nextUp?.items ?? [];
 
   // Warms the browser's own image cache for the backdrops/logos reachable within a few keypresses

@@ -34,6 +34,7 @@ import {
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
+import { useWakeLock } from "@/lib/useWakeLock";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -259,6 +260,9 @@ export function ExperimentalPlayerHost({
   }, []);
   const [facade, setFacade] = useState<MediaElementFacade | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Tant que ça joue, l'écran reste allumé — voir useWakeLock pour ce que chaque chemin
+  // obtient déjà tout seul et ce qu'il n'obtient pas.
+  useWakeLock(playing);
   /**
    * Le film est allé jusqu'au bout.
    *
