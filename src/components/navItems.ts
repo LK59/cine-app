@@ -35,7 +35,7 @@ export const NAV_GROUPS: { titleKey: string; items: NavItem[] }[] = [
   {
     titleKey: "nav.sections.library",
     items: [
-      { href: "/", navKey: "nav.overview", icon: LayoutDashboard },
+      { href: "/gestion", navKey: "nav.overview", icon: LayoutDashboard },
       { href: "/radarr", navKey: "nav.radarr", icon: Film },
       { href: "/sonarr", navKey: "nav.sonarr", icon: Tv },
       { href: "/watchlist", navKey: "nav.watchlist", icon: Bookmark },
@@ -67,6 +67,6 @@ export const NAV_GROUPS: { titleKey: string; items: NavItem[] }[] = [
 ];
 
 /** La barre du bas sur téléphone — les quatre destinations qui portent tout le reste. */
-export const NAV_BAR_HREFS = ["/", "/radarr", "/sonarr", "/watchlist"];
+export const NAV_BAR_HREFS = ["/gestion", "/radarr", "/sonarr", "/watchlist"];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);

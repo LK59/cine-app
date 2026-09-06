@@ -4,7 +4,11 @@
 // v10 : le lecteur a changé d'adresse (/cinema → /player) et la coquille de gestion a
 // gagné la sienne (/gestion). Un cache d'une version précédente peut contenir des pages qui
 // pointent encore vers les anciennes ; le bump les évince toutes d'un coup.
-const CACHE_NAME = "cine-app-v10";
+// v11 : le lecteur *est* la racine. `/player` et `/cinema` y redirigent désormais, et tout ce
+// qu'une version précédente aurait pu garder — une réponse RSC, une ressource d'un ancien build —
+// désigne une arborescence qui n'existe plus. On repart de zéro : `activate` supprime tout cache
+// dont le nom n'est pas celui-ci.
+const CACHE_NAME = "cine-app-v11";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
 self.addEventListener("install", (event) => {

@@ -100,12 +100,20 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
 }
 
 /**
- * Le mode cinéma est devenu le lecteur, avec sa propre coquille et sa propre adresse. L'ancienne
- * reste valable — pour les liens partagés, les onglets ouverts et les raccourcis installés sur un
- * écran d'accueil.
+ * Les adresses que le lecteur a portées avant d'être la racine.
+ *
+ * Il a été `/cinema`, puis `/player`, et il est maintenant l'application elle-même : c'est sur lui
+ * qu'on arrive en tapant l'adresse, et la gestion a la sienne (`/gestion`). Les deux anciennes
+ * restent valables et redirigent — pour les liens partagés, les onglets restés ouverts, les
+ * favoris, et surtout les raccourcis déjà installés sur un écran d'accueil, qui pointent vers ce
+ * que le manifeste disait le jour de l'installation.
+ *
+ * Une redirection permanente (308) plutôt qu'un simple lien : les navigateurs la retiennent, donc
+ * un raccourci installé finit par pointer directement au bon endroit sans passer par nous.
  */
 const MOVED_PATHS: Record<string, string> = {
-  "/cinema": "/player",
+  "/cinema": "/",
+  "/player": "/",
 };
 
 export async function proxy(req: NextRequest) {

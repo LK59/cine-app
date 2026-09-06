@@ -32,11 +32,16 @@ describe("proxy — moved paths", () => {
   // La redirection est faite ici et non par la page : `redirect()` dans un composant serveur
   // imbriqué renvoie une page complète (la coquille de gestion a déjà commencé à partir), donc un
   // éclair de barre latérale avant d'arriver au lecteur.
-  it("sends the old cinema address to the player, permanently", async () => {
+  // Le lecteur a porté deux adresses avant d'être la racine. Les deux redirigent : les liens
+  // partagés, les onglets restés ouverts et surtout les raccourcis déjà installés sur un écran
+  // d'accueil pointent vers ce que le manifeste disait le jour de l'installation.
+  it("sends both of the player's old addresses to the root, permanently", async () => {
     const { proxy } = await import("@/proxy");
-    const res = await proxy(req("/cinema"));
-    expect(res.status).toBe(308);
-    expect(res.headers.get("location")).toBe("https://cine.example/player");
+    for (const old of ["/cinema", "/player"]) {
+      const res = await proxy(req(old));
+      expect([old, res.status]).toEqual([old, 308]);
+      expect(res.headers.get("location")).toBe("https://cine.example/");
+    }
     // Rien n'a besoin d'être vérifié en session pour une adresse qui a simplement déménagé.
     expect(mockVerify).not.toHaveBeenCalled();
   });
@@ -46,14 +51,16 @@ describe("proxy — moved paths", () => {
   // quelque chose venait à le transmettre.
   it("keeps the hash across the move when one is present", async () => {
     const { proxy } = await import("@/proxy");
-    const res = await proxy(req("/cinema", "#film=42"));
-    expect(res.headers.get("location")).toBe("https://cine.example/player#film=42");
+    const res = await proxy(req("/player", "#film=42"));
+    expect(res.headers.get("location")).toBe("https://cine.example/#film=42");
   });
 
   it("leaves every other path alone", async () => {
     const { proxy } = await import("@/proxy");
-    const res = await proxy(req("/player"));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("location")).toBeNull();
+    for (const path of ["/", "/gestion", "/radarr"]) {
+      const res = await proxy(req(path));
+      expect([path, res.status]).toEqual([path, 200]);
+      expect(res.headers.get("location")).toBeNull();
+    }
   });
 });

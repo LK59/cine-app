@@ -12,8 +12,9 @@ import { sendPushToAll, sendPushToUser } from "@/lib/push";
  * identifiant TMDB : la fiche sait dire « ouvrir » si le titre est là, et l'attente sinon.
  */
 function playerUrl(mediaType: "movie" | "series", tmdbId?: number | null): string {
-  if (!tmdbId) return "/player";
-  return `/player#decouverte=${tmdbId}${mediaType === "series" ? "&type=series" : ""}`;
+  // La racine : le lecteur est l'application, et c'est là qu'une notification doit ouvrir.
+  if (!tmdbId) return "/";
+  return `/#decouverte=${tmdbId}${mediaType === "series" ? "&type=series" : ""}`;
 }
 
 
@@ -80,7 +81,7 @@ export async function checkNewEpisodes(): Promise<void> {
       await sendPushToAll({
         title: "📺 Nouvel épisode",
         body: `${ev.title}${ev.detail ? ` — ${ev.detail}` : ""} est disponible`,
-        url: "/player",
+        url: "/",
         tag: "new-episode",
         category: "new-episode",
       });

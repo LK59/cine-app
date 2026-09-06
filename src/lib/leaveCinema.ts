@@ -24,7 +24,7 @@ type Router = ReturnType<typeof useRouter>;
 const FALLBACK_MS = 1200;
 
 export function leaveCinema(router: Router): void {
-  navigateWithFallback(router, "/gestion", (path) => path.startsWith("/player"));
+  navigateWithFallback(router, "/gestion", (path) => path === "/");
 }
 
 // Entering Cinema Mode, with the same belt-and-braces as leaving it.
@@ -34,7 +34,7 @@ export function leaveCinema(router: Router): void {
 // the crossing), so they go through the router again. Same fallback as above, for the same
 // deploy-window reason.
 export function enterCinema(router: Router): void {
-  navigateWithFallback(router, "/player", (path) => !path.startsWith("/player"));
+  navigateWithFallback(router, "/", (path) => path !== "/");
 }
 
 function navigateWithFallback(router: Router, target: string, stillHere: (path: string) => boolean): void {
