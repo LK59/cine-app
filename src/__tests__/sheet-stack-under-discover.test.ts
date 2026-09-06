@@ -34,3 +34,43 @@ describe("la pile des fiches sous une fiche découverte", () => {
     expect(src).toMatch(/const top = !(covered|sheetAbove) && i === \w+\.length - 1;/);
   });
 });
+
+/**
+ * Une fiche ne peut pas être derrière elle-même.
+ *
+ * Ouvrir une fiche TMDB garde le `film` de l'adresse : sans cette garde, « ce qu'on laisse
+ * derrière » désigne la fiche affichée, la pile porte deux fois la même clé, et React en remonte
+ * une — la fiche du dessous se retrouvait en haut de page, puis se recalait au retour.
+ */
+describe("la fiche du dessous n'est jamais celle du dessus", () => {
+  it("le téléphone écarte l'entrée qui désigne la fiche courante", () => {
+    const src = readFileSync("src/components/cinema/mobile/CinemaMobileClient.tsx", "utf8");
+    expect(src).toMatch(/if \(id === \(isSeries \? route\.serie : route\.film\)\) return null;/);
+  });
+
+  it("le bureau garde la sienne", () => {
+    const src = readFileSync("src/components/cinema/CinemaClient.tsx", "utf8");
+    expect(src).toMatch(/behind\.film !== route\.film/);
+    expect(src).toMatch(/behind\.serie !== route\.serie/);
+  });
+});
+
+/** Les deux sortes de fiche entrent et sortent de la même façon sur téléphone. */
+describe("les fiches TMDB s'animent comme les fiches de bibliothèque", () => {
+  it.each([
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/player/PlayerPersonSheet.tsx",
+  ])("%s utilise sheet-in / sheet-out", (file) => {
+    const src = readFileSync(file, "utf8");
+    expect(src).toMatch(/"sheet-in/);
+    expect(src).toMatch(/"sheet-out/);
+    // Les anciennes classes, qui ne ressemblaient à aucune fiche de bibliothèque.
+    expect(src).not.toMatch(/"animate-slide-up/);
+    expect(src).not.toMatch(/"animate-fade-out-down/);
+  });
+
+  it("leur sursis de sortie vaut la durée de sheet-out sur téléphone", () => {
+    const src = readFileSync("src/components/player/PlayerShell.tsx", "utf8");
+    expect(src).toMatch(/isMobile \? SHEET_OUT_MS : EXIT_MS/);
+  });
+});

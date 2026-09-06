@@ -186,9 +186,20 @@ export function CinemaMobileClient() {
     if (behind.tab !== mediaType) return null;
     const id = isSeries ? behind.serie : behind.film;
     if (id === null) return null;
+    /**
+     * Une fiche ne peut pas être derrière elle-même — la garde que le bureau avait déjà.
+     *
+     * Ouvrir une fiche TMDB empile bien une entrée d'historique, mais ne change pas la fiche de
+     * bibliothèque ouverte : l'adresse garde son `film`. « Ce qu'on laisse derrière » désignait
+     * alors le film qu'on affiche encore, et la pile devenait `[film1, film1]` — deux entrées de
+     * même clé. React n'en garde qu'une, remonte l'autre, et la fiche du dessous se retrouvait en
+     * haut de sa page ; au retour, l'instance survivante reprenait sa place et on voyait l'écran
+     * se recaler tout seul.
+     */
+    if (id === (isSeries ? route.serie : route.film)) return null;
     const item = byId.get(id);
     return item ? { item, mediaType } : null;
-  }, [behind, byId, selected, isSeries, mediaType]);
+  }, [behind, byId, selected, isSeries, mediaType, route.film, route.serie]);
 
   /** La pile, du dessous vers le dessus. Une seule fiche la plupart du temps. */
   const stack = useMemo(

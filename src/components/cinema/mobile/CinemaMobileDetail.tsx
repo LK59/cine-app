@@ -12,6 +12,7 @@ import { arrivedByBack } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
+import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -53,7 +54,7 @@ interface DetailInfo {
  * Les deux façons de refermer une fiche, le bouton et le doigt, doivent mettre exactement le même
  * temps : sinon l'une des deux démonte la carte avant qu'elle n'ait fini de descendre.
  */
-const SHEET_OUT_MS = 280;
+
 
 export function CinemaMobileDetail({
   item,

@@ -172,7 +172,10 @@ export function PlayerDiscoverSheet({
   const mobileSheet = (
     <div
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        swipe.touched ? "" : leaving ? "animate-fade-out" : revealed ? "" : "animate-slide-up"
+        // Exactement les classes des fiches de bibliothèque : dans une rangée de saga, un titre
+        // sur trois ouvre celle-ci et les autres ouvrent l'autre, et rien dans le geste ne dit
+        // laquelle — les deux doivent donc entrer et sortir de la même façon.
+        swipe.touched ? "" : leaving ? "sheet-out" : revealed ? "" : "sheet-in"
       }`}
       style={{
         zIndex: 48,

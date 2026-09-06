@@ -217,10 +217,10 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
         swipe.touched
           ? ""
           : leaving
-            ? "animate-fade-out-down md:animate-fade-out"
+            ? "sheet-out md:animate-fade-out"
             : revealed
               ? ""
-              : "animate-slide-up md:animate-fade-in"
+              : "sheet-in md:animate-fade-in"
       }`}
       style={{
         zIndex: 48,

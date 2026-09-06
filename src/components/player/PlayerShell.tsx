@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
+import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { preload } from "swr";
 import { fetcher } from "@/lib/swr";
 import { useExitDelay } from "@/lib/useExitDelay";
@@ -80,10 +81,23 @@ export function PlayerShell() {
   const search = useExitDelay(route.search, EXIT_MS);
   const list = useExitDelay(route.list, EXIT_MS);
   const account = useExitDelay(route.account, EXIT_MS);
-  // Les fiches ne s'effacent pas quand une autre attend derrière : leur sortie découvrirait
-  // l'accueil le temps de l'animation, avant que la précédente n'entre par-dessus. Voir
-  // `useSheetBehind`.
-  const sheetExitMs = useSheetBehind() ? 0 : EXIT_MS;
+  /**
+   * Ces fiches sortent en glissant, sauf quand ce qu'elles recouvrent n'est pas dessiné.
+   *
+   * La règle d'avant supprimait leur sortie dès que quelque chose attendait derrière, parce que
+   * l'animation découvrait alors l'accueil avant que la précédente n'entre par-dessus. Ce n'est
+   * plus vrai d'une fiche de bibliothèque : la pile reste montée sous elles (voir
+   * CinemaMobileClient), donc leur sortie découvre exactement ce qu'il faut, et la supprimer ne
+   * faisait plus qu'une chose — ouvrir un titre de saga absent de la bibliothèque se refermait
+   * d'un coup sec là où le titre d'à côté, lui, glissait.
+   *
+   * Le cas d'origine subsiste et garde son remède : une fiche TMDB par-dessus une *autre* fiche
+   * TMDB. `useRouteBehind` ne rend un objet que pour une fiche de bibliothèque — c'est ce qui les
+   * distingue.
+   */
+  const behindIsLibrarySheet = useRouteBehind() !== null;
+  const sheetExitMs =
+    useSheetBehind() && !behindIsLibrarySheet ? 0 : isMobile ? SHEET_OUT_MS : EXIT_MS;
   const person = useExitDelay(route.person !== null, sheetExitMs);
   const discover = useExitDelay(route.discover !== null, sheetExitMs);
 
