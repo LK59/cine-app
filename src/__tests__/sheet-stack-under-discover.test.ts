@@ -74,3 +74,25 @@ describe("les fiches TMDB s'animent comme les fiches de bibliothèque", () => {
     expect(src).toMatch(/isMobile \? SHEET_OUT_MS : EXIT_MS/);
   });
 });
+
+/**
+ * Le geste de fermeture va au bout sur une fiche TMDB comme sur une fiche de bibliothèque.
+ *
+ * `cinemaClose` change l'adresse immédiatement : sans sursis, la fiche cessait d'être celle du
+ * dessus au premier pixel de sa sortie, et le lancer du doigt s'interrompait net.
+ */
+describe("la sortie des fiches TMDB attend son animation", () => {
+  it.each([
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/player/PlayerPersonSheet.tsx",
+  ])("%s ferme par requestClose, jamais par close directement", (file) => {
+    const src = readFileSync(file, "utf8");
+    expect(src).toMatch(/useDelayedClose\(close, isMobile \? SHEET_OUT_MS : 0\)/);
+    expect(src).toMatch(/useSwipeToDismiss\(requestClose\)/);
+    // Plus aucun bouton ni raccourci ne court-circuite le sursis.
+    expect(src).not.toMatch(/onClick=\{close\}/);
+    expect(src).not.toMatch(/^ +close\(\);$/m);
+    // Et la classe de sortie part du sursis, pas seulement de l'adresse.
+    expect(src).toMatch(/closing \|\| leaving/);
+  });
+});

@@ -10,6 +10,8 @@ import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { useDelayedClose } from "@/lib/useDelayedClose";
+import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
   HORIZONTAL_VEIL,
@@ -118,9 +120,21 @@ export function PlayerDiscoverSheet({
   );
 
   const close = () => cinemaClose({ discover: null, person: null });
+  /**
+   * La fermeture attend son animation, comme sur les fiches de bibliothèque.
+   *
+   * `cinemaClose` change l'adresse tout de suite : la fiche cessait donc d'être celle du dessus au
+   * premier pixel de sa sortie, et le geste — qui vient pourtant de la lancer, offset et inertie
+   * compris — n'avait plus le temps d'aller au bout. Lâchée, elle disparaissait net là où la fiche
+   * d'à côté finissait sa course.
+   *
+   * `useDelayedClose` est exactement ce que fait CinemaMobileDetail, et pour la même raison. Sur
+   * grand écran le sursis reste nul : la sortie y est un fondu de 200 ms que `leaving` pilote déjà.
+   */
+  const { closing, requestClose } = useDelayedClose(close, isMobile ? SHEET_OUT_MS : 0);
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
-  const swipe = useSwipeToDismiss(close);
+  const swipe = useSwipeToDismiss(requestClose);
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
@@ -145,11 +159,11 @@ export function PlayerDiscoverSheet({
       if (showSynopsis) return;
       e.preventDefault();
       e.stopPropagation();
-      close();
+      requestClose();
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [showSynopsis]);
+  }, [showSynopsis, requestClose]);
 
   const inList = data?.watchlistStatus === "to_watch";
   const StateIcon = data?.requestState ? STATE_ICON[data.requestState] : Clock;
@@ -175,7 +189,7 @@ export function PlayerDiscoverSheet({
         // Exactement les classes des fiches de bibliothèque : dans une rangée de saga, un titre
         // sur trois ouvre celle-ci et les autres ouvrent l'autre, et rien dans le geste ne dit
         // laquelle — les deux doivent donc entrer et sortir de la même façon.
-        swipe.touched ? "" : leaving ? "sheet-out" : revealed ? "" : "sheet-in"
+        swipe.touched ? "" : closing || leaving ? "sheet-out" : revealed ? "" : "sheet-in"
       }`}
       style={{
         zIndex: 48,
@@ -216,7 +230,7 @@ export function PlayerDiscoverSheet({
         <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
           type="button"
-          onClick={close}
+          onClick={requestClose}
           aria-label={t("cinema.back")}
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
         >
@@ -320,7 +334,7 @@ export function PlayerDiscoverSheet({
     <div
       ref={containerRef}
       className={`fixed inset-0 overflow-hidden bg-ink ${
-        leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
+        closing || leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
       }`}
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.
@@ -346,7 +360,7 @@ export function PlayerDiscoverSheet({
       <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
 
       <button
-        onClick={close}
+        onClick={requestClose}
         // `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone
         // elle s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à
         // elle plutôt qu'à la fenêtre, ce qui rend le placement dépendant de l'animation. En

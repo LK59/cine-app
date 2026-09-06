@@ -11,6 +11,8 @@ import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { useDelayedClose } from "@/lib/useDelayedClose";
+import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 
 interface PersonCredit {
   tmdbId: number;
@@ -177,9 +179,21 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
   const photos = photoData?.photos ?? [];
 
   const close = () => cinemaClose({ person: null });
+  /**
+   * La fermeture attend son animation, comme sur les fiches de bibliothèque.
+   *
+   * `cinemaClose` change l'adresse tout de suite : la fiche cessait donc d'être celle du dessus au
+   * premier pixel de sa sortie, et le geste — qui vient pourtant de la lancer, offset et inertie
+   * compris — n'avait plus le temps d'aller au bout. Lâchée, elle disparaissait net là où la fiche
+   * d'à côté finissait sa course.
+   *
+   * `useDelayedClose` est exactement ce que fait CinemaMobileDetail, et pour la même raison. Sur
+   * grand écran le sursis reste nul : la sortie y est un fondu de 200 ms que `leaving` pilote déjà.
+   */
+  const { closing, requestClose } = useDelayedClose(close, isMobile ? SHEET_OUT_MS : 0);
   // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
   // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
-  const swipe = useSwipeToDismiss(close);
+  const swipe = useSwipeToDismiss(requestClose);
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
@@ -193,11 +207,11 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       if (e.key !== "Escape" && e.key !== "Backspace") return;
       e.preventDefault();
       e.stopPropagation();
-      close();
+      requestClose();
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [photoIndex]);
+  }, [photoIndex, requestClose]);
 
   // Ce qu'on possède d'abord : c'est ce qui se regarde ce soir. Le serveur trie déjà ainsi, on
   // garde son ordre et on se contente de retirer les entrées sans titre.
@@ -216,7 +230,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       className={`fixed inset-0 overflow-hidden bg-ink ${
         swipe.touched
           ? ""
-          : leaving
+          : closing || leaving
             ? "sheet-out md:animate-fade-out"
             : revealed
               ? ""
@@ -252,7 +266,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       {isMobile ? (
         <button
           type="button"
-          onClick={close}
+          onClick={requestClose}
           aria-label={t("cinema.back")}
           className="absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
           style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
@@ -261,7 +275,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
         </button>
       ) : (
         <button
-          onClick={close}
+          onClick={requestClose}
           className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
           style={{ top: "max(1rem, env(safe-area-inset-top))" }}
         >
