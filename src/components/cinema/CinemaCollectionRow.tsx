@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PosterImage } from "@/components/PosterImage";
@@ -59,21 +60,46 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Co
   // La même clé que la fiche interroge déjà pour la bande-annonce : la réponse est en cache, et
   // cette rangée ne coûte donc pas une requête de plus.
   const { data: info } = useSWR<MovieInfo>(`/api/radarr/movies/${radarrId}/info`, fetcher, {
+    // Même raison que ci-dessous : la fiche ouverte au-dessus revalidait cette clé, ce qui rendait
+    // un nouvel objet à la fiche du dessous et la faisait se redessiner pendant l'animation.
     revalidateOnFocus: false,
+    revalidateIfStale: false,
+    keepPreviousData: true,
   });
   const collectionId = info?.tmdb?.collection?.id ?? null;
   const { data } = useSWR<CollectionPayload>(
     collectionId ? `/api/tmdb/collection/${collectionId}` : null,
     fetcher,
-    { revalidateOnFocus: false }
+    // Lu une fois et gardé : une saga ne change pas pendant qu'on regarde une fiche, et chaque
+    // revalidation rend un nouvel objet — donc une nouvelle liste, donc un nouveau rendu de la
+    // rangée, au moment précis où la fiche est en train de s'animer.
+    { revalidateOnFocus: false, revalidateIfStale: false, keepPreviousData: true }
   );
-  return {
-    name: data?.name ?? "",
-    parts: (data?.parts ?? []).filter((part) => part.libraryHref !== `/radarr/${radarrId}`),
-  };
+
+  /**
+   * La liste, calculée une fois par réponse.
+   *
+   * Sans ce `useMemo`, `filter` rendait un tableau neuf à *chaque* rendu de la fiche — et une
+   * fiche de téléphone se redessine à chaque pixel du geste de fermeture, puisque le glissement
+   * vit dans son état. La rangée mémoïsée ci-dessous n'aurait alors jamais rien mémoïsé : elle
+   * redessinait ses affiches pendant toute l'animation, ce qui est exactement ce qu'on voyait.
+   */
+  const parts = useMemo(
+    () => (data?.parts ?? []).filter((part) => part.libraryHref !== `/radarr/${radarrId}`),
+    [data, radarrId]
+  );
+
+  return { name: data?.name ?? "", parts };
 }
 
-export function CinemaCollectionRow({
+/**
+ * Mémoïsée, comme la rangée des titres similaires et pour la même raison.
+ *
+ * La fiche qui la contient se redessine sans arrêt — le geste de fermeture, l'état d'ouverture,
+ * l'arrivée des données. Sans `memo`, chacun de ces rendus redessinait la rangée entière et ses
+ * affiches, et l'animation de fermeture se payait en saccades.
+ */
+export const CinemaCollectionRow = memo(function CinemaCollectionRow({
   name,
   parts,
   onOpenLibrary,
@@ -120,7 +146,7 @@ export function CinemaCollectionRow({
       </div>
     </section>
   );
-}
+});
 
 /**
  * La même rangée, qui va chercher ses données elle-même.
