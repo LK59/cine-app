@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { sessionDb } from "@/lib/db";
-import { revokeJellyfinToken } from "@/lib/clients/jellyfin";
 
 /**
  * Se déconnecter.
@@ -12,20 +11,16 @@ import { revokeJellyfinToken } from "@/lib/clients/jellyfin";
  * `verifySessionToken`, qui ne consulte pas la base. Sans cette vérification, n'importe qui
  * connaissant un `jti` pouvait déconnecter la personne à qui il appartient.
  *
- * La session Jellyfin ouverte pour cette connexion est fermée dans la foulée : la révoquer ici
- * est la seule occasion de le faire, et un jeton laissé vivant chez Jellyfin est un jeton qui
- * survit à la déconnexion. Voir `revokeJellyfinToken` pour pourquoi les autres appareils de la
- * personne n'en sont pas affectés.
+ * Ce qui est révoqué, c'est la session Cine App et rien d'autre : le jeton Jellyfin qu'elle
+ * portait n'est pas fermé chez Jellyfin. C'est un choix — se déconnecter d'ici ne doit pas
+ * ressembler, de près ou de loin, à perdre l'accès à Jellyfin. Le risque que ça laissait ouvert
+ * — un cookie volé valant un jeton Jellyfin utilisable — est traité ailleurs et autrement : ce
+ * jeton est désormais chiffré dans le cookie, et n'y est donc plus lisible.
  */
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const payload = await verifySessionToken(token);
-  if (payload?.jti) {
-    // Celui de la base plutôt que celui du cookie : c'est le même, mais la base reste lisible
-    // même si le cookie a été émis par une version qui ne le chiffrait pas encore.
-    await revokeJellyfinToken(sessionDb.jellyfinToken(payload.jti) ?? payload.jfToken);
-    sessionDb.delete(payload.jti);
-  }
+  if (payload?.jti) sessionDb.delete(payload.jti);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, "", { maxAge: 0, path: "/" });
   return res;

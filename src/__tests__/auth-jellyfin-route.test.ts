@@ -18,7 +18,6 @@ vi.mock("@/lib/auth", () => ({
   SESSION_COOKIE: "cine_session",
   SESSION_MAX_AGE: 3600,
 }));
-vi.mock("@/lib/clients/jellyfin", () => ({ revokeJellyfinToken: vi.fn(async () => {}) }));
 const mockSessionDb = { create: vi.fn() };
 const mockUserPrefsDb = { getLang: vi.fn() };
 vi.mock("@/lib/db", () => ({ sessionDb: mockSessionDb, userPrefsDb: mockUserPrefsDb }));
@@ -89,9 +88,7 @@ describe("POST /api/auth/jellyfin", () => {
     expect(body).toEqual({ ok: true, role: "admin" });
     expect(mockJellyseerrLogin).toHaveBeenCalledWith("louis", "x");
     expect(mockCreateSessionToken).toHaveBeenCalledWith("louis", "admin", "louis", "jf-1", "jf-token", undefined);
-    // Le jeton Jellyfin est rangé avec la session : c'est la seule copie que le serveur puisse
-    // relire pour la révoquer, celle du cookie ne lui étant pas accessible.
-    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1", expect.anything());
+    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1");
     expect(res.cookies.get("cine_session")?.value).toBe("signed-token");
   });
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
@@ -74,7 +75,7 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
  * La vue serveur, et non celle d'un compte — voir la note jumelle dans la route des films, où le
  * comptage est écrit.
  */
-export async function GET() {
+export async function GET(req: Request) {
   const [series, jellyfinSeries] = await Promise.all([cachedSeries(), cachedJellyfinSeriesAdmin()]);
 
   const downloaded = series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0);
@@ -109,5 +110,7 @@ export async function GET() {
     recentlyAdded: recentlyAddedRail(cinemaSeries),
     top10: top10Rail(cinemaSeries),
   };
-  return NextResponse.json(payload);
+  // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
+  // entier, il demande seulement s'il a changé. Voir `cachedJson`.
+  return cachedJson(req, "cinema-series", payload);
 }

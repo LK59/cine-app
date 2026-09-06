@@ -163,12 +163,12 @@ function migrate(db: Database.Database): void {
   // whoever was mid-migration. Everybody starts at zero, which is now the new player, which is
   // what everybody gets.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN legacy_player INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
-  // Le jeton Jellyfin de chaque session, pour pouvoir le révoquer à distance.
-  //
-  // Il ne vit sinon que dans le cookie de la personne concernée, que le serveur ne peut pas lire :
-  // « révoquer les autres sessions » n'effaçait donc qu'une ligne ici pendant que le jeton, lui,
-  // restait valide chez Jellyfin. Le bouton promettait plus qu'il ne tenait.
-  try { db.exec("ALTER TABLE sessions ADD COLUMN jf_token TEXT"); } catch { /* already exists */ }
+  // La colonne a existé le temps d'une version qui révoquait le jeton Jellyfin en même temps que
+  // la session. Ce n'est plus le cas — se déconnecter de Cine App ne doit pas toucher à Jellyfin —
+  // et un secret qu'on ne lit plus n'a rien à faire au repos : elle est vidée à chaque démarrage.
+  // `ALTER TABLE ... DROP COLUMN` n'existe pas dans les vieilles versions de SQLite ; l'effacer
+  // suffit et ne demande pas de reconstruire la table.
+  try { db.exec("UPDATE sessions SET jf_token = NULL WHERE jf_token IS NOT NULL"); } catch { /* colonne absente */ }
   // Two columns are left behind and nothing reads either: `experimental_player`, which asked the
   // question the other way round, and an older HDR consent flag. Both have defaults and dropping
   // a column rewrites the table, so they stay where they are.
@@ -571,15 +571,14 @@ export interface StoredSession {
   jti: string;
   createdAt: number;
   lastSeenAt: number;
-  jfToken: string | null;
 }
 
 export const sessionDb = {
-  create(jti: string, userId: string, jfToken?: string | null): void {
+  create(jti: string, userId: string): void {
     const db = getDb();
     const now = Date.now();
-    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at, jf_token) VALUES (?, ?, ?, ?, ?)")
-      .run(jti, userId, now, now, jfToken ?? null);
+    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at) VALUES (?, ?, ?, ?)")
+      .run(jti, userId, now, now);
     // Opportunistic cleanup of expired sessions
     db.prepare("DELETE FROM sessions WHERE last_seen_at < ?").run(now - SESSION_MAX_AGE_MS);
   },
@@ -602,15 +601,9 @@ export const sessionDb = {
   /** Les autres sessions de cette personne, la plus récente d'abord. */
   listOthers(userId: string, currentJti: string): StoredSession[] {
     const rows = getDb()
-      .prepare("SELECT jti, created_at, last_seen_at, jf_token FROM sessions WHERE user_id = ? AND jti != ? ORDER BY created_at DESC")
-      .all(userId, currentJti) as { jti: string; created_at: number; last_seen_at: number; jf_token: string | null }[];
-    return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at, jfToken: r.jf_token }));
-  },
-
-  /** Le jeton Jellyfin d'une session, à révoquer avant de l'oublier. */
-  jellyfinToken(jti: string): string | null {
-    const row = getDb().prepare("SELECT jf_token FROM sessions WHERE jti = ?").get(jti) as { jf_token: string | null } | undefined;
-    return row?.jf_token ?? null;
+      .prepare("SELECT jti, created_at, last_seen_at FROM sessions WHERE user_id = ? AND jti != ? ORDER BY created_at DESC")
+      .all(userId, currentJti) as { jti: string; created_at: number; last_seen_at: number }[];
+    return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at }));
   },
 
   exists(jti: string): boolean {

@@ -13,8 +13,6 @@ const mockUserPrefsDb = {
   setLegacyPlayer: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []) };
-const mockRevokeJellyfin = vi.fn(async () => {});
-vi.mock("@/lib/clients/jellyfin", () => ({ revokeJellyfinToken: (...a: unknown[]) => mockRevokeJellyfin(...a) }));
 vi.mock("@/lib/db", () => ({
   notificationPrefsDb: mockNotificationPrefsDb,
   pushDb: mockPushDb,
@@ -266,8 +264,8 @@ describe("/api/auth/sessions", () => {
   it("GET lists the other sessions with their dates, keyed on jfId over username", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jti: "current-jti" });
     mockSessionDb.listOthers.mockReturnValue([
-      { jti: "a", createdAt: 111, lastSeenAt: 222, jfToken: "t-a" },
-      { jti: "b", createdAt: 333, lastSeenAt: 444, jfToken: null },
+      { jti: "a", createdAt: 111, lastSeenAt: 222 },
+      { jti: "b", createdAt: 333, lastSeenAt: 444 },
     ] as never);
     const { GET } = await import("@/app/api/auth/sessions/route");
     const res = await GET(fakeReq());
@@ -279,22 +277,16 @@ describe("/api/auth/sessions", () => {
       { id: "1", createdAt: 333, lastSeenAt: 444 },
     ]);
     // Le `jti` identifie une session : la page n'a besoin que de la reconnaître.
-    expect(JSON.stringify(body)).not.toContain("t-a");
     expect(JSON.stringify(body)).not.toContain('"a"');
   });
 
-  it("DELETE revokes other sessions, and their Jellyfin tokens with them", async () => {
+  // Cine App et rien d'autre : le bouton ne doit jamais vouloir dire « coupe-moi Jellyfin ».
+  it("DELETE revokes the other cine-app sessions and reports how many", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jti: "current-jti" });
-    mockSessionDb.listOthers.mockReturnValue([
-      { jti: "a", createdAt: 1, lastSeenAt: 2, jfToken: "t-a" },
-      { jti: "b", createdAt: 3, lastSeenAt: 4, jfToken: null },
-    ] as never);
     mockSessionDb.deleteOthers.mockReturnValue(3);
     const { DELETE } = await import("@/app/api/auth/sessions/route");
     const res = await DELETE(fakeReq());
     expect(await res.json()).toEqual({ ok: true, revoked: 3 });
-    // Sans ça, la révocation n'effaçait qu'une ligne : le jeton restait valide chez Jellyfin.
-    expect(mockRevokeJellyfin).toHaveBeenCalledWith("t-a");
-    expect(mockRevokeJellyfin).toHaveBeenCalledWith(null);
+    expect(mockSessionDb.deleteOthers).toHaveBeenCalledWith("louis", "current-jti");
   });
 });

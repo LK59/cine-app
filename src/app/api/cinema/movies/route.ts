@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
@@ -87,7 +88,7 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
  * Le filtrage par personne reviendra le jour où il servira vraiment, et il devra alors passer par
  * des requêtes ciblées (`Filters=…`), pas par une énumération : celles-ci répondent juste.
  */
-export async function GET() {
+export async function GET(req: Request) {
   const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
 
   const downloaded = movies.filter((m) => m.hasFile);
@@ -122,5 +123,7 @@ export async function GET() {
     recentlyAdded: recentlyAddedRail(cinemaMovies),
     top10: top10Rail(cinemaMovies),
   };
-  return NextResponse.json(payload);
+  // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
+  // entier, il demande seulement s'il a changé. Voir `cachedJson`.
+  return cachedJson(req, "cinema-movies", payload);
 }

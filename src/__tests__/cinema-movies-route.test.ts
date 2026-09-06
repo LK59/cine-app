@@ -1,3 +1,8 @@
+/** La route ne lit de la requête que ce qui décide du cache : deux en-têtes. */
+function fakeReq(headers: Record<string, string> = {}): Request {
+  return new Request("https://cine.example/api/cinema", { headers });
+}
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockCachedMovies = vi.fn();
@@ -44,7 +49,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(body.genres).toEqual([]);
     expect(body.spotlight).toEqual([]);
@@ -55,7 +60,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([]); // no match
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(body.genres).toEqual([]);
   });
@@ -65,7 +70,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(body.genres.sort()).toEqual(["Action", "Comedy"]);
     expect(body.rows.Action).toHaveLength(1);
@@ -78,7 +83,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(body.rows.Action[0].imdbRating).toBe("8.0");
   });
@@ -88,7 +93,7 @@ describe("GET /api/cinema/movies", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "b".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(body.rows.Action[0].jellyfinItemId).toBe("b".repeat(32));
   });
@@ -104,7 +109,7 @@ describe("GET /api/cinema/movies", () => {
     );
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(body.spotlight).toHaveLength(10);
     // Most recently added (2024-01-12, tmdbId 111) comes first.
@@ -123,10 +128,42 @@ describe("GET /api/cinema/movies — which Jellyfin view", () => {
     mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
 
     const { GET } = await import("@/app/api/cinema/movies/route");
-    const body = await (await GET()).json();
+    const body = await (await GET(fakeReq())).json();
 
     expect(mockCachedJellyfinMoviesAdmin).toHaveBeenCalled();
     expect(mockCachedJellyfinMovies).not.toHaveBeenCalled();
     expect(body.spotlight).toHaveLength(1);
+  });
+});
+
+// Le catalogue fait un mégaoctet et demi, et il était retéléchargé à chaque retour sur l'onglet.
+// Une étiquette et « no-cache » donnent l'entre-deux qu'on veut : le navigateur redemande toujours
+// — la bibliothèque bouge — mais une réponse inchangée ne coûte plus qu'un 304.
+describe("GET /api/cinema/movies — ce qui repart sur le réseau", () => {
+  it("tags the answer and asks the browser to revalidate rather than to keep it blindly", async () => {
+    const { GET } = await import("@/app/api/cinema/movies/route");
+    const res = await GET(fakeReq());
+    expect(res.headers.get("etag")).toMatch(/^W\/"/);
+    expect(res.headers.get("cache-control")).toBe("private, no-cache");
+    expect(res.headers.get("vary")).toBe("Accept-Encoding");
+  });
+
+  it("answers 304 with no body when nothing has changed", async () => {
+    const { GET } = await import("@/app/api/cinema/movies/route");
+    const etag = (await GET(fakeReq())).headers.get("etag")!;
+    const res = await GET(fakeReq({ "if-none-match": etag }));
+    expect(res.status).toBe(304);
+    expect(await res.text()).toBe("");
+  });
+
+  it("compresses when the browser says it can", async () => {
+    const { GET } = await import("@/app/api/cinema/movies/route");
+    const plain = await GET(fakeReq());
+    const gzipped = await GET(fakeReq({ "accept-encoding": "gzip, deflate, br" }));
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect(gzipped.headers.get("content-encoding")).toBe("gzip");
+    const compressed = Number(gzipped.headers.get("content-length"));
+    expect(compressed).toBeGreaterThan(0);
+    expect(compressed).toBeLessThan((await plain.text()).length);
   });
 });

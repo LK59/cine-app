@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { sessionDb } from "@/lib/db";
-import { revokeJellyfinToken } from "@/lib/clients/jellyfin";
 
 async function getSession(req: NextRequest) {
   return verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
@@ -41,16 +40,19 @@ export async function GET(req: NextRequest) {
 /**
  * Fermer toutes les autres.
  *
- * Chaque session emporte avec elle la session Jellyfin ouverte pour elle. Sans ça, la révocation
- * n'effaçait qu'une ligne ici : le jeton Jellyfin que ce cookie transportait restait valide, et
- * quiconque détenait le cookie gardait un accès à Jellyfin après avoir été « déconnecté ».
+ * Toutes les autres *sessions Cine App*, et rien de plus : les sessions Jellyfin ouvertes pour
+ * elles ne sont pas fermées. C'est délibéré. Le bouton doit vouloir dire « qu'on me déconnecte
+ * d'ici », jamais « qu'on me coupe Jellyfin » — et pour qui lit l'étiquette, la nuance
+ * n'existerait pas.
+ *
+ * Ce que ça laissait ouvert — un cookie volé emportant un jeton Jellyfin utilisable — est traité
+ * autrement, et mieux : ce jeton est chiffré dans le cookie. Le lire demande la clé du serveur,
+ * et qui l'a n'a plus besoin d'un cookie.
  */
 export async function DELETE(req: NextRequest) {
   const session = await getSession(req);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  const others = sessionDb.listOthers(userId(session), session.jti);
-  await Promise.all(others.map((other) => revokeJellyfinToken(other.jfToken)));
   const revoked = sessionDb.deleteOthers(userId(session), session.jti);
   return NextResponse.json({ ok: true, revoked });
 }

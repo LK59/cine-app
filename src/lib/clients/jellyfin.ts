@@ -127,30 +127,6 @@ function playbackHeaders(token: string, client: PlaybackClient, userId: string) 
   };
 }
 
-/**
- * Mettre fin à une session Jellyfin, la sienne et rien d'autre.
- *
- * `POST /Sessions/Logout` agit sur la session que le jeton présenté identifie — rien d'autre. Et
- * comme chaque connexion à Cine App ouvre sa propre session Jellyfin, avec un `DeviceId` tiré au
- * hasard (voir la route de connexion et la raison qui l'a imposé), révoquer ce jeton-là ne touche
- * ni l'application Jellyfin du téléphone, ni la page web de Jellyfin, ni les autres appareils.
- * Vérifié sur le serveur : chaque connexion Cine App y apparaît comme un appareil distinct.
- *
- * Au mieux : un échec ne doit jamais empêcher quelqu'un de se déconnecter de chez nous.
- */
-export async function revokeJellyfinToken(token: string | null | undefined): Promise<void> {
-  if (!token) return;
-  try {
-    await fetch(`${config.jellyfin.url}/Sessions/Logout`, {
-      method: "POST",
-      headers: { "X-Emby-Token": token },
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    // Jellyfin injoignable ou jeton déjà mort : la session Cine App part quand même.
-  }
-}
-
 export const jellyfin = {
   // DeviceProfile is built by the caller (see deviceProfile.ts) from the browser's actually
   // detected codec support, and handed to Jellyfin's own StreamBuilder to negotiate

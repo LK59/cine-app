@@ -75,9 +75,7 @@ export async function POST(req: NextRequest) {
     jellyseerrCookie ?? undefined
   );
   const userId = jellyfinId || jellyfinUsername;
-  // Le jeton est rangé avec la session pour pouvoir être révoqué à distance : il ne vit sinon
-  // que dans un cookie que le serveur ne peut pas lire.
-  sessionDb.create(jti, userId, jellyfinToken || null);
+  sessionDb.create(jti, userId);
   const lang = userPrefsDb.getLang(userId, config.app.language);
   const res = NextResponse.json({ ok: true, role });
   res.cookies.set(SESSION_COOKIE, token, {
