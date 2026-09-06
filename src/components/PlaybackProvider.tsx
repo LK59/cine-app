@@ -66,7 +66,7 @@ export function usePlayback(): PlaybackContextValue {
 export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PlaybackSession | null>(null);
   const [mode, setMode] = useState<PlaybackMode>("closed");
-  const { mutate } = useSWRConfig();
+  const { mutate, cache } = useSWRConfig();
 
   // Told to the rest of the app, which stops polling while the film has the whole screen.
   useEffect(() => {
@@ -95,6 +95,35 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     }
     wasPlaying.current = playing;
   }, [session, mutate]);
+
+  /**
+   * Redemander ce que la pause a avalé.
+   *
+   * SWR ne rejoue pas une requête qu'il a sautée : `isPaused` la fait renoncer sans erreur, et
+   * quand la pause se lève, cette clé reste sans réponse jusqu'à un remontage. Le commentaire de
+   * SWRProvider promet que « tout se rattrape à la fermeture du lecteur » — c'était vrai des
+   * écrans qu'on rouvre, faux de ceux restés montés derrière le film.
+   *
+   * Ce que ça coûtait, observé : après le rechargement que WebKit impose pour changer de piste, la
+   * séance rouvre dès le montage, et la fiche derrière se monte donc pendant la pause. Sa requête
+   * de configuration était perdue, `playerEnabled` retombait sur son défaut « non », et le bouton
+   * Lire ne revenait plus — sur une page par ailleurs vivante. La recherche, elle, marchait très
+   * bien : elle se monte à la demande, une fois la pause levée.
+   *
+   * On ne relance que les clés qui n'ont jamais rien reçu — ni donnée, ni erreur. Une donnée
+   * périmée se revalidera d'elle-même, une erreur a déjà sa propre logique de reprise, et
+   * revalider tout le catalogue à chaque fermeture de film n'aurait servi personne.
+   *
+   * Placé après l'effet du dessus, dont il dépend : la pause doit être retombée pour que ces
+   * revalidations partent au lieu d'être avalées à leur tour.
+   */
+  useEffect(() => {
+    if (mode === "full") return;
+    for (const key of cache.keys()) {
+      const entry = cache.get(key) as { data?: unknown; error?: unknown } | undefined;
+      if (entry && entry.data === undefined && entry.error === undefined) void mutate(key);
+    }
+  }, [mode, cache, mutate]);
 
   /**
    * The manifest asks for portrait, and it is right to: everything except a film is a list to
