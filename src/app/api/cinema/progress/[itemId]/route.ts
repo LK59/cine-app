@@ -16,6 +16,14 @@ export interface CinemaProgressPayload {
    */
   played: boolean;
   favorite: boolean;
+  /**
+   * A-t-on réellement pu lire ces deux états.
+   *
+   * Faux quand Jellyfin n'a pas répondu, ou quand la connexion n'a pas d'identité Jellyfin —
+   * l'administrateur local. `played: false` voulait alors dire « pas vu » à une interface qui
+   * proposait aussitôt de le marquer comme vu : une lecture ratée se transformait en écriture.
+   */
+  known: boolean;
 }
 
 // A movie's own Jellyfin watch progress — CinemaMovie (the /api/cinema/movies payload) carries no
@@ -29,7 +37,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) {
-    return NextResponse.json({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false });
+    return NextResponse.json({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false, known: false });
   }
 
   const item = await jellyfin.getItemUserData(session.jfId, itemId).catch(() => null);
@@ -38,6 +46,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     runtimeTicks: item?.RunTimeTicks ?? null,
     played: Boolean(item?.UserData?.Played),
     favorite: Boolean(item?.UserData?.IsFavorite),
+    known: item !== null,
   };
   return NextResponse.json(payload);
 }

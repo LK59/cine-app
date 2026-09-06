@@ -88,7 +88,7 @@ export function CinemaMovieDetail({
   // La même réponse porte « vu » et « favori », qui vivent chez Jellyfin et non dans la base
   // locale — voir useJellyfinItemState pour pourquoi une seconde copie finissait toujours par
   // mentir.
-  const { progress, watched, favorite, busy: flagsBusy, toggleWatched, toggleFavorite } =
+  const { progress, watched, favorite, known: flagsKnown, busy: flagsBusy, toggleWatched, toggleFavorite } =
     useJellyfinItemState(item.jellyfinItemId);
   const hasResume = !!progress?.resumeTicks && progress.resumeTicks > 0;
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
@@ -388,7 +388,9 @@ export function CinemaMovieDetail({
               onClick={toggleWatched}
               disabled={flagsBusy}
               aria-pressed={watched}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              // Estompé tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire
+              // une valeur qu'on n'a pas lue est la façon la plus sûre de la changer par erreur.
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${flagsKnown ? "" : "opacity-50"}`}
             >
               <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
                 {watched ? <CircleCheck size={16} /> : <Check size={14} />}

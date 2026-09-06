@@ -30,10 +30,22 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
   const [busy, setBusy] = useState(false);
   const key = itemId ? `/api/cinema/progress/${itemId}` : null;
   const { data, mutate } = useSWR<CinemaProgressPayload>(key, fetcher);
+  /**
+   * Sait-on seulement ce qu'il en est ?
+   *
+   * Tant que la réponse n'est pas là — ou si elle a échoué — `played` valait `false`, c'est-à-dire
+   * « pas vu ». Une lecture ratée devenait donc une affirmation, sur un bouton qui *écrit* : on
+   * proposait « marquer comme vu » pour un film déjà vu, et le geste changeait la donnée.
+   *
+   * L'ignorance se dit maintenant : les bascules attendent de savoir avant de laisser agir.
+   */
+  const known = data?.known ?? false;
 
   const toggle = useCallback(
     async (field: "played" | "favorite") => {
-      if (!itemId || !data || busy) return;
+      // Rien tant qu'on ignore l'état : agir sur une supposition, c'est écrire une valeur qu'on
+      // n'a pas lue.
+      if (!itemId || !data || !data.known || busy) return;
       const next = !data[field];
       setBusy(true);
       void mutate({ ...data, [field]: next }, { revalidate: false });
@@ -58,9 +70,10 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
 
   return {
     progress: data,
+    known,
     watched: Boolean(data?.played),
     favorite: Boolean(data?.favorite),
-    busy,
+    busy: busy || !known,
     toggleWatched: () => toggle("played"),
     toggleFavorite: () => toggle("favorite"),
   };

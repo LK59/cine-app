@@ -20,7 +20,9 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis" });
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
     const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
-    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false });
+    // `known: false` : sans identité Jellyfin, on ne sait rien — et « pas vu » serait une
+    // affirmation, sur des boutons qui écrivent.
+    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false, known: false });
     expect(mockGetItemUserData).not.toHaveBeenCalled();
   });
 
@@ -44,7 +46,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
     const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
 
-    expect(body).toEqual({ resumeTicks: 300_000_000, runtimeTicks: 1_200_000_000, played: false, favorite: false });
+    expect(body).toEqual({ resumeTicks: 300_000_000, runtimeTicks: 1_200_000_000, played: false, favorite: false, known: true });
   });
 
   it("returns nulls for an item with no watch history", async () => {
@@ -57,13 +59,26 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     expect(body.resumeTicks).toBeNull();
   });
 
-  it("falls back to nulls when the Jellyfin call fails", async () => {
+  // Une lecture ratée ne doit pas se lire comme « pas vu » : la fiche proposerait aussitôt de
+  // marquer comme vu un film qui l'est déjà, et le geste écrirait cette supposition.
+  it("admits it does not know when the Jellyfin call fails", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     mockGetItemUserData.mockRejectedValue(new Error("jellyfin down"));
 
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
     const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
 
-    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false });
+    expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false, known: false });
+  });
+
+  it("knows when Jellyfin answered, even if there is nothing to report", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+    mockGetItemUserData.mockResolvedValue({ UserData: { Played: false } });
+
+    const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+
+    expect(body.known).toBe(true);
+    expect(body.played).toBe(false);
   });
 });

@@ -88,7 +88,7 @@ export function CinemaSeriesDetail({
   const { data: episodesData } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
   // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
   // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
-  const { watched, favorite, busy: flagsBusy, toggleWatched, toggleFavorite } = useJellyfinItemState(item.jellyfinItemId);
+  const { watched, favorite, known: flagsKnown, busy: flagsBusy, toggleWatched, toggleFavorite } = useJellyfinItemState(item.jellyfinItemId);
   // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
   // un-toggled even for a series already on the watchlist. item.tmdbId can be null (Sonarr
   // doesn't always resolve one) — bulk-status has nothing to look up then, same as toggleWatched/
@@ -379,7 +379,9 @@ export function CinemaSeriesDetail({
               onClick={toggleWatched}
               disabled={flagsBusy}
               aria-pressed={watched}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              // Estompé tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire
+              // une valeur qu'on n'a pas lue est la façon la plus sûre de la changer par erreur.
+              className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${flagsKnown ? "" : "opacity-50"}`}
             >
               <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
                 {watched ? <CircleCheck size={16} /> : <Check size={14} />}

@@ -11,6 +11,7 @@ import { useDelayedClose } from "@/lib/useDelayedClose";
 import { arrivedByBack } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -117,7 +118,19 @@ export function CinemaMobileDetail({
   const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
     tmdbId ? statusMap[`${isSeries ? "series" : "movie"}:${tmdbId}`] ?? null : null
   );
-  const watched = addedStatus === "watched";
+  /**
+   * « Vu » vient de Jellyfin, comme sur les fiches du bureau.
+   *
+   * Il était lu ici dans la table locale — la même colonne que « À voir », qui ne tient qu'un
+   * statut par titre. Trois conséquences, toutes visibles : un film terminé sur la télé
+   * s'affichait « pas vu » alors que l'onglet « Vu » de Ma liste, qui lit Jellyfin, le montrait
+   * bien ; le marquer vu le sortait de « À voir » ; et le démarquer effaçait la ligne entière.
+   *
+   * Une seule vérité par information : « vu » et « favori » chez Jellyfin, qui les tient déjà pour
+   * ses propres applications, et « à voir » dans la liste locale, qui est une intention que
+   * Jellyfin ne connaît pas.
+   */
+  const { watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId);
   const inList = addedStatus === "to_watch";
 
   const [logoErrored, setLogoErrored] = useState(false);
@@ -189,15 +202,6 @@ export function CinemaMobileDetail({
       resumeAt: episode.resumeTicks ? episode.resumeTicks / 10_000_000 : undefined,
       getNextEpisode,
     });
-  }
-
-  function toggleWatched() {
-    if (watched) removeFromWatchlist({ tmdbId, mediaType: isSeries ? "series" : "movie" });
-    else
-      addToWatchlist(
-        { tmdbId, mediaType: isSeries ? "series" : "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "watched"
-      );
   }
 
   function toggleInList() {
@@ -387,7 +391,15 @@ export function CinemaMobileDetail({
               {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
             </span>
           </button>
-          <button type="button" onClick={toggleWatched} aria-pressed={watched} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
+          {/* Estompé tant qu'on ignore l'état : proposer « marquer comme vu » sans l'avoir lu,
+              c'est proposer d'écrire une valeur qu'on a devinée. */}
+          <button
+            type="button"
+            onClick={toggleWatched}
+            disabled={watchedBusy}
+            aria-pressed={watched}
+            className={`flex w-16 flex-col items-center gap-1.5 active:scale-95 ${watchedKnown ? "" : "opacity-40"}`}
+          >
             {watched ? <CircleCheck size={22} className="text-accent-400" /> : <Check size={22} className="text-white" />}
             <span className="text-center text-xs leading-tight text-white/70">
               {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
