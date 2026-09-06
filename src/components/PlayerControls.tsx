@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
+import {
+  subtitleStyleStore,
+  cueCss,
+  SUBTITLE_SIZES,
+  SUBTITLE_COLORS,
+  SUBTITLE_BACKGROUNDS,
+} from "@/lib/subtitleStyle";
 import { useMediaSession } from "@/lib/useMediaSession";
 
 export interface Track {
@@ -45,16 +53,6 @@ export const VOLUME_STORAGE_KEY = "cine:player-volume";
 
 /** How long a seek may take before it is worth showing as a wait rather than as a still button. */
 const SEEK_SPINNER_MS = 150;
-// labelKey, not a literal string — SUBTITLE_SIZES is a module-level constant (evaluated once,
-// outside any component), so it can't call the useT() hook itself; each label is resolved via
-// t(`player.${labelKey}`) at render time instead.
-const SUBTITLE_SIZES = [
-  { labelKey: "subtitleSizeSmall", value: 0.75 },
-  { labelKey: "subtitleSizeNormal", value: 1 },
-  { labelKey: "subtitleSizeLarge", value: 1.3 },
-  { labelKey: "subtitleSizeXLarge", value: 1.6 },
-];
-const SUBTITLE_SIZE_KEY = "cine:subtitle-size";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -151,7 +149,7 @@ export function PlayerControls({
   }, []);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "more">(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -159,15 +157,15 @@ export function PlayerControls({
   const [speed, setSpeed] = useState(1);
   const [chapters, setChapters] = useState<{ start: number; name: string }[]>([]);
   const [bufferedEnd, setBufferedEnd] = useState(0);
-  // General preference, persisted across sessions like volume — a subtitle size someone needs
-  // isn't specific to one file.
-  const [subtitleSize, setSubtitleSize] = useState(() => {
-    try {
-      return Number(localStorage.getItem(SUBTITLE_SIZE_KEY)) || 1;
-    } catch {
-      return 1;
-    }
-  });
+  // Préférence générale, gardée d'une session à l'autre comme le volume : une taille de
+  // sous-titres dont on a besoin ne dépend pas du film. Elle vit dans un magasin partagé, parce
+  // que l'autre lecteur dessine ses lignes lui-même et doit obéir aux mêmes réglages — voir
+  // `subtitleStyle`.
+  const subtitleStyle = useSyncExternalStore(
+    subtitleStyleStore.subscribe,
+    subtitleStyleStore.snapshot,
+    subtitleStyleStore.serverSnapshot
+  );
   // Deliberately NOT persisted, and reset per item (below) rather than per session: a
   // desync is a property of one specific file's subtitle track, meaningless carried over to a
   // different file that likely isn't desynced at all.
@@ -204,9 +202,26 @@ export function PlayerControls({
     return () => clearInterval(id);
   }, [showNextUp]);
 
+  /**
+   * L'écran « vous êtes toujours là ? ».
+   *
+   * Au bout de trois épisodes enchaînés sans un geste, le décompte arrive à zéro et on ne passe
+   * pas à la suite : on demande. Le compteur vit hors du composant — voir `autoAdvance` — parce
+   * que celui-ci est remonté à chaque épisode.
+   */
+  const autoAdvances = useSyncExternalStore(
+    autoAdvanceStore.subscribe,
+    autoAdvanceStore.snapshot,
+    autoAdvanceStore.serverSnapshot
+  );
+  // Déduit du rendu et non posé dans un effet : l'écran à afficher est une conséquence du
+  // décompte et du compteur, pas un état de plus à tenir à jour à côté d'eux.
+  const askStillThere = showNextUp && nextUpCountdown === 0 && autoAdvances >= STILL_THERE_AFTER;
   useEffect(() => {
-    if (showNextUp && nextUpCountdown === 0) onAdvance();
-  }, [showNextUp, nextUpCountdown, onAdvance]);
+    if (!showNextUp || nextUpCountdown !== 0 || askStillThere) return;
+    noteAutoAdvance();
+    onAdvance();
+  }, [showNextUp, nextUpCountdown, askStillThere, onAdvance]);
 
   const showSkipIntro = !!introSkip && currentTime >= introSkip.start && currentTime < introSkip.end;
 
@@ -432,6 +447,10 @@ export function PlayerControls({
   // invisible-but-clickable menu floating over the video.
   const showControls = useCallback(
     (delayMs: number = 3000) => {
+      // Un geste vaut présence, et c'est ici qu'ils passent tous — un clic, une touche, un
+      // pointeur qui bouge. Quelqu'un qui vient de bouger n'a pas à répondre trois épisodes plus
+      // tard à une question qui demande s'il est là.
+      noteViewerPresent();
       setVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (playing) {
@@ -742,17 +761,6 @@ export function PlayerControls({
     setMenu(null);
   }
 
-  function cycleSubtitleSize() {
-    const idx = SUBTITLE_SIZES.findIndex((s) => s.value === subtitleSize);
-    const next = SUBTITLE_SIZES[(idx + 1) % SUBTITLE_SIZES.length];
-    setSubtitleSize(next.value);
-    try {
-      localStorage.setItem(SUBTITLE_SIZE_KEY, String(next.value));
-    } catch {
-      // Storage unavailable — just doesn't persist this time.
-    }
-  }
-
   // Shifts every cue of the CURRENTLY SHOWING subtitle track by `deltaSeconds` — applied
   // directly to the live TextTrackCue objects (their startTime/endTime are writable), not
   // re-derived from an "original" copy, so repeated small nudges (−0.5s, −0.5s, +0.5s…)
@@ -803,7 +811,7 @@ export function PlayerControls({
   };
 
   // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more" };
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", subtitleStyle: "more" };
 
   // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
   // only focuses THAT button (native click behavior), never moves focus into the popup that
@@ -997,7 +1005,7 @@ export function PlayerControls({
           them is the ::cue pseudo-element, which can't be scoped by a React inline style since
           it isn't a real element. Targets every <video> globally rather than this one
           specifically: harmless since the whole app only ever has one active <video> at a time. */}
-      <style>{`video::cue { font-size: clamp(14px, ${subtitleSize * 4}vw, ${Math.round(subtitleSize * 48)}px); }`}</style>
+      <style>{cueCss(subtitleStyle)}</style>
       {/* Always visible regardless of the auto-hide controls fade below —
           otherwise a rebuffer that happens while controls are hidden looks
           like a silent freeze instead of a loading state. */}
@@ -1035,7 +1043,26 @@ export function PlayerControls({
         </button>
       )}
 
-      {showNextUp && nextEpisode && (
+      {/* La question, à la place de l'épisode suivant. Elle occupe tout l'écran plutôt qu'un coin :
+          si personne n'est là, autant que la pièce cesse d'être éclairée par un film qui joue. */}
+      {askStillThere && nextEpisode && (
+        <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/80 px-6 text-center">
+          <p className="text-lg font-medium text-white">{t("player.stillThere")}</p>
+          <p className="max-w-sm text-sm text-slate-400">{t("player.stillThereHint")}</p>
+          <button
+            type="button"
+            onClick={() => {
+              noteViewerPresent();
+              onAdvance();
+            }}
+            className="btn-primary px-6"
+          >
+            {t("player.stillThereContinue")}
+          </button>
+        </div>
+      )}
+
+      {showNextUp && !askStillThere && nextEpisode && (
         <div
           className="player-panel pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] animate-fade-in-scale rounded-2xl p-4"
           style={{
@@ -1046,7 +1073,13 @@ export function PlayerControls({
           <p className="mb-1 text-xs text-slate-400">{t('player.nextEpisodeIn', { n: nextUpCountdown })}</p>
           <p className="mb-3 truncate text-sm font-medium text-white">{nextEpisode.title}</p>
           <div className="flex gap-2">
-            <button onClick={onAdvance} className="btn-primary flex-1 justify-center py-1.5 text-xs">
+            <button
+              onClick={() => {
+                noteViewerPresent();
+                onAdvance();
+              }}
+              className="btn-primary flex-1 justify-center py-1.5 text-xs"
+            >
               {t('player.playNow')}
             </button>
             <button
@@ -1227,20 +1260,16 @@ export function PlayerControls({
                     <Cast size={16} /> {t('player.cast')}
                   </button>
                 )}
+                {/* Une porte plutôt que trois lignes de plus : la taille, la couleur et le fond
+                    vivent ensemble et se règlent au même moment, et les poser à plat dans ce menu
+                    l'aurait fait doubler de hauteur pour des réglages qu'on touche une fois. */}
                 {subtitleTracks.length > 0 && (
-                  <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-2 text-sm text-white">
-                    {/* The label is what gives way — a longer translation wraps rather than
-                        pushing the control out of the box. */}
-                    <span className="flex min-w-0 items-center gap-3">
-                      <Captions size={16} className="shrink-0" /> {t('player.subtitleSize')}
-                    </span>
-                    <button
-                      onClick={cycleSubtitleSize}
-                      className="btn btn-ghost btn-sm shrink-0"
-                    >
-                      {t(`player.${SUBTITLE_SIZES.find((s) => s.value === subtitleSize)?.labelKey ?? "subtitleSizeNormal"}`)}
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setMenu("subtitleStyle")}
+                    className="flex w-full items-center gap-3 border-t border-white/10 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <Captions size={16} /> {t("player.subtitleStyle.title")}
+                  </button>
                 )}
                 {subtitleTracks.length > 0 && currentSubtitleId !== null && (
                   <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-white">
@@ -1269,7 +1298,7 @@ export function PlayerControls({
                 )}
               </>
             )}
-            {(menu === "chapters" || menu === "speed") && (
+            {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle") && (
               <button
                 onClick={() => setMenu("more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -1305,6 +1334,31 @@ export function PlayerControls({
               >
                 {t('player.none')}
               </button>
+            )}
+            {menu === "subtitleStyle" && (
+              <>
+                <SubtitleStyleGroup
+                  label={t("player.subtitleSize")}
+                  options={SUBTITLE_SIZES.map((s) => ({ value: s.value, label: t(`player.${s.labelKey}`) }))}
+                  current={subtitleStyle.size}
+                  onPick={(size) => subtitleStyleStore.set({ size })}
+                />
+                <SubtitleStyleGroup
+                  label={t("player.subtitleStyle.colour")}
+                  options={SUBTITLE_COLORS.map((c) => ({ value: c, label: t(`player.subtitleStyle.colours.${c}`) }))}
+                  current={subtitleStyle.color}
+                  onPick={(color) => subtitleStyleStore.set({ color })}
+                />
+                <SubtitleStyleGroup
+                  label={t("player.subtitleStyle.background")}
+                  options={SUBTITLE_BACKGROUNDS.map((b) => ({
+                    value: b,
+                    label: t(`player.subtitleStyle.backgrounds.${b}`),
+                  }))}
+                  current={subtitleStyle.background}
+                  onPick={(background) => subtitleStyleStore.set({ background })}
+                />
+              </>
             )}
             {menu === "speed" &&
               PLAYBACK_SPEEDS.map((rate) => (
@@ -1659,6 +1713,46 @@ export function PlayerControls({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * Un groupe de choix du sous-menu des sous-titres.
+ *
+ * Trois réglages qui se règlent tous de la même façon — un intitulé, quelques valeurs, celle qui
+ * est retenue en couleur d'accent — et qui n'ont donc aucune raison d'être écrits trois fois.
+ */
+function SubtitleStyleGroup<T extends string | number>({
+  label,
+  options,
+  current,
+  onPick,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  current: T;
+  onPick: (value: T) => void;
+}) {
+  return (
+    <div className="border-b border-white/10 px-3 py-2 last:border-b-0">
+      <p className="mb-1.5 text-[11px] uppercase tracking-wide text-white/40">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((option) => (
+          <button
+            key={String(option.value)}
+            type="button"
+            onClick={() => onPick(option.value)}
+            aria-pressed={current === option.value}
+            className={`rounded-full px-2.5 py-1 text-xs ${
+              current === option.value ? "bg-accent-600 text-white" : "bg-white/10 text-white/70 hover:bg-white/20"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
+import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -229,6 +230,11 @@ export function ExperimentalPlayerHost({
    * repeat of the same sentence a new notice rather than an unchanged value that re-arms nothing.
    */
   const [warning, setWarning] = useState<{ text: string; at: number } | null>(null);
+  const subtitleStyle = useSyncExternalStore(
+    subtitleStyleStore.subscribe,
+    subtitleStyleStore.snapshot,
+    subtitleStyleStore.serverSnapshot
+  );
 
   const showWarning = useCallback((text: string | null) => {
     setWarning(text ? { text, at: Date.now() } : null);
@@ -1105,10 +1111,11 @@ export function ExperimentalPlayerHost({
       {subtitle && !isMini && (
         <div className="pointer-events-none absolute inset-x-0 bottom-24 z-10 flex justify-center px-8">
           <p
-            className="max-w-4xl whitespace-pre-line text-center text-lg font-medium leading-snug text-white sm:text-2xl font-display"
-            // Drawn with a shadow rather than a box: a background plate is heavier over a moving
-            // picture, and this is what every player converges on.
-            style={{ textShadow: "0 2px 6px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,1)" }}
+            // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
+            // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
+            // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.
+            className="max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
+            style={overlayCss(subtitleStyle)}
           >
             {subtitle}
           </p>

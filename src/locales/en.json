@@ -1386,7 +1386,24 @@
         "movies": "See all films",
         "series": "See all series"
       }
-    }
+    },
+    "subtitleStyle": {
+      "title": "Subtitle appearance",
+      "colour": "Colour",
+      "background": "Background",
+      "colours": {
+        "white": "White",
+        "yellow": "Yellow"
+      },
+      "backgrounds": {
+        "shadow": "Shadow",
+        "box": "Box",
+        "none": "None"
+      }
+    },
+    "stillThere": "Are you still watching?",
+    "stillThereHint": "Three episodes have played back to back untouched. Playback resumes whenever you like.",
+    "stillThereContinue": "Continue"
   },
   "cinema": {
     "standardMode": "Standard mode",

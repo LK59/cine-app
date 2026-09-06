@@ -1386,7 +1386,24 @@
         "movies": "Voir tous les films",
         "series": "Voir toutes les séries"
       }
-    }
+    },
+    "subtitleStyle": {
+      "title": "Apparence des sous-titres",
+      "colour": "Couleur",
+      "background": "Fond",
+      "colours": {
+        "white": "Blanc",
+        "yellow": "Jaune"
+      },
+      "backgrounds": {
+        "shadow": "Ombre",
+        "box": "Boîte",
+        "none": "Aucun"
+      }
+    },
+    "stillThere": "Vous êtes toujours là ?",
+    "stillThereHint": "Trois épisodes se sont enchaînés sans un geste. La lecture reprend quand vous voulez.",
+    "stillThereContinue": "Continuer"
   },
   "cinema": {
     "standardMode": "Mode standard",

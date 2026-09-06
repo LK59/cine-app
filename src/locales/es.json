@@ -1386,7 +1386,24 @@
         "movies": "Ver todas las películas",
         "series": "Ver todas las series"
       }
-    }
+    },
+    "subtitleStyle": {
+      "title": "Aspecto de los subtítulos",
+      "colour": "Color",
+      "background": "Fondo",
+      "colours": {
+        "white": "Blanco",
+        "yellow": "Amarillo"
+      },
+      "backgrounds": {
+        "shadow": "Sombra",
+        "box": "Caja",
+        "none": "Ninguno"
+      }
+    },
+    "stillThere": "¿Sigues ahí?",
+    "stillThereHint": "Tres episodios se han encadenado sin tocar nada. La reproducción sigue cuando quieras.",
+    "stillThereContinue": "Continuar"
   },
   "cinema": {
     "standardMode": "Modo estándar",

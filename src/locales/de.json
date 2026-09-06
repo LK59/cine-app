@@ -1386,7 +1386,24 @@
         "movies": "Alle Filme anzeigen",
         "series": "Alle Serien anzeigen"
       }
-    }
+    },
+    "subtitleStyle": {
+      "title": "Untertitel-Darstellung",
+      "colour": "Farbe",
+      "background": "Hintergrund",
+      "colours": {
+        "white": "Weiß",
+        "yellow": "Gelb"
+      },
+      "backgrounds": {
+        "shadow": "Schatten",
+        "box": "Kasten",
+        "none": "Keiner"
+      }
+    },
+    "stillThere": "Schaust du noch?",
+    "stillThereHint": "Drei Folgen liefen ohne eine Berührung hintereinander. Die Wiedergabe geht weiter, wann du willst.",
+    "stillThereContinue": "Weiter"
   },
   "cinema": {
     "standardMode": "Standardmodus",
