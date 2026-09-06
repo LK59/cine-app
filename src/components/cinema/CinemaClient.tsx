@@ -1096,9 +1096,9 @@ export function CinemaClient() {
         />
       )}
 
-      {!sheetAbove &&
-        movieStack.map((film, i) => {
-          const top = i === movieStack.length - 1;
+      {movieStack.map((film, i) => {
+          // Voir CinemaMobileClient : une fiche TMDB recouvre la pile sans la remplacer.
+          const top = !sheetAbove && i === movieStack.length - 1;
           return (
             <CinemaMovieDetail
               key={film.radarrId}
@@ -1109,9 +1109,8 @@ export function CinemaClient() {
             />
           );
         })}
-      {!sheetAbove &&
-        seriesStack.map((serie, i) => {
-          const top = i === seriesStack.length - 1;
+      {seriesStack.map((serie, i) => {
+          const top = !sheetAbove && i === seriesStack.length - 1;
           return (
             <CinemaSeriesDetail
               key={serie.sonarrId}

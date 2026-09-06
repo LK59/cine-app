@@ -595,10 +595,23 @@ export function CinemaMobileClient() {
         />
       )}
 
-      {route.discover === null &&
-        route.person === null &&
-        stack.map((entry, i) => {
-          const top = i === stack.length - 1;
+      {stack.map((entry, i) => {
+          /**
+           * Une fiche TMDB se pose *par-dessus* la pile, elle ne la remplace pas.
+           *
+           * La pile n'était pas dessinée du tout tant qu'une fiche découverte ou personne était
+           * ouverte, et ça se voyait exactement là où on ouvre le plus de fiches découverte :
+           * une rangée de saga. Près d'un tiers des titres d'une collection ne sont pas dans la
+           * bibliothèque — mesuré sur celle-ci : quinze entrées sur quarante-neuf — et chacun de
+           * ces posters ouvre donc une fiche TMDB. Le film d'où l'on venait disparaissait alors
+           * derrière elle : on refermait, on voyait la grille pendant toute l'animation, puis le
+           * film primaire réapparaissait d'un coup, remonté à neuf et revenu en haut de page.
+           *
+           * Rien à changer aux plans : la fiche découverte est au 48, une fiche recouverte au 47.
+           * Il suffisait de la laisser exister.
+           */
+          const covered = route.discover !== null || route.person !== null;
+          const top = !covered && i === stack.length - 1;
           return (
             <CinemaMobileDetail
               key={itemId(entry.item)}
