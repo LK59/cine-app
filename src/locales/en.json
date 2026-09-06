@@ -1474,6 +1474,7 @@
       "seasonRequested": "Season {n} requested",
       "episodeRequested": "{label} requested",
       "airsOn": "on {date}"
-    }
+    },
+    "reload": "Reload the page"
   }
 }

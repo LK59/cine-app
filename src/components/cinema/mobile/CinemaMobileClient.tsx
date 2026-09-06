@@ -286,10 +286,20 @@ export function CinemaMobileClient() {
         {/* Le coin qui portait le hamburger porte maintenant le nom. La navigation est passée en
             bas, à portée de pouce ; ce qui reste ici n'a plus à être un bouton, et une marque
             discrète vaut mieux qu'un coin vide. */}
-        <span className="flex min-w-0 items-center gap-1.5 text-white/90">
+        <button
+          type="button"
+          // Un rechargement franc du document, et non une navigation : c'est le geste qu'on fait
+          // après un déploiement pour voir la nouvelle version. La page est la seule chose que le
+          // service worker ne met plus en cache (voir sw.js), donc un rechargement suffit — il n'y
+          // a rien à contourner.
+          onClick={() => window.location.reload()}
+          aria-label={t("cinema.reload")}
+          title={t("cinema.reload")}
+          className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white/90 transition-opacity active:opacity-60"
+        >
           <Clapperboard size={16} className="shrink-0 text-accent-400" />
           <span className="truncate font-display text-sm font-semibold tracking-tight">Ciné App</span>
-        </span>
+        </button>
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
             la seule chose qu'on change souvent depuis cette barre. */}
