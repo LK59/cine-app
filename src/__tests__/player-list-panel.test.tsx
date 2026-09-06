@@ -183,12 +183,17 @@ describe("PlayerListPanel", () => {
     expect(stat("player.lists.stats.watched")).toBe("1");
   });
 
-  // Le « + » ne cherche pas dans la liste : il ouvre la recherche générale, parce qu'ajouter un
-  // titre c'est le chercher ailleurs que là où il n'est pas encore.
-  it("sends the plus button to the general search", async () => {
+  // Le « + » ouvre une recherche *ici*, et non l'écran de recherche générale : ajouter un titre
+  // ne doit pas demander de quitter la liste qu'on est en train de remplir.
+  it("opens the add search inside the screen, without navigating away", async () => {
     renderWith({ ...EMPTY_LISTS });
     fireEvent.click(await screen.findByLabelText("player.lists.addTitle"));
-    expect(mockNavigate).toHaveBeenCalledWith({ list: false, search: true });
+
+    expect(screen.getByPlaceholderText("player.lists.addPlaceholder")).toBeTruthy();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    // Et la liste s'efface pendant ce temps : deux champs à l'écran, on ne sait plus lequel
+    // filtre quoi.
+    expect(screen.queryByPlaceholderText("player.lists.searchInList")).toBeNull();
   });
 
   it("sends an arrived request to its library sheet, not to the TMDB one", async () => {

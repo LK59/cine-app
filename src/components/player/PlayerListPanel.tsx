@@ -161,8 +161,10 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
           <StatCard value={stats.watched} label={t("player.lists.stats.watched")} />
         </div>
 
-        {/* Chercher, trier, ajouter — sur une ligne. Le « + » ouvre la recherche générale :
-            ajouter un titre, c'est le chercher, et cette recherche-ci ne fouille que la liste. */}
+        {/* Chercher, trier, ajouter — sur une ligne. Cette recherche-ci ne fouille que la liste ;
+            le « + » en ouvre une autre, qui cherche partout pour y ajouter. La ligne s'efface
+            pendant ce temps : deux champs à l'écran, on ne saurait plus lequel filtre quoi. */}
+        {!adding && (
         <div className="mb-4 flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -196,6 +198,7 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
             <Plus size={18} />
           </button>
         </div>
+        )}
 
         {/* La recherche d'ajout remplace la liste tant qu'elle est ouverte : deux champs et deux
             grilles à l'écran au même moment, on ne saurait plus lequel filtre quoi. */}
