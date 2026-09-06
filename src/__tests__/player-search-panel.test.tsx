@@ -128,7 +128,10 @@ describe("PlayerSearchPanel — clearing the field", () => {
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
     await waitFor(() => expect(screen.queryByText("Matrix")).toBeNull());
-    expect(screen.getByText("player.search.hint")).toBeTruthy();
+    // Le champ vide rend l'écran de départ — les dernières recherches, ce qui vient d'arriver —
+    // et non plus une phrase grise. Ce qui compte ici est que la grille de résultats et ses
+    // filtres aient bien disparu.
+    expect(screen.getByText("player.search.recent")).toBeTruthy();
     expect(screen.queryByText("player.search.filterAll")).toBeNull();
   });
 });
