@@ -279,7 +279,10 @@ describe("dfLa", () => {
     expect(Array.from(box.subarray(4, 8))).toEqual([0x64, 0x66, 0x4c, 0x61]); // "dfLa"
     // version and flags, then the blocks themselves, magic gone.
     expect(Array.from(box.subarray(8, 12))).toEqual([0, 0, 0, 0]);
-    expect(Array.from(box.subarray(12, 16))).toEqual([0x00, 0x00, 0x00, 0x22]);
+    // L'en-tête du bloc, avec le drapeau « dernier » désormais posé. Cette assertion attendait
+    // auparavant 0x00 — c'est-à-dire l'octet tel qu'il arrive de Matroska, qui annonce d'autres
+    // blocs alors qu'il n'en suit aucun. Elle verrouillait donc la faute plutôt que la règle.
+    expect(Array.from(box.subarray(12, 16))).toEqual([0x80, 0x00, 0x00, 0x22]);
   });
 
   it("takes the blocks as they are when the magic is already gone", () => {

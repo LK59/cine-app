@@ -29,7 +29,9 @@ function codecPrivate(bitsPerSample: number): Uint8Array {
   const info = streamInfo(bitsPerSample);
   const out = new Uint8Array(4 + 4 + info.length);
   out.set([0x66, 0x4c, 0x61, 0x43], 0); // « fLaC »
-  out[4] = 0x80; // dernier bloc, type 0 = STREAMINFO
+  // Comme les fichiers réels : type 0 = STREAMINFO, et le drapeau « dernier » *pas* posé —
+  // Matroska garde le début du fichier FLAC d'origine, où d'autres blocs suivaient.
+  out[4] = 0x00;
   out[5] = 0; out[6] = 0; out[7] = 34;
   out.set(info, 8);
   return out;
@@ -90,5 +92,49 @@ describe("l'entrée d'échantillon FLAC", () => {
       firstFrame: null,
     });
     expect(declaredSampleSize(entry)).toBe(16);
+  });
+});
+
+/**
+ * La boîte `dfLa` ne doit annoncer que ce qu'elle contient.
+ *
+ * Ce que Matroska garde est le début du fichier FLAC d'origine : l'en-tête de bloc y porte encore
+ * « d'autres blocs suivent », et il n'y en a aucun. Vérifié sur six pistes de cette bibliothèque —
+ * toutes avec le drapeau à faux. Recopiée telle quelle, la boîte décrivait une chaîne qui
+ * continue au-delà de sa propre fin.
+ */
+describe("la boîte dfLa", () => {
+  /** Les blocs occupent les trente-huit derniers octets de l'entrée : leur en-tête ouvre le lot. */
+  const firstBlockHeader = (entry: Uint8Array) => entry[entry.length - 38];
+
+  it("marque STREAMINFO comme le dernier bloc, quoi qu'en dise la source", () => {
+    const priv = codecPrivate(24);
+    expect(priv[4] & 0x80).toBe(0); // la source dit « il en reste », et il n'en reste rien
+
+    const entry = audioSampleEntryFor({
+      codecId: "A_FLAC",
+      codecPrivate: priv,
+      channels: 1,
+      sampleRate: 48000,
+      firstFrame: null,
+    });
+    expect(firstBlockHeader(entry) & 0x80).toBe(0x80);
+    expect(firstBlockHeader(entry) & 0x7f).toBe(0); // et c'est bien un STREAMINFO
+  });
+
+  it("n'emporte que les trente-huit octets qui décrivent le flux", () => {
+    const priv = codecPrivate(16);
+    const withArtwork = new Uint8Array(priv.length + 500); // une pochette imaginaire à la suite
+    withArtwork.set(priv, 0);
+
+    const entry = audioSampleEntryFor({
+      codecId: "A_FLAC",
+      codecPrivate: withArtwork,
+      channels: 1,
+      sampleRate: 48000,
+      firstFrame: null,
+    });
+    // 8 d'en-tête de boîte + 28 d'entrée audio + 8 d'en-tête dfLa + 4 de version/drapeaux + 38.
+    expect(entry.length).toBe(8 + 28 + 8 + 4 + 38);
   });
 });

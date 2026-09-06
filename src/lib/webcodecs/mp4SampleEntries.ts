@@ -412,7 +412,26 @@ function flacBlocks(codecPrivate: Uint8Array): Uint8Array | null {
 
 export function dfLa(codecPrivate: Uint8Array): Uint8Array | null {
   const blocks = flacBlocks(codecPrivate);
-  return blocks ? box("dfLa", u32(0), blocks) : null; // version and flags, then the blocks
+  if (!blocks) return null;
+
+  /**
+   * STREAMINFO seul, et déclaré comme le dernier.
+   *
+   * Ce que Matroska garde ici est le début du fichier FLAC d'origine, et l'en-tête de bloc y porte
+   * encore le drapeau « d'autres blocs suivent » — vérifié sur les fichiers de cette bibliothèque :
+   * les six pistes examinées ont toutes `dernier=false`, et rien derrière. Recopié tel quel, notre
+   * `dfLa` annonçait donc une chaîne qui continue au-delà de la fin de la boîte. Chrome ne s'en
+   * plaint pas, parce qu'il ne lit que STREAMINFO — mais c'est exactement l'espèce de détail sur
+   * lequel il nous a refusé un segment entier douze heures plus tôt, et rien ne dit que le
+   * prochain lecteur sera aussi indulgent.
+   *
+   * On n'émet donc que les trente-huit octets qui décrivent le flux, drapeau corrigé. Ça vaut
+   * aussi pour un fichier qui porterait davantage : une table de recherche ou une pochette n'aide
+   * aucun décodeur et voyagerait dans chaque segment d'initialisation.
+   */
+  const streamInfo = blocks.slice(0, 38);
+  streamInfo[0] |= 0x80;
+  return box("dfLa", u32(0), streamInfo); // version and flags, then the blocks
 }
 
 /**

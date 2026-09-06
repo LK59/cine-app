@@ -300,7 +300,11 @@ export function unifiedAudioChannels(file: MatroskaFile): number | null {
   const carried = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
   if (carried.length < 2) return null;
 
-  const counts = carried.map((t) => t.audio?.channels ?? 2);
+  // Le repli est celui de la spécification Matroska — un canal —, et non un deux inventé ici.
+  // Le lecteur de conteneur applique déjà ce défaut et construit toujours ce bloc pour une piste
+  // audio, si bien que ce repli ne s'exécute pas ; le laisser contredire la seule autre valeur par
+  // défaut du dépôt n'aidait qu'à faire croire à deux règles là où il n'y en a qu'une.
+  const counts = carried.map((t) => t.audio?.channels ?? 1);
   const max = Math.max(...counts);
   return counts.some((n) => n !== max) ? max : null;
 }
