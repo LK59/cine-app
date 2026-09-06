@@ -6,6 +6,7 @@ import { Menu, X } from "lucide-react";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
+import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 
 /**
  * L'habillage commun des écrans ouverts depuis le rail — Recherche, Ma liste, Compte.
@@ -44,6 +45,11 @@ export function PlayerPanelFrame({
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Les flèches parcourent le contenu du panneau, comme elles parcourent déjà les rangées de
+  // l'accueil. Sur le corps et non sur la fenêtre : un panneau ne prend les flèches que de ce
+  // qu'il recouvre — et jamais quand on écrit. Voir `usePanelArrowNav`.
+  usePanelArrowNav(bodyRef);
+
   // Une fiche ouverte par-dessus ce panneau écoute Échap elle aussi. `stopPropagation` n'y change
   // rien : deux écouteurs posés sur la même cible se déclenchent tous les deux, et une seule
   // touche remontait alors de deux crans dans l'historique — la fiche *et* le panneau. Le panneau

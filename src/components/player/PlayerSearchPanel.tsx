@@ -155,6 +155,7 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
                   type="button"
                   onClick={() => setFilter(key)}
                   aria-pressed={filter === key}
+                  data-nav-item
                   className={filter === key ? "chip chip-on" : "chip"}
                 >
                   {label}

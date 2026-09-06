@@ -220,6 +220,7 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
                 type="button"
                 onClick={() => setChosen(key)}
                 aria-pressed={segment === key}
+                data-nav-item
                 className={`shrink-0 whitespace-nowrap ${segment === key ? "chip chip-on" : "chip"}`}
               >
                 {t(`player.lists.${key}`)}

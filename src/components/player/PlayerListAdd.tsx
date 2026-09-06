@@ -135,6 +135,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
           // rendrait l'ajout de trois titres d'affilée poussif pour rien.
           setAdded(true);
         }}
+        data-nav-item
         aria-label={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}
         title={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
