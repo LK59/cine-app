@@ -41,8 +41,34 @@ export function PushToggle() {
       const reg = await navigator.serviceWorker.ready;
       swReg.current = reg;
       const existing = await reg.pushManager.getSubscription();
-      if (existing) { setSub(existing); setState("subscribed"); }
-      else setState("unsubscribed");
+      if (existing) {
+        setSub(existing);
+        setState("subscribed");
+        /**
+         * Redire au serveur l'abonnement que ce navigateur a réellement.
+         *
+         * `pushsubscriptionchange` est censé s'en charger, et le service worker l'écoute — mais
+         * l'événement n'est pas fiable partout, iOS en particulier ne le déclenche pas toujours
+         * quand il renouvelle un abonnement. Quand il manque, le serveur reste sur un point de
+         * terminaison mort qu'il supprimera au premier 410, et les notifications s'arrêtent sans
+         * que rien ne l'indique : l'interrupteur, lui, dit toujours « activé ».
+         *
+         * L'écriture est idempotente (`pushDb.upsert` est indexé sur le point de terminaison), ne
+         * coûte qu'un appel à l'ouverture du panneau, et ne fait rien de visible si elle échoue.
+         */
+        // Dans son propre `try` : c'est un rattrapage, il n'a pas le droit de décider de ce que
+        // l'interrupteur affiche. Sans ça, un abonnement que le navigateur décrit autrement que
+        // prévu faisait tomber la détection dans son `catch` — et un abonnement bien vivant
+        // s'affichait « désactivé ».
+        try {
+          void apiAction("/api/push/subscribe", {
+            method: "POST",
+            body: JSON.stringify(existing.toJSON()),
+          }).catch(() => {});
+        } catch {
+          // Best effort, et rien de plus.
+        }
+      } else setState("unsubscribed");
     } catch { setState("unsubscribed"); }
   }, []);
 

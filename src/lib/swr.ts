@@ -1,6 +1,9 @@
+import { noteUnauthorized } from "@/lib/sessionExpired";
+
 export const fetcher = async (url: string) => {
   const res = await fetch(url);
   if (!res.ok) {
+    noteUnauthorized(res);
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Erreur ${res.status}`);
   }

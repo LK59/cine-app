@@ -172,3 +172,57 @@ self.addEventListener("notificationclick", (event) => {
     ])
   );
 });
+
+// ─── L'abonnement push change sous nos pieds ──────────────────────────────────
+//
+// Les navigateurs font tourner l'abonnement : Chrome le renouvelle périodiquement, iOS le lâche
+// quand la PWA reste longtemps inutilisée. Sans ce gestionnaire, l'ancien point de terminaison
+// meurt, le serveur le supprime au premier 410 — et plus aucune notification n'arrive, pendant que
+// l'interrupteur des options continue d'afficher « activé ». Une panne qui ne se voit jamais.
+//
+// Tout est au mieux : il n'y a pas d'écran ici pour signaler un échec, et rien à gagner à ce qu'un
+// service worker s'interrompe.
+
+function swUrlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+async function resubscribePush(oldSubscription) {
+  // La clé de l'ancien abonnement quand le navigateur la donne — elle évite un aller-retour, et
+  // surtout elle est forcément la bonne. Firefox ne la fournit pas : on la redemande alors.
+  let key = oldSubscription?.options?.applicationServerKey ?? null;
+  if (!key) {
+    const res = await fetch("/api/push/vapid-key");
+    if (!res.ok) return;
+    const { publicKey } = await res.json();
+    if (!publicKey) return;
+    key = swUrlBase64ToUint8Array(publicKey);
+  }
+
+  const fresh = await self.registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: key,
+  });
+  await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fresh.toJSON()),
+  });
+
+  // L'ancien n'enverra plus rien ; le laisser en base, c'est garder une ligne qui n'attend que son
+  // premier 410 pour disparaître. Autant le dire tout de suite.
+  if (oldSubscription?.endpoint && oldSubscription.endpoint !== fresh.endpoint) {
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: oldSubscription.endpoint }),
+    }).catch(() => {});
+  }
+}
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(resubscribePush(event.oldSubscription).catch(() => {}));
+});

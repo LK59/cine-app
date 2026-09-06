@@ -1,3 +1,5 @@
+import { noteUnauthorized } from "@/lib/sessionExpired";
+
 /**
  * A mutating call whose failure reaches the screen.
  *
@@ -15,6 +17,9 @@ export async function apiAction(url: string, init?: RequestInit): Promise<unknow
   });
 
   if (!res.ok) {
+    // Une action tentée sur une session disparue n'a pas d'erreur utile à afficher : elle a une
+    // reconnexion à demander.
+    noteUnauthorized(res);
     // The app's own routes answer `{ error }`; anything else is quoted as it came.
     const said = await res
       .json()

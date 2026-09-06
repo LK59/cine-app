@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // `config`, qui est la configuration du proxy lui-même.
 import { config as appConfig } from "@/lib/config";
 import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, shouldRefresh } from "@/lib/auth";
+import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { verifySessionFull } from "@/lib/session";
 import { sessionDb } from "@/lib/db";
 
@@ -145,7 +146,12 @@ export async function proxy(req: NextRequest) {
 
   if (!session) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      // L'en-tête, et non le seul code : une page ouverte doit pouvoir distinguer « ta session
+      // a disparu » d'un 401 venu d'un service amont — voir noteUnauthorized.
+      return NextResponse.json(
+        { error: "unauthorized" },
+        { status: 401, headers: { [SESSION_EXPIRED_HEADER]: "1" } }
+      );
     }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("next", pathname);
