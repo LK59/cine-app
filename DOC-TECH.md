@@ -16,6 +16,20 @@ dégrade l'image. Ici le fichier part du disque tel qu'il est.
 
 ---
 
+## Où ce lecteur vit
+
+Depuis la bascule de la racine, **l'interface cinéma est l'application** : `/` la sert, et la
+gestion a son adresse (`/gestion`). Les deux adresses que le lecteur a portées avant —
+`/cinema`, puis `/player` — répondent une redirection permanente vers `/`, ce qui couvre les liens
+partagés, les onglets restés ouverts et les raccourcis déjà installés sur un écran d'accueil.
+
+Le lecteur décrit ici est celui de cette interface. Il n'est pas seul : le lecteur serveur
+(Jellyfin/HLS) reste là, et prend la main quand ce chemin-ci renonce — un fichier qu'il ne sait pas
+remultiplexer, un navigateur qui refuse le codec, ou un compte qui a demandé l'ancien lecteur dans
+ses réglages. Voir `PlayerHost` pour l'aiguillage.
+
+---
+
 ## Les trois chemins
 
 Le fichier décide, pas un réglage. `pathSelector.ts` les classe et **dit

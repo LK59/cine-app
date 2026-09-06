@@ -1,8 +1,17 @@
 # Cine App
 
-Self-hosted PWA dashboard for managing a cinema/media stack from one mobile-friendly interface.
+Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / Jellyfin / Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in the household uses, and a management dashboard for whoever runs the box.
 
-Cine App brings together Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr into a single dashboard designed for daily use, on desktop and mobile.
+## The two interfaces
+
+| | Address | Who it is for |
+|---|---|---|
+| **Cinema** | `/` | Everyone. Rows of posters, a full-bleed hero, search, personal lists, requests, and in-browser playback. This is the front door. |
+| **Management** | `/gestion` | The administrator. Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin, Jellyseerr, statistics, settings — the whole stack. |
+
+Both run from the same container, the same session and the same set of API routes. There are only ever **two roles**: `admin` and `user`. A `user` can browse, play, keep lists and request titles; every write to the underlying services is refused server-side in `src/proxy.ts`, whatever the interface happens to show. The management screens are reachable from Cinema through **Compte → Gestion**, which only an administrator sees.
+
+`/player` and `/cinema` are the addresses Cinema had before it became the root; both answer `308` to `/`, so old links, open tabs and already-installed home-screen shortcuts keep working.
 
 <img src="docs/screenshots/dashboard-1.png" height="210"> <img src="docs/screenshots/dashboard-2.png" height="210"> <img src="docs/screenshots/dashboard-mobile.PNG" height="210">
 
@@ -111,6 +120,17 @@ All media grids (Watchlist, Discover, Recommendations) share the same card desig
 - Admin mode (full access including interactive search and deletion)
 
 ---
+
+## Optional services
+
+Only **Jellyfin** and **TMDB** are needed for Cinema to be worth opening; Radarr and Sonarr are what fill it. Everything else is optional, and an integration that is not configured is treated as a configuration, not as a failure:
+
+- `/api/config/public` reports which services are connected — booleans only, never an address or a key, since that route is read without a session.
+- A page whose service is missing shows what is missing and the exact variables to add to `.env`, instead of a network error.
+- The sidebar dims those entries rather than hiding them, so a page someone is looking for can still be found and explain itself.
+- In Cinema, requests disappear when Jellyseerr is absent, and playback falls back to the server-side player when the browser cannot handle a file.
+
+A service that is configured but **down** is a different thing and reads differently: `/health` and the status cards say so, with the error the service itself returned.
 
 ## Requirements
 
@@ -347,11 +367,11 @@ higher defaults and need nothing.
 
 ### First Login
 
-Open Cine App through your configured URL.
+Open Cine App through your configured URL. You land on **Cinema**, at `/`.
 
-For normal users, log in with an existing Jellyfin username and password.
+For normal use — including your own — log in with an existing **Jellyfin username and password**. That login carries a Jellyfin identity, which is what playback, resume points, watch state and playback preferences are built on.
 
-For setup or maintenance, use the local admin account configured with `APP_ADMIN_USER` and `APP_ADMIN_PASSWORD`.
+The **local admin account** (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) exists for setup and for the day Jellyfin is unreachable. It has no Jellyfin identity, so nothing that depends on one works under it — starting a film, chapters, scrub previews, playback preferences. It therefore lands on `/gestion` rather than on Cinema, which is what it is for.
 
 ### Updating
 
@@ -569,6 +589,16 @@ data/
 ```
 
 All service API keys are kept server-side and are never exposed to the browser.
+
+### Sessions
+
+A session is a signed token (HMAC-SHA256) in an `httpOnly` cookie, with a server-side row so it can be revoked immediately rather than only on expiry. Three things are worth knowing:
+
+- **The Jellyfin token and the Jellyseerr cookie travel inside it, encrypted** (AES-GCM, key derived from `SESSION_SECRET`). Signing is not hiding: without this, a stolen cookie handed over a working Jellyfin token rather than just a Cine App session.
+- **Sessions slide.** The cookie is reissued past a day of age, keeping the same session id, so daily use never ends in a weekly sign-out.
+- **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin with it.
+
+`SESSION_SECRET` must be set. Left at its default, the server refuses to start rather than logging a line nobody reads.
 
 ---
 
