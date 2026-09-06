@@ -525,7 +525,7 @@ function toFrame(chunk: EncodedAudioChunk): TranscodedFrame {
  * décodeurs matériels : le centre et l'ambiance entrent à −3 dB dans chaque côté, la basse
  * fréquence est écartée plutôt que sommée, où elle ne ferait que de la boue.
  */
-function fold(planes: Float32Array[], to: number): Float32Array[] {
+export function fold(planes: Float32Array[], to: number): Float32Array[] {
   const from = planes.length;
   if (to === from) return planes;
 
@@ -541,8 +541,23 @@ function fold(planes: Float32Array[], to: number): Float32Array[] {
    * riche garde tous ses canaux, et c'est la plus pauvre qui s'adapte — sans rien perdre non plus.
    */
   if (to > from) {
-    const silence = Array.from({ length: to - from }, () => new Float32Array(planes[0]?.length ?? 0));
-    return [...planes, ...silence];
+    const frames = planes[0]?.length ?? 0;
+    const silence = (count: number) => Array.from({ length: count }, () => new Float32Array(frames));
+    /**
+     * Le mono est une exception, et elle s'entend.
+     *
+     * Complété comme les autres, un unique plan devient le canal avant *gauche* et rien d'autre :
+     * l'ordre est L R C LFE Ls Rs, et un fichier mono n'a qu'un plan. Le navigateur replie ensuite
+     * ce 5.1 en stéréo par la matrice habituelle — droite = R + 0,707·C + 0,707·Rs — dont chaque
+     * terme est nul. On obtenait donc un film entier dans une seule oreille.
+     *
+     * Un mono se copie dans les deux canaux avant, ce que fait tout décodeur : c'est un centre
+     * fantôme, à niveau égal des deux côtés, et le repli du navigateur le rend au centre. Le cas
+     * n'a rien de théorique — la piste française par défaut de « L'Exorciste » est un mix mono,
+     * et l'unification de ce fichier porte toutes ses pistes à six canaux.
+     */
+    if (from === 1) return [planes[0], planes[0], ...silence(to - 2)];
+    return [...planes, ...silence(to - from)];
   }
   const [L, R, C, , Ls, Rs, Lrs, Rrs] = planes;
   const mix = (...parts: [Float32Array | undefined, number][]) => {
