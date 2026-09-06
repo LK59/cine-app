@@ -547,18 +547,4 @@ export function createRenderer(
   );
 }
 
-/**
- * La récupération seule, sans tentative de conversion.
- *
- * Pour les images qui arrivent déjà converties : il n'y a plus rien à convertir, seulement du
- * contraste et de la couleur à remettre après une conversion qui les a emportés. `createRenderer`
- * ne sait pas y aller directement — il essaie toujours la conversion d'abord, et sur une image
- * déjà en sRGB cet essai ne se solderait pas par une erreur franche mais par une image fausse,
- * ses octets RGBA lus comme des plans 10 bits. Le choix se fait donc avant, à la lumière de ce
- * que l'image dit d'elle-même.
- */
-export function createHdrRecoveryRenderer(canvas: HTMLCanvasElement): FrameRenderer {
-  return new PunchRenderer(canvas);
-}
-
-export const __testing = { ToneMapRenderer, CanvasRenderer, FallbackRenderer, PunchRenderer };
+export const __testing = { ToneMapRenderer, CanvasRenderer, FallbackRenderer };

@@ -1354,23 +1354,6 @@
       "signOut": "Cerrar sesión",
       "signOutAction": "Cerrar sesión",
       "localAccountHint": "Esta cuenta no está vinculada a Jellyfin: las preferencias de reproducción y la contraseña se gestionan en otro sitio."
-    },
-    "hdrTone": {
-      "title": "Visualización HDR",
-      "auto": "Automático",
-      "always": "Tomar siempre el control",
-      "never": "Dejarlo al navegador",
-      "hint": "Este archivo es HDR y esta pantalla no lo es. Se toma el control para convertir la imagen correctamente.",
-      "hintHdrScreen": "Esta pantalla se declara HDR: el navegador la muestra de forma nativa y el modo automático no interviene.",
-      "hintUnknownScreen": "Este navegador no sabe si la pantalla es HDR. El modo automático no interviene.",
-      "stateNative": "Ahora mismo: la imagen viene del navegador.",
-      "stateTonemap": "Ahora mismo: conversión completa, a partir de los valores HDR reales.",
-      "stateRecovery": "Ahora mismo: contraste y color restituidos tras una conversión ya hecha."
-    },
-    "hdrLook": {
-      "message": "Este navegador parece mostrar mal el HDR.",
-      "switch": "Reproducción estándar",
-      "dismiss": "No proponerlo más"
     }
   },
   "cinema": {

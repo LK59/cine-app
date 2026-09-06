@@ -20,16 +20,6 @@ import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
-import { hdrModeStore, displayRangeStore, hdrModeApplies, shouldPresentHdr, HDR_PRESENTER_ENABLED, type HdrMode } from "@/lib/hdrToSdr";
-import { HdrPresenter, type HdrPresentation } from "@/lib/webcodecs/hdrPresenter";
-import {
-  sampleOnce,
-  verdictStore,
-  writeVerdict,
-  verdictOf,
-  REQUIRED_SAMPLES,
-  type TrickplayInfo,
-} from "@/lib/hdrCalibration";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -240,14 +230,6 @@ export function ExperimentalPlayerHost({
    */
   const [warning, setWarning] = useState<{ text: string; at: number } | null>(null);
 
-  /** L'affichage HDR repris : ce qui a été demandé, et ce que l'écran sait afficher. */
-  const hdrMode = useSyncExternalStore(hdrModeStore.subscribe, hdrModeStore.snapshot, hdrModeStore.serverSnapshot);
-  const screenRange = useSyncExternalStore(
-    displayRangeStore.subscribe,
-    displayRangeStore.snapshot,
-    displayRangeStore.serverSnapshot
-  );
-  const chooseHdrMode = useCallback((mode: HdrMode) => hdrModeStore.set(mode), []);
   const showWarning = useCallback((text: string | null) => {
     setWarning(text ? { text, at: Date.now() } : null);
   }, []);
@@ -434,13 +416,6 @@ export function ExperimentalPlayerHost({
   const title = info?.title ?? openedAs;
 
   /** The file, as every entry in the server's record wants it described. */
-  // `onElement` compte autant que le reste : sur le chemin canevas, c'est déjà le shader qui
-  // convertit, et il n'y a rien à reprendre. Un réglage sans effet dans un menu est pire qu'un
-  // réglage absent.
-  const fileIsHdr = info?.video?.isHdr ?? false;
-  const toneAvailable = HDR_PRESENTER_ENABLED && hdrModeApplies(fileIsHdr, onElement);
-  const wantHdrPresenter = HDR_PRESENTER_ENABLED && shouldPresentHdr(fileIsHdr, onElement, hdrMode, screenRange);
-
   /**
    * Reprendre l'affichage, ou le rendre.
    *
@@ -451,93 +426,6 @@ export function ExperimentalPlayerHost({
    * Dépend de `ready` : avant la première image décodée, il n'y a rien à interroger, et la
    * question « dans quel espace es-tu » n'a pas encore de réponse.
    */
-  /**
-   * Le navigateur affiche-t-il ce film HDR comme il le devrait.
-   *
-   * On ne peut pas le lui demander, et l'image qu'il nous rend est déjà aplatie — mais les
-   * vignettes de la barre de progression, elles, sont converties correctement par ffmpeg à partir
-   * du master. Comparer l'image du lecteur à la vignette du même instant compare deux versions de
-   * la même image : le contenu sort de l'équation, il ne reste que le rendu. Voir `hdrLook`.
-   *
-   * Ne tourne que là où la question se pose — un fichier HDR, sur l'élément natif — et une seule
-   * fois par navigateur : le verdict est ensuite retenu. Pendant ce temps la lecture n'est ni
-   * interrompue ni modifiée ; au pire, rien ne se conclut et rien ne s'affiche.
-   */
-  const hdrLook = useSyncExternalStore(verdictStore.subscribe, verdictStore.snapshot, verdictStore.serverSnapshot);
-  const hdrLookFlattened = hdrLook?.verdict === "flattened" && !hdrLook.dismissed;
-  useEffect(() => {
-    // Déjà tranché pour ce navigateur — dans un sens ou dans l'autre : rien à remesurer.
-    if (!fileIsHdr || !onElement || !ready || hdrLook) return;
-
-    const video = videoElRef.current;
-    if (!video) return;
-    let cancelled = false;
-    let busy = false;
-    const results: boolean[] = [];
-    let lastSampledIndex = -1;
-    let info: TrickplayInfo | null = null;
-
-    async function tick() {
-      if (cancelled || busy || !video) return;
-      busy = true;
-      try {
-        if (!info) {
-          const res = await fetch(`/api/jellyfin/trickplay/info?itemId=${encodeURIComponent(itemId)}`);
-          if (!res.ok) {
-            // Pas de vignettes pour ce titre : aucune référence, donc aucune conclusion. On
-            // s'arrête là plutôt que d'inventer un jugement à partir de la seule image du lecteur.
-            cancelled = true;
-            return;
-          }
-          info = (await res.json()) as TrickplayInfo;
-        }
-        const time = video.currentTime;
-        // Un repère par échantillon : deux mesures sur la même vignette n'apportent rien de neuf.
-        const index = Math.floor((time * 1000) / info.intervalMs);
-        if (index === lastSampledIndex) return;
-        const outcome = await sampleOnce(video, itemId, info, time);
-        if (cancelled || outcome === "unusable") return;
-        lastSampledIndex = index;
-        results.push(outcome === "flattened");
-        if (results.length < REQUIRED_SAMPLES) return;
-        cancelled = true;
-        const verdict = verdictOf(results);
-        writeVerdict(verdict);
-        trace(`rendu HDR : verdict ${verdict} sur ${results.length} échantillons`);
-      } catch {
-        // Une mesure ratée n'est pas un événement : on réessaiera au repère suivant.
-      } finally {
-        busy = false;
-      }
-    }
-
-    const timer = setInterval(() => void tick(), 500);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [fileIsHdr, onElement, ready, itemId, hdrLook]);
-
-  const hdrCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [hdrPresentation, setHdrPresentation] = useState<HdrPresentation | null>(null);
-  useEffect(() => {
-    if (!wantHdrPresenter || !ready) return;
-    const video = videoElRef.current;
-    const canvas = hdrCanvasRef.current;
-    if (!video || !canvas) return;
-    const presenter = HdrPresenter.start(video, canvas, {
-      onState: (state) => setHdrPresentation(state?.presentation ?? null),
-      onDowngrade: (reason) => trace(`affichage HDR : conversion complète abandonnée — ${reason}`),
-    });
-    // L'état retombe à l'arrêt et non au démarrage : posé dans le corps de l'effet, il
-    // provoquerait un rendu en cascade à chaque passage, pour une valeur que le présentateur
-    // rectifie dans la foulée.
-    return () => {
-      presenter?.stop();
-      setHdrPresentation(null);
-    };
-  }, [wantHdrPresenter, ready, itemId]);
-
   const describeFile = useCallback(
     () => ({
       itemId,
@@ -1206,14 +1094,6 @@ export function ExperimentalPlayerHost({
           ready ? "opacity-100" : "opacity-0"
         }`}
       />
-      {/* Posé par-dessus l'élément plutôt qu'à sa place : un élément vidéo caché — `hidden`,
-          `display:none` — peut cesser de présenter des images sur certaines plateformes, et c'est
-          justement de ses images qu'on a besoin. Il reste donc affiché, simplement recouvert. */}
-      <canvas
-        ref={hdrCanvasRef}
-        hidden={hdrPresentation === null}
-        className={`absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}`}
-      />
       <canvas
         ref={canvasRef}
         hidden={onElement}
@@ -1271,33 +1151,6 @@ export function ExperimentalPlayerHost({
               className="btn btn-ghost px-4 py-2"
             >
               {t("common.close")}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Discrète, en haut, et jamais au milieu du film : elle constate et propose, elle
-          n'interrompt pas. Le bouton passe la main au lecteur serveur, qui convertit le HDR avant
-          l'envoi — la seule façon d'avoir une image juste ici, au prix d'un transcodage. */}
-      {hdrLookFlattened && !isMini && !error && (
-        <div className="pointer-events-none absolute inset-x-0 top-6 z-30 flex justify-center px-4">
-          <div className="player-glass pointer-events-auto flex max-w-xl items-center gap-3 rounded-full py-2 pl-4 pr-2 text-sm text-white shadow-lg">
-            <span className="min-w-0">{t("player.hdrLook.message")}</span>
-            <button
-              type="button"
-              onClick={() => onFallback("le HDR s'affiche mal sur ce navigateur")}
-              className="btn-primary shrink-0 rounded-full px-3 py-1 text-xs"
-            >
-              {t("player.hdrLook.switch")}
-            </button>
-            <button
-              type="button"
-              onClick={() => writeVerdict("flattened", true)}
-              className="shrink-0 rounded-full p-1.5 text-white/60 hover:text-white"
-              aria-label={t("player.hdrLook.dismiss")}
-              title={t("player.hdrLook.dismiss")}
-            >
-              <X size={14} />
             </button>
           </div>
         </div>
@@ -1431,11 +1284,6 @@ export function ExperimentalPlayerHost({
             creditsStart={info?.creditsStart ?? null}
             nextEpisode={nextEpisode}
             onAdvance={handleAdvance}
-            toneAvailable={toneAvailable}
-            toneScreen={screenRange}
-            hdrMode={hdrMode}
-            onChangeHdrMode={chooseHdrMode}
-            hdrPresentation={hdrPresentation}
           />
         )
       )}

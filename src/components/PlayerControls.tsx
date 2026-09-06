@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, SunMedium } from "lucide-react";
-import { HDR_MODES, type HdrMode, type DisplayRange } from "@/lib/hdrToSdr";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { useMediaSession } from "@/lib/useMediaSession";
 
@@ -38,18 +37,6 @@ interface PlayerControlsProps {
   creditsStart: number | null;
   nextEpisode: { itemId: string; title: string } | null;
   onAdvance: () => void;
-  /**
-   * La correction HDR n'est proposée que là où elle a un sens : un fichier HDR, un écran qui ne
-   * l'est pas, et le chemin natif. Ailleurs l'entrée n'existe pas — un réglage sans effet dans un
-   * menu est pire qu'un réglage absent, parce qu'on l'essaie.
-   */
-  toneAvailable?: boolean;
-  /** Ce que l'écran répond, pour le dire à qui choisit — jamais pour choisir à sa place. */
-  toneScreen?: DisplayRange;
-  hdrMode?: HdrMode;
-  onChangeHdrMode?: (mode: HdrMode) => void;
-  /** Ce que l'affichage repris fait en ce moment, ou null s'il n'a pas été repris. */
-  hdrPresentation?: "tonemap" | "recovery" | null;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -99,11 +86,6 @@ export function PlayerControls({
   creditsStart,
   nextEpisode,
   onAdvance,
-  toneAvailable = false,
-  toneScreen = "unknown",
-  hdrMode = "auto",
-  onChangeHdrMode,
-  hdrPresentation = null,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -169,7 +151,7 @@ export function PlayerControls({
   }, []);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "tone" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "more">(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -821,7 +803,7 @@ export function PlayerControls({
   };
 
   // Which topbar control reopens each menu on Escape, to land focus back where it came from.
-  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more", tone: "more" };
+  const MENU_TRIGGER: Record<string, string> = { subtitles: "captions", audio: "audio", more: "more", chapters: "more", speed: "more" };
 
   // Lands focus on the menu's first item the instant it opens — clicking captions/audio/more
   // only focuses THAT button (native click behavior), never moves focus into the popup that
@@ -1234,14 +1216,6 @@ export function PlayerControls({
                 >
                   <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
-                {toneAvailable && (
-                  <button
-                    onClick={() => setMenu("tone")}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <SunMedium size={16} /> {t('player.hdrTone.title')} · {t(`player.hdrTone.${hdrMode}`)}
-                  </button>
-                )}
                 {castSupported && (
                   <button
                     onClick={() => {
@@ -1295,7 +1269,7 @@ export function PlayerControls({
                 )}
               </>
             )}
-            {(menu === "chapters" || menu === "speed" || menu === "tone") && (
+            {(menu === "chapters" || menu === "speed") && (
               <button
                 onClick={() => setMenu("more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -1331,41 +1305,6 @@ export function PlayerControls({
               >
                 {t('player.none')}
               </button>
-            )}
-            {menu === "tone" && (
-              <>
-                <p className="border-b border-white/10 px-3 py-2 text-xs leading-5 text-white/50">
-                  {t(
-                    toneScreen === "high"
-                      ? 'player.hdrTone.hintHdrScreen'
-                      : toneScreen === "standard"
-                        ? 'player.hdrTone.hint'
-                        : 'player.hdrTone.hintUnknownScreen'
-                  )}
-                </p>
-                {/* Ce qui se passe réellement, pas seulement ce qui a été demandé : « automatique »
-                    ne dit pas si l'affichage a été repris, ni ce qu'il a pu faire une fois repris. */}
-                <p className="border-b border-white/10 px-3 py-2 text-xs leading-5 text-white/40">
-                  {t(
-                    hdrPresentation === "tonemap"
-                      ? 'player.hdrTone.stateTonemap'
-                      : hdrPresentation === "recovery"
-                        ? 'player.hdrTone.stateRecovery'
-                        : 'player.hdrTone.stateNative'
-                  )}
-                </p>
-                {HDR_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => onChangeHdrMode?.(mode)}
-                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
-                      hdrMode === mode ? "text-accent-400" : "text-white"
-                    }`}
-                  >
-                    {t(`player.hdrTone.${mode}`)}
-                  </button>
-                ))}
-              </>
             )}
             {menu === "speed" &&
               PLAYBACK_SPEEDS.map((rate) => (

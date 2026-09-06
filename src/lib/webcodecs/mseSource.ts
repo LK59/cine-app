@@ -14,7 +14,6 @@ import { isNetworkFailure } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
-import { probeFrame } from "./hdrPresenter";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
 // moving where they live should not mean touching a dozen call sites.
@@ -1035,11 +1034,10 @@ export class MseSource {
   /**
    * L'espace colorimétrique d'une image telle que l'élément la rend, demandé une seule fois.
    *
-   * C'est la réponse qui décide de tout côté HDR : une image en `pq` porte encore les vraies
-   * valeurs malgré le décodage matériel, et peut donc être convertie pour de bon ; une image déjà
-   * en sRGB a été convertie avant qu'on puisse la voir. La même sonde sert au présentateur — voir
-   * `hdrPresenter` — et elle est posée ici pour que le relevé la porte même quand personne n'a
-   * repris l'affichage.
+   * Purement informatif : rien ici n'agit dessus. La réponse dit si les vraies valeurs HDR ont
+   * survécu au décodage matériel — `bt2020 · pq` — ou si le navigateur a déjà converti l'image
+   * avant qu'on puisse la voir, auquel cas elle revient en RGB 8 bits. C'est la seule mesure qui
+   * distingue les deux, et un relevé qui la porte évite d'avoir à refaire la démonstration.
    *
    * Une seule fois, et le résultat gardé : construire une image 4K à chaque rafraîchissement du
    * panneau pour lire trois champs coûterait bien plus que ce qu'elle apprend.
@@ -1048,10 +1046,20 @@ export class MseSource {
 
   private frameColorSpace(): string {
     if (this.colorProbe) return this.colorProbe;
-    const probe = probeFrame(this.video);
-    if (!probe) return "pas encore lisible";
-    this.colorProbe = probe.colorSpace;
-    return this.colorProbe;
+    const Frame = (globalThis as { VideoFrame?: new (source: CanvasImageSource) => VideoFrame }).VideoFrame;
+    if (!Frame || this.video.readyState < 2) return "pas encore lisible";
+    let frame: VideoFrame | null = null;
+    try {
+      frame = new Frame(this.video);
+      const space = frame.colorSpace;
+      this.colorProbe = `${space.primaries ?? "?"} · ${space.transfer ?? "?"} · ${space.matrix ?? "?"} · ${frame.format ?? "format non déclaré"}`;
+      return this.colorProbe;
+    } catch (error) {
+      this.colorProbe = `refusé (${error instanceof Error ? error.message : String(error)})`;
+      return this.colorProbe;
+    } finally {
+      frame?.close();
+    }
   }
 
   /** Images perdues sur images rendues, telles que l'élément lui-même les compte. */
