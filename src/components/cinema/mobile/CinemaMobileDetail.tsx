@@ -300,7 +300,13 @@ export function CinemaMobileDetail({
       {/* Couché, l'écran fait ~844 px de large : des boutons pleine largeur y traversent tout
           l'écran et le texte court sur des lignes trop longues. Une colonne centrée règle les
           deux, sans changer quoi que ce soit debout. */}
-      <div className={`-mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
+      {/* `relative` : ce bloc remonte de 24 px sous la bannière, et la bannière est positionnée.
+          Un élément positionné se peint après les blocs statiques quel que soit l'ordre du
+          document : le dégradé opaque du bas de l'image recouvrait donc le titre, dont il ne
+          restait qu'un liseré de six pixels. Positionner ce bloc à son tour le remet au-dessus,
+          à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
+          fondu de l'image. */}
+      <div className={`relative -mt-6 px-4 pb-16 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
         {item.logoUrl && !logoErrored ? (
           <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" onError={() => setLogoErrored(true)} className="mb-3 object-left" />
         ) : (

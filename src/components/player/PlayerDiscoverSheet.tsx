@@ -233,8 +233,14 @@ export function PlayerDiscoverSheet({
         </p>
       )}
 
+      {/* `relative` : ce bloc remonte de 24 px sous la bannière, et la bannière est positionnée.
+          Un élément positionné se peint après les blocs statiques quel que soit l'ordre du
+          document : le dégradé opaque du bas de l'image recouvrait donc le titre, dont il ne
+          restait qu'un liseré de six pixels. Positionner ce bloc à son tour le remet au-dessus,
+          à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
+          fondu de l'image. */}
       {data && (
-        <div className="-mt-6 px-4 pb-16">
+        <div className="relative -mt-6 px-4 pb-16">
           <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{data.title}</h1>
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
