@@ -1,24 +1,27 @@
 {
   "auth": {
-    "title": "Dashboard login",
-    "reasonPlayback": "Playback requires logging back in to Jellyfin.",
+    "reasonPlayback": "Sign in again to start playing.",
     "jellyfin": {
-      "heading": "Jellyfin user",
-      "username": "Jellyfin username",
+      "heading": "Sign in",
+      "username": "Username",
       "password": "Password",
-      "submit": "Sign in with Jellyfin",
-      "submitting": "Signing in..."
+      "submit": "Sign in",
+      "submitting": "Signing in…"
     },
     "local": {
-      "heading": "Local admin login",
-      "username": "Local admin account",
+      "heading": "Administrator sign-in",
+      "username": "Administrator account",
       "usernamePlaceholder": "Username",
-      "submit": "Sign in"
+      "submit": "Sign in",
+      "passwordPlaceholder": "Password"
     },
     "error": {
-      "failed": "Login failed",
-      "unknown": "Unknown error"
-    }
+      "failed": "Could not sign in",
+      "unknown": "Something went wrong"
+    },
+    "tagline": "Your films and series, ready to watch.",
+    "hint": "Sign in with your Jellyfin account details.",
+    "statusLink": "Service status"
   },
   "nav": {
     "overview": "Overview",
@@ -146,7 +149,7 @@
     "sheetLink": "Details",
     "downloadedTooltip": "Downloaded",
     "pageTitle": "Overview",
-    "pageSubtitle": "Real-time status of your media stack",
+    "pageSubtitle": "Live status of your services",
     "storageTitle": "Storage",
     "computingStorage": "Computing…",
     "storageFree": "{free} free of {total}",
@@ -390,7 +393,7 @@
       "internalError": "Internal error"
     },
     "endpoints": {
-      "dashboard": "Dashboard aggregate",
+      "dashboard": "Overview aggregate",
       "metadata": "Metadata",
       "calendar": "Calendar",
       "queue": "Queue",
@@ -408,7 +411,7 @@
       "diskStats": "Disk stats"
     },
     "groups": {
-      "dashboard": "Dashboard",
+      "dashboard": "Overview",
       "radarr": "Radarr",
       "sonarr": "Sonarr",
       "jellyfin": "Jellyfin",

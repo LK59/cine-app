@@ -36,7 +36,7 @@ function LoginForm() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || t('auth.error.failed'));
+        throw new Error(data.error || t("auth.error.failed"));
       }
       /**
        * La connexion locale n'a pas d'identité Jellyfin — et donc pas de lecture.
@@ -55,74 +55,121 @@ function LoginForm() {
       const local = endpoint.endsWith("/login");
       router.replace(asked || (local ? "/gestion" : "/"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('auth.error.unknown'));
+      setError(err instanceof Error ? err.message : t("auth.error.unknown"));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-ink px-4">
-      <div className="card w-full max-w-sm p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="rounded-lg bg-accent-600/20 p-2 text-accent-400">
-            <Clapperboard size={24} />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-white">Cine App</h1>
-            <p className="text-xs text-slate-400">{t('auth.title')}</p>
-          </div>
+    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10">
+      {/*
+        Une lueur, pas une image.
+        
+        La porte d'entrée doit ressembler à l'application qu'elle ouvre, et l'application est
+        sombre avec un accent chaud. Deux dégradés radiaux suffisent à le dire : rien à télécharger,
+        rien qui puisse manquer sur une connexion lente, et l'écran est peint avant même que la
+        police d'affichage soit arrivée. `pointer-events-none` parce qu'un décor ne se clique pas.
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(60rem 40rem at 50% -10%, color-mix(in srgb, var(--color-accent-600) 22%, transparent), transparent 70%)," +
+            "radial-gradient(40rem 30rem at 100% 100%, color-mix(in srgb, var(--color-accent-500) 10%, transparent), transparent 70%)",
+        }}
+      />
+
+      <div className="relative w-full max-w-sm">
+        {/* L'enseigne, au-dessus de la carte plutôt que dedans : on reconnaît d'abord l'endroit,
+            on s'identifie ensuite. */}
+        <div className="mb-8 flex flex-col items-center text-center">
+          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600/15 text-accent-400 ring-1 ring-accent-500/25">
+            <Clapperboard size={28} />
+          </span>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-white">Ciné App</h1>
+          <p className="mt-2 text-sm text-slate-400">{t("auth.tagline")}</p>
         </div>
 
-        {reason === "playback" && (
-          <p className="mb-4 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-300">
-            {t('auth.reasonPlayback')}
-          </p>
-        )}
+        <div className="card p-6 sm:p-7">
+          {reason === "playback" && (
+            <p className="mb-5 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-200">
+              {t("auth.reasonPlayback")}
+            </p>
+          )}
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit("/api/auth/jellyfin");
-          }}
-          className="space-y-4"
-        >
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-400">
-              {t('auth.jellyfin.username')}
-            </label>
-            <input
-              className="input"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-400">{t('auth.jellyfin.password')}</label>
-            <input
-              type="password"
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
-            {loading ? t('auth.jellyfin.submitting') : t('auth.jellyfin.submit')}
-          </button>
-        </form>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit("/api/auth/jellyfin");
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label htmlFor="login-user" className="mb-1.5 block text-xs font-medium text-slate-300">
+                {t("auth.jellyfin.username")}
+              </label>
+              {/*
+                `autoCapitalize` et `autoCorrect` désactivés : un téléphone met une majuscule à la
+                première lettre de tout champ de texte, et un identifiant en minuscules devenait
+                donc faux à la première frappe — un échec de connexion que personne ne sait
+                expliquer. `autoComplete` pour que les gestionnaires de mots de passe proposent le
+                bon couple plutôt que de ne rien reconnaître.
+              */}
+              <input
+                id="login-user"
+                className="input py-2.5"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                autoFocus
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="login-pass" className="mb-1.5 block text-xs font-medium text-slate-300">
+                {t("auth.jellyfin.password")}
+              </label>
+              <input
+                id="login-pass"
+                type="password"
+                className="input py-2.5"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </div>
 
-        <div className="mt-6 border-t border-slate-800 pt-4">
+            {error && (
+              <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {error}
+              </p>
+            )}
+
+            <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3 text-base">
+              {loading ? t("auth.jellyfin.submitting") : t("auth.jellyfin.submit")}
+            </button>
+          </form>
+
+          {/* Dit une fois, en petit : c'est la réponse à « quel mot de passe ? », et c'est la seule
+              question que cet écran provoque. Sans elle on la reçoit par message. */}
+          <p className="mt-4 text-center text-xs leading-5 text-slate-500">{t("auth.hint")}</p>
+        </div>
+
+        {/* La porte de service. Elle existe pour le jour où Jellyfin ne répond plus, et elle ne
+            s'adresse qu'à une personne : elle reste donc repliée et discrète. */}
+        <div className="mt-6">
           {!showLocalForm ? (
             <button
               onClick={() => setShowLocalForm(true)}
-              className="w-full text-center text-xs text-slate-500 hover:text-slate-300"
+              className="mx-auto block text-xs text-slate-600 transition-colors hover:text-slate-400"
             >
-              {t('auth.local.heading')}
+              {t("auth.local.heading")}
             </button>
           ) : (
             <form
@@ -130,40 +177,44 @@ function LoginForm() {
                 e.preventDefault();
                 submit("/api/auth/login");
               }}
-              className="space-y-3"
+              className="card space-y-3 p-5"
             >
-              <p className="text-xs font-medium text-slate-400">{t('auth.local.username')}</p>
+              <p className="text-xs font-medium text-slate-400">{t("auth.local.heading")}</p>
               <input
                 className="input"
-                placeholder={t('auth.local.usernamePlaceholder')}
+                placeholder={t("auth.local.usernamePlaceholder")}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
               />
               <input
                 type="password"
                 className="input"
-                placeholder="Mot de passe"
+                placeholder={t("auth.local.passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
               />
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
               <button type="submit" disabled={loading} className="btn-ghost w-full justify-center">
-                {loading ? t('auth.jellyfin.submitting') : t('auth.local.submit')}
+                {loading ? t("auth.jellyfin.submitting") : t("auth.local.submit")}
               </button>
             </form>
           )}
         </div>
-      </div>
 
-      <Link
-        href="/status"
-        className="mt-4 flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300"
-      >
-        <Activity size={13} /> {t('health.pageTitle')}
-      </Link>
+        <Link
+          href="/status"
+          className="mx-auto mt-8 flex w-fit items-center gap-1.5 text-xs text-slate-600 transition-colors hover:text-slate-400"
+        >
+          <Activity size={13} /> {t("auth.statusLink")}
+        </Link>
+      </div>
     </main>
   );
 }

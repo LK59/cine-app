@@ -1,24 +1,27 @@
 {
   "auth": {
-    "title": "Acceso al panel",
-    "reasonPlayback": "La reproducción requiere volver a iniciar sesión en Jellyfin.",
+    "reasonPlayback": "Vuelve a iniciar sesión para reproducir.",
     "jellyfin": {
-      "heading": "Usuario de Jellyfin",
-      "username": "Usuario de Jellyfin",
+      "heading": "Iniciar sesión",
+      "username": "Nombre de usuario",
       "password": "Contraseña",
-      "submit": "Iniciar sesión con Jellyfin",
-      "submitting": "Iniciando sesión..."
+      "submit": "Iniciar sesión",
+      "submitting": "Conectando…"
     },
     "local": {
-      "heading": "Acceso de administrador local",
-      "username": "Cuenta de administrador local",
+      "heading": "Acceso de administrador",
+      "username": "Cuenta de administrador",
       "usernamePlaceholder": "Usuario",
-      "submit": "Iniciar sesión"
+      "submit": "Iniciar sesión",
+      "passwordPlaceholder": "Contraseña"
     },
     "error": {
-      "failed": "Error de inicio de sesión",
-      "unknown": "Error desconocido"
-    }
+      "failed": "No se pudo iniciar sesión",
+      "unknown": "Se produjo un error"
+    },
+    "tagline": "Tus películas y series, listas para ver.",
+    "hint": "Usa los datos de tu cuenta de Jellyfin.",
+    "statusLink": "Estado de los servicios"
   },
   "nav": {
     "overview": "Resumen",
@@ -146,7 +149,7 @@
     "sheetLink": "Ficha",
     "downloadedTooltip": "Descargado",
     "pageTitle": "Vista general",
-    "pageSubtitle": "Estado en tiempo real de tu stack multimedia",
+    "pageSubtitle": "Estado de tus servicios en tiempo real",
     "storageTitle": "Almacenamiento",
     "computingStorage": "Calculando…",
     "storageFree": "{free} libres de {total}",
@@ -390,7 +393,7 @@
       "internalError": "Error interno"
     },
     "endpoints": {
-      "dashboard": "Agregado del panel",
+      "dashboard": "Agregado de la vista general",
       "metadata": "Metadatos",
       "calendar": "Calendario",
       "queue": "Cola",
@@ -408,7 +411,7 @@
       "diskStats": "Stats de disco"
     },
     "groups": {
-      "dashboard": "Panel",
+      "dashboard": "Vista general",
       "radarr": "Radarr",
       "sonarr": "Sonarr",
       "jellyfin": "Jellyfin",

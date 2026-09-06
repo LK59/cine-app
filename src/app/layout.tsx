@@ -46,8 +46,9 @@ const SPLASH_SCREENS: { width: number; height: number; dpr: number; file: string
 ];
 
 export const metadata: Metadata = {
-  title: "Cine App",
-  description: "Tableau de bord unifié pour la stack média",
+  title: "Ciné App",
+  // Ce que voit quelqu'un à qui on partage le lien, et ce que l'écran de connexion dit déjà.
+  description: "Vos films et vos séries.",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -59,7 +60,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Cine App",
+    title: "Ciné App",
   },
 };
 

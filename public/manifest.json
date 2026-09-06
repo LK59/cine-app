@@ -1,8 +1,8 @@
 {
-  "name": "Cine App",
-  "short_name": "Cine App",
+  "name": "Ciné App",
+  "short_name": "Ciné App",
   "id": "/",
-  "description": "Tableau de bord unifié pour votre stack média",
+  "description": "Vos films et vos séries.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

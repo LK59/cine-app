@@ -1,24 +1,27 @@
 {
   "auth": {
-    "title": "Connexion au tableau de bord",
-    "reasonPlayback": "La lecture nécessite de se reconnecter à Jellyfin.",
+    "reasonPlayback": "Reconnectez-vous pour lancer la lecture.",
     "jellyfin": {
-      "heading": "Utilisateur Jellyfin",
-      "username": "Utilisateur Jellyfin",
+      "heading": "Se connecter",
+      "username": "Nom d'utilisateur",
       "password": "Mot de passe",
-      "submit": "Se connecter avec Jellyfin",
-      "submitting": "Connexion..."
+      "submit": "Se connecter",
+      "submitting": "Connexion…"
     },
     "local": {
-      "heading": "Connexion administrateur locale",
-      "username": "Compte administrateur local",
-      "usernamePlaceholder": "Utilisateur",
-      "submit": "Se connecter"
+      "heading": "Connexion administrateur",
+      "username": "Compte administrateur",
+      "usernamePlaceholder": "Identifiant",
+      "submit": "Se connecter",
+      "passwordPlaceholder": "Mot de passe"
     },
     "error": {
-      "failed": "Connexion échouée",
-      "unknown": "Erreur inconnue"
-    }
+      "failed": "Connexion impossible",
+      "unknown": "Une erreur est survenue"
+    },
+    "tagline": "Vos films et vos séries, prêts à regarder.",
+    "hint": "Utilisez les identifiants de votre compte Jellyfin.",
+    "statusLink": "État des services"
   },
   "nav": {
     "overview": "Vue d'ensemble",
@@ -146,7 +149,7 @@
     "sheetLink": "Fiche",
     "downloadedTooltip": "Téléchargé",
     "pageTitle": "Vue d'ensemble",
-    "pageSubtitle": "État en temps réel de votre stack média",
+    "pageSubtitle": "État de vos services en temps réel",
     "storageTitle": "Stockage",
     "computingStorage": "Calcul en cours…",
     "storageFree": "{free} libres sur {total}",
@@ -390,7 +393,7 @@
       "internalError": "Erreur interne"
     },
     "endpoints": {
-      "dashboard": "Agrégat dashboard",
+      "dashboard": "Agrégat de la vue d'ensemble",
       "metadata": "Métadonnées",
       "calendar": "Calendrier",
       "queue": "File d'attente",
@@ -408,7 +411,7 @@
       "diskStats": "Stats disque"
     },
     "groups": {
-      "dashboard": "Dashboard",
+      "dashboard": "Vue d'ensemble",
       "radarr": "Radarr",
       "sonarr": "Sonarr",
       "jellyfin": "Jellyfin",

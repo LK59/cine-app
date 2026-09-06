@@ -1,24 +1,27 @@
 {
   "auth": {
-    "title": "Dashboard-Anmeldung",
-    "reasonPlayback": "Für die Wiedergabe musst du dich erneut bei Jellyfin anmelden.",
+    "reasonPlayback": "Melde dich erneut an, um abzuspielen.",
     "jellyfin": {
-      "heading": "Jellyfin-Benutzer",
-      "username": "Jellyfin-Benutzername",
+      "heading": "Anmelden",
+      "username": "Benutzername",
       "password": "Passwort",
-      "submit": "Mit Jellyfin anmelden",
-      "submitting": "Anmelden..."
+      "submit": "Anmelden",
+      "submitting": "Anmeldung…"
     },
     "local": {
-      "heading": "Lokale Admin-Anmeldung",
-      "username": "Lokales Administratorkonto",
-      "usernamePlaceholder": "Benutzer",
-      "submit": "Anmelden"
+      "heading": "Administrator-Anmeldung",
+      "username": "Administratorkonto",
+      "usernamePlaceholder": "Benutzername",
+      "submit": "Anmelden",
+      "passwordPlaceholder": "Passwort"
     },
     "error": {
-      "failed": "Anmeldung fehlgeschlagen",
-      "unknown": "Unbekannter Fehler"
-    }
+      "failed": "Anmeldung nicht möglich",
+      "unknown": "Ein Fehler ist aufgetreten"
+    },
+    "tagline": "Deine Filme und Serien, startklar.",
+    "hint": "Melde dich mit deinem Jellyfin-Konto an.",
+    "statusLink": "Dienststatus"
   },
   "nav": {
     "overview": "Übersicht",
@@ -146,7 +149,7 @@
     "sheetLink": "Details",
     "downloadedTooltip": "Heruntergeladen",
     "pageTitle": "Übersicht",
-    "pageSubtitle": "Echtzeit-Status deines Medien-Stacks",
+    "pageSubtitle": "Live-Status deiner Dienste",
     "storageTitle": "Speicher",
     "computingStorage": "Wird berechnet…",
     "storageFree": "{free} frei von {total}",
@@ -390,7 +393,7 @@
       "internalError": "Interner Fehler"
     },
     "endpoints": {
-      "dashboard": "Dashboard-Aggregat",
+      "dashboard": "Übersicht-Aggregat",
       "metadata": "Metadaten",
       "calendar": "Kalender",
       "queue": "Warteschlange",
@@ -408,7 +411,7 @@
       "diskStats": "Festplattenstatistiken"
     },
     "groups": {
-      "dashboard": "Dashboard",
+      "dashboard": "Übersicht",
       "radarr": "Radarr",
       "sonarr": "Sonarr",
       "jellyfin": "Jellyfin",
