@@ -9,6 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaCollectionRow, useCinemaCollection } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -116,6 +117,7 @@ export function CinemaMovieDetail({
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.
   const similar = useCinemaSimilar(item, "movies");
+  const collection = useCinemaCollection(item.radarrId);
   const hasSimilar = !!onSelectSimilar && similar.length > 0;
 
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
@@ -439,9 +441,13 @@ export function CinemaMovieDetail({
         {/* Its own full-height snap position — centred rather than pinned to the top, so landing
             on it reads as a deliberate second screen instead of one row stranded above a lot of
             empty backdrop. */}
-        {hasSimilar && (
-          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
-            <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaMovie)} />
+        {/* La saga partage la section des titres similaires plutôt que d'en réclamer une à elle :
+            deux écrans pleins à faire défiler l'un après l'autre, pour deux rangées, c'est une
+            promenade là où on voulait une réponse. */}
+        {(hasSimilar || collection.parts.length > 0) && (
+          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center gap-6 px-8 sm:px-16">
+            <CinemaCollectionRow name={collection.name} parts={collection.parts} />
+            {hasSimilar && <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaMovie)} />}
           </div>
         )}
       </div>

@@ -61,6 +61,21 @@ describe("PlayerListPanel", () => {
     expect(screen.queryByText("player.lists.empty.requests")).toBeNull();
   });
 
+  // « À voir » ouvre la liste : c'est ce qu'on vient y chercher. Une demande, on sait déjà qu'on
+  // l'a faite — et le point de son onglet dit quand elle a abouti.
+  it("opens on À voir even when there are requests waiting", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      requests: [
+        { id: 1, tmdbId: 1, type: "movie", title: "Demandé", poster: null, year: 2020, state: "processing", requestedAt: "", changedAt: "", justArrived: false, canCancel: true, libraryId: null },
+      ],
+      toWatch: [{ tmdbId: 603, type: "movie", title: "Matrix", year: 1999, poster: null, libraryId: 42, jellyfinId: null }],
+    });
+
+    expect(await screen.findByText("Matrix")).toBeTruthy();
+    expect(screen.queryByText("Demandé")).toBeNull();
+  });
+
   it("keeps an explicit choice even when that segment is empty", async () => {
     renderWith({
       ...EMPTY_LISTS,

@@ -22,6 +22,7 @@ import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress
 import { formatDurationShort } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -483,6 +484,9 @@ export function CinemaMobileDetail({
           </>
         )}
 
+        {/* La saga d'abord, les titres similaires ensuite : « et la suite ? » est une question
+            plus précise que « et quoi d'autre ? », et elle se pose plus souvent. */}
+        {mediaType === "movies" && "radarrId" in item && <CinemaMovieCollectionRow radarrId={item.radarrId} />}
         {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} />}
       </div>
 

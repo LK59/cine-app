@@ -14,15 +14,17 @@ import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/
 
 type Segment = "requests" | "toWatch" | "watched" | "abandoned" | "favorites";
 
-const SEGMENTS: Segment[] = ["requests", "toWatch", "watched", "abandoned", "favorites"];
+const SEGMENTS: Segment[] = ["toWatch", "requests", "watched", "abandoned", "favorites"];
 
 /**
  * « Ma liste » — les cinq segments.
  *
  * Les demandes sont ici plutôt que dans une section à elles, et c'est un choix : de son côté, la
- * personne n'a qu'une question, « où sont mes trucs », et elle mérite une seule réponse. Elles
- * sont en première position parce que ce sont les seules qui bougent toutes seules, et elles
- * portent une pastille quand quelque chose est arrivé.
+ * personne n'a qu'une question, « où sont mes trucs », et elle mérite une seule réponse.
+ *
+ * « À voir » ouvre la liste, et les demandes viennent juste après. Ce qu'on vient chercher ici,
+ * c'est ce qu'on s'est promis de regarder ; une demande, on sait déjà qu'on l'a faite, et le point
+ * vert de son onglet suffit à dire quand elle a abouti.
  *
  * Chaque segment lit sa propre source (voir /api/player/lists), mais rien de tout ça ne se voit :
  * cinq onglets, la même carte partout, et deux phrases pour dire ce qui a besoin d'être dit.
@@ -34,8 +36,8 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
   });
   const { busy, cancelRequest } = usePlayerTitleActions(null);
   // Aucun onglet n'est choisi d'avance : on ouvre sur le premier qui a quelque chose à montrer,
-  // en commençant par les demandes. Atterrir sur un écran vide alors que trois onglets plus loin
-  // il y a quarante titres, c'est donner l'impression que la page est cassée.
+  // en commençant par « À voir ». Atterrir sur un écran vide alors que trois onglets plus loin il
+  // y a quarante titres, c'est donner l'impression que la page est cassée.
   const [chosen, setChosen] = useState<Segment | null>(null);
 
   const counts = useMemo(
