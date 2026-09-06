@@ -15,14 +15,29 @@ vi.mock("@/lib/db", () => ({
 
 const mockCachedMovies = vi.fn();
 const mockCachedSeries = vi.fn();
+const mockCachedJellyfinSeries = vi.fn(async () => [] as unknown[]);
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...args: unknown[]) => mockCachedMovies(...args),
   cachedSeries: (...args: unknown[]) => mockCachedSeries(...args),
+  cachedJellyfinSeriesAdmin: (...args: unknown[]) => mockCachedJellyfinSeries(...(args as [])),
+  // L'appariement TVDB→Jellyfin est testé chez lui : ici on lui fait rendre la série qu'on veut.
+  findJellyfinSeriesByTvdb: (items: { Id: string }[]) => items[0] ?? null,
+}));
+
+const mockGetUsers = vi.fn();
+const mockNextUp = vi.fn();
+vi.mock("@/lib/clients/jellyfin", () => ({
+  jellyfin: {
+    getUsers: (...a: unknown[]) => mockGetUsers(...a),
+    getNextUpGlobal: (...a: unknown[]) => mockNextUp(...a),
+  },
 }));
 
 const mockSendPushToAll = vi.fn();
+const mockSendPushToUser = vi.fn();
 vi.mock("@/lib/push", () => ({
   sendPushToAll: (...args: unknown[]) => mockSendPushToAll(...args),
+  sendPushToUser: (...args: unknown[]) => mockSendPushToUser(...args),
 }));
 
 vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
@@ -110,26 +125,73 @@ describe("checkWatchlistAvailability", () => {
 });
 
 describe("checkNewEpisodes", () => {
-  it("dedupes on the timeline event id, not the series tmdb_id", async () => {
-    prepareReturning([
-      { id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" },
-      { id: 102, tmdb_id: 7, title: "Severance", detail: "S02E02" },
+  function aSeriesEveryoneCouldFollow() {
+    mockCachedSeries.mockResolvedValue([{ tmdbId: 7, tvdbId: 700, title: "Severance", year: 2022 }]);
+    mockCachedJellyfinSeries.mockResolvedValue([{ Id: "jf-severance" }]);
+  }
+
+  // Le fond de la correction : la tâche poussait vers tout le monde à chaque import. Une
+  // notification qu'on n'attendait pas est une notification qu'on finit par couper, emportant
+  // avec elle celles qui comptaient.
+  it("tells only the people who were waiting for that episode", async () => {
+    prepareReturning([{ id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" }]);
+    aSeriesEveryoneCouldFollow();
+    mockGetUsers.mockResolvedValue([
+      { Id: "u1", Name: "louis" },
+      { Id: "u2", Name: "arthur" },
     ]);
-    mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((_type: string, id: number) => id === 101);
+    mockNextUp.mockImplementation(async (userId: string) =>
+      userId === "u1" ? [{ SeriesId: "jf-severance" }] : [{ SeriesId: "jf-autre-chose" }]
+    );
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
 
     const { checkNewEpisodes } = await import("@/lib/notificationJobs");
     await checkNewEpisodes();
 
-    // event 101 already notified -> skipped; event 102 -> notified, even though
-    // both events share the same series tmdb_id.
-    expect(mockSendPushToAll).toHaveBeenCalledTimes(1);
-    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("episode", 102);
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    expect(mockSendPushToUser).toHaveBeenCalledWith("louis", expect.objectContaining({ category: "new-episode" }));
+    // Et plus jamais vers tout le monde.
+    expect(mockSendPushToAll).not.toHaveBeenCalled();
+  });
+
+  // Le dédoublonnage est devenu par personne : le même épisode s'annonce à plusieurs comptes, et
+  // une seule fois à chacun. Une clé globale faisait taire tous les autres dès le premier averti.
+  it("dedupes per person rather than per episode", async () => {
+    prepareReturning([{ id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" }]);
+    aSeriesEveryoneCouldFollow();
+    mockGetUsers.mockResolvedValue([
+      { Id: "u1", Name: "louis" },
+      { Id: "u2", Name: "arthur" },
+    ]);
+    mockNextUp.mockResolvedValue([{ SeriesId: "jf-severance" }]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((kind: string) => kind === "episode:louis");
+
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    expect(mockSendPushToUser).toHaveBeenCalledWith("arthur", expect.anything());
+    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("episode:arthur", 101);
+  });
+
+  it("says nothing about a series nobody has started", async () => {
+    prepareReturning([{ id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" }]);
+    aSeriesEveryoneCouldFollow();
+    mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
+    mockNextUp.mockResolvedValue([]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
+
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
   });
 
   it("does nothing when there are no recent imports", async () => {
     prepareReturning([]);
     const { checkNewEpisodes } = await import("@/lib/notificationJobs");
     await checkNewEpisodes();
-    expect(mockSendPushToAll).not.toHaveBeenCalled();
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
+    // Et n'interroge même pas Jellyfin : rien n'est arrivé, il n'y a rien à demander.
+    expect(mockGetUsers).not.toHaveBeenCalled();
   });
 });

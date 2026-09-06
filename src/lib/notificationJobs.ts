@@ -1,5 +1,6 @@
 import { availabilityNotifDb, pendingRequestDb, kvCacheDb, getDb } from "@/lib/db";
-import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { cachedMovies, cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
+import { jellyfin } from "@/lib/clients/jellyfin";
 import { logError } from "@/lib/logger";
 import { sendPushToAll, sendPushToUser } from "@/lib/push";
 
@@ -62,6 +63,22 @@ export async function checkWatchlistAvailability(): Promise<void> {
   }
 }
 
+/**
+ * Prévenir d'un nouvel épisode — mais seulement ceux qui l'attendaient.
+ *
+ * Cette tâche poussait vers *tout le monde* à chaque épisode importé. Sur une bibliothèque active,
+ * ça fait plusieurs notifications par jour pour des séries que la plupart des gens ne regardent
+ * pas — et une notification qu'on n'attendait pas est une notification qu'on finit par couper,
+ * emportant avec elle celles qui comptaient.
+ *
+ * « Attendre un épisode » a une définition exacte et déjà calculée par Jellyfin : la liste
+ * « À suivre » d'un compte contient les séries qu'il a commencées et dont un épisode non vu
+ * existe. Un épisode qui arrive sur une série qu'on n'a jamais lancée n'y apparaît pas ; celui qui
+ * arrive sur une série finie y apparaît le jour où il arrive. C'est exactement la question posée.
+ *
+ * Le dédoublonnage devient donc par personne : le même épisode peut légitimement être annoncé à
+ * trois comptes, et à chacun une seule fois.
+ */
 export async function checkNewEpisodes(): Promise<void> {
   try {
     const db = getDb();
@@ -69,24 +86,49 @@ export async function checkNewEpisodes(): Promise<void> {
     const recentImports = db.prepare(
       "SELECT id, tmdb_id, title, detail FROM timeline_events WHERE source = 'sonarr' AND event_type = 'import' AND event_date > ? AND tmdb_id IS NOT NULL"
     ).all(cutoff) as { id: number; tmdb_id: number; title: string; detail: string | null }[];
+    if (recentImports.length === 0) return;
+
+    const [sonarrSeries, jellyfinSeries, users] = await Promise.all([
+      cachedSeries().catch(() => []),
+      cachedJellyfinSeriesAdmin().catch(() => []),
+      jellyfin.getUsers().catch(() => [] as { Id: string; Name: string }[]),
+    ]);
+
+    // L'événement porte le TMDB de la série ; Jellyfin la connaît par son TVDB. Le passage se
+    // fait par Sonarr, qui a les deux — c'est le même appariement que le reste de l'application.
+    const jellyfinSeriesId = (tmdbId: number): string | null => {
+      const show = sonarrSeries.find((serie) => serie.tmdbId === tmdbId);
+      if (!show) return null;
+      return findJellyfinSeriesByTvdb(jellyfinSeries, show.tvdbId, show.title, show.year)?.Id ?? null;
+    };
+
+    // Une seule interrogation par compte, quel que soit le nombre d'épisodes importés.
+    const following = new Map<string, Set<string>>();
+    for (const user of users) {
+      const nextUp = await jellyfin.getNextUpGlobal(user.Id, 50).catch(() => []);
+      following.set(user.Name, new Set(nextUp.map((item) => item.SeriesId).filter((id): id is string => !!id)));
+    }
 
     for (const ev of recentImports) {
-      if (!ev.tmdb_id) continue;
-      // Dedup key is the timeline event's own row id, not the series' tmdb_id: several
-      // episodes of the same show share one tmdb_id, and keying on that meant the first
-      // "new episode" push for a series permanently suppressed every later episode of that
-      // same series until the 30-day cleanup ran.
-      if (availabilityNotifDb.hasBeenNotified("episode", ev.id)) continue;
+      const seriesId = jellyfinSeriesId(ev.tmdb_id);
+      if (!seriesId) continue;
 
-      await sendPushToAll({
-        title: "📺 Nouvel épisode",
-        body: `${ev.title}${ev.detail ? ` — ${ev.detail}` : ""} est disponible`,
-        url: "/",
-        tag: "new-episode",
-        category: "new-episode",
-      });
+      for (const [userName, followed] of following) {
+        if (!followed.has(seriesId)) continue;
+        // La clé porte le nom du compte : le même épisode s'annonce à plusieurs personnes, et une
+        // seule fois à chacune. Sans ça, le premier averti faisait taire tous les autres.
+        if (availabilityNotifDb.hasBeenNotified(`episode:${userName}`, ev.id)) continue;
 
-      availabilityNotifDb.markNotified("episode", ev.id);
+        await sendPushToUser(userName, {
+          title: "📺 Nouvel épisode",
+          body: `${ev.title}${ev.detail ? ` — ${ev.detail}` : ""} est disponible`,
+          url: "/",
+          tag: "new-episode",
+          category: "new-episode",
+        });
+
+        availabilityNotifDb.markNotified(`episode:${userName}`, ev.id);
+      }
     }
   } catch (err) {
     logError("notifications.new-episodes", err);

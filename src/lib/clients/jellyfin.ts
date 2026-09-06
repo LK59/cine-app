@@ -417,6 +417,16 @@ export const jellyfin = {
   // Continue Watching row show a series that hasn't been started yet ("Lire EpX SX") and not just
   // ones with an actual partial episode ("Reprendre EpX SX") — getResumeItems only ever returns
   // the latter, since by definition nothing has been played on the former.
+  /**
+   * Tous les comptes du serveur, avec leur nom et leur identifiant.
+   *
+   * Lu avec la clé d'administration : c'est une tâche de fond qui appelle, sans session de
+   * personne. Le nom compte autant que l'identifiant — c'est sous lui que les abonnements aux
+   * notifications sont rangés (voir `pushDb`), et sous l'identifiant que Jellyfin répond.
+   */
+  getUsers: () =>
+    fetchJson<{ Id: string; Name: string }[]>(`${url}/Users`, { headers }),
+
   getNextUpGlobal: (userId: string, limit = 10) =>
     fetchJson<{ Items: JellyfinItem[] }>(
       `${url}/Shows/NextUp?UserId=${userId}&Limit=${limit}&Fields=UserData,ImageTags,RunTimeTicks,IndexNumber,ParentIndexNumber,SeriesName,SeriesId`,

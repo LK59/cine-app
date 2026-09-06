@@ -26,7 +26,11 @@ export function formatContinueLabel(
       : null;
 
   if (episodeCode) {
-    return hasResume && timeLabel ? `${t("common.resume")} ${episodeCode} - ${timeLabel}` : `${t("common.play")} ${episodeCode}`;
+    // Un épisode jamais commencé n'est pas une lecture à reprendre : c'est la suite qui attend.
+    // « À suivre » le dit, là où « Lire » ne disait rien de plus qu'un bouton.
+    return hasResume && timeLabel
+      ? `${t("common.resume")} ${episodeCode} - ${timeLabel}`
+      : `${t("cinema.upNext")} ${episodeCode}`;
   }
   return hasResume && timeLabel ? `${t("common.resume")} - ${timeLabel}` : t("common.play");
 }

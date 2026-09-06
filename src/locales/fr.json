@@ -1476,7 +1476,8 @@
       "episodeRequested": "{label} demandé",
       "airsOn": "le {date}"
     },
-    "reload": "Recharger la page"
+    "reload": "Recharger la page",
+    "upNext": "À suivre"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

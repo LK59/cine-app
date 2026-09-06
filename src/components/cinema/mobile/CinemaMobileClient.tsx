@@ -105,11 +105,21 @@ export function CinemaMobileClient() {
     mediaType === "series" ? "/api/cinema/series" : null,
     fetcher
   );
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? "/api/cinema/next-up" : null, fetcher);
+  /**
+   * « À suivre » n'appartient pas à un onglet.
+   *
+   * Il n'était demandé que sur l'onglet des séries : quelqu'un resté sur « Films » — c'est-à-dire
+   * tout le monde, puisque c'est celui qui s'ouvre — n'apprenait jamais qu'un nouvel épisode
+   * d'une série commencée était arrivé. Or c'est précisément ce qu'on vient chercher en ouvrant
+   * l'application. « Reprendre » est personnel : il traverse les deux onglets, comme la rangée
+   * du même nom chez Netflix.
+   */
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>("/api/cinema/next-up", fetcher);
   const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>("/api/jellyfin/resume", fetcher);
 
   const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
   const continueSeries = nextUp?.items ?? [];
+  const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
 
@@ -399,7 +409,7 @@ export function CinemaMobileClient() {
 
         {/* Continue watching — landscape stills with a progress bar and the same resume wording
             the desktop cards use. */}
-        {!isSeries && resumeMovies.length > 0 && (
+        {hasContinue && (
           <MobileRow label={t("cinema.continueWatching")}>
             {resumeMovies.map((entry) => (
               <button
@@ -439,11 +449,6 @@ export function CinemaMobileClient() {
                 </p>
               </button>
             ))}
-          </MobileRow>
-        )}
-
-        {isSeries && continueSeries.length > 0 && (
-          <MobileRow label={t("cinema.continueWatching")}>
             {continueSeries.map((entry) => (
               <button
                 key={entry.jellyfinItemId}
