@@ -8,12 +8,15 @@ vi.mock("@/lib/rateLimiter", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
-const mockSessionDb = { create: vi.fn(), delete: vi.fn() };
+const mockSessionDb = { create: vi.fn(), delete: vi.fn(), jellyfinToken: vi.fn(() => null) };
 const mockUserPrefsDb = { getLang: vi.fn(() => "fr") };
 vi.mock("@/lib/db", () => ({
   sessionDb: mockSessionDb,
   userPrefsDb: mockUserPrefsDb,
 }));
+
+const mockRevokeJellyfin = vi.fn(async () => {});
+vi.mock("@/lib/clients/jellyfin", () => ({ revokeJellyfinToken: (...a: unknown[]) => mockRevokeJellyfin(...a) }));
 
 vi.mock("@/lib/config", () => ({
   config: {
@@ -81,12 +84,15 @@ describe("POST /api/auth/logout", () => {
     expect(res.cookies.get("cine_session")?.value).toBe("");
   });
 
-  it("revokes the session server-side by extracting jti from the token", async () => {
+  it("revokes the session server-side, and its Jellyfin token with it", async () => {
     const { createSessionToken } = await import("@/lib/auth");
-    const { token, jti } = await createSessionToken("louis", "admin");
+    const { token, jti } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");
+    mockSessionDb.jellyfinToken.mockReturnValueOnce("jf-token" as never);
     const { POST } = await import("@/app/api/auth/logout/route");
     await POST(fakeReq({ cookie: token }));
     expect(mockSessionDb.delete).toHaveBeenCalledWith(jti);
+    // Sans ça, le jeton restait valide chez Jellyfin après la déconnexion.
+    expect(mockRevokeJellyfin).toHaveBeenCalledWith("jf-token");
   });
 
   it("does not throw when the cookie is garbage", async () => {
@@ -94,5 +100,18 @@ describe("POST /api/auth/logout", () => {
     const res = await POST(fakeReq({ cookie: "not-a-valid-token" }));
     expect(res.status).toBe(200);
     expect(mockSessionDb.delete).not.toHaveBeenCalled();
+  });
+
+  // Le fond de la correction : la route décodait la charge utile sans vérifier la signature, donc
+  // quiconque connaissait un `jti` pouvait déconnecter la personne à qui il appartient.
+  it("refuses a token whose signature does not hold", async () => {
+    const { createSessionToken } = await import("@/lib/auth");
+    const { token } = await createSessionToken("louis", "admin");
+    const forged = `${token.slice(0, token.indexOf("."))}.signature-inventee`;
+    const { POST } = await import("@/app/api/auth/logout/route");
+    const res = await POST(fakeReq({ cookie: forged }));
+    expect(res.status).toBe(200);
+    expect(mockSessionDb.delete).not.toHaveBeenCalled();
+    expect(mockRevokeJellyfin).not.toHaveBeenCalled();
   });
 });

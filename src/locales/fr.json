@@ -1366,7 +1366,9 @@
         "copy": "Copier",
         "copied": "Copié",
         "copyFailed": "Copie impossible — sélectionnez le texte à la main."
-      }
+      },
+      "sessionOpened": "Ouverte le {date}",
+      "sessionSeen": "vue le {date}"
     },
     "browse": {
       "seeAll": "Voir tout",

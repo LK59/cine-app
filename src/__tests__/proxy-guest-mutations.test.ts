@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 
-vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+// Le proxy prolonge désormais une session qui a vieilli : il lui faut de quoi décider et de
+// quoi réémettre. Ici, rien n'a jamais assez vieilli — ces tests parlent d'autre chose.
+vi.mock("@/lib/auth", () => ({
+  SESSION_COOKIE: "cine_session",
+  SESSION_MAX_AGE: 604800,
+  shouldRefresh: () => false,
+  refreshSessionToken: async () => "renouvelé",
+}));
+vi.mock("@/lib/db", () => ({ sessionDb: { touch: vi.fn() } }));
 const mockVerify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerify(...a) }));
 

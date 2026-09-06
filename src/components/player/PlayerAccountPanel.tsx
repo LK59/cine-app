@@ -13,6 +13,7 @@ import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
+import type { OtherSession } from "@/app/api/auth/sessions/route";
 
 /**
  * Le compte, en une feuille.
@@ -325,15 +326,16 @@ function PasswordSection() {
 function SessionsSection() {
   const t = useT();
   const toast = useToast();
-  const [count, setCount] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<OtherSession[] | null>(null);
   const [revoking, setRevoking] = useState(false);
+  const count = sessions?.length ?? null;
 
   useEffect(() => {
     let alive = true;
     fetch("/api/auth/sessions")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (alive && j != null) setCount(j.count);
+        if (alive && j != null) setSessions(j.sessions ?? []);
       })
       .catch(() => {});
     return () => {
@@ -345,7 +347,7 @@ function SessionsSection() {
     setRevoking(true);
     try {
       await apiAction("/api/auth/sessions", { method: "DELETE" });
-      setCount(0);
+      setSessions([]);
       toast.success(t("player.account.devicesRevoked"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.unknown"));
@@ -356,22 +358,38 @@ function SessionsSection() {
 
   return (
     <Section icon={MonitorSmartphone} title={t("player.account.devices")}>
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
-        <p className="text-sm text-slate-300">
-          {count === null
-            ? t("settings.security.loading")
-            : count === 0
-            ? t("player.account.noOtherDevices")
-            : t("player.account.otherDevices", { n: count })}
-        </p>
-        <button
-          type="button"
-          onClick={revoke}
-          disabled={revoking || count === 0 || count === null}
-          className="btn btn-ghost btn-sm shrink-0 text-red-400"
-        >
-          {t("player.account.signOutOthers")}
-        </button>
+      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-slate-300">
+            {count === null
+              ? t("settings.security.loading")
+              : count === 0
+                ? t("player.account.noOtherDevices")
+                : t("player.account.otherDevices", { n: count })}
+          </p>
+          <button
+            type="button"
+            onClick={revoke}
+            disabled={revoking || count === 0 || count === null}
+            className="btn btn-ghost btn-sm shrink-0 text-red-400"
+          >
+            {t("player.account.signOutOthers")}
+          </button>
+        </div>
+
+        {/* Les dates, pas seulement le nombre. « 3 » ne permet ni de reconnaître une connexion
+            oubliée sur un ordinateur prêté, ni de constater qu'il n'y a rien d'anormal — et elles
+            étaient déjà en base. */}
+        {sessions && sessions.length > 0 && (
+          <ul className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
+            {sessions.map((s) => (
+              <li key={s.id} className="flex items-baseline justify-between gap-3 text-xs text-slate-500">
+                <span>{t("player.account.sessionOpened", { date: formatDay(s.createdAt) })}</span>
+                <span className="shrink-0">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt) })}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Section>
   );
@@ -447,3 +465,9 @@ function KnownIssuesSection() {
 
 /** Le réglage Firefox qui règle le HDR sous Linux, vérifié sur place avant d'être écrit ici. */
 const FIREFOX_HDR_PREF = "gfx.color_management.hdr";
+
+
+/** Une date lisible, dans la langue de la page. L'heure ne dit rien d'utile ici, le jour si. */
+function formatDay(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}

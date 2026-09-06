@@ -5,6 +5,7 @@ import { sessionDb, userPrefsDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
+import { timingSafeEquals } from "@/lib/timingSafeEquals";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -22,8 +23,8 @@ export async function POST(req: NextRequest) {
 
   const isAdmin =
     username === config.app.adminUser &&
-    config.app.adminPassword &&
-    password === config.app.adminPassword;
+    !!config.app.adminPassword &&
+    timingSafeEquals(password, config.app.adminPassword);
 
   if (!isAdmin) {
     return NextResponse.json({ error: "Identifiants invalides" }, { status: 401 });

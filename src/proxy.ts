@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/lib/auth";
+// `appConfig` et non `config` : le bas de ce fichier exporte déjà une constante nommée
+// `config`, qui est la configuration du proxy lui-même.
+import { config as appConfig } from "@/lib/config";
+import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, shouldRefresh } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { sessionDb } from "@/lib/db";
 
 // Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
 // Edge-only middleware, so verifySessionFull's better-sqlite3-backed revocation check (a native
@@ -141,7 +145,31 @@ export async function proxy(req: NextRequest) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+
+  /**
+   * La session se prolonge tant qu'on s'en sert.
+   *
+   * Le jeton portait une date d'expiration fixée à la connexion : tout le monde était déconnecté
+   * sept jours plus tard, qu'on ait ouvert l'application tous les soirs ou jamais. Le cookie est
+   * donc réémis au-delà d'un jour d'ancienneté — avec le *même* `jti`, pour que ce soit la même
+   * session qui continue et non une de plus dans la liste.
+   *
+   * `touch` n'écrit qu'au-delà d'une heure : `last_seen_at` était posé à la création et jamais
+   * ensuite, et c'est pourtant lui qui décide du ménage.
+   */
+  if (shouldRefresh(session)) {
+    res.cookies.set(SESSION_COOKIE, await refreshSessionToken(session), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: appConfig.app.cookieSecure,
+      maxAge: SESSION_MAX_AGE,
+      path: "/",
+    });
+  }
+  sessionDb.touch(session.jti);
+
+  return res;
 }
 
 export const config = {

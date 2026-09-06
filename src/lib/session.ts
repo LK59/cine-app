@@ -13,8 +13,10 @@ export async function verifySessionFull(
 ): Promise<SessionPayload | null> {
   const payload = await verifySessionToken(token);
   if (!payload) return null;
-  // Sessions without jti (issued before revocation feature) are still accepted
-  if (payload.jti && !sessionDb.exists(payload.jti)) return null;
+  // Un jeton sans `jti` ne peut pas être révoqué : il était toléré le temps que les jetons émis
+  // avant la révocation expirent, ce qui est fait depuis longtemps. Le tolérer encore, c'est
+  // garder une porte que rien ne referme.
+  if (!payload.jti || !sessionDb.exists(payload.jti)) return null;
   return payload;
 }
 

@@ -1366,7 +1366,9 @@
         "copy": "Copy",
         "copied": "Copied",
         "copyFailed": "Could not copy — select the text by hand."
-      }
+      },
+      "sessionOpened": "Opened {date}",
+      "sessionSeen": "seen {date}"
     },
     "browse": {
       "seeAll": "See all",

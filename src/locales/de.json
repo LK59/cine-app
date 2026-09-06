@@ -1366,7 +1366,9 @@
         "copy": "Kopieren",
         "copied": "Kopiert",
         "copyFailed": "Kopieren nicht möglich — Text bitte selbst markieren."
-      }
+      },
+      "sessionOpened": "Geöffnet am {date}",
+      "sessionSeen": "gesehen am {date}"
     },
     "browse": {
       "seeAll": "Alle anzeigen",

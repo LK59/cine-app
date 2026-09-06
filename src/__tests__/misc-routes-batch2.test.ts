@@ -12,7 +12,9 @@ const mockUserPrefsDb = {
   getLegacyPlayer: vi.fn(() => ({ enabled: false })),
   setLegacyPlayer: vi.fn(),
 };
-const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn() };
+const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []) };
+const mockRevokeJellyfin = vi.fn(async () => {});
+vi.mock("@/lib/clients/jellyfin", () => ({ revokeJellyfinToken: (...a: unknown[]) => mockRevokeJellyfin(...a) }));
 vi.mock("@/lib/db", () => ({
   notificationPrefsDb: mockNotificationPrefsDb,
   pushDb: mockPushDb,
@@ -261,21 +263,38 @@ describe("/api/auth/me", () => {
 });
 
 describe("/api/auth/sessions", () => {
-  it("GET counts other active sessions using jfId over username", async () => {
+  it("GET lists the other sessions with their dates, keyed on jfId over username", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", jti: "current-jti" });
-    mockSessionDb.countOthers.mockReturnValue(2);
+    mockSessionDb.listOthers.mockReturnValue([
+      { jti: "a", createdAt: 111, lastSeenAt: 222, jfToken: "t-a" },
+      { jti: "b", createdAt: 333, lastSeenAt: 444, jfToken: null },
+    ] as never);
     const { GET } = await import("@/app/api/auth/sessions/route");
     const res = await GET(fakeReq());
-    expect(mockSessionDb.countOthers).toHaveBeenCalledWith("jf-1", "current-jti");
-    expect((await res.json()).count).toBe(2);
+    expect(mockSessionDb.listOthers).toHaveBeenCalledWith("jf-1", "current-jti");
+    const body = await res.json();
+    expect(body.count).toBe(2);
+    expect(body.sessions).toEqual([
+      { id: "0", createdAt: 111, lastSeenAt: 222 },
+      { id: "1", createdAt: 333, lastSeenAt: 444 },
+    ]);
+    // Le `jti` identifie une session : la page n'a besoin que de la reconnaître.
+    expect(JSON.stringify(body)).not.toContain("t-a");
+    expect(JSON.stringify(body)).not.toContain('"a"');
   });
 
-  it("DELETE revokes other sessions and reports how many", async () => {
+  it("DELETE revokes other sessions, and their Jellyfin tokens with them", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jti: "current-jti" });
+    mockSessionDb.listOthers.mockReturnValue([
+      { jti: "a", createdAt: 1, lastSeenAt: 2, jfToken: "t-a" },
+      { jti: "b", createdAt: 3, lastSeenAt: 4, jfToken: null },
+    ] as never);
     mockSessionDb.deleteOthers.mockReturnValue(3);
     const { DELETE } = await import("@/app/api/auth/sessions/route");
     const res = await DELETE(fakeReq());
-    const body = await res.json();
-    expect(body).toEqual({ ok: true, revoked: 3 });
+    expect(await res.json()).toEqual({ ok: true, revoked: 3 });
+    // Sans ça, la révocation n'effaçait qu'une ligne : le jeton restait valide chez Jellyfin.
+    expect(mockRevokeJellyfin).toHaveBeenCalledWith("t-a");
+    expect(mockRevokeJellyfin).toHaveBeenCalledWith(null);
   });
 });
