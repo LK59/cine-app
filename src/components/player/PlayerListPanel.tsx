@@ -263,11 +263,15 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
             icon={EMPTY_ICON[segment]}
             message={t(`player.lists.empty.${segment}`)}
             action={
-              // « Vu » se remplit tout seul au fil des lectures : on y renvoie vers la
-              // bibliothèque, pas vers un ajout à la main.
+              // Chaque vide renvoie là où on peut le remplir, et nulle part ailleurs. « Vu » se
+              // remplit tout seul au fil des lectures : on y renvoie vers la bibliothèque.
+              // « Demandes » se remplit depuis la recherche générale, seule à connaître ce qu'on
+              // n'a pas — l'ajout sur place, lui, ne range que dans « À voir ».
               segment === "watched"
                 ? { label: t("player.browse.seeAll"), onClick: () => cinemaNavigate({ list: false, browse: BROWSE_ALL }) }
-                : { label: t("player.lists.addTitle"), onClick: () => setAdding(true) }
+                : segment === "requests"
+                  ? { label: t("player.lists.addTitle"), onClick: () => cinemaNavigate({ list: false, search: true }) }
+                  : { label: t("player.lists.addTitle"), onClick: () => setAdding(true) }
             }
           />
         )}

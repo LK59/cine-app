@@ -70,6 +70,14 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/jellyfin/favorite",
   "POST /api/player/account/preferences",
   "POST /api/player/account/password",
+  // Trouvées à la revue précédant la bascule, et du même tonneau que les quatre précédentes : le
+  // panneau « Compte » montre à tout le monde un interrupteur de notifications et un bouton
+  // « déconnecter mes autres appareils », et les deux répondaient 403 à un compte ordinaire. Les
+  // trois routes n'agissent que sur l'appelant — la souscription est rangée sous son nom, les
+  // sessions supprimées sont les siennes — donc les ouvrir n'ouvre rien d'autre.
+  "POST /api/push/subscribe",
+  "DELETE /api/push/subscribe",
+  "DELETE /api/auth/sessions",
 ]);
 
 /**

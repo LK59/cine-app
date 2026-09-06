@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useCinemaRoute } from "@/lib/cinemaRoute";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useHideOnScroll } from "@/lib/useHideOnScroll";
@@ -13,6 +14,9 @@ import { PLAYER_NAV, activePanel, openPanel } from "./playerNav";
  * clignote — et assez court pour qu'on ne l'attende jamais en revenant vers le haut.
  */
 const AWAY_MS = 280;
+
+/** Le clic qui suit un appui arrive dans cette fenêtre : au-delà, c'est un vrai clic à lui seul. */
+const DOUBLE_FIRE_MS = 700;
 
 /**
  * La navigation du téléphone.
@@ -33,16 +37,20 @@ const AWAY_MS = 280;
 export function PlayerBottomBar() {
   const t = useT();
   const route = useCinemaRoute();
-  const short = useIsShortViewport();
-  const hidden = useHideOnScroll();
-  const active = activePanel(route);
-
   // Effacée pendant qu'une fiche est ouverte : elle recouvre l'écran entier, et la barre y
   // flotterait au-dessus d'un contenu qu'elle ne commande pas.
   const covered = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+  const short = useIsShortViewport();
+  // Désactivée pendant qu'une fiche recouvre l'écran : sans ça, le défilement de la fiche la
+  // laissait « cachée », et refermer la fiche découvrait une barre absente qu'il fallait aller
+  // rechercher en remontant. Le crochet repart de zéro quand il reprend la main.
+  const hidden = useHideOnScroll(!covered);
+  const active = activePanel(route);
   const away = hidden || covered;
   /** Ce qui sépare la barre du bord de l'écran — et donc ce qu'il faut franchir pour en sortir. */
   const gap = `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`;
+  /** Quand le pointeur a déjà fait le travail — voir la garde du clic. */
+  const handledAt = useRef(0);
 
   return (
     <nav
@@ -94,12 +102,17 @@ export function PlayerBottomBar() {
               // doigt. Une navigation qui ne coûte rien doit partir au contact.
               onPointerDown={(e) => {
                 if (e.button !== 0 && e.pointerType === "mouse") return;
+                handledAt.current = Date.now();
                 openPanel(panel, route);
               }}
-              // Le clic reste branché pour le clavier et les technologies d'assistance, qui
-              // n'émettent pas de pointeur — et il ne fait rien de plus quand il suit un appui,
-              // `openPanel` ne bougeant pas d'un écran déjà ouvert.
-              onClick={() => openPanel(panel, route)}
+              /* Le clic reste branché pour le clavier et les technologies d'assistance, qui
+                 n'émettent aucun pointeur. Mais un appui en émet un *puis* un clic : sans cette
+                 garde, le même geste ouvrirait deux fois, et une entrée d'historique de plus
+                 demanderait deux retours pour revenir. */
+              onClick={() => {
+                if (Date.now() - handledAt.current < DOUBLE_FIRE_MS) return;
+                openPanel(panel, route);
+              }}
               aria-current={on ? "page" : undefined}
               data-nav-item
               className={`flex flex-col items-center justify-center rounded-full transition-colors ${

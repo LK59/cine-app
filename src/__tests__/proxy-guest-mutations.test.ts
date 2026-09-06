@@ -35,6 +35,12 @@ describe("proxy — what a plain user may write", () => {
       ["POST", "/api/player/account/preferences"],
       ["POST", "/api/player/account/password"],
       ["POST", "/api/watchlist"],
+      // Les deux boutons du panneau « Compte » que tout le monde voit : l'interrupteur de
+      // notifications et « déconnecter mes autres appareils ». Ils répondaient 403 à un compte
+      // ordinaire, ce qui ne se voit pas quand on teste en administrateur.
+      ["POST", "/api/push/subscribe"],
+      ["DELETE", "/api/push/subscribe"],
+      ["DELETE", "/api/auth/sessions"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

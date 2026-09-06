@@ -32,6 +32,20 @@ export function useHideOnScroll(enabled = true): boolean {
   const lastTop = useRef(new WeakMap<EventTarget, number>());
   const frame = useRef<number | null>(null);
 
+  /**
+   * Reprendre la main, c'est repartir visible.
+   *
+   * Le crochet est mis en sommeil pendant qu'une fiche recouvre l'écran — et le défilement de
+   * cette fiche le laissait « caché ». En refermant, on découvrait une barre absente qu'il fallait
+   * aller rechercher en remontant. L'ajustement se fait pendant le rendu, la forme que React
+   * recommande pour dériver un état d'une entrée et la seule que le compilateur accepte ici.
+   */
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    if (enabled) setHidden(false);
+  }
+
   useEffect(() => {
     if (!enabled) return;
 

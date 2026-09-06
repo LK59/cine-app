@@ -79,6 +79,19 @@ describe("useHideOnScroll", () => {
     stranger.remove();
   });
 
+  // Remis en service après une pause, il repart visible : sans ça, refermer une fiche découvrait
+  // une barre absente, cachée par le défilement de la fiche elle-même.
+  it("comes back visible when it is turned on again", async () => {
+    const { rerender } = render(<Bar />);
+    await scrollTo(400);
+    expect(state()).toBe("cachée");
+
+    rerender(<Bar enabled={false} />);
+    expect(state()).toBe("visible");
+    rerender(<Bar enabled />);
+    expect(state()).toBe("visible");
+  });
+
   it("stays out of the way when it is turned off", async () => {
     render(<Bar enabled={false} />);
     await scrollTo(500);

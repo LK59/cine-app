@@ -74,6 +74,10 @@ describe("PlayerListAdd", () => {
     renderAdd();
     await type("ma");
 
+    // Attendre un résultat, et non la seule disparition de l'invitation : celle-ci part dès que
+    // la frappe s'est calmée, donc avant que la réponse soit arrivée. Sans cette attente, le test
+    // lisait une liste encore vide — il passait par chance, et échouait sous charge.
+    await screen.findByText("Matrix");
     const titles = screen.getAllByRole("listitem").map((li) => li.querySelector("p")?.textContent);
     expect(titles).toEqual(["Matrix", "Dune"]);
   });
