@@ -1252,7 +1252,9 @@
       "hint": "Suche nach einem Film, einer Serie oder einer Person. Was noch nicht da ist, lässt sich anfragen.",
       "noResults": "Nichts gefunden für „{query}“.",
       "filterAll": "Alles",
-      "personTitles": "{n} Titel hier"
+      "personTitles": "{n} Titel hier",
+      "recent": "Deine letzten Suchen",
+      "forget": "Löschen"
     },
     "lists": {
       "requests": "Anfragen",
@@ -1477,7 +1479,8 @@
       "airsOn": "am {date}"
     },
     "reload": "Seite neu laden",
-    "upNext": "Als Nächstes"
+    "upNext": "Als Nächstes",
+    "becauseWatched": "Weil du {title} gesehen hast"
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",

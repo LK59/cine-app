@@ -1252,7 +1252,9 @@
       "hint": "Cherchez un film, une série ou quelqu’un. Ce qui n’est pas encore dans la bibliothèque peut être demandé.",
       "noResults": "Rien trouvé pour « {query} ».",
       "filterAll": "Tout",
-      "personTitles": "{n} titre(s) ici"
+      "personTitles": "{n} titre(s) ici",
+      "recent": "Vos dernières recherches",
+      "forget": "Effacer"
     },
     "lists": {
       "requests": "Demandes",
@@ -1477,7 +1479,8 @@
       "airsOn": "le {date}"
     },
     "reload": "Recharger la page",
-    "upNext": "À suivre"
+    "upNext": "À suivre",
+    "becauseWatched": "Parce que vous avez regardé {title}"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

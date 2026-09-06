@@ -1252,7 +1252,9 @@
       "hint": "Busca una película, una serie o alguien. Lo que aún no está en la biblioteca se puede pedir.",
       "noResults": "No hay resultados para «{query}».",
       "filterAll": "Todo",
-      "personTitles": "{n} título(s) aquí"
+      "personTitles": "{n} título(s) aquí",
+      "recent": "Tus últimas búsquedas",
+      "forget": "Borrar"
     },
     "lists": {
       "requests": "Peticiones",
@@ -1477,7 +1479,8 @@
       "airsOn": "el {date}"
     },
     "reload": "Recargar la página",
-    "upNext": "A continuación"
+    "upNext": "A continuación",
+    "becauseWatched": "Porque viste {title}"
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

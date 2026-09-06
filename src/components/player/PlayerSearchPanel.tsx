@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
+import { recentSearches, rememberSearch, forgetSearches } from "@/lib/recentSearches";
+import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
@@ -78,7 +80,12 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   useEffect(() => {
     const term = query.trim();
     lastQuery = term;
-    const timer = setTimeout(() => setDebounced(term.length >= MIN_QUERY ? term : ""), DEBOUNCE_MS);
+    const timer = setTimeout(() => {
+      setDebounced(term.length >= MIN_QUERY ? term : "");
+      // Retenue une fois la frappe calmée, jamais lettre à lettre : « i », « in », « int » ne
+      // sont pas trois recherches.
+      if (term.length >= MIN_QUERY) rememberSearch(term);
+    }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -174,9 +181,12 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
           </div>
         )}
 
-        {!debounced && (
-          <p className="mt-10 text-sm text-slate-500">{t("player.search.hint")}</p>
-        )}
+        {/* L'écran d'avant la frappe.
+            Il ne portait qu'une phrase grise, au moment précis où quelqu'un cherche sans savoir
+            quoi. Il porte maintenant ses propres recherches — on cherche souvent deux fois la
+            même chose — et ce qui vient d'arriver dans la bibliothèque, qui est la réponse la
+            plus fréquente à « quoi de neuf ». */}
+        {!debounced && <SearchStart onPick={setQuery} />}
 
         {empty && (
           <p className="mt-10 text-sm text-slate-400">{t("player.search.noResults", { query: debounced })}</p>
@@ -216,4 +226,99 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
       </div>
     </PlayerPanelFrame>
   );
+}
+
+
+/**
+ * Ce qu'on montre avant qu'on tape.
+ *
+ * Deux choses seulement, et les deux existent déjà : les dernières recherches de la personne, et
+ * les derniers titres arrivés. Rien de nouveau n'est demandé au serveur — le catalogue est lu
+ * dans le cache, comme partout ailleurs dans cet écran.
+ */
+function SearchStart({ onPick }: { onPick: (query: string) => void }) {
+  const t = useT();
+  /**
+   * Les dernières recherches, lues une fois.
+   *
+   * Le stockage local n'existe pas côté serveur, et le relire à chaque rendu donnerait une liste
+   * instable. `useSyncExternalStore` avec un abonnement vide dit exactement ça : une valeur qui ne
+   * change pas d'elle-même, un instantané pour le serveur, et rien à poser dans un effet.
+   *
+   * L'effacement passe donc par un état à part plutôt que par une relecture.
+   */
+  const stored = useSyncExternalStore(subscribeNothing, recentSearches, emptyList);
+  const [forgotten, setForgotten] = useState(false);
+  const recent = forgotten ? [] : stored;
+
+  const { data: movies } = useSWR<CinemaMoviesPayload>("/api/cinema/movies", fetcher, {
+    revalidateOnMount: false,
+    revalidateIfStale: false,
+    revalidateOnFocus: false,
+  });
+  const fresh = (movies?.recentlyAdded ?? []).slice(0, 12);
+
+  return (
+    <div className="mt-8 space-y-8">
+      {recent.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold text-white">{t("player.search.recent")}</h2>
+            <button
+              type="button"
+              onClick={() => {
+                forgetSearches();
+                setForgotten(true);
+              }}
+              className="shrink-0 text-xs text-slate-500 transition-colors hover:text-white"
+            >
+              {t("player.search.forget")}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {recent.map((query) => (
+              <button key={query} type="button" onClick={() => onPick(query)} data-nav-item className="chip">
+                <SearchIcon size={13} />
+                {query}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {fresh.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-white">{t("cinema.recentlyAdded")}</h2>
+          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+            {fresh.map((movie) => (
+              <PlayerResultCard
+                key={movie.radarrId}
+                kind="movie"
+                title={movie.title}
+                subtitle={movie.year ? String(movie.year) : null}
+                poster={movie.posterUrl}
+                onOpen={() => openLibraryTitle("movie", movie.radarrId)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {recent.length === 0 && fresh.length === 0 && (
+        <p className="text-sm text-slate-500">{t("player.search.hint")}</p>
+      )}
+    </div>
+  );
+}
+
+
+/** Les recherches retenues ne changent pas toutes seules : il n'y a rien à écouter. */
+function subscribeNothing(): () => void {
+  return () => {};
+}
+
+/** L'instantané du serveur, où le stockage local n'existe pas. Constant, comme React l'exige. */
+const NOTHING_YET: string[] = [];
+function emptyList(): string[] {
+  return NOTHING_YET;
 }

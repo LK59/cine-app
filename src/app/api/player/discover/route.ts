@@ -23,6 +23,16 @@ export interface DiscoveryItem {
 export interface DiscoveryRow {
   key: string;
   items: DiscoveryItem[];
+  /**
+   * Pourquoi cette rangée est là.
+   *
+   * Une recommandation qui ne dit pas d'où elle vient est un mur d'affiches de plus. Nommer le
+   * titre qui l'a déclenchée — le dernier regardé parmi ceux qui l'ont semée — la rend vérifiable :
+   * on peut être d'accord ou non, ce qui n'est possible que si on sait de quoi il s'agit.
+   *
+   * Absent sur les rangées qui n'ont rien à expliquer : les tendances sont les tendances.
+   */
+  becauseOf?: string;
 }
 
 export interface PlayerDiscoverPayload {
@@ -52,14 +62,21 @@ async function recommendedFor(
   userId: string | null,
   tmdb: ReturnType<typeof createTmdbClient>,
   locale: string
-): Promise<{ id: number; title: string; year: number | null; posterPath: string | null }[]> {
-  if (!userId) return [];
+): Promise<{
+  items: { id: number; title: string; year: number | null; posterPath: string | null }[];
+  becauseOf: string | null;
+}> {
+  if (!userId) return { items: [], becauseOf: null };
   return withCache(`player:reco:${userId}:${locale}`, TTL.MEDIUM, async () => {
     const played = await jellyfin.getRecentlyPlayed(userId, "Movie", SEED_COUNT).catch(() => null);
-    const seeds = (played?.Items ?? [])
+    const watched = played?.Items ?? [];
+    const seeds = watched
       .map((item) => Number(getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "tmdb") ?? 0))
       .filter((id) => id > 0);
-    if (seeds.length === 0) return [];
+    // Le plus récent des titres qui ont semé la rangée : c'est celui dont on se souvient, donc
+    // celui qui rend l'explication crédible.
+    const becauseOf = watched[0]?.Name ?? null;
+    if (seeds.length === 0) return { items: [], becauseOf: null };
 
     const batches = await Promise.allSettled(seeds.map((id) => tmdb.movieRecommendations(id)));
     const seen = new Set<number>(seeds);
@@ -81,7 +98,7 @@ async function recommendedFor(
         if (out.length >= ROW_SIZE) break;
       }
     }
-    return out;
+    return { items: out, becauseOf };
   });
 }
 
@@ -111,7 +128,7 @@ export async function GET(req: NextRequest) {
       withCache(`tmdb:trending:movie:${locale}`, TTL.LONG, () => tmdb.trendingMovies()).catch(() => ({ results: [] })),
       withCache(`tmdb:trending:tv:${locale}`, TTL.LONG, () => tmdb.trendingTv()).catch(() => ({ results: [] })),
       playableLibrary(),
-      recommendedFor(session.jfId ?? null, tmdb, locale).catch(() => []),
+      recommendedFor(session.jfId ?? null, tmdb, locale).catch(() => ({ items: [], becauseOf: null })),
     ]);
 
     // Seulement ce qui est ouvrable : un titre surveillé sans fichier doit porter la pastille et
@@ -122,7 +139,8 @@ export async function GET(req: NextRequest) {
     const rows: DiscoveryRow[] = [
       {
         key: "recommended",
-        items: recommended.map((r): DiscoveryItem => ({
+        becauseOf: recommended.becauseOf ?? undefined,
+        items: recommended.items.map((r): DiscoveryItem => ({
           tmdbId: r.id,
           type: "movie",
           title: r.title,

@@ -530,6 +530,7 @@ export function CinemaMobileClient() {
             <DiscoveryRow
               key={row.key}
               label={t(`cinema.discovery.${row.key}`)}
+              eyebrow={row.becauseOf ? t("cinema.becauseWatched", { title: row.becauseOf }) : null}
               items={row.items}
               missingLabel={t("player.notInLibrary")}
               onSelect={openDiscovery}
@@ -688,18 +689,20 @@ const PosterRow = memo(PosterRowInner) as typeof PosterRowInner;
  */
 const DiscoveryRow = memo(function DiscoveryRow({
   label,
+  eyebrow,
   items,
   missingLabel,
   onSelect,
 }: {
   label: string;
+  eyebrow?: string | null;
   items: DiscoveryItem[];
   missingLabel: string;
   onSelect: (item: DiscoveryItem) => void;
 }) {
   if (items.length === 0) return null;
   return (
-    <MobileRow label={label}>
+    <MobileRow label={label} eyebrow={eyebrow}>
       {items.map((item) => (
         <button
           key={`${item.type}-${item.tmdbId}`}
@@ -724,10 +727,19 @@ const DiscoveryRow = memo(function DiscoveryRow({
 
 function MobileRow({
   label,
+  eyebrow,
   onSeeAll,
   children,
 }: {
   label: string;
+  /**
+   * Pourquoi cette rangée est là, au-dessus de son titre.
+   *
+   * Une rangée qui ne dit pas d'où elle vient est un mur d'affiches de plus. « Parce que vous
+   * avez regardé Interstellar » se vérifie : on peut n'être pas d'accord, ce qui suppose déjà
+   * de savoir de quoi il s'agit. Absent partout où il n'y a rien à expliquer.
+   */
+  eyebrow?: string | null;
   onSeeAll?: () => void;
   children: React.ReactNode;
 }) {
@@ -740,7 +752,10 @@ function MobileRow({
           à vingt-quatre affiches, et il fallait faire glisser vingt-quatre fois pour découvrir
           qu'il y avait une suite. Ici il se voit avant qu'on commence. */}
       <div className="mb-2 flex items-baseline justify-between gap-3 px-4 [@media(max-height:500px)]:mb-1.5">
-        <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
+        <div className="min-w-0">
+          {eyebrow && <p className="truncate text-[11px] leading-4 text-slate-500">{eyebrow}</p>}
+          <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
+        </div>
         {onSeeAll && (
           <button
             type="button"
