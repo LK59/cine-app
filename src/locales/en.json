@@ -1353,7 +1353,19 @@
       "devicesRevoked": "The other devices have been signed out",
       "signOut": "Sign out",
       "signOutAction": "Sign out",
-      "localAccountHint": "This account isn’t linked to Jellyfin, so playback preferences and the password live elsewhere."
+      "localAccountHint": "This account isn’t linked to Jellyfin, so playback preferences and the password live elsewhere.",
+      "help": {
+        "title": "Known issues",
+        "hdrTitle": "HDR films look washed out on Firefox (Linux)",
+        "hdrIntro": "Firefox does not yet display HDR correctly on Linux. It knows how: the option exists, it is simply off by default.",
+        "hdrStep1": "Open a new tab, type about:config and accept the warning.",
+        "hdrStep2": "Search for this setting:",
+        "hdrStep3": "Set it to true, then restart Firefox.",
+        "hdrNote": "This is a Firefox setting, not one of this app's, and it undoes just as easily. Other browsers are unaffected.",
+        "copy": "Copy",
+        "copied": "Copied",
+        "copyFailed": "Could not copy — select the text by hand."
+      }
     }
   },
   "cinema": {

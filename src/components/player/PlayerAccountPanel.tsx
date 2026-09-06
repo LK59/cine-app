@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -77,6 +77,7 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
           </Section>
         )}
         <SessionsSection />
+        <KnownIssuesSection />
 
         <Section icon={LogOut} title={t("player.account.signOut")}>
           <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-red-400 sm:w-auto">
@@ -335,3 +336,74 @@ function SessionsSection() {
     </Section>
   );
 }
+
+/**
+ * Les problèmes qu'on connaît et qu'on ne peut pas corriger d'ici.
+ *
+ * Il n'y en a qu'un pour l'instant, et il est réel : Firefox sous Linux n'affiche pas encore le
+ * HDR correctement, les films sortent gris et délavés. Firefox sait le faire — l'option existe,
+ * elle est simplement désactivée par défaut le temps que le travail se termine.
+ *
+ * Aucune détection : la fiche est là pour qui la cherche, sans dire à personne qu'il a un
+ * problème qu'il n'a peut-être pas. Elle nomme Firefox et non « votre navigateur » — quelqu'un
+ * qui lit ça sur un téléphone comprend en une seconde que ça ne le concerne pas.
+ */
+function KnownIssuesSection() {
+  const t = useT();
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+
+  // On ne peut pas faire un lien vers `about:config` : les navigateurs refusent d'y naviguer
+  // depuis une page. Reste à copier le nom du réglage, ce qui évite de retaper trente caractères
+  // sans faute — et le retour visuel, parce qu'une copie silencieuse ne se voit pas.
+  async function copyPref() {
+    try {
+      await navigator.clipboard.writeText(FIREFOX_HDR_PREF);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error(t("player.account.help.copyFailed"));
+    }
+  }
+
+  return (
+    <Section icon={LifeBuoy} title={t("player.account.help.title")}>
+      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <p className="text-sm font-medium text-white">{t("player.account.help.hdrTitle")}</p>
+        <p className="mt-1.5 text-xs leading-5 text-slate-400">{t("player.account.help.hdrIntro")}</p>
+        <ol className="mt-3 space-y-2 text-xs leading-5 text-slate-400">
+          <li className="flex gap-2.5">
+            <span className="shrink-0 text-slate-600">1.</span>
+            <span>{t("player.account.help.hdrStep1")}</span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="shrink-0 text-slate-600">2.</span>
+            <span className="min-w-0">
+              {t("player.account.help.hdrStep2")}
+              <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-slate-200">
+                  {FIREFOX_HDR_PREF}
+                </code>
+                <button type="button" onClick={copyPref} className="btn btn-ghost btn-sm shrink-0">
+                  {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                  {copied ? t("player.account.help.copied") : t("player.account.help.copy")}
+                </button>
+              </span>
+            </span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="shrink-0 text-slate-600">3.</span>
+            <span>{t("player.account.help.hdrStep3")}</span>
+          </li>
+        </ol>
+        {/* La phrase qui compte le plus : sans elle, on conclut que le lecteur est cassé. */}
+        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-slate-500">
+          {t("player.account.help.hdrNote")}
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+/** Le réglage Firefox qui règle le HDR sous Linux, vérifié sur place avant d'être écrit ici. */
+const FIREFOX_HDR_PREF = "gfx.color_management.hdr";

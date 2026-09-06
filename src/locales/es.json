@@ -1353,7 +1353,19 @@
       "devicesRevoked": "Los demás dispositivos se han desconectado",
       "signOut": "Cerrar sesión",
       "signOutAction": "Cerrar sesión",
-      "localAccountHint": "Esta cuenta no está vinculada a Jellyfin: las preferencias de reproducción y la contraseña se gestionan en otro sitio."
+      "localAccountHint": "Esta cuenta no está vinculada a Jellyfin: las preferencias de reproducción y la contraseña se gestionan en otro sitio.",
+      "help": {
+        "title": "Problemas conocidos",
+        "hdrTitle": "Las películas HDR se ven lavadas en Firefox (Linux)",
+        "hdrIntro": "Firefox aún no muestra bien el HDR en Linux. Sabe hacerlo: la opción existe, simplemente está desactivada por defecto.",
+        "hdrStep1": "Abre una pestaña nueva, escribe about:config y acepta el aviso.",
+        "hdrStep2": "Busca este ajuste:",
+        "hdrStep3": "Ponlo en true y reinicia Firefox.",
+        "hdrNote": "Es un ajuste de Firefox, no de esta aplicación, y se deshace igual de fácil. Los demás navegadores no se ven afectados.",
+        "copy": "Copiar",
+        "copied": "Copiado",
+        "copyFailed": "No se pudo copiar — selecciona el texto a mano."
+      }
     }
   },
   "cinema": {

@@ -1353,7 +1353,19 @@
       "devicesRevoked": "Die anderen Geräte wurden abgemeldet",
       "signOut": "Abmelden",
       "signOutAction": "Abmelden",
-      "localAccountHint": "Dieses Konto ist nicht mit Jellyfin verknüpft — Wiedergabe-Einstellungen und Passwort werden anderswo verwaltet."
+      "localAccountHint": "Dieses Konto ist nicht mit Jellyfin verknüpft — Wiedergabe-Einstellungen und Passwort werden anderswo verwaltet.",
+      "help": {
+        "title": "Bekannte Probleme",
+        "hdrTitle": "HDR-Filme wirken auf Firefox (Linux) flau",
+        "hdrIntro": "Firefox stellt HDR unter Linux noch nicht korrekt dar. Es kann es: die Option existiert, sie ist nur standardmäßig aus.",
+        "hdrStep1": "Neuen Tab öffnen, about:config eingeben und die Warnung bestätigen.",
+        "hdrStep2": "Nach dieser Einstellung suchen:",
+        "hdrStep3": "Auf true setzen, dann Firefox neu starten.",
+        "hdrNote": "Das ist eine Einstellung von Firefox, nicht dieser App, und lässt sich ebenso leicht zurücknehmen. Andere Browser sind nicht betroffen.",
+        "copy": "Kopieren",
+        "copied": "Kopiert",
+        "copyFailed": "Kopieren nicht möglich — Text bitte selbst markieren."
+      }
     }
   },
   "cinema": {
