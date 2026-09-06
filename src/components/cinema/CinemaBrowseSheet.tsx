@@ -114,7 +114,10 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
         {shown.length === 0 ? (
           <p className="py-16 text-center text-sm text-slate-500">{t("player.browse.nothing")}</p>
         ) : (
-          <div className="poster-grid">
+          // `player-grid` : c'est lui qui porte `content-visibility`, et sans lui le navigateur
+          // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille
+          // complète est justement le seul écran où ce nombre est atteint.
+          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {shown.map((item) => (
               <PlayerResultCard
                 key={idOf(item)}
