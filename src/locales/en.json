@@ -1283,7 +1283,12 @@
         "inList": "in the list",
         "available": "available",
         "watched": "watched"
-      }
+      },
+      "addPlaceholder": "Add a title to the list…",
+      "addHint": "Type the name of a film or a series.",
+      "addNothing": "Nothing found.",
+      "addToWatch": "Add to “À voir”",
+      "alreadyInList": "Already in the list"
     },
     "requests": {
       "state": {

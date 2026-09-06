@@ -1283,7 +1283,12 @@
         "inList": "in der Liste",
         "available": "verfügbar",
         "watched": "gesehen"
-      }
+      },
+      "addPlaceholder": "Einen Titel zur Liste hinzufügen…",
+      "addHint": "Namen eines Films oder einer Serie eingeben.",
+      "addNothing": "Nichts gefunden.",
+      "addToWatch": "Zu „Anzusehen“ hinzufügen",
+      "alreadyInList": "Schon in der Liste"
     },
     "requests": {
       "state": {

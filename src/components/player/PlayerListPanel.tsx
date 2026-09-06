@@ -8,6 +8,7 @@ import { Search, Plus, Bookmark, Inbox, Eye, CircleSlash, Heart } from "lucide-r
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { filterByTitle, sortList, LIST_SORTS, type ListSort } from "@/lib/playerListSort";
 import { PlayerEmptyState } from "./PlayerEmptyState";
+import { PlayerListAdd } from "./PlayerListAdd";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
@@ -62,6 +63,21 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
    */
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<ListSort>("added");
+
+  /**
+   * Le mode « ajouter », dans cet écran plutôt qu'ailleurs.
+   *
+   * Le « + » ouvrait la recherche générale : chercher, ouvrir la fiche, y trouver « Dans ma
+   * liste » — trois écrans pour ranger un titre qu'on avait déjà en tête. Il ouvre maintenant une
+   * recherche ici même, où chaque résultat porte son propre « + ».
+   */
+  const [adding, setAdding] = useState(false);
+
+  /** Ce qui est déjà rangé, pour que la recherche le montre coché plutôt que de l'offrir. */
+  const alreadyListed = useMemo(
+    () => new Set((data?.toWatch ?? []).map((i) => `${i.type}-${i.tmdbId}`)),
+    [data]
+  );
 
   // Les comptes suivent la recherche : un onglet qui annonce huit titres et n'en montre aucun,
   // parce qu'on filtre, dit quelque chose de faux au moment où on a le plus besoin d'y croire.
@@ -172,7 +188,7 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
           </select>
           <button
             type="button"
-            onClick={() => cinemaNavigate({ list: false, search: true })}
+            onClick={() => setAdding(true)}
             aria-label={t("player.lists.addTitle")}
             title={t("player.lists.addTitle")}
             className="btn-primary h-10 w-10 shrink-0 justify-center p-0"
@@ -181,6 +197,12 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
           </button>
         </div>
 
+        {/* La recherche d'ajout remplace la liste tant qu'elle est ouverte : deux champs et deux
+            grilles à l'écran au même moment, on ne saurait plus lequel filtre quoi. */}
+        {adding && <PlayerListAdd existing={alreadyListed} onClose={() => setAdding(false)} />}
+
+        {!adding && (
+          <>
         {/* Une seule ligne qui défile plutôt que cinq pastilles réparties sur trois rangs : sur
             téléphone, l'en-tête reprenait un tiers de l'écran avant la première affiche.
 
@@ -280,6 +302,8 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
               />
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
     </PlayerPanelFrame>
