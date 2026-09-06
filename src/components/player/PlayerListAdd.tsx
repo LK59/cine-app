@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { Plus, Check, X, Loader2 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { useT } from "@/components/TranslationProvider";
+import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { PosterImage } from "@/components/PosterImage";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import type { SearchResponse, UnifiedSearchResult } from "@/app/api/search/route";
@@ -110,24 +111,47 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
   const [added, setAdded] = useState(false);
   const done = already || added;
 
+  /**
+   * La ligne ouvre la fiche, le « + » range.
+   *
+   * Deux gestes différents sur la même ligne, et c'est voulu : on cherche parfois pour ajouter
+   * sans réfléchir — c'est le « + » — et parfois pour vérifier de quoi il s'agit avant de
+   * décider, et il faut alors pouvoir ouvrir la fiche sans repasser par la recherche générale.
+   *
+   * Ce qu'on possède ouvre sa fiche de bibliothèque, où « Lire » existe ; le reste ouvre sa fiche
+   * TMDB, où « Lire » est devenu « Demander ». C'est le même aiguillage que partout ailleurs.
+   */
+  function open() {
+    const libraryId = result.type === "series" ? result.sonarrId : result.radarrId;
+    if (libraryId !== null) openLibraryTitle(result.type === "series" ? "series" : "movie", libraryId);
+    else cinemaNavigate({ discover: result.tmdbId, discoverType: result.type === "series" ? "series" : "movie" });
+  }
+
   return (
     <li className="flex items-center gap-3 py-2">
-      <div className="h-14 w-10 shrink-0 overflow-hidden rounded bg-white/5">
-        <PosterImage
-          src={result.posterPath ? `${TMDB_POSTER}${result.posterPath}` : null}
-          alt={result.title}
-          subtle
-          unoptimized
-          sizes="40px"
-        />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-white">{result.title}</p>
-        <p className="truncate text-xs text-slate-500">
-          {[result.year, t(`player.kind.${result.type === "series" ? "series" : "movie"}`)].filter(Boolean).join(" · ")}
-          {!result.inLibrary && ` · ${t("player.notInLibrary")}`}
-        </p>
-      </div>
+      <button
+        type="button"
+        onClick={open}
+        data-nav-item
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors active:bg-white/5"
+      >
+        <span className="h-14 w-10 shrink-0 overflow-hidden rounded bg-white/5">
+          <PosterImage
+            src={result.posterPath ? `${TMDB_POSTER}${result.posterPath}` : null}
+            alt={result.title}
+            subtle
+            unoptimized
+            sizes="40px"
+          />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-white">{result.title}</span>
+          <span className="block truncate text-xs text-slate-500">
+            {[result.year, t(`player.kind.${result.type === "series" ? "series" : "movie"}`)].filter(Boolean).join(" · ")}
+            {!result.inLibrary && ` · ${t("player.notInLibrary")}`}
+          </span>
+        </span>
+      </button>
       <button
         type="button"
         disabled={done || busy}

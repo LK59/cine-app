@@ -10,6 +10,12 @@ vi.mock("@/components/PosterImage", () => ({
   // eslint-disable-next-line @next/next/no-img-element
   PosterImage: ({ alt }: { alt: string }) => <img alt={alt} />,
 }));
+const mockNavigate = vi.fn();
+vi.mock("@/lib/cinemaRoute", () => ({
+  cinemaNavigate: (...a: unknown[]) => mockNavigate(...a),
+  openLibraryTitle: (type: string, id: number) =>
+    mockNavigate(type === "series" ? { tab: "series", serie: id, film: null } : { tab: "movies", film: id, serie: null }),
+}));
 const mockSetStatus = vi.fn();
 vi.mock("@/lib/usePlayerTitleActions", () => ({
   usePlayerTitleActions: (ref: unknown) => ({
@@ -78,8 +84,9 @@ describe("PlayerListAdd", () => {
     // la frappe s'est calmée, donc avant que la réponse soit arrivée. Sans cette attente, le test
     // lisait une liste encore vide — il passait par chance, et échouait sous charge.
     await screen.findByText("Matrix");
-    const titles = screen.getAllByRole("listitem").map((li) => li.querySelector("p")?.textContent);
-    expect(titles).toEqual(["Matrix", "Dune"]);
+    const titles = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(titles[0]).toContain("Matrix");
+    expect(titles[1]).toContain("Dune");
   });
 
   // Un titre déjà rangé ne s'offre pas : la coche le dit, et le bouton ne répond plus.
@@ -99,5 +106,29 @@ describe("PlayerListAdd", () => {
     renderAdd();
     await type("zzzz");
     expect(await screen.findByText("player.lists.addNothing")).toBeTruthy();
+  });
+});
+
+// Deux gestes sur la même ligne : le « + » range sans réfléchir, la ligne ouvre la fiche pour
+// vérifier avant de décider.
+describe("PlayerListAdd — ouvrir plutôt qu'ajouter", () => {
+  it("opens a library title on its own sheet", async () => {
+    payload = { library: [MATRIX], tmdb: [], persons: [] };
+    renderAdd();
+    await type("matrix");
+
+    fireEvent.click(await screen.findByText("Matrix"));
+    expect(mockNavigate).toHaveBeenCalledWith({ tab: "movies", film: 42, serie: null });
+    // Ouvrir n'ajoute pas : ce sont deux décisions.
+    expect(mockSetStatus).not.toHaveBeenCalled();
+  });
+
+  it("opens a title we do not have on its TMDB sheet", async () => {
+    payload = { library: [], tmdb: [DUNE], persons: [] };
+    renderAdd();
+    await type("dune");
+
+    fireEvent.click(await screen.findByText("Dune"));
+    expect(mockNavigate).toHaveBeenCalledWith({ discover: 693134, discoverType: "movie" });
   });
 });

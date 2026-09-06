@@ -33,6 +33,20 @@ export function formatDurationShort(ticks: number): string {
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
 }
 
+/**
+ * Une durée en minutes, dite comme on la dit : « 1h10 », pas « 70 min ».
+ *
+ * Au-delà d'une heure, personne ne compte en minutes — un épisode de 70 min oblige à faire la
+ * division soi-même pour savoir ce qu'on s'engage à regarder. En dessous, la minute reste la
+ * bonne unité et « 0h45 » serait une coquetterie.
+ */
+export function formatMinutes(minutes: number | null | undefined): string | null {
+  if (!minutes || minutes <= 0) return null;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+}
+
 /** Formats a qBittorrent ETA in seconds into a short label — qBittorrent uses 8640000 (100 days)
  *  as a sentinel for "no estimate" (seeding, stalled, paused), which reads as "—" instead of days. */
 export function fmtEta(seconds: number): string {

@@ -204,6 +204,26 @@ describe("PlayerListPanel", () => {
     expect(screen.queryByPlaceholderText("player.lists.searchInList")).toBeNull();
   });
 
+  // Le tri vaut pour les demandes comme pour le reste : « date d'ajout » y veut dire « date de la
+  // demande », ce qu'on cherche justement quand on trie une liste de demandes.
+  it("sorts the requests too, on the date they were made", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      requests: [
+        { id: 1, tmdbId: 1, type: "movie", title: "Ancienne", poster: null, year: 2020, state: "processing", requestedAt: "2026-01-01T00:00:00Z", changedAt: "", justArrived: false, canCancel: true, libraryId: null },
+        { id: 2, tmdbId: 2, type: "movie", title: "Récente", poster: null, year: 2021, state: "processing", requestedAt: "2026-09-01T00:00:00Z", changedAt: "", justArrived: false, canCancel: true, libraryId: null },
+      ],
+    });
+
+    await screen.findByText("player.lists.stats.inList");
+    fireEvent.click(screen.getAllByText(/player\.lists\.requests/)[0]);
+    const shown = () => screen.getAllByText(/Ancienne|Récente/).map((n) => n.textContent);
+    expect(shown()).toEqual(["Récente", "Ancienne"]);
+
+    fireEvent.change(screen.getByLabelText("player.lists.sort"), { target: { value: "title" } });
+    expect(shown()).toEqual(["Ancienne", "Récente"]);
+  });
+
   it("sends an arrived request to its library sheet, not to the TMDB one", async () => {
     renderWith({
       ...EMPTY_LISTS,

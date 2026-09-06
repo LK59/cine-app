@@ -144,10 +144,20 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
     return sortList(filterByTitle(source, query), sort);
   }, [data, segment, query, sort]);
 
-  /** Les demandes suivent la même recherche : c'est le même écran, et la même question. */
+  /**
+   * Les demandes suivent la même recherche **et** le même tri.
+   *
+   * Elles portent leurs propres dates — celle de la demande, celle du dernier changement d'état.
+   * « Date d'ajout » veut donc dire ici « date de la demande », ce qui est exactement ce qu'on
+   * cherche quand on trie une liste de demandes : les dernières faites en premier.
+   */
   const shownRequests = useMemo(
-    () => filterByTitle(data?.requests ?? [], query),
-    [data, query]
+    () =>
+      sortList(
+        filterByTitle(data?.requests ?? [], query).map((r) => ({ ...r, addedAt: Date.parse(r.requestedAt) || null })),
+        sort
+      ),
+    [data, query, sort]
   );
 
   return (

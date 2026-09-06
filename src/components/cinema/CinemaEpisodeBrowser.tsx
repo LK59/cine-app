@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
-import { formatDurationShort } from "@/lib/format";
+import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
@@ -233,7 +233,9 @@ export function CinemaEpisodeBrowser({
                         {t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks - ep.resumeTicks) })}
                       </span>
                     ) : (
-                      ep.runtimeMinutes && <span className="shrink-0 text-xs text-white/50">{ep.runtimeMinutes} min</span>
+                      ep.runtimeMinutes && (
+                        <span className="shrink-0 text-xs text-white/50">{formatMinutes(ep.runtimeMinutes)}</span>
+                      )
                     )}
                   </div>
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-white/60">{ep.overview}</p>}

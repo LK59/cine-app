@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Heart, Plus, RotateCcw, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { formatMinutes } from "@/lib/format";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
@@ -36,7 +37,8 @@ interface RadarrCastMember {
 }
 
 interface RadarrInfo {
-  tmdb: { overview: string; cast: RadarrCastMember[] } | null;
+  /** `runtime` est la durée du film en minutes : elle vient de TMDB, comme le synopsis. */
+  tmdb: { overview: string; cast: RadarrCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
 }
 
@@ -300,6 +302,9 @@ export function CinemaMovieDetail({
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+            {/* Voir la note jumelle de la fiche téléphone : la durée manquait, et c'est la
+                troisième chose qu'on veut savoir avant de lancer un film. */}
+            {formatMinutes(info?.tmdb?.runtime) && <span>{formatMinutes(info?.tmdb?.runtime)}</span>}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 

@@ -19,7 +19,7 @@ import { useIsShortViewport } from "@/lib/useIsMobile";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
-import { formatDurationShort } from "@/lib/format";
+import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
@@ -33,7 +33,8 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
 interface DetailInfo {
-  tmdb: { overview: string; cast: { tmdbId: number; name: string }[] } | null;
+  /** `runtime` est la durée du film en minutes : elle vient de TMDB, comme le synopsis. */
+  tmdb: { overview: string; cast: { tmdbId: number; name: string }[]; runtime?: number | null } | null;
   trailerKey: string | null;
 }
 
@@ -320,6 +321,10 @@ export function CinemaMobileDetail({
           {isSeries && seasons.length > 0 && (
             <span>{t("cinema.seasonCount", { n: seasons.length })}</span>
           )}
+          {/* La durée, à côté de l'année et du genre : c'est la troisième chose qu'on veut savoir
+              avant de lancer un film, et la seule des trois qui manquait. Pour une série, elle
+              n'aurait aucun sens — c'est celle d'un épisode, et elle est déjà sur chacun. */}
+          {!isSeries && formatMinutes(info?.tmdb?.runtime) && <span>{formatMinutes(info?.tmdb?.runtime)}</span>}
           {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).join(" · ")}</span>}
         </div>
 
@@ -465,7 +470,9 @@ export function CinemaMobileDetail({
                         {t("cinema.timeRemaining", { time: formatDurationShort(episode.runtimeTicks - episode.resumeTicks) })}
                       </p>
                     ) : (
-                      episode.runtimeMinutes && <p className="mt-0.5 text-xs text-white/50">{episode.runtimeMinutes} min</p>
+                      episode.runtimeMinutes && (
+                        <p className="mt-0.5 text-xs text-white/50">{formatMinutes(episode.runtimeMinutes)}</p>
+                      )
                     )}
                     {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-white/60">{episode.overview}</p>}
                   </div>
