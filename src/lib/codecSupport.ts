@@ -1,3 +1,4 @@
+import { isWebKit } from "@/lib/webkitEngine";
 // Client-only: detects what the browser can actually decode, so the DeviceProfile sent to
 // Jellyfin (see PlaybackInfoOptions in clients/jellyfin.ts) reflects real capabilities instead
 // of the previous "always transcode everything" fallback.
@@ -107,7 +108,11 @@ function testSourceBuffer(mime: string): Promise<boolean> {
 // decode fine). video.canPlayType() is the API that actually reflects Safari's real decode
 // capability for both native HLS and plain <video src>, so it's used directly there instead.
 function isNativeHlsBrowser(): boolean {
-  return !!document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
+  // Le moteur d'abord. Chrome Android accepte ce type MIME sans lire le HLS par un chemin opaque :
+  // sonder ses capacités avec `canPlayType` au lieu de MediaSource lui faisait décrire un pipeline
+  // dont ce lecteur ne se sert jamais, et le profil envoyé à Jellyfin s'en trouvait faussé.
+  // Voir isWebKitEngine.
+  return isWebKit() && !!document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
 }
 
 function checkViaCanPlayType(mime: string): boolean {

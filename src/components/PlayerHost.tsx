@@ -13,6 +13,7 @@ import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeJellyfinPlayback } from "@/lib/playbackPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
+import { isWebKit } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -644,7 +645,9 @@ function ActivePlayer({
       // other angle has been tested and ruled out. A full page reload sidesteps it entirely: the
       // new track then loads as the page's first-ever HLS session, which has never once failed
       // across every test. Persists just enough to resume exactly where playback left off.
-      if (video?.canPlayType("application/vnd.apple.mpegurl")) {
+      // WebKit, et non « sait lire du HLS » : Chrome Android répond oui à la seconde question et
+      // rechargeait donc la page à chaque changement de piste. Voir isWebKitEngine.
+      if (isWebKit() && video?.canPlayType("application/vnd.apple.mpegurl")) {
         try {
           sessionStorage.setItem(
             PLAYER_RELOAD_INTENT_KEY,
@@ -869,7 +872,7 @@ function ActivePlayer({
       // whose grace-delayed restart (see fromReload) then loads into a genuinely clean slate.
       // Strictly bounded by the attempt counter carried in the intent so two exhausted ladders
       // can never reload-loop forever.
-      if ((reloadAttempt ?? 0) < 1 && video!.canPlayType("application/vnd.apple.mpegurl")) {
+      if ((reloadAttempt ?? 0) < 1 && isWebKit() && video!.canPlayType("application/vnd.apple.mpegurl")) {
         try {
           const audioIdx = lastPlaybackOpts.current?.audioStreamIndex;
           sessionStorage.setItem(
