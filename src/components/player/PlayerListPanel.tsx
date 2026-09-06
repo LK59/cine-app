@@ -98,28 +98,37 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
     >
       <div className="mx-auto w-full max-w-6xl">
         {/* Une seule ligne qui défile plutôt que cinq pastilles réparties sur trois rangs : sur
-            téléphone, l'en-tête reprenait un tiers de l'écran avant la première affiche. */}
-        <div className="scrollbar-thin -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          {SEGMENTS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setChosen(key)}
-              aria-pressed={segment === key}
-              className={`shrink-0 whitespace-nowrap ${segment === key ? "chip chip-on" : "chip"}`}
-            >
-              {t(`player.lists.${key}`)}
-              <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span>
-              {key === "requests" && arrived > 0 && (
-                <span
-                  aria-label={t("player.lists.arrivedBadge", { n: arrived })}
-                  className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold text-ink"
-                >
-                  {arrived}
-                </span>
-              )}
-            </button>
-          ))}
+            téléphone, l'en-tête reprenait un tiers de l'écran avant la première affiche.
+
+            Le fondu sur le bord droit dit que la ligne continue. Sans lui, le dernier onglet
+            arrivait coupé en plein mot contre le bord de l'écran, ce qui se lit comme un défaut
+            d'affichage et non comme une invitation à faire glisser. */}
+        <div className="relative -mx-1">
+          <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
+            {SEGMENTS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setChosen(key)}
+                aria-pressed={segment === key}
+                className={`shrink-0 whitespace-nowrap ${segment === key ? "chip chip-on" : "chip"}`}
+              >
+                {t(`player.lists.${key}`)}
+                <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span>
+                {/* Un point, plus un second nombre. « Demandes 47 · 1 » posait deux chiffres côte à
+                    côte sans dire lequel était quoi ; le point ne dit qu'une chose — il y a du
+                    nouveau — et laisse le compte être le seul nombre de l'onglet. Combien de
+                    nouveautés se lit à l'intérieur, sur les cartes elles-mêmes. */}
+                {key === "requests" && arrived > 0 && (
+                  <span
+                    aria-label={t("player.lists.arrivedBadge", { n: arrived })}
+                    className="ml-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-ink to-transparent" />
         </div>
 
         {/* Une phrase par segment qui en a besoin, à l'endroit où la question se pose. */}

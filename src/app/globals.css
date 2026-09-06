@@ -394,6 +394,15 @@
   scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
 }
 
+/* Une ligne qui défile sous le doigt et dont le bord est déjà estompé n'a pas besoin d'une
+   barre en plus : elle ajouterait un trait sous les onglets, à quelques pixels d'eux. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility skeleton {
   background: linear-gradient(
     90deg,

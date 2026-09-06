@@ -131,7 +131,11 @@ export function PlayerPanelFrame({
           </h1>
           {subtitle && !short && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}
         </div>
-        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {/* Effacé tant que le tiroir est ouvert. Le voile du tiroir assombrit l'écran sans le
+            masquer : la croix de ce panneau restait lisible à côté de celle du tiroir, deux croix
+            à l'écran sans rien pour dire laquelle ferme quoi. `invisible` plutôt qu'un retrait,
+            pour que le titre ne se déplace pas quand le tiroir se referme. */}
+        <div className={`flex shrink-0 items-center gap-1 sm:gap-2 ${route.menu ? "invisible" : ""}`}>
           {actions}
           <button
             type="button"

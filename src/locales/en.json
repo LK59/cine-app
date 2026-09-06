@@ -701,7 +701,7 @@
       "loading": "Loading…",
       "enabled": "Notifications enabled",
       "disable": "Disable",
-      "enable": "Enable push notifications"
+      "enable": "Turn on notifications"
     }
   },
   "bazarr": {

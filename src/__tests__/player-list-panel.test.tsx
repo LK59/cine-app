@@ -72,9 +72,10 @@ describe("PlayerListPanel", () => {
     expect(screen.getByText("player.lists.empty.abandoned")).toBeTruthy();
   });
 
-  // La pastille ne compte que ce qui est arrivé : c'est la seule chose de cet écran qui mérite
-  // qu'on attire l'œil dessus.
-  it("counts only the arrived requests in the badge", async () => {
+  // Le point ne s'allume que pour ce qui vient d'arriver : c'est la seule chose de cet écran qui
+  // mérite qu'on attire l'œil dessus. Il ne porte plus de nombre — « Demandes 47 · 1 » posait deux
+  // chiffres côte à côte sans dire lequel était quoi.
+  it("marks the tab only when something has just arrived", async () => {
     renderWith({
       ...EMPTY_LISTS,
       requests: [
@@ -85,12 +86,25 @@ describe("PlayerListPanel", () => {
       ],
     });
 
-    // La pastille ne compte que ce qui vient d'arriver : sans quoi, au bout de quelques mois,
-    // elle affiche le total de toutes les demandes abouties — c'est-à-dire plus rien du tout.
-    expect(await screen.findByLabelText("player.lists.arrivedBadge")).toHaveTextContent("1");
+    // Le compte reste dans l'onglet ; le point ne dit que « il y a du nouveau ».
+    expect(await screen.findByLabelText("player.lists.arrivedBadge")).toBeTruthy();
     // Les trois demandes sont bien là — seule la pastille fait le tri.
     expect(screen.getAllByText("player.requests.state.available")).toHaveLength(2);
     expect(screen.getByText("player.requests.state.processing")).toBeTruthy();
+  });
+
+  // Et il reste éteint quand tout est arrivé depuis longtemps : sans quoi il resterait allumé en
+  // permanence, c'est-à-dire ne dirait plus rien.
+  it("leaves the tab unmarked when nothing is new", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      requests: [
+        { id: 3, tmdbId: 3, type: "movie", title: "Arrivé depuis longtemps", poster: null, year: 2019, state: "available", requestedAt: "", changedAt: "", justArrived: false, canCancel: false, libraryId: 9 },
+      ],
+    });
+
+    await screen.findByText("Arrivé depuis longtemps");
+    expect(screen.queryByLabelText("player.lists.arrivedBadge")).toBeNull();
   });
 
   it("sends an arrived request to its library sheet, not to the TMDB one", async () => {

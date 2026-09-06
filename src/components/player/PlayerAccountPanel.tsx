@@ -61,7 +61,7 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
         {hasJellyfin && <PlaybackSection />}
 
         <Section icon={Bell} title={t("player.account.notifications")}>
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
+          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <p className="text-sm text-white">{t("player.account.notificationsLabel")}</p>
               <p className="mt-0.5 text-xs text-slate-500">{t("player.account.notificationsHint")}</p>
@@ -106,13 +106,16 @@ function LanguageSection() {
 
   return (
     <Section icon={Languages} title={t("player.account.language")}>
-      <div className="flex flex-wrap gap-2.5">
+      {/* Une grille plutôt qu'un enroulement : quatre langues qui se répartissent au fil de la
+          largeur laissaient la dernière seule sur son rang, en bas à gauche d'un bloc en escalier.
+          Deux colonnes sur téléphone, une ligne dès qu'il y a la place. */}
+      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
         {LOCALES.map((l) => (
           <button
             key={l}
             type="button"
             onClick={() => l !== locale && setPending(l)}
-            className={`chip px-5 py-2 ${active === l ? "chip-on" : ""}`}
+            className={`chip justify-center px-5 py-2 ${active === l ? "chip-on" : ""}`}
           >
             {LOCALE_LABELS[l]}
           </button>

@@ -68,15 +68,20 @@ export const PlayerResultCard = memo(function PlayerResultCard({
           )}
         </div>
 
-        {/* La pastille de type, en haut à gauche : c'est elle qui départage un film et une série
-            du même nom, donc elle est lisible avant le titre. */}
-        <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+        {/* Deux étiquettes mangeaient l'affiche par les deux bouts. Le type reste — c'est lui
+            qui départage un film et une série du même nom — mais posé sur un voile sombre plutôt
+            que dans un cadre à lui, et sans son propre fond : il se lit, il ne se réclame pas. */}
+        <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
           <Icon size={10} />
           {kindLabel}
         </span>
 
+        {/* « Pas encore là » est l'état par défaut d'une liste d'envies : c'était l'information la
+            moins importante de la grille et la plus voyante, un bandeau violet pleine largeur en
+            travers de six affiches sur huit. Réduite à une pastille de coin sans fond plein, le
+            violet reste disponible pour ce qui le mérite — un titre qui vient d'arriver. */}
         {missing && (
-          <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-md bg-accent-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+          <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40 backdrop-blur-sm">
             {t("player.notInLibrary")}
           </span>
         )}
