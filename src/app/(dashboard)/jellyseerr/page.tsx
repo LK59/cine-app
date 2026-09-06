@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import Link from "next/link";
@@ -90,6 +93,9 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
 }
 
 export default function JellyseerrPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("jellyseerr");
   const { mutate } = useSWRConfig();
   const { isReadOnly, jfUser } = useRole();
   const toast = useToast();
@@ -129,6 +135,8 @@ export default function JellyseerrPage() {
 
   const allRequests = allData?.results ?? [];
   const myRequests = myData?.results ?? [];
+
+  if (notConfigured) return <ServiceNotConfigured service="jellyseerr" />;
 
   return (
     <div>

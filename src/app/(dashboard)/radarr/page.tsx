@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalState } from "@/hooks/useLocalState";
 import Link from "next/link";
@@ -51,6 +54,9 @@ function decadeOf(year: number): DecadeFilter {
 }
 
 export default function RadarrPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("radarr");
   const t = useT();
   const { mutate } = useSWRConfig();
   const { isReadOnly } = useRole();
@@ -95,7 +101,7 @@ export default function RadarrPage() {
 
     list = [...list].sort((a, b) => {
       if (sort === "added") {
-        return (b.added ?? "").localeCompare(a.added ?? "");
+      return (b.added ?? "").localeCompare(a.added ?? "");
       }
       if (sort === "title") return a.title.localeCompare(b.title);
       if (sort === "year") return (b.year ?? 0) - (a.year ?? 0);
@@ -134,6 +140,8 @@ export default function RadarrPage() {
   }, []);
 
   const visible = filtered.slice(0, visibleCount);
+
+  if (notConfigured) return <ServiceNotConfigured service="radarr" />;
 
   return (
     <div>

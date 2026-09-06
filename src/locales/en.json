@@ -52,7 +52,8 @@
       "library": "Library",
       "content": "Content",
       "manage": "Manage"
-    }
+    },
+    "tmdb": "TMDB"
   },
   "common": {
     "loading": "Loading...",
@@ -1476,5 +1477,9 @@
       "airsOn": "on {date}"
     },
     "reload": "Reload the page"
+  },
+  "services": {
+    "notConfigured": "{name} is not configured.",
+    "notConfiguredHint": "This page needs a service that is not connected on this installation. Add these variables to your .env file, then restart the container."
   }
 }

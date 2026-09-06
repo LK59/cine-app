@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
@@ -13,6 +16,9 @@ import { useT } from "@/components/TranslationProvider";
 type TestState = "idle" | "testing" | "ok" | "fail";
 
 export default function JackettPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("jackett");
   const { isReadOnly } = useRole();
   const t = useT();
   const { data, error, isLoading } = useSWR<JackettIndexer[]>("/api/jackett/indexers", fetcher);
@@ -28,6 +34,8 @@ export default function JackettPage() {
       setTestResults((prev) => ({ ...prev, [id]: "fail" }));
     }
   }
+
+  if (notConfigured) return <ServiceNotConfigured service="jackett" />;
 
   return (
     <div>

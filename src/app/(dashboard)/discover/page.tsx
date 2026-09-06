@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
@@ -208,6 +211,9 @@ function SearchGrid({ query, type }: { query: string; type: "movie" | "tv" }) {
 }
 
 export default function DiscoverPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("tmdb");
   const [tab, setTab] = usePersistentState<"movie" | "tv" | "pour-vous">("discover.tab", "movie");
   const [rawQuery, setRawQuery] = useState("");
   const [query, setQuery] = useState("");
@@ -223,6 +229,8 @@ export default function DiscoverPage() {
 
   const isSearching = rawQuery.length > 0;
   const searchType = tab === "pour-vous" ? "movie" : tab;
+
+  if (notConfigured) return <ServiceNotConfigured service="tmdb" />;
 
   return (
     <div>

@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
@@ -26,6 +29,9 @@ interface ActiveSearch {
 const PAGE_SIZE = 25;
 
 export default function BazarrPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("bazarr");
   const { isReadOnly } = useRole();
   const t = useT();
   const [movieLength, setMovieLength] = useState(PAGE_SIZE);
@@ -35,6 +41,8 @@ export default function BazarrPage() {
     fetcher
   );
   const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
+
+  if (notConfigured) return <ServiceNotConfigured service="bazarr" />;
 
   return (
     <div>

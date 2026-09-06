@@ -52,7 +52,8 @@
       "library": "Bibliothek",
       "content": "Inhalte",
       "manage": "Verwaltung"
-    }
+    },
+    "tmdb": "TMDB"
   },
   "common": {
     "loading": "Laden...",
@@ -1476,5 +1477,9 @@
       "airsOn": "am {date}"
     },
     "reload": "Seite neu laden"
+  },
+  "services": {
+    "notConfigured": "{name} ist nicht konfiguriert.",
+    "notConfiguredHint": "Diese Seite braucht einen Dienst, der auf dieser Installation nicht angebunden ist. Trage diese Variablen in deine .env-Datei ein und starte den Container neu."
   }
 }

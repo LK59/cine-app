@@ -52,7 +52,8 @@
       "library": "Biblioteca",
       "content": "Contenido",
       "manage": "Gestión"
-    }
+    },
+    "tmdb": "TMDB"
   },
   "common": {
     "loading": "Cargando...",
@@ -1476,5 +1477,9 @@
       "airsOn": "el {date}"
     },
     "reload": "Recargar la página"
+  },
+  "services": {
+    "notConfigured": "{name} no está configurado.",
+    "notConfiguredHint": "Esta página necesita un servicio que no está conectado en esta instalación. Añade estas variables a tu archivo .env y reinicia el contenedor."
   }
 }

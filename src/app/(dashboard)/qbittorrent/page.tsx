@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
@@ -59,6 +62,9 @@ function sortTorrents(torrents: QbTorrent[]): QbTorrent[] {
 }
 
 export default function QbittorrentPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("qbittorrent");
   const toast = useToast();
   const { mutate } = useSWRConfig();
   const { isReadOnly } = useRole();
@@ -91,7 +97,7 @@ export default function QbittorrentPage() {
 
   const filteredTorrents = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (torrents ?? []).filter((t) => {
+  return (torrents ?? []).filter((t) => {
       if (q && !t.name.toLowerCase().includes(q)) return false;
       if (!matchesStatus(t.state, statusFilter)) return false;
       if (categoryFilter !== "all" && t.category !== categoryFilter) return false;
@@ -169,6 +175,8 @@ export default function QbittorrentPage() {
     await run(apiAction(`/api/qbittorrent/torrents/${hash}?deleteFiles=${deleteFiles}`, { method: "DELETE" }));
     setSelectedHash(null);
   }
+
+  if (notConfigured) return <ServiceNotConfigured service="qbittorrent" />;
 
   return (
     <div>

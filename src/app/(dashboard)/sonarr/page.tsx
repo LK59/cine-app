@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalState } from "@/hooks/useLocalState";
 import Link from "next/link";
@@ -46,6 +49,9 @@ function ratingKey(show: { tmdbId?: number | null; tvdbId?: number | null }): st
 }
 
 export default function SonarrPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("sonarr");
   const { mutate } = useSWRConfig();
   const { isReadOnly } = useRole();
   const toast = useToast();
@@ -123,7 +129,7 @@ export default function SonarrPage() {
       if (sort === "title") return a.title.localeCompare(b.title);
       if (sort === "year") return (b.year ?? 0) - (a.year ?? 0);
       if (sort === "episodes") {
-        return (b.statistics?.episodeFileCount ?? 0) - (a.statistics?.episodeFileCount ?? 0);
+      return (b.statistics?.episodeFileCount ?? 0) - (a.statistics?.episodeFileCount ?? 0);
       }
       if (sort === "rating") {
         const ra = Number(ratingsMap?.[ratingKey(a)] ?? 0);
@@ -155,6 +161,8 @@ export default function SonarrPage() {
     return () => obs.disconnect();
   }, []);
   const visible = filtered.slice(0, visibleCount);
+
+  if (notConfigured) return <ServiceNotConfigured service="sonarr" />;
 
   return (
     <div>

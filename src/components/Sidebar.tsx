@@ -7,12 +7,14 @@ import { NAV_GROUPS } from "@/components/navItems";
 import { useRole } from "@/lib/useRole";
 import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
 import { enterCinema } from "@/lib/leaveCinema";
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
+  const { isConfigured } = useConfiguredServices();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -84,8 +86,13 @@ export function Sidebar() {
             {t(group.titleKey)}
           </p>
           <div className="space-y-0.5">
-          {group.items.map(({ href, navKey, icon: Icon }) => {
+          {group.items.map(({ href, navKey, icon: Icon, service }) => {
             const active = pathname === href;
+            // Une page dont le service n'est pas branché reste accessible — elle explique alors
+            // quoi poser dans `.env` — mais elle cesse de se présenter comme une destination
+            // ordinaire. L'estomper vaut mieux que la retirer : quelqu'un qui la cherche doit
+            // pouvoir la trouver et lire pourquoi elle est vide.
+            const off = !!service && !isConfigured(service);
             return (
               <Link
                 key={href}
@@ -97,11 +104,12 @@ export function Sidebar() {
                    principal, la puce sélectionnée et l'icône de chaque section : une couleur qui
                    veut dire six choses n'en dit plus aucune. Ici deux de ces pavés se touchaient
                    et se disputaient l'œil. */
+                title={off ? t("services.notConfigured", { name: t(navKey) }) : undefined}
                 className={`relative flex items-center gap-3 rounded-lg py-1.5 pl-4 pr-3 text-sm font-medium transition-colors ${
                   active
                     ? "text-white before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent-500"
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
-                }`}
+                } ${off ? "opacity-40" : ""}`}
               >
                 <Icon size={18} className="shrink-0" />
                 <span className="truncate">{t(navKey)}</span>

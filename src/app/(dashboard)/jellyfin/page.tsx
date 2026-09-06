@@ -1,5 +1,8 @@
 "use client";
 
+import { ServiceNotConfigured } from "@/components/ServiceNotConfigured";
+import { useConfiguredServices } from "@/lib/useConfiguredServices";
+
 import { useState } from "react";
 import { PlayButton } from "@/components/PlayButton";
 import useSWR, { useSWRConfig } from "swr";
@@ -55,6 +58,9 @@ interface PlaybackData {
 }
 
 export default function JellyfinPage() {
+  // Un service absent est une configuration, pas une panne : la page le dit et donne la
+  // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
+  const notConfigured = !useConfiguredServices().isConfigured("jellyfin");
   const { isReadOnly, jfId, jfUser } = useRole();
   const toast = useToast();
   const t = useT();
@@ -95,6 +101,8 @@ export default function JellyfinPage() {
       setRefreshing(false);
     }
   }
+
+  if (notConfigured) return <ServiceNotConfigured service="jellyfin" />;
 
   return (
     <div>
