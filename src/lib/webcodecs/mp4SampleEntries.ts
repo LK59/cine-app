@@ -94,14 +94,25 @@ export function videoSampleEntry(codecId: string, codecPrivate: Uint8Array, widt
 
 // ── Audio ────────────────────────────────────────────────────────────────────
 
-function audioSampleEntry(type: string, channels: number, sampleRate: number, configuration: Uint8Array): Uint8Array {
+/**
+ * @param sampleSize Bits per sample to declare. Sixteen is the conventional value and every codec
+ *   here is content with it — except FLAC, whose mapping requires this field to *equal* the depth
+ *   in its own STREAMINFO, and whose readers check. See {@link flacBitsPerSample}.
+ */
+function audioSampleEntry(
+  type: string,
+  channels: number,
+  sampleRate: number,
+  configuration: Uint8Array,
+  sampleSize = 16
+): Uint8Array {
   return box(
     type,
     zeros(6), // reserved
     u16(1), // data reference index
     u32(0), u32(0), // reserved
     u16(channels),
-    u16(16), // sample size, fixed at 16 in this field regardless of the real depth
+    u16(sampleSize),
     u16(0), u16(0), // pre-defined, reserved
     // 16.16 fixed point, and it cannot express rates above 65535 — those are carried by the
     // codec's own configuration instead, which is where a player reads them from anyway.
@@ -388,7 +399,7 @@ export function opusSampleEntry(opusHead: Uint8Array, channels: number, sampleRa
  * Returns null when the bytes are not a FLAC header, rather than producing a box describing
  * nothing.
  */
-export function dfLa(codecPrivate: Uint8Array): Uint8Array | null {
+function flacBlocks(codecPrivate: Uint8Array): Uint8Array | null {
   const hasMagic =
     codecPrivate.length > 8 &&
     codecPrivate[0] === 0x66 && codecPrivate[1] === 0x4c && codecPrivate[2] === 0x61 && codecPrivate[3] === 0x43;
@@ -396,7 +407,33 @@ export function dfLa(codecPrivate: Uint8Array): Uint8Array | null {
   // The first block must be STREAMINFO — type 0 in the low seven bits of its header byte — and
   // it is thirty-four bytes long, so anything shorter cannot describe a stream.
   if (blocks.length < 38 || (blocks[0] & 0x7f) !== 0) return null;
-  return box("dfLa", u32(0), blocks); // version and flags, then the blocks
+  return blocks;
+}
+
+export function dfLa(codecPrivate: Uint8Array): Uint8Array | null {
+  const blocks = flacBlocks(codecPrivate);
+  return blocks ? box("dfLa", u32(0), blocks) : null; // version and flags, then the blocks
+}
+
+/**
+ * The depth STREAMINFO declares, which the sample entry beside it has to repeat.
+ *
+ * Chrome refuses the whole append otherwise, in as many words: « FLAC AudioSampleEntry sample size
+ * mismatches FLACSpecificBox STREAMINFO sample size ». The field was written as a fixed sixteen —
+ * correct for every other codec here, where nothing reads it — so a twenty-four-bit FLAC track
+ * killed the MediaSource on the first init segment, before a single frame. Safari does not check,
+ * which is why the same file played on an iPhone and not on an Android.
+ *
+ * STREAMINFO is a bit field, not a byte one. Sixteen bits of minimum block size, sixteen of
+ * maximum, twenty-four of minimum frame size, twenty-four of maximum, twenty of sample rate, three
+ * of channel count — one hundred and three bits before the five that matter, so they straddle the
+ * boundary between the thirteenth and fourteenth bytes. Stored one less than the real value.
+ */
+export function flacBitsPerSample(codecPrivate: Uint8Array): number | null {
+  const blocks = flacBlocks(codecPrivate);
+  if (!blocks) return null;
+  const info = blocks.subarray(4); // past this block's own four-byte header
+  return (((info[12] & 0x01) << 4) | (info[13] >> 4)) + 1;
 }
 
 export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
@@ -409,7 +446,9 @@ export function audioSampleEntryFor(input: AudioEntryInput): Uint8Array {
       if (!codecPrivate) throw new Error("Piste FLAC sans configuration de décodeur.");
       const configuration = dfLa(codecPrivate);
       if (!configuration) throw new Error("Configuration FLAC illisible.");
-      return audioSampleEntry("fLaC", channels, sampleRate, configuration);
+      // La profondeur vient du fichier, jamais d'une valeur par défaut : c'est la seule des deux
+      // que le lecteur compare à l'autre.
+      return audioSampleEntry("fLaC", channels, sampleRate, configuration, flacBitsPerSample(codecPrivate) ?? 16);
     }
     case "A_AC3":
       if (!firstFrame) throw new Error("Piste AC-3 sans trame à analyser.");
