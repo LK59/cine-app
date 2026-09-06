@@ -21,6 +21,8 @@ import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
+import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
+import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
@@ -240,8 +242,31 @@ export function ExperimentalPlayerHost({
     setWarning(text ? { text, at: Date.now() } : null);
   }, []);
   const [closing, setClosing] = useState(false);
+  /**
+   * L'arrivée du lecteur.
+   *
+   * Il apparaissait d'un coup, en plein écran et en noir, alors qu'il s'en va en fondu. Une
+   * entrée qui monte légèrement depuis l'affiche qu'on vient de quitter fait le lien entre les
+   * deux écrans, au lieu de les faire se remplacer.
+   *
+   * Posé à la frame suivante et non au montage : appliquer l'état d'arrivée et l'état d'entrée
+   * dans le même rendu ne laisse rien à animer au navigateur.
+   */
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setRevealed(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const [facade, setFacade] = useState<MediaElementFacade | null>(null);
   const [playing, setPlaying] = useState(false);
+  /**
+   * Le film est allé jusqu'au bout.
+   *
+   * Une série enchaîne toute seule ; un film s'arrêtait sur sa dernière image, et il ne restait
+   * qu'une croix. Remis à faux dès que la lecture repart — rejouer, ou reculer de quelques
+   * secondes, doit rendre l'écran de fin caduc.
+   */
+  const [ended, setEnded] = useState(false);
   const [subtitle, setSubtitle] = useState<string | null>(null);
   // Mirrored into state from the engine so the controls' menus can be driven by props, the way
   // they already are for the stable player.
@@ -674,18 +699,23 @@ export function ExperimentalPlayerHost({
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
       const onPlay = () => {
         setPlaying(true);
+        setEnded(false);
         showWarning(null);
       };
       const onPause = () => setPlaying(false);
+      const onEnded = () => {
+        setPlaying(false);
+        setEnded(true);
+      };
       element.addEventListener("timeupdate", onTime);
       element.addEventListener("play", onPlay);
       element.addEventListener("pause", onPause);
-      element.addEventListener("ended", onPause);
+      element.addEventListener("ended", onEnded);
       unsubscribes.push(() => {
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);
-        element.removeEventListener("ended", onPause);
+        element.removeEventListener("ended", onEnded);
       });
 
       await element.play().catch(() => {});
@@ -718,9 +748,14 @@ export function ExperimentalPlayerHost({
       };
       const onPlay = () => {
         setPlaying(true);
+        setEnded(false);
         showWarning(null);
       };
       const onPause = () => setPlaying(false);
+      const onEnded = () => {
+        setPlaying(false);
+        setEnded(true);
+      };
       // The element's own verdict, which is the only one there is on this path.
       const onFailure = () => {
         const failure = element.error;
@@ -736,14 +771,14 @@ export function ExperimentalPlayerHost({
       element.addEventListener("timeupdate", onTime);
       element.addEventListener("play", onPlay);
       element.addEventListener("pause", onPause);
-      element.addEventListener("ended", onPause);
+      element.addEventListener("ended", onEnded);
       element.addEventListener("error", onFailure);
       element.addEventListener("loadedmetadata", onMetadata, { once: true });
       unsubscribes.push(() => {
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);
-        element.removeEventListener("ended", onPause);
+        element.removeEventListener("ended", onEnded);
         element.removeEventListener("error", onFailure);
         element.removeEventListener("loadedmetadata", onMetadata);
         element.removeAttribute("src");
@@ -815,7 +850,10 @@ export function ExperimentalPlayerHost({
           setPlaying(true);
         }),
         engine.on("pause", () => setPlaying(false)),
-        engine.on("ended", () => setPlaying(false)),
+        engine.on("ended", () => {
+          setPlaying(false);
+          setEnded(true);
+        }),
         engine.on("subtitle", (payload) => {
           // Silenced while a file beside the film is showing, which the engine knows nothing of.
           if (externalSubtitleRef.current) return;
@@ -1070,8 +1108,13 @@ export function ExperimentalPlayerHost({
         borderRadius: 0,
         zIndex: 80,
         background: "black",
-        transition: resizing ? "opacity 200ms ease-out" : `${TRANSITION}, opacity 200ms ease-out`,
-        opacity: closing ? 0 : 1,
+        transition: resizing
+          ? "opacity 220ms ease-out, transform 220ms cubic-bezier(0.32, 0.72, 0, 1)"
+          : `${TRANSITION}, opacity 220ms ease-out, transform 220ms cubic-bezier(0.32, 0.72, 0, 1)`,
+        opacity: revealed && !closing ? 1 : 0,
+        // Une échelle très légère : assez pour que l'œil suive le passage d'un écran à l'autre,
+        // pas assez pour que ça ressemble à un effet.
+        transform: revealed && !closing ? "scale(1)" : "scale(0.985)",
       };
 
   return createPortal(
@@ -1161,6 +1204,28 @@ export function ExperimentalPlayerHost({
             </button>
           </div>
         </div>
+      )}
+
+      {/* La fin d'un film. Jamais celle d'un épisode : une série a son propre enchaînement, et
+          deux propositions au même moment se disputeraient l'écran. */}
+      {ended && !nextEpisode && !isMini && !error && (
+        <PlayerEndScreen
+          itemId={itemId}
+          title={info?.title ?? openedAs}
+          onReplay={() => {
+            const element = videoElRef.current;
+            if (element) {
+              element.currentTime = 0;
+              void element.play().catch(() => {});
+            }
+            setEnded(false);
+          }}
+          onClose={handleClose}
+          onOpenTitle={(movie) => {
+            handleClose();
+            openLibraryTitle("movie", movie.radarrId);
+          }}
+        />
       )}
 
       {error && !networkLost && !isMini && (

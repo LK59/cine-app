@@ -1422,7 +1422,12 @@
     },
     "stillThere": "Are you still watching?",
     "stillThereHint": "Three episodes have played back to back untouched. Playback resumes whenever you like.",
-    "stillThereContinue": "Continue"
+    "stillThereContinue": "Continue",
+    "end": {
+      "finished": "Finished",
+      "replay": "Watch again",
+      "done": "Done"
+    }
   },
   "cinema": {
     "standardMode": "Standard mode",

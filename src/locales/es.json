@@ -1422,7 +1422,12 @@
     },
     "stillThere": "¿Sigues ahí?",
     "stillThereHint": "Tres episodios se han encadenado sin tocar nada. La reproducción sigue cuando quieras.",
-    "stillThereContinue": "Continuar"
+    "stillThereContinue": "Continuar",
+    "end": {
+      "finished": "Terminado",
+      "replay": "Volver a ver",
+      "done": "Volver"
+    }
   },
   "cinema": {
     "standardMode": "Modo estándar",

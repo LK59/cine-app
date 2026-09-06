@@ -1422,7 +1422,12 @@
     },
     "stillThere": "Schaust du noch?",
     "stillThereHint": "Drei Folgen liefen ohne eine Berührung hintereinander. Die Wiedergabe geht weiter, wann du willst.",
-    "stillThereContinue": "Weiter"
+    "stillThereContinue": "Weiter",
+    "end": {
+      "finished": "Beendet",
+      "replay": "Noch einmal",
+      "done": "Zurück"
+    }
   },
   "cinema": {
     "standardMode": "Standardmodus",

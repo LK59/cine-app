@@ -1422,7 +1422,12 @@
     },
     "stillThere": "Vous êtes toujours là ?",
     "stillThereHint": "Trois épisodes se sont enchaînés sans un geste. La lecture reprend quand vous voulez.",
-    "stillThereContinue": "Continuer"
+    "stillThereContinue": "Continuer",
+    "end": {
+      "finished": "Terminé",
+      "replay": "Revoir",
+      "done": "Retour"
+    }
   },
   "cinema": {
     "standardMode": "Mode standard",
