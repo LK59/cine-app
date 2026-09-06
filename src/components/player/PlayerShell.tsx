@@ -6,7 +6,7 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind } from "@/lib/cinemaRoute";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
-import { PlayerDrawer } from "./PlayerDrawer";
+import { PlayerBottomBar } from "./PlayerBottomBar";
 
 // Chaque panneau est un écran entier qu'on n'ouvre pas forcément de la soirée : les charger à la
 // demande garde le premier rendu du lecteur à ce qu'il doit être — des affiches.
@@ -18,6 +18,9 @@ const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) =
 
 /** La largeur que le rail replié occupe, réservée par le contenu. Voir globals.css. */
 const RAIL_WIDTH = "4.5rem";
+
+/** La hauteur que la barre du téléphone occupe, réservée par le bas des panneaux. */
+const BAR_SPACE = "5.5rem";
 
 /** La durée des animations de sortie — celle de `--animate-fade-out`, à la milliseconde près. */
 const EXIT_MS = 200;
@@ -62,8 +65,13 @@ export function PlayerShell() {
   useIsomorphicLayoutEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--player-rail", isMobile ? "0px" : RAIL_WIDTH);
+    // Et symétriquement en bas : la barre du téléphone flotte au-dessus du contenu, donc les
+    // panneaux doivent lui réserver la place. Nulle sur grand écran, où c'est le rail qui navigue
+    // et où rien ne flotte en bas.
+    root.style.setProperty("--player-bar-space", isMobile ? BAR_SPACE : "0px");
     return () => {
       root.style.removeProperty("--player-rail");
+      root.style.removeProperty("--player-bar-space");
     };
   }, [isMobile]);
 
@@ -110,14 +118,11 @@ export function PlayerShell() {
 
   return (
     <>
-      {isMobile ? (
-        <PlayerDrawer
-          open={route.menu}
-          onOpenChange={(open) => (open ? cinemaNavigate({ menu: true }) : cinemaClose({ menu: false }))}
-        />
-      ) : (
-        <PlayerRail />
-      )}
+      {/* Le rail sur grand écran, la barre du bas sur téléphone : la même navigation, dite dans
+          la grammaire de chaque appareil. Le tiroir et son hamburger ont disparu — deux coins du
+          haut hors de portée du pouce, et un écran entier recouvert pour poser une deuxième
+          question. */}
+      {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
           glissant. Voir useExitDelay. */}

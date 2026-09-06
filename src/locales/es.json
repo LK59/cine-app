@@ -1386,7 +1386,8 @@
         "copyFailed": "No se pudo copiar — selecciona el texto a mano."
       },
       "sessionOpened": "Abierta el {date}",
-      "sessionSeen": "vista el {date}"
+      "sessionSeen": "vista el {date}",
+      "openManage": "Abrir la gestión"
     },
     "browse": {
       "seeAll": "Ver todo",

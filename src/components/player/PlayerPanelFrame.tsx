@@ -2,9 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Menu, X } from "lucide-react";
+import { X } from "lucide-react";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
-import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
+import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
 
@@ -40,7 +40,6 @@ export function PlayerPanelFrame({
 }) {
   const t = useT();
   const route = useCinemaRoute();
-  const isMobile = useIsMobile();
   const short = useIsShortViewport();
   const bodyRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -110,23 +109,6 @@ export function PlayerPanelFrame({
         // marge en mangeaient le quart avant la première affiche.
         style={{ paddingTop: `calc(${short ? "0.75rem" : "1.5rem"} + env(safe-area-inset-top))` }}
       >
-        {/* Le même bouton qu'à l'accueil, à la même place.
-            Sur téléphone, l'accueil se navigue par le menu en haut à gauche et ces écrans ne se
-            fermaient que par une croix en haut à droite : deux façons d'aller ailleurs selon
-            l'écran où l'on se trouvait. Le menu est ici aussi ; la croix reste, parce que fermer
-            en un geste vaut mieux que passer par « Accueil ». Sur grand écran, le rail est
-            toujours là, donc le bouton n'a pas lieu d'être. */}
-        {isMobile && (
-          <button
-            type="button"
-            onClick={() => cinemaNavigate({ menu: true })}
-            aria-label={t("player.nav.label")}
-            className="-ml-1 mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-300 transition-colors active:bg-white/10"
-          >
-            <Menu size={20} />
-          </button>
-        )}
-
         <div className="min-w-0 flex-1">
           <h1
             ref={headingRef}
@@ -137,11 +119,7 @@ export function PlayerPanelFrame({
           </h1>
           {subtitle && !short && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}
         </div>
-        {/* Effacé tant que le tiroir est ouvert. Le voile du tiroir assombrit l'écran sans le
-            masquer : la croix de ce panneau restait lisible à côté de celle du tiroir, deux croix
-            à l'écran sans rien pour dire laquelle ferme quoi. `invisible` plutôt qu'un retrait,
-            pour que le titre ne se déplace pas quand le tiroir se referme. */}
-        <div className={`flex shrink-0 items-center gap-1 sm:gap-2 ${route.menu ? "invisible" : ""}`}>
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {actions}
           <button
             type="button"
@@ -161,6 +139,9 @@ export function PlayerPanelFrame({
       <div
         ref={bodyRef}
         className="scrollbar-thin flex-1 animate-fade-in-up overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
+        // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
+        // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))" }}
       >
         {children}
       </div>

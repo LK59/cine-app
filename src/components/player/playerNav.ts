@@ -59,12 +59,6 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     discover: null,
     person: null,
     browse: null,
-    // Le tiroir du téléphone se referme dans le *même* mouvement.
-    //
-    // Il se fermait juste avant, par un `cinemaClose` séparé — donc un `history.back()`, qui est
-    // asynchrone : la navigation suivante était empilée avant que le retour ait eu lieu, et le
-    // retour l'annulait ensuite. On choisissait « Ma liste » et on retombait sur la grille.
-    menu: false,
   } satisfies Partial<CinemaRoute>;
 
   if (panel === "home") {
@@ -91,11 +85,8 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     current.browse !== null;
   if (activePanel(current) === panel && !covered) return;
 
-  // Depuis le tiroir du téléphone, on remplace au lieu d'empiler : le tiroir est une étape vers
-  // un écran, pas un écran en soi. Sans ça, un retour depuis « Ma liste » rouvrait le tiroir, et
-  // il fallait appuyer deux fois pour revenir à l'accueil.
-  cinemaNavigate(
-    { ...closed, ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }) },
-    current.menu ? "replace" : "push"
-  );
+  cinemaNavigate({
+    ...closed,
+    ...(panel === "search" ? { search: true } : panel === "list" ? { list: true } : { account: true }),
+  });
 }

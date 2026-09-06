@@ -44,14 +44,6 @@ export interface CinemaRoute {
    * qu'une grille de genre se partage et se retrouve.
    */
   browse: string | null;
-  /**
-   * Le tiroir de navigation, sur téléphone.
-   *
-   * Dans l'URL, contrairement au rail du bureau qui n'est qu'un survol : sur Android, le geste de
-   * retour doit refermer le tiroir plutôt que quitter l'écran, et c'est l'historique qui le
-   * permet — gratuitement, puisque tout le reste passe déjà par là.
-   */
-  menu: boolean;
 }
 
 const EMPTY: CinemaRoute = {
@@ -66,7 +58,6 @@ const EMPTY: CinemaRoute = {
   discoverType: "movie",
   person: null,
   browse: null,
-  menu: false,
 };
 
 // How many entries this session has pushed. Kept in history.state so a close can tell "I opened
@@ -124,7 +115,6 @@ function parse(hash: string): CinemaRoute {
     discoverType: params.get("type") === "series" ? "series" : "movie",
     person: readNumber(params, "personne"),
     browse: params.get("parcourir"),
-    menu: params.get("menu") === "1",
   };
 }
 
@@ -143,7 +133,6 @@ function serialize(route: CinemaRoute): string {
   }
   if (route.person) params.set("personne", String(route.person));
   if (route.browse) params.set("parcourir", route.browse);
-  if (route.menu) params.set("menu", "1");
   const query = params.toString();
   return query ? `#${query}` : "";
 }

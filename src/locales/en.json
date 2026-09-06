@@ -1386,7 +1386,8 @@
         "copyFailed": "Could not copy — select the text by hand."
       },
       "sessionOpened": "Opened {date}",
-      "sessionSeen": "seen {date}"
+      "sessionSeen": "seen {date}",
+      "openManage": "Open management"
     },
     "browse": {
       "seeAll": "See all",

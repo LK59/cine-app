@@ -541,6 +541,19 @@
    Le fond translucide et le liseré intérieur suffisent : ces boutons reposent déjà sur le
    dégradé sombre du haut, qui fait le travail que le flou faisait. Les panneaux, eux, le gardent
    — ils sont deux, rares, et couvrent une zone qui ne bouge pas. */
+/* La barre de navigation du téléphone.
+
+   Un fond franc plutôt qu'un flou : le contenu défile juste en dessous, et un calque flouté
+   au-dessus d'un défilement est la façon la plus fiable de faire hoqueter iOS — c'est déjà la
+   raison pour laquelle l'en-tête de l'écran mobile n'en a pas. L'ombre portée fait le décollement
+   que le flou aurait fait, pour rien. */
+@utility player-bar {
+  background: rgb(12 12 15 / 0.94);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.12),
+    0 14px 34px rgb(0 0 0 / 0.55);
+}
+
 .player-glass {
   background: rgb(0 0 0 / 0.48);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);

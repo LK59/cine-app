@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -40,7 +40,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
   const t = useT();
   const router = useRouter();
-  const { data: me } = useSWR<{ username: string; jfUser: string | null }>("/api/auth/me", fetcher);
+  const { data: me } = useSWR<{ username: string; jfUser: string | null; role: string }>("/api/auth/me", fetcher);
   // La connexion locale (celle de l'administrateur) n'a pas de compte Jellyfin derrière elle :
   // ni préférences de lecture, ni mot de passe à changer de ce côté. Le dire une fois vaut mieux
   // que trois listes déroulantes grisées sans explication.
@@ -80,6 +80,19 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
         )}
         <SessionsSection />
         <KnownIssuesSection />
+
+        {/* « Gestion » vivait tout en bas du tiroir, qui n'existe plus. Elle atterrit ici, et
+            seulement pour l'administrateur : rien n'est bloqué au-delà de l'affichage — le proxy
+            refuse déjà toute écriture à un compte ordinaire — mais proposer une porte qui ne
+            s'ouvre pas est une promesse qu'on ne tient pas. */}
+        {me?.role === "admin" && (
+          <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
+            <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
+              <SlidersHorizontal size={16} />
+              {t("player.account.openManage")}
+            </a>
+          </Section>
+        )}
 
         <Section icon={LogOut} title={t("player.account.signOut")}>
           <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-red-400 sm:w-auto">

@@ -16,7 +16,6 @@ const EMPTY: CinemaRoute = {
   discoverType: "movie",
   person: null,
   browse: null,
-  menu: false,
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -47,17 +46,13 @@ describe("openPanel", () => {
     expect(patch).toMatchObject({ film: null, serie: null, episodes: false, person: null, discover: null });
   });
 
-  // Le tiroir du téléphone se referme dans la même écriture. Le fermer séparément voulait dire un
-  // `history.back()` asynchrone, empilé sous la navigation suivante puis l'annulant : on
-  // choisissait « Ma liste » et on retombait sur la grille.
-  it("closes the phone drawer in the same history write, and replaces its entry", async () => {
+  // La barre du bas remplace le tiroir : on ouvre un panneau depuis l'écran lui-même, sans étape
+  // intermédiaire à refermer. Chaque choix empile donc une entrée, et une seule.
+  it("opens a panel in one history entry", async () => {
     const { openPanel } = await import("@/components/player/playerNav");
-    openPanel("list", { ...EMPTY, menu: true });
+    openPanel("list", { ...EMPTY });
     expect(mockNavigate).toHaveBeenCalledTimes(1);
-    expect(mockNavigate.mock.calls[0][0]).toMatchObject({ menu: false, list: true });
-    // Le tiroir est une étape vers un écran, pas un écran : l'empiler obligeait à deux retours
-    // pour revenir à l'accueil, le premier ne faisant que rouvrir le tiroir.
-    expect(mockNavigate.mock.calls[0][1]).toBe("replace");
+    expect(mockNavigate.mock.calls[0][0]).toMatchObject({ list: true, search: false, account: false });
   });
 
   it("does nothing when the panel asked for is already the open one", async () => {

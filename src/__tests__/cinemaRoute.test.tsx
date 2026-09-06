@@ -27,7 +27,6 @@ describe("cinemaRoute", () => {
       discoverType: "movie",
       person: null,
       browse: null,
-      menu: false,
     });
 
     act(() => cinemaNavigate({ film: 603 }));
@@ -90,7 +89,6 @@ describe("cinemaRoute", () => {
       discoverType: "movie",
       person: null,
       browse: null,
-      menu: false,
     });
   });
 

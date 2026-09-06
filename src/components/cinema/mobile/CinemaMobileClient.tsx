@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Info, Menu, Play, Plus, Search } from "lucide-react";
+import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -278,23 +278,22 @@ export function CinemaMobileClient() {
           content scrolls under is one of the most reliable ways to make scrolling stutter on
           iOS, and a solid bar reads the same here. */}
       <header
-        className={`flex shrink-0 items-center gap-3 bg-ink px-4 ${short ? "pb-2" : "pb-3"}`}
+        className={`grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 bg-ink px-4 ${short ? "pb-2" : "pb-3"}`}
         // Couché, l'écran fait ~390 px de haut : la barre en prenait un sixième avant la
         // première affiche.
         style={{ paddingTop: `calc(env(safe-area-inset-top, 0px) + ${short ? "0.6rem" : "1.25rem"})` }}
       >
-        {/* Le menu remplace la flèche de sortie : un seul bouton dans ce coin, qui mène à tout —
-            l'accueil, la recherche, les listes, le compte, et la gestion tout en bas. La sortie
-            n'a pas disparu, elle a juste cessé d'être la seule chose qu'on pouvait faire d'ici. */}
-        <button
-          type="button"
-          onClick={() => cinemaNavigate({ menu: true })}
-          aria-label={t("player.nav.label")}
-          className="btn btn-ghost btn-icon h-9 w-9 shrink-0"
-        >
-          <Menu size={18} />
-        </button>
-        <div className="flex gap-2">
+        {/* Le coin qui portait le hamburger porte maintenant le nom. La navigation est passée en
+            bas, à portée de pouce ; ce qui reste ici n'a plus à être un bouton, et une marque
+            discrète vaut mieux qu'un coin vide. */}
+        <span className="flex min-w-0 items-center gap-1.5 text-white/90">
+          <Clapperboard size={16} className="shrink-0 text-accent-400" />
+          <span className="truncate font-display text-sm font-semibold tracking-tight">Ciné App</span>
+        </span>
+
+        {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
+            la seule chose qu'on change souvent depuis cette barre. */}
+        <div className="flex justify-center gap-2">
           {(["movies", "series"] as const).map((type) => (
             <button
               key={type}
@@ -324,7 +323,13 @@ export function CinemaMobileClient() {
           trouve aussi les personnes et les titres qu'on n'a pas encore. `searchOpen` reste lu
           ci-dessous pour mettre la bande-annonce en pause pendant qu'elle est ouverte. */}
 
-      <div className="flex-1 overflow-y-auto overscroll-contain pb-12">
+      {/* La barre du bas flotte par-dessus : sans cette réserve, la dernière rangée finissait
+          dessous. Le retrait de la zone sûre s'y ajoute, l'indicateur d'accueil en mangeant déjà
+          une partie. */}
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain"
+        style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "4.5rem" : "6rem"})` }}
+      >
         {loading && (
           <div className="px-4 pt-2">
             <div className="skeleton aspect-2/3 w-full rounded-2xl" />
@@ -373,7 +378,7 @@ export function CinemaMobileClient() {
               // fiche : laisser une bande-annonce tourner derrière consomme des données mobiles
               // pour une image que personne ne voit.
               paused={
-                mediaType !== tab || selected !== null || searchOpen || route.list || route.account || route.menu
+                mediaType !== tab || selected !== null || searchOpen || route.list || route.account
               }
               short={short}
               onPlay={playHero}
