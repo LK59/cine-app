@@ -4,6 +4,7 @@ import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PosterImage } from "@/components/PosterImage";
+import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { useT } from "@/components/TranslationProvider";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 
@@ -17,6 +18,12 @@ interface CollectionPart {
   posterPath: string | null;
   inLibrary: boolean;
   libraryHref: string | null;
+}
+
+/** Le même épisode de saga, une fois confronté à ce que cet écran sait réellement ouvrir. */
+interface ResolvedPart extends CollectionPart {
+  /** L'identifiant de la fiche cinéma, ou null si ce titre n'y est pas ouvrable. */
+  libraryId: number | null;
 }
 
 interface CollectionPayload {
@@ -56,7 +63,7 @@ interface MovieInfo {
  * *avant* de dessiner s'il y aura quelque chose, faute de quoi elle réserve un écran entier de
  * défilement à une rangée vide.
  */
-export function useCinemaCollection(radarrId: number): { name: string; parts: CollectionPart[] } {
+export function useCinemaCollection(radarrId: number): { name: string; parts: ResolvedPart[] } {
   // La même clé que la fiche interroge déjà pour la bande-annonce : la réponse est en cache, et
   // cette rangée ne coûte donc pas une requête de plus.
   const { data: info } = useSWR<MovieInfo>(`/api/radarr/movies/${radarrId}/info`, fetcher, {
@@ -77,16 +84,45 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Co
   );
 
   /**
+   * Ce que cet écran sait réellement ouvrir.
+   *
+   * La route des collections répond « on l'a » d'après *tout* Radarr. L'écran cinéma, lui, ne
+   * connaît que ce qui a un fichier et une correspondance Jellyfin — six cent soixante-quinze
+   * titres sur six cent quatre-vingt-dix. Un épisode de saga présent dans Radarr mais absent
+   * d'ici s'ouvrait donc sur une fiche que rien ne pouvait résoudre : l'écran restait vide, et la
+   * fiche du dessous était démontée avec lui. C'est ce qu'on prenait pour une animation ratée.
+   *
+   * L'appartenance se décide donc contre le catalogue de cet écran, lu dans le cache comme
+   * partout ailleurs. Ce qui n'y est pas ouvre sa fiche TMDB, où « Lire » est devenu « Demander ».
+   */
+  const { data: catalogue } = useSWR<CinemaMoviesPayload>("/api/cinema/movies", fetcher, {
+    revalidateOnMount: false,
+    revalidateIfStale: false,
+    revalidateOnFocus: false,
+  });
+
+  const openableById = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!catalogue) return map;
+    for (const movie of [...catalogue.spotlight, ...Object.values(catalogue.rows).flat()]) {
+      if (movie.tmdbId) map.set(movie.tmdbId, movie.radarrId);
+    }
+    return map;
+  }, [catalogue]);
+
+  /**
    * La liste, calculée une fois par réponse.
    *
-   * Sans ce `useMemo`, `filter` rendait un tableau neuf à *chaque* rendu de la fiche — et une
-   * fiche de téléphone se redessine à chaque pixel du geste de fermeture, puisque le glissement
-   * vit dans son état. La rangée mémoïsée ci-dessous n'aurait alors jamais rien mémoïsé : elle
-   * redessinait ses affiches pendant toute l'animation, ce qui est exactement ce qu'on voyait.
+   * Sans ce `useMemo`, elle rendait un tableau neuf à *chaque* rendu de la fiche — et une fiche de
+   * téléphone se redessine à chaque pixel du geste de fermeture, puisque le glissement vit dans
+   * son état. La rangée mémoïsée ci-dessous n'aurait alors jamais rien mémoïsé.
    */
   const parts = useMemo(
-    () => (data?.parts ?? []).filter((part) => part.libraryHref !== `/radarr/${radarrId}`),
-    [data, radarrId]
+    () =>
+      (data?.parts ?? [])
+        .map((part): ResolvedPart => ({ ...part, libraryId: openableById.get(part.tmdbId) ?? null }))
+        .filter((part) => part.libraryId !== radarrId),
+    [data, openableById, radarrId]
   );
 
   return { name: data?.name ?? "", parts };
@@ -105,17 +141,16 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
   onOpenLibrary,
 }: {
   name: string;
-  parts: CollectionPart[];
+  parts: ResolvedPart[];
   onOpenLibrary?: () => void;
 }) {
   const t = useT();
   if (parts.length === 0) return null;
 
-  function open(part: CollectionPart) {
-    const owned = part.libraryHref?.match(/^\/radarr\/(\d+)$/);
-    if (owned) {
+  function open(part: ResolvedPart) {
+    if (part.libraryId !== null) {
       onOpenLibrary?.();
-      openLibraryTitle("movie", Number(owned[1]));
+      openLibraryTitle("movie", part.libraryId);
       return;
     }
     cinemaNavigate({ discover: part.tmdbId, discoverType: "movie" });
@@ -136,7 +171,7 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
             <PosterImage src={part.posterPath ? `${TMDB_POSTER}${part.posterPath}` : null} alt={part.title} subtle unoptimized sizes="120px" />
             {/* Le même signe discret que partout ailleurs pour « on ne l'a pas » — voir la grille
                 de Ma liste, où la pastille pleine largeur écrasait les affiches. */}
-            {!part.inLibrary && (
+            {part.libraryId === null && (
               <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40 backdrop-blur-sm">
                 {t("player.notInLibrary")}
               </span>

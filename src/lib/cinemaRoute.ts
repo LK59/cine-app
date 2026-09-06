@@ -212,6 +212,18 @@ function readSheetBehind(): boolean {
   return Boolean(readBehind());
 }
 
+/**
+ * Y a-t-il une fiche sous celle-ci, demandé au moment où on le demande.
+ *
+ * La version crochet sert au rendu ; celle-ci sert aux gestes. Un rappel qui se déclenche sur un
+ * clic doit lire l'état du clic, pas celui du rendu qui l'a créé — et surtout pas obliger le
+ * rappel à dépendre d'une valeur de rendu, ce qui redessinerait mille cartes à chaque ouverture
+ * de fiche.
+ */
+export function sheetIsBehind(): boolean {
+  return typeof window !== "undefined" && readSheetBehind();
+}
+
 // useSyncExternalStore exige une identité stable entre deux changements : l'objet lu dans
 // history.state est recréé à chaque lecture, donc on le met en cache contre son propre contenu.
 let cachedBehindKey: string | null = null;

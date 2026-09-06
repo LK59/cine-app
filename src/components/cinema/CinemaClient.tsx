@@ -7,7 +7,7 @@ import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
-import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -511,11 +511,18 @@ export function CinemaClient() {
   );
 
   const closeDetail = useCallback(() => {
+    // Le focus ne revient à la grille que si l'on y revient.
+    //
+    // Fermer une fiche ouverte par-dessus une autre découvre la précédente, pas l'accueil : y
+    // renvoyer le focus faisait défiler la grille *derrière* la fiche restée à l'écran, et le
+    // mouvement se voyait à travers. La carte mémorisée est celle qui a ouvert la *première*
+    // fiche, et elle n'a rien à voir avec celle-ci.
+    const returningToBrowse = !sheetIsBehind();
     cinemaClose({ film: null, episodes: false });
     // The card is still in the DOM (the browse screen never unmounts under the overlay) but
     // isn't focused yet the instant this runs — the overlay's own focused button is still
     // mid-unmount. One frame later it's safe to move focus back.
-    requestAnimationFrame(() => lastFocusedCard.current?.focus());
+    if (returningToBrowse) requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
   const openSeriesDetail = useCallback((item: CinemaSeries) => {
@@ -524,8 +531,10 @@ export function CinemaClient() {
   }, []);
 
   const closeSeriesDetail = useCallback(() => {
+    // Voir `closeDetail` : la grille ne récupère le focus que si c'est elle qu'on découvre.
+    const returningToBrowse = !sheetIsBehind();
     cinemaClose({ serie: null, episodes: false });
-    requestAnimationFrame(() => lastFocusedCard.current?.focus());
+    if (returningToBrowse) requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
   /**
