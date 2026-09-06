@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
-import { Search } from "lucide-react";
+import { Search, Bookmark, Inbox, Eye, CircleSlash, Heart } from "lucide-react";
+import { BROWSE_ALL } from "@/lib/cinemaBrowse";
+import { PlayerEmptyState } from "./PlayerEmptyState";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
@@ -15,6 +17,15 @@ import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/
 type Segment = "requests" | "toWatch" | "watched" | "abandoned" | "favorites";
 
 const SEGMENTS: Segment[] = ["toWatch", "requests", "watched", "abandoned", "favorites"];
+
+/** Une image par vide : un écran qui ne porte qu'une phrase grise ressemble à un chargement raté. */
+const EMPTY_ICON: Record<Segment, React.ElementType> = {
+  toWatch: Bookmark,
+  requests: Inbox,
+  watched: Eye,
+  abandoned: CircleSlash,
+  favorites: Heart,
+};
 
 /**
  * « Ma liste » — les cinq segments.
@@ -60,7 +71,9 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
 
   // Déduit au rendu, jamais corrigé dans un effet : la valeur suit l'arrivée des données sans
   // provoquer de rendu en cascade, et un choix explicite l'emporte pour toujours.
-  const segment: Segment = chosen ?? SEGMENTS.find((key) => counts[key] > 0) ?? "requests";
+  // Le repli est le premier onglet et non un nom écrit en dur : tout vide, on ouvre sur « À
+  // voir », qui est aussi celui qu'on trouve en premier quand il y a quelque chose.
+  const segment: Segment = chosen ?? SEGMENTS.find((key) => counts[key] > 0) ?? SEGMENTS[0];
 
   // Une fiche s'ouvre *par-dessus* Ma liste, sans la refermer : le retour du navigateur ramène
   // alors sur la liste, à son onglet, au lieu de sauter à l'accueil.
@@ -151,7 +164,19 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
         )}
 
         {!isLoading && counts[segment] === 0 && (
-          <p className="mt-10 text-sm text-slate-500">{t(`player.lists.empty.${segment}`)}</p>
+          <PlayerEmptyState
+            icon={EMPTY_ICON[segment]}
+            message={t(`player.lists.empty.${segment}`)}
+            action={
+              // « Abandonné » est le seul vide qu'on ne cherche pas à remplir : proposer d'y
+              // ajouter quelque chose serait une drôle d'invitation.
+              segment === "abandoned"
+                ? null
+                : segment === "requests" || segment === "toWatch"
+                  ? { label: t("player.lists.addTitle"), onClick: () => cinemaNavigate({ list: false, search: true }) }
+                  : { label: t("player.browse.seeAll"), onClick: () => cinemaNavigate({ list: false, browse: BROWSE_ALL }) }
+            }
+          />
         )}
 
         {segment === "requests" && counts.requests > 0 && (

@@ -122,6 +122,27 @@ describe("PlayerListPanel", () => {
     expect(screen.queryByLabelText("player.lists.arrivedBadge")).toBeNull();
   });
 
+  // Un écran vide qui ne porte qu'une phrase grise ressemble à un chargement raté. Il doit dire
+  // pourquoi il est vide, et par où on le remplit.
+  it("offers a way out of an empty list rather than just stating it", async () => {
+    renderWith({ ...EMPTY_LISTS });
+
+    expect(await screen.findByText("player.lists.empty.toWatch")).toBeTruthy();
+    fireEvent.click(screen.getByText("player.lists.addTitle"));
+    expect(mockNavigate).toHaveBeenCalledWith({ list: false, search: true });
+  });
+
+  // Sauf celui-là : proposer d'ajouter quelque chose à « Abandonné » serait une drôle d'invitation.
+  it("proposes nothing for the one empty list that is good news", async () => {
+    renderWith({ ...EMPTY_LISTS });
+
+    await screen.findByText("player.lists.empty.toWatch");
+    fireEvent.click(screen.getByText(/player\.lists\.abandoned/));
+    expect(screen.getByText("player.lists.empty.abandoned")).toBeTruthy();
+    expect(screen.queryByText("player.lists.addTitle")).toBeNull();
+    expect(screen.queryByText("player.browse.seeAll")).toBeNull();
+  });
+
   it("sends an arrived request to its library sheet, not to the TMDB one", async () => {
     renderWith({
       ...EMPTY_LISTS,
