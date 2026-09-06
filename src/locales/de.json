@@ -1396,7 +1396,10 @@
       },
       "sessionOpened": "Geöffnet am {date}",
       "sessionSeen": "gesehen am {date}",
-      "openManage": "Verwaltung öffnen"
+      "openManage": "Verwaltung öffnen",
+      "status": "Dienststatus",
+      "openStatus": "Dienststatus ansehen",
+      "statusHint": "Auch ohne Anmeldung lesbar — die Anlaufstelle, wenn die App nicht mehr antwortet."
     },
     "browse": {
       "seeAll": "Alle anzeigen",

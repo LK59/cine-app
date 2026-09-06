@@ -67,3 +67,13 @@ describe("les textes de l'écran de connexion", () => {
     }
   });
 });
+
+/** Le proxy et le client lisent la même liste, jamais deux copies. */
+describe("les chemins publics", () => {
+  it("ne sont déclarés qu'une fois", () => {
+    const proxy = readFileSync("src/proxy.ts", "utf8");
+    expect(proxy).toMatch(/isPublicPath\(pathname\)/);
+    expect(proxy).not.toMatch(/const PUBLIC_PATHS = \[/);
+    expect(readFileSync("src/lib/sessionExpired.ts", "utf8")).toMatch(/isPublicPath\(window\.location\.pathname\)/);
+  });
+});

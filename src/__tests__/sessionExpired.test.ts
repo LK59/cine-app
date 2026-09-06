@@ -53,3 +53,29 @@ describe("noteUnauthorized", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Une page publique ne part pas vers la connexion.
+ *
+ * La racine monte le lecteur partout, et il demande les préférences de l'utilisateur : sur une
+ * page qui n'exige pas de session, ce 401 est la réponse normale. La garde n'excusait d'abord que
+ * `/login`, et la page d'état — publique, et justement celle qu'on consulte quand on n'arrive pas
+ * à se connecter — repartait donc aussitôt vers la connexion.
+ */
+describe("les pages publiques", () => {
+  it.each(["/login", "/status", "/status/details"])("%s ne redirige pas", (pathname) => {
+    const replace2 = vi.fn();
+    Object.defineProperty(window, "location", { configurable: true, value: { pathname, search: "", replace: replace2 } });
+    resetSessionExpiredForTests();
+    noteUnauthorized({ headers: new Headers({ [SESSION_EXPIRED_HEADER]: "1" }) } as Response);
+    expect(replace2).not.toHaveBeenCalled();
+  });
+
+  it("une page privée redirige toujours", () => {
+    const replace2 = vi.fn();
+    Object.defineProperty(window, "location", { configurable: true, value: { pathname: "/gestion", search: "", replace: replace2 } });
+    resetSessionExpiredForTests();
+    noteUnauthorized({ headers: new Headers({ [SESSION_EXPIRED_HEADER]: "1" }) } as Response);
+    expect(replace2).toHaveBeenCalledOnce();
+  });
+});

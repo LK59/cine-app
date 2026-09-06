@@ -1396,7 +1396,10 @@
       },
       "sessionOpened": "Abierta el {date}",
       "sessionSeen": "vista el {date}",
-      "openManage": "Abrir la gestión"
+      "openManage": "Abrir la gestión",
+      "status": "Estado de los servicios",
+      "openStatus": "Ver el estado de los servicios",
+      "statusHint": "Se puede consultar sin iniciar sesión: es adonde ir si la aplicación deja de responder."
     },
     "browse": {
       "seeAll": "Ver todo",

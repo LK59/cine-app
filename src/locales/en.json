@@ -1396,7 +1396,10 @@
       },
       "sessionOpened": "Opened {date}",
       "sessionSeen": "seen {date}",
-      "openManage": "Open management"
+      "openManage": "Open management",
+      "status": "Service status",
+      "openStatus": "View service status",
+      "statusHint": "Readable without signing in — the place to go if the app stops responding."
     },
     "browse": {
       "seeAll": "See all",

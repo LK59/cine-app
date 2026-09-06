@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { config as appConfig } from "@/lib/config";
 import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, shouldRefresh } from "@/lib/auth";
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
+import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { sessionDb } from "@/lib/db";
 
@@ -14,16 +15,6 @@ import { sessionDb } from "@/lib/db";
 // the cookie client-side and deleted the DB row, but every route that doesn't individually call
 // verifySessionFull relied solely on this gate — so a revoked session (logged out, or
 // force-expired) stayed fully usable against most of the app for up to its full 7-day lifetime.
-
-const PUBLIC_PATHS = [
-  "/login",
-  "/status",
-  "/api/auth/login",
-  "/api/auth/jellyfin",
-  "/api/status/public",
-  "/api/config/public",
-  "/api/push/vapid-key",
-];
 
 // The slideshow page (/random, og:image preview + <img> tags) and the individual photo files it
 // hotlinks (/[filename]) both need to work for an anonymous visitor of clara.kakol.fr. The list
@@ -121,7 +112,7 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
-    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
+    isPublicPath(pathname) ||
     pathname.startsWith("/_next") ||
     isPublicClaraPhoto(pathname)
   ) {

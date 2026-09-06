@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -93,6 +93,20 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
             </a>
           </Section>
         )}
+
+        {/* L'état des services, pour tout le monde.
+            
+            La page est publique — c'est tout l'intérêt d'une page d'état : elle doit répondre le
+            jour où le reste ne répond plus, y compris avant d'être connecté. Mais il faut aussi
+            pouvoir y aller depuis l'intérieur quand on est déjà là et que quelque chose cloche,
+            sans avoir à se déconnecter pour retrouver le lien de l'écran de connexion. */}
+        <Section icon={Activity} title={t("player.account.status")}>
+          <a href="/status" className="btn btn-ghost w-full justify-center sm:w-auto">
+            <Activity size={16} />
+            {t("player.account.openStatus")}
+          </a>
+          <p className="mt-2 text-xs text-slate-500">{t("player.account.statusHint")}</p>
+        </Section>
 
         <Section icon={LogOut} title={t("player.account.signOut")}>
           <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-red-400 sm:w-auto">

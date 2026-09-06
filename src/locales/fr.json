@@ -1396,7 +1396,10 @@
       },
       "sessionOpened": "Ouverte le {date}",
       "sessionSeen": "vue le {date}",
-      "openManage": "Ouvrir la gestion"
+      "openManage": "Ouvrir la gestion",
+      "status": "État des services",
+      "openStatus": "Voir l'état des services",
+      "statusHint": "Consultable sans être connecté — c'est là qu'il faut aller si l'application ne répond plus."
     },
     "browse": {
       "seeAll": "Voir tout",

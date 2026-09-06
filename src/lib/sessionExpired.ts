@@ -1,3 +1,5 @@
+import { isPublicPath } from "@/lib/publicPaths";
+
 /**
  * L'en-tête par lequel le proxy dit « ta session n'existe plus », et rien d'autre.
  *
@@ -40,9 +42,18 @@ export function noteUnauthorized(res: Response): void {
     return;
   }
   if (flagged !== "1") return;
-  // La page de connexion appelle elle-même des routes protégées avant qu'une session existe —
-  // /api/user/preferences en est une. S'y renvoyer depuis elle serait une boucle.
-  if (window.location.pathname === "/login") return;
+  /**
+   * Une page publique n'a rien à faire de ce 401.
+   *
+   * La racine monte le lecteur partout, et il demande les préférences de l'utilisateur : sur une
+   * page qui n'exige pas de session, ce 401 est la réponse normale, pas un accident. Renvoyer
+   * vers la connexion depuis la page de connexion serait une boucle ; depuis la page d'état, ce
+   * serait pire — c'est celle qu'on va lire *parce qu'on* n'arrive pas à se connecter.
+   *
+   * La liste est celle du proxy, importée et non recopiée : deux copies d'une même règle finissent
+   * toujours par différer, et celle-ci a déjà coûté une page publique inaccessible.
+   */
+  if (isPublicPath(window.location.pathname)) return;
 
   leaving = true;
   const here = window.location.pathname + window.location.search;
