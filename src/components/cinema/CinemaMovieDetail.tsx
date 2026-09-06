@@ -453,7 +453,10 @@ export function CinemaMovieDetail({
             promenade là où on voulait une réponse. */}
         {(hasSimilar || collection.parts.length > 0) && (
           <div data-snap-section className="flex min-h-full snap-start flex-col justify-center gap-6 px-8 sm:px-16">
-            <CinemaCollectionRow name={collection.name} parts={collection.parts} />
+            {/* Le même rappel que la rangée du dessous : ouvrir un titre de la saga et ouvrir un
+                titre similaire sont le même geste, donc le même chemin — et donc, à la fermeture,
+                la même animation. */}
+            <CinemaCollectionRow name={collection.name} parts={collection.parts} onSelectOwned={onSelectSimilar} />
             {hasSimilar && <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaMovie)} />}
           </div>
         )}

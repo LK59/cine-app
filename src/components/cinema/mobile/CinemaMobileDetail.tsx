@@ -504,7 +504,11 @@ export function CinemaMobileDetail({
 
         {/* La saga d'abord, les titres similaires ensuite : « et la suite ? » est une question
             plus précise que « et quoi d'autre ? », et elle se pose plus souvent. */}
-        {mediaType === "movies" && "radarrId" in item && <CinemaMovieCollectionRow radarrId={item.radarrId} />}
+        {mediaType === "movies" && "radarrId" in item && (
+          /* `onSelectOwned` est le rappel des titres similaires, volontairement : les deux rangées
+             ouvrent une fiche de la même façon, et se referment donc de la même façon. */
+          <CinemaMovieCollectionRow radarrId={item.radarrId} onSelectOwned={onSelectSimilar} />
+        )}
         {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} />}
       </div>
 

@@ -4,7 +4,7 @@ import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PosterImage } from "@/components/PosterImage";
-import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
+import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { useT } from "@/components/TranslationProvider";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 
@@ -22,8 +22,15 @@ interface CollectionPart {
 
 /** Le même épisode de saga, une fois confronté à ce que cet écran sait réellement ouvrir. */
 interface ResolvedPart extends CollectionPart {
-  /** L'identifiant de la fiche cinéma, ou null si ce titre n'y est pas ouvrable. */
-  libraryId: number | null;
+  /**
+   * Le titre du catalogue, quand cet écran le connaît — l'objet entier, pas son identifiant.
+   *
+   * C'est ce que la rangée des titres similaires rend à la fiche, et c'est pour ça qu'on le rend
+   * ici aussi : ouvrir depuis une saga et ouvrir depuis les titres similaires doivent emprunter
+   * *le même* chemin, pas deux chemins qu'on croit équivalents. Chercher pourquoi la fermeture
+   * n'était pas la même revenait à comparer deux trajets ; il n'y en a plus qu'un.
+   */
+  movie: CinemaMovie | null;
 }
 
 interface CollectionPayload {
@@ -101,11 +108,11 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Re
     revalidateOnFocus: false,
   });
 
-  const openableById = useMemo(() => {
-    const map = new Map<number, number>();
+  const openableByTmdb = useMemo(() => {
+    const map = new Map<number, CinemaMovie>();
     if (!catalogue) return map;
     for (const movie of [...catalogue.spotlight, ...Object.values(catalogue.rows).flat()]) {
-      if (movie.tmdbId) map.set(movie.tmdbId, movie.radarrId);
+      if (movie.tmdbId) map.set(movie.tmdbId, movie);
     }
     return map;
   }, [catalogue]);
@@ -120,9 +127,9 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Re
   const parts = useMemo(
     () =>
       (data?.parts ?? [])
-        .map((part): ResolvedPart => ({ ...part, libraryId: openableById.get(part.tmdbId) ?? null }))
-        .filter((part) => part.libraryId !== radarrId),
-    [data, openableById, radarrId]
+        .map((part): ResolvedPart => ({ ...part, movie: openableByTmdb.get(part.tmdbId) ?? null }))
+        .filter((part) => part.movie?.radarrId !== radarrId),
+    [data, openableByTmdb, radarrId]
   );
 
   return { name: data?.name ?? "", parts };
@@ -138,19 +145,29 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Re
 export const CinemaCollectionRow = memo(function CinemaCollectionRow({
   name,
   parts,
-  onOpenLibrary,
+  onSelectOwned,
 }: {
   name: string;
   parts: ResolvedPart[];
-  onOpenLibrary?: () => void;
+  /**
+   * Ouvrir un titre qu'on possède.
+   *
+   * C'est la fiche qui le fait, avec le rappel qu'elle donne déjà à ses titres similaires : le
+   * geste est le même, il doit donc suivre le même chemin — jusqu'à la façon dont la fermeture
+   * retrouve son état. Sans lui, la rangée navigue elle-même, ce qui marche mais n'est pas la
+   * même chose.
+   */
+  onSelectOwned?: (movie: CinemaMovie) => void;
 }) {
   const t = useT();
   if (parts.length === 0) return null;
 
   function open(part: ResolvedPart) {
-    if (part.libraryId !== null) {
-      onOpenLibrary?.();
-      openLibraryTitle("movie", part.libraryId);
+    if (part.movie) {
+      // Le chemin de la fiche quand elle en offre un ; le nôtre sinon, pour que la rangée reste
+      // utilisable là où personne ne l'écoute.
+      if (onSelectOwned) onSelectOwned(part.movie);
+      else openLibraryTitle("movie", part.movie.radarrId);
       return;
     }
     cinemaNavigate({ discover: part.tmdbId, discoverType: "movie" });
@@ -171,7 +188,7 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
             <PosterImage src={part.posterPath ? `${TMDB_POSTER}${part.posterPath}` : null} alt={part.title} subtle unoptimized sizes="120px" />
             {/* Le même signe discret que partout ailleurs pour « on ne l'a pas » — voir la grille
                 de Ma liste, où la pastille pleine largeur écrasait les affiches. */}
-            {part.libraryId === null && (
+            {!part.movie && (
               <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40 backdrop-blur-sm">
                 {t("player.notInLibrary")}
               </span>
@@ -189,7 +206,13 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
  * La fiche du téléphone empile ses sections sans réserver d'écran à chacune : elle n'a donc pas
  * besoin de savoir d'avance s'il y aura quelque chose, et se passe du crochet séparé.
  */
-export function CinemaMovieCollectionRow({ radarrId }: { radarrId: number }) {
+export const CinemaMovieCollectionRow = memo(function CinemaMovieCollectionRow({
+  radarrId,
+  onSelectOwned,
+}: {
+  radarrId: number;
+  onSelectOwned?: (movie: CinemaMovie) => void;
+}) {
   const { name, parts } = useCinemaCollection(radarrId);
-  return <CinemaCollectionRow name={name} parts={parts} />;
-}
+  return <CinemaCollectionRow name={name} parts={parts} onSelectOwned={onSelectOwned} />;
+});
