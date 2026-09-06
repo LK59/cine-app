@@ -480,6 +480,14 @@
       "downloads": "Descargas",
       "library": "Biblioteca",
       "other": "Otro"
+    },
+    "latencyHistory": {
+      "sectionTitle": "Tendencia de 7 días",
+      "sectionSubtitle": "Lo que dicen las mediciones minuto a minuto, allí donde el resto de la página solo dice el instante actual.",
+      "samples": "{n} mediciones",
+      "peak": "pico {ms} ms",
+      "failures": "{n} fallos",
+      "noFailure": "sin fallos"
     }
   },
   "stats": {

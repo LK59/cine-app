@@ -480,6 +480,14 @@
       "downloads": "Downloads",
       "library": "Bibliothek",
       "other": "Sonstiges"
+    },
+    "latencyHistory": {
+      "sectionTitle": "Verlauf über 7 Tage",
+      "sectionSubtitle": "Was die minütlichen Messungen sagen — der Rest dieser Seite zeigt nur den Augenblick.",
+      "samples": "{n} Messungen",
+      "peak": "Spitze {ms} ms",
+      "failures": "{n} Fehler",
+      "noFailure": "keine Fehler"
     }
   },
   "stats": {

@@ -480,6 +480,14 @@
       "downloads": "Téléchargements",
       "library": "Bibliothèque",
       "other": "Autre"
+    },
+    "latencyHistory": {
+      "sectionTitle": "Tendance sur 7 jours",
+      "sectionSubtitle": "Ce que les relevés d'une minute sur l'autre disent, là où le reste de la page dit l'instant présent.",
+      "samples": "{n} relevés",
+      "peak": "pic {ms} ms",
+      "failures": "{n} échecs",
+      "noFailure": "aucun échec"
     }
   },
   "stats": {

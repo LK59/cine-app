@@ -161,6 +161,21 @@ function migrate(db: Database.Database): void {
       checked_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_capability_checks ON capability_checks (capability, checked_at);
+
+    /* Un second index sur la seule date, pour le ménage.
+       
+       Les deux index ci-dessus commencent par le nom du service : parfaits pour lire l'historique
+       d'un service, inutiles pour « tout ce qui est plus vieux que telle date, tous services
+       confondus ». Le plan de la suppression horaire était donc un SCAN de l'index entier — 1,3
+       million d'entrées, une soixantaine de millisecondes pendant lesquelles better-sqlite3, qui
+       est synchrone, tient toute la boucle d'événements. Ce n'était pas visible aujourd'hui ;
+       c'était linéaire dans la taille de la table, donc c'était une question de temps.
+       
+       Trié par date, la suppression se positionne au point de coupe et efface un bloc contigu. Le
+       même index sert la vue « quel service ralentit » ci-dessous, qui agrège elle aussi sur une
+       fenêtre de temps sans distinguer les services. */
+    CREATE INDEX IF NOT EXISTS idx_service_checks_time ON service_checks (checked_at);
+    CREATE INDEX IF NOT EXISTS idx_capability_checks_time ON capability_checks (checked_at);
   `);
 
   // Per-user opt-out, back to the server-side player.
@@ -537,6 +552,21 @@ export const kvCacheDb = {
 
 // ─── Status/health history (see src/lib/healthChecks.ts + statusCron.ts) ──────
 
+/** Lignes effacées par tranche, et temps maximal passé à effacer par table et par passe. */
+const CLEANUP_BATCH = 5_000;
+const CLEANUP_BUDGET_MS = 250;
+
+/** Le comportement d'un service sur une fenêtre de temps, agrégé par SQLite. */
+export interface ServiceLatencyStat {
+  service: string;
+  samples: number;
+  /** Null quand aucune mesure de la fenêtre n'a de latence — un service injoignable n'en a pas. */
+  avgMs: number | null;
+  maxMs: number | null;
+  /** Nombre de relevés où le service n'était pas « ok ». */
+  failures: number;
+}
+
 export const statusHistoryDb = {
   recordServiceChecks(results: Record<string, { status: string; latencyMs: number | null }>, checkedAt: number): void {
     const db = getDb();
@@ -562,12 +592,63 @@ export const statusHistoryDb = {
       .all(capability, sinceMs) as { status: string; checkedAt: number }[];
   },
 
-  // Opportunistic cleanup — keeps service_checks/capability_checks from growing forever.
+  /**
+   * Ce que chaque service a coûté en temps de réponse sur une fenêtre, et ce qu'il a raté.
+   *
+   * `service_checks` était une table qu'on écrivait sans jamais la lire : une insertion, une
+   * suppression, et pas un seul SELECT dans tout le dépôt — trois cent soixante mille mesures de
+   * latence accumulées depuis des mois et jamais regardées. Ou bien on la supprimait, ou bien on
+   * s'en servait ; la donnée était déjà là, et « quel service ralentit » est justement la question
+   * qu'on se pose quand quelque chose traîne sans tomber.
+   *
+   * Une seule requête groupée, en un passage, servie par l'index sur la date : pas de tri, pas de
+   * lignes remontées jusqu'à JavaScript.
+   */
+  getServiceLatencyStats(sinceMs: number): ServiceLatencyStat[] {
+    return getDb()
+      .prepare(
+        `SELECT service,
+                COUNT(*)                                        AS samples,
+                CAST(ROUND(AVG(latency_ms)) AS INTEGER)         AS avgMs,
+                MAX(latency_ms)                                 AS maxMs,
+                SUM(CASE WHEN status <> 'ok' THEN 1 ELSE 0 END) AS failures
+         FROM service_checks
+         WHERE checked_at >= ?
+         GROUP BY service
+         ORDER BY service ASC`
+      )
+      .all(sinceMs) as ServiceLatencyStat[];
+  },
+
+  /**
+   * Le ménage, par tranches et sous budget de temps.
+   *
+   * En régime normal il n'y a qu'une heure de relevés à effacer — quelques milliers de lignes, une
+   * seule tranche, rien à borner. Le cas qui compte est l'autre : un retard accumulé. Une rétention
+   * qu'on raccourcit, une application arrêtée trois semaines, et la première passe se retrouve avec
+   * un million de lignes à supprimer d'un seul coup. better-sqlite3 est synchrone : ce coup-là est
+   * du temps pendant lequel plus rien n'est servi, ni une page ni un octet de film.
+   *
+   * Alors on efface par tranches jusqu'à épuisement *ou* jusqu'au budget, et ce qui reste attend la
+   * passe suivante — elles se succèdent toutes les heures, personne n'est pressé. Le retard se
+   * résorbe en quelques heures au lieu d'une seconde de gel.
+   */
   cleanup(maxAgeMs: number): void {
     const cutoff = Date.now() - maxAgeMs;
     const db = getDb();
-    db.prepare("DELETE FROM service_checks WHERE checked_at < ?").run(cutoff);
-    db.prepare("DELETE FROM capability_checks WHERE checked_at < ?").run(cutoff);
+    for (const table of ["service_checks", "capability_checks"] as const) {
+      // `rowid IN (… LIMIT n)` : SQLite n'accepte pas LIMIT sur un DELETE sans une option de
+      // compilation que ce paquet n'active pas.
+      const stmt = db.prepare(
+        `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE checked_at < ? LIMIT ${CLEANUP_BATCH})`
+      );
+      const startedAt = Date.now();
+      for (;;) {
+        const { changes } = stmt.run(cutoff);
+        if (changes < CLEANUP_BATCH) break;
+        if (Date.now() - startedAt > CLEANUP_BUDGET_MS) break;
+      }
+    }
   },
 };
 

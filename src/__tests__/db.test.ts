@@ -317,3 +317,75 @@ describe("recommendationsDb", () => {
     expect(hidden.has("movie:900")).toBe(true);
   });
 });
+
+describe("statusHistoryDb — l'historique des services", () => {
+  it("agrège la latence et les échecs de chaque service sur une fenêtre", () => {
+    const now = Date.now();
+    db.statusHistoryDb.recordServiceChecks(
+      { radarr: { status: "ok", latencyMs: 10 }, sonarr: { status: "down", latencyMs: null } },
+      now - 1000
+    );
+    db.statusHistoryDb.recordServiceChecks(
+      { radarr: { status: "ok", latencyMs: 30 }, sonarr: { status: "ok", latencyMs: 50 } },
+      now - 500
+    );
+
+    const stats = db.statusHistoryDb.getServiceLatencyStats(now - 10_000);
+    const radarr = stats.find((s) => s.service === "radarr")!;
+    const sonarr = stats.find((s) => s.service === "sonarr")!;
+
+    expect(radarr).toMatchObject({ samples: 2, avgMs: 20, maxMs: 30, failures: 0 });
+    // Un relevé sans latence ne compte pas dans la moyenne, mais compte comme échec.
+    expect(sonarr).toMatchObject({ samples: 2, avgMs: 50, maxMs: 50, failures: 1 });
+  });
+
+  it("ignore ce qui est hors de la fenêtre", () => {
+    const now = Date.now();
+    db.statusHistoryDb.recordServiceChecks({ vieux: { status: "ok", latencyMs: 5 } }, now - 60_000);
+    expect(db.statusHistoryDb.getServiceLatencyStats(now - 1000).map((s) => s.service)).not.toContain("vieux");
+  });
+
+  it("rend une moyenne nulle, et non zéro, pour un service jamais joignable", () => {
+    const now = Date.now();
+    db.statusHistoryDb.recordServiceChecks({ muet: { status: "down", latencyMs: null } }, now - 100);
+    const stat = db.statusHistoryDb.getServiceLatencyStats(now - 10_000).find((s) => s.service === "muet")!;
+    expect(stat.avgMs).toBeNull();
+    expect(stat.failures).toBe(1);
+  });
+
+  it("le ménage se positionne par la date au lieu de balayer tout l'index", () => {
+    // La faute d'origine : les deux index commencent par le nom du service, donc une suppression
+    // « tout ce qui est plus vieux que X » parcourait le million d'entrées — et better-sqlite3
+    // étant synchrone, elle tenait la boucle d'événements pendant tout ce temps.
+    const plan = db
+      .getDb()
+      .prepare("EXPLAIN QUERY PLAN SELECT rowid FROM capability_checks WHERE checked_at < ?")
+      .all(Date.now()) as { detail: string }[];
+    expect(plan.map((r) => r.detail).join(" ")).toMatch(/SEARCH/);
+  });
+
+  it("supprime au-delà de la rétention et garde le reste", () => {
+    const now = Date.now();
+    db.statusHistoryDb.recordCapabilityChecks([{ id: "ancien", status: "ok" }], now - 20 * 24 * 3600_000);
+    db.statusHistoryDb.recordCapabilityChecks([{ id: "recent", status: "ok" }], now - 1000);
+    db.statusHistoryDb.cleanup(10 * 24 * 3600_000);
+    expect(db.statusHistoryDb.getCapabilityHistory("ancien", 0)).toHaveLength(0);
+    expect(db.statusHistoryDb.getCapabilityHistory("recent", 0)).toHaveLength(1);
+  });
+});
+
+describe("le ménage par tranches", () => {
+  it("efface un retard qui dépasse largement une tranche", () => {
+    const old = Date.now() - 30 * 24 * 3600_000;
+    // Plus que CLEANUP_BATCH (5 000), donc plusieurs tours de boucle : c'est le cas d'une
+    // rétention qu'on vient de raccourcir, ou d'une application arrêtée trois semaines.
+    const rows = Array.from({ length: 12_000 }, (_, i) => ({ id: `retard-${i % 3}`, status: "ok" }));
+    for (let i = 0; i < 4; i++) db.statusHistoryDb.recordCapabilityChecks(rows.slice(0, 3000), old + i);
+
+    db.statusHistoryDb.cleanup(10 * 24 * 3600_000);
+
+    for (const id of ["retard-0", "retard-1", "retard-2"]) {
+      expect(db.statusHistoryDb.getCapabilityHistory(id, 0)).toHaveLength(0);
+    }
+  });
+});

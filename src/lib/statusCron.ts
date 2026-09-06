@@ -5,7 +5,18 @@ import { logError } from "@/lib/logger";
 // 60s gives incident detection (see statusHistory.ts) fine enough granularity to tell a brief
 // container restart apart from a real outage — a longer interval would blur the two together.
 const POLL_INTERVAL_MS = 60_000;
-const RETENTION_MS = 35 * 24 * 3600_000;
+/**
+ * Dix jours, parce que sept sont lus.
+ *
+ * La page d'état publique — seule lectrice de cet historique — demande exactement une fenêtre de
+ * sept jours pour son pourcentage de disponibilité et sa liste d'incidents. On en gardait
+ * trente-cinq : quatre lignes sur cinq étaient stockées, sauvegardées et parcourues à chaque
+ * ménage sans que rien ne les regarde jamais, pour cent dix-sept mégaoctets de base.
+ *
+ * Dix laissent trois jours de marge à qui voudrait élargir la fenêtre, sans rien changer à ce qui
+ * s'affiche : la résolution reste la minute, ce sont les vieilles lignes qui partent.
+ */
+const RETENTION_MS = 10 * 24 * 3600_000;
 
 export async function runStatusPoll(): Promise<void> {
   try {

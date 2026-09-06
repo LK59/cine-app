@@ -4,8 +4,8 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState } from "@/components/StateViews";
-import type { ServiceHealth, StoragePathHealth } from "@/app/api/health/route";
-import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench, HardDrive } from "lucide-react";
+import type { ServiceHealth, StoragePathHealth, ServiceLatencyStat } from "@/app/api/health/route";
+import { CircleCheckBig, CircleX, RefreshCw, Loader2, Wrench, HardDrive, Activity } from "lucide-react";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useState, useCallback } from "react";
 import { useT } from "@/components/TranslationProvider";
@@ -18,6 +18,7 @@ interface HealthResponse {
   checkedAt: string;
   services: ServiceHealth[];
   paths: StoragePathHealth[];
+  latencyHistory: ServiceLatencyStat[];
 }
 
 function LatencyBar({ ms }: { ms: number | null }) {
@@ -251,6 +252,59 @@ function StoragePathsSection({ paths }: { paths: StoragePathHealth[] }) {
   );
 }
 
+/**
+ * Ce que la semaine dit de chaque service, et que l'instant présent ne dit pas.
+ *
+ * Les mesures du haut de page datent de la seconde où l'on a chargé : elles répondent « est-ce que
+ * ça marche », jamais « est-ce que ça marche moins bien qu'avant ». La sonde relève pourtant chaque
+ * minute depuis des mois, et ces relevés n'étaient lus par rien du tout — une insertion, une
+ * suppression, aucun SELECT. Un service qui traîne sans jamais tomber ne se voyait donc nulle
+ * part, alors que c'est exactement le cas qu'on cherche quand quelque chose rame sans qu'aucun
+ * voyant ne soit rouge.
+ */
+function LatencyHistorySection({ stats }: { stats: ServiceLatencyStat[] }) {
+  const t = useT();
+  if (stats.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex items-center gap-2">
+        <Activity size={16} className="text-slate-500" />
+        <div>
+          <h2 className="text-base font-semibold text-white">{t("health.latencyHistory.sectionTitle")}</h2>
+          <p className="mt-0.5 text-xs text-slate-500">{t("health.latencyHistory.sectionSubtitle")}</p>
+        </div>
+      </div>
+
+      <div className="card divide-y divide-white/5 overflow-hidden">
+        {stats.map((stat) => (
+          <div key={stat.service} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+            <div className="min-w-0 flex-1">
+              <span className="text-sm text-slate-200">{stat.service}</span>
+              <span className="ml-2 text-[10px] text-slate-600">
+                {t("health.latencyHistory.samples", { n: String(stat.samples) })}
+              </span>
+            </div>
+            {/* Un service injoignable toute la semaine n'a aucune latence à montrer : la moyenne
+                est alors nulle, et le tiret de LatencyBar le dit mieux qu'un zéro. */}
+            <LatencyBar ms={stat.avgMs} />
+            <div className="w-24 shrink-0 text-right text-[11px] tabular-nums text-slate-500">
+              {stat.maxMs !== null && t("health.latencyHistory.peak", { ms: String(stat.maxMs) })}
+            </div>
+            <div className="w-24 shrink-0 text-right text-[11px] tabular-nums">
+              {stat.failures > 0 ? (
+                <span className="text-amber-400">{t("health.latencyHistory.failures", { n: String(stat.failures) })}</span>
+              ) : (
+                <span className="text-slate-600">{t("health.latencyHistory.noFailure")}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Technical detail (admin only) ─────────────────────────────────────────────
 
 function TechnicalDetail() {
@@ -347,6 +401,9 @@ function TechnicalDetail() {
 
           {/* Storage path checks */}
           <StoragePathsSection paths={paths} />
+
+          {/* Ce que la semaine dit, là où tout le reste de la page dit l'instant présent. */}
+          <LatencyHistorySection stats={data?.latencyHistory ?? []} />
 
           {/* API routes section */}
           <ApiChecksSection />

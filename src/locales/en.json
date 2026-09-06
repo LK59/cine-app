@@ -480,6 +480,14 @@
       "downloads": "Downloads",
       "library": "Library",
       "other": "Other"
+    },
+    "latencyHistory": {
+      "sectionTitle": "Seven-day trend",
+      "sectionSubtitle": "What the minute-by-minute probes say, where the rest of this page says only right now.",
+      "samples": "{n} samples",
+      "peak": "peak {ms} ms",
+      "failures": "{n} failures",
+      "noFailure": "no failure"
     }
   },
   "stats": {
