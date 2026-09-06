@@ -38,7 +38,22 @@ function LoginForm() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || t('auth.error.failed'));
       }
-      router.replace(searchParams.get("next") || "/");
+      /**
+       * La connexion locale n'a pas d'identité Jellyfin — et donc pas de lecture.
+       *
+       * C'est la porte de secours, celle qui reste ouverte quand Jellyfin ne répond plus : elle
+       * ne porte ni jeton ni identifiant de compte, si bien que tout ce qui en dépend — lancer un
+       * film, les chapitres, l'aperçu de la barre, les préférences, « vu » et « favori » —
+       * répond 401. Vérifié en direct sur les routes concernées.
+       *
+       * L'y faire atterrir sur l'écran cinéma le jour où il devient la racine, c'est offrir une
+       * interface dont le bouton « Lire » ne marche pas. Cette connexion-là va donc à la gestion,
+       * qui est ce pour quoi elle existe. Une destination explicitement demandée reste prioritaire,
+       * et rien n'empêche d'aller ensuite au lecteur à la main.
+       */
+      const asked = searchParams.get("next");
+      const local = endpoint.endsWith("/login");
+      router.replace(asked || (local ? "/gestion" : "/"));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.error.unknown'));
     } finally {
