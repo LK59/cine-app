@@ -92,10 +92,24 @@ describe("toCodecChannelOrder", () => {
     expect(channels(toCodecChannelOrder(eight, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 7, 8, 4]);
   });
 
-  // Opus suit une autre convention encore : lui appliquer celle de l'AAC serait remplacer un
-  // mauvais ordre par un autre.
-  it("laisse les autres codecs tranquilles", () => {
-    expect(toCodecChannelOrder(surround, "opus")).toBe(surround);
+  // Opus reprend la disposition Vorbis — L C R Ls Rs LFE — qui ne diffère de celle de l'AAC que
+  // par les deux premiers rangs. C'est le repli d'un navigateur sans encodeur AAC (Firefox), donc
+  // le même défaut y attendait qui regarde de là.
+  it("range pour Opus dans l'ordre Vorbis, pas dans celui de l'AAC", () => {
+    // [L,R,C,LFE,Ls,Rs] → [L,C,R,Ls,Rs,LFE]
+    expect(channels(toCodecChannelOrder(surround, "opus"))).toEqual([1, 3, 2, 5, 6, 4]);
+  });
+
+  it("distingue bien les deux conventions", () => {
+    const aac = channels(toCodecChannelOrder(surround, "mp4a.40.2"));
+    const opus = channels(toCodecChannelOrder(surround, "opus"));
+    expect(aac).not.toEqual(opus);
+    // Le centre est premier chez l'un, deuxième chez l'autre — et jamais au rang de la droite.
+    expect([aac[0], opus[1]]).toEqual([3, 3]);
+  });
+
+  it("ne touche pas à un codec dont il ignore la convention", () => {
+    expect(toCodecChannelOrder(surround, "vorbis")).toBe(surround);
   });
 
   // Mieux vaut ne pas permuter que permuter au hasard.

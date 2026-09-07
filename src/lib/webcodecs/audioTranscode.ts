@@ -609,22 +609,42 @@ const AAC_ORDER: Record<number, readonly number[]> = {
   8: [2, 0, 1, 4, 5, 6, 7, 3],
 };
 
-/** Vrai pour les codecs AAC, qui sont les seuls dont l'ordre diffère de celui du décodeur ici. */
-function isAac(codec: string): boolean {
-  return codec.startsWith("mp4a.");
+/**
+ * L'ordre d'Opus, qui est un troisième ordre — ni celui du décodeur, ni celui de l'AAC.
+ *
+ * Opus reprend la disposition Vorbis : L C R Ls Rs LFE. Elle ne diffère de celle de l'AAC que par
+ * les deux premiers rangs, ce qui est exactement le genre d'écart qu'on ne remarque pas en lisant
+ * et qu'on entend tout de suite.
+ *
+ * Ce codec n'est pas théorique : c'est le repli pour un navigateur sans encodeur AAC — Firefox,
+ * qui encode Opus en 5.1 et l'accepte en MediaSource. Le même défaut que celui rapporté sur
+ * « Titanic » l'attendait donc là, pour qui regarde depuis un Firefox.
+ */
+const OPUS_ORDER: Record<number, readonly number[]> = {
+  // [L,R,C,LFE,Ls,Rs] → [L,C,R,Ls,Rs,LFE]
+  6: [0, 2, 1, 4, 5, 3],
+  // [L,R,C,LFE,Ls,Rs,Lrs,Rrs] → [L,C,R,Ls,Rs,Lrs,Rrs,LFE]
+  8: [0, 2, 1, 4, 5, 6, 7, 3],
+};
+
+/** La disposition attendue par le codec de destination, ou rien si on ne la connaît pas. */
+function orderFor(codec: string): Record<number, readonly number[]> | null {
+  if (codec.startsWith("mp4a.")) return AAC_ORDER;
+  if (codec.startsWith("opus")) return OPUS_ORDER;
+  return null;
 }
 
 /**
  * Remet les plans dans l'ordre du codec de destination.
  *
- * Rendus tels quels quand il n'y a rien à faire : la stéréo, le mono, un codec qui partage
- * l'ordre du décodeur (Opus suit une autre convention encore, et n'est pas retenu ici tant que
- * l'AAC l'est), ou une disposition qu'on ne sait pas décrire — auquel cas on préfère ne pas
- * inventer une permutation plutôt que d'en appliquer une fausse.
+ * Rendus tels quels quand il n'y a rien à faire : la stéréo et le mono, dont L et R sont au même
+ * rang partout ; un codec dont on ne connaît pas la convention ; ou un nombre de canaux qu'aucune
+ * des tables ne décrit — quadriphonie, 5.0. On préfère alors ne pas permuter que permuter au
+ * hasard : un ordre inconnu laissé tel quel est un pari, un ordre inventé est une faute.
  */
 export function toCodecChannelOrder(planes: Float32Array[], codec: string): Float32Array[] {
-  if (!isAac(codec)) return planes;
-  const order = AAC_ORDER[planes.length];
+  const table = orderFor(codec);
+  const order = table?.[planes.length];
   if (!order) return planes;
   return order.map((from) => planes[from]);
 }
