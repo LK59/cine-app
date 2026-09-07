@@ -120,7 +120,20 @@ export function CinemaMobileClient() {
   // close a sheet instead of leaving Cinema Mode — see lib/cinemaRoute.
   const route = useCinemaRoute();
   const mediaType = route.tab;
-  const setMediaType = (tab: "movies" | "series") => cinemaNavigate({ tab }, "replace");
+  /**
+   * Changer d'onglet referme ce qui était ouvert.
+   *
+   * L'adresse n'écrivait que l'onglet, donc un `serie` déjà posé lui survivait — invisible tant
+   * que la fiche se choisissait par l'onglet, puisqu'on ne lisait alors que le champ correspondant.
+   * Depuis que l'autre champ sert de repli, cette valeur oubliée réapparaît des deux côtés : une
+   * série revenait d'elle-même aussi bien dans l'onglet Séries que dans l'onglet Films.
+   *
+   * Sans effet de bord : le sélecteur est recouvert par la fiche ouverte, donc on ne peut pas
+   * changer d'onglet en ayant quelque chose à refermer. Ce qu'on efface ici est toujours une
+   * valeur périmée, jamais une fiche à l'écran.
+   */
+  const setMediaType = (tab: "movies" | "series") =>
+    cinemaNavigate({ tab, film: null, serie: null }, "replace");
   const searchOpen = route.search;
   const setSearchOpen = (open: boolean) =>
     open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false });
@@ -236,10 +249,20 @@ export function CinemaMobileClient() {
   const behind = useRouteBehind();
   const behindSelected = useMemo(() => {
     if (!behind || !selected) return null;
-    // La même résolution que ci-dessus, pour que le dessous et le dessus ne puissent pas
-    // diverger. L'onglet de l'entrée précédente, pas celui d'aujourd'hui : c'est le sien qu'elle
-    // décrivait.
-    const target = sheetTarget(behind.tab, behind.film, behind.serie);
+    /**
+     * L'entrée précédente doit décrire le même onglet que celui qu'on regarde.
+     *
+     * Cette garde existait, je l'ai retirée, et elle manquait aussitôt : une entrée de l'autre
+     * onglet remontait alors *sous* la fiche courante, où elle est rendue inerte par construction.
+     * Ça se voyait comme une fiche qui surgit un instant après une fermeture et ne répond pas au
+     * doigt — parce qu'elle n'est pas censée être là du tout.
+     *
+     * Le repli de `sheetTarget` reste utile au-dessus, où l'adresse courante est celle qu'on vient
+     * d'écrire. Ici on parle d'une entrée d'historique, dont rien ne garantit qu'elle ait un
+     * rapport avec l'écran actuel.
+     */
+    if (behind.tab !== mediaType) return null;
+    const target = sheetTarget(mediaType, behind.film, behind.serie);
     if (!target) return null;
     const { id } = target;
     /**
@@ -262,7 +285,7 @@ export function CinemaMobileClient() {
     if (target.type === selected.mediaType && id === itemId(selected.item)) return null;
     const item = (target.type === "series" ? byIdSeries : byIdMovies)?.get(id);
     return item ? { item, mediaType: target.type } : null;
-  }, [behind, byIdMovies, byIdSeries, selected]);
+  }, [behind, mediaType, byIdMovies, byIdSeries, selected]);
 
   /** La pile, du dessous vers le dessus. Une seule fiche la plupart du temps. */
   const stack = useMemo(

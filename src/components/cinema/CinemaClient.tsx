@@ -251,7 +251,19 @@ export function CinemaClient() {
   const mediaType = route.tab;
   // "replace": the tab is a filter on the screen you're already on, not a screen of its own —
   // Back from a title should return to the grid, not undo a tab switch.
-  const setMediaType = useCallback((tab: "movies" | "series") => cinemaNavigate({ tab }, "replace"), []);
+  /**
+   * Changer d'onglet referme ce qui était ouvert — comme sur téléphone.
+   *
+   * Ici les fiches se choisissent par `route.film` et `route.serie` sans passer par l'onglet : une
+   * valeur oubliée dans l'adresse rouvrait donc sa fiche quel que soit l'onglet affiché. Le défaut
+   * existait avant le chantier du téléphone ; il se corrige au même endroit et pour la même
+   * raison, et la même garantie s'applique — la fiche recouvre le sélecteur, donc on ne peut pas
+   * changer d'onglet en ayant quelque chose à refermer.
+   */
+  const setMediaType = useCallback(
+    (tab: "movies" | "series") => cinemaNavigate({ tab, film: null, serie: null }, "replace"),
+    []
+  );
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     "/api/cinema/movies",
