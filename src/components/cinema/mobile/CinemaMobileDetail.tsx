@@ -172,6 +172,14 @@ export function CinemaMobileDetail({
 
   const nextEpisode = episodesData?.nextEpisode;
   const resumeTicks = isSeries ? nextEpisode?.resumeTicks ?? null : progress?.resumeTicks ?? null;
+  /**
+   * Sait-on s'il y a une reprise, ou attend-on encore la réponse ?
+   *
+   * `resumeTicks` vaut `null` dans les deux cas, et les confondre faisait repartir du début un
+   * film vu à moitié quand on cliquait sur une page fraîchement chargée. Voir `resumeKnown` dans
+   * PlayButton — c'est le même jumeau, il doit dire la même chose.
+   */
+  const resumeKnown = isSeries ? episodesData !== undefined : progress !== undefined;
   const runtimeTicks = isSeries ? nextEpisode?.runtimeTicks ?? null : progress?.runtimeTicks ?? null;
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const playTargetId = isSeries ? nextEpisode?.itemId : item.jellyfinItemId;
@@ -191,10 +199,10 @@ export function CinemaMobileDetail({
     playback.play({
       itemId: playTargetId,
       title: playTargetTitle,
-      // Zéro plutôt qu'omis, dans les deux cas : « recommencer » veut dire le début, et un film
-      // sans reprise aussi. Omettre revenait à laisser le lecteur natif choisir la position du
-      // serveur — voir PlaybackSession.
-      resumeAt: !fromStart && resumeTicks ? resumeTicks / 10_000_000 : 0,
+      // « Recommencer » dit toujours zéro. Sinon : la position si on la connaît, zéro si on sait
+      // qu'il n'y en a pas, et rien du tout tant qu'on l'ignore — auquel cas c'est le serveur qui
+      // tranche, ce qui vaut mieux qu'une affirmation fausse. Voir PlaybackSession.
+      resumeAt: fromStart ? 0 : !resumeKnown ? undefined : resumeTicks ? resumeTicks / 10_000_000 : 0,
       ...(isSeries ? { getNextEpisode } : {}),
     });
   }

@@ -347,6 +347,9 @@ export function CinemaMovieDetail({
               title={item.title}
               resumeTicks={progress?.resumeTicks ?? undefined}
               runtimeTicks={progress?.runtimeTicks ?? undefined}
+              // Tant que la réponse n'est pas là, ne rien affirmer : `progress` absent ne veut pas
+              // dire « jamais commencé ».
+              resumeKnown={progress !== undefined}
               variant="row"
               // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
               // so a movie opened from the Continue Watching row and one opened from its own

@@ -36,9 +36,9 @@ describe("PlayButton", () => {
     expect(play).toHaveBeenCalledWith(expect.objectContaining({ itemId: "a", resumeAt: 0 }));
   });
 
-  // La distinction qui a coûté les deux bugs : ce que le bouton transmet doit être un nombre,
-  // jamais une absence — c'est l'absence que le lecteur natif traduit en « demande au serveur ».
-  it("transmet toujours une position, jamais une absence", async () => {
+  // La distinction qui a coûté les deux bugs : dès qu'on sait, ce que le bouton transmet est un
+  // nombre — c'est l'absence que le lecteur natif traduit en « demande au serveur ».
+  it("transmet toujours une position quand elle est connue", async () => {
     const user = userEvent.setup();
     for (const props of [{}, { resumeTicks: HOUR / 2 }, { resumeTicks: HOUR / 2, restart: true }]) {
       play.mockClear();
@@ -47,6 +47,32 @@ describe("PlayButton", () => {
       await user.click(screen.getByRole("button"));
       expect(typeof play.mock.calls[0][0].resumeAt).toBe("number");
     }
+  });
+
+  /**
+   * L'ignorance se dit, elle ne s'arrondit pas à zéro.
+   *
+   * `resumeTicks` absent voulait dire deux choses à la fois : « jamais commencé » et « la réponse
+   * n'est pas encore arrivée ». Sur une page fraîchement chargée on clique avant que la position
+   * soit revenue, et un film vu à moitié repartait du début. Laisser le champ absent rend la main
+   * au serveur, qui lui sait.
+   */
+  it("ne prétend pas partir du début tant qu'il ignore où l'on en est", async () => {
+    const user = userEvent.setup();
+    render(<PlayButton itemId="a" title="Un Film" resumeKnown={false} />);
+
+    await user.click(screen.getByRole("button"));
+    expect(play).toHaveBeenCalledWith(expect.objectContaining({ resumeAt: undefined }));
+  });
+
+  // Mais « recommencer » reste une intention, pas une observation : elle ne dépend pas de ce
+  // qu'on sait de la position.
+  it("recommence depuis le début même sans connaître la position", async () => {
+    const user = userEvent.setup();
+    render(<PlayButton itemId="a" title="Un Film" resumeTicks={HOUR / 2} resumeKnown={false} restart />);
+
+    await user.click(screen.getByRole("button"));
+    expect(play).toHaveBeenCalledWith(expect.objectContaining({ resumeAt: 0 }));
   });
 
   it("dit « reprendre » et repart où on s'était arrêté", async () => {

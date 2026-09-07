@@ -34,6 +34,22 @@ interface PlayButtonProps {
    * reprise à écarter.
    */
   restart?: boolean;
+  /**
+   * Sait-on seulement s'il y a une reprise ?
+   *
+   * `resumeTicks` ne peut pas répondre : absent, il dit aussi bien « ce film n'a jamais été
+   * commencé » que « la réponse n'est pas encore arrivée ». Les deux menaient au même geste, et
+   * le second est un mensonge — sur une page fraîchement chargée, on clique avant que
+   * `/api/cinema/progress/…` ait répondu, et le film repartait du début alors qu'il était vu à
+   * moitié.
+   *
+   * Faux, on ne prétend rien : la position est laissée absente, ce qui veut dire « je ne sais
+   * pas, prends ce dont le serveur se souvient » — voir PlaybackSession. C'est la même règle que
+   * les bascules « vu » et « favori », qui attendent de savoir avant de laisser agir.
+   *
+   * Vrai par défaut : les appelants qui rendent une rangée tiennent déjà la donnée dans la main.
+   */
+  resumeKnown?: boolean;
 }
 
 // Single source of truth for the Lire/Reprendre label + resume behavior, used
@@ -50,6 +66,7 @@ export function PlayButton({
   label: labelOverride,
   getNextEpisode,
   restart = false,
+  resumeKnown = true,
 }: PlayButtonProps) {
   const playback = usePlayback();
   const t = useT();
@@ -64,9 +81,9 @@ export function PlayButton({
   const label = labelOverride ?? (
     restart ? t('common.restart') : hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play')
   );
-  // Toujours un nombre : un film sans reprise commence à zéro, et le dire évite que le lecteur
-  // aille chercher chez le serveur une position qu'on n'a pas demandée — voir PlaybackSession.
-  const initialResumeAt = restart || !hasResume ? 0 : resumeTicks! / 10_000_000;
+  // Un nombre dès qu'on sait, et rien du tout quand on ne sait pas. Zéro veut dire « depuis le
+  // début » et ne doit être dit que par quelqu'un qui en est sûr — voir `resumeKnown`.
+  const initialResumeAt = restart ? 0 : !resumeKnown ? undefined : hasResume ? resumeTicks! / 10_000_000 : 0;
   const progressPct =
     !restart && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
   const Icon = restart ? RotateCcw : PlayCircle;
