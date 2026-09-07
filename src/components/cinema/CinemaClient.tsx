@@ -731,7 +731,33 @@ export function CinemaClient() {
           DOM order alone already paints this correctly above the backgroundlayer right before it
           (that one has no z-index either), so nothing here needs to compete with the fixed
           buttons at all. */}
-      <div className="relative flex h-full flex-col">
+      <div
+        className="relative flex h-full flex-col"
+        /**
+         * La molette agit partout, même sur l'aperçu du haut.
+         *
+         * L'écran a deux volets : l'aperçu, qui ne défile pas, et les rangées, qui défilent dans
+         * leur propre zone. La molette ne faisait donc rien tant que la souris n'était pas
+         * descendue dans la moitié basse — une zone morte qui occupe la moitié de l'écran, et
+         * qu'on ne comprend pas quand on la rencontre.
+         *
+         * Renvoyé plutôt qu'imité : c'est le volet des rangées qui défile, avec son propre
+         * alignement magnétique. Rien n'est recalculé ici, on lui passe la distance.
+         *
+         * Sans effet quand le geste vient déjà de l'intérieur des rangées — le navigateur y fait
+         * son travail, et s'en mêler doublerait chaque cran. C'est aussi ce qui laisse les
+         * rangées défiler horizontalement au trackpad : elles sont à l'intérieur.
+         */
+        onWheel={(event) => {
+          const pane = rowsPaneRef.current;
+          if (!pane || pane.contains(event.target as Node)) return;
+          // Certaines souris comptent en lignes ou en pages plutôt qu'en pixels. Sans cette
+          // conversion, un cran de molette déplaçait la vue de trois pixels.
+          const step =
+            event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? pane.clientHeight : 1;
+          pane.scrollBy({ top: event.deltaY * step, behavior: "auto" });
+        }}
+      >
         {/* flex-basis 50% via inline style (arbitrary-value classes don't make it into the
             production CSS bundle — see the z-index note above), grow-0 (never grows past 50% on
             a tall screen) shrink (free to shrink below it) — paired with the rows pane's own

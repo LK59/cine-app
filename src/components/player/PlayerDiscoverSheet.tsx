@@ -361,12 +361,18 @@ export function PlayerDiscoverSheet({
 
       <button
         onClick={requestClose}
-        // `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone
-        // elle s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à
-        // elle plutôt qu'à la fenêtre, ce qui rend le placement dépendant de l'animation. En
-        // absolu, il se cale sur la boîte de contenu, rail déjà déduit.
-        className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
-        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+        // `absolute`, pas `fixed` : sur téléphone la racine s'anime en translation, et un enfant
+        // `fixed` se positionnerait alors par rapport à la fenêtre plutôt qu'à elle.
+        //
+        // Mais un enfant absolu se cale sur la boîte de *bordure*, pas sur la boîte de contenu :
+        // il ignore le `padding-left` qui réserve le rail, et le bouton passait donc dessous. Le
+        // retrait est écrit dans sa position — même correctif que la fiche personne, même cause,
+        // et le commentaire d'origine portait ici aussi l'hypothèse fausse.
+        className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2"
+        style={{
+          top: "max(1rem, env(safe-area-inset-top))",
+          left: "calc(1rem + var(--player-rail, 0px))",
+        }}
       >
         <ArrowLeft size={16} /> {t("cinema.back")}
       </button>
