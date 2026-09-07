@@ -106,5 +106,20 @@ export async function refreshAfterPlayback(reported: Promise<void>, itemId: stri
   await reported;
   if (!(await whenScreenIsFree())) return;
   const keys = itemId ? [RESUME_KEY, NEXT_UP_KEY, progressKey(itemId)] : [RESUME_KEY, NEXT_UP_KEY];
-  await Promise.all(keys.map((key) => globalMutate(key)));
+  await Promise.all([
+    ...keys.map((key) => globalMutate(key)),
+    /**
+     * Et la liste d'épisodes de la série, qui porte la position de chacun et celui qu'il faut
+     * reprendre.
+     *
+     * Un filtre plutôt qu'un nom : cette clé est bâtie sur l'identifiant de la *série*, et une
+     * fermeture ne connaît que celui de l'épisode. Sans elle, l'accueil se mettait bien à jour
+     * mais la fiche de la série gardait « Reprendre Ep5 S2 — 30 min restantes » jusqu'au
+     * rechargement suivant, sur un épisode qu'on venait de finir.
+     *
+     * La barre oblique finale compte : `/api/cinema/series` sans elle est le catalogue entier,
+     * 1,4 Mo qu'on ne veut surtout pas redemander à chaque fermeture.
+     */
+    globalMutate((key) => typeof key === "string" && key.startsWith("/api/cinema/series/")),
+  ]);
 }

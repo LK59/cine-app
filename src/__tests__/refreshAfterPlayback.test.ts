@@ -6,6 +6,16 @@ vi.mock("swr", () => ({ mutate: (...a: unknown[]) => mutate(...a) }));
 import { refreshAfterPlayback, RESUME_KEY, NEXT_UP_KEY, progressKey } from "@/lib/swr";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
 
+/**
+ * Les clés nommées, le filtre des séries mis à part.
+ *
+ * `refreshAfterPlayback` demande aussi la relecture par *motif* — la liste d'épisodes d'une série
+ * est bâtie sur l'identifiant de la série, que la fermeture ne connaît pas. Ces tests-ci parlent
+ * des clés que l'on nomme ; le filtre a le sien.
+ */
+const namedKeys = (): string[] =>
+  mutate.mock.calls.map((c) => c[0]).filter((k): k is string => typeof k === "string");
+
 beforeEach(() => {
   vi.clearAllMocks();
   setWatchingFullScreen(false);
@@ -17,14 +27,24 @@ describe("refreshAfterPlayback", () => {
   // « Reprendre » inchangée, jusqu'à ce qu'on quitte l'écran et qu'on y revienne.
   it("relit les trois vues que la fermeture rend fausses", async () => {
     await refreshAfterPlayback(Promise.resolve(), "item-42");
-    expect(mutate.mock.calls.map((c) => c[0]).sort()).toEqual(
-      [NEXT_UP_KEY, RESUME_KEY, progressKey("item-42")].sort()
-    );
+    expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY, progressKey("item-42")].sort());
+  });
+
+  // Le symptôme : l'accueil se mettait à jour, la fiche de la série non — elle proposait encore
+  // de reprendre l'épisode qu'on venait de terminer.
+  it("relit aussi la liste d'épisodes des séries, sans toucher au catalogue", async () => {
+    await refreshAfterPlayback(Promise.resolve(), "item-42");
+    const filtre = mutate.mock.calls.map((c) => c[0]).find((k) => typeof k === "function");
+    expect(filtre).toBeTypeOf("function");
+    expect(filtre("/api/cinema/series/abc/episodes")).toBe(true);
+    // La barre oblique finale : le catalogue entier fait 1,4 Mo et n'a rien à faire ici.
+    expect(filtre("/api/cinema/series")).toBe(false);
+    expect(filtre("/api/cinema/movies")).toBe(false);
   });
 
   it("se limite aux vues d'ensemble quand aucun titre n'est nommé", async () => {
     await refreshAfterPlayback(Promise.resolve(), null);
-    expect(mutate.mock.calls.map((c) => c[0]).sort()).toEqual([NEXT_UP_KEY, RESUME_KEY].sort());
+    expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY].sort());
   });
 
   // Relire avant que Jellyfin ait enregistré l'arrêt redonne exactement la valeur qu'on voulait
@@ -54,7 +74,7 @@ describe("refreshAfterPlayback", () => {
       setWatchingFullScreen(false);
       await vi.advanceTimersByTimeAsync(100);
       await fini;
-      expect(mutate).toHaveBeenCalledTimes(3);
+      expect(namedKeys()).toHaveLength(3);
     } finally {
       vi.useRealTimers();
     }
