@@ -52,7 +52,7 @@ export function CinemaTop10Card({
       onMouseEnter={onFocusItem}
       onClick={onSelectItem}
       aria-label={`${rank}. ${title}`}
-      className={`flex shrink-0 items-end transition duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
+      className={`flex shrink-0 items-end transition duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 active:scale-[0.96] ${TV_NAV_RING}`}
     >
       {/* The digit sizes its own box. A fixed-width slot was tried and reverted: right-aligning
           the glyph in it pulled every number tight against its poster, which read as cramped. */}

@@ -90,7 +90,7 @@ export function PlayerRail() {
               type="button"
               onClick={() => openPanel(panel, route)}
               aria-current={isActive ? "page" : undefined}
-              className={`relative flex h-11 shrink-0 items-center gap-4 overflow-hidden rounded-lg pl-[0.85rem] pr-3 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
+              className={`relative flex h-11 shrink-0 items-center gap-4 overflow-hidden rounded-lg pl-[0.85rem] pr-3 text-left text-sm font-medium transition-colors active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
                 isActive
                   ? "text-white before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent-500"
                   : "text-slate-400 hover:bg-white/10 hover:text-white"

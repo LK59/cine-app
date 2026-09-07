@@ -290,6 +290,31 @@
 .btn:disabled {
   @apply cursor-not-allowed opacity-45;
 }
+
+/* Le même retour au doigt, pour ce qui n'est pas un bouton.
+ *
+ * Les cartes d'affiche, les lignes d'épisode, les entrées du rail : un pouce les touche plus
+ * souvent que n'importe quel `.btn`, et rien ne bougeait sous lui. Sur iOS c'est le seul accusé de
+ * réception qui existe — `navigator.vibrate` n'y est pas supporté, donc le retour haptique du
+ * dépôt ne s'y déclenche jamais.
+ *
+ * Même valeur et même courbe que `.btn`, à dessein : trois valeurs de creux pour un même geste,
+ * c'est ce qu'on avait déjà sans le vouloir.
+ *
+ * À ne pas poser sur un élément qui porte déjà sa propre `transition` — la forme courte
+ * ci-dessous remplacerait sa liste de propriétés et ferait disparaître son animation de survol.
+ * Ceux-là écrivent leur `active:` en ligne, avec la transition qu'ils ont déjà.
+ *
+ * Et pas sur une ligne pleine largeur : à 0,96 elle se déplace d'une quinzaine de pixels sous le
+ * doigt, ce qui se lit comme un sursaut plutôt que comme un appui. Les listes natives s'allument,
+ * elles ne s'enfoncent pas — d'où `active:bg-white/15` sur les lignes du rail et des épisodes.
+ * Creux pour ce qu'on saisit, fond pour ce qu'on parcourt. */
+@utility pressable {
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pressable:active:not(:disabled) {
+  transform: scale(0.96);
+}
 .btn:focus-visible {
   @apply outline-2 outline-offset-2 outline-white/60;
 }

@@ -45,7 +45,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
       type="button"
       onClick={onOpen}
       data-nav-item
-      className="group flex flex-col text-left focus-visible:outline-none"
+      className="pressable group flex flex-col text-left focus-visible:outline-none"
     >
       <div className="relative overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition duration-200 group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-accent-500">
         <div className={kind === "person" ? "aspect-[2/3]" : "aspect-[2/3]"}>
