@@ -115,7 +115,7 @@ export function CinemaOverview({
       <p
         ref={bodyRef}
         // Sélectionnable : c'est du texte, on doit pouvoir le copier même s'il est dans un bouton.
-        className="line-clamp-2 select-text text-sm text-white/90 drop-shadow-sm sm:text-base"
+        className="clamp-fade-2 select-text text-sm text-white/90 drop-shadow-sm sm:text-base"
       >
         {text}
       </p>

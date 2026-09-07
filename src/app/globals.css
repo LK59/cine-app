@@ -38,7 +38,7 @@
      les changer là demande de les changer ici aussi. */
   --animate-fade-in: fade-in 0.18s ease-out both;
   --animate-fade-in-up: fade-in-up 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-fade-in-side: fade-in-side 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in-side: fade-in-side 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-scroll-hint: scroll-hint 2s ease-in-out infinite;
   --animate-fade-in-scale: fade-in-scale 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-shimmer: shimmer 1.6s linear infinite;
@@ -332,6 +332,22 @@
  * doigt, ce qui se lit comme un sursaut plutôt que comme un appui. Les listes natives s'allument,
  * elles ne s'enfoncent pas — d'où `active:bg-white/15` sur les lignes du rail et des épisodes.
  * Creux pour ce qu'on saisit, fond pour ce qu'on parcourt. */
+/* Deux lignes, puis le texte s'estompe.
+ *
+ * `line-clamp` pose des points de suspension, et « Voir plus » juste en dessous disait déjà la
+ * même chose : deux fois le même message, dont l'un sous forme de ponctuation cassée en plein mot.
+ *
+ * La hauteur est bornée à deux interlignes et la fin se fond dans le fond. Le texte paraît alors
+ * continuer au lieu d'être coupé, et l'invitation à ouvrir revient au seul élément dont c'est le
+ * rôle. La mesure du dépassement, elle, ne change pas : `scrollHeight` reste supérieur à
+ * `clientHeight`, qui est ce sur quoi le composant décide d'afficher « Voir plus ». */
+@utility clamp-fade-2 {
+  max-height: calc(2 * 1lh);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent 100%);
+}
+
 @utility pressable {
   transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -670,9 +686,12 @@
   38% { transform: scale(1.14); }
   100% { transform: scale(1); }
 }
+/* Moitié moins marquée qu'à l'origine : elle compensait un creux qu'on ne voyait pas, et ce
+   problème est réglé depuis que le geste se joue jusqu'au bout. Deux signaux pleins pour un seul
+   appui, c'est un de trop — le creux mène, la lueur accompagne. */
 @keyframes tab-press-glow {
   0% { background-color: rgb(255 255 255 / 0); }
-  30% { background-color: rgb(255 255 255 / 0.16); }
+  30% { background-color: rgb(255 255 255 / 0.09); }
   100% { background-color: rgb(255 255 255 / 0); }
 }
 .player-tab[data-pressed] {

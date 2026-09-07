@@ -125,7 +125,13 @@ export function PlayerPanelFrame({
          *
          * Plus de variante `md:` : un onglet est un onglet à toutes les tailles, et la distinction
          * ne faisait que donner deux gestes différents à la même idée. */
-        leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
+        /* Sur la racine, et non sur le conteneur de défilement où elle était.
+         *
+         * Ce conteneur peut être vide au moment où l'animation se joue — sa charge utile arrive
+         * après —, si bien que la dérive animait une boîte sans contenu et passait inaperçue. La
+         * racine, elle, existe et se voit toujours : son fond porte le mouvement quoi qu'il arrive
+         * au reste. Une seule transformation composée par bascule au lieu de deux, aussi. */
+        leaving ? "animate-fade-out-scale" : "animate-fade-in-side"
       }`}
       style={{
         zIndex: 46,
@@ -179,7 +185,7 @@ export function PlayerPanelFrame({
       <div
         ref={bodyRef}
         key={entrance}
-        className="scrollbar-thin flex-1 animate-fade-in-side overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
+        className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))" }}
