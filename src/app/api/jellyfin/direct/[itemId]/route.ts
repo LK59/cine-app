@@ -3,7 +3,6 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
-import type { TrackPreferences } from "@/lib/trackPreferences";
 import { displayTitle } from "@/lib/displayTitle";
 import { userPrefsDb } from "@/lib/db";
 
@@ -41,13 +40,22 @@ export interface ExternalSubtitle {
   url: string;
 }
 
+/**
+ * La description du fichier, et rien qui appartienne au spectateur.
+ *
+ * `resumeSeconds` et `preferences` vivaient ici et sont partis dans
+ * `/api/jellyfin/playback-state/[itemId]` : le lecteur garde cette charge-ci en mémoire pour
+ * rouvrir un film instantanément, ce qui est juste pour un fichier qui ne change jamais et faux
+ * pour deux valeurs qui changent entre chaque lecture. Voir la doc de `PlaybackState` pour les
+ * deux symptômes que ça produisait.
+ */
 export interface DirectPlayInfo {
   /** Range-seekable URL for the untouched file, through this app's own proxy. */
   streamUrl: string;
   container: string;
   sizeBytes: number | null;
   runtimeSeconds: number | null;
-  resumeSeconds: number;
+
   video: {
     codec: string | null;
     width: number | null;
@@ -77,7 +85,7 @@ export interface DirectPlayInfo {
    * What the viewer's Jellyfin account asks for, so this player opens on the same track their
    * other clients would. Null when the server would not say.
    */
-  preferences: TrackPreferences | null;
+
   /** How to name this on screen — "Série — S02E05 · Titre" for an episode. Null if unknown. */
   title: string | null;
   /** Where the opening titles run, when Jellyfin has analysed the episode. Null otherwise. */
@@ -154,23 +162,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       url: `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${encodeURIComponent(source.Id ?? itemId)}&index=${s.Index}`,
     }));
 
-  // Best effort, and deliberately so: a server that will not answer about someone's languages
-  // is a reason to open the file on its own defaults, not a reason to refuse to play it.
-  const configuration = session.jfToken
-    ? await jellyfin
-        .getUserConfiguration(session.jfId, session.jfToken)
-        .then((user) => user.Configuration ?? null)
-        .catch(() => null)
-    : null;
-  const preferences: TrackPreferences | null = configuration
-    ? {
-        audioLanguage: configuration.AudioLanguagePreference ?? null,
-        subtitleLanguage: configuration.SubtitleLanguagePreference ?? null,
-        subtitleMode: (configuration.SubtitleMode as TrackPreferences["subtitleMode"]) ?? null,
-        playDefaultAudioTrack: configuration.PlayDefaultAudioTrack === true,
-      }
-    : null;
-
   const payload: DirectPlayInfo = {
     // The same static endpoint DirectPlay already uses: the proxy forwards Range headers for it,
     // which is exactly what a demuxer jumping around a 40 GB file needs.
@@ -178,7 +169,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     container,
     sizeBytes: null,
     runtimeSeconds: item?.RunTimeTicks ? item.RunTimeTicks / 10_000_000 : null,
-    resumeSeconds: (item?.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000,
     video: videoStream
       ? {
           codec: videoStream.Codec ?? null,
@@ -202,7 +192,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     refusedReason,
     canvasHdrRefusal,
     externalSubtitles,
-    preferences,
     title: naming ? displayTitle(naming, "") || null : null,
     introSkip: timestamps?.Introduction?.Valid
       ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End }

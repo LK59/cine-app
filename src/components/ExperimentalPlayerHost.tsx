@@ -27,6 +27,7 @@ import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
+import type { PlaybackState } from "@/app/api/jellyfin/playback-state/[itemId]/route";
 import {
   ExternalSubtitleTrack,
   isExternalTrack,
@@ -450,6 +451,37 @@ export function ExperimentalPlayerHost({
     revalidateOnReconnect: false,
     revalidateIfStale: false,
   });
+  /**
+   * Où en est ce spectateur, et dans quelles langues il regarde — relu à chaque ouverture.
+   *
+   * Volontairement hors de SWR, et volontairement pas dans la charge du fichier. Ces deux faits
+   * changent entre deux lectures du même film, alors que la description du fichier ne bouge
+   * jamais : les mélanger revenait à geler les premiers avec la seconde jusqu'au rechargement de
+   * la page. Changer sa langue de sous-titres puis relancer un film déjà lu dans la session
+   * appliquait l'ancienne, à tous les coups.
+   *
+   * Une lecture nue plutôt qu'une clé mise en cache, parce que la valeur alimente l'effet qui
+   * construit tout le pipeline : elle doit changer *une seule fois*, de « pas encore su » à
+   * « su ». Une clé SWR rendrait d'abord la valeur mémorisée puis la fraîche — deux changements,
+   * donc un pipeline reconstruit et un film qui repart en cours de route.
+   *
+   * `undefined` tant qu'on ne sait pas, `null` si le serveur n'a pas répondu — auquel cas le film
+   * s'ouvre à son début sur ses pistes par défaut, ce qui vaut mieux que de ne pas s'ouvrir.
+   */
+  const [playbackState, setPlaybackState] = useState<PlaybackState | null | undefined>(undefined);
+  useEffect(() => {
+    let abandoned = false;
+    fetch(`/api/jellyfin/playback-state/${itemId}`)
+      .then((response) => (response.ok ? (response.json() as Promise<PlaybackState>) : null))
+      .catch(() => null)
+      .then((value) => {
+        if (!abandoned) setPlaybackState(value);
+      });
+    return () => {
+      abandoned = true;
+    };
+  }, [itemId]);
+
   const error =
     runtimeError ??
     info?.refusedReason ??
@@ -587,7 +619,9 @@ export function ExperimentalPlayerHost({
       fallToStable(info.refusedReason);
       return;
     }
-    if (!info || !canvasRef.current || !videoElRef.current) return;
+    // `playbackState` est attendu au même titre que la description : ouvrir le film sans savoir
+    // où l'on en est, c'est l'ouvrir au mauvais endroit.
+    if (!info || playbackState === undefined || !canvasRef.current || !videoElRef.current) return;
 
     let cancelled = false;
     let unsubscribes: (() => void)[] = [];
@@ -608,7 +642,7 @@ export function ExperimentalPlayerHost({
      * ask for, and told nothing about it.
      */
     const applyPreferences = (audio: EngineTrack[], subtitles: EngineTrack[]): number | null => {
-      const preferences = info.preferences;
+      const preferences = playbackState?.preferences ?? null;
       if (!preferences || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
 
       const wantedAudio = chooseAudioTrack(audio, preferences);
@@ -668,7 +702,8 @@ export function ExperimentalPlayerHost({
     // it was told to start. Without that last part, a rebuild nobody asked for — and there was
     // one, every time the player was minimised — sent the film back to where it began.
     const startSeconds =
-      rebuildAtRef.current ?? (positionRef.current > 0 ? positionRef.current : session.resumeAt ?? info.resumeSeconds ?? 0);
+      rebuildAtRef.current ??
+      (positionRef.current > 0 ? positionRef.current : session.resumeAt ?? playbackState?.resumeSeconds ?? 0);
     // Connue avant que le moteur n'ouvre quoi que ce soit : entre ici et la première image il
     // s'écoule le temps de télécharger un en-tête et un groupe d'images, et une fermeture dans
     // cette fenêtre rapportait zéro.
@@ -1002,7 +1037,7 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle, spendRebuild]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle, spendRebuild]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -1100,7 +1135,11 @@ export function ExperimentalPlayerHost({
     elapsedMs: openingFor,
     title,
     itemId,
-    file: (info as unknown as Record<string, unknown>) ?? null,
+    // Les deux champs du spectateur sont réintégrés ici : ils ont quitté la charge du fichier,
+    // mais un rapport qui ne dit plus où l'on en était serait moins utile qu'avant.
+    file: info
+      ? ({ ...(info as unknown as Record<string, unknown>), ...(playbackState ?? {}) } as Record<string, unknown>)
+      : null,
     pathReason,
     diagnostics: {
       ...diagnostics,

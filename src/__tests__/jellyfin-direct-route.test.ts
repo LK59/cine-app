@@ -8,13 +8,11 @@ vi.mock("@/lib/config", () => ({ config: { player: { enabled: true } } }));
 const mockGetSources = vi.fn();
 const mockTimestamps = vi.fn();
 const mockNaming = vi.fn();
-const mockUserConfig = vi.fn();
 vi.mock("@/lib/clients/jellyfin", () => ({
   jellyfin: {
     getItemMediaSources: (...a: unknown[]) => mockGetSources(...a),
     getEpisodeTimestamps: (...a: unknown[]) => mockTimestamps(...a),
     getItemNaming: (...a: unknown[]) => mockNaming(...a),
-    getUserConfiguration: (...a: unknown[]) => mockUserConfig(...a),
   },
 }));
 const mockPrefs = vi.fn();
@@ -67,7 +65,6 @@ beforeEach(() => {
   mockGetSources.mockResolvedValue(mediaSource());
   mockTimestamps.mockResolvedValue(null);
   mockNaming.mockResolvedValue(null);
-  mockUserConfig.mockResolvedValue({ Configuration: {} });
 });
 
 describe("GET /api/jellyfin/direct/[itemId]", () => {
@@ -235,40 +232,14 @@ describe("nommer et régler ce qui est lu", () => {
     expect(body.title).toBe("La Petite Maison dans la prairie — S00E01 · La Genèse");
   });
 
-  it("transmet les préférences de langue du compte", async () => {
-    mockUserConfig.mockResolvedValue({
-      Configuration: {
-        AudioLanguagePreference: "fra",
-        SubtitleLanguagePreference: "fra",
-        SubtitleMode: "OnlyForced",
-        PlayDefaultAudioTrack: false,
-      },
-    });
-    const body = await (await get()).json();
-    expect(body.preferences).toEqual({
-      audioLanguage: "fra",
-      subtitleLanguage: "fra",
-      subtitleMode: "OnlyForced",
-      playDefaultAudioTrack: false,
-    });
-  });
-
-  it("ne demande pas les préférences d'un compte sans jeton Jellyfin", async () => {
-    // Their settings are read with their own token; without one there is nobody to ask about.
-    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", id: 7 });
-    const body = await (await get()).json();
-    expect(mockUserConfig).not.toHaveBeenCalled();
-    expect(body.preferences).toBeNull();
-    expect(body.refusedReason).toBeNull();
-  });
-
-  it("joue quand même quand le serveur ne dit ni l'un ni l'autre", async () => {
-    // A server that will not answer about someone's languages is a reason to open the file on
-    // its own defaults, not a reason to refuse to play it.
-    mockUserConfig.mockRejectedValue(new Error("indisponible"));
+  // Les préférences de langue ont quitté cette charge — elles changent entre deux lectures du
+  // même fichier, et restaient gelées avec lui. Leurs tests ont suivi, dans
+  // `jellyfin-playback-state-route.test.ts`.
+  it("joue quand même quand le serveur ne sait pas nommer le titre", async () => {
+    // A server that will not answer is a reason to open the file without a name, not a reason to
+    // refuse to play it.
     mockNaming.mockRejectedValue(new Error("indisponible"));
     const body = await (await get()).json();
-    expect(body.preferences).toBeNull();
     expect(body.title).toBeNull();
     expect(body.refusedReason).toBeNull();
   });

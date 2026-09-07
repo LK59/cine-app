@@ -62,6 +62,34 @@ type Info = Record<string, unknown>;
 let swr: { data: Info | undefined; error: unknown };
 vi.mock("swr", () => ({ default: () => swr }));
 
+/**
+ * Ce que la route `playback-state` répond — position et préférences.
+ *
+ * Ces deux champs vivaient dans la charge du fichier, et c'est précisément ce qu'on a séparé :
+ * le fichier ne change jamais, le spectateur si.
+ */
+let viewerState: { resumeSeconds: number; preferences: unknown } | null;
+
+/**
+ * Le `fetch` du harnais.
+ *
+ * Le lecteur lit l'état du spectateur à chaque ouverture ; un test qui remplace `fetch` pour ses
+ * propres besoins doit donc quand même répondre à cette adresse-là, sinon il coupe une lecture
+ * qui n'a rien à voir avec ce qu'il examine. D'où ce point d'entrée unique : l'état d'abord, le
+ * reste au test.
+ */
+function stubFetch(rest: (url: string) => unknown = () => ({ ok: true, text: async () => "" })) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.startsWith("/api/jellyfin/playback-state/")) {
+        return { ok: true, json: async () => viewerState };
+      }
+      return rest(url);
+    })
+  );
+}
+
 function info(over: Info = {}): Info {
   return {
     streamUrl: "/stream.mkv",
@@ -69,8 +97,6 @@ function info(over: Info = {}): Info {
     refusedReason: null,
     canvasHdrRefusal: null,
     externalSubtitles: [],
-    preferences: null,
-    resumeSeconds: 0,
     video: { codec: "hevc", width: 1920, height: 1080, bitDepth: 10, isHdr: false, rangeType: "SDR" },
     introSkip: null,
     creditsStart: null,
@@ -182,6 +208,8 @@ beforeEach(() => {
   probes = [];
   engineHandlers.clear();
   swr = { data: info(), error: undefined };
+  viewerState = { resumeSeconds: 0, preferences: null };
+  stubFetch();
   remux = fakeRemux();
   nextProbe = () => ({ path: "remux", start: async () => remux, discard: vi.fn() });
   Object.defineProperty(navigator, "onLine", { value: true, writable: true, configurable: true });
@@ -192,6 +220,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -428,7 +457,7 @@ describe("ce que le spectateur avait choisi", () => {
       data: info({ externalSubtitles: [{ id: -1, language: "fra", title: "Français", url: "/sub.vtt" }] }),
       error: undefined,
     };
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => "" })));
+    stubFetch();
     mount();
     await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
     await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
@@ -489,7 +518,7 @@ describe("les préférences du compte Jellyfin", () => {
   it("ouvre sur la piste que le compte demande, malgré deux écritures différentes", async () => {
     // The container says `fre`, the account says `fra`. Compared as strings they never match,
     // and this whole feature would silently do nothing.
-    swr = { data: info({ preferences }), error: undefined };
+    viewerState = { resumeSeconds: 0, preferences };
     remux = fakeRemux({ currentAudioTrack: 2 }); // opens on English
     mount();
     await waitFor(() => expect(remux.selectAudioTrack).toHaveBeenCalledWith(1));
@@ -497,7 +526,7 @@ describe("les préférences du compte Jellyfin", () => {
 
   it("ne touche à rien quand la langue demandée n'est pas là", async () => {
     // Being handed the only other track is being given a film in a language nobody asked for.
-    swr = { data: info({ preferences: { ...preferences, audioLanguage: "jpn" } }), error: undefined };
+    viewerState = { resumeSeconds: 0, preferences: { ...preferences, audioLanguage: "jpn" } };
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
     expect(remux.selectAudioTrack).not.toHaveBeenCalled();
@@ -506,7 +535,7 @@ describe("les préférences du compte Jellyfin", () => {
   it("laisse le choix du spectateur l'emporter sur une reconstruction", async () => {
     // Coming back from a network cut must give back what *they* picked, not what their account
     // would have picked.
-    swr = { data: info({ preferences }), error: undefined };
+    viewerState = { resumeSeconds: 0, preferences };
     mount();
     await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
     await act(async () => void fireEvent.click(screen.getByText("audio:eng")));
@@ -520,15 +549,15 @@ describe("les préférences du compte Jellyfin", () => {
 
   it("peut satisfaire une préférence de sous-titres avec un fichier posé à côté", async () => {
     // The direct path has no tracks of its own at all, so this is the only way it has any.
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => "" })));
+    stubFetch();
     swr = {
       data: info({
         container: "mp4",
-        preferences: { ...preferences, subtitleMode: "Default" },
         externalSubtitles: [{ id: -1, language: "fra", title: "Français", url: "/sub.vtt" }],
       }),
       error: undefined,
     };
+    viewerState = { resumeSeconds: 0, preferences: { ...preferences, subtitleMode: "Default" } };
     nextProbe = () => ({ path: "direct", discard: vi.fn() });
     mount();
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/sub.vtt", expect.anything()));
@@ -536,7 +565,7 @@ describe("les préférences du compte Jellyfin", () => {
   });
 
   it("se passe très bien de préférences quand le serveur n'en donne pas", async () => {
-    swr = { data: info({ preferences: null }), error: undefined };
+    viewerState = { resumeSeconds: 0, preferences: null };
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
     expect(remux.selectAudioTrack).not.toHaveBeenCalled();
@@ -583,10 +612,7 @@ describe("les sous-titres posés à côté du film", () => {
 
   it("éteint la piste du conteneur et affiche le fichier, à la bonne seconde", async () => {
     withExternal();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nBonjour." }))
-    );
+    stubFetch(() => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nBonjour." }));
     mount();
     await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
     await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
@@ -602,7 +628,7 @@ describe("les sous-titres posés à côté du film", () => {
 
   it("le dit sans rien casser quand le fichier ne vient pas", async () => {
     withExternal();
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404 })));
+    stubFetch(() => ({ ok: false, status: 404 }));
     mount();
     await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
     await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
@@ -629,10 +655,7 @@ describe("le chemin canvas", () => {
       data: info({ externalSubtitles: [{ id: -1, language: "fra", title: "Français", url: "/sub.vtt" }] }),
       error: undefined,
     };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nDu fichier." }))
-    );
+    stubFetch(() => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nDu fichier." }));
     nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
     mount();
     await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
