@@ -70,24 +70,6 @@ function itemId(item: CinemaMovie | CinemaSeries): number {
   return "radarrId" in item ? item.radarrId : item.sonarrId;
 }
 
-/**
- * Un catalogue, indexé par identifiant.
- *
- * Hors du composant à dessein : recréée à chaque rendu, elle deviendrait une dépendance des
- * mémoïsations qu'elle alimente, et les annulerait exactement — l'index se reconstruirait à chaque
- * passage. Elle ne lit rien du composant, elle n'a donc rien à y faire.
- */
-function indexByItemId(
-  data: CinemaMoviesPayload | CinemaSeriesPayload | undefined
-): Map<number, CinemaMovie | CinemaSeries> | null {
-  if (!data) return null;
-  const all = uniqueById(
-    [...data.spotlight, ...Object.values(data.rows).flat()],
-    (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
-  );
-  return new Map(all.map((item) => [itemId(item), item] as const));
-}
-
 export function CinemaMobileClient() {
   const t = useT();
   const playback = usePlayback();
@@ -163,22 +145,14 @@ export function CinemaMobileClient() {
   // Les deux étaient dans le même `useMemo`, donc ouvrir ou fermer un écran — n'importe lequel —
   // aplatissait un millier d'éléments et reconstruisait l'index à chaque fois. C'est exactement le
   // genre de travail qui se paie en à-coups sur un téléphone, pour un résultat identique.
-  /**
-   * Un index par catalogue, et non un index de l'onglet courant.
-   *
-   * Une fiche se retrouve par son identifiant, quel que soit l'onglet ouvert : c'est ce qui permet
-   * d'ouvrir une série depuis la rangée « Reprendre » de l'onglet Films. L'index unique obligeait
-   * à basculer l'onglet pour retrouver l'élément, donc à revenir en arrière juste après — c'est
-   * tout le clignotement.
-   *
-   * Ça ne coûte rien de plus : chaque index est construit à partir de sa propre charge utile, et
-   * celle des séries est différée tant qu'on n'a pas ouvert leur onglet. Tant qu'elle est absente,
-   * son index vaut `null` et rien n'est calculé.
-   */
-  const byIdMovies = useMemo(() => indexByItemId(movies), [movies]);
-  const byIdSeries = useMemo(() => indexByItemId(series), [series]);
-  /** Celui de l'onglet affiché : c'est lui, et lui seul, qui alimente la grille. */
-  const byId = isSeries ? byIdSeries : byIdMovies;
+  const byId = useMemo(() => {
+    if (!payload) return null;
+    const all = uniqueById(
+      [...payload.spotlight, ...Object.values(payload.rows).flat()],
+      (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
+    );
+    return new Map(all.map((item) => [itemId(item), item] as const));
+  }, [payload]);
 
   /**
    * Toute la bibliothèque de l'onglet courant, une fois chacune.
@@ -188,24 +162,12 @@ export function CinemaMobileClient() {
    */
   const catalogue = useMemo(() => (byId ? [...byId.values()] : []), [byId]);
 
-  /**
-   * Ce que l'adresse nomme, et non ce que l'onglet montre.
-   *
-   * C'est ainsi que fait déjà le grand écran, où la fiche se choisit par `route.film` ou
-   * `route.serie` sans passer par l'onglet. Ici elle y passait, donc ouvrir une série depuis une
-   * rangée mixte imposait de basculer l'onglet — et de le rebasculer en refermant.
-   */
   const selected = useMemo(() => {
-    if (route.serie !== null) {
-      const item = byIdSeries?.get(route.serie);
-      return item ? { item, mediaType: "series" as const } : null;
-    }
-    if (route.film !== null) {
-      const item = byIdMovies?.get(route.film);
-      return item ? { item, mediaType: "movies" as const } : null;
-    }
-    return null;
-  }, [route.serie, route.film, byIdMovies, byIdSeries]);
+    const id = isSeries ? route.serie : route.film;
+    if (id === null || !byId) return null;
+    const item = byId.get(id);
+    return item ? { item, mediaType } : null;
+  }, [isSeries, route.serie, route.film, byId, mediaType]);
 
   /**
    * La fiche que celle du dessus recouvre.
@@ -234,11 +196,9 @@ export function CinemaMobileClient() {
   const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
   const behind = useRouteBehind();
   const behindSelected = useMemo(() => {
-    if (!behind || !selected) return null;
-    // Plus de comparaison d'onglet : ce qui est dessous est ce que l'adresse précédente nommait,
-    // exactement comme ce qui est dessus.
-    const type = behind.serie !== null ? ("series" as const) : ("movies" as const);
-    const id = behind.serie !== null ? behind.serie : behind.film;
+    if (!behind || !byId || !selected) return null;
+    if (behind.tab !== mediaType) return null;
+    const id = isSeries ? behind.serie : behind.film;
     if (id === null) return null;
     /**
      * Une fiche ne peut pas être derrière elle-même — la garde que le bureau avait déjà.
@@ -250,10 +210,10 @@ export function CinemaMobileClient() {
      * haut de sa page ; au retour, l'instance survivante reprenait sa place et on voyait l'écran
      * se recaler tout seul.
      */
-    if (id === (type === "series" ? route.serie : route.film)) return null;
-    const item = (type === "series" ? byIdSeries : byIdMovies)?.get(id);
-    return item ? { item, mediaType: type } : null;
-  }, [behind, byIdMovies, byIdSeries, selected, route.film, route.serie]);
+    if (id === (isSeries ? route.serie : route.film)) return null;
+    const item = byId.get(id);
+    return item ? { item, mediaType } : null;
+  }, [behind, byId, selected, isSeries, mediaType, route.film, route.serie]);
 
   /** La pile, du dessous vers le dessus. Une seule fiche la plupart du temps. */
   const stack = useMemo(
@@ -297,13 +257,10 @@ export function CinemaMobileClient() {
    * repartir du début. La fiche porte les deux, et « Reprendre » y est la première ligne.
    */
   const openResume = useCallback((href: string | null, play: () => void) => {
-    // Sans toucher à l'onglet, comme le fait déjà le grand écran. La rangée « Reprendre » est
-    // mixte par nature — on y reprend ce qu'on regardait, pas ce que l'onglet contient — et
-    // basculer pour ouvrir puis rebasculer en refermant se voyait comme un clignotement.
     const film = href?.match(/^\/radarr\/(\d+)$/);
-    if (film) return cinemaNavigate({ film: Number(film[1]), serie: null });
+    if (film) return cinemaNavigate({ tab: "movies", film: Number(film[1]), serie: null });
     const serie = href?.match(/^\/sonarr\/(\d+)$/);
-    if (serie) return cinemaNavigate({ serie: Number(serie[1]), film: null });
+    if (serie) return cinemaNavigate({ tab: "series", serie: Number(serie[1]), film: null });
     play();
   }, []);
 
