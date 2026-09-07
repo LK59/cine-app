@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { fetcher, revalidateWatchState } from "@/lib/swr";
+import { fetcher, progressKey, revalidateWatchState } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
@@ -28,7 +28,10 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
   const t = useT();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const key = itemId ? `/api/cinema/progress/${itemId}` : null;
+  // La clé vient de `progressKey` et non d'un gabarit recopié : c'est elle que
+  // `revalidateWatchState` relit, et deux écritures de la même clé finissent par ne plus
+  // désigner la même chose.
+  const key = itemId ? progressKey(itemId) : null;
   const { data, mutate } = useSWR<CinemaProgressPayload>(key, fetcher);
   /**
    * Sait-on seulement ce qu'il en est ?

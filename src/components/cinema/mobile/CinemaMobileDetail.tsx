@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, Video, X } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { arrivedByBack } from "@/lib/cinemaRoute";
@@ -106,7 +106,8 @@ export function CinemaMobileDetail({
   // Movies carry their resume point on a per-user endpoint (the library payload is shared across
   // viewers); a series' equivalent is whichever episode Jellyfin says is next up.
   const { data: progress } = useSWR<CinemaProgressPayload>(
-    isSeries ? null : `/api/cinema/progress/${item.jellyfinItemId}`,
+    // Voir `progressKey` : la même clé que celle que la relecture après lecture invalide.
+    isSeries ? null : progressKey(item.jellyfinItemId),
     fetcher
   );
   const { data: episodesData } = useSWR<CinemaEpisodesPayload>(

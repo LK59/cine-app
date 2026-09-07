@@ -4,7 +4,14 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { SWRConfig } from "swr";
 
 let payload: Record<string, unknown> | null = null;
-vi.mock("@/lib/swr", () => ({ fetcher: async () => payload }));
+// Le module entier, et pas seulement `fetcher` : le crochet lit aussi la clé (`progressKey`) et
+// demande la relecture des vues de reprise (`revalidateWatchState`). Un mock qui n'expose que ce
+// dont on se souvient laisse le crochet appeler `undefined` — ici pendant le rendu.
+vi.mock("@/lib/swr", () => ({
+  fetcher: async () => payload,
+  progressKey: (itemId: string) => `/api/cinema/progress/${itemId}`,
+  revalidateWatchState: vi.fn(async () => {}),
+}));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 const mockAction = vi.fn(async () => ({}));
