@@ -117,6 +117,26 @@ describe("PlaybackGuard", () => {
     expect(video.currentTime).toBe(12);
   });
 
+  it("ne ramène pas la lecture à une pause d'avant l'ouverture", () => {
+    // Le cas forcé sur appareil : « Reprendre », fermer pendant que ça charge — la tête est
+    // encore à zéro — puis « Reprendre » à nouveau. L'élément avait signalé une pause à 0, qui
+    // n'en était pas une : c'est un démarrage auquel il renonce, faute de média.
+    const { guard, video, seeks } = build({ at: 0, playable: ranges([648, 680]) });
+    (video as unknown as { paused: boolean }).paused = true;
+    guard.paused();
+
+    // La seconde lecture pose sa tête là où l'on reprend.
+    guard.opened(648.2);
+    (video as unknown as { currentTime: number }).currentTime = 648.2;
+    (video as unknown as { paused: boolean }).paused = false;
+    guard.playing();
+
+    // Sans quoi la reprise après pause y voyait un saut en avant de dix minutes et ramenait le
+    // film à l'ancre de la tentative précédente, c'est-à-dire au début.
+    expect(video.currentTime).toBeCloseTo(648.2, 2);
+    expect(seeks.map((s) => s.at)).not.toContain(0);
+  });
+
   it("shows a wait when play is pressed, and lifts it when the clock moves", () => {
     const { guard, video, starting } = build({ at: 5 });
     guard.playing();

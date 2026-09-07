@@ -575,6 +575,21 @@ export class PlaybackGuard {
     this.startRetries = 0;
     this.openedFrom = playerSeconds;
     this.openedAt = Date.now();
+    /**
+     * Et toute pause d'avant l'ouverture cesse de compter.
+     *
+     * L'ancre de pause sert à remettre la lecture là où le son s'est arrêté, parce que l'horloge
+     * de l'élément le dépasse et que le système peut reprendre le média pendant l'arrêt. Elle
+     * suppose donc une lecture en cours. Une pause enregistrée *avant* que la tête ait atterri
+     * n'en est pas une : c'est l'élément qui renonce à un démarrage qu'il ne pouvait pas faire,
+     * à la position où il se trouvait — zéro.
+     *
+     * Rapporté sur appareil : « Reprendre », fermer pendant le chargement, « Reprendre » à
+     * nouveau. La seconde lecture posait bien sa tête à 648 s, puis la reprise après pause la
+     * ramenait à l'ancre de la première, c'est-à-dire au début. Ouvrir quelque part est une
+     * décision plus récente que cette pause-là, et elle tranche.
+     */
+    this.forgetPause();
   }
 
   /**
