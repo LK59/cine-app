@@ -45,7 +45,11 @@ describe("la pile des fiches sous une fiche découverte", () => {
 describe("la fiche du dessous n'est jamais celle du dessus", () => {
   it("le téléphone écarte l'entrée qui désigne la fiche courante", () => {
     const src = readFileSync("src/components/cinema/mobile/CinemaMobileClient.tsx", "utf8");
-    expect(src).toMatch(/if \(id === \(isSeries \? route\.serie : route\.film\)\) return null;/);
+    // Le motif ne fige plus la condition qui choisit le champ — elle a changé de forme le jour où
+    // la fiche a cessé d'être choisie par l'onglet, et ce test s'est cassé sans qu'aucune garde
+    // n'ait disparu. Ce qu'il protège, c'est la comparaison avec l'adresse courante, pas la façon
+    // de nommer le type.
+    expect(src).toMatch(/if \(id === \(.*route\.serie : route\.film\)\) return null;/);
   });
 
   it("le bureau garde la sienne", () => {
