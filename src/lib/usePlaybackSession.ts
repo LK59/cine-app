@@ -30,15 +30,21 @@ function report(
   info: PlaybackSessionInfo,
   positionTicks: number,
   isPaused = false
-) {
+): Promise<void> {
   // keepalive lets the stop-on-unload report survive the page tearing down —
   // a regular fetch would get cancelled mid-flight on navigation/close.
-  fetch(`/api/jellyfin/playback/${path}`, {
+  //
+  // La promesse est rendue, et c'est nouveau : l'appelant qui ferme le lecteur doit savoir *quand*
+  // Jellyfin a pris l'arrêt en compte, sous peine de relire la position juste avant qu'elle change
+  // et de réafficher « Lecture » sur un film qu'on vient de quitter.
+  return fetch(`/api/jellyfin/playback/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ client: PLAYBACK_CLIENTS.stable, ...info, positionTicks, isPaused }),
     keepalive: true,
-  }).catch(() => {});
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 // Keeps Jellyfin's "now playing" / resume state in sync with an active
@@ -59,7 +65,7 @@ export function usePlaybackSession(
   getPositionSeconds: () => number,
   session: PlaybackSessionInfo | null,
   getPaused?: () => boolean
-): () => void {
+): () => Promise<void> {
   const sessionRef = useRef(session);
   const stoppedRef = useRef(false);
   const positionRef = useRef(getPositionSeconds);
@@ -116,10 +122,10 @@ export function usePlaybackSession(
   }, [session?.itemId, session?.playSessionId, session?.mediaSourceId, session?.announce, session?.client]);
 
   return useCallback(() => {
-    if (stoppedRef.current) return;
+    if (stoppedRef.current) return Promise.resolve();
     stoppedRef.current = true;
     const s = sessionRef.current;
-    if (!s) return;
-    report("stop", s, Math.floor(positionRef.current() * TICKS_PER_SECOND));
+    if (!s) return Promise.resolve();
+    return report("stop", s, Math.floor(positionRef.current() * TICKS_PER_SECOND));
   }, []);
 }

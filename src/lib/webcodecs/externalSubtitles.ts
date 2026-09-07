@@ -1,3 +1,4 @@
+import { stripSubtitleMarkup } from "./subtitleMarkup";
 import type { EngineTrack, SubtitleCue } from "./engine";
 
 /**
@@ -46,11 +47,15 @@ function seconds(h: string, m: string, s: string, fraction: string): number {
   return Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(fraction) / 10 ** fraction.length;
 }
 
-/** Everything a cue carries that is not the words: position hints, karaoke spans, markup. */
+/**
+ * Everything a cue carries that is not the words: position hints, karaoke spans, markup.
+ *
+ * Le retrait des chevrons est passé dans `stripSubtitleMarkup` : les pistes internes au Matroska
+ * en avaient besoin aussi et ne l'avaient pas, ce qui affichait les `<i>` de Titanic à l'écran.
+ * Ce qui reste ici est propre au format des fichiers : les blocs d'override ASS.
+ */
 function plainText(lines: string[]): string {
-  return lines
-    .join("\n")
-    .replace(/<[^>]*>/g, "")
+  return stripSubtitleMarkup(lines.join("\n"))
     .replace(/\{\\[^}]*\}/g, "")
     .trim();
 }

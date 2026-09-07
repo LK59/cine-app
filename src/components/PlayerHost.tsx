@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
+import { refreshAfterPlayback } from "@/lib/swr";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
@@ -210,7 +211,12 @@ function ActivePlayer({
   // place, no longer receiving new data) still has a recent position to resume from — reading
   // video.currentTime directly at that point would work too, but this is more robust if the
   // element itself is ever swapped.
-  const lastKnownTime = useRef(0);
+  //
+  // Semée au point de reprise plutôt qu'à zéro. Elle ne l'était qu'une fois le chargement fini,
+  // si bien que fermer un film *pendant* qu'il chargeait rapportait un arrêt à 0:00 — Jellyfin
+  // oubliait la position, le film quittait « Reprendre », et cliquer sur « Reprendre » pour se
+  // raviser aussitôt effaçait donc précisément ce qu'on venait de vouloir reprendre.
+  const lastKnownTime = useRef(initialResumeAt ?? 0);
   const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Belt-and-braces for the native (non-hls.js) path: iOS's media daemon releases HLS sessions
   // asynchronously, so even with the reload-based track switch a fresh load can race the old
@@ -319,10 +325,14 @@ function ActivePlayer({
   const CLOSE_MS = 200;
   const handleClose = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    stopPlaybackNow();
+    const reported = stopPlaybackNow();
     setClosing(true);
     setTimeout(() => playback.close(), CLOSE_MS);
-  }, [playback, stopPlaybackNow]);
+    // La fiche et la rangée « Reprendre » décrivent ce film : elles sont fausses dès l'instant
+    // où on le quitte, et rien ne les relisait. Volontairement hors du chemin de la fermeture —
+    // l'écran doit partir tout de suite, la relecture peut attendre son tour.
+    void refreshAfterPlayback(reported, itemId);
+  }, [playback, stopPlaybackNow, itemId]);
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
@@ -443,6 +453,10 @@ function ActivePlayer({
       setPlaybackInfo(data.playbackInfo ?? null);
 
       const resumeAt = opts?.resumeAt;
+      // Avant le chargement, et pas seulement dans son rappel plus bas : entre cet instant et
+      // l'arrivée des métadonnées il s'écoule plusieurs secondes sur un gros fichier, et c'est
+      // exactement la fenêtre pendant laquelle une fermeture rapportait zéro.
+      lastKnownTime.current = resumeAt ?? 0;
       video.addEventListener(
         // Root cause found live via real Jellyfin logs during a reproduced test: setting
         // currentTime this early (previously on 'loadedmetadata', which only guarantees

@@ -170,8 +170,28 @@ describe("subtitle cue selection", () => {
 });
 
 describe("subtitle text extraction", () => {
-  it("passes SRT through untouched", () => {
+  it("passes plain SRT through untouched", () => {
     expect(subtitleText("Bonjour\nle monde", "S_TEXT/UTF8")).toBe("Bonjour\nle monde");
+  });
+
+  // Le symptôme, trouvé sur Titanic : ses quatre pistes sont du SubRip *interne* au Matroska, et
+  // ce chemin-là ne nettoyait rien — une réplique en italique s'affichait entourée de ses balises.
+  // Les fichiers posés à côté du film, eux, étaient nettoyés depuis toujours ; c'est la même
+  // fonction qui sert maintenant aux deux.
+  it("retire les balises d'un SubRip interne", () => {
+    expect(subtitleText("<i>Pour que ça compte.</i>", "S_TEXT/UTF8")).toBe("Pour que ça compte.");
+  });
+
+  // Une balise ouverte sur une ligne et fermée sur la suivante est la forme normale d'une
+  // réplique de deux lignes — c'est exactement ce que Jellyfin renvoie pour ce film.
+  it("retire une balise qui enjambe deux lignes", () => {
+    expect(subtitleText("<i>Pour que ça compte.\nRendez-vous à la pendule.</i>", "S_TEXT/UTF8")).toBe(
+      "Pour que ça compte.\nRendez-vous à la pendule."
+    );
+  });
+
+  it("retire aussi les balises à attributs", () => {
+    expect(subtitleText('<font color="#ffffff">Blanc</font>', "S_TEXT/UTF8")).toBe("Blanc");
   });
 
   // An ASS block is the tail of a Dialogue row: nine fields, then the text. Throwing the track

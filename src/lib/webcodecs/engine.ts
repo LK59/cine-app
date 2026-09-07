@@ -13,6 +13,7 @@
 // be decoded directly, so a silent fallback to another pipeline would defeat the purpose.
 
 import { HttpByteSource, type ByteSource } from "./byteSource";
+import { stripSubtitleMarkup } from "./subtitleMarkup";
 import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
 import { SampleReader } from "./sampleReader";
 import { audioConfigCandidates, audioConfigFor, videoConfigFor, unsupportedReason } from "./codecConfig";
@@ -64,20 +65,29 @@ export interface SubtitleCue {
 // stripped beats withholding 218 files' subtitles over their styling — see subtitleText below.
 export const TEXT_SUBTITLE_CODECS = new Set(["S_TEXT/UTF8", "S_TEXT/ASCII", "S_TEXT/ASS", "S_TEXT/SSA"]);
 
+// Réexporté : la fonction vit dans `subtitleMarkup.ts` — un module minuscule, pour que
+// `externalSubtitles.ts` puisse s'en servir sans dépendre du moteur à l'exécution — mais c'est
+// ici qu'on vient la chercher quand on parle de sous-titres.
+export { stripSubtitleMarkup };
+
 /**
  * The displayable text of a subtitle block.
  *
- * SRT blocks are the line itself. ASS blocks are the tail of a Dialogue row — nine
- * comma-separated fields before the text — carrying inline override tags like {\i1}. Those are
- * stripped rather than honoured: styled positioning is out of scope, but throwing the track away
- * over its styling would leave 218 files in this library with no subtitles at all when the text
- * is right there.
+ * SRT blocks are the line itself, markup included: `<i>`, `<b>`, `<font color="…">`. Those are
+ * stripped, because this player draws its own lines in a paragraph and would otherwise print the
+ * tags — which is exactly what Titanic's four internal SubRip tracks did. ASS blocks are the tail
+ * of a Dialogue row — nine comma-separated fields before the text — carrying inline override tags
+ * like {\i1}. Those go too: styled positioning is out of scope, but throwing the track away over
+ * its styling would leave 218 files in this library with no subtitles at all when the text is
+ * right there.
  */
 export function subtitleText(raw: string, codecId: string): string {
-  if (codecId !== "S_TEXT/ASS" && codecId !== "S_TEXT/SSA") return raw.trim();
+  if (codecId !== "S_TEXT/ASS" && codecId !== "S_TEXT/SSA") {
+    return stripSubtitleMarkup(raw).trim();
+  }
   const fields = raw.split(",");
   const text = fields.length > 8 ? fields.slice(8).join(",") : raw;
-  return text
+  return stripSubtitleMarkup(text)
     .replace(/\{[^}]*\}/g, "")
     .replace(/\\N/gi, "\n")
     .replace(/\\h/gi, " ")

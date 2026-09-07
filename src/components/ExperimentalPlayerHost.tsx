@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
-import { fetcher, playerBootstrapOptions } from "@/lib/swr";
+import { fetcher, playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -165,7 +165,12 @@ export function ExperimentalPlayerHost({
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
   const facadeRef = useRef<MediaElementFacade | null>(null);
-  const positionRef = useRef(0);
+  // Semée au point de reprise plutôt qu'à zéro : fermer pendant le chargement rapportait sinon
+  // un arrêt à 0:00, ce qui effaçait chez Jellyfin la position qu'on venait justement de vouloir
+  // reprendre. `?? 0` et non `?? info.resumeSeconds` : laisser zéro est ce qui permet au calcul
+  // de `startSeconds` plus bas de retomber sur ce que le serveur sait, quand la séance ne le
+  // portait pas.
+  const positionRef = useRef(session.resumeAt ?? 0);
 
   const [ready, setReady] = useState(false);
   // Only failures that happen *during* playback are state. The two that are already known from
@@ -515,10 +520,13 @@ export function ExperimentalPlayerHost({
 
   const handleClose = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    stopPlaybackNow();
+    const reported = stopPlaybackNow();
     setClosing(true);
     setTimeout(() => playback.close(), 200);
-  }, [playback, stopPlaybackNow]);
+    // Voir PlayerHost : la fiche et la rangée « Reprendre » sont fausses dès qu'on quitte le film,
+    // et les deux lecteurs doivent les relire de la même façon.
+    void refreshAfterPlayback(reported, itemId);
+  }, [playback, stopPlaybackNow, itemId]);
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
@@ -661,6 +669,10 @@ export function ExperimentalPlayerHost({
     // one, every time the player was minimised — sent the film back to where it began.
     const startSeconds =
       rebuildAtRef.current ?? (positionRef.current > 0 ? positionRef.current : session.resumeAt ?? info.resumeSeconds ?? 0);
+    // Connue avant que le moteur n'ouvre quoi que ce soit : entre ici et la première image il
+    // s'écoule le temps de télécharger un en-tête et un groupe d'images, et une fermeture dans
+    // cette fenêtre rapportait zéro.
+    positionRef.current = startSeconds;
 
     // The file decides which pipeline runs, not a setting: repackaging it for the browser's own
     // decoder is better on every axis when the codecs allow it, and decoding it ourselves is the

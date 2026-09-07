@@ -1,4 +1,6 @@
+import { mutate as globalMutate } from "swr";
 import { noteUnauthorized } from "@/lib/sessionExpired";
+import { isWatchingFullScreen } from "@/lib/playbackBusy";
 
 export const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -52,3 +54,57 @@ export const liveFeedOptions = {
  * Un sondage attend son tour. Ce qui conditionne l'affichage, non.
  */
 export const playerBootstrapOptions = { isPaused: () => false } as const;
+
+
+/** La clé qui porte « vu », « favori » et le point de reprise d'un titre. */
+export const progressKey = (itemId: string) => `/api/cinema/progress/${itemId}`;
+
+/**
+ * Combien de temps attendre que l'écran se libère avant d'abandonner la remise en cause.
+ *
+ * L'animation de fermeture dure 200 ms ; le reste est de la marge pour que React ait rendu et que
+ * `setWatchingFullScreen(false)` soit passé. Borné, parce qu'une attente sans fin sur un lecteur
+ * qui ne se ferme pas serait une fuite silencieuse.
+ */
+const UNPAUSE_TIMEOUT_MS = 3000;
+const UNPAUSE_POLL_MS = 50;
+
+function whenScreenIsFree(): Promise<boolean> {
+  if (!isWatchingFullScreen()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (!isWatchingFullScreen()) {
+        clearInterval(timer);
+        resolve(true);
+      } else if (Date.now() - started > UNPAUSE_TIMEOUT_MS) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, UNPAUSE_POLL_MS);
+  });
+}
+
+/**
+ * Ce que la fermeture du lecteur vient de rendre faux, relu — pour les deux lecteurs.
+ *
+ * Quitter un film à trente minutes laissait sa fiche sur « Lecture » et la rangée « Reprendre »
+ * de l'accueil inchangée, jusqu'à ce qu'on quitte l'écran et qu'on y revienne. Rien ne relisait :
+ * `PlaybackProvider` ne redemande que les clés restées *sans* donnée ni erreur, et celles-ci en
+ * avaient une — simplement périmée depuis la première seconde du film.
+ *
+ * Deux attentes, et aucune n'est superflue :
+ *
+ * 1. **Le rapport d'arrêt.** Relire la position avant que Jellyfin l'ait enregistrée redonne
+ *    exactement la valeur qu'on voulait remplacer, et la fiche resterait fausse — avec, en prime,
+ *    la conviction d'avoir rafraîchi.
+ * 2. **L'écran libéré.** SWR est en pause tant qu'un film l'occupe entièrement, et une requête
+ *    mise en pause est *abandonnée*, pas différée. Demander la relecture pendant l'animation de
+ *    fermeture, c'est la jeter.
+ */
+export async function refreshAfterPlayback(reported: Promise<void>, itemId: string | null): Promise<void> {
+  await reported;
+  if (!(await whenScreenIsFree())) return;
+  const keys = itemId ? [RESUME_KEY, NEXT_UP_KEY, progressKey(itemId)] : [RESUME_KEY, NEXT_UP_KEY];
+  await Promise.all(keys.map((key) => globalMutate(key)));
+}
