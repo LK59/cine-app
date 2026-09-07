@@ -167,7 +167,7 @@ export default function RadarrPage() {
           <div className="mb-4 space-y-2">
             <div className="flex items-center gap-2">
               <div className="relative flex-1 sm:max-w-xs sm:flex-none">
-                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
                 <input
                   className="input w-full pl-8"
                   placeholder={t('radarr.searchPlaceholder')}

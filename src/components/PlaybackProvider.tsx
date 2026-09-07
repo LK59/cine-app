@@ -19,7 +19,7 @@ export interface PlaybackSession {
    * La confusion a coûté deux bugs à la fois. Le lecteur stable ne bougeait la tête que si la
    * valeur était vraie (`if (resumeAt)`), si bien qu'omettre le champ *et* passer zéro
    * revenaient au même : plusieurs appelants ont donc pris l'habitude de l'omettre pour
-   * recommencer. Le lecteur natif, écrit après, lit `session.resumeAt ?? info.resumeSeconds` —
+   * recommencer. Le lecteur natif, écrit après, lit `session.resumeAt ?? playbackState?.resumeSeconds` —
    * et pour lui un champ omis désigne précisément la position que l'on voulait écarter.
    * « Recommencer » reprenait donc au même endroit, et « Reprendre » repartait au début quand la
    * position mémorisée par le serveur, elle, était encore à zéro.

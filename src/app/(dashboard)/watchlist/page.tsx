@@ -204,7 +204,7 @@ function AddModal({ existingKeys, onClose, onAdded }: {
         <div className="shrink-0 border-b border-white/10 p-4">
           <div className="mb-3 flex items-center gap-2">
             <div className="relative flex-1">
-              <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Search size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
               <input
                 ref={inputRef}
                 value={q}
@@ -725,7 +725,7 @@ export default function WatchlistPage() {
       {/* Controls */}
       <div className="mb-4 flex gap-2">
         <div className="relative flex-1">
-          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}

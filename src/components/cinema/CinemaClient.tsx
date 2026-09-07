@@ -269,10 +269,21 @@ export function CinemaClient() {
     "/api/cinema/movies",
     fetcher
   );
+  /**
+   * Différé, sauf quand une série est visée — la même règle que sur téléphone.
+   *
+   * `openResume` ouvre ici une série sans changer d'onglet, et la fiche se choisit par
+   * `route.serie` : sans son catalogue, l'appui ne trouvait rien et ne faisait rien. Il fallait
+   * être passé par l'onglet Séries, qui le met en cache. Le défaut est antérieur au chantier du
+   * téléphone — il attendait simplement que quelqu'un ouvre une série depuis l'autre onglet.
+   */
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" ? "/api/cinema/series" : null,
+    mediaType === "series" || route.serie !== null ? "/api/cinema/series" : null,
     fetcher
   );
+  /** Le catalogue de l'onglet affiché est-il arrivé ? Voir la remise à zéro du volet.*/
+  const catalogueReady = mediaType === "series" ? series !== undefined : movies !== undefined;
+
   const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
   // "Ma liste": the watchlist entries that are actually in the library, so every card on that
   // rail is playable (see the hook).
@@ -308,8 +319,12 @@ export function CinemaClient() {
     [mediaType, moviesById, seriesById]
   );
   // Series' own Continue Watching row — lazy for the same reason `series` itself is (see above).
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(mediaType === "series" ? NEXT_UP_KEY : null, fetcher, liveFeedOptions);
+  /**
+   * « À suivre » ne dépend plus de l'onglet : sa rangée est commune aux deux (voir `continueRow`).
+   */
+  const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
   const continueSeries = nextUp?.items ?? [];
+  const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
 
   // Warms the browser's own image cache for the backdrops/logos reachable within a few keypresses
   // (see warmUpUrls/prefetchImages above for the budget and why it's capped) — without it, the
@@ -499,7 +514,16 @@ export function CinemaClient() {
    */
   useEffect(() => {
     rowsPaneRef.current?.scrollTo({ top: 0, behavior: "instant" });
-  }, [mediaType]);
+    // Et une seconde fois quand le catalogue de l'onglet arrive.
+    //
+    // Le catalogue des séries est différé : en venant de « Films », l'onglet s'affiche vide, la
+    // remise à zéro ci-dessus porte donc sur un volet qui ne contient rien, puis les rangées
+    // apparaissent d'un coup sous un conteneur magnétique — et le navigateur, qui doit se
+    // raccrocher à un point d'accroche après un changement de contenu, tombait sur le dernier :
+    // on arrivait tout en bas de la page. Invisible en rechargeant *sur* l'onglet Séries, où le
+    // catalogue est déjà là quand la remise à zéro a lieu — d'où un bug qui ne se voyait que
+    // dans un sens.
+  }, [mediaType, catalogueReady]);
 
   /** Le film de la bibliothèque désigné par un lien de reprise, s'il y est. */
   const matchRadarr = useCallback(
@@ -664,6 +688,84 @@ export function CinemaClient() {
     );
   }
 
+  /**
+   * « Reprendre », une seule rangée, la même sur les deux onglets.
+   *
+   * Elle était scindée : les films sur l'onglet Films, les épisodes sur l'onglet Séries. Or
+   * « Reprendre » ne décrit pas une catégorie du catalogue, mais l'endroit où l'on s'est arrêté —
+   * et ce qu'on a laissé en cours hier soir n'est pas rangé par onglet dans la tête de personne.
+   * Le film à moitié vu disparaissait donc derrière un onglet où l'on n'était pas. Le téléphone
+   * les réunissait déjà ; c'est lui qui avait raison.
+   *
+   * Une seule définition, rendue par les deux branches, pour qu'elles ne puissent plus diverger.
+   * Les indices se suivent d'une liste à l'autre : c'est une rangée, donc un seul parcours aux
+   * flèches.
+   */
+  const continueRow = hasContinue && (
+    <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
+      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+        {resumeMovies.map((item, i) => (
+          <ContinueCard
+            key={item.id}
+            itemId={item.id}
+            title={item.name}
+            thumbnailUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
+            progress={item.progress}
+            resumeTicks={item.positionTicks}
+            runtimeTicks={item.runtimeTicks}
+            rowKey="continue"
+            index={i}
+            onFocus={() => {
+              const inLibrary = matchRadarr(item.cinemaHref);
+              if (inLibrary) setFocusedItem(inLibrary);
+            }}
+            onOpen={() =>
+              openResume(item.cinemaHref, () =>
+                playback.play({
+                  itemId: item.id,
+                  title: item.name,
+                  resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : 0,
+                })
+              )
+            }
+          />
+        ))}
+        {continueSeries.map((item, i) => (
+          <ContinueCard
+            key={item.jellyfinItemId}
+            itemId={item.jellyfinItemId}
+            title={item.title}
+            thumbnailUrl={item.thumbnailUrl}
+            progress={
+              item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0
+            }
+            resumeTicks={item.resumeTicks}
+            runtimeTicks={item.runtimeTicks}
+            seasonNumber={item.seasonNumber}
+            episodeNumber={item.episodeNumber}
+            rowKey="continue"
+            index={resumeMovies.length + i}
+            onFocus={() => {
+              const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
+              if (inLibrary) setSeriesFocusedItem(inLibrary);
+            }}
+            onOpen={() =>
+              openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
+                playback.play({
+                  itemId: item.jellyfinItemId,
+                  title: item.title,
+                  resumeAt:
+                    item.resumeTicks && item.resumeTicks > 0 ? item.resumeTicks / 10_000_000 : 0,
+                })
+              )
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+
   return createPortal(
     // `--player-rail` est posée par PlayerShell : la bande repliée du rail est réservée ici,
     // parce qu'un écran porté dans document.body n'hérite d'aucun padding de la coquille.
@@ -807,6 +909,9 @@ export function CinemaClient() {
         <div
           ref={rowsPaneRef}
           className="scrollbar-thin relative min-h-80 flex-1 snap-y snap-mandatory scroll-smooth overflow-y-auto pb-16 pt-6"
+          // L'ancrage du défilement compense l'arrivée de contenu en déplaçant la vue : ici, ce
+          // contenu arrive toujours *après* qu'on a décidé où l'on veut être. On le désactive.
+          style={{ overflowAnchor: "none" }}
         >
           {/* Keyed by mediaType so switching Films/Séries crossfades the whole rows pane in
               instead of hard-cutting between them — only the ENTERING side needs an animation
@@ -844,39 +949,7 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {resumeMovies.length > 0 && (
-                <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
-                  <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-                    {resumeMovies.map((item, i) => (
-                      <ContinueCard
-                        key={item.id}
-                        itemId={item.id}
-                        title={item.name}
-                        thumbnailUrl={item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null}
-                        progress={item.progress}
-                        resumeTicks={item.positionTicks}
-                        runtimeTicks={item.runtimeTicks}
-                        rowKey="continue-movies"
-                        index={i}
-                        onFocus={() => {
-                          const inLibrary = matchRadarr(item.cinemaHref);
-                          if (inLibrary) setFocusedItem(inLibrary);
-                        }}
-                        onOpen={() =>
-                          openResume(item.cinemaHref, () =>
-                            playback.play({
-                              itemId: item.id,
-                              title: item.name,
-                              resumeAt: item.positionTicks > 0 ? item.positionTicks / 10_000_000 : 0,
-                            })
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {continueRow}
 
               {/* The curated rails, ahead of the alphabetical genre rows: what's best, what just
                   arrived, what you saved. A library sorted A→Z is a catalogue; these three are
@@ -885,7 +958,7 @@ export function CinemaClient() {
                 <CinemaTop10Row
                   label={t("cinema.top10")}
                   rowKey="top10-movies"
-                  rowIndex={resumeMovies.length > 0 ? 2 : 1}
+                  rowIndex={hasContinue ? 2 : 1}
                   items={movies.top10}
                   idOf={(m) => m.radarrId}
                   cardWidthClassName={CARD_WIDTH}
@@ -986,44 +1059,7 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
-              {continueSeries.length > 0 && (
-                <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
-                  <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-                  <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-                    {continueSeries.map((item, i) => (
-                      <ContinueCard
-                        key={item.jellyfinItemId}
-                        itemId={item.jellyfinItemId}
-                        title={item.title}
-                        thumbnailUrl={item.thumbnailUrl}
-                        progress={
-                          item.resumeTicks && item.runtimeTicks ? Math.min((item.resumeTicks / item.runtimeTicks) * 100, 99) : 0
-                        }
-                        resumeTicks={item.resumeTicks}
-                        runtimeTicks={item.runtimeTicks}
-                        seasonNumber={item.seasonNumber}
-                        episodeNumber={item.episodeNumber}
-                        rowKey="continue-series"
-                        index={i}
-                        onFocus={() => {
-                          const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
-                          if (inLibrary) setSeriesFocusedItem(inLibrary);
-                        }}
-                        onOpen={() =>
-                          openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
-                            playback.play({
-                              itemId: item.jellyfinItemId,
-                              title: item.title,
-                              resumeAt:
-                                item.resumeTicks && item.resumeTicks > 0 ? item.resumeTicks / 10_000_000 : 0,
-                            })
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {continueRow}
 
               {seriesLoading && (
                 <div className="flex justify-center pt-12">
@@ -1041,7 +1077,7 @@ export function CinemaClient() {
                 <CinemaTop10Row
                   label={t("cinema.top10")}
                   rowKey="top10-series"
-                  rowIndex={continueSeries.length > 0 ? 1 : 0}
+                  rowIndex={hasContinue ? 1 : 0}
                   items={series.top10}
                   idOf={(x) => x.sonarrId}
                   cardWidthClassName={CARD_WIDTH}

@@ -196,7 +196,7 @@ export default function QbittorrentPage() {
       {torrents && torrents.length > 0 && (
         <div>
           <div className="relative mb-3">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={query}

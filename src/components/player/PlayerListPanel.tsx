@@ -180,7 +180,11 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
         {!adding && (
         <div className="mb-4 flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            {/* z-10 : `.input` porte un `backdrop-blur`, qui crée un contexte d'empilement et
+                fait peindre le champ *par-dessus* une icône absolue sans plan. La loupe était
+                donc invisible — un creux à gauche du texte, qu'on prend pour un emplacement
+                oublié. Même correction partout où ce motif est copié. */}
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
             <input
               type="search"
               value={query}
