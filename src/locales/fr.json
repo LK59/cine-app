@@ -1500,7 +1500,8 @@
     },
     "reload": "Recharger la page",
     "upNext": "À suivre",
-    "becauseWatched": "Parce que vous avez regardé {title}"
+    "becauseWatched": "Parce que vous avez regardé {title}",
+    "castTitle": "Distribution"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

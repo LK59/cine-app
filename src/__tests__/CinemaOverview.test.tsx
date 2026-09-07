@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
+import { CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 
 afterEach(() => cleanup());
 
@@ -70,7 +70,9 @@ describe("le résumé d'une fiche cinéma", () => {
 
 describe("la fenêtre du synopsis", () => {
   function open(onClose = vi.fn()) {
-    render(<CinemaSynopsisModal title="Sunshine" text="Le soleil se meurt." closeLabel="Fermer" onClose={onClose} />);
+    render(<CinemaDetailModal title="Sunshine" closeLabel="Fermer" onClose={onClose}>
+        <p>Le soleil se meurt.</p>
+      </CinemaDetailModal>);
     return onClose;
   }
 

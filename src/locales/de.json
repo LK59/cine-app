@@ -1500,7 +1500,8 @@
     },
     "reload": "Seite neu laden",
     "upNext": "Als Nächstes",
-    "becauseWatched": "Weil du {title} gesehen hast"
+    "becauseWatched": "Weil du {title} gesehen hast",
+    "castTitle": "Besetzung"
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",

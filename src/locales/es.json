@@ -1500,7 +1500,8 @@
     },
     "reload": "Recargar la página",
     "upNext": "A continuación",
-    "becauseWatched": "Porque viste {title}"
+    "becauseWatched": "Porque viste {title}",
+    "castTitle": "Reparto"
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

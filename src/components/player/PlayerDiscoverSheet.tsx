@@ -22,7 +22,7 @@ import {
   CAST_CLASS,
   COLUMN_GAP,
   CinemaOverview,
-  CinemaSynopsisModal,
+  CinemaDetailModal,
 } from "@/components/cinema/CinemaDetailLayout";
 import type { PlayerTitlePayload, PlayerTitleCast } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
@@ -488,12 +488,13 @@ export function PlayerDiscoverSheet({
       )}
 
       {showSynopsis && data && (
-        <CinemaSynopsisModal
+        <CinemaDetailModal
           title={data.title}
-          text={data.overview}
           closeLabel={t("common.close")}
           onClose={() => setShowSynopsis(false)}
-        />
+        >
+          <p>{data.overview}</p>
+        </CinemaDetailModal>
       )}
     </div>
     ),

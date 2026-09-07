@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 /**
@@ -67,6 +67,15 @@ export const SECTION_CLASS =
 
 /** La distribution reste, quelle que soit la hauteur : elle tient sur une ligne tronquée. */
 export const CAST_CLASS = "truncate text-xs text-white/60";
+
+/**
+ * Combien de noms tiennent avant qu'un décompte prenne le relais.
+ *
+ * Trois, parce que c'est ce qui tient sur une ligne à la largeur de la colonne sans que la
+ * troncature n'entre en jeu — et parce qu'au-delà, une liste d'acteurs ne se lit plus, elle se
+ * survole.
+ */
+export const CAST_SHOWN = 3;
 
 /** L'espacement de la colonne, resserré sur un écran court. */
 export const COLUMN_GAP = "gap-3 [@media(min-height:820px)]:gap-4";
@@ -135,14 +144,23 @@ export function CinemaOverview({
  * écran : ce que l'on venait lire chassait ce que l'on venait faire. Une fenêtre centrée ne
  * déplace rien et se referme d'un geste — Échap, un clic à côté, ou son propre bouton.
  */
-export function CinemaSynopsisModal({
+export function CinemaDetailModal({
   title,
-  text,
+  children,
   closeLabel,
   onClose,
 }: {
   title: string;
-  text: string;
+  /**
+   * Du contenu, et non une chaîne.
+   *
+   * Elle ne servait qu'au synopsis, donc un `text` suffisait. La distribution a besoin de la même
+   * fenêtre — même dimensions, même fermeture, même piège d'Échap capturé — mais avec des noms
+   * cliquables. Écrire une seconde fenêtre pour ça, c'était deux boîtes de dialogue à maintenir
+   * qui divergeraient à la première correction. D'où le contenu libre, et le nom qui cesse de
+   * promettre un synopsis.
+   */
+  children: ReactNode;
   closeLabel: string;
   onClose: () => void;
 }) {
@@ -187,9 +205,9 @@ export function CinemaSynopsisModal({
             <X size={16} />
           </button>
         </div>
-        <p className="scrollbar-thin max-h-[60vh] select-text overflow-y-auto pr-1 text-sm leading-7 text-white/90">
-          {text}
-        </p>
+        <div className="scrollbar-thin max-h-[60vh] select-text overflow-y-auto pr-1 text-sm leading-7 text-white/90">
+          {children}
+        </div>
       </div>
     </div>,
     document.body

@@ -23,7 +23,7 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, COLUMN_GAP, CinemaOverview, CinemaSynopsisModal } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -79,6 +79,7 @@ export function CinemaSeriesDetail({
 
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
+  const [showCast, setShowCast] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
   // this sheet instead of leaving the mode (see lib/cinemaRoute).
   const showEpisodes = useCinemaRoute().episodes;
@@ -295,21 +296,39 @@ export function CinemaSeriesDetail({
                Volontairement hors du parcours des flèches (pas de `data-detail-menu`) : le menu
                est une colonne d'actions, et y intercaler cinq noms ferait descendre de six crans
                pour atteindre la ligne suivante. La tabulation, elle, y va. */
-            <p className={CAST_CLASS}>
-              {t("cinema.cast")}{" "}
-              {info.tmdb.cast.slice(0, 5).map((c, i) => (
-                <span key={c.tmdbId}>
-                  {i > 0 && ", "}
-                  <button
-                    type="button"
-                    onClick={() => cinemaNavigate({ person: c.tmdbId })}
-                    className="rounded transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
-                  >
-                    {c.name}
-                  </button>
-                </span>
-              ))}
-            </p>
+            /* Trois noms entiers et un décompte, plutôt qu'une coupure au pixel.
+               `truncate` tranchait au milieu d'un nom en laissant la virgule qui le précédait
+               pendre dans le vide — « Julie Glenn,… ». Un nombre dit la même chose sans rien
+               casser, et il devient l'entrée vers la liste complète.
+
+               Le décompte est hors du paragraphe tronqué : à l'intérieur, il aurait pu être coupé
+               lui aussi, ce qui est le seul élément qu'on ne peut pas se permettre de perdre. */
+            <div className="flex items-baseline gap-1.5">
+              <p className={CAST_CLASS}>
+                {t("cinema.cast")}{" "}
+                {info.tmdb.cast.slice(0, CAST_SHOWN).map((c, i) => (
+                  <span key={c.tmdbId}>
+                    {i > 0 && ", "}
+                    <button
+                      type="button"
+                      onClick={() => cinemaNavigate({ person: c.tmdbId })}
+                      className="rounded transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                    >
+                      {c.name}
+                    </button>
+                  </span>
+                ))}
+              </p>
+              {info.tmdb.cast.length > CAST_SHOWN && (
+                <button
+                  type="button"
+                  onClick={() => setShowCast(true)}
+                  className="shrink-0 rounded text-xs font-medium text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                >
+                  +{info.tmdb.cast.length - CAST_SHOWN}
+                </button>
+              )}
+            </div>
           )}
 
           {/* Plus étroit que le texte au-dessus, sans être une colonne à part — voir MENU_STYLE. */}
@@ -462,10 +481,37 @@ export function CinemaSeriesDetail({
         />
       )}
 
+      {showCast && info?.tmdb?.cast && (
+        <CinemaDetailModal
+          title={t("cinema.castTitle")}
+          closeLabel={t("common.close")}
+          onClose={() => setShowCast(false)}
+        >
+          {/* La même fenêtre que le synopsis, et chaque nom y reste ce qu'il est ailleurs : une
+              porte vers sa filmographie. Fermer d'abord, naviguer ensuite — laisser la fenêtre
+              ouverte par-dessus la fiche qu'on vient de quitter serait un écran de trop. */}
+          <ul className="flex flex-col gap-1">
+            {info.tmdb.cast.map((c) => (
+              <li key={c.tmdbId}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCast(false);
+                    cinemaNavigate({ person: c.tmdbId });
+                  }}
+                  className="rounded text-left transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                >
+                  {c.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </CinemaDetailModal>
+      )}
+
       {showSynopsis && (
-        <CinemaSynopsisModal
+        <CinemaDetailModal
           title={item.title}
-          text={info?.tmdb?.overview || item.overview || ""}
           closeLabel={t("common.close")}
           onClose={() => {
             setShowSynopsis(false);
@@ -474,7 +520,9 @@ export function CinemaSeriesDetail({
               focusFirstAction(containerRef.current)
             );
           }}
-        />
+        >
+          <p>{info?.tmdb?.overview || item.overview || ""}</p>
+        </CinemaDetailModal>
       )}
     </div>,
     document.body
