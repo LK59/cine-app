@@ -7,6 +7,7 @@ import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { recentSearches, rememberSearch, forgetSearches } from "@/lib/recentSearches";
+import { onSearchFocusRequest } from "@/lib/searchFocus";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
@@ -68,14 +69,27 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   const [requested, setFilter] = useState<Filter>("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    // Le curseur à la fin de ce qui est déjà là, pas devant : on revient pour continuer, ou pour
-    // effacer d'un geste, jamais pour taper au milieu.
-    input.setSelectionRange(input.value.length, input.value.length);
-  }, []);
+  /**
+   * Le clavier n'arrive que si on le demande.
+   *
+   * Ce panneau prenait le focus à son montage, donc toucher l'onglet ouvrait le clavier — et
+   * parcourir les quatre onglets au pouce le faisait surgir puis disparaître au passage. La
+   * recherche s'ouvre maintenant comme n'importe quel écran : on y voit ses dernières requêtes,
+   * et rien ne se lève tant qu'on n'a pas visé le champ ou réappuyé sur l'onglet.
+   *
+   * Le curseur va à la fin de ce qui est déjà là, pas devant : on revient pour continuer, ou pour
+   * effacer d'un geste, jamais pour taper au milieu.
+   */
+  useEffect(
+    () =>
+      onSearchFocusRequest(() => {
+        const input = inputRef.current;
+        if (!input) return;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }),
+    []
+  );
 
   useEffect(() => {
     const term = query.trim();

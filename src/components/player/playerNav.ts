@@ -2,6 +2,7 @@
 
 import { Home, Search, Bookmark, User, SlidersHorizontal } from "lucide-react";
 import { cinemaNavigate, type CinemaRoute } from "@/lib/cinemaRoute";
+import { requestSearchFocus } from "@/lib/searchFocus";
 
 export type PlayerPanel = "home" | "search" | "list" | "account";
 
@@ -83,7 +84,13 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     current.discover !== null ||
     current.person !== null ||
     current.browse !== null;
-  if (activePanel(current) === panel && !covered) return;
+  if (activePanel(current) === panel && !covered) {
+    // Déjà là, et rien par-dessus : il n'y a pas d'écran à changer. Mais sur la recherche, ce
+    // second appui a un sens — c'est l'intention de taper, celle qu'on refuse au premier pour ne
+    // pas lever un clavier que personne n'a demandé. Voir `searchFocus`.
+    if (panel === "search") requestSearchFocus();
+    return;
+  }
 
   cinemaNavigate({
     ...closed,
