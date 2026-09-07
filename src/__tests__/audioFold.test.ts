@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fold } from "@/lib/webcodecs/audioTranscode";
+import { fold, toCodecChannelOrder } from "@/lib/webcodecs/audioTranscode";
 
 /** Un plan constant, pour lire d'un coup d'œil où le contenu a atterri. */
 const plane = (value: number, frames = 4) => new Float32Array(frames).fill(value);
@@ -53,5 +53,54 @@ describe("fold — replier vers le bas", () => {
   it("garde les premiers canaux plutôt que d'inventer une matrice inconnue", () => {
     const source = [plane(1), plane(2), plane(3), plane(4), plane(5)];
     expect(channels(fold(source, 3))).toEqual([1, 2, 3]);
+  });
+});
+
+
+/**
+ * L'ordre des canaux entre le décodeur et l'encodeur.
+ *
+ * Le symptôme, rapporté au casque sur « Titanic » : les voix uniquement à droite, la musique à
+ * gauche, sur les quatre pistes — toutes en 6 canaux. Les plans étaient entrelacés dans l'ordre
+ * du décodeur et lus dans celui de l'AAC, donc chaque canal gardait son rang et changeait de
+ * sens. Le centre, c'est-à-dire les dialogues, arrivait au rang du canal droit.
+ */
+describe("toCodecChannelOrder", () => {
+  /** Les plans dans l'ordre du décodeur : L R C LFE Ls Rs. */
+  const surround = [plane(1), plane(2), plane(3), plane(4), plane(5), plane(6)];
+
+  it("met le centre en premier et le LFE en dernier pour l'AAC", () => {
+    // [L,R,C,LFE,Ls,Rs] → [C,L,R,Ls,Rs,LFE]
+    expect(channels(toCodecChannelOrder(surround, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 4]);
+  });
+
+  it("place les dialogues au centre, et non à droite", () => {
+    // Le canal du centre vaut 3 à l'entrée ; il doit ressortir au rang 0, celui que l'AAC lit
+    // comme le centre — et surtout pas au rang 2, que l'AAC lit comme la droite.
+    const out = channels(toCodecChannelOrder(surround, "mp4a.40.2"));
+    expect(out[0]).toBe(3);
+    expect(out[2]).not.toBe(3);
+  });
+
+  it("ne touche pas à la stéréo, qui range pareil des deux côtés", () => {
+    const stereo = [plane(1), plane(2)];
+    expect(toCodecChannelOrder(stereo, "mp4a.40.2")).toBe(stereo);
+  });
+
+  it("applique le même principe en 7.1", () => {
+    const eight = [...surround, plane(7), plane(8)];
+    expect(channels(toCodecChannelOrder(eight, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 7, 8, 4]);
+  });
+
+  // Opus suit une autre convention encore : lui appliquer celle de l'AAC serait remplacer un
+  // mauvais ordre par un autre.
+  it("laisse les autres codecs tranquilles", () => {
+    expect(toCodecChannelOrder(surround, "opus")).toBe(surround);
+  });
+
+  // Mieux vaut ne pas permuter que permuter au hasard.
+  it("ne devine pas une disposition qu'il ne connaît pas", () => {
+    const three = [plane(1), plane(2), plane(3)];
+    expect(toCodecChannelOrder(three, "mp4a.40.2")).toBe(three);
   });
 });

@@ -293,7 +293,7 @@ export class AudioTranscoder {
         for (let i = 0; i < 8; i++) {
           const next = await primer.next();
           if (next.done) return;
-          encode(encoder, next.value, outChannels);
+          encode(encoder, next.value, outChannels, target);
         }
         for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
           await new Promise((resolve) => setTimeout(resolve, 5));
@@ -446,7 +446,7 @@ export class AudioTranscoder {
         break;
       }
       this.lastDecodedSeconds = next.value.timestampSeconds;
-      encode(this.encoder, next.value, this.channels);
+      encode(this.encoder, next.value, this.channels, this.actualCodec);
     }
 
     // At the end of the file there is nothing left to feed, so the remainder has to be asked for.
@@ -584,9 +584,56 @@ export function fold(planes: Float32Array[], to: number): Float32Array[] {
   return planes.slice(0, to);
 }
 
+/**
+ * L'ordre des canaux que l'AAC attend, à partir de celui que le décodeur rend.
+ *
+ * Les deux ne rangent pas leurs canaux pareil, et personne ne le disait ici. Le décodeur rend
+ * l'ordre WAVE — L R C LFE Ls Rs, celui que `fold` lit déjà juste au-dessus. L'AAC multicanal,
+ * lui, met le centre en premier et le LFE en dernier : C L R Ls Rs LFE.
+ *
+ * Entrelacés sans permutation, les plans gardaient leur rang et changeaient de sens : le centre,
+ * c'est-à-dire les dialogues, arrivait au rang du canal droit. Au casque, sur un 5.1 replié en
+ * stéréo par le navigateur, ça donnait les voix uniquement à droite et la musique à gauche.
+ * Rapporté sur « Titanic », vérifié à l'oreille, et absent du lecteur Jellyfin — qui transcode
+ * côté serveur avec ffmpeg, lequel fait cette correspondance depuis toujours.
+ *
+ * La stéréo n'a rien à permuter : L et R sont au même rang dans les deux conventions. C'est
+ * pourquoi seuls les fichiers multicanaux étaient touchés — c'est-à-dire presque toute cette
+ * bibliothèque.
+ */
+const AAC_ORDER: Record<number, readonly number[]> = {
+  // [L,R,C,LFE,Ls,Rs] → [C,L,R,Ls,Rs,LFE]
+  6: [2, 0, 1, 4, 5, 3],
+  // Le même principe en 7.1 : centre devant, LFE derrière, arrières inchangés.
+  // [L,R,C,LFE,Ls,Rs,Lrs,Rrs] → [C,L,R,Ls,Rs,Lrs,Rrs,LFE]
+  8: [2, 0, 1, 4, 5, 6, 7, 3],
+};
+
+/** Vrai pour les codecs AAC, qui sont les seuls dont l'ordre diffère de celui du décodeur ici. */
+function isAac(codec: string): boolean {
+  return codec.startsWith("mp4a.");
+}
+
+/**
+ * Remet les plans dans l'ordre du codec de destination.
+ *
+ * Rendus tels quels quand il n'y a rien à faire : la stéréo, le mono, un codec qui partage
+ * l'ordre du décodeur (Opus suit une autre convention encore, et n'est pas retenu ici tant que
+ * l'AAC l'est), ou une disposition qu'on ne sait pas décrire — auquel cas on préfère ne pas
+ * inventer une permutation plutôt que d'en appliquer une fausse.
+ */
+export function toCodecChannelOrder(planes: Float32Array[], codec: string): Float32Array[] {
+  if (!isAac(codec)) return planes;
+  const order = AAC_ORDER[planes.length];
+  if (!order) return planes;
+  return order.map((from) => planes[from]);
+}
+
 /** Interleaves the decoder's planes, which is the layout an encoder takes. */
-function encode(encoder: AudioEncoder, decoded: DecodedAudio, outChannels?: number): void {
-  const planes = outChannels ? fold(decoded.planes, outChannels) : decoded.planes;
+function encode(encoder: AudioEncoder, decoded: DecodedAudio, outChannels: number | undefined, codec: string): void {
+  const folded = outChannels ? fold(decoded.planes, outChannels) : decoded.planes;
+  // Après le repli, jamais avant : `fold` raisonne en ordre WAVE, comme le décodeur.
+  const planes = toCodecChannelOrder(folded, codec);
   const channels = planes.length;
   const frames = planes[0]?.length ?? 0;
   if (frames === 0) return;
