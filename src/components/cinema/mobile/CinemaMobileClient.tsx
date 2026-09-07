@@ -70,6 +70,49 @@ function itemId(item: CinemaMovie | CinemaSeries): number {
   return "radarrId" in item ? item.radarrId : item.sonarrId;
 }
 
+/**
+ * Un catalogue, indexé par identifiant.
+ *
+ * Hors du composant : recréée à chaque rendu, elle deviendrait une dépendance des mémoïsations
+ * qu'elle alimente et les annulerait. Elle ne lit rien du composant.
+ */
+function indexByItemId(
+  data: CinemaMoviesPayload | CinemaSeriesPayload | undefined
+): Map<number, CinemaMovie | CinemaSeries> | null {
+  if (!data) return null;
+  const all = uniqueById(
+    [...data.spotlight, ...Object.values(data.rows).flat()],
+    (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
+  );
+  return new Map(all.map((item) => [itemId(item), item] as const));
+}
+
+/**
+ * Quelle fiche une adresse désigne : l'onglet d'abord, l'autre type ensuite.
+ *
+ * L'onglet reste **préféré**, et c'est tout l'enjeu. L'adresse peut porter un film *et* une série
+ * en même temps — `cinemaClose` fait `history.back()`, donc fermer une fiche restaure une entrée
+ * d'historique avec tout ce qu'elle contenait, valeurs périmées comprises. Donner la priorité
+ * absolue à la série faisait ressurgir n'importe quelle série oubliée dans l'historique : elle
+ * bloquait l'ouverture des films et réapparaissait d'elle-même en refermant.
+ *
+ * Préférer l'onglet reproduit donc exactement l'ancien comportement quand son champ est renseigné.
+ * On ne consulte l'autre que lorsqu'il n'y a rien à montrer — c'est-à-dire précisément le cas
+ * qu'on veut réparer : une série ouverte depuis la rangée « Reprendre » de l'onglet Films, qui
+ * n'avait plus besoin de faire basculer l'onglet pour être trouvée.
+ */
+function sheetTarget(
+  tab: "movies" | "series",
+  film: number | null,
+  serie: number | null
+): { id: number; type: "movies" | "series" } | null {
+  const preferred = tab === "series" ? serie : film;
+  if (preferred !== null) return { id: preferred, type: tab };
+  const other = tab === "series" ? film : serie;
+  if (other !== null) return { id: other, type: tab === "series" ? "movies" : "series" };
+  return null;
+}
+
 export function CinemaMobileClient() {
   const t = useT();
   const playback = usePlayback();
@@ -145,14 +188,10 @@ export function CinemaMobileClient() {
   // Les deux étaient dans le même `useMemo`, donc ouvrir ou fermer un écran — n'importe lequel —
   // aplatissait un millier d'éléments et reconstruisait l'index à chaque fois. C'est exactement le
   // genre de travail qui se paie en à-coups sur un téléphone, pour un résultat identique.
-  const byId = useMemo(() => {
-    if (!payload) return null;
-    const all = uniqueById(
-      [...payload.spotlight, ...Object.values(payload.rows).flat()],
-      (item: CinemaMovie | CinemaSeries) => ("radarrId" in item ? item.radarrId : item.sonarrId)
-    );
-    return new Map(all.map((item) => [itemId(item), item] as const));
-  }, [payload]);
+  const byIdMovies = useMemo(() => indexByItemId(movies), [movies]);
+  const byIdSeries = useMemo(() => indexByItemId(series), [series]);
+  /** Celui de l'onglet affiché : c'est lui, et lui seul, qui alimente la grille. */
+  const byId = isSeries ? byIdSeries : byIdMovies;
 
   /**
    * Toute la bibliothèque de l'onglet courant, une fois chacune.
@@ -163,11 +202,11 @@ export function CinemaMobileClient() {
   const catalogue = useMemo(() => (byId ? [...byId.values()] : []), [byId]);
 
   const selected = useMemo(() => {
-    const id = isSeries ? route.serie : route.film;
-    if (id === null || !byId) return null;
-    const item = byId.get(id);
-    return item ? { item, mediaType } : null;
-  }, [isSeries, route.serie, route.film, byId, mediaType]);
+    const target = sheetTarget(mediaType, route.film, route.serie);
+    if (!target) return null;
+    const item = (target.type === "series" ? byIdSeries : byIdMovies)?.get(target.id);
+    return item ? { item, mediaType: target.type } : null;
+  }, [mediaType, route.film, route.serie, byIdMovies, byIdSeries]);
 
   /**
    * La fiche que celle du dessus recouvre.
@@ -196,10 +235,13 @@ export function CinemaMobileClient() {
   const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
   const behind = useRouteBehind();
   const behindSelected = useMemo(() => {
-    if (!behind || !byId || !selected) return null;
-    if (behind.tab !== mediaType) return null;
-    const id = isSeries ? behind.serie : behind.film;
-    if (id === null) return null;
+    if (!behind || !selected) return null;
+    // La même résolution que ci-dessus, pour que le dessous et le dessus ne puissent pas
+    // diverger. L'onglet de l'entrée précédente, pas celui d'aujourd'hui : c'est le sien qu'elle
+    // décrivait.
+    const target = sheetTarget(behind.tab, behind.film, behind.serie);
+    if (!target) return null;
+    const { id } = target;
     /**
      * Une fiche ne peut pas être derrière elle-même — la garde que le bureau avait déjà.
      *
@@ -210,10 +252,17 @@ export function CinemaMobileClient() {
      * haut de sa page ; au retour, l'instance survivante reprenait sa place et on voyait l'écran
      * se recaler tout seul.
      */
-    if (id === (isSeries ? route.serie : route.film)) return null;
-    const item = byId.get(id);
-    return item ? { item, mediaType } : null;
-  }, [behind, byId, selected, isSeries, mediaType, route.film, route.serie]);
+    /**
+     * Une fiche ne peut pas être derrière elle-même.
+     *
+     * Le type compte autant que l'identifiant : un film et une série peuvent porter le même
+     * numéro chez Radarr et chez Sonarr, et comparer les seuls nombres supprimerait une fiche du
+     * dessous parfaitement légitime.
+     */
+    if (target.type === selected.mediaType && id === itemId(selected.item)) return null;
+    const item = (target.type === "series" ? byIdSeries : byIdMovies)?.get(id);
+    return item ? { item, mediaType: target.type } : null;
+  }, [behind, byIdMovies, byIdSeries, selected]);
 
   /** La pile, du dessous vers le dessus. Une seule fiche la plupart du temps. */
   const stack = useMemo(
@@ -257,10 +306,14 @@ export function CinemaMobileClient() {
    * repartir du début. La fiche porte les deux, et « Reprendre » y est la première ligne.
    */
   const openResume = useCallback((href: string | null, play: () => void) => {
+    // Sans toucher à l'onglet : la rangée est mixte par nature, et basculer pour ouvrir puis
+    // rebasculer en refermant se voyait comme un clignotement. `sheetTarget` retrouve la fiche
+    // sans l'onglet dès lors que le champ de l'onglet, lui, est vide — ce que ces deux écritures
+    // garantissent en effaçant l'autre.
     const film = href?.match(/^\/radarr\/(\d+)$/);
-    if (film) return cinemaNavigate({ tab: "movies", film: Number(film[1]), serie: null });
+    if (film) return cinemaNavigate({ film: Number(film[1]), serie: null });
     const serie = href?.match(/^\/sonarr\/(\d+)$/);
-    if (serie) return cinemaNavigate({ tab: "series", serie: Number(serie[1]), film: null });
+    if (serie) return cinemaNavigate({ serie: Number(serie[1]), film: null });
     play();
   }, []);
 

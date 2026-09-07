@@ -45,7 +45,10 @@ describe("la pile des fiches sous une fiche découverte", () => {
 describe("la fiche du dessous n'est jamais celle du dessus", () => {
   it("le téléphone écarte l'entrée qui désigne la fiche courante", () => {
     const src = readFileSync("src/components/cinema/mobile/CinemaMobileClient.tsx", "utf8");
-    expect(src).toMatch(/if \(id === \(isSeries \? route\.serie : route\.film\)\) return null;/);
+    // Le motif ne fige que ce qu'il protège : une comparaison avec la fiche affichée, suivie d'un
+    // abandon. La forme de la condition a déjà changé une fois — le jour où la fiche a cessé
+    // d'être désignée par l'onglet — et ce test est tombé alors qu'aucune garde n'avait disparu.
+    expect(src).toMatch(/id === itemId\(selected\.item\)\) return null;/);
   });
 
   it("le bureau garde la sienne", () => {
