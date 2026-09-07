@@ -157,8 +157,22 @@ export function CinemaMobileClient() {
   );
   // Series (and its Continue Watching feed) stay unfetched until the tab is actually opened —
   // same lazy contract as desktop, and more valuable here where the connection may be mobile data.
+  /**
+   * Le catalogue des séries : différé, sauf quand une série est visée.
+   *
+   * Il ne se chargeait qu'à l'ouverture de l'onglet Séries — un différé qui a tout son sens, ce
+   * n'est pas une charge utile qu'on demande pour rien. Mais depuis que la rangée « Reprendre »
+   * peut ouvrir une série sans quitter l'onglet Films, la fiche a besoin de ce catalogue pour
+   * retrouver son titre : sans lui, l'appui ne faisait rien. Il fallait passer une fois par
+   * l'onglet Séries — qui le met en cache — pour que ça se mette à marcher, d'où l'impression de
+   * capricieux au premier lancement.
+   *
+   * `route.serie` suffit à le déclencher : c'est exactement le moment où l'on en a besoin, et
+   * jamais avant. Le temps qu'il arrive, la fiche ne rend rien puis apparaît — le même
+   * comportement qu'un lien profond ouvert à froid, que ce composant décrit déjà plus haut.
+   */
   const { data: series, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" ? "/api/cinema/series" : null,
+    mediaType === "series" || route.serie !== null ? "/api/cinema/series" : null,
     fetcher
   );
   /**
