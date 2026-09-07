@@ -34,7 +34,7 @@ export async function playSeriesNextEpisode(
   playback.play({
     itemId: next.itemId,
     title: next.title,
-    resumeAt: next.resumeTicks ? next.resumeTicks / 10_000_000 : undefined,
+    resumeAt: next.resumeTicks ? next.resumeTicks / 10_000_000 : 0,
     getNextEpisode: (currentItemId: string) => {
       const idx = flat.findIndex((e) => e.jellyfinItemId === currentItemId);
       if (idx === -1 || idx === flat.length - 1) return null;

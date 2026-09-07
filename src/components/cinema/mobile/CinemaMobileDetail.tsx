@@ -191,7 +191,10 @@ export function CinemaMobileDetail({
     playback.play({
       itemId: playTargetId,
       title: playTargetTitle,
-      resumeAt: !fromStart && resumeTicks ? resumeTicks / 10_000_000 : undefined,
+      // Zéro plutôt qu'omis, dans les deux cas : « recommencer » veut dire le début, et un film
+      // sans reprise aussi. Omettre revenait à laisser le lecteur natif choisir la position du
+      // serveur — voir PlaybackSession.
+      resumeAt: !fromStart && resumeTicks ? resumeTicks / 10_000_000 : 0,
       ...(isSeries ? { getNextEpisode } : {}),
     });
   }
@@ -200,7 +203,7 @@ export function CinemaMobileDetail({
     playback.play({
       itemId: episode.jellyfinItemId,
       title: episode.title,
-      resumeAt: episode.resumeTicks ? episode.resumeTicks / 10_000_000 : undefined,
+      resumeAt: episode.resumeTicks ? episode.resumeTicks / 10_000_000 : 0,
       getNextEpisode,
     });
   }

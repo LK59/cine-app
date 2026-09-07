@@ -64,7 +64,9 @@ export function PlayButton({
   const label = labelOverride ?? (
     restart ? t('common.restart') : hasResume ? `${t('common.resume')} - ${formatResumeTicks(resumeTicks!)}` : t('common.play')
   );
-  const initialResumeAt = restart ? 0 : hasResume ? resumeTicks! / 10_000_000 : undefined;
+  // Toujours un nombre : un film sans reprise commence à zéro, et le dire évite que le lecteur
+  // aille chercher chez le serveur une position qu'on n'a pas demandée — voir PlaybackSession.
+  const initialResumeAt = restart || !hasResume ? 0 : resumeTicks! / 10_000_000;
   const progressPct =
     !restart && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
   const Icon = restart ? RotateCcw : PlayCircle;

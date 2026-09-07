@@ -10,6 +10,20 @@ export interface PlaybackSession {
   itemId: string;
   title: string;
   /** Resume position in seconds, if reopening a partially-watched item. */
+  /**
+   * Où ouvrir le film, en secondes.
+   *
+   * `0` veut dire « depuis le début », et il faut l'écrire. `undefined` veut dire « je n'ai pas
+   * d'avis, prends ce dont le serveur se souvient » — ce qui n'est pas du tout la même chose.
+   *
+   * La confusion a coûté deux bugs à la fois. Le lecteur stable ne bougeait la tête que si la
+   * valeur était vraie (`if (resumeAt)`), si bien qu'omettre le champ *et* passer zéro
+   * revenaient au même : plusieurs appelants ont donc pris l'habitude de l'omettre pour
+   * recommencer. Le lecteur natif, écrit après, lit `session.resumeAt ?? info.resumeSeconds` —
+   * et pour lui un champ omis désigne précisément la position que l'on voulait écarter.
+   * « Recommencer » reprenait donc au même endroit, et « Reprendre » repartait au début quand la
+   * position mémorisée par le serveur, elle, était encore à zéro.
+   */
   resumeAt?: number;
   /** Only honored for the very first startPlayback call after opening — an initial audio track
    *  other than the default, used to resume into the right track after a WebKit reload-based
@@ -179,7 +193,8 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   // Resets resumeAt — an advance always starts the new episode from 0, matching the previous
   // per-invocation player's behavior.
   const advance = useCallback((next: { itemId: string; title: string }) => {
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: undefined } : prev));
+    // Zéro, et non « pas d'avis » : c'est bien depuis le début que l'épisode suivant commence.
+    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt: 0 } : prev));
   }, []);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on

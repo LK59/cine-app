@@ -200,7 +200,7 @@ export function CinemaSeriesDetail({
     playback.play({
       itemId: ep.jellyfinItemId,
       title: ep.title,
-      resumeAt: ep.resumeTicks ? ep.resumeTicks / 10_000_000 : undefined,
+      resumeAt: ep.resumeTicks ? ep.resumeTicks / 10_000_000 : 0,
       getNextEpisode,
     });
     setShowEpisodes(false);

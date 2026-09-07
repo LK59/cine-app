@@ -431,7 +431,7 @@ export function CinemaMobileClient() {
                     playback.play({
                       itemId: entry.id,
                       title: entry.name,
-                      resumeAt: entry.positionTicks > 0 ? entry.positionTicks / 10_000_000 : undefined,
+                      resumeAt: entry.positionTicks > 0 ? entry.positionTicks / 10_000_000 : 0,
                     })
                   )
                 }
@@ -471,7 +471,7 @@ export function CinemaMobileClient() {
                     playback.play({
                       itemId: entry.jellyfinItemId,
                       title: entry.title,
-                      resumeAt: entry.resumeTicks ? entry.resumeTicks / 10_000_000 : undefined,
+                      resumeAt: entry.resumeTicks ? entry.resumeTicks / 10_000_000 : 0,
                     })
                   )
                 }

@@ -23,13 +23,30 @@ beforeEach(() => {
 });
 
 describe("PlayButton", () => {
-  it("dit « lire » et part du début quand rien n'a été vu", async () => {
+  // Zéro, et pas « rien ». Ce test attendait `undefined`, ce qui n'était pas faux du temps où le
+  // seul lecteur ne sautait que sur une valeur vraie — mais le lecteur natif lit un champ absent
+  // comme « prends la position dont le serveur se souvient ». Le film repartait alors là où on
+  // l'avait laissé, sur un bouton qui annonçait « Lire ».
+  it("dit « lire » et part explicitement du début quand rien n'a été vu", async () => {
     const user = userEvent.setup();
     render(<PlayButton itemId="a" title="Un Film" />);
 
     expect(screen.getByText("common.play")).toBeInTheDocument();
     await user.click(screen.getByRole("button"));
-    expect(play).toHaveBeenCalledWith(expect.objectContaining({ itemId: "a", resumeAt: undefined }));
+    expect(play).toHaveBeenCalledWith(expect.objectContaining({ itemId: "a", resumeAt: 0 }));
+  });
+
+  // La distinction qui a coûté les deux bugs : ce que le bouton transmet doit être un nombre,
+  // jamais une absence — c'est l'absence que le lecteur natif traduit en « demande au serveur ».
+  it("transmet toujours une position, jamais une absence", async () => {
+    const user = userEvent.setup();
+    for (const props of [{}, { resumeTicks: HOUR / 2 }, { resumeTicks: HOUR / 2, restart: true }]) {
+      play.mockClear();
+      cleanup();
+      render(<PlayButton itemId="a" title="Un Film" {...props} />);
+      await user.click(screen.getByRole("button"));
+      expect(typeof play.mock.calls[0][0].resumeAt).toBe("number");
+    }
   });
 
   it("dit « reprendre » et repart où on s'était arrêté", async () => {

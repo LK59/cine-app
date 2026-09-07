@@ -359,12 +359,16 @@ export function CinemaMovieDetail({
 
             {/* Only when there's actually something to restart FROM — a movie with no progress
                 already opens fresh via Lecture above, so this would just be a redundant second
-                "Lire" button. resumeAt deliberately omitted (not 0): PlayerHost only seeks when
-                resumeAt is truthy, so leaving it out already starts at the beginning. */}
+                "Lire" button.
+
+                `resumeAt: 0`, explicitement. Le champ était omis, et le commentaire d'origine le
+                justifiait par le lecteur stable, qui ne saute que sur une valeur vraie. Le
+                lecteur natif, lui, lit un champ absent comme « prends la position du serveur » :
+                « Recommencer » reprenait donc exactement là où l'on venait de s'arrêter. */}
             {hasResume && (
               <button
                 data-detail-menu
-                onClick={() => playback.play({ itemId: item.jellyfinItemId, title: item.title })}
+                onClick={() => playback.play({ itemId: item.jellyfinItemId, title: item.title, resumeAt: 0 })}
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               >
                 <span className={MENU_BADGE}>

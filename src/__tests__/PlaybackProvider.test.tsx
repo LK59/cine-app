@@ -56,7 +56,11 @@ describe("PlaybackProvider / usePlayback", () => {
     expect(result.current.session).toBeNull();
   });
 
-  it("advance() swaps to the next episode, resets resumeAt, and preserves other session fields", () => {
+  // « Remis à zéro » veut désormais dire zéro, et non « pas d'avis ». Le champ était laissé
+  // absent, ce que le lecteur natif lit comme « prends la position dont le serveur se souvient » —
+  // l'épisode suivant repartait donc à sa propre reprise, alors qu'un enchaînement commence au
+  // début. Voir PlaybackSession.
+  it("advance() swaps to the next episode, starts it at zero, and preserves other session fields", () => {
     const { result } = renderHook(() => usePlayback(), { wrapper });
     const getNextEpisode = () => null;
     act(() =>
@@ -67,7 +71,7 @@ describe("PlaybackProvider / usePlayback", () => {
 
     expect(result.current.session?.itemId).toBe("ep2");
     expect(result.current.session?.title).toBe("Episode 2");
-    expect(result.current.session?.resumeAt).toBeUndefined();
+    expect(result.current.session?.resumeAt).toBe(0);
     expect(result.current.session?.getNextEpisode).toBe(getNextEpisode);
   });
 
