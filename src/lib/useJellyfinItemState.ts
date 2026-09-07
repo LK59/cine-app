@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, revalidateWatchState } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
@@ -58,6 +58,17 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
         // « Ma liste » lit ces deux états depuis sa propre vue agrégée : sans ça, on coche
         // « vu » sur une fiche et l'onglet d'à côté l'ignore jusqu'au prochain chargement.
         void globalMutate("/api/player/lists");
+        /**
+         * Et les rangées de reprise, qui viennent de changer aussi.
+         *
+         * Marquer un film comme vu efface sa position chez Jellyfin, donc il quitte « Reprendre ».
+         * Le démarquer l'y ramène. Ces rangées ne l'apprenaient qu'au rechargement suivant : on
+         * cochait « vu » et le film restait sur l'accueil, ce qui ressemble à un geste sans effet.
+         *
+         * La même liste de clés que la fermeture du lecteur — c'est la même information, changée
+         * par l'autre des deux seuls gestes qui la changent.
+         */
+        void revalidateWatchState(itemId);
       } catch (err) {
         void mutate(data, { revalidate: false });
         toast.error(err instanceof Error ? err.message : t("common.unknown"));
