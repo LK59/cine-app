@@ -7,6 +7,7 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 import { useT } from "@/components/TranslationProvider";
+import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 
@@ -42,6 +43,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   short,
   onPlay,
   onOpen,
+  resumeFor,
 }: {
   items: Item[];
   /** La rotation s'arrête quand une fiche ou la recherche est ouverte par-dessus. */
@@ -50,6 +52,14 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   short: boolean;
   onPlay: (item: Item) => void;
   onOpen: (item: Item) => void;
+  /**
+   * Où en est ce titre, quand il a été commencé.
+   *
+   * Rendu par l'appelant plutôt que cherché ici : c'est l'écran d'accueil qui tient déjà la liste
+   * de reprise, pour sa propre rangée. La bannière annonçait « Lire » sur un film vu à moitié —
+   * le plus gros bouton de l'écran était le seul à ne pas savoir où il emmenait.
+   */
+  resumeFor?: (item: Item) => { positionTicks: number; runtimeTicks: number | null } | null;
 }) {
   const t = useT();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -65,7 +75,9 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
 
   if (items.length === 0) return null;
 
-  const actions = (item: Item) => (
+  const actions = (item: Item) => {
+    const resume = resumeFor?.(item) ?? null;
+    return (
     <div className="flex gap-2">
       <button
         type="button"
@@ -73,7 +85,11 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
       >
         <Play size={16} fill="currentColor" />
-        {t("common.play")}
+        {/* La même formule que les fiches et les rangées : « Reprendre — 40 min restantes ». Un
+            libellé propre à la bannière aurait été un troisième vocabulaire pour un même geste. */}
+        <span className="truncate">
+          {resume ? formatContinueLabel(t, resume.positionTicks, resume.runtimeTicks) : t("common.play")}
+        </span>
       </button>
       <button
         type="button"
@@ -84,7 +100,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
         {t("cinema.moreInfo")}
       </button>
     </div>
-  );
+    );
+  };
 
   return (
     <section className="px-4 pt-2">

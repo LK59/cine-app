@@ -118,6 +118,20 @@ export function CinemaMobileClient() {
   const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
 
   const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
+  /**
+   * Où en est chaque film commencé, à portée de la bannière.
+   *
+   * La charge de la bibliothèque est partagée entre les comptes et ne porte donc aucune position ;
+   * celle-ci, si, et elle est déjà là pour la rangée « Reprendre ». La bannière peut s'y retrouver
+   * elle-même plutôt que de laisser le lecteur deviner — c'est la même donnée, lue une fois.
+   *
+   * Les séries n'y figurent pas : leur entrée de reprise désigne un épisode, pas la série, et
+   * c'est `playSeriesNextEpisode` qui sait résoudre ça.
+   */
+  const resumeByItemId = useMemo(
+    () => new Map((resume?.items ?? []).map((r) => [r.id, r])),
+    [resume]
+  );
   const continueSeries = nextUp?.items ?? [];
   const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
   const isSeries = mediaType === "series";
@@ -268,10 +282,18 @@ export function CinemaMobileClient() {
     (item: CinemaMovie | CinemaSeries) => {
       // Un identifiant de série ne se lit pas tel quel : il faut d'abord résoudre son prochain
       // épisode (voir playSeriesNextEpisode).
-      if ("sonarrId" in item) playSeriesNextEpisode(playback, item);
-      else playback.play({ itemId: item.jellyfinItemId, title: item.title });
+      if ("sonarrId" in item) return playSeriesNextEpisode(playback, item);
+      // La position vient de la liste de reprise, pas d'une supposition. Tant qu'elle n'est pas
+      // arrivée on ne prétend rien : le champ reste absent, ce qui veut dire « prends ce dont le
+      // serveur se souvient » — voir PlaybackSession.
+      const entry = resumeByItemId.get(item.jellyfinItemId);
+      playback.play({
+        itemId: item.jellyfinItemId,
+        title: item.title,
+        resumeAt: resume === undefined ? undefined : entry ? entry.positionTicks / 10_000_000 : 0,
+      });
     },
-    [playback]
+    [playback, resume, resumeByItemId]
   );
 
   const openHero = useCallback(
@@ -414,6 +436,11 @@ export function CinemaMobileClient() {
               short={short}
               onPlay={playHero}
               onOpen={openHero}
+              // Pour que le bouton annonce « Reprendre — 40 min restantes » plutôt qu'un « Lire »
+              // qui ne dit pas où il emmène.
+              resumeFor={(item) =>
+                "sonarrId" in item ? null : resumeByItemId.get(item.jellyfinItemId) ?? null
+              }
             />
           </div>
         ))}

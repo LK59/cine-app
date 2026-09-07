@@ -341,12 +341,19 @@ export function CinemaSeriesDetail({
 
             {/* Only when the NEXT episode itself has progress — a fresh, never-started episode
                 already opens at 0 via Lire above, same reasoning as CinemaMovieDetail's own
-                restart row. resumeAt deliberately omitted, not 0 — PlayerHost only seeks when
-                it's truthy, so leaving it out already starts at the beginning. */}
+                restart row.
+
+                `resumeAt: 0`, explicitement. Le champ était omis, et le commentaire d'origine le
+                justifiait par le lecteur stable, qui ne saute que sur une valeur vraie. Le lecteur
+                natif lit un champ absent comme « prends la position du serveur » : « Recommencer »
+                reprenait donc l'épisode là où on l'avait laissé. Le jumeau côté film a été corrigé
+                d'abord et celui-ci oublié — c'est exactement la dérive que le CLAUDE.md décrit. */}
             {nextEpisode && hasResume && (
               <button
                 data-detail-menu
-                onClick={() => playback.play({ itemId: nextEpisode.itemId, title: nextEpisode.title, getNextEpisode })}
+                onClick={() =>
+                  playback.play({ itemId: nextEpisode.itemId, title: nextEpisode.title, resumeAt: 0, getNextEpisode })
+                }
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               >
                 <span className={MENU_BADGE}>
