@@ -160,7 +160,7 @@ export function PlayerPanelFrame({
           l'écran cinéma. Ici, rien de fixe n'en descend, mais la règle vaut d'être tenue. */}
       <div
         ref={bodyRef}
-        className="scrollbar-thin flex-1 animate-fade-in-up overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
+        className="scrollbar-thin flex-1 animate-fade-in-side overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))" }}
