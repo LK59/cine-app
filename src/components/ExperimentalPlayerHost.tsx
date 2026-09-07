@@ -168,9 +168,8 @@ export function ExperimentalPlayerHost({
   const facadeRef = useRef<MediaElementFacade | null>(null);
   // Semée au point de reprise plutôt qu'à zéro : fermer pendant le chargement rapportait sinon
   // un arrêt à 0:00, ce qui effaçait chez Jellyfin la position qu'on venait justement de vouloir
-  // reprendre. `?? 0` et non `?? info.resumeSeconds` : laisser zéro est ce qui permet au calcul
-  // de `startSeconds` plus bas de retomber sur ce que le serveur sait, quand la séance ne le
-  // portait pas.
+  // reprendre. `?? 0` et non la position du serveur : laisser zéro est ce qui permet au calcul de
+  // `startSeconds` plus bas de retomber sur `playbackState`, quand la séance ne portait rien.
   const positionRef = useRef(session.resumeAt ?? 0);
 
   const [ready, setReady] = useState(false);

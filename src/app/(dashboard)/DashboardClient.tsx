@@ -82,7 +82,10 @@ function ResumeCard({ item, index }: { item: ResumeItem; index: number }) {
   const playback = usePlayback();
   const [open, setOpen] = useState(false);
   const lp = useLongPress(() => setOpen(true));
-  const resumeAt = item.positionTicks > 0 ? item.positionTicks / 10_000_000 : undefined;
+  // Zéro et non « rien » : cette carte affiche déjà la position juste au-dessous, donc elle la
+  // connaît. Un champ absent veut dire « je ne sais pas, prends ce dont le serveur se souvient »,
+  // ce qui n'est pas la même chose — voir PlaybackSession.
+  const resumeAt = item.positionTicks > 0 ? item.positionTicks / 10_000_000 : 0;
   const playLabel =
     item.positionTicks > 0 ? `${t('common.resume')} - ${formatResumeTicks(item.positionTicks)}` : t('common.play');
 
