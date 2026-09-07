@@ -134,6 +134,32 @@ describe("PlayerSearchPanel — clearing the field", () => {
     expect(screen.getByText("player.search.recent")).toBeTruthy();
     expect(screen.queryByText("player.search.filterAll")).toBeNull();
   });
+
+  /**
+   * La croix, et le clavier qui reste.
+   *
+   * `type="search"` dessine bien une croix native, mais pas sur iOS — précisément là où enchaîner
+   * des recherches au pouce est le plus pénible, et d'où la demande vient. Le champ reprend le
+   * focus après l'effacement : sans ça, vider la recherche referme le clavier et il faut retoucher
+   * l'écran pour retaper le mot suivant.
+   */
+  it("offre une croix qui vide le champ et lui rend le focus", async () => {
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+
+    const clear = screen.getByLabelText("common.clear");
+    fireEvent.click(clear);
+
+    const box = screen.getByRole("searchbox") as HTMLInputElement;
+    expect(box.value).toBe("");
+    expect(document.activeElement).toBe(box);
+  });
+
+  // Rien à effacer, rien à montrer : une croix sur un champ vide est un bouton qui ne fait rien.
+  it("ne montre pas de croix tant qu'il n'y a rien à effacer", () => {
+    // Le panneau est monté vide par le beforeEach : rien de tapé, donc rien à effacer.
+    expect(screen.queryByLabelText("common.clear")).toBeNull();
+  });
 });
 
 // Ouvrir une fiche depuis les résultats puis revenir doit ramener la recherche telle quelle :

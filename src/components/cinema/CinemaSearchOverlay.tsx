@@ -123,7 +123,9 @@ export function CinemaSearchOverlay({
               type="button"
               onClick={() => setQuery("")}
               className="shrink-0 text-slate-400 hover:text-white"
-              aria-label={t("cinema.search")}
+              /* Elle s'annonçait « Rechercher », comme le champ qu'elle vide : un lecteur d'écran
+                 lisait donc deux fois le même mot pour deux gestes opposés. */
+              aria-label={t("common.clear")}
             >
               <X className="h-4 w-4" />
             </button>

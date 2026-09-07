@@ -136,7 +136,8 @@
     "online": "Online",
     "offline": "Offline",
     "downloaded": "Heruntergeladen",
-    "restart": "Von vorn"
+    "restart": "Von vorn",
+    "clear": "Löschen"
   },
   "dashboard": {
     "resumeWatching": "Weiterschauen",
