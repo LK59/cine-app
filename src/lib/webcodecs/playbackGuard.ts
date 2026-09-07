@@ -474,14 +474,28 @@ export class PlaybackGuard {
     if (this.host.destroyed) return;
     // A pause that arrives before the first frame of a playback that was asked for is not the
     // viewer pausing — it is the element giving up on a start it could not make.
-    if (this.startingFrom !== null) this.startAborted = true;
+    const abortedStart = this.startingFrom !== null;
+    if (abortedStart) this.startAborted = true;
     this.startingFrom = null;
     this.stopWatchingForFirstFrame();
     this.setStarting(null, "mise en pause");
-    this.pauseAnchor = this.video.currentTime;
+    /**
+     * Et une pause pareille ne laisse pas d'ancre.
+     *
+     * L'ancre existe pour remettre la lecture là où le *son* s'est arrêté : l'horloge de
+     * l'élément dépasse le bouton, et le système peut reprendre le média pendant l'arrêt. Elle
+     * suppose donc qu'il y a eu lecture. Un démarrage auquel l'élément renonce n'en est pas une,
+     * et la position où il renonce est celle où il se trouvait : zéro.
+     *
+     * Cette ancre-là servait ensuite de vérité. Rapporté sur appareil, en forçant le cas : lancer
+     * une reprise, fermer pendant le chargement, relancer. La seconde lecture posait sa tête à
+     * 1049 s, puis la reprise après pause y voyait un saut de dix-sept minutes à annuler et
+     * ramenait le film au début. Une lecture qui n'a jamais commencé ne doit rien décider.
+     */
+    this.pauseAnchor = abortedStart ? null : this.video.currentTime;
     this.resumeTrace = {
-      paused: this.pauseAnchor,
-      settled: this.pauseAnchor,
+      paused: this.video.currentTime,
+      settled: this.video.currentTime,
       asserted: 0,
       play: NaN,
       tick: null,

@@ -117,6 +117,24 @@ describe("PlaybackGuard", () => {
     expect(video.currentTime).toBe(12);
   });
 
+  it("ne retient pas une pause d'un démarrage qui n'a jamais eu lieu", () => {
+    // Le cas décrit par Louis : une lecture fantôme, fermée avant sa première image. L'élément
+    // signale une pause à zéro — mais personne n'a rien regardé, et cette position ne décrit rien
+    // qu'il faille retrouver.
+    const { guard, video, seeks } = build({ at: 0, playable: ranges([1049, 1080]) });
+    // Une lecture est demandée, et l'élément y renonce sans jamais présenter d'image.
+    guard.playing();
+    (video as unknown as { paused: boolean }).paused = true;
+    guard.paused();
+
+    (video as unknown as { currentTime: number }).currentTime = 1049.1;
+    (video as unknown as { paused: boolean }).paused = false;
+    guard.playing();
+
+    expect(video.currentTime).toBeCloseTo(1049.1, 2);
+    expect(seeks.map((s) => s.at)).not.toContain(0);
+  });
+
   it("ne ramène pas la lecture à une pause d'avant l'ouverture", () => {
     // Le cas forcé sur appareil : « Reprendre », fermer pendant que ça charge — la tête est
     // encore à zéro — puis « Reprendre » à nouveau. L'élément avait signalé une pause à 0, qui
