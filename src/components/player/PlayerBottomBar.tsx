@@ -111,6 +111,17 @@ export function PlayerBottomBar() {
                 openPanel(panel, route);
               }}
               onAnimationEnd={(e) => e.currentTarget.removeAttribute("data-pressed")}
+              /* Le bouton ne prend jamais le focus au doigt.
+               *
+               * Sans ça, le second appui sur « Recherche » levait le clavier puis le refermait
+               * aussitôt : le focus partait bien sur le champ au `pointerdown`, et le `mousedown`
+               * synthétisé juste après le rendait au bouton. On voyait le clavier monter et
+               * redescendre.
+               *
+               * `mousedown` et non `pointerdown` : c'est celui-là qui déplace le focus, et le
+               * prévenir ici laisse intacte la navigation, qui part du pointeur. Le focus au
+               * clavier, lui, passe par la tabulation et n'est pas concerné. */
+              onMouseDown={(e) => e.preventDefault()}
               /* Le clic reste branché pour le clavier et les technologies d'assistance, qui
                  n'émettent aucun pointeur. Mais un appui en émet un *puis* un clic : sans cette
                  garde, le même geste ouvrirait deux fois, et une entrée d'historique de plus

@@ -95,7 +95,11 @@ export function PlayButton({
         ? "btn-primary relative overflow-hidden"
         : variant === "row"
           ? "flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-white transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
-          : "flex items-center gap-1.5 rounded-lg bg-accent-600/80 px-3 py-1.5 text-xs text-white backdrop-blur-xs hover:bg-accent-600";
+          /* Sans flou d'arrière-plan, et c'est la même leçon que `.btn` a déjà apprise : il se
+             recalcule par élément et par image, et cette pastille est celle des cartes — il y en a
+             des rangées entières à l'écran pendant qu'on fait défiler. Ce qu'il apportait, un fond
+             qui tient sur n'importe quelle affiche, l'opacité le donne déjà. */
+          : "flex items-center gap-1.5 rounded-lg bg-accent-600/85 px-3 py-1.5 text-xs text-white hover:bg-accent-600";
 
   return (
     <button
