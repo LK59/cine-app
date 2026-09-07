@@ -34,7 +34,15 @@ export interface RemuxPlaybackOptions {
 }
 
 export type PathProbe = { discard: () => void } & (
-  | { path: "remux"; start: (video: HTMLVideoElement) => Promise<RemuxPlayback> }
+  /**
+   * `chosen` est porté ici aussi, et pas seulement par la variante WebCodecs.
+   *
+   * Le motif du choix n'existait que dans la trace, si bien que l'appelant ne pouvait pas nommer
+   * le chemin *quand il marchait* : le rapport technique disait « non encore décidé » sur une
+   * lecture parfaitement saine, et ne se remplissait qu'en cas de repli. Un rapport qui ne se
+   * renseigne que lorsque ça se dégrade est un rapport qu'on lit à l'envers.
+   */
+  | { path: "remux"; start: (video: HTMLVideoElement) => Promise<RemuxPlayback>; chosen: ChosenPath }
   | { path: "webcodecs"; chosen: ChosenPath }
   /** Nothing to repackage: the browser can be handed the URL and left alone. See below. */
   | { path: "direct" }
@@ -146,6 +154,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
 
   return {
     path: "remux",
+    chosen,
     start: (video) => RemuxPlayback.start(video, source, file, videoTrack, audioTrack, chosen, options),
     // For a caller that asked and then changed its mind: the remuxer holds the software decoder
     // and the encoder, and the source holds the connection.

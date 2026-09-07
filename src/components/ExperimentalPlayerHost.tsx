@@ -960,7 +960,21 @@ export function ExperimentalPlayerHost({
           probe.discard();
           return;
         }
-        if (probe.path === "remux") return startRemux(element, probe.start);
+        // Le chemin retenu, nommé ici plutôt que dans chaque branche.
+        //
+        // Deux branches sur trois le faisaient, et pas celle du remultiplexage — c'est-à-dire pas
+        // le chemin normal. Le rapport technique affichait donc « non encore décidé » quand tout
+        // allait bien, et ne se remplissait que lorsque la lecture se dégradait : exactement
+        // l'inverse de ce qu'on attend d'un rapport, et de quoi faire croire à une panne du
+        // lecteur natif alors qu'il jouait le film. Posé au point de branchement, il ne peut plus
+        // manquer à une branche qu'on ajouterait plus tard.
+        if (probe.path === "remux") {
+          setPathReason(describePath(probe.chosen));
+          return startRemux(element, probe.start);
+        }
+        // Les deux autres nomment déjà le leur, chacune avec ses propres mots : la lecture directe
+        // parce qu'elle n'a pas de chemin à décrire, le moteur parce qu'il reçoit le motif en
+        // argument.
         if (probe.path === "direct") return startDirect(element);
         return startEngine(describePath(probe.chosen));
       })
