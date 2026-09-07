@@ -12,6 +12,7 @@ import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
+import { heroKindFor, type HeroFocus } from "@/lib/cinemaHeroKind";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -351,6 +352,19 @@ export function CinemaClient() {
     );
   }, [series]);
 
+  /**
+   * De quelle sorte est le titre que la bannière montre.
+   *
+   * Elle suivait l'onglet, ce qui suffisait tant qu'un onglet ne montrait que sa propre sorte.
+   * « Reprendre » est désormais commun aux deux : sur l'onglet Films, survoler la carte d'une
+   * série laissait la bannière sur le dernier film — elle annonçait autre chose que ce qu'on
+   * désignait, c'est-à-dire exactement le défaut que le survol de ces cartes existe pour éviter.
+   *
+   * Rangé avec l'onglet où le choix a été fait, plutôt que remis à zéro par un effet : changer
+   * d'onglet redonne ainsi sa sorte par défaut sans qu'un rendu supplémentaire ne l'efface, et
+   * sans écrire d'état depuis un effet.
+   */
+  const [heroFocus, setHeroFocus] = useState<HeroFocus | null>(null);
   const [focusedItem, setFocusedItem] = useState<CinemaMovie | null>(null);
 
   // Les rangées de découverte, tout en bas : chargées comme le reste, mais elles ne bloquent
@@ -363,7 +377,10 @@ export function CinemaClient() {
   // Un titre de découverte mène à sa fiche quand on l'a, à la fiche TMDB sinon — où « Lire » est
   // devenu « Demander ». Un seul chemin, quel que soit le côté de la frontière.
   // Le focus d'une rangée de découverte rend la main au carrousel : voir CinemaDiscoveryRow.
-  const clearFocus = useCallback(() => setFocusedItem(null), []);
+  const clearFocus = useCallback(() => {
+    setFocusedItem(null);
+    setHeroFocus({ tab: "movies", kind: "movies" });
+  }, []);
 
   const openDiscovery = useCallback((item: DiscoveryItem) => {
     if (item.libraryId !== null) {
@@ -400,7 +417,11 @@ export function CinemaClient() {
   // above (not touched) so each tab remembers its own position independently when you switch
   // back and forth, same as Netflix's own Movies/TV Shows toggle.
   const [seriesFocusedItem, setSeriesFocusedItem] = useState<CinemaSeries | null>(null);
-  const clearSeriesFocus = useCallback(() => setSeriesFocusedItem(null), []);
+  const clearSeriesFocus = useCallback(() => {
+    setSeriesFocusedItem(null);
+    setHeroFocus({ tab: "series", kind: "series" });
+  }, []);
+  const heroKind = heroKindFor(heroFocus, mediaType);
   const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
   const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
   const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
@@ -409,10 +430,33 @@ export function CinemaClient() {
     ? seriesCarousel.findIndex((sh) => sh.sonarrId === seriesHeroItem.sonarrId)
     : -1;
 
+  /**
+   * Désigner un titre, et dire du même geste ce que la bannière doit montrer.
+   *
+   * Tous les survols passent par ces deux-là : si un seul écrivait la sélection sans la sorte, la
+   * bannière resterait bloquée sur la précédente. La sorte n'est notée que pour un titre réel —
+   * une rangée qui efface la sélection ne doit pas faire basculer la bannière vers une sorte dont
+   * le catalogue n'est peut-être pas encore arrivé, ce qui la laisserait vide.
+   */
+  const focusMovie = useCallback(
+    (item: CinemaMovie | null) => {
+      setFocusedItem(item);
+      if (item) setHeroFocus({ tab: mediaType, kind: "movies" });
+    },
+    [mediaType]
+  );
+  const focusSeries = useCallback(
+    (item: CinemaSeries | null) => {
+      setSeriesFocusedItem(item);
+      if (item) setHeroFocus({ tab: mediaType, kind: "series" });
+    },
+    [mediaType]
+  );
+
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
   // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
-  const activeHeroItem = mediaType === "movies" ? heroItem : seriesHeroItem;
-  const activeHeroKey = activeHeroItem ? (mediaType === "movies" ? (activeHeroItem as CinemaMovie).radarrId : (activeHeroItem as CinemaSeries).sonarrId) : null;
+  const activeHeroItem = heroKind === "movies" ? heroItem : seriesHeroItem;
+  const activeHeroKey = activeHeroItem ? (heroKind === "movies" ? (activeHeroItem as CinemaMovie).radarrId : (activeHeroItem as CinemaSeries).sonarrId) : null;
 
   // The backdrop specifically (not the hero's own title/synopsis text, which still updates
   // instantly) is debounced before it's allowed to (re)trigger its crossfade — animating a fresh
@@ -722,7 +766,7 @@ export function CinemaClient() {
             index={i}
             onFocus={() => {
               const inLibrary = matchRadarr(item.cinemaHref);
-              if (inLibrary) setFocusedItem(inLibrary);
+              if (inLibrary) focusMovie(inLibrary);
             }}
             onOpen={() =>
               openResume(item.cinemaHref, () =>
@@ -752,7 +796,7 @@ export function CinemaClient() {
             index={resumeMovies.length + i}
             onFocus={() => {
               const inLibrary = item.sonarrId ? seriesById.get(item.sonarrId) : undefined;
-              if (inLibrary) setSeriesFocusedItem(inLibrary);
+              if (inLibrary) focusSeries(inLibrary);
             }}
             onOpen={() =>
               openResume(item.sonarrId ? `/sonarr/${item.sonarrId}` : null, () =>
@@ -892,7 +936,7 @@ export function CinemaClient() {
             *entière*, puis le titre de « Reprendre » et le haut de ses affiches — c'est ce qui
             dit qu'on peut descendre. Six points de hauteur suffisent à l'obtenir. */}
         <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "44%" }}>
-          {mediaType === "movies"
+          {heroKind === "movies"
             ? heroItem && <CinemaHero item={heroItem} />
             : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}
         </div>
@@ -936,6 +980,7 @@ export function CinemaClient() {
                   // La bannière doit repartir sur la rotation : tant qu'une carte est retenue,
                   // c'est elle qui commande, et les barres ne changeraient rien à l'écran.
                   setFocusedItem(null);
+                  setHeroFocus({ tab: "movies", kind: "movies" });
                   setMovieCarouselIndex(i);
                 }}
               >
@@ -946,7 +991,7 @@ export function CinemaClient() {
                     index={i}
                     rowKey="spotlight-movies"
                     widthClassName={CARD_WIDTH}
-                    onFocusItem={setFocusedItem}
+                    onFocusItem={focusMovie}
                     onSelectItem={openDetail}
                     showNewBadge={false}
                   />
@@ -966,7 +1011,7 @@ export function CinemaClient() {
                   items={movies.top10}
                   idOf={(m) => m.radarrId}
                   cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={setFocusedItem}
+                  onFocusItem={focusMovie}
                   onSelectItem={openDetail}
                 />
               )}
@@ -979,7 +1024,7 @@ export function CinemaClient() {
                   rowIndex={RAIL_COUNT}
                   items={movies.recentlyAdded}
                   cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={setFocusedItem}
+                  onFocusItem={focusMovie}
                   onSelectItem={openDetail}
                 />
               )}
@@ -991,7 +1036,7 @@ export function CinemaClient() {
                 items={myListMovies}
                 cardWidthClassName={CARD_WIDTH}
                 onSeeAll={() => cinemaNavigate({ list: true })}
-                onFocusItem={setFocusedItem}
+                onFocusItem={focusMovie}
                 onSelectItem={openDetail}
               />
 
@@ -1003,7 +1048,7 @@ export function CinemaClient() {
                   rowIndex={i + RAIL_COUNT}
                   items={movies.rows[genre] ?? []}
                   cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={setFocusedItem}
+                  onFocusItem={focusMovie}
                   onSelectItem={openDetail}
                   onSeeAll={() => cinemaNavigate({ browse: genre })}
                 />
@@ -1046,6 +1091,7 @@ export function CinemaClient() {
                 activeIndex={seriesSpotlightIndex}
                 onPick={(i) => {
                   setSeriesFocusedItem(null);
+                  setHeroFocus({ tab: "series", kind: "series" });
                   setSeriesCarouselIndex(i);
                 }}
               >
@@ -1056,7 +1102,7 @@ export function CinemaClient() {
                     index={i}
                     rowKey="spotlight-series"
                     widthClassName={CARD_WIDTH}
-                    onFocusItem={setSeriesFocusedItem}
+                    onFocusItem={focusSeries}
                     onSelectItem={openSeriesDetail}
                     showNewBadge={false}
                   />
@@ -1085,7 +1131,7 @@ export function CinemaClient() {
                   items={series.top10}
                   idOf={(x) => x.sonarrId}
                   cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={setSeriesFocusedItem}
+                  onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
                 />
               )}
@@ -1098,7 +1144,7 @@ export function CinemaClient() {
                   rowIndex={RAIL_COUNT}
                   items={series.recentlyAdded}
                   cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={setSeriesFocusedItem}
+                  onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
                 />
               )}
@@ -1110,7 +1156,7 @@ export function CinemaClient() {
                 items={myListSeries}
                 cardWidthClassName={CARD_WIDTH}
                 onSeeAll={() => cinemaNavigate({ list: true })}
-                onFocusItem={setSeriesFocusedItem}
+                onFocusItem={focusSeries}
                 onSelectItem={openSeriesDetail}
               />
 
@@ -1122,7 +1168,7 @@ export function CinemaClient() {
                   rowIndex={i + RAIL_COUNT}
                   items={series.rows[genre] ?? []}
                   cardWidthClassName={CARD_WIDTH}
-                  onFocusItem={setSeriesFocusedItem}
+                  onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
                   onSeeAll={() => cinemaNavigate({ browse: genre })}
                 />
