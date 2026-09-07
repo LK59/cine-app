@@ -18,6 +18,15 @@ class FakeBuffer extends EventTarget {
   coversNothing = false;
   /** How far past the point it was pointed at this buffer's media actually begins. */
   landsLate = 0;
+  /**
+   * Où commence le média, quand ce n'est pas sous la tête.
+   *
+   * Une ouverture en cours de film envoie son média avant de déplacer la tête : le lecteur est
+   * pointé sur 1200 s pendant que la tête est encore à zéro. Ce modèle faisait naître toute
+   * nouvelle plage sous la tête, ce qui était vrai tant que la tête y était déjà — et qui rendait
+   * l'état d'une reprise impossible à écrire ici.
+   */
+  mediaStartsAt: number | null = null;
   /** Set to make the next append throw as a full buffer does. */
   quotaOnNextAppend = false;
   /** Set to make the next append fail the way a segment the decoder rejects does. */
@@ -101,7 +110,7 @@ class FakeBuffer extends EventTarget {
     // reader was pointed, exactly as a real one does — starting every range at zero would mean
     // media never reached a seeked-to playhead, and the model would loop rather than the code.
     if (this.initSeen) {
-      const here = playheadOf();
+      const here = this.mediaStartsAt ?? mediaStartsAtDefault ?? playheadOf();
       const start = this.ranges.length > 0 ? this.ranges[0][0] : here + this.landsLate;
       const end = (this.ranges.length > 0 ? this.ranges[0][1] : here + this.landsLate) + this.secondsPerAppend;
       this.ranges = [[start, end]];
@@ -190,6 +199,15 @@ class FakeSource extends EventTarget {
  * désigne le dernier élément créé, c'est-à-dire celui du test en cours.
  */
 let playheadOf: () => number = () => 0;
+/**
+ * Où naît le média quand ce n'est pas sous la tête, pour les tampons pas encore créés.
+ *
+ * Le modèle prenait la tête pour le lecteur, ce qui était vrai tant que l'ouverture d'un film
+ * en cours de route posait la tête tout de suite. Elle attend maintenant que le média la couvre
+ * (voir `pendingStart`), et sans cette distinction le banc ne peut pas écrire l'état d'une
+ * reprise : celui où le lecteur travaille à 1200 s pendant que la tête est encore à zéro.
+ */
+let mediaStartsAtDefault: number | null = null;
 
 /** The intersection of every buffer's ranges, which is what a media element reports. */
 function intersectionOfBuffers(): TimeRanges {
@@ -297,6 +315,7 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
 
 beforeEach(() => {
   playheadOf = () => 0;
+  mediaStartsAtDefault = null;
   FakeSource.instances = [];
   FakeSource.supported = new Set([PLAN.videoMimeType, PLAN.audioMimeType!]);
   vi.stubGlobal("ManagedMediaSource", FakeSource);
@@ -669,17 +688,18 @@ describe("MseSource", () => {
   it("starts reading where the viewer is resuming, not at the beginning of the file", async () => {
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500);
+    // Le média naît là où le lecteur est pointé, pas sous la tête restée en arrière.
+    mediaStartsAtDefault = 1200;
     await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() }, 1200);
+    // Rien n'a encore été envoyé : c'est le seul instant où la tête ne peut pas être posée, et
+    // c'est celui que WebKit ne pardonne pas.
+    expect(video.currentTime).toBe(0);
     await flush();
     // Filling thirty seconds from zero and then discarding all of it is what made resuming a
     // part-watched episode feel slow.
     expect(remuxer.seeks).toEqual([1200]);
-    // Mais la tête, elle, attend. Mesuré sur un iPhone : un `currentTime` posé alors que seuls
-    // les segments d'initialisation sont envoyés est une demande que WebKit accepte et n'honore
-    // jamais — le film restait figé avec trente secondes de média sous la tête et pas une image
-    // décodée, indéfiniment. Un saut *pendant* la lecture n'a jamais eu ce défaut : là, le média
-    // et le décodeur existent déjà.
-    expect(video.currentTime).toBe(0);
+    // Et elle finit par être posée, sur le média qui la couvre — jamais avant qu'il existe.
+    expect(video.currentTime).toBeCloseTo(1200, 1);
   });
 
   it("pose la tête à l'ouverture dès que le média la couvre", async () => {
@@ -694,6 +714,26 @@ describe("MseSource", () => {
     video.dispatchEvent(new Event("timeupdate"));
     await flush();
 
+    expect(video.currentTime).toBeCloseTo(1200, 1);
+  });
+
+  it("ne prend pas une ouverture différée pour un lecteur égaré", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(2000);
+    mediaStartsAtDefault = 1197;
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() }, 1200);
+    // L'état exact rapporté par un iPhone : le remultiplexeur ouvre bien à la position demandée,
+    // mais le média qu'il produit commence à l'image-clé qui précède et n'a couvert que deux
+    // secondes — il ne contient donc pas encore 1200 s. La tête, elle, est restée à zéro : c'est
+    // `pendingStart` qui l'y garde tant que le média ne la couvre pas, parce que WebKit ne
+    // résout jamais un `seeking` posé sur un tampon vide.
+    await flush();
+
+    // Lu comme un lecteur égaré — du média à 1197 s, une tête à 0 — cet écart déclenchait un
+    // saut vers la tête, c'est-à-dire vers zéro : on cliquait « Reprendre », et le film repartait
+    // du début. Deux fois sur trois, selon la vitesse à laquelle l'élément publie ses plages.
+    expect(remuxer.seeks).toEqual([1200]);
+    // Et la tête finit par être posée, une fois le média assez long pour la couvrir.
     expect(video.currentTime).toBeCloseTo(1200, 1);
   });
 

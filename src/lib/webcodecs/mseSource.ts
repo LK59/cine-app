@@ -420,9 +420,29 @@ export class MseSource {
     return typeof managed.streaming === "boolean" ? managed.streaming : true;
   }
 
+  /**
+   * Où le lecteur travaille — la tête, ou la position qu'elle n'a pas encore rejointe.
+   *
+   * Tout ce qui mesure « ce qu'on a d'avance » partait de `currentTime`, ce qui était juste tant
+   * que la tête était toujours là où le film s'ouvre. Une ouverture en cours de film envoie
+   * maintenant son média *avant* de déplacer la tête — c'est ce qui évite à WebKit un `seeking`
+   * qu'il ne résout jamais (voir `pendingStart`). Pendant ces quelques centaines de
+   * millisecondes, la tête est à zéro et le média arrive à 1200 s : mesurée depuis la tête,
+   * l'avance vaut donc zéro segment après segment.
+   *
+   * Deux conclusions fausses en découlaient, et les deux ramenaient le film à son début : le
+   * détecteur de segments sans effet concluait que le navigateur ne retenait rien, et le contrôle
+   * d'égarement, que le lecteur remplissait un endroit où personne n'était. « Reprendre »
+   * repartait de zéro — deux fois sur trois, selon la vitesse à laquelle l'élément publie ses
+   * plages.
+   */
+  private get anchor(): number {
+    return this.pendingStart ?? this.video.currentTime;
+  }
+
   /** How much media sits between the playhead and the end of its own run. */
   private get lead(): number {
-    return this.bufferedEnd() - this.video.currentTime;
+    return this.bufferedEnd() - this.anchor;
   }
 
   /**
@@ -435,7 +455,7 @@ export class MseSource {
   /** How far the picture is held from the playhead, ignoring what the sound is doing. */
   private videoBufferedEnd(): number {
     const ranges = this.videoBuffer?.buffered;
-    const now = this.video.currentTime;
+    const now = this.anchor;
     for (let i = 0; ranges && i < ranges.length; i++) {
       if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
     }
@@ -444,7 +464,7 @@ export class MseSource {
 
   private bufferedEnd(): number {
     const ranges = this.playable;
-    const now = this.video.currentTime;
+    const now = this.anchor;
     for (let i = 0; i < ranges.length; i++) {
       if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
     }
@@ -591,13 +611,26 @@ export class MseSource {
         // fresh seek, which empties the buffers again, which fires another: three recoveries in
         // nine seconds, and Safari closes the source. Only media that exists and is genuinely
         // far away means the reader is in the wrong place.
-        const distance = this.distanceToMedia(this.video.currentTime);
+        //
+        // Et rien de tout cela ne s'applique tant que la tête n'a pas été posée. Une ouverture en
+        // cours de film demande son média *avant* de déplacer la tête — c'est ce qui évite à
+        // WebKit de rester bloqué sur un `seeking` qu'il ne résout plus (voir `pendingStart`). Le
+        // média est alors loin de la tête par construction, pendant les quelques dizaines de
+        // millisecondes qui séparent le premier envoi de la première plage tamponnée visible.
+        // Lu comme un égarement, ce délai déclenchait un saut vers la tête, c'est-à-dire vers
+        // zéro : on cliquait « Reprendre », le remultiplexeur ouvrait bien à 1315 s, et le film
+        // repartait du début. Deux fois sur trois, selon la vitesse à laquelle l'élément publie
+        // ses plages — d'où une reprise qui semblait marcher « quand elle voulait ».
+        // Et rien de tout cela tant que la tête n'a pas atterri : le lecteur remplit alors vers
+        // une position que personne n'occupe encore, par construction, et `placePendingStart` l'y
+        // posera dès que le média la couvrira. Il n'y a rien à récupérer, seulement à attendre.
+        const distance = this.pendingStart !== null ? 0 : this.distanceToMedia(this.anchor);
         if (Number.isFinite(distance) && distance > MISPLACED_SECONDS) {
           trace(
-            `reprise : média à ${distance.toFixed(1)} s de la tête (${this.video.currentTime.toFixed(1)} s), ` +
+            `reprise : média à ${distance.toFixed(1)} s de la tête (${this.anchor.toFixed(1)} s), ` +
               `lecteur à ${this.readUpTo.toFixed(1)} s`
           );
-          if (this.recover(this.video.currentTime)) break;
+          if (this.recover(this.anchor)) break;
         }
       }
     } catch (error) {
@@ -606,7 +639,7 @@ export class MseSource {
       // nothing was actually lost, and declaring playback over was the wrong answer. A refused
       // append is retried from where the playhead is; only a run of them is a real fault.
       this.appendFailures += 1;
-      if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.video.currentTime)) {
+      if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.anchor)) {
         // Traced, not shown. The viewer saw nothing: the segment was fetched again and the film
         // did not stop. A banner here interrupts somebody to tell them about a problem that has
         // already been solved — the record is the right place for it.
@@ -710,7 +743,7 @@ export class MseSource {
         // into a dead player.
         this.appendFailures += 1;
         const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-        if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.video.currentTime)) {
+        if (this.appendFailures <= MAX_APPEND_FAILURES && this.recover(this.anchor)) {
           trace(`saut refusé, repris — ${detail}`);
           return;
         }
@@ -961,6 +994,11 @@ export class MseSource {
     // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
     // would be this player seeking against itself.
     if (this.requestedSeek !== null) return;
+    // Une ouverture qui attend son média non plus. La tête est restée là où l'élément l'a laissée
+    // — zéro — pendant que le film s'ouvre ailleurs, et c'est exactement ce que `pendingStart`
+    // organise. « Rien sous la tête » est donc l'état normal ici, pas une panne : la ramener
+    // ferait repartir du début un film qu'on venait de demander à reprendre.
+    if (this.pendingStart !== null) return;
     // On media: the only stall left is a clock that has stopped anyway, which is its own check.
     if (this.isBufferedAt(now)) return this.watchForFrozenClock(now);
 
