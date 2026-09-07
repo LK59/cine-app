@@ -49,6 +49,10 @@ Tests default to the `node` environment; a component test opts into jsdom with a
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
 `data/logs/player.log` holds what each viewer's player reported about itself — path taken,
 fallbacks, browser, file. Several bugs this repository has fixed were found there and nowhere else.
+`data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
+line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
+day — so an error a viewer hit in the evening was gone before anyone went looking. Both are one
+JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`), and read with `tail`/`jq`.
 
 ## Architecture
 

@@ -12,11 +12,11 @@ let dir: string;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "cine-log-"));
   vi.resetModules();
-  vi.doMock("@/lib/db", () => ({ DATA_DIR: dir }));
+  vi.doMock("@/lib/dataDir", () => ({ DATA_DIR: dir }));
 });
 
 afterEach(() => {
-  vi.doUnmock("@/lib/db");
+  vi.doUnmock("@/lib/dataDir");
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

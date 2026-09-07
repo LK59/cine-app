@@ -2,8 +2,11 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import { getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
+import { DATA_DIR } from "@/lib/dataDir";
 
-export const DATA_DIR = process.env.DATA_DIR ?? path.join(process.cwd(), "data");
+// Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
+// devoir à la base — voir `dataDir.ts`. Une seule écriture de la valeur, ici comme là-bas.
+export { DATA_DIR };
 const DB_PATH  = path.join(DATA_DIR, "cine.db");
 
 // ─── Singleton ────────────────────────────────────────────────────────────────

@@ -1,6 +1,5 @@
-import fs from "node:fs";
 import path from "node:path";
-import { DATA_DIR } from "@/lib/db";
+import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
 
 /**
  * What actually happened during playback, for everybody, written to a file.
@@ -16,11 +15,7 @@ import { DATA_DIR } from "@/lib/db";
  * rest of the app already logs in.
  */
 
-const LOG_DIR = path.join(DATA_DIR, "logs");
 const LOG_FILE = path.join(LOG_DIR, "player.log");
-
-/** Rotated at this size, keeping one previous file. Bounded on purpose: this is a diary, not an archive. */
-const MAX_BYTES = 5 * 1024 * 1024;
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
 const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop"]);
@@ -51,16 +46,6 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
   return out;
 }
 
-function rotate(): void {
-  try {
-    if (fs.statSync(LOG_FILE).size < MAX_BYTES) return;
-    fs.renameSync(LOG_FILE, `${LOG_FILE}.1`);
-  } catch {
-    // No file yet, or a rename that lost a race with another write: either way the append below
-    // is what matters and it creates what it needs.
-  }
-}
-
 /**
  * Appends one event. Never throws: a player must not fail because a log could not be written.
  *
@@ -72,19 +57,12 @@ export function logPlaybackEvent(
   kind: PlayerEventKind,
   fields: Record<string, unknown>
 ): void {
-  try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    rotate();
-    const line = JSON.stringify({
-      timestamp: new Date().toISOString(),
-      kind,
-      user,
-      ...clean(fields),
-    });
-    fs.appendFileSync(LOG_FILE, `${line}\n`);
-  } catch {
-    // A disk that will not take a diary entry is not a reason to stop a film.
-  }
+  appendJsonLine(LOG_FILE, {
+    timestamp: new Date().toISOString(),
+    kind,
+    user,
+    ...clean(fields),
+  });
 }
 
 /** Where it is, so the settings page and the documentation can say so without guessing. */
