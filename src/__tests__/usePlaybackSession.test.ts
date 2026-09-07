@@ -79,6 +79,33 @@ describe("usePlaybackSession", () => {
     expect(bodies("stop")).toEqual([expect.objectContaining({ positionTicks: 600 * TICKS })]);
   });
 
+  it("reprend la séance quand la page revient telle qu'elle était", () => {
+    // `pagehide` sert de dernier instant garanti, et il déclare la séance finie. Mais il se
+    // déclenche aussi quand le navigateur range la page pour la rendre intacte : elle revient
+    // alors avec son film en cours, et elle revenait marquée « arrêtée » — plus un seul battement
+    // accepté, et surtout plus de position finale. Le titre gardait celle du moment où l'on avait
+    // quitté, pour toujours.
+    const { unmount } = renderHook(() => usePlaybackSession(() => 300, session));
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    expect(bodies("stop")).toHaveLength(1);
+
+    const back = new Event("pageshow") as Event & { persisted?: boolean };
+    Object.defineProperty(back, "persisted", { value: true });
+    act(() => void window.dispatchEvent(back));
+    act(() => unmount());
+    // Une deuxième fin, celle de la vraie fermeture : sans la reprise, elle n'existait pas.
+    expect(bodies("stop")).toHaveLength(2);
+  });
+
+  it("ne reprend rien pour une page réellement rechargée", () => {
+    // `persisted` faux, c'est une page neuve : l'ancienne séance est bien finie.
+    const { unmount } = renderHook(() => usePlaybackSession(() => 300, session));
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    act(() => void window.dispatchEvent(new Event("pageshow")));
+    act(() => unmount());
+    expect(bodies("stop")).toHaveLength(1);
+  });
+
   it("ne dit la fin qu'une seule fois, quel que soit le nombre d'événements", () => {
     // beforeunload and pagehide both fire on a desktop browser, and the unmount follows.
     const { unmount } = renderHook(() => usePlaybackSession(() => 300, session));

@@ -104,6 +104,25 @@ export function usePlaybackSession(
 
     const interval = setInterval(() => report("progress", session, ticks(), paused()), HEARTBEAT_MS);
 
+    /**
+     * Une page mise de côté n'est pas une page fermée.
+     *
+     * `pagehide` sert ici de dernier instant garanti pour rapporter la position, et il déclare la
+     * séance terminée. Mais il se déclenche aussi quand le navigateur range la page pour pouvoir
+     * la rendre telle quelle — `persisted` le dit — et cette page-là revient, avec son minuteur,
+     * son film et sa lecture en cours. Elle revenait alors marquée « arrêtée » : plus aucun
+     * battement n'était accepté et, surtout, la position finale n'était plus rapportée du tout.
+     * Le titre gardait pour toujours la position qu'il avait au moment où l'on avait quitté.
+     *
+     * On rouvre donc la séance au retour. Sans nouvelle annonce : c'est la même, on reprend d'où
+     * elle en était — et si le serveur l'a réellement oubliée, un rapport ignoré ne coûte pas plus
+     * que le silence qu'il remplace.
+     */
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) stoppedRef.current = false;
+    };
+
+    window.addEventListener("pageshow", onShow);
     window.addEventListener("beforeunload", reportStop);
     // iOS never fires beforeunload — closing a tab, swiping the app away or following a link out
     // all end at pagehide instead, so on a phone that was the whole of the final position being
@@ -113,6 +132,7 @@ export function usePlaybackSession(
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener("pageshow", onShow);
       window.removeEventListener("beforeunload", reportStop);
       window.removeEventListener("pagehide", reportStop);
       document.removeEventListener("visibilitychange", saveNow);
