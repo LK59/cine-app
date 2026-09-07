@@ -78,12 +78,21 @@ describe("sonarr client", () => {
 });
 
 describe("jellyfin client", () => {
-  it("getSystemInfo uses the Emby token header", async () => {
+  // L'en-tête moderne, et lui seul. `X-Emby-Token` n'est plus lu par défaut à partir de Jellyfin
+  // 12.0 — garder les deux ferait marcher la migration sur le serveur d'aujourd'hui même mal
+  // écrite, et on ne l'apprendrait qu'à la mise à jour.
+  it("getSystemInfo s'authentifie avec l'en-tête MediaBrowser", async () => {
     await jellyfin.getSystemInfo();
     expect(global.fetch).toHaveBeenCalledWith(
       `${config.jellyfin.url}/System/Info`,
-      expect.objectContaining({ headers: expect.objectContaining({ "X-Emby-Token": config.jellyfin.apiKey }) })
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `MediaBrowser Token="${config.jellyfin.apiKey}"`,
+        }),
+      })
     );
+    const sent = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
+    expect(Object.keys(sent.headers as object)).not.toContain("X-Emby-Token");
   });
 
   it("getAllMovies scopes the request to the given userId", async () => {

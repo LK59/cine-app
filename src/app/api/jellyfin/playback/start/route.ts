@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/http";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
+import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { buildDeviceProfile } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { displayTitle } from "@/lib/displayTitle";
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
       if (nativeHls) {
         try {
           const warmup = await fetch(`${config.jellyfin.url}${source.TranscodingUrl}`, {
-            headers: { "X-Emby-Token": session.jfToken },
+            headers: jellyfinAuthHeaders(session.jfToken),
             signal: AbortSignal.timeout(15_000),
           });
           // Read it to completion (a ~700 byte playlist) rather than dropping the response on the

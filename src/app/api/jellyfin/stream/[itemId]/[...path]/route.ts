@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 
@@ -69,7 +70,7 @@ export async function GET(
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
       // here is what lets the browser's native <video> seeking issue real HTTP range requests
       // instead of always re-fetching from byte 0.
-      { "X-Emby-Token": config.jellyfin.apiKey, ...(range ? { Range: range } : {}) },
+      { ...jellyfinAuthHeaders(config.jellyfin.apiKey), ...(range ? { Range: range } : {}) },
       AbortSignal.any([req.signal, AbortSignal.timeout(30_000)])
     );
     if (!res.ok || !res.body) {

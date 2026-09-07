@@ -5,10 +5,11 @@ export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/p
 
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
+import { jellyfinAuth, jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
 
 const { url, apiKey } = config.jellyfin;
-const headers = { "X-Emby-Token": apiKey };
+const headers = jellyfinAuthHeaders(apiKey);
 
 export interface JellyfinItem {
   Id: string;
@@ -121,9 +122,13 @@ export interface PlaybackInfoOptions {
 function playbackHeaders(token: string, client: PlaybackClient, userId: string) {
   const deviceId = `${client === PLAYBACK_CLIENTS.engine ? "cine-engine" : "cine-app"}-${userId}`;
   return {
-    "X-Emby-Token": token,
     "Content-Type": "application/json",
-    Authorization: `MediaBrowser Client="${client}", Device="Navigateur", DeviceId="${deviceId}", Version="1.0.0", Token="${token}"`,
+    Authorization: jellyfinAuth(token, {
+      client,
+      device: "Navigateur",
+      deviceId,
+      version: "1.0.0",
+    }),
   };
 }
 
@@ -141,7 +146,7 @@ export const jellyfin = {
   getPlaybackInfo: (userId: string, itemId: string, token: string, opts: PlaybackInfoOptions) =>
     fetchJson<JellyfinPlaybackInfo>(`${url}/Items/${itemId}/PlaybackInfo?UserId=${userId}`, {
       method: "POST",
-      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      headers: { ...jellyfinAuthHeaders(token), "Content-Type": "application/json" },
       body: JSON.stringify({
         UserId: userId,
         MaxStreamingBitrate: opts.maxBitrate,
@@ -240,7 +245,7 @@ export const jellyfin = {
         SubtitleMode?: string | null;
         PlayDefaultAudioTrack?: boolean;
       };
-    }>(`${url}/Users/${userId}`, { headers: { "X-Emby-Token": token } }),
+    }>(`${url}/Users/${userId}`, { headers: jellyfinAuthHeaders(token) }),
 
   /**
    * Écrire ces mêmes préférences, avec le jeton de la personne.
@@ -252,7 +257,7 @@ export const jellyfin = {
   updateUserConfiguration: (userId: string, token: string, configuration: Record<string, unknown>) =>
     fetchJson<void>(`${url}/Users/${userId}/Configuration`, {
       method: "POST",
-      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      headers: { ...jellyfinAuthHeaders(token), "Content-Type": "application/json" },
       body: JSON.stringify(configuration),
     }),
 
@@ -266,7 +271,7 @@ export const jellyfin = {
   changePassword: (userId: string, token: string, currentPw: string, newPw: string) =>
     fetchJson<void>(`${url}/Users/${userId}/Password`, {
       method: "POST",
-      headers: { "X-Emby-Token": token, "Content-Type": "application/json" },
+      headers: { ...jellyfinAuthHeaders(token), "Content-Type": "application/json" },
       body: JSON.stringify({ CurrentPw: currentPw, NewPw: newPw }),
     }),
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(`${config.jellyfin.url}/Items/${itemId}?Fields=Trickplay&UserId=${session.jfId}`, {
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
-      headers: { "X-Emby-Token": config.jellyfin.apiKey },
+      headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     });
     if (!res.ok) return new NextResponse(null, { status: 404 });
 

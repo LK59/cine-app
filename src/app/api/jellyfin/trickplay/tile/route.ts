@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 
 const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
       `${config.jellyfin.url}/Videos/${itemId}/Trickplay/${width}/${index}.jpg?MediaSourceId=${itemId}`,
       {
         signal: AbortSignal.any([req.signal, AbortSignal.timeout(8000)]),
-        headers: { "X-Emby-Token": config.jellyfin.apiKey },
+        headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
       }
     );
     if (!res.ok) return new NextResponse(null, { status: 404 });
