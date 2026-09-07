@@ -256,9 +256,13 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
         boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
       }}
     >
-      {/* `absolute`, pas `fixed` : la racine porte déjà le retrait du rail, et sur téléphone elle
-          s'anime en translation — un enfant `fixed` se positionnerait alors par rapport à elle
-          plutôt qu'à la fenêtre. En absolu, il se cale sur la boîte de contenu, rail déjà déduit.
+      {/* `absolute`, pas `fixed` : sur téléphone la racine s'anime en translation, et un enfant
+          `fixed` se positionnerait alors par rapport à la fenêtre plutôt qu'à elle.
+
+          Mais un enfant absolu se cale sur la boîte de *bordure*, pas sur la boîte de contenu : il
+          ignore le `padding-left` qui réserve le rail. Le bouton Retour passait donc dessous sur
+          grand écran. Le retrait est donc écrit dans sa position, comme le fait déjà le navigateur
+          d'épisodes — c'est le même calcul, au même endroit.
 
           Deux formes pour un même geste, chacune là où on la cherche : sur téléphone, la croix en
           haut à droite, comme sur toutes les autres fiches ; sur grand écran, le bouton Retour à
@@ -276,8 +280,11 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       ) : (
         <button
           onClick={requestClose}
-          className="btn btn-ghost absolute left-4 z-10 rounded-full bg-black/55 px-3 py-2"
-          style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+          className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2"
+          style={{
+            top: "max(1rem, env(safe-area-inset-top))",
+            left: "calc(1rem + var(--player-rail, 0px))",
+          }}
         >
           <ArrowLeft size={16} /> {t("cinema.back")}
         </button>

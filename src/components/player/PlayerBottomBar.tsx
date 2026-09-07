@@ -103,8 +103,14 @@ export function PlayerBottomBar() {
               onPointerDown={(e) => {
                 if (e.button !== 0 && e.pointerType === "mouse") return;
                 handledAt.current = Date.now();
+                // Le geste est *déclenché*, pas tenu. `:active` ne dure que le contact, et un tap
+                // franc — quarante millisecondes — ne laissait pas à l'échelle le temps
+                // d'atteindre son creux : il fallait appuyer longtemps pour voir quelque chose.
+                // L'attribut est posé ici et retiré quand l'animation a fini d'elle-même.
+                e.currentTarget.setAttribute("data-pressed", "");
                 openPanel(panel, route);
               }}
+              onAnimationEnd={(e) => e.currentTarget.removeAttribute("data-pressed")}
               /* Le clic reste branché pour le clavier et les technologies d'assistance, qui
                  n'émettent aucun pointeur. Mais un appui en émet un *puis* un clic : sans cette
                  garde, le même geste ouvrirait deux fois, et une entrée d'historique de plus

@@ -651,13 +651,38 @@
 .player-tab svg {
   transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.player-tab:active {
-  transform: scale(0.82);
-  transition: transform 90ms ease-out;
+/* Jouée jusqu'au bout, et non tenue tant que le doigt est là.
+ *
+ * `:active` ne dure que le contact. Un tap franc, c'est quarante millisecondes : l'échelle n'avait
+ * pas atteint son creux que le retour commençait déjà, et on ne voyait rien. Il fallait appuyer
+ * *longtemps* pour voir le geste — exactement l'inverse de ce qu'on veut d'une barre d'onglets.
+ *
+ * Déclenchée au contact et laissée se dérouler, l'animation dit la même chose quelle que soit la
+ * durée de l'appui. Le creux est atteint à 38 % — assez tôt pour paraître solidaire du doigt — et
+ * le reste est la remontée. */
+@keyframes tab-press {
+  0% { transform: scale(1); }
+  38% { transform: scale(0.82); }
+  100% { transform: scale(1); }
 }
-.player-tab:active svg {
-  transform: scale(1.14);
-  transition: transform 90ms ease-out;
+@keyframes tab-press-icon {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+@keyframes tab-press-glow {
+  0% { background-color: rgb(255 255 255 / 0); }
+  30% { background-color: rgb(255 255 255 / 0.16); }
+  100% { background-color: rgb(255 255 255 / 0); }
+}
+.player-tab[data-pressed] {
+  animation: tab-press 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.player-tab[data-pressed] svg {
+  animation: tab-press-icon 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.player-tab[data-pressed]::before {
+  animation: tab-press-glow 380ms ease-out;
 }
 /* Un second signal, parce qu'un seul ne suffisait pas.
  *
@@ -673,13 +698,8 @@
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  background: rgb(255 255 255 / 0);
-  transition: background-color 260ms ease-out;
+  background-color: rgb(255 255 255 / 0);
   pointer-events: none;
-}
-.player-tab:active::before {
-  background: rgb(255 255 255 / 0.14);
-  transition: background-color 60ms ease-out;
 }
 @media (hover: hover) {
   .player-glass-on:hover { background: rgb(255 255 255 / 0.3); }
@@ -814,9 +834,29 @@
 }
 
 .player-rail {
-  width: 4.5rem;
-  background: var(--color-ink);
-  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
+  /* Doit rester d'accord avec `RAIL_WIDTH` dans PlayerShell.tsx, qui publie la même valeur en
+     variable pour que le contenu réserve la bande. Deux endroits pour une décision : si l'un
+     change, l'autre aussi. */
+  width: 4rem;
+  /* Du verre, plus une bande noire.
+   *
+   * Le fond était opaque, et ce n'était pas un oubli : le contenu est décalé de la largeur du
+   * rail, donc rien ne passait dessous et l'opacité ne coûtait rien. Sauf que `--player-rail` est
+   * appliqué en *padding* et non en décalage — les arrière-plans, eux, s'étendent bien sous la
+   * bande. Il y avait donc quelque chose à laisser voir depuis le début.
+   *
+   * Le dégradé va du plus dense au bord gauche vers le plus clair à droite : la bande se fond dans
+   * l'image au lieu de s'y découper. Et une ligne d'un pixel à droite, plutôt qu'une coupure
+   * franche, pour que la limite se devine sans se voir. */
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-ink) 88%, transparent),
+    color-mix(in srgb, var(--color-ink) 58%, transparent)
+  );
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.06);
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease, background 260ms ease;
 }
 /* Replié, le rail est une bande opaque et le contenu se décale d'exactement sa largeur : pas de
    dégradé à raccorder, pas d'affiche coupée. Déployé, il passe par-dessus — une ombre portée
@@ -829,6 +869,13 @@
 .player-rail:hover,
 .player-rail:focus-within {
   width: 15rem;
+  /* Déployé, il recouvre des affiches et porte du texte : la transparence qui l'allège au repos
+     rendrait les libellés illisibles. Il se densifie donc en s'ouvrant. */
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-ink) 96%, transparent),
+    color-mix(in srgb, var(--color-ink) 88%, transparent)
+  );
   box-shadow: 0 0 3rem rgb(0 0 0 / 0.55);
 }
 .player-rail:hover {

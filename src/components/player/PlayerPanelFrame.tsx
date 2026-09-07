@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
@@ -39,6 +39,24 @@ export function PlayerPanelFrame({
   children: React.ReactNode;
 }) {
   const t = useT();
+  /**
+   * De quoi rejouer l'entrée quand on revient sur un onglet qu'on venait de quitter.
+   *
+   * `useExitDelay` reprend la main sans démonter : la phase passe de « sortante » à « entrante »
+   * sur le *même* nœud. Or une animation CSS ne se relance pas parce que React a rerendu — la
+   * classe est déjà là, le navigateur considère qu'elle a joué. D'où « ça ne se joue pas à tous
+   * les coups » : rouvrir Recherche avant que Ma liste ait fini de partir n'animait rien.
+   *
+   * Un compteur en clé force un nœud neuf, et le navigateur repart de zéro. Dérivé pendant le
+   * rendu, comme `useExitDelay` lui-même : un `setState` dans un effet est refusé ici, à raison.
+   */
+  const [entrance, setEntrance] = useState(0);
+  const [wasLeaving, setWasLeaving] = useState(leaving);
+  if (wasLeaving !== leaving) {
+    setWasLeaving(leaving);
+    if (!leaving) setEntrance((n) => n + 1);
+  }
+
   const route = useCinemaRoute();
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
@@ -160,6 +178,7 @@ export function PlayerPanelFrame({
           l'écran cinéma. Ici, rien de fixe n'en descend, mais la règle vaut d'être tenue. */}
       <div
         ref={bodyRef}
+        key={entrance}
         className="scrollbar-thin flex-1 animate-fade-in-side overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.

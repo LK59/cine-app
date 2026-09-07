@@ -19,8 +19,12 @@ const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) =
 const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
 
-/** La largeur que le rail replié occupe, réservée par le contenu. Voir globals.css. */
-const RAIL_WIDTH = "4.5rem";
+/**
+ * La largeur que le rail replié occupe, réservée par le contenu.
+ *
+ * La même valeur que `.player-rail` dans globals.css : si l'une change, l'autre aussi.
+ */
+const RAIL_WIDTH = "4rem";
 
 /** La hauteur que la barre du téléphone occupe, réservée par le bas des panneaux. */
 const BAR_SPACE = "5.5rem";
