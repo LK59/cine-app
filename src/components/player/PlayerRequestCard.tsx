@@ -58,7 +58,7 @@ export function PlayerRequestCard({
         onClick={openable ? onOpen : undefined}
         aria-disabled={!openable}
         data-nav-item
-        className={`relative overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 active:scale-[0.96] ${
+        className={`relative overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 active:scale-[0.96] active:delay-75 ${
           openable ? "cursor-pointer group-hover:ring-white/30" : "cursor-default"
         }`}
       >

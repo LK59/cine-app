@@ -351,8 +351,21 @@
 @utility pressable {
   transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Un court délai avant l'enfoncement, et lui seul.
+ *
+ * Le retour réagissait au simple contact : poser le doigt sur une affiche puis faire défiler
+ * enfonçait la carte, le défilement partait, et l'animation se terminait dans le vide.
+ *
+ * Le navigateur retire l'état pressé dès qu'un défilement commence — et un défilement bouge dans
+ * les trente à cinquante millisecondes. Retarder l'aller de soixante-dix suffit donc à ce qu'un
+ * balayage ne l'obtienne jamais, tandis qu'un vrai appui, immobile, l'obtient. C'est exactement ce
+ * que font les listes natives d'iOS.
+ *
+ * Le délai ne vaut que pour l'aller : au relâchement, la règle de base reprend, sans attente. Le
+ * geste reste donc collé au doigt là où il compte. */
 .pressable:active:not(:disabled) {
   transform: scale(0.96);
+  transition-delay: 70ms;
 }
 .btn:focus-visible {
   @apply outline-2 outline-offset-2 outline-white/60;

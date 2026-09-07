@@ -40,7 +40,7 @@ export function CinemaSeriesCard({
       onFocus={() => onFocusItem(item)}
       onMouseEnter={() => onFocusItem(item)}
       onClick={() => onSelectItem(item)}
-      className={`${widthClassName} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 active:scale-[0.96] ${TV_NAV_RING}`}
+      className={`${widthClassName} relative shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40 transition duration-200 hover:z-10 hover:scale-105 hover:shadow-xl hover:shadow-black/60 focus-visible:z-10 focus-visible:scale-105 active:scale-[0.96] active:delay-75 ${TV_NAV_RING}`}
     >
       {/* unoptimized: these URLs are already TMDB CDN images requested at the exact width this
           card renders at (see the cinema payload routes). Routing them through Next's optimizer

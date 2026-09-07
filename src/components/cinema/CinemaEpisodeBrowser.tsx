@@ -202,7 +202,7 @@ export function CinemaEpisodeBrowser({
                 key={ep.jellyfinItemId}
                 data-episode-item="true"
                 onClick={() => onPlayEpisode(ep)}
-                className="flex items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 active:bg-white/15 focus-visible:bg-white/10 focus-visible:outline-none"
+                className="flex items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 active:bg-white/15 active:delay-75 focus-visible:bg-white/10 focus-visible:outline-none"
               >
                 <div className="relative w-40 shrink-0 sm:w-48">
                   <PosterImage src={ep.thumbnailUrl} alt={ep.title} aspectRatio="aspect-video" unoptimized subtle />
