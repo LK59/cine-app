@@ -99,9 +99,13 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
             La page est publique — c'est tout l'intérêt d'une page d'état : elle doit répondre le
             jour où le reste ne répond plus, y compris avant d'être connecté. Mais il faut aussi
             pouvoir y aller depuis l'intérieur quand on est déjà là et que quelque chose cloche,
-            sans avoir à se déconnecter pour retrouver le lien de l'écran de connexion. */}
+            sans avoir à se déconnecter pour retrouver le lien de l'écran de connexion.
+
+            `from=compte` dit à la page d'état par où l'on est entré, pour que son « Retour »
+            ramène ici. Sans lui, il ramenait à la connexion — la seule autre porte — et consulter
+            l'état des services ressemblait à se faire déconnecter. */}
         <Section icon={Activity} title={t("player.account.status")}>
-          <a href="/status" className="btn btn-ghost w-full justify-center sm:w-auto">
+          <a href="/status?from=compte" className="btn btn-ghost w-full justify-center sm:w-auto">
             <Activity size={16} />
             {t("player.account.openStatus")}
           </a>

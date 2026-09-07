@@ -108,8 +108,38 @@ const MOVED_PATHS: Record<string, string> = {
   "/player": "/",
 };
 
+/**
+ * L'écran de connexion, quand on est déjà connecté.
+ *
+ * `/login` est publique — elle doit l'être — et repartait donc sans que rien ne regarde la
+ * session : y arriver avec une session valide affichait un formulaire de connexion à quelqu'un de
+ * connecté. C'est ce qu'on voyait en revenant de la page d'état des services, et ça se lit comme
+ * une déconnexion.
+ *
+ * Une session locale ne va pas à la racine mais à la gestion, pour la raison que l'écran de
+ * connexion donne déjà lui-même : elle ne porte aucune identité Jellyfin, donc le lecteur qu'elle
+ * ouvrirait aurait un bouton « Lire » qui répond 401.
+ *
+ * La vérification est gardée : la page de connexion est la porte d'entrée, et le jour où la base
+ * ne répond plus, une garde qui lève à sa place la remplacerait par une erreur. On laisse alors
+ * passer — le formulaire est toujours la bonne réponse à qui n'a pas de session utilisable.
+ */
+async function signedInElsewhere(req: NextRequest): Promise<NextResponse | null> {
+  try {
+    const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+    if (!session) return null;
+    return NextResponse.redirect(new URL(session.jfId ? "/" : "/gestion", req.url));
+  } catch {
+    return null;
+  }
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (pathname === "/login") {
+    return (await signedInElsewhere(req)) ?? NextResponse.next();
+  }
 
   if (
     isPublicPath(pathname) ||
