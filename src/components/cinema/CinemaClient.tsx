@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
+import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -266,7 +267,7 @@ export function CinemaClient() {
   );
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
-    "/api/cinema/movies",
+    MOVIES_CATALOGUE_KEY,
     fetcher
   );
   /**
@@ -278,9 +279,12 @@ export function CinemaClient() {
    * téléphone — il attendait simplement que quelqu'un ouvre une série depuis l'autre onglet.
    */
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" || route.serie !== null ? "/api/cinema/series" : null,
+    mediaType === "series" || route.serie !== null ? SERIES_CATALOGUE_KEY : null,
     fetcher
   );
+  // Les films sont là : on peut préparer les séries sans rien retarder. Voir le crochet.
+  useWarmSeriesCatalogue(movies !== undefined);
+
   /** Le catalogue de l'onglet affiché est-il arrivé ? Voir la remise à zéro du volet.*/
   const catalogueReady = mediaType === "series" ? series !== undefined : movies !== undefined;
 

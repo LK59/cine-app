@@ -4,7 +4,13 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 
 let payload: Record<string, unknown> = { username: "louis", jfUser: null };
 vi.mock("swr", () => ({ default: () => ({ data: payload }) }));
-vi.mock("@/lib/swr", () => ({ fetcher: async () => payload }));
+// Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
+// (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
+// dont on se souvient les laisse valoir `undefined`.
+vi.mock("@/lib/swr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/swr")>()),
+  fetcher: async () => payload,
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,

@@ -7,7 +7,13 @@ import { SWRConfig } from "swr";
 // Le composant passe explicitement son propre fetcher à useSWR : celui de SWRConfig ne serait
 // jamais appelé. C'est donc lui qu'on remplace.
 let payload: Record<string, unknown> = {};
-vi.mock("@/lib/swr", () => ({ fetcher: async () => payload }));
+// Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
+// (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
+// dont on se souvient les laisse valoir `undefined`.
+vi.mock("@/lib/swr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/swr")>()),
+  fetcher: async () => payload,
+}));
 
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon, X } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { recentSearches, rememberSearch, forgetSearches } from "@/lib/recentSearches";
@@ -287,7 +287,7 @@ function SearchStart({ onPick }: { onPick: (query: string) => void }) {
   const [forgotten, setForgotten] = useState(false);
   const recent = forgotten ? [] : stored;
 
-  const { data: movies } = useSWR<CinemaMoviesPayload>("/api/cinema/movies", fetcher, {
+  const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, fetcher, {
     revalidateOnMount: false,
     revalidateIfStale: false,
     revalidateOnFocus: false,

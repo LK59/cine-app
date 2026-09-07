@@ -4,13 +4,14 @@ import useSWR from "swr";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
-import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
+import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { useIsShortViewport } from "@/lib/useIsMobile";
+import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -152,7 +153,7 @@ export function CinemaMobileClient() {
   }, []);
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
-    "/api/cinema/movies",
+    MOVIES_CATALOGUE_KEY,
     fetcher
   );
   // Series (and its Continue Watching feed) stay unfetched until the tab is actually opened —
@@ -172,9 +173,11 @@ export function CinemaMobileClient() {
    * comportement qu'un lien profond ouvert à froid, que ce composant décrit déjà plus haut.
    */
   const { data: series, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" || route.serie !== null ? "/api/cinema/series" : null,
+    mediaType === "series" || route.serie !== null ? SERIES_CATALOGUE_KEY : null,
     fetcher
   );
+  // Le même réchauffage que sur ordinateur, et le même crochet : c'est une seule décision.
+  useWarmSeriesCatalogue(movies !== undefined);
   /**
    * « À suivre » n'appartient pas à un onglet.
    *

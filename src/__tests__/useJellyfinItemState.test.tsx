@@ -4,13 +4,12 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { SWRConfig } from "swr";
 
 let payload: Record<string, unknown> | null = null;
-// Le module entier, et pas seulement `fetcher` : le crochet lit aussi la clé (`progressKey`) et
-// demande la relecture des vues de reprise (`revalidateWatchState`). Un mock qui n'expose que ce
-// dont on se souvient laisse le crochet appeler `undefined` — ici pendant le rendu.
-vi.mock("@/lib/swr", () => ({
+// Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
+// (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
+// dont on se souvient les laisse valoir `undefined`.
+vi.mock("@/lib/swr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: async () => payload,
-  progressKey: (itemId: string) => `/api/cinema/progress/${itemId}`,
-  revalidateWatchState: vi.fn(async () => {}),
 }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));

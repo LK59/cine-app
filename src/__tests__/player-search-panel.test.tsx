@@ -5,7 +5,13 @@ import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 
 let payload: Record<string, unknown> = { library: [], tmdb: [], persons: [] };
-vi.mock("@/lib/swr", () => ({ fetcher: async () => payload }));
+// Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
+// (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
+// dont on se souvient les laisse valoir `undefined`.
+vi.mock("@/lib/swr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/swr")>()),
+  fetcher: async () => payload,
+}));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/PosterImage", () => ({
   // eslint-disable-next-line @next/next/no-img-element

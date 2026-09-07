@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Search, X } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { searchCinemaLibrary } from "@/lib/cinemaSearch";
 import { uniqueById } from "@/lib/cinemaRails";
 import { useDelayedClose } from "@/lib/useDelayedClose";
@@ -41,8 +41,8 @@ export function CinemaSearchOverlay({
   // Both keys are already in SWR's cache whenever the browse grid has them, so opening the search
   // is free on the movies side; the series side is what actually forces the lazy /api/cinema/series
   // fetch here — the search has to be able to find a series even from the Films tab.
-  const { data: movies } = useSWR<CinemaMoviesPayload>("/api/cinema/movies", fetcher);
-  const { data: series } = useSWR<CinemaSeriesPayload>("/api/cinema/series", fetcher);
+  const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, fetcher);
+  const { data: series } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, fetcher);
 
   const allMovies = useMemo(
     () => uniqueById([...(movies?.spotlight ?? []), ...Object.values(movies?.rows ?? {}).flat()], (m) => m.radarrId),

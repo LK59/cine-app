@@ -2,7 +2,7 @@
 
 import { memo, useMemo } from "react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 import { uniqueById } from "@/lib/cinemaRails";
 import { PosterImage } from "@/components/PosterImage";
@@ -40,12 +40,12 @@ export function useCinemaSimilar(
   // pourtant pas bougé.
   const swrOptions = { revalidateOnMount: false, revalidateOnFocus: false, revalidateIfStale: false };
   const { data: movies } = useSWR<CinemaMoviesPayload>(
-    mediaType === "movies" ? "/api/cinema/movies" : null,
+    mediaType === "movies" ? MOVIES_CATALOGUE_KEY : null,
     fetcher,
     swrOptions
   );
   const { data: series } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" ? "/api/cinema/series" : null,
+    mediaType === "series" ? SERIES_CATALOGUE_KEY : null,
     fetcher,
     swrOptions
   );

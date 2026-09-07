@@ -56,6 +56,16 @@ export const liveFeedOptions = {
 export const playerBootstrapOptions = { isPaused: () => false } as const;
 
 
+/**
+ * Les deux catalogues, nommés une fois.
+ *
+ * Onze endroits écrivaient ces deux adresses à la main, et ce sont des clés de cache autant que
+ * des URL : deux écritures qui divergent d'un caractère, ce sont deux caches qui s'ignorent, donc
+ * un catalogue téléchargé deux fois sans que rien ne le signale.
+ */
+export const MOVIES_CATALOGUE_KEY = "/api/cinema/movies";
+export const SERIES_CATALOGUE_KEY = "/api/cinema/series";
+
 /** La clé qui porte « vu », « favori » et le point de reprise d'un titre. */
 export const progressKey = (itemId: string) => `/api/cinema/progress/${itemId}`;
 
