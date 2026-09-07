@@ -11,6 +11,10 @@ const mockCachedSeries = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...args: unknown[]) => mockCachedMovies(...args),
   cachedSeries: (...args: unknown[]) => mockCachedSeries(...args),
+  // Le lien vers Sonarr passe par cette entrée de cache depuis qu'il est partagé avec « À
+  // suivre » (voir `sonarrIdsBySeriesId`). Sans mémoire ici : ce que ce fichier vérifie, c'est que
+  // la route interroge la *série* et une seule fois par série, pas que le cache existe.
+  cachedItemProviderIds: (userId: unknown, itemId: unknown) => mockJellyfin.getItemProviderIds(userId, itemId),
 }));
 
 function fakeReq(cookie = "t"): NextRequest {

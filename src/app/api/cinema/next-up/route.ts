@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
-import { sonarr } from "@/lib/clients/sonarr";
+import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
 
 export interface CinemaNextUpItem {
   jellyfinItemId: string;
@@ -47,29 +47,16 @@ export async function GET(req: NextRequest) {
 
   const items = await jellyfin.getNextUpGlobal(session.jfId, 10).catch(() => []);
 
-  // La correspondance vers Sonarr passe par le TVDB de la série, comme le fait déjà la liste de
-  // reprise des films avec le TMDB : une carte de reprise doit pouvoir ouvrir sa fiche, et non
-  // seulement lancer la lecture.
-  const seriesIds = [...new Set(items.map((i) => i.SeriesId).filter((id): id is string => !!id))];
-  const tvdbBySeries = new Map<string, number>();
-  await Promise.all(
-    seriesIds.map(async (seriesId) => {
-      const providerIds = await jellyfin.getItemProviderIds(session.jfId!, seriesId).catch(() => null);
-      const tvdb = providerIds?.ProviderIds?.Tvdb;
-      if (tvdb) tvdbBySeries.set(seriesId, parseInt(tvdb, 10));
-    })
-  );
-  const sonarrByTvdb = new Map(
-    (await sonarr.getSeries().catch(() => []))
-      .filter((s) => s.tvdbId)
-      .map((s) => [s.tvdbId, s.id] as const)
+  // La correspondance vers Sonarr — une carte de reprise doit pouvoir ouvrir sa fiche, et pas
+  // seulement lancer la lecture. Le calcul est partagé avec le flux « Reprendre » : voir
+  // `sonarrIdsBySeriesId`.
+  const sonarrBySeries = await sonarrIdsBySeriesId(
+    session.jfId,
+    items.map((i) => i.SeriesId).filter((id): id is string => !!id)
   );
 
   const payload: CinemaNextUpPayload = {
-    items: items.map((item) => {
-      const tvdb = item.SeriesId ? tvdbBySeries.get(item.SeriesId) : undefined;
-      return toNextUpItem(item, (tvdb ? sonarrByTvdb.get(tvdb) : undefined) ?? null);
-    }),
+    items: items.map((item) => toNextUpItem(item, (item.SeriesId ? sonarrBySeries.get(item.SeriesId) : undefined) ?? null)),
   };
   return NextResponse.json(payload);
 }

@@ -314,8 +314,17 @@ export function ExperimentalPlayerHost({
     () => ({ current: facade ? asVideoElement(facade) : null }),
     [facade]
   );
+  /**
+   * Le chemin retenu, noté au moment où il est choisi.
+   *
+   * Ce ref ne servait qu'au rapport d'échec, et il était recopié depuis l'état — donc un rendu
+   * après la décision. Un échec survenant dans cet intervalle se rapportait « non décidé », et
+   * neuf replis du journal disent exactement ça : le seul champ qui aurait dit ce que le lecteur
+   * tentait est vide sur les seules lectures qui ont échoué. `choosePath` l'écrit maintenant en
+   * même temps que l'état, dans l'effet qui décide — jamais pendant un rendu.
+   */
   useEffect(() => {
-    pathRef.current = path;
+    if (path !== null) pathRef.current = path;
   }, [path]);
   // Bumped to build the pipeline again from scratch. iOS takes the media resources back when the
   // page goes to the background, and a MediaSource it has closed cannot be reopened — so coming
@@ -726,6 +735,7 @@ export function ExperimentalPlayerHost({
       if (cancelled) return playback.destroy();
 
       remuxRef.current = playback;
+      pathRef.current = "remux";
       setPath("remux");
       announceStart("remux", "remultiplexage → lecteur natif");
       setTracks({ audio: playback.audioTracks, subtitles: playback.subtitleTracks });
@@ -794,6 +804,7 @@ export function ExperimentalPlayerHost({
      * Matroska container this player never opens here; those files carry one audio track.
      */
     const startDirect = async (element: HTMLVideoElement) => {
+      pathRef.current = "direct";
       setPath("direct");
       setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
       announceStart("direct", "le conteneur est déjà celui du navigateur");
@@ -867,6 +878,7 @@ export function ExperimentalPlayerHost({
       // converting anything; it is landing on the canvas that makes tone mapping — and therefore
       // the viewer's consent to it — necessary.
       if (info.canvasHdrRefusal) {
+        pathRef.current = "webcodecs";
         setPath("webcodecs");
         fallToStable(info.canvasHdrRefusal);
         return;
@@ -874,6 +886,7 @@ export function ExperimentalPlayerHost({
 
       const engine = new PlaybackEngine(canvasRef.current!);
       engineRef.current = engine;
+      pathRef.current = "webcodecs";
       setPath("webcodecs");
       announceStart("webcodecs", reason);
 

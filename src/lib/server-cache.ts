@@ -177,6 +177,20 @@ export const cachedMovies = (opts?: { forceRefresh?: boolean }) =>
 export const cachedSeries = (opts?: { forceRefresh?: boolean }) =>
   withCache("sonarr:series", TTL.MEDIUM, () => sonarr.getSeries(), opts);
 
+/**
+ * Les identifiants externes d'un titre chez Jellyfin — TVDB, TMDB, IMDb.
+ *
+ * C'est une correspondance immuable : une série ne change pas de TVDB. Elle était pourtant
+ * redemandée à chaque appel de « À suivre », une fois par série affichée, sur un flux que la
+ * reprise de focus relit et que les deux onglets demandent maintenant. Dix allers-retours pour
+ * réapprendre ce qu'on savait déjà.
+ *
+ * La clé ne porte pas la personne : la réponse n'en dépend pas, seul l'appel a besoin d'un compte.
+ * La porter multiplierait par dix-neuf des entrées identiques.
+ */
+export const cachedItemProviderIds = (userId: string, itemId: string, opts?: { forceRefresh?: boolean }) =>
+  withCache(`jf:providers:${itemId}`, TTL.VERY_LONG, () => jellyfin.getItemProviderIds(userId, itemId), opts);
+
 export const cachedJellyfinMovies = (userId: string, opts?: { forceRefresh?: boolean }) =>
   withCache(`jf:movies:${userId}`, TTL.LONG, () => jellyfin.getAllMovies(userId), opts);
 

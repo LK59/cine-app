@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
+import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -20,18 +21,13 @@ export async function GET(req: NextRequest) {
   const moviesByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
   const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s.id]));
 
-  // Jellyfin never puts ProviderIds on Episode items, only on their parent
-  // Series — fetch the series' TVDB id separately (deduped) so episodes in
-  // the resume list can still link to their series' sheet.
-  const episodeSeriesIds = [...new Set(
+  // Jellyfin ne pose jamais d'identifiants externes sur un épisode, seulement sur sa série : la
+  // fiche d'un épisode en cours se retrouve donc par la série. Même calcul que « À suivre », et
+  // au même endroit — voir `sonarrIdsBySeriesId`.
+  const sonarrBySeries = await sonarrIdsBySeriesId(
+    session.jfId,
     resumeData.Items.filter((i) => i.Type === "Episode" && i.SeriesId).map((i) => i.SeriesId!)
-  )];
-  const seriesTvdbById = new Map<string, number | undefined>();
-  await Promise.all(episodeSeriesIds.map(async (seriesId) => {
-    const providerIds = await jellyfin.getItemProviderIds(session.jfId!, seriesId).catch(() => null);
-    const tvdb = providerIds?.ProviderIds?.Tvdb;
-    if (tvdb) seriesTvdbById.set(seriesId, parseInt(tvdb, 10));
-  }));
+  );
 
   const items = resumeData.Items.map((item) => {
     const positionTicks = item.UserData?.PlaybackPositionTicks ?? 0;
@@ -48,8 +44,7 @@ export async function GET(req: NextRequest) {
       const sonarrId = seriesByTvdb.get(tvdbId);
       if (sonarrId) cinemaHref = `/sonarr/${sonarrId}`;
     } else if (item.Type === "Episode" && item.SeriesId) {
-      const tvdb = seriesTvdbById.get(item.SeriesId);
-      const sonarrId = tvdb ? seriesByTvdb.get(tvdb) : undefined;
+      const sonarrId = sonarrBySeries.get(item.SeriesId);
       if (sonarrId) cinemaHref = `/sonarr/${sonarrId}`;
     }
 

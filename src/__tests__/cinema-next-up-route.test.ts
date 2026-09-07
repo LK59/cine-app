@@ -21,8 +21,14 @@ function fakeReq(cookie = "t"): NextRequest {
   } as unknown as NextRequest;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  // La route lit maintenant Sonarr et les identifiants externes à travers le cache du serveur,
+  // qui vit dans le module et donc d'un test à l'autre : sans cette purge, le deuxième test
+  // reçoit la bibliothèque du premier.
+  const cache = await import("@/lib/server-cache");
+  cache.invalidateLibrary();
+  cache.invalidateJellyfinLibrary();
   mockGetItemProviderIds.mockResolvedValue(null);
   mockGetSeries.mockResolvedValue([]);
 });
