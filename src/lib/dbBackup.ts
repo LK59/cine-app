@@ -9,8 +9,21 @@ import { logError } from "@/lib/logger";
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const RETENTION_DAYS = 7;
 
+/**
+ * Le jour, tel qu'il est ici — pas tel qu'il est à Greenwich.
+ *
+ * `toISOString()` est en UTC quoi qu'il arrive : ni le `TZ` du conteneur ni `tzdata` n'y changent
+ * quoi que ce soit. Une sauvegarde prise à 1h du matin à Paris portait donc la date de la veille,
+ * et deux fichiers voisins ne racontaient pas les nuits qu'on croyait.
+ *
+ * Les composantes locales le disent juste, et le tri des noms reste ce qu'il était : `YYYY-MM-DD`
+ * s'ordonne aussi bien dans un sens que dans l'autre.
+ */
 function backupFileName(date = new Date()): string {
-  return `cine-${date.toISOString().slice(0, 10)}.db`;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `cine-${year}-${month}-${day}.db`;
 }
 
 export async function runDbBackup(): Promise<void> {

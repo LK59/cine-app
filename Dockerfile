@@ -27,7 +27,22 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
 # Runtime: libstdc++ for better-sqlite3, sharp for image optimization
-RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ && npm install --no-save sharp
+# `tzdata` pour que le TZ déclaré dans docker-compose.yml veuille dire quelque chose.
+#
+# `TZ=Europe/Paris` était bien posé dans l'environnement, et bien ignoré : sans base de fuseaux
+# l'image Alpine ne sait pas à quoi ce nom correspond, et retombe sur UTC sans le dire. Le
+# conteneur annonçait donc 10:09 quand la machine affichait 12:09.
+#
+# L'application elle-même n'en souffrait pas — toutes les heures sont mises en forme dans le
+# navigateur, avec le fuseau du spectateur, et le journal du lecteur écrit de l'ISO en UTC
+# explicitement marqué `Z`. Ce qui en souffrait, c'est tout ce qu'un *opérateur* lit : `date`, les
+# horodatages ajoutés par Docker, décalés de deux heures au moment précis où l'on compare un
+# journal à l'heure où quelqu'un a appuyé sur un bouton.
+#
+# À ne pas confondre avec le nom des sauvegardes, qui vient de `toISOString()` : celui-là est en
+# UTC quoi qu'il arrive, `tzdata` n'y peut rien, et il a fallu le corriger dans le code — voir
+# `dbBackup.ts`.
+RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && npm install --no-save sharp
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
