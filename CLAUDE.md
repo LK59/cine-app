@@ -62,7 +62,10 @@ means the viewer's own session is gone.
 
 **API routes are thin** (~59 lines average). Logic lives in `src/lib`:
 
-- `src/lib/clients/*` — one module per upstream service.
+- `src/lib/clients/*` — one module per upstream service. Jellyfin is authenticated through
+  `src/lib/jellyfinAuth.ts` and nowhere else: `Authorization: MediaBrowser Token="…"`. The old
+  `X-Emby-Token` header is refused by default from Jellyfin 12 onwards, and a test forbids it
+  reappearing anywhere in `src/`.
 - `src/lib/server-cache.ts` — TTL-keyed caching in front of them. Prefer `cachedMovies` /
   `cachedSeries` over hitting a client directly from a route.
 - `src/lib/db.ts` — SQLite through better-sqlite3, `migrate()` creating tables idempotently.
@@ -88,10 +91,25 @@ direct play. `PlayerHost` chooses between the native player and the legacy serve
 how a decision's history survives. Match that density; a comment restating the code is worse than
 none.
 
-**Mobile and desktop are parallel trees that drift.** `CinemaClient.tsx` /
+**The same decision is made in several places, and they drift.** `CinemaClient.tsx` /
 `mobile/CinemaMobileClient.tsx`, `CinemaMovieDetail` / `CinemaMobileDetail`. A fix on one side is
 half a fix — and a guard present on one side and missing on the other has cost five failed attempts
 at a single bug. Better than fixing both: give them one shared function so they cannot diverge again.
+
+Having two interfaces is not the debt — desktop and mobile are genuinely different products here
+(focus-following hero and arrow-key grid on one side, flick rows and inline hero actions on the
+other), and merging them would spoil both. The debt is duplicated *decisions*, and the axis is not
+screen size: a resume fix landed in the movie sheet and its mobile twin, and missed
+`CinemaSeriesDetail` — film versus series, not mobile versus desktop. Count the places that make
+the decision, not the layouts.
+
+**`resumeAt: 0` means "from the beginning"; omitting it means "ask the server".** They are not
+interchangeable, and treating them as such cost two opposite bugs in one day. The old server-side
+player only honoured a truthy value, so callers took the habit of leaving the field out to restart;
+the native player reads `session.resumeAt ?? playbackState?.resumeSeconds`, where an absent field
+names exactly the position you wanted to discard. Every caller that knows the position passes a
+number — zero included. Absence is reserved for a caller that genuinely does not know yet
+(`resumeKnown` on `PlayButton`), and it defers to the server rather than asserting a start.
 
 **Ask the browser, never a list.** `MediaSource.isTypeSupported`, real `SourceBuffer` probes,
 `AudioEncoder.isConfigSupported`. But ask the question you actually mean:
@@ -125,6 +143,11 @@ dictionaries' values.
   back.
 - **Only `/api/jellyfin/resume` and `/api/cinema/next-up` revalidate on focus** (`liveFeedOptions`).
   The rest of the catalogue is deliberately frozen; a 1.4 MB payload is not refetched on every wake.
+- **Closing the player leaves four views stale, and it revalidates all four**
+  (`refreshAfterPlayback`): the resume feed, next-up, the title's own progress, and — through a key
+  filter, since a close only knows the *episode* id — every series episode list. It waits for two
+  things first, and neither is optional: the stop report, or it re-reads the value it meant to
+  replace; and the screen being free, because a paused SWR query is dropped, not deferred.
 - **A TMDB or person sheet covers the library stack, it does not replace it** — keep the stack
   rendered and inert. And a sheet is never behind itself: a discover push keeps the current `film`
   in the address.

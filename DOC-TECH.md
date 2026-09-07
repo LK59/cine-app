@@ -223,6 +223,15 @@ qui déplace du média. Elle lui tend une vue étroite d'elle-même
   jeter des segments en silence : huit refus d'affilée et la boucle concluait que
   le navigateur ne retenait rien, diagnostic sans rapport avec la cause. Mesuré,
   pas deviné, et sans effet sur un navigateur qui ne refuse jamais rien.
+- **Ouvrir ailleurs qu'au début** : le remultiplexeur est envoyé au bon endroit
+  tout de suite, mais la **tête attend que le média soit arrivé** sous elle. Un
+  `currentTime` posé quand seuls les segments d'initialisation ont été envoyés
+  est une demande que WebKit accepte et n'honore **jamais** : mesuré sur iPhone,
+  un film rouvert à 23:24 restait figé avec trente secondes de média sous la tête
+  et pas une image décodée, `seeking` à vrai indéfiniment. Un saut *pendant* la
+  lecture n'a jamais eu ce défaut — là, le média et le décodeur existent déjà, et
+  c'est toute la différence. Un saut demandé annule l'ouverture différée au lieu
+  de s'y ajouter, sans quoi la tête reviendrait au point d'ouverture.
 - **Chien de garde** : si la tête de lecture n'a rien sous elle et que rien
   n'arrive, on se replace. *Un tampon vide n'est pas un lecteur égaré* — les
   plages de l'élément sont l'**intersection** des deux tampons, donc vider
@@ -299,6 +308,40 @@ le **reprendre** dans MediaSource. AAC d'abord, Opus ensuite.
   et comme il ne décode pas le HEVC 10 bits en WebCodecs, il perdait la lecture
   tout court.
 - **iOS n'accepte pas l'Opus** dans MediaSource, mais encode l'AAC en 5.1.
+
+### L'ordre des canaux n'est pas le même des deux côtés
+
+Trois conventions se croisent ici, et personne ne le disait :
+
+| | Disposition 5.1 |
+|---|---|
+| Ce que le décodeur rend (ordre WAVE) | `L R C LFE Ls Rs` |
+| Ce que l'**AAC** attend | `C L R Ls Rs LFE` |
+| Ce qu'**Opus** attend (ordre Vorbis) | `L C R Ls Rs LFE` |
+
+Entrelacés sans permutation, les plans gardaient leur rang et changeaient de
+sens. Le centre — les dialogues — arrivait au rang que l'AAC lit comme le canal
+droit. Au casque, sur un 5.1 replié en stéréo par le navigateur, ça donnait
+**les voix uniquement à droite et la musique à gauche**. Rapporté sur
+« Titanic », absent du lecteur Jellyfin, qui transcode côté serveur avec ffmpeg —
+lequel fait cette correspondance depuis toujours.
+
+`toCodecChannelOrder` permute donc selon le **codec de destination**, et pas
+selon une convention unique. Trois règles :
+
+- **après le repli, jamais avant** — `fold` raisonne dans l'ordre du décodeur ;
+- **la stéréo et le mono ne sont pas touchés**, L et R étant au même rang partout
+  (c'est pourquoi seuls les fichiers multicanaux chantaient de travers) ;
+- **ce qu'on ne sait pas décrire n'est pas permuté** — quadriphonie, 5.0, un
+  codec inconnu. Un ordre inconnu laissé tel quel est un pari ; un ordre inventé
+  est une faute.
+
+Vérifié à l'oreille sur AC-3, E-AC3, DTS et DTS-HD MA, en 5.1 et en 7.1.
+
+> **Effet de bord attendu** : une fois le LFE correctement étiqueté, le repli
+> stéréo standard **l'écarte**. Avant la correction il était pris pour un
+> surround et versé dans la sortie ; le son paraît donc plus faible après. C'est
+> le comportement juste, pas une régression.
 
 ### Le codec est unifié par fichier
 
@@ -464,6 +507,20 @@ Le choix du spectateur l'emporte toujours sur celui du compte, y compris après
 une reconstruction : revenir d'une coupure réseau doit rendre ce que *lui* avait
 choisi.
 
+**D'où elles viennent** : `/api/jellyfin/playback-state/[itemId]`, relue à chaque
+ouverture — et non plus de la description du fichier. Celle-ci est gardée en
+mémoire pour rouvrir un film instantanément, ce qui est juste pour un fichier qui
+ne change jamais et faux pour des préférences qui changent : les modifier dans
+« Compte » puis relancer un film déjà lu dans la même session appliquait
+l'ancienne langue, à tous les coups, jusqu'au rechargement de la page.
+
+La lecture est un `fetch` nu et non une clé mise en cache, parce qu'elle
+conditionne l'effet qui construit tout le pipeline : elle doit changer **une
+seule fois**, de « pas encore su » à « su ». Une clé rendrait d'abord la valeur
+mémorisée puis la fraîche — deux changements, donc un film qui repart en cours de
+route. Elle porte un délai de garde de huit secondes : une requête sans réponse
+laisserait sinon un spinner qui ne s'arrête pas.
+
 ---
 
 ## Ce que le serveur apprend quand même
@@ -592,6 +649,8 @@ Tout est dans `src/lib/webcodecs/`, sauf mention contraire.
 | `mseSupport.ts` | Ce que le navigateur accepte, et la sonde de remplacement de tampon |
 | `bufferQueue.ts` | Une opération à la fois par tampon |
 | `externalSubtitles.ts` | Les `.srt` posés à côté du film : lecture, recherche par temps |
+| `subtitleMarkup.ts` | Le balisage retiré d'une ligne, pour les pistes internes **et** les fichiers |
+| `src/app/api/jellyfin/playback-state/[itemId]` | Position et préférences : ce qui change entre deux lectures |
 | `src/lib/usePlaybackSession.ts` | Ce que le serveur apprend : démarrage, battement, fin |
 | `src/lib/playbackClients.ts` | Les deux noms sous lesquels l'app joue |
 | `src/lib/playerLog.ts` | Le journal des lectures : écriture, bornes, rotation |
