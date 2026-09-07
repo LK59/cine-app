@@ -95,7 +95,11 @@ export function CinemaHero({
           une interface en français, l'accueil affichait un texte en anglais le temps que le bon
           arrive, puis le remplaçait. Une ligne vide un court instant se remarque moins qu'une
           langue qui change sous les yeux. */}
-      <p className="line-clamp-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+      <p /* Estompé et non tronqué par des points, comme la fiche depuis cet après-midi : deux
+             façons de couper le même texte dans la même application, c'était une de trop. Le
+             minimum de hauteur reste — c'est lui qui empêche la mise en page de sauter quand le
+             survol change de titre, et la classe ne fixe qu'un maximum. */
+          className="clamp-fade-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
         {info?.tmdb?.overview ?? (info ? item.overview : "")}
       </p>
 

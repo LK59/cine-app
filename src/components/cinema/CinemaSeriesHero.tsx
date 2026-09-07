@@ -64,7 +64,8 @@ export function CinemaSeriesHero({
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
       </div>
 
-      <p className="line-clamp-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+      <p /* Voir CinemaHero : la même coupure, au même endroit de l'écran, pour l'autre onglet. */
+          className="clamp-fade-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
         {info?.tmdb?.overview || item.overview}
       </p>
 
