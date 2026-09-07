@@ -674,7 +674,45 @@ describe("MseSource", () => {
     // Filling thirty seconds from zero and then discarding all of it is what made resuming a
     // part-watched episode feel slow.
     expect(remuxer.seeks).toEqual([1200]);
-    expect(video.currentTime).toBe(1200);
+    // Mais la tête, elle, attend. Mesuré sur un iPhone : un `currentTime` posé alors que seuls
+    // les segments d'initialisation sont envoyés est une demande que WebKit accepte et n'honore
+    // jamais — le film restait figé avec trente secondes de média sous la tête et pas une image
+    // décodée, indéfiniment. Un saut *pendant* la lecture n'a jamais eu ce défaut : là, le média
+    // et le décodeur existent déjà.
+    expect(video.currentTime).toBe(0);
+  });
+
+  it("pose la tête à l'ouverture dès que le média la couvre", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() }, 1200);
+    await flush();
+
+    // Les deux pistes, parce qu'un élément ne joue que là où toutes ont du média.
+    FakeSource.instances[0].buffers[0].setBuffered(1199, 1230);
+    FakeSource.instances[0].buffers[1].setBuffered(1199, 1230);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+
+    expect(video.currentTime).toBeCloseTo(1200, 1);
+  });
+
+  it("laisse un saut remplacer l'ouverture au lieu de s'y ajouter", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() }, 1200);
+    await flush();
+
+    // Sauter avant que la tête soit posée : sans quoi elle serait ensuite ramenée au point
+    // d'ouverture, et le film repartirait tout seul là où on venait de le quitter.
+    await mse.seek(300);
+    await flush();
+    FakeSource.instances[0].buffers[0].setBuffered(1199, 1230);
+    FakeSource.instances[0].buffers[1].setBuffered(1199, 1230);
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+
+    expect(video.currentTime).not.toBeCloseTo(1200, 1);
   });
 
   it("steps the playhead onto media that begins just after it", async () => {

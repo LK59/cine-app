@@ -138,6 +138,13 @@ export class MseSource {
   private delaySeconds = 0;
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
+  /**
+   * Où le film doit s'ouvrir, tant que le média n'est pas encore là pour l'y recevoir.
+   *
+   * Voir `placePendingStart`. `null` dès que la tête y a été posée, et dès le départ pour une
+   * ouverture au début, qui n'a personne à attendre.
+   */
+  private pendingStart: number | null = null;
   /** While set, video already held is not sent again — see refillAudio. */
   private skipVideoUntil: number | null = null;
   private lastAppendAt = 0;
@@ -260,16 +267,29 @@ export class MseSource {
 
     // Positioned before the first read, not after it. Filling thirty seconds from the beginning
     // and then throwing all of it away is what made resuming a part-watched episode feel slow.
+    //
+    // Le lecteur est envoyé chercher le bon endroit tout de suite ; la *tête*, elle, attend que
+    // ce média soit arrivé — voir `placePendingStart`. Déplacer la tête ici, alors que seuls les
+    // segments d'initialisation ont été envoyés et que le tampon est vide, laissait WebKit dans
+    // un `seeking` qu'il ne résolvait plus jamais : mesuré sur un iPhone, un film rouvert à
+    // 23:24 restait figé avec trente secondes de média sous la tête et pas une image décodée,
+    // pendant que le chien de garde redemandait la position toutes les 1,8 s sans effet. Un saut
+    // *pendant* la lecture n'a jamais eu ce défaut — là, le média et le décodeur existent déjà,
+    // et c'est toute la différence.
     if (startSeconds > 1 && this.remuxer.seekable) {
       this.remuxer.seekTo(startSeconds);
       this.lastSeekTarget = startSeconds;
-      this.video.currentTime = startSeconds;
+      this.pendingStart = startSeconds;
     }
     // Opening a film is a request to be somewhere, and it is about to be answered with media
     // that begins a fraction of a second later — a file with B-frames presents its first picture
     // 210 ms in. Declared as a landing so the playhead may be put onto that media even though
     // the element, having nothing to play yet, is still paused.
-    this.guard.opened(this.video.currentTime);
+    //
+    // Pour une ouverture différée, la même déclaration est refaite au moment où la tête est
+    // posée : c'est là que le film s'ouvre vraiment, et l'annoncer ici la placerait à un endroit
+    // où la tête n'ira pas.
+    if (this.pendingStart === null) this.guard.opened(this.video.currentTime);
 
     // The element's own verdict, recorded when it is delivered. Everything so far learned of it
     // second-hand, when some later operation tripped over the wreckage — so the report showed the
@@ -534,6 +554,9 @@ export class MseSource {
         if (this.generation !== generation || this.destroyed) break;
 
         this.readUpTo = segment.endSeconds;
+        // Avant le reste : tant que la tête n'est pas posée, il n'y a ni atterrissage à faire ni
+        // démarrage à réclamer.
+        this.placePendingStart();
         this.guard.nudgeIntoBuffer();
         this.lastAppendAt = Date.now();
 
@@ -815,6 +838,11 @@ export class MseSource {
   private async performSeek(requested: number): Promise<void> {
     if (this.destroyed) return;
 
+    // Un saut demandé remplace l'ouverture, il ne s'y ajoute pas. Sans cette ligne, sauter avant
+    // que la tête ait été posée la ramènerait ensuite au point d'ouverture — le film repartirait
+    // tout seul là où on venait de le quitter.
+    this.pendingStart = null;
+
     // Clamped to the media, as a media element clamps its own currentTime. Without this, asking
     // for a time past the end sends the reader somewhere there is nothing to read, and the
     // recovery machinery then tries again and again to reach a place that does not exist.
@@ -867,6 +895,37 @@ export class MseSource {
     // seconds of media to be fetched before admitting so means the next seek queues behind a
     // download of a place the viewer has already left.
     void this.fill();
+  }
+
+  /**
+   * Pose la tête de lecture à l'ouverture — une fois le média arrivé, jamais avant.
+   *
+   * C'est la moitié différée de l'ouverture à une position non nulle. Le remultiplexeur a été
+   * envoyé au bon endroit dès le départ ; il ne restait qu'à attendre que ce qu'il rapporte soit
+   * réellement sous la tête avant de l'y déplacer. Un `currentTime` posé sur un tampon vide est
+   * une demande que WebKit accepte et n'honore jamais.
+   *
+   * Deux façons d'être arrivé, et la seconde compte autant que la première : la plage peut
+   * contenir la cible, ou commencer juste après elle — un fichier à images B présente sa première
+   * image 210 ms plus tard, et une ouverture qui tomberait dans cet intervalle attendrait un
+   * instant que le fichier ne contient pas. On se pose alors au début de la plage, comme le fait
+   * déjà l'atterrissage après un saut.
+   */
+  private placePendingStart(): void {
+    const target = this.pendingStart;
+    if (target === null) return;
+    const ranges = this.video.buffered;
+    for (let i = 0; i < ranges.length; i++) {
+      const start = ranges.start(i);
+      const end = ranges.end(i);
+      const landing = target >= start && target <= end ? target : start > target && start - target < 1 ? start : null;
+      if (landing === null) continue;
+      this.pendingStart = null;
+      trace(`ouverture : le média couvre ${landing.toFixed(1)} s, la tête y est posée`);
+      this.video.currentTime = landing;
+      this.guard.opened(landing);
+      return;
+    }
   }
 
   private async clear(queue: BufferQueue): Promise<void> {
