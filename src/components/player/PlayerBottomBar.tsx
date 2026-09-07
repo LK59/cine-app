@@ -115,7 +115,9 @@ export function PlayerBottomBar() {
               }}
               aria-current={on ? "page" : undefined}
               data-nav-item
-              className={`flex flex-col items-center justify-center rounded-full transition-colors ${
+              /* `player-tab` porte la transition des couleurs *et* du geste : la classe utilitaire
+                 de Tailwind ne décrivait que la couleur, et les deux écriraient `transition`. */
+              className={`player-tab flex flex-col items-center justify-center rounded-full ${
                 short ? "h-11 w-14 gap-0" : "h-14 w-16 gap-0.5"
               } ${on ? "text-white" : "text-white/55 active:text-white/80"}`}
             >

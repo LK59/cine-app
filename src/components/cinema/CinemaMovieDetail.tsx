@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Heart, Plus, RotateCcw, Video } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, RotateCcw, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatMinutes } from "@/lib/format";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -88,7 +88,7 @@ export function CinemaMovieDetail({
   // La même réponse porte « vu » et « favori », qui vivent chez Jellyfin et non dans la base
   // locale — voir useJellyfinItemState pour pourquoi une seconde copie finissait toujours par
   // mentir.
-  const { progress, watched, favorite, known: flagsKnown, busy: flagsBusy, toggleWatched, toggleFavorite } =
+  const { progress, watched, known: flagsKnown, busy: flagsBusy, toggleWatched } =
     useJellyfinItemState(item.jellyfinItemId);
   const hasResume = !!progress?.resumeTicks && progress.resumeTicks > 0;
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
@@ -404,24 +404,6 @@ export function CinemaMovieDetail({
               </span>
               <span className="text-sm font-medium">
                 {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
-              </span>
-            </button>
-
-            {/* Le favori part chez Jellyfin, donc il se retrouve aussi sur la télé et le
-                téléphone. Il n'existe que pour un titre qu'on possède — ce qui est toujours le
-                cas ici, cette fiche étant celle de la bibliothèque. */}
-            <button
-              data-detail-menu
-              onClick={toggleFavorite}
-              disabled={flagsBusy}
-              aria-pressed={favorite}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-            >
-              <span className={favorite ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <Heart size={14} />
-              </span>
-              <span className="text-sm font-medium">
-                {favorite ? t("player.discover.favoriteOn") : t("player.discover.favorite")}
               </span>
             </button>
 

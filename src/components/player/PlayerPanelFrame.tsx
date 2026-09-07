@@ -94,7 +94,20 @@ export function PlayerPanelFrame({
       // Sur téléphone, il monte comme les fiches ; sur grand écran, il apparaît. Deux idiomes, chacun
       // celui de sa plateforme — et surtout le même que les autres écrans de la même famille.
       className={`fixed inset-0 flex flex-col overflow-hidden bg-ink ${
-        leaving ? "animate-fade-out-down md:animate-fade-out" : "animate-slide-up md:animate-fade-in"
+        /* Un onglet, pas une feuille.
+         *
+         * Ces panneaux montaient depuis le bas — le vocabulaire de la modale, alors que le modèle
+         * est celui d'onglets pairs : `openPanel` dit lui-même qu'ils s'excluent et *remplacent*
+         * l'écran au lieu de s'empiler, exactement comme les onglets du bas d'une app iOS. La
+         * présentation contredisait le modèle, et on ne « rejette » pas un onglet.
+         *
+         * Un fondu avec un soupçon d'échelle, donc : non directionnel, le contenu se pose au lieu
+         * d'arriver d'ailleurs. Les deux courbes existaient déjà dans la feuille de style ; la
+         * montée n'était utilisée qu'ici, et disparaît avec elle.
+         *
+         * Plus de variante `md:` : un onglet est un onglet à toutes les tailles, et la distinction
+         * ne faisait que donner deux gestes différents à la même idée. */
+        leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
       }`}
       style={{
         zIndex: 46,

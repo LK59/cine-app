@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Heart, ListVideo, Plus, RotateCcw, Video } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, Check, CircleCheck, ListVideo, Plus, RotateCcw, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
@@ -88,7 +88,7 @@ export function CinemaSeriesDetail({
   const { data: episodesData } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
   // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
   // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
-  const { watched, favorite, known: flagsKnown, busy: flagsBusy, toggleWatched, toggleFavorite } = useJellyfinItemState(item.jellyfinItemId);
+  const { watched, known: flagsKnown, busy: flagsBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId);
   // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
   // un-toggled even for a series already on the watchlist. item.tmdbId can be null (Sonarr
   // doesn't always resolve one) — bulk-status has nothing to look up then, same as toggleWatched/
@@ -395,21 +395,6 @@ export function CinemaSeriesDetail({
               </span>
               <span className="text-sm font-medium">
                 {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
-              </span>
-            </button>
-
-            <button
-              data-detail-menu
-              onClick={toggleFavorite}
-              disabled={flagsBusy}
-              aria-pressed={favorite}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-            >
-              <span className={favorite ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <Heart size={14} />
-              </span>
-              <span className="text-sm font-medium">
-                {favorite ? t("player.discover.favoriteOn") : t("player.discover.favorite")}
               </span>
             </button>
 

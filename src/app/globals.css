@@ -608,6 +608,34 @@
 .player-glass-back:active { transform: scale(0.94) rotate(-14deg); }
 .player-glass-fwd:active { transform: scale(0.94) rotate(14deg); }
 .player-glass-on { background: rgb(255 255 255 / 0.22); }
+
+/* Les onglets du bas : appui instantané, retour élastique.
+ *
+ * Deux courbes et non une, parce que le geste n'est pas symétrique. L'enfoncement doit être
+ * *immédiat* — il accuse réception du doigt, et 90 ms le rendent solidaire du contact. Le retour,
+ * lui, a le droit de dépasser un peu avant de se poser : c'est ce léger rebond qui fait la
+ * différence entre un bouton qui bouge et un bouton qui répond. Une seule transition partagée
+ * donnerait soit un appui mou, soit un retour sec.
+ *
+ * L'icône résiste pendant que la surface s'enfonce. Le décalage entre les deux échelles se lit
+ * comme une matière qui s'écrase, plutôt que comme une image qu'on réduit.
+ *
+ * Plus profond que les 0,96 d'ailleurs, à dessein : c'est la cible qu'on touche le plus souvent de
+ * toute l'application, et c'est la seule dont le geste mérite d'être remarqué. */
+.player-tab {
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), color 150ms ease-out;
+}
+.player-tab svg {
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.player-tab:active {
+  transform: scale(0.88);
+  transition: transform 90ms ease-out;
+}
+.player-tab:active svg {
+  transform: scale(1.08);
+  transition: transform 90ms ease-out;
+}
 @media (hover: hover) {
   .player-glass-on:hover { background: rgb(255 255 255 / 0.3); }
 }
