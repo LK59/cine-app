@@ -471,7 +471,17 @@ export function ExperimentalPlayerHost({
   const [playbackState, setPlaybackState] = useState<PlaybackState | null | undefined>(undefined);
   useEffect(() => {
     let abandoned = false;
-    fetch(`/api/jellyfin/playback-state/${itemId}`)
+    // Un délai de garde, parce que cette lecture est devenue une condition d'ouverture.
+    //
+    // Le film n'attendait qu'une chose avant de se construire — la description du fichier — et il
+    // en attend deux depuis que l'état du spectateur a sa propre adresse. Une requête qui ne
+    // répond jamais, ni par un succès ni par une erreur, laisserait donc un spinner qui ne
+    // s'arrête pas : `.catch()` attrape un refus, pas une absence.
+    //
+    // Huit secondes, comme les routes qui vont chercher chez Jellyfin. Passé ce délai on ouvre le
+    // film à son début sur ses pistes par défaut, ce qui vaut infiniment mieux que de ne pas
+    // l'ouvrir — et c'est déjà ce que fait ce chemin quand le serveur refuse de répondre.
+    fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(8000) })
       .then((response) => (response.ok ? (response.json() as Promise<PlaybackState>) : null))
       .catch(() => null)
       .then((value) => {
