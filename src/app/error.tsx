@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { isChunkLoadError, recoverFromChunkError } from "@/lib/chunkError";
 
 export default function RootError({
   error,
@@ -10,9 +11,19 @@ export default function RootError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  /**
+   * Un morceau de code manquant se recharge, il ne se réessaie pas.
+   *
+   * Webpack garde en mémoire la promesse rejetée du chunk absent : `reset()` redemande donc le
+   * même nom disparu et échoue à l'identique. Voir `chunkError.ts` — le rechargement n'a lieu
+   * qu'une fois par onglet, pour qu'un déploiement à moitié publié ne fasse pas clignoter l'écran
+   * indéfiniment.
+   */
+  const stale = isChunkLoadError(error);
   useEffect(() => {
     console.error("[root error]", error);
-  }, [error]);
+    if (stale) recoverFromChunkError();
+  }, [error, stale]);
 
   return (
     <html lang="fr" className="dark">
@@ -26,7 +37,7 @@ export default function RootError({
             {error.message || "L'application a rencontré un problème."}
           </p>
           <button
-            onClick={reset}
+            onClick={() => (stale ? window.location.reload() : reset())}
             className="btn btn-ghost mt-2 px-4 py-2"
           >
             <RefreshCw size={14} />
