@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { formatMinutes } from "@/lib/format";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -81,6 +82,11 @@ export function CinemaHero({
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
         <span>{item.year}</span>
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+        {/* La durée au survol, et non seulement dans la fiche : c'est elle qui décide si on lance
+            le film ce soir, donc elle a sa place avant qu'on ouvre quoi que ce soit. */}
+        {"runtimeMinutes" in item && formatMinutes(item.runtimeMinutes) && (
+          <span>{formatMinutes(item.runtimeMinutes)}</span>
+        )}
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
       </div>
 

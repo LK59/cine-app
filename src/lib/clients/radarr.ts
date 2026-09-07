@@ -10,6 +10,8 @@ export interface RadarrMovie {
   originalTitle?: string;
   year: number;
   overview?: string;
+  /** En minutes. Radarr la renseigne pour l'intégralité de cette bibliothèque. */
+  runtime?: number;
   monitored: boolean;
   hasFile: boolean;
   status: string;

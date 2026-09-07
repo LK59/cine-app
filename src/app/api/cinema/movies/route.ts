@@ -25,6 +25,14 @@ export interface CinemaMovie {
   posterTextlessUrl: string | null;
   overview: string | null;
   imdbRating: string | null;
+  /**
+   * La durée, en minutes.
+   *
+   * Elle n'existait que dans la fiche d'un titre, alors qu'elle est ce qu'on veut savoir *avant*
+   * d'ouvrir quoi que ce soit — c'est elle qui décide si on lance le film ce soir. Radarr la donne
+   * déjà pour chacun des titres de cette bibliothèque ; la porter ici coûte un nombre par film.
+   */
+  runtimeMinutes: number | null;
   genres: string[];
   // Drives the "Nouveau" badge and the "Récemment ajoutés" rail. Null when Radarr has no real
   // date for it (its "never" sentinel included — see lib/cinemaRails).
@@ -53,6 +61,7 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
   const art = await getTitleArt(m.tmdbId, "movie");
   return {
     radarrId: m.id,
+    runtimeMinutes: m.runtime && m.runtime > 0 ? m.runtime : null,
     jellyfinItemId,
     tmdbId: m.tmdbId,
     title: m.title,
