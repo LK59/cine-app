@@ -772,6 +772,9 @@ function ActivePlayer({
     }, graceMs);
     return () => {
       clearTimeout(graceTimer);
+      // Un startPlayback encore en vol au démontage revient et construit son Hls quand même :
+      // même fuite que F-013, autre déclencheur. Le compteur périme cette exécution-là.
+      playbackGeneration.current += 1;
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (networkRetryTimer.current) clearTimeout(networkRetryTimer.current);
