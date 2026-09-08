@@ -11,7 +11,18 @@ const nextConfig = {
   // sharp is externalized by Next.js by default; web-push needs to be added explicitly.
   serverExternalPackages: ["web-push"],
   images: {
-    remotePatterns: [{ hostname: "**" }],
+    // Les deux seuls hôtes distants réellement servis en image, relevés dans le dépôt plutôt que
+    // devinés (F-009). `hostname: "**"` faisait de /_next/image un relais ouvert et sans session
+    // vers n'importe quelle image du web, ré-encodée par sharp puis conservée un an sur ./data.
+    //
+    // artworks.thetvdb.com n'est pas une hypothèse : posterUrl()/backdropUrl() (src/lib/images.ts)
+    // renvoient le `remoteUrl` de Radarr/Sonarr, et mesuré en direct sur cette bibliothèque les
+    // 134 séries de Sonarr y ont 100 % de leurs affiches — Radarr, lui, est entièrement sur TMDB.
+    // L'oublier viderait toute la grille séries. Le préfixe de chemin est relevé de la même façon.
+    remotePatterns: [
+      { protocol: "https", hostname: "image.tmdb.org", pathname: "/t/p/**" },
+      { protocol: "https", hostname: "artworks.thetvdb.com", pathname: "/banners/**" },
+    ],
     // Next.js 16 defaults local image patterns to an empty query string;
     // our Jellyfin image proxy passes itemId/tag as query params.
     localPatterns: [{ pathname: "/api/jellyfin/image" }],
