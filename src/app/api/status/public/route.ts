@@ -27,6 +27,19 @@ const SEVEN_DAYS_MS = 7 * 24 * 3600_000;
  * garde ouverte — SWR conserve la donnée précédente (`keepPreviousData`) mais réessaie en
  * arrière-plan, ce qui creuse le trou. Trop large, il ne borne rien : 30/min plafonnent une IP
  * à 0,5 requête/s, soit ~16 % de la boucle au lieu de sa saturation.
+ *
+ * **Ce que « par IP » veut dire ici, et où ça s'effondre.** La clé vient de `getClientIp`
+ * (`src/lib/api-helpers.ts`), qui lit le *dernier* maillon de `x-forwarded-for` — le vrai
+ * client tel que le proxy inverse l'a écrit, précisément pour qu'on ne puisse pas s'inventer
+ * une adresse — et qui, **en l'absence de cet en-tête, rend la chaîne littérale `"unknown"`**.
+ * Autrement dit : tout ce qui atteint le conteneur sans passer par le proxy inverse partage un
+ * seul et même seau de 30/min. C'est le cas de la pile de développement sur son propre port, de
+ * l'accès direct depuis le réseau local, et de toute sonde interne au réseau Docker. Deux
+ * conséquences opposées, aucune corrigée ici : par cette porte-là, la borne est collective —
+ * quelques onglets ouverts en direct peuvent se 429 mutuellement — et elle ne protège plus
+ * individuellement. Le remède serait dans `getClientIp` (distinguer « pas d'en-tête » de « une
+ * adresse »), pas dans ce seuil ; en production, où tout entre par le proxy inverse, l'en-tête
+ * est toujours là et la borne est bien par client.
  */
 const publicStatusRateLimit = createRateLimiter(30, 60_000);
 

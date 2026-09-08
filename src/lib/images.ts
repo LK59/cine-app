@@ -36,6 +36,18 @@ export function backdropUrl(images?: RadarrSonarrImage[], size: "thumb" | "full"
  * n'ont pas de segment `/original/`, la substitution ne mordait pas, et elles s'affichaient.
  *
  * Une adresse qui n'est pas servie par le redimensionneur de TMDB est donc rendue telle quelle.
+ *
+ * **Ce contrat est ouvert, et celui d'en face est fermé.** Ce qui sort d'ici part vers
+ * `next/image` (`PosterImage`), donc vers `images.remotePatterns` de `next.config.js`, qui
+ * n'autorise que `image.tmdb.org` et `artworks.thetvdb.com` — la directive `img-src` de la CSP,
+ * juste en dessous, dit la même chose. Un `remoteUrl` de Radarr/Sonarr servi par un troisième
+ * hôte traverse donc cette fonction sans encombre et se fait refuser en 400 par l'optimiseur,
+ * ce que l'écran affiche en « No image », sans distinguer cela d'une affiche réellement absente.
+ * Le cas n'est pas hypothétique : la ligne ci-dessous reconnaît `www.themoviedb.org`, qui n'est
+ * dans aucune des deux listes. La restriction est délibérée (elle ferme un relais d'images
+ * ouvert) et la liste a été relevée sur cette bibliothèque, pas devinée — mais elle décrit un
+ * état, pas une garantie. `PosterImage` nomme désormais l'hôte fautif dans la console quand un
+ * chargement échoue ; c'est là qu'on relie les deux.
  */
 export function tmdbResize(url: string | null | undefined, size: string): string | null {
   if (!url) return null;

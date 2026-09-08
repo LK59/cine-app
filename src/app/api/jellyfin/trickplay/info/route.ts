@@ -3,8 +3,7 @@ import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 interface TrickplayResolution {
   Width: number;
@@ -24,7 +23,7 @@ export async function GET(req: NextRequest) {
   if (!config.player.enabled) return new NextResponse(null, { status: 404 });
 
   const itemId = req.nextUrl.searchParams.get("itemId");
-  if (!itemId || !JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
 
   // Verified live: Jellyfin's /Items/{id} returns a bare 400 ("Error processing request.", not
   // even JSON) when queried without a UserId — evidently required internally to resolve

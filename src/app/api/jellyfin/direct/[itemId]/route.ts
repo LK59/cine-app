@@ -5,11 +5,10 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { displayTitle } from "@/lib/displayTitle";
 import { userPrefsDb } from "@/lib/db";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 /** What Jellyfin can hand back as WebVTT. Anything else is a picture and has nothing to read. */
 const TEXT_SUBTITLE_FORMATS = new Set(["srt", "subrip", "ass", "ssa", "vtt", "webvtt", "mov_text"]);
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 
 // Containers the experimental player's demuxer understands. Matroska is 99.7% of this library;
 // anything else is refused with a reason rather than half-played.
@@ -98,7 +97,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   if (!config.player.enabled) return NextResponse.json({ error: "Lecteur intégré désactivé" }, { status: 404 });
 
   const { itemId } = await props.params;
-  if (!JELLYFIN_ID_RE.test(itemId)) return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
+  if (!isJellyfinId(itemId)) return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
 
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });

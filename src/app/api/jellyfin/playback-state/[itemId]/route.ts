@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import type { TrackPreferences } from "@/lib/trackPreferences";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 /**
  * Ce qui change entre deux lectures du même fichier — et rien d'autre.
@@ -33,11 +34,9 @@ export interface PlaybackState {
   preferences: TrackPreferences | null;
 }
 
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
-
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await props.params;
-  if (!JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
 
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   // Sans identité Jellyfin — l'administrateur local — il n'y a ni position ni préférences, et

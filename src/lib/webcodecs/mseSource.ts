@@ -1236,8 +1236,12 @@ export class MseSource {
     } catch {
       // Already closed by the element being torn down first.
     }
-    // L'attribut part AVANT la révocation, et hors du `catch` — même ordre que la sonde de
-    // `codecSupport.ts`, pour la même raison. Écrire `srcObject`, *y compris avec `null`*,
+    // L'attribut part AVANT la révocation, et hors du `catch`. Ordre **inverse** de celui de la
+    // sonde de `codecSupport.ts:78-80`, qui révoque puis retire — et c'est délibéré des deux
+    // côtés : ce qui compte n'est pas l'ordre en soi, c'est ce qui, entre les deux gestes, peut
+    // relancer la sélection de ressource. La sonde n'écrit jamais `srcObject`, rien ne la relance
+    // donc entre sa révocation et son retrait, et son `load()` final tombe sur un élément déjà
+    // vidé — d'ailleurs jeté juste après. Ici, si. Écrire `srcObject`, *y compris avec `null`*,
     // relance l'algorithme de chargement de l'élément ; ne trouvant plus de `srcObject`, la
     // sélection de ressource retombe sur l'attribut `src`. Révoquer d'abord envoyait donc
     // l'élément chercher l'URL qu'on venait de tuer, et Chrome le disait dans la console à

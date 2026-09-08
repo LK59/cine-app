@@ -3,8 +3,8 @@ import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
 const TICKS_PER_SECOND = 10_000_000;
 
 interface JellyfinChapter {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!config.player.enabled) return new NextResponse(null, { status: 404 });
 
   const itemId = req.nextUrl.searchParams.get("itemId");
-  if (!itemId || !JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
 
   // Same requirement as trickplay/info: /Items/{id} 400s without a UserId.
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);

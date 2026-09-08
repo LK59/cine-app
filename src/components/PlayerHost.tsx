@@ -145,6 +145,15 @@ export function PlayerHost() {
   // mounts and *starts* — and for the server-side one that means negotiating a stream and
   // warming a transcode, which was then thrown away a round trip later. One request, once per
   // session, against an abandoned transcode on every playback.
+  //
+  // Attention : ce `return null` s'applique à une séance **en cours**, pas seulement à un
+  // démarrage. `useLegacyPlayer` cesse de poser sa question sur les adresses publiques (sa clé
+  // SWR passe à `null`), et le mini-lecteur, lui, survit aux changements de page — ouvrir la page
+  // d'état avec un film réduit fait donc arriver ici avec la question fermée. Ce qui empêche le
+  // film de disparaître à cet instant est ailleurs et nulle part visible : `keepPreviousData:
+  // true` dans `SWRProvider`, qui rend la valeur déjà connue quand la clé devient nulle. Le jour
+  // où quelqu'un retire cette option, c'est cette ligne qui coupera la lecture. Couvert par
+  // `useLegacyPlayer-public-path.test.tsx`, qui monte le vrai `SWRProvider`.
   if (legacy === undefined) return null;
 
   const useNative = !legacy && !handedOver.includes(session.itemId);

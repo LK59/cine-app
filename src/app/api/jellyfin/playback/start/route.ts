@@ -8,8 +8,7 @@ import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { buildDeviceProfile } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { displayTitle } from "@/lib/displayTitle";
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -108,7 +107,7 @@ export async function POST(req: NextRequest) {
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
 
-  if (!itemId || !JELLYFIN_ID_RE.test(itemId)) {
+  if (!isJellyfinId(itemId)) {
     return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   }
 

@@ -32,6 +32,44 @@ interface PosterImageProps {
   priority?: boolean;
 }
 
+/**
+ * Dire quel hôte vient d'échouer, une fois par hôte.
+ *
+ * L'échec d'une image distante est muet ici par construction : `onError` bascule sur « No image »
+ * et c'est tout ce que quiconque en voit — pas d'URL, pas de raison, rien dans la console. Or
+ * `next.config.js` (`images.remotePatterns`, et la directive `img-src` de la CSP juste en dessous)
+ * n'autorise que deux hôtes, tandis que `tmdbResize` (`src/lib/images.ts`) rend telle quelle
+ * n'importe quelle adresse venue du `remoteUrl` de Radarr/Sonarr : un troisième hôte est donc
+ * parfaitement possible, et il se présente exactement comme une affiche manquante. Un 400 de
+ * l'optimiseur et une image réellement absente sont alors le même carré gris.
+ *
+ * La liste des hôtes autorisés n'est **pas** recopiée ici — elle vit dans `next.config.js`, et une
+ * seconde copie dériverait. On ne prétend donc pas savoir *pourquoi* le chargement a échoué : on
+ * nomme l'hôte et on dit où aller vérifier. C'est ce qui manquait pour faire le lien.
+ *
+ * Une grille en porte des centaines : la déduplication par hôte est ce qui distingue un
+ * diagnostic d'un bruit de fond.
+ */
+const reportedImageHosts = new Set<string>();
+function reportRemoteImageFailure(src: string): void {
+  // Une image servie par cette app n'a rien à voir avec les hôtes distants : un échec là est un
+  // 404 ou une session, pas une question de configuration.
+  if (!/^https?:\/\//i.test(src)) return;
+  let host: string;
+  try {
+    host = new URL(src).host;
+  } catch {
+    return;
+  }
+  if (reportedImageHosts.has(host)) return;
+  reportedImageHosts.add(host);
+  console.warn(
+    `[image] échec de chargement depuis ${host} — si cet hôte n'est ni dans images.remotePatterns ` +
+      `ni dans la directive img-src de la CSP (next.config.js), il est refusé avant d'être demandé.`,
+    src
+  );
+}
+
 export function PosterImage({
   src,
   alt,
@@ -66,7 +104,10 @@ export function PosterImage({
         priority={priority}
         className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         onLoad={() => setLoaded(true)}
-        onError={() => setErrored(true)}
+        onError={() => {
+          reportRemoteImageFailure(src);
+          setErrored(true);
+        }}
       />
     </div>
   );

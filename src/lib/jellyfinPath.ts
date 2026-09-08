@@ -59,13 +59,40 @@ export function isStreamPath(segments: unknown): segments is string[] {
  * comprise. Normaliser d'abord, comparer ensuite, c'est poser la question que `fetch` posera.
  * La validation par segment devrait suffire ; cette vérification-là est celle qui tient encore
  * si une forme d'échappement nous a échappé, parce qu'elle porte sur ce qui part vraiment.
+ *
+ * **Les deux côtés sont normalisés, et la comparaison porte sur les composants.** Une première
+ * version normalisait le `target` puis le comparait, en chaîne, à un préfixe brut — or ce préfixe
+ * sort de `JELLYFIN_URL`, une variable d'environnement dont la forme ne nous appartient pas.
+ * `new URL().href` réécrit ce que la concaténation avait laissé tel quel : `http://JELLYFIN:8096`
+ * devient minuscule, `http://jellyfin:80` perd son port, et la garde refusait alors, en 400, des
+ * requêtes parfaitement légitimes. Cela ne se voyait pas parce que la valeur servie ici est
+ * `http://jellyfin:8096` — port explicite et non par défaut, minuscules — que la normalisation
+ * laisse intact. Une garde qui ne tient que par une coïncidence de configuration ne tient pas.
+ *
+ * D'où : `origin` comparé à `origin` (c'est lui qui porte le schéma, l'hôte et le port, tous trois
+ * normalisés de la même façon des deux côtés) et `pathname` comparé à `pathname`. Le chemin, lui,
+ * n'est *pas* normalisé par `URL` au-delà de la résolution des `..` — c'est exactement ce qu'on
+ * veut : les deux côtés sortent de la même chaîne littérale, donc une éventuelle bizarrerie
+ * (`JELLYFIN_URL` avec un slash final, qui donne `//videos/…`) est la même des deux côtés et ne
+ * fait pas échouer la comparaison, tandis qu'une traversée, elle, a disparu du `pathname` du
+ * `target` et ne peut plus y correspondre.
+ *
+ * Le préfixe est ramené à une frontière de segment : sans cela, `…/videos/{id}` couvrirait
+ * `…/videos/{id}anything`.
  */
 export function isUnderJellyfinPrefix(target: string, prefix: string): boolean {
-  let normalized: string;
+  let targetUrl: URL;
+  let prefixUrl: URL;
   try {
-    normalized = new URL(target).href;
+    targetUrl = new URL(target);
+    prefixUrl = new URL(prefix);
   } catch {
+    // Un préfixe illisible veut dire une configuration illisible : on refuse, on ne devine pas.
     return false;
   }
-  return normalized.startsWith(prefix);
+
+  if (targetUrl.origin !== prefixUrl.origin) return false;
+
+  const prefixPath = prefixUrl.pathname.endsWith("/") ? prefixUrl.pathname : `${prefixUrl.pathname}/`;
+  return targetUrl.pathname.startsWith(prefixPath);
 }

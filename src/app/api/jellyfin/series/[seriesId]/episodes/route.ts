@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ seriesId: string }> }) {
   const { seriesId } = await params;
-  if (!JELLYFIN_ID_RE.test(seriesId)) {
+  if (!isJellyfinId(seriesId)) {
     return NextResponse.json({ error: "seriesId invalide" }, { status: 400 });
   }
 

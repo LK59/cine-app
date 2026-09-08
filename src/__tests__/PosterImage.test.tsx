@@ -1,15 +1,26 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
 /**
  * next/image est remplacé par une balise nue qui expose ce qui nous intéresse : le drapeau
- * `unoptimized`, qui décide si l'image passe ou non par l'optimiseur de Next.
+ * `unoptimized`, qui décide si l'image passe ou non par l'optimiseur de Next, et `onError`, par
+ * lequel arrive le refus de l'optimiseur.
  */
 vi.mock("next/image", () => ({
-  default: ({ src, alt, unoptimized }: { src: string; alt: string; unoptimized?: boolean }) => (
+  default: ({
+    src,
+    alt,
+    unoptimized,
+    onError,
+  }: {
+    src: string;
+    alt: string;
+    unoptimized?: boolean;
+    onError?: () => void;
+  }) => (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} data-unoptimized={unoptimized ? "1" : "0"} />
+    <img src={src} alt={alt} data-unoptimized={unoptimized ? "1" : "0"} onError={onError} />
   ),
 }));
 
@@ -44,5 +55,49 @@ describe("PosterImage", () => {
   it("affiche un substitut plutôt qu'une image vide quand il n'y a pas de source", () => {
     render(<PosterImage src={null} alt="Sans affiche" />);
     expect(screen.getByText("No image")).toBeInTheDocument();
+  });
+});
+
+/**
+ * `remotePatterns` et la CSP n'autorisent que deux hôtes ; `tmdbResize` (src/lib/images.ts) laisse
+ * passer n'importe quel `remoteUrl` de Radarr/Sonarr. Entre les deux, un hôte non autorisé se
+ * présentait exactement comme une affiche manquante : le même carré « No image », et rien
+ * nulle part. Le carré reste — c'est le bon écran — mais il n'est plus muet.
+ */
+describe("PosterImage, quand une image distante échoue", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("nomme l'hôte fautif et où aller vérifier", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<PosterImage src="https://cdn.exemple-inconnu.test/p/x.jpg" alt="Hôte inconnu" />);
+    fireEvent.error(screen.getByAltText("Hôte inconnu"));
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message, url] = warn.mock.calls[0];
+    expect(message).toContain("cdn.exemple-inconnu.test");
+    expect(message).toContain("remotePatterns");
+    expect(url).toBe("https://cdn.exemple-inconnu.test/p/x.jpg");
+    // L'écran, lui, ne change pas.
+    expect(screen.getByText("No image")).toBeInTheDocument();
+  });
+
+  // Une grille de Cinéma en porte des centaines : un avertissement par affiche serait du bruit,
+  // et le bruit se filtre — donc ne se lit plus.
+  it("ne le dit qu'une fois par hôte", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<PosterImage src="https://repete.test/a.jpg" alt="Un" />);
+    render(<PosterImage src="https://repete.test/b.jpg" alt="Deux" />);
+    fireEvent.error(screen.getByAltText("Un"));
+    fireEvent.error(screen.getByAltText("Deux"));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  // Une image servie par cette app qui échoue est un 404 ou une session expirée, jamais une
+  // question de configuration d'hôtes : rien à dire ici.
+  it("se tait pour une image locale", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<PosterImage src="/api/jellyfin/image?itemId=42" alt="Locale" />);
+    fireEvent.error(screen.getByAltText("Locale"));
+    expect(warn).not.toHaveBeenCalled();
   });
 });

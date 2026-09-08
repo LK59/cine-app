@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 // One tile is a sprite sheet covering many thumbnails (see trickplay/info/route.ts) — a modest
 // number of distinct tiles covers a whole movie, so caching them aggressively is safe and cuts
@@ -13,7 +12,7 @@ export async function GET(req: NextRequest) {
   const itemId = req.nextUrl.searchParams.get("itemId");
   const width = req.nextUrl.searchParams.get("width");
   const index = req.nextUrl.searchParams.get("index");
-  if (!itemId || !JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
   if (!width || !/^\d+$/.test(width) || !index || !/^\d+$/.test(index)) {
     return new NextResponse(null, { status: 400 });
   }

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 export async function GET(req: NextRequest) {
   const itemId = req.nextUrl.searchParams.get("itemId");
   const tag = req.nextUrl.searchParams.get("tag");
-  if (!itemId || !JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
 
   const params = new URLSearchParams({ quality: "90", maxWidth: "300" });
   if (tag) params.set("tag", tag);
