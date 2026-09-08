@@ -1163,6 +1163,7 @@
     "unsupportedBrowser": "Este navegador no puede reproducir este flujo.",
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",
     "playbackInterrupted": "La reproducción se interrumpió. Inténtalo de nuevo.",
+    "libraryUnreachable": "La biblioteca no responde en este momento. Inténtalo de nuevo en unos minutos.",
     "info": {
       "title": "Información de reproducción",
       "network": "Red",

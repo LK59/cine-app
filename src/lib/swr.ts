@@ -1,13 +1,14 @@
 import { mutate as globalMutate } from "swr";
 import { noteUnauthorized } from "@/lib/sessionExpired";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
+import { withCode } from "@/lib/upstreamError";
 
 export const fetcher = async (url: string) => {
   const res = await fetch(url);
   if (!res.ok) {
     noteUnauthorized(res);
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Erreur ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    throw withCode(new Error(body.error || `Erreur ${res.status}`), body.code);
   }
   return res.json();
 };

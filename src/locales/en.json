@@ -1163,6 +1163,7 @@
     "unsupportedBrowser": "This browser can't play this stream.",
     "playbackInterruptedCheckConnection": "Playback was interrupted. Check your connection and try again.",
     "playbackInterrupted": "Playback was interrupted. Try again.",
+    "libraryUnreachable": "The library is not responding right now. Try again in a few minutes.",
     "info": {
       "title": "Playback info",
       "network": "Network",

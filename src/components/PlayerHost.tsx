@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
+import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
@@ -433,7 +434,14 @@ function ActivePlayer({
       }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setError(body?.error || "Lecture impossible pour le moment.");
+        // La même phrase que le lecteur natif pour la même panne : un serveur média absent n'est
+        // pas une lecture impossible, c'est une lecture à retenter plus tard. Le code vient de la
+        // réponse, comme `jellyfin_reauth_required` juste au-dessus.
+        setError(
+          body?.code === UPSTREAM_UNREACHABLE
+            ? t("player.libraryUnreachable")
+            : body?.error || "Lecture impossible pour le moment."
+        );
         setLoading(false);
         return;
       }

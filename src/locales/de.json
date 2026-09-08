@@ -1163,6 +1163,7 @@
     "unsupportedBrowser": "Dieser Browser kann diesen Stream nicht abspielen.",
     "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfe deine Verbindung und versuch's erneut.",
     "playbackInterrupted": "Die Wiedergabe wurde unterbrochen. Versuch's erneut.",
+    "libraryUnreachable": "Die Bibliothek antwortet gerade nicht. Versuche es in ein paar Minuten erneut.",
     "info": {
       "title": "Wiedergabe-Infos",
       "network": "Netzwerk",

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
 import { fetcher, playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
+import { isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -500,10 +501,21 @@ export function ExperimentalPlayerHost({
     };
   }, [itemId]);
 
+  /**
+   * Un serveur absent se dit autrement qu'un fichier illisible.
+   *
+   * Les deux échouaient sur la même phrase, qui décrivait le symptôme sans nommer la cause — et
+   * quand la cause est « le serveur média est arrêté », c'est la seule chose que le spectateur ait
+   * besoin de savoir : il n'y a rien à réessayer tout de suite, et rien de cassé chez lui.
+   */
   const error =
     runtimeError ??
     info?.refusedReason ??
-    (infoError ? "Impossible de récupérer les informations du fichier." : null);
+    (isUpstreamUnreachable(infoError)
+      ? t("player.libraryUnreachable")
+      : infoError
+        ? "Impossible de récupérer les informations du fichier."
+        : null);
   // The server's own name for it, which is the only one that knows an episode is an episode.
   // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
   const title = info?.title ?? openedAs;
@@ -628,7 +640,16 @@ export function ExperimentalPlayerHost({
   // is refused here, with the reason, rather than deeper down where the message would be opaque.
   useEffect(() => {
     if (!info && infoError) {
-      fallToStable("les informations du fichier n'ont pas pu être récupérées");
+      /**
+       * Sauf quand c'est le serveur qui manque : passer la main ne mène nulle part.
+       *
+       * Le lecteur stable a besoin du même Jellyfin. Lui céder la place sur une panne amont, c'est
+       * refaire la même attente une seconde fois avant d'afficher le même échec — l'erreur met
+       * alors deux fois plus longtemps à apparaître qu'à se produire.
+       */
+      if (!isUpstreamUnreachable(infoError)) {
+        fallToStable("les informations du fichier n'ont pas pu être récupérées");
+      }
       return;
     }
     // Nothing is started for a file the server already refused: it named the reason, and the

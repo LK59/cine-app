@@ -1,4 +1,5 @@
 import { noteUnauthorized } from "@/lib/sessionExpired";
+import { withCode } from "@/lib/upstreamError";
 
 /**
  * A mutating call whose failure reaches the screen.
@@ -21,11 +22,10 @@ export async function apiAction(url: string, init?: RequestInit): Promise<unknow
     // reconnexion à demander.
     noteUnauthorized(res);
     // The app's own routes answer `{ error }`; anything else is quoted as it came.
-    const said = await res
-      .json()
-      .then((body: { error?: string }) => body?.error)
-      .catch(() => null);
-    throw new Error(said || `${res.status} ${res.statusText}`);
+    const body = await res.json().catch(() => null) as { error?: string; code?: string } | null;
+    // Le code voyage avec le message : sans lui, l'écran ne peut que répéter une phrase venue
+    // d'ailleurs. Voir `upstreamError`.
+    throw withCode(new Error(body?.error || `${res.status} ${res.statusText}`), body?.code);
   }
 
   return res.json().catch(() => null);
