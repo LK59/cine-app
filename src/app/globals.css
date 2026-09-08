@@ -464,6 +464,17 @@
   @apply w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs placeholder:text-slate-500 focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
 }
 
+/* Le champ qui dessine sa propre croix d'effacement doit demander à Chrome de ranger la sienne :
+   `type="search"` en pose une, et les deux se superposaient au même endroit. On ne la retire pas
+   partout — là où il n'y a pas de bouton à nous, la croix native est la seule qu'on ait. */
+@utility search-no-native-clear {
+  &::-webkit-search-cancel-button,
+  &::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
 @utility badge {
   @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2.5 py-0.5 text-xs font-medium backdrop-blur-xs;
 }

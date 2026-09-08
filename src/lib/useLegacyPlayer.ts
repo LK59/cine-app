@@ -1,6 +1,8 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import useSWR from "swr";
+import { isPublicPath } from "@/lib/publicPaths";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 
 interface PreferencesPayload {
@@ -17,7 +19,15 @@ interface PreferencesPayload {
  * an abandoned transcode on every single playback.
  */
 export function useLegacyPlayer(): { legacy: boolean | undefined } {
-  const { data, error } = useSWR<PreferencesPayload>("/api/user/preferences", fetcher, {
+  // Rien à demander sans session. La mise en page racine monte le lecteur sur *toutes* les pages,
+  // page de connexion comprise, où cette route répond 401 — et le court `errorRetryInterval`
+  // ci-dessous en faisait une requête toutes les 1,5 s tant que la personne tapait son mot de
+  // passe. Sur une adresse publique on ne pose donc pas la question ; la clé redevient d'elle-même
+  // non nulle à la première adresse privée, y compris après la navigation client de la connexion.
+  const pathname = usePathname();
+  const key = pathname && isPublicPath(pathname) ? null : "/api/user/preferences";
+
+  const { data, error } = useSWR<PreferencesPayload>(key, fetcher, {
     // Sans quoi le lecteur attend une réponse que sa propre ouverture empêche d'arriver.
     ...playerBootstrapOptions,
     // Réessayer vite : le cas courant d'échec est une réponse obtenue *avant* d'être connecté, et

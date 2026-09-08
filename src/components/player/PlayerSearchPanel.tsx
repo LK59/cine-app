@@ -170,13 +170,14 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
             autoComplete="off"
             placeholder={t("player.search.placeholder")}
             aria-label={t("player.nav.search")}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-12 text-base text-white placeholder:text-slate-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+            className="search-no-native-clear w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-12 text-base text-white placeholder:text-slate-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           />
           {/* Effacer sans viser la touche retour arrière trente fois.
               `type="search"` dessine bien une croix native, mais pas sur iOS — et c'est
               précisément là qu'enchaîner des recherches au pouce est le plus pénible. Celle-ci est
               la même que la recherche cinéma affiche déjà : deux champs pour un même geste
-              devaient s'effacer pareil.
+              devaient s'effacer pareil. La croix native, elle, est masquée ici
+              (`search-no-native-clear`) : sur Chrome les deux se superposaient.
 
               La cible fait toute la hauteur du champ plutôt que la taille de l'icône : un doigt ne
               vise pas seize pixels. Et le champ reprend le focus, sinon effacer ferme le clavier
