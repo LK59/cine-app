@@ -73,8 +73,9 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
 // episodes actually exist) is a separate route — this one is just the browse grid.
 
 /**
- * La vue serveur, et non celle d'un compte — voir la note jumelle dans la route des films, où le
- * comptage est écrit.
+ * La vue serveur, et non celle d'un compte — voir la note jumelle dans la route des films, où les
+ * deux comptages sont écrits : le défaut de 10.11, sa correction en 12, et pourquoi on garde la
+ * vue serveur malgré tout.
  */
 export async function GET(req: Request) {
   try {

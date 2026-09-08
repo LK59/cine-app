@@ -89,14 +89,28 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
  * La bibliothèque, vue par le serveur et non par un compte.
  *
  * Cette route a lu un temps `/Users/{id}/Items` pour ne montrer à chacun que ce qu'il peut voir.
- * Mesuré sur cette installation : cet endpoint renvoie 546 films là où la vue serveur en compte
- * 674 — et pour un compte **administrateur, avec accès à toutes les bibliothèques**. Ce n'est donc
- * pas une question de droits : le parcours à partir des vues d'un utilisateur ne descend pas dans
- * tout l'arbre. Cent vingt-huit films disparaissaient du catalogue, dont un que Louis était en
- * train de regarder — sa reprise ouvrait une fiche introuvable, donc rien.
+ * Mesuré sur Jellyfin 10.11 : cet endpoint renvoyait 546 films là où la vue serveur en comptait
+ * 674 — et pour un compte **administrateur, avec accès à toutes les bibliothèques**. Ce n'était
+ * donc pas une question de droits : le parcours à partir des vues d'un utilisateur ne descendait
+ * pas dans tout l'arbre. Cent vingt-huit films disparaissaient du catalogue, dont un que Louis
+ * était en train de regarder — sa reprise ouvrait une fiche introuvable, donc rien.
  *
- * Le filtrage par personne reviendra le jour où il servira vraiment, et il devra alors passer par
- * des requêtes ciblées (`Filters=…`), pas par une énumération : celles-ci répondent juste.
+ * **Jellyfin 12 a corrigé ce défaut.** Remesuré le 2026-09-08, le jour de la montée de version :
+ * 554 films des deux côtés, à l'unité près. L'annonce le laissait entendre — `GetItems` devient
+ * asynchrone et applique `recursive` quand des filtres sont demandés, « la même requête peut
+ * renvoyer un jeu de résultats différent de 10.11 ».
+ *
+ * On garde pourtant la vue serveur, et c'est maintenant un choix et non une contrainte : cette
+ * application est publiée pour d'autres installations, dont certaines resteront en 10.11 un
+ * moment. Un catalogue amputé d'un cinquième y serait un défaut silencieux, alors que la vue
+ * serveur est correcte sur les deux versions.
+ *
+ * Ce que ça implique, et qu'il faut savoir avant de le changer : le catalogue est **le même pour
+ * tout le monde**, et les permissions ne s'appliquent qu'à la lecture, où Jellyfin refuse. Le jour
+ * où un compte devra voir une bibliothèque restreinte, la vue serveur deviendra franchement
+ * fausse — elle lui montrerait des titres qu'il ne peut pas ouvrir. `cachedJellyfinMovies(userId)`
+ * existe déjà pour ce jour-là ; le prix à payer sera un cache par compte au lieu d'un seul, pour
+ * une charge utile qui ne se partagera plus.
  */
 export async function GET(req: Request) {
   try {
