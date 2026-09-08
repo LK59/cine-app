@@ -224,6 +224,45 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(body.playbackInfo.transcodeReasons).toEqual(["AudioCodecNotSupported"]);
   });
 
+  // Found live on a 10-bit HEVC file (`(500) jours ensemble`) negotiated for a device whose
+  // mp4/hevc10 probe says no: VideoCodec still lists hevc — it's what the client accepts, not
+  // what ffmpeg will produce — while the server says outright it will re-encode. The reason wins.
+  it("labels playMethod Transcode when TranscodeReasons carries a video-level reason, even though the source codec IS in the accepted list", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl:
+          "/videos/x/master.m3u8?VideoCodec=h264,hevc&TranscodeReasons=ContainerNotSupported,VideoBitDepthNotSupported",
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "hevc", BitDepth: 10 }],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId }));
+    const body = await res.json();
+    expect(body.playbackInfo.playMethod).toBe("Transcode");
+    expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith("jf-1", validId, "tok", "s", "src-1", "Transcode");
+  });
+
+  // The counterpart the closed list protects: a container remux with the video copied. Same file,
+  // same accepted-codec list, only ContainerNotSupported — still a genuine DirectStream.
+  it("keeps DirectStream when the only reason is a container one", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{
+        Id: "src-1",
+        TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264,hevc&TranscodeReasons=ContainerNotSupported",
+        MediaStreams: [{ Type: "Video", Index: 0, Codec: "hevc", BitDepth: 10 }],
+      }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    const res = await POST(fakeReq({ itemId: validId }));
+    const body = await res.json();
+    expect(body.playbackInfo.playMethod).toBe("DirectStream");
+  });
+
   // The pre-warm exists to absorb ffmpeg's startup for Safari's native HLS pipeline, which gives
   // up on a slow first manifest. hls.js retries patiently and gains nothing from waiting here.
   function transcodingSource() {

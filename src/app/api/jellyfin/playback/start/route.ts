@@ -38,14 +38,37 @@ function parseTranscodingUrlInfo(transcodingUrl: string): { videoCodecs: string[
 // as jellyfin-web: DirectPlay when the source plays untouched, otherwise DirectStream when the
 // video stream itself is copied (not re-encoded), otherwise a real Transcode.
 //
-// Deliberately NOT guessed from whether TranscodeReasons contains a "Video*"-prefixed reason —
-// verified against the real server that this mis-predicts: the exact same file, negotiated for
-// two different browsers, produced TranscodeReasons with no Video* entry in both cases, yet one
-// browser's actual ffmpeg job did `-codec:v:0 copy` (a real DirectStream) while the other's did
-// a full `-codec:v:0 h264_qsv` re-encode (a real Transcode) — the reason string alone doesn't
-// reliably capture that. Comparing the source's own video codec against the VideoCodec list
-// Jellyfin was asked to accept is what ffmpeg itself actually keys its copy-vs-encode decision
-// on, so it can't disagree with reality the way the reason-parsing heuristic did.
+// Two signals, crossed — neither alone is right, and each catches what the other misses.
+//
+// TranscodeReasons alone mis-predicts: the exact same file, negotiated for two different
+// browsers, produced TranscodeReasons with no Video* entry in both cases, yet one browser's
+// actual ffmpeg job did `-codec:v:0 copy` (a real DirectStream) while the other's did a full
+// `-codec:v:0 h264_qsv` re-encode (a real Transcode). So the codec comparison stays: the source's
+// own video codec against the VideoCodec list Jellyfin was asked to accept.
+//
+// But that comparison alone is wrong the other way round, and this is the case it got wrong:
+// VideoCodec in TranscodingUrl is the list of codecs the client ACCEPTS, not the one ffmpeg will
+// PRODUCE. On a device whose `mp4/hevc10` probe says no, a 10-bit HEVC file negotiates with
+// VideoCodec=[h264,hevc] — `hevc` is still there, so the comparison said "copied" — while
+// TranscodeReasons carried VideoBitDepthNotSupported, i.e. the server saying it will re-encode.
+// Verified live on `(500) jours ensemble` against this installation's server.
+//
+// Hence: an explicit video-level reason wins over the codec comparison. The list below is closed
+// and deliberate — ContainerNotSupported and the Audio* reasons are NOT in it, which is what
+// preserves the genuine DirectStream (container remux, video copied) the codec comparison exists
+// to catch.
+const VIDEO_TRANSCODE_REASONS = new Set([
+  "VideoCodecNotSupported",
+  "VideoBitDepthNotSupported",
+  "VideoProfileNotSupported",
+  "VideoLevelNotSupported",
+  "VideoResolutionNotSupported",
+  "VideoBitrateNotSupported",
+  "VideoRangeTypeNotSupported",
+  "VideoFramerateNotSupported",
+  "AnamorphicVideoNotSupported",
+  "InterlacedVideoNotSupported",
+]);
 type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 function derivePlayMethod(isDirectPlay: boolean, isVideoCopied: boolean): PlayMethod {
   if (isDirectPlay) return "DirectPlay";
@@ -173,7 +196,9 @@ export async function POST(req: NextRequest) {
     }
 
     const videoStream = (source.MediaStreams ?? []).find((s) => s.Type === "Video") ?? null;
-    const isVideoCopied = isDirectPlay || (!!videoStream?.Codec && videoCodecs.includes(videoStream.Codec));
+    const forcedByReason = transcodeReasons.some((r) => VIDEO_TRANSCODE_REASONS.has(r));
+    const isVideoCopied =
+      isDirectPlay || (!forcedByReason && !!videoStream?.Codec && videoCodecs.includes(videoStream.Codec));
     const playMethod = derivePlayMethod(isDirectPlay, isVideoCopied);
 
     const audioStreamForPlayback = (source.MediaStreams ?? []).find(
