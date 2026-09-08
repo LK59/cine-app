@@ -184,10 +184,15 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
 
 export function CapabilitySection() {
   const t = useT();
+  // `INTERVALS.FAST` (15 s) est un rythme de file d'attente Jellyseerr, pas d'une page d'état :
+  // derrière cette route il y a douze appels amont et ~330 ms de SQLite synchrone, et l'état
+  // qu'elle rapporte ne bouge qu'au rythme du cron. Un onglet laissé ouvert bloquait la boucle
+  // d'événements 2,2 % du temps — sur la page qu'on ouvre justement quand l'application rame.
+  // Le bouton de rafraîchissement reste là pour qui veut l'instant présent.
   const { data, isLoading, mutate, isValidating } = useSWR<PublicStatusResponse>(
     "/api/status/public",
     fetcher,
-    { refreshInterval: INTERVALS.FAST }
+    { refreshInterval: INTERVALS.SLOW }
   );
 
   const overall = data?.overall ?? "ok";
