@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
 import { fetcher, playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
-import { isUpstreamUnreachable } from "@/lib/upstreamError";
+import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -511,11 +511,7 @@ export function ExperimentalPlayerHost({
   const error =
     runtimeError ??
     info?.refusedReason ??
-    (isUpstreamUnreachable(infoError)
-      ? t("player.libraryUnreachable")
-      : infoError
-        ? "Impossible de récupérer les informations du fichier."
-        : null);
+    (infoError ? errorMessage(infoError, t, "Impossible de récupérer les informations du fichier.") : null);
   // The server's own name for it, which is the only one that knows an episode is an episode.
   // Whatever the caller passed stands until it arrives, so the title never blinks in empty.
   const title = info?.title ?? openedAs;

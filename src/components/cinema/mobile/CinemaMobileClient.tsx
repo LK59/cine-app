@@ -12,6 +12,7 @@ import { useExitDelay } from "@/lib/useExitDelay";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
+import { errorMessage } from "@/lib/upstreamError";
 import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -488,7 +489,7 @@ export function CinemaMobileClient() {
           </div>
         )}
 
-        {moviesError && <p className="px-4 pt-6 text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>}
+        {moviesError && <p className="px-4 pt-6 text-sm text-red-400">{errorMessage(moviesError, t, t("common.unknown"))}</p>}
         {!loading && payload && payload.spotlight.length === 0 && (
           <p className="px-4 pt-6 text-sm text-slate-400">{t("cinema.empty")}</p>
         )}

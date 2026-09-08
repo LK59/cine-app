@@ -12,6 +12,7 @@ import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
+import { errorMessage } from "@/lib/upstreamError";
 import { heroKindFor, type HeroFocus } from "@/lib/cinemaHeroKind";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -719,7 +720,7 @@ export function CinemaClient() {
   if (moviesError) {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <p className="max-w-sm text-sm text-red-400">{moviesError.message || t("common.unknown")}</p>
+        <p className="max-w-sm text-sm text-red-400">{errorMessage(moviesError, t, t("common.unknown"))}</p>
         {exitButton}
       </div>,
       document.body

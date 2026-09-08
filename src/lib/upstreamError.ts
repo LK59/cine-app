@@ -22,3 +22,19 @@ export function withCode<E extends Error>(error: E, code: string | undefined): E
 export function isUpstreamUnreachable(error: unknown): boolean {
   return error instanceof Error && (error as Error & { code?: string }).code === UPSTREAM_UNREACHABLE;
 }
+
+/**
+ * La phrase à montrer pour une erreur, quelle que soit l'écran.
+ *
+ * Quatre endroits affichaient une erreur de chargement — les deux lecteurs, la grille du cinéma et
+ * sa jumelle du téléphone — et chacun décidait dans son coin quoi en dire. C'est une décision, pas
+ * quatre : un serveur média absent se dit pareil partout, et le jour où la phrase change, elle
+ * change une fois.
+ *
+ * Le repli reste au choix de l'appelant, parce que « impossible de lire ce fichier » et « le
+ * catalogue n'a pas pu être chargé » ne sont pas la même phrase quand la cause, elle, est autre.
+ */
+export function errorMessage(error: unknown, t: (key: string) => string, fallback: string): string {
+  if (isUpstreamUnreachable(error)) return t("player.libraryUnreachable");
+  return (error instanceof Error && error.message) || fallback;
+}

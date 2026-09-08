@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
@@ -76,41 +77,46 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
  * comptage est écrit.
  */
 export async function GET(req: Request) {
-  const [series, jellyfinSeries] = await Promise.all([cachedSeries(), cachedJellyfinSeriesAdmin()]);
+  try {
+    const [series, jellyfinSeries] = await Promise.all([cachedSeries(), cachedJellyfinSeriesAdmin()]);
 
-  const downloaded = series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0);
-  const matched = downloaded
-    .map((s) => ({ s, jfItem: findJellyfinSeriesByTvdb(jellyfinSeries, s.tvdbId, s.title, s.year) }))
-    .filter((x): x is { s: SonarrSeries; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
+    const downloaded = series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0);
+    const matched = downloaded
+      .map((s) => ({ s, jfItem: findJellyfinSeriesByTvdb(jellyfinSeries, s.tvdbId, s.title, s.year) }))
+      .filter((x): x is { s: SonarrSeries; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
 
-  const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id)));
+    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id)));
 
-  const bySonarrId = new Map<number, CinemaSeries>();
-  const rows: Record<string, CinemaSeries[]> = {};
-  const genreSet = new Set<string>();
+    const bySonarrId = new Map<number, CinemaSeries>();
+    const rows: Record<string, CinemaSeries[]> = {};
+    const genreSet = new Set<string>();
 
-  for (const cs of cinemaSeries) {
-    bySonarrId.set(cs.sonarrId, cs);
-    for (const g of cs.genres) {
-      genreSet.add(g);
-      (rows[g] ??= []).push(cs);
+    for (const cs of cinemaSeries) {
+      bySonarrId.set(cs.sonarrId, cs);
+      for (const g of cs.genres) {
+        genreSet.add(g);
+        (rows[g] ??= []).push(cs);
+      }
     }
+
+    const spotlight = downloaded
+      .filter((s) => bySonarrId.has(s.id) && s.added && s.added !== "0001-01-01T00:00:00Z")
+      .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
+      .slice(0, 10)
+      .map((s) => bySonarrId.get(s.id)!);
+
+    const payload: CinemaSeriesPayload = {
+      genres: [...genreSet].sort(),
+      rows,
+      spotlight,
+      recentlyAdded: recentlyAddedRail(cinemaSeries),
+      top10: top10Rail(cinemaSeries),
+    };
+    // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
+    // entier, il demande seulement s'il a changé. Voir `cachedJson`.
+    return cachedJson(req, "cinema-series", payload);
+  } catch (err) {
+    // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
+    return upstreamFailure(err, "cinema-series");
   }
-
-  const spotlight = downloaded
-    .filter((s) => bySonarrId.has(s.id) && s.added && s.added !== "0001-01-01T00:00:00Z")
-    .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-    .slice(0, 10)
-    .map((s) => bySonarrId.get(s.id)!);
-
-  const payload: CinemaSeriesPayload = {
-    genres: [...genreSet].sort(),
-    rows,
-    spotlight,
-    recentlyAdded: recentlyAddedRail(cinemaSeries),
-    top10: top10Rail(cinemaSeries),
-  };
-  // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
-  // entier, il demande seulement s'il a changé. Voir `cachedJson`.
-  return cachedJson(req, "cinema-series", payload);
 }

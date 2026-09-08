@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
@@ -98,41 +99,46 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
  * des requêtes ciblées (`Filters=…`), pas par une énumération : celles-ci répondent juste.
  */
 export async function GET(req: Request) {
-  const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
+  try {
+    const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
 
-  const downloaded = movies.filter((m) => m.hasFile);
-  const matched = downloaded
-    .map((m) => ({ m, jfItem: findJellyfinMovieByTmdb(jellyfinMovies, m.tmdbId, m.title, m.year, m.imdbId ?? null) }))
-    .filter((x): x is { m: RadarrMovie; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
+    const downloaded = movies.filter((m) => m.hasFile);
+    const matched = downloaded
+      .map((m) => ({ m, jfItem: findJellyfinMovieByTmdb(jellyfinMovies, m.tmdbId, m.title, m.year, m.imdbId ?? null) }))
+      .filter((x): x is { m: RadarrMovie; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
 
-  const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id)));
+    const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id)));
 
-  const byRadarrId = new Map<number, CinemaMovie>();
-  const rows: Record<string, CinemaMovie[]> = {};
-  const genreSet = new Set<string>();
+    const byRadarrId = new Map<number, CinemaMovie>();
+    const rows: Record<string, CinemaMovie[]> = {};
+    const genreSet = new Set<string>();
 
-  for (const cinemaMovie of cinemaMovies) {
-    byRadarrId.set(cinemaMovie.radarrId, cinemaMovie);
-    for (const g of cinemaMovie.genres) {
-      genreSet.add(g);
-      (rows[g] ??= []).push(cinemaMovie);
+    for (const cinemaMovie of cinemaMovies) {
+      byRadarrId.set(cinemaMovie.radarrId, cinemaMovie);
+      for (const g of cinemaMovie.genres) {
+        genreSet.add(g);
+        (rows[g] ??= []).push(cinemaMovie);
+      }
     }
+
+    const spotlight = downloaded
+      .filter((m) => byRadarrId.has(m.id) && m.added && m.added !== "0001-01-01T00:00:00Z")
+      .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
+      .slice(0, 10)
+      .map((m) => byRadarrId.get(m.id)!);
+
+    const payload: CinemaMoviesPayload = {
+      genres: [...genreSet].sort(),
+      rows,
+      spotlight,
+      recentlyAdded: recentlyAddedRail(cinemaMovies),
+      top10: top10Rail(cinemaMovies),
+    };
+    // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
+    // entier, il demande seulement s'il a changé. Voir `cachedJson`.
+    return cachedJson(req, "cinema-movies", payload);
+  } catch (err) {
+    // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
+    return upstreamFailure(err, "cinema-movies");
   }
-
-  const spotlight = downloaded
-    .filter((m) => byRadarrId.has(m.id) && m.added && m.added !== "0001-01-01T00:00:00Z")
-    .sort((a, b) => new Date(b.added!).getTime() - new Date(a.added!).getTime())
-    .slice(0, 10)
-    .map((m) => byRadarrId.get(m.id)!);
-
-  const payload: CinemaMoviesPayload = {
-    genres: [...genreSet].sort(),
-    rows,
-    spotlight,
-    recentlyAdded: recentlyAddedRail(cinemaMovies),
-    top10: top10Rail(cinemaMovies),
-  };
-  // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
-  // entier, il demande seulement s'il a changé. Voir `cachedJson`.
-  return cachedJson(req, "cinema-movies", payload);
 }

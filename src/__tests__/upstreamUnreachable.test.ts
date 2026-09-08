@@ -85,12 +85,12 @@ describe("un amont injoignable", () => {
  * et c'est exactement le genre de décision qui dérive : corrigée d'un côté, oubliée de l'autre.
  */
 describe("la même phrase des deux côtés", () => {
-  it.each([
-    "src/components/ExperimentalPlayerHost.tsx",
-    "src/components/PlayerHost.tsx",
-  ])("%s nomme la bibliothèque injoignable", async (file) => {
+  it("la phrase est écrite à un seul endroit", async () => {
     const { readFileSync } = await import("fs");
-    expect(readFileSync(file, "utf8")).toContain('t("player.libraryUnreachable")');
+    // Le lecteur natif y arrive par `errorMessage`, le stable en lisant le code de la réponse :
+    // deux chemins, une seule phrase, et le jour où elle change elle change une fois.
+    expect(readFileSync("src/lib/upstreamError.ts", "utf8")).toContain('t("player.libraryUnreachable")');
+    expect(readFileSync("src/components/PlayerHost.tsx", "utf8")).toContain('t("player.libraryUnreachable")');
   });
 
   it("le lecteur natif ne passe pas la main quand c'est le serveur qui manque", async () => {
@@ -100,5 +100,32 @@ describe("la même phrase des deux côtés", () => {
     expect(readFileSync("src/components/ExperimentalPlayerHost.tsx", "utf8")).toMatch(
       /if \(!isUpstreamUnreachable\(infoError\)\) \{\s*\n\s*fallToStable\(/
     );
+  });
+});
+
+/**
+ * Le catalogue aussi, et pas seulement le lecteur.
+ *
+ * Les routes du cinéma répondent par `cachedJson` — étiquette et compression — donc elles ne
+ * passaient pas par `withErrorHandling` et n'avaient aucune gestion d'erreur du tout. Observé
+ * pendant la migration de Jellyfin : la gestion encaissait la panne service par service et restait
+ * lisible, le cinéma tombait en entier sur un « Erreur 500 » nu.
+ */
+describe("les écrans disent la même chose que le lecteur", () => {
+  it.each([
+    "src/app/api/cinema/movies/route.ts",
+    "src/app/api/cinema/series/route.ts",
+  ])("%s ne laisse pas une panne amont sortir en 500", async (file) => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync(file, "utf8")).toContain("upstreamFailure(err,");
+  });
+
+  it.each([
+    "src/components/cinema/CinemaClient.tsx",
+    "src/components/cinema/mobile/CinemaMobileClient.tsx",
+    "src/components/ExperimentalPlayerHost.tsx",
+  ])("%s passe par la phrase partagée plutôt que par la sienne", async (file) => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync(file, "utf8")).toMatch(/errorMessage\(\w+, t,/);
   });
 });
