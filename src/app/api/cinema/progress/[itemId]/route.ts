@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 export interface CinemaProgressPayload {
   resumeTicks: number | null;
@@ -34,6 +35,9 @@ export interface CinemaProgressPayload {
 // equivalent of what the episodes route already does for series' nextEpisode.
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await props.params;
+  // Même raison que les deux autres routes de lecture : `getItemUserData` l'interpole dans
+  // `/Users/{userId}/Items/{itemId}` et signe avec la clé d'administration.
+  if (!isJellyfinId(itemId)) return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) {

@@ -85,3 +85,43 @@ describe("GET /api/jellyfin/stream/[itemId]/[...path]", () => {
     expect(anon.status).toBe(403);
   });
 });
+
+// F-004 rejoué de bout en bout. Le chemin attrape-tout partait tel quel dans l'URL amont, signée
+// avec la clé d'administration : `fetch` résolvait les `..` et `/videos/{id}/../../X` devenait
+// `/X`. Chacun des ~19 comptes du foyer avait ainsi un GET arbitraire sur l'API Jellyfin avec les
+// droits de l'administrateur. La cible ici est volontairement bénigne (`/System/Info/Public`) —
+// la chaîne est la même que celle qui atteignait `/Users`, on ne l'écrit simplement pas.
+describe("traversée de chemin sur /api/jellyfin/stream/[itemId]/[...path]", () => {
+  const adminTarget = "http://jf.test/System/Info/Public";
+
+  // Les deux formes que peut prendre la traversée, selon le moment où Next décode le `%2F` :
+  // segments séparés si le décodage précède le découpage, un seul segment porteur de `/` sinon.
+  // `path.join("/")` les ramène toutes deux à la même URL, donc les deux sont refusées.
+  const shapes: Array<[string, string[]]> = [
+    ["segments `..` séparés", ["..", "..", "System", "Info", "Public"]],
+    ["un segment portant des `/` décodés", ["../../System/Info/Public"]],
+    ["une traversée glissée en fin de chemin", ["hls1", "main", "..", "..", "..", "System"]],
+  ];
+
+  for (const [label, path] of shapes) {
+    it(`refuse ${label} en 400, sans rien envoyer à Jellyfin`, async () => {
+      const res = await get(path);
+      expect(res.status).toBe(400);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  }
+
+  // Le test ci-dessus échouerait aussi si la route refusait tout : cette assertion-là dit que
+  // l'URL refusée était bien celle qui sortait du dossier, et non un faux positif.
+  it("la chaîne refusée atteignait bien un point d'administration", () => {
+    const naive = `http://jf.test/videos/${validId}/${["..", "..", "System", "Info", "Public"].join("/")}`;
+    expect(new URL(naive).href).toBe(adminTarget);
+  });
+
+  it("laisse passer les formes légitimes", async () => {
+    for (const path of [["master.m3u8"], ["main.m3u8"], ["hls1", "main", "0.mp4"], ["stream.mkv"]]) {
+      mockFetch.mockResolvedValue(upstream(200));
+      expect((await get(path)).status).toBe(200);
+    }
+  });
+});

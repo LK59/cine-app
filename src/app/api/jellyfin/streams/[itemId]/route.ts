@@ -3,6 +3,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { describeFileTracks, prettyCodec, type FileTracks } from "@/lib/fileTracks";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 export interface FileStreamsResponse extends FileTracks {
   container: string | null;
@@ -18,6 +19,9 @@ export interface FileStreamsResponse extends FileTracks {
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await ctx.params;
+  // Le paramètre part tel quel dans l'URL amont, signée avec la clé d'administration : un `..`
+  // ou un `?` y réécrirait le chemin. Refusé avant l'appel client.
+  if (!isJellyfinId(itemId)) return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
 
   if (!session?.jfId) {

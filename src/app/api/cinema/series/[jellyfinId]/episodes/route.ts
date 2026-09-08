@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 export interface CinemaEpisode {
   jellyfinItemId: string;
@@ -58,6 +59,9 @@ function toCinemaEpisode(item: import("@/lib/clients/jellyfin").JellyfinItem): C
 // returns here is by definition already downloaded and playable.
 export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinId: string }> }) {
   const { jellyfinId } = await props.params;
+  // Interpolé tel quel dans `/Shows/{id}/Episodes` par le client, avec la clé d'administration :
+  // un `?` tronquerait le chemin et laisserait réécrire la query string.
+  if (!isJellyfinId(jellyfinId)) return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });

@@ -3,8 +3,7 @@ import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-
-const JELLYFIN_ID_RE = /^[0-9a-f]{32}$/i;
+import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -41,7 +40,11 @@ export async function GET(
   if (!config.player.enabled) return new NextResponse(null, { status: 404 });
 
   const { itemId, path } = await params;
-  if (!JELLYFIN_ID_RE.test(itemId)) return new NextResponse(null, { status: 400 });
+  if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
+  // Avant toute concaténation : un segment attrape-tout peut porter un `/` (un `%2F` décodé par
+  // Next) et `path.join("/")` reconstituerait alors la traversée, quelle que soit l'étape où le
+  // décodage a eu lieu. Refusé ici, la chaîne n'est jamais assemblée.
+  if (!isStreamPath(path)) return new NextResponse(null, { status: 400 });
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
@@ -49,6 +52,12 @@ export async function GET(
 
   const restPath = path.join("/");
   const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${req.nextUrl.search}`;
+  // Ceinture et bretelles : la question est reposée sur l'URL assemblée, celle que `fetch`
+  // normalisera, et non sur les morceaux dont elle sort.
+  if (!isUnderJellyfinPrefix(target, `${config.jellyfin.url}/videos/${itemId}/`)) {
+    return new NextResponse(null, { status: 400 });
+  }
+
   const isStatic = req.nextUrl.searchParams.get("static") === "true";
   const isManifest = restPath.endsWith(".m3u8");
 

@@ -163,7 +163,7 @@ describe("GET /api/jellyfin/stream/subtitle/[itemId]", () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
     global.fetch = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["WEBVTT"]) });
     const { GET } = await import("@/app/api/jellyfin/stream/subtitle/[itemId]/route");
-    const res = await GET(fakeReq({ search: "mediaSourceId=src1&index=2" }), { params: Promise.resolve({ itemId: validId }) });
+    const res = await GET(fakeReq({ search: `mediaSourceId=${"c".repeat(32)}&index=2` }), { params: Promise.resolve({ itemId: validId }) });
     expect(res.headers.get("content-type")).toBe("text/vtt");
   });
 });

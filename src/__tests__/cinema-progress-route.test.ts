@@ -13,13 +13,17 @@ function fakeReq(cookie = "t"): NextRequest {
   } as unknown as NextRequest;
 }
 
+// Un identifiant Jellyfin de la forme réelle : la route refuse désormais tout ce qui n'est pas
+// 32 hexadécimaux, puisque ce paramètre finit interpolé dans une URL amont.
+const validId = "a".repeat(32);
+
 beforeEach(() => vi.clearAllMocks());
 
 describe("GET /api/cinema/progress/[itemId]", () => {
   it("returns nulls when the session has no Jellyfin account linked", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis" });
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
-    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: validId }) })).json();
     // `known: false` : sans identité Jellyfin, on ne sait rien — et « pas vu » serait une
     // affirmation, sur des boutons qui écrivent.
     expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false, known: false });
@@ -33,7 +37,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockGetItemUserData.mockResolvedValue({ UserData: { Played: true, IsFavorite: true } });
 
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
-    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: validId }) })).json();
 
     expect(body.played).toBe(true);
     expect(body.favorite).toBe(true);
@@ -44,7 +48,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockGetItemUserData.mockResolvedValue({ UserData: { PlaybackPositionTicks: 300_000_000 }, RunTimeTicks: 1_200_000_000 });
 
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
-    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: validId }) })).json();
 
     expect(body).toEqual({ resumeTicks: 300_000_000, runtimeTicks: 1_200_000_000, played: false, favorite: false, known: true });
   });
@@ -54,7 +58,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockGetItemUserData.mockResolvedValue({ UserData: { Played: false, PlayCount: 0 }, RunTimeTicks: 1_200_000_000 });
 
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
-    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: validId }) })).json();
 
     expect(body.resumeTicks).toBeNull();
   });
@@ -66,7 +70,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockGetItemUserData.mockRejectedValue(new Error("jellyfin down"));
 
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
-    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: validId }) })).json();
 
     expect(body).toEqual({ resumeTicks: null, runtimeTicks: null, played: false, favorite: false, known: false });
   });
@@ -76,7 +80,7 @@ describe("GET /api/cinema/progress/[itemId]", () => {
     mockGetItemUserData.mockResolvedValue({ UserData: { Played: false } });
 
     const { GET } = await import("@/app/api/cinema/progress/[itemId]/route");
-    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: "abc" }) })).json();
+    const body = await (await GET(fakeReq(), { params: Promise.resolve({ itemId: validId }) })).json();
 
     expect(body.known).toBe(true);
     expect(body.played).toBe(false);
