@@ -56,28 +56,39 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
           { key: "X-DNS-Prefetch-Control", value: "on" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
-          // Phase 1 de F-010 : on observe, on ne bloque pas. `Report-Only` n'applique rien —
-          // il fait seulement écrire la violation dans la console du navigateur. La bascule
-          // vers `Content-Security-Policy` tout court est une décision séparée, à prendre
-          // après avoir relevé ce que cette politique-ci signale en usage réel.
+          // F-010, phase 2 : la politique bloque désormais. Elle a d'abord tourné en
+          // `Report-Only` le temps d'un parcours complet ; ce qui suit porte les trois seuls
+          // ajustements que ce parcours a imposés, chacun commenté à sa directive.
           //
-          // Il n'y a pas de point de collecte (`report-to`) : les rapports restent locaux au
-          // navigateur de qui teste.
+          // Ce qu'elle protège, et ce qu'elle ne protège pas. `script-src` porte
+          // `'unsafe-inline'` (voir plus bas) : contre l'injection d'un <script> inline, elle ne
+          // vaut rien. Ce qui reste, et qui est l'essentiel du filet visé par F-010 : un script
+          // compromis ne peut plus exfiltrer vers un hôte de son choix (`connect-src`), la page
+          // ne peut pas être encadrée (`frame-ancestors`), ni sa base ni ses formulaires
+          // détournés (`base-uri`, `form-action`), ni un plugin chargé (`object-src`).
           //
-          // /!\ Connu d'avance : Next émet lui-même 7 scripts inline sans nonce par page
-          // (la charge utile RSC, `self.__next_f.push`), mesurés sur /login. Ils violeront
-          // `script-src` à chaque chargement tant qu'un nonce n'est pas posé dans proxy.ts.
-          // Ce n'est pas une régression à corriger ici, c'est le bruit de fond à trier.
+          // Pas de `report-to` : plus rien n'est collecté une fois la phase d'observation close.
           {
-            key: "Content-Security-Policy-Report-Only",
+            key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              // Le hash est celui du script d'accent de layout.tsx:84 (applique le thème avant
-              // le premier rendu). Il est calculé sur le contenu exact du template : toute
-              // retouche de cette ligne, espace compris, invalide le hash — et le symptôme
-              // sera une violation, pas une page cassée, tant qu'on est en Report-Only.
+              // `'unsafe-inline'`, et donc PAS de hash — décision prise, pas un oubli. Next
+              // émet 7 scripts inline sans nonce par page (la charge utile RSC,
+              // `self.__next_f.push`, mesurés sur /login) ; les autoriser demanderait un nonce
+              // par requête posé dans proxy.ts et relayé dans layout.tsx. Attention au piège
+              // qui va avec : un hash ou un nonce présent fait *ignorer* `'unsafe-inline'` par
+              // les navigateurs CSP3. On ne peut donc pas garder le hash du script d'accent
+              // (layout.tsx:84) « au cas où » — sa seule présence casserait les 7 autres.
+              //
+              // `'wasm-unsafe-eval'` et non `'unsafe-eval'` : les décodeurs AC-3 et DTS de
+              // mediabunny (@mediabunny/ac3, @mediabunny/dts, chargés en import dynamique par
+              // webcodecs/softwareAudio.ts:42-46) sont des portages Emscripten qui appellent
+              // WebAssembly.instantiate. Ils servent 72 % de cette bibliothèque et sur le
+              // chemin natif, pas seulement sur le repli — sans eux, un film joue sans son.
+              // Le mot-clé CSP3 autorise WebAssembly *sans* rouvrir eval().
+              //
               // www.youtube.com : loadYoutubeIframeApi.ts:82 injecte <script src=…/iframe_api>.
-              "script-src 'self' 'sha256-+FwBETlEEYICBnpy7vxJRMMbjVkPRCLgbC/vWdl95Jo=' https://www.youtube.com",
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.youtube.com",
               // React écrit des attributs style= ; seul 'unsafe-inline' les couvre. Les polices
               // next/font sont auto-hébergées sous /_next/static, donc 'self'.
               "style-src 'self' 'unsafe-inline'",
@@ -88,20 +99,29 @@ const nextConfig = {
               // et le remotePoster de Radarr/Sonarr (radarr/page.tsx:434, sonarr/page.tsx:444),
               // qui retombe sur ces deux mêmes hôtes.
               // Volontairement sans data: ni blob: — rien dans le dépôt n'en sert en image, et
-              // c'est exactement ce que cette phase doit vérifier plutôt que présumer.
+              // le parcours en Report-Only n'a relevé aucune violation ici, ce qui le confirme.
               "img-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com",
               // blob: n'est pas une commodité : le lecteur natif attache son MediaSource par
               // URL.createObjectURL (mseSource.ts:240,244). Sans lui, plus aucun film ne démarre.
               "media-src 'self' blob:",
-              // Tout ce que le client appelle est same-origin, y compris les GET par plages du
-              // lecteur natif (byteSource.ts:185,235 posent un en-tête Range sur /api/jellyfin/stream).
-              "connect-src 'self'",
+              // Les trois hôtes d'images et celui du script YouTube reparaissent ici, et ce
+              // n'est pas une redondance avec img-src/script-src : le service worker hérite de
+              // cette politique (elle est servie avec /sw.js), et son gestionnaire fetch
+              // n'exclut que le *chemin* /api/ (sw.js:32). Toute image distante est donc
+              // interceptée puis rejouée en fetch() (sw.js:87), et un fetch relève de
+              // connect-src, pas d'img-src. Mesuré : ~2630 violations sur un parcours complet
+              // en Report-Only, sans un seul fetch vers une URL absolue dans src/.
+              //
+              // 'self' couvre le reste : /api/sse (SSENotifier.tsx:91) et les GET par plages du
+              // lecteur natif (byteSource.ts:185,235, en-tête Range sur /api/jellyfin/stream).
+              "connect-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com https://www.youtube.com",
               // Deux hôtes : youtube-nocookie pour TrailerModal.tsx:48, www.youtube.com pour la
               // carte vidéo de person/[id]/page.tsx:288 et pour les cadres que crée l'API iframe.
               "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
-              // blob: est obligatoire ici : hls.js construit son démultiplexeur depuis un Blob
-              // (injectWorker, hls.js/dist/hls.js:15931) et PlayerHost.tsx ne désactive pas
-              // enableWorker. 'self' couvre /sw.js.
+              // blob: est obligatoire ici, et pour deux raisons plutôt qu'une : hls.js
+              // construit son démultiplexeur depuis un Blob (injectWorker,
+              // hls.js/dist/hls.js:15931, et PlayerHost.tsx ne désactive pas enableWorker), et
+              // les décodeurs mediabunny font de même pour le leur. 'self' couvre /sw.js.
               "worker-src 'self' blob:",
               "object-src 'none'",
               // Même verrou que le X-Frame-Options: DENY posé plus haut.
