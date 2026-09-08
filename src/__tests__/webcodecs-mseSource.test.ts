@@ -1492,3 +1492,68 @@ describe("MseSource", () => {
     expect((video as unknown as { srcObject: unknown }).srcObject).toBeNull();
   });
 });
+
+/**
+ * Le démontage sur la branche à URL, c'est-à-dire chez tout le monde.
+ *
+ * `fakeVideo` accepte n'importe quoi dans `srcObject` et prend donc la branche préférée, celle
+ * qui n'a pas d'URL à révoquer. Aucun navigateur de la bibliothèque ne fait cela : Chrome — le
+ * seul que le journal du lecteur montre sur le chemin `remux` — refuse `srcObject = MediaSource`
+ * et se rabat sur `createObjectURL`. Ce banc modélise cet élément-là, y compris le détail qui
+ * faisait le défaut : écrire `srcObject`, même avec `null`, relance l'algorithme de chargement,
+ * lequel retombe sur l'attribut `src` quand il ne trouve pas de `srcObject`.
+ */
+function videoRefusingSrcObject(fetched: string[]): HTMLVideoElement {
+  const video = fakeVideo() as unknown as { src: string; removeAttribute: (name: string) => void };
+  Object.defineProperty(video, "srcObject", {
+    get: () => null,
+    set: (value: unknown) => {
+      if (value !== null) throw new TypeError("srcObject n'accepte qu'un MediaStream");
+      if (video.src) fetched.push(video.src);
+    },
+    configurable: true,
+  });
+  video.removeAttribute = (name: string) => {
+    if (name === "src") video.src = "";
+  };
+  return video as unknown as HTMLVideoElement;
+}
+
+describe("MseSource sur un élément qui refuse srcObject", () => {
+  let created: string[];
+  let revoked: string[];
+
+  beforeEach(() => {
+    created = [];
+    revoked = [];
+    vi.stubGlobal("URL", {
+      createObjectURL: () => {
+        const url = `blob:mse-${created.length}`;
+        created.push(url);
+        return url;
+      },
+      revokeObjectURL: (url: string) => revoked.push(url),
+    });
+  });
+
+  // Le symptôme tel qu'il se lisait en production : `GET blob:https://…/<uuid>
+  // net::ERR_FILE_NOT_FOUND` dans la console, à chaque fermeture du lecteur natif. Ce n'était
+  // pas quelque chose qui revenait tardivement sur une URL morte — c'était le nettoyage
+  // lui-même qui la redemandait, ayant révoqué avant de retirer l'attribut.
+  it("ne redemande pas l'URL qu'il vient de révoquer", async () => {
+    const fetched: string[] = [];
+    const video = videoRefusingSrcObject(fetched);
+    const mse = await MseSource.attach(video, fakeRemuxer(50), PLAN, { onError: vi.fn() });
+    await flush();
+
+    // Sans cela le banc passerait en ne prouvant rien : c'est la branche à URL qui est en cause.
+    expect(created).toHaveLength(1);
+    expect((video as unknown as { src: string }).src).toBe(created[0]);
+
+    mse.destroy();
+
+    expect(revoked).toEqual(created);
+    expect(fetched.filter((url) => revoked.includes(url))).toEqual([]);
+    expect((video as unknown as { src: string }).src).toBe("");
+  });
+});

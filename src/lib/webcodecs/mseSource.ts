@@ -1236,14 +1236,30 @@ export class MseSource {
     } catch {
       // Already closed by the element being torn down first.
     }
+    // L'attribut part AVANT la révocation, et hors du `catch` — même ordre que la sonde de
+    // `codecSupport.ts`, pour la même raison. Écrire `srcObject`, *y compris avec `null`*,
+    // relance l'algorithme de chargement de l'élément ; ne trouvant plus de `srcObject`, la
+    // sélection de ressource retombe sur l'attribut `src`. Révoquer d'abord envoyait donc
+    // l'élément chercher l'URL qu'on venait de tuer, et Chrome le disait dans la console à
+    // chaque fermeture : `GET blob:… net::ERR_FILE_NOT_FOUND`. Pire, le retrait vivait dans un
+    // `catch` qui ne s'exécutait jamais là où il servait : Chrome refuse `srcObject = MediaSource`
+    // — c'est pourquoi il prend la branche à URL — mais accepte `srcObject = null` sans broncher.
+    // L'élément restait donc avec un `src` pointant sur un blob mort, et l'échec de chargement
+    // levait un `error` qui pouvait atterrir sur la session suivante, laquelle réutilise le même
+    // élément.
+    this.video.removeAttribute("src");
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl);
       this.objectUrl = null;
     }
     try {
+      // Suffit à remettre l'élément à zéro : le setter relance l'algorithme de chargement, qui ne
+      // trouve alors plus rien à charger. Pas de `load()` derrière, contrairement à la sonde, qui
+      // n'écrit jamais `srcObject` et n'a que lui pour interrompre le chargement en cours.
       (this.video as unknown as { srcObject: unknown }).srcObject = null;
     } catch {
-      this.video.removeAttribute("src");
+      // Un élément qui refuse jusqu'à `null` n'a rien relancé, mais son `src` est déjà parti
+      // ci-dessus : il ne reste rien à défaire ici.
     }
   }
 }
