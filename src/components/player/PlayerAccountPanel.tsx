@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
@@ -103,12 +104,20 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
 
             `from=compte` dit à la page d'état par où l'on est entré, pour que son « Retour »
             ramène ici. Sans lui, il ramenait à la connexion — la seule autre porte — et consulter
-            l'état des services ressemblait à se faire déconnecter. */}
+            l'état des services ressemblait à se faire déconnecter.
+
+            `Link` et non `<a>` : un `<a>` nu est une navigation de document, donc le déchargement
+            de la page — et avec elle la séance de lecture, qui ne vit que dans `PlaybackProvider`,
+            en mémoire. Aller voir si le serveur va bien coupait le film qu'on était en train de
+            regarder, mini-lecteur compris, et rien ne le rouvrait au retour : la seule séance
+            qu'un rechargement sait restaurer est celle du changement de piste sous WebKit
+            (`PLAYER_RELOAD_INTENT_KEY`). En navigation client, le film continue de jouer pendant
+            qu'on lit l'état des services, et le « Retour » ramène dessus. */}
         <Section icon={Activity} title={t("player.account.status")}>
-          <a href="/status?from=compte" className="btn btn-ghost w-full justify-center sm:w-auto">
+          <Link href="/status?from=compte" className="btn btn-ghost w-full justify-center sm:w-auto">
             <Activity size={16} />
             {t("player.account.openStatus")}
-          </a>
+          </Link>
           <p className="mt-2 text-xs text-slate-500">{t("player.account.statusHint")}</p>
         </Section>
 

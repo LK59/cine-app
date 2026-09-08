@@ -12,6 +12,16 @@ vi.mock("@/lib/swr", async (importOriginal) => ({
   fetcher: async () => payload,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+// `next/link` rendu comme il l'est vraiment — un `<a>` — mais marqué, parce que c'est justement
+// ce que le DOM seul ne distingue pas : un `<a>` nu et un `Link` produisent la même balise et
+// n'ont pas du tout le même effet sur la page.
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} data-client-nav="1" {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
   useLocale: () => ["fr", vi.fn()],
@@ -110,5 +120,25 @@ describe("PlayerAccountPanel — playback preferences", () => {
     const audio = screen.getAllByRole("combobox").slice(-3)[0] as HTMLSelectElement;
     expect(audio.value).toBe("rus");
     expect(screen.getByText("RUS")).toBeTruthy();
+  });
+});
+
+/**
+ * Comment on va voir l'état des services — c'est-à-dire ce qu'on laisse derrière soi.
+ *
+ * La séance de lecture ne vit qu'en mémoire, dans `PlaybackProvider`. Un `<a>` nu vers `/status`
+ * est une navigation de document : la page est déchargée, la séance meurt avec elle, et rien ne
+ * la rouvre au retour — la seule qu'un rechargement sache restaurer est celle du changement de
+ * piste sous WebKit. Le symptôme signalé en production : le mini-lecteur tué en ouvrant la page
+ * d'état. Le DOM ne distingue pas les deux formes, d'où le marqueur posé sur le mock.
+ */
+describe("PlayerAccountPanel — la porte vers l'état des services", () => {
+  it("y va par une navigation client, sans décharger la page ni la séance en cours", () => {
+    payload = { username: "louis", jfUser: "louis" };
+    render(<PlayerAccountPanel />);
+
+    const link = screen.getByRole("link", { name: /player\.account\.openStatus/ });
+    expect(link.getAttribute("href")).toBe("/status?from=compte");
+    expect(link.getAttribute("data-client-nav")).toBe("1");
   });
 });

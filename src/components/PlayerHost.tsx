@@ -147,13 +147,12 @@ export function PlayerHost() {
   // session, against an abandoned transcode on every playback.
   //
   // Attention : ce `return null` s'applique à une séance **en cours**, pas seulement à un
-  // démarrage. `useLegacyPlayer` cesse de poser sa question sur les adresses publiques (sa clé
-  // SWR passe à `null`), et le mini-lecteur, lui, survit aux changements de page — ouvrir la page
-  // d'état avec un film réduit fait donc arriver ici avec la question fermée. Ce qui empêche le
-  // film de disparaître à cet instant est ailleurs et nulle part visible : `keepPreviousData:
-  // true` dans `SWRProvider`, qui rend la valeur déjà connue quand la clé devient nulle. Le jour
-  // où quelqu'un retire cette option, c'est cette ligne qui coupera la lecture. Couvert par
-  // `useLegacyPlayer-public-path.test.tsx`, qui monte le vrai `SWRProvider`.
+  // démarrage. Sur une adresse publique — la page d'état, qu'on peut ouvrir depuis le panneau
+  // Compte avec un film réduit —, `useLegacyPlayer` ne pose plus sa question. Il faut donc qu'il
+  // se souvienne de la réponse, sans quoi cette ligne coupe la lecture ; c'est le cache SWR, qui
+  // n'appartient à aucun montage, qui la porte. Une version qui la retenait dans l'instance du
+  // hook (clé nulle + `keepPreviousData`) a tué le film en production. Couvert par
+  // `useLegacyPlayer-public-path.test.tsx`, qui remonte le hook au lieu de le re-rendre.
   if (legacy === undefined) return null;
 
   const useNative = !legacy && !handedOver.includes(session.itemId);
