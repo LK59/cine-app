@@ -192,7 +192,21 @@ export class RemuxPlayback {
     options: RemuxPlaybackOptions
   ): Promise<RemuxPlayback> {
     const playback = new RemuxPlayback(video, source, file, videoTrack, audioTrack, chosen.remuxer!, chosen, options);
-    await playback.attach(chosen.plan!, options.startSeconds);
+    // The instance is only handed back once it is attached, so a rejection here leaves an object
+    // nobody can free: it holds the remuxer — hence an AudioDecoder and an AudioEncoder, of which
+    // the browser allows a fixed number at a time — the byte source and its connection. Firefox on
+    // Windows reaches this path for real: `MediaSource.isTypeSupported` claims a codec it then
+    // refuses as a SourceBuffer (see codecSupport.ts), and `addSourceBuffer` throws inside attach.
+    // Releasing it here rather than in the caller: nothing else ever held a reference to it.
+    try {
+      await playback.attach(chosen.plan!, options.startSeconds);
+    } catch (error) {
+      // `destroy()` tolerates a half-built instance — `mse` is still null, `Remuxer.close()` and
+      // `AudioTranscoder.close()` are both guarded and idempotent — so it cannot replace the
+      // error that names the real reason on screen and in the technical report.
+      playback.destroy();
+      throw error;
+    }
     return playback;
   }
 

@@ -248,78 +248,90 @@ export class MseSource {
     await opened;
     if (this.destroyed) return;
 
-    trace("MediaSource ouverte, création des tampons");
-    this.videoBuffer = this.source.addSourceBuffer(this.plan.videoMimeType);
-    this.videoBuffer.mode = "segments";
-    this.videoOps = new BufferQueue(this.videoBuffer, () => this.elementState());
-    if (this.plan.audioMimeType) {
-      this.audioBuffer = this.source.addSourceBuffer(this.plan.audioMimeType);
-      this.audioBuffer.mode = "segments";
-      this.audioOps = new BufferQueue(this.audioBuffer, () => this.elementState());
+    // From here on the element holds the source: the object URL keeps the MediaSource alive and
+    // `video.src` still points at it. `addSourceBuffer` is a real failure path — Firefox on
+    // Windows can claim support for a codec through `MediaSource.isTypeSupported` and then refuse
+    // it here (see codecSupport.ts) — and the init appends below can reject too. Without this the
+    // object outlived its own failure to open, since `revokeObjectURL` only ever runs in destroy().
+    try {
+      trace("MediaSource ouverte, création des tampons");
+      this.videoBuffer = this.source.addSourceBuffer(this.plan.videoMimeType);
+      this.videoBuffer.mode = "segments";
+      this.videoOps = new BufferQueue(this.videoBuffer, () => this.elementState());
+      if (this.plan.audioMimeType) {
+        this.audioBuffer = this.source.addSourceBuffer(this.plan.audioMimeType);
+        this.audioBuffer.mode = "segments";
+        this.audioOps = new BufferQueue(this.audioBuffer, () => this.elementState());
+      }
+
+      await this.appendTo(this.videoOps, this.plan.videoInit, this.generation);
+      trace("segment d'initialisation vidéo accepté");
+      if (this.audioOps && this.plan.audioInit) {
+        await this.appendTo(this.audioOps, this.plan.audioInit, this.generation);
+        trace("segment d'initialisation audio accepté");
+      }
+
+      // Positioned before the first read, not after it. Filling thirty seconds from the beginning
+      // and then throwing all of it away is what made resuming a part-watched episode feel slow.
+      //
+      // Le lecteur est envoyé chercher le bon endroit tout de suite ; la *tête*, elle, attend que
+      // ce média soit arrivé — voir `placePendingStart`. Déplacer la tête ici, alors que seuls les
+      // segments d'initialisation ont été envoyés et que le tampon est vide, laissait WebKit dans
+      // un `seeking` qu'il ne résolvait plus jamais : mesuré sur un iPhone, un film rouvert à
+      // 23:24 restait figé avec trente secondes de média sous la tête et pas une image décodée,
+      // pendant que le chien de garde redemandait la position toutes les 1,8 s sans effet. Un saut
+      // *pendant* la lecture n'a jamais eu ce défaut — là, le média et le décodeur existent déjà,
+      // et c'est toute la différence.
+      if (startSeconds > 1 && this.remuxer.seekable) {
+        this.remuxer.seekTo(startSeconds);
+        this.lastSeekTarget = startSeconds;
+        this.pendingStart = startSeconds;
+      }
+      // Opening a film is a request to be somewhere, and it is about to be answered with media
+      // that begins a fraction of a second later — a file with B-frames presents its first picture
+      // 210 ms in. Declared as a landing so the playhead may be put onto that media even though
+      // the element, having nothing to play yet, is still paused.
+      //
+      // Pour une ouverture différée, la même déclaration est refaite au moment où la tête est
+      // posée : c'est là que le film s'ouvre vraiment, et l'annoncer ici la placerait à un endroit
+      // où la tête n'ira pas.
+      if (this.pendingStart === null) this.guard.opened(this.video.currentTime);
+
+      // The element's own verdict, recorded when it is delivered. Everything so far learned of it
+      // second-hand, when some later operation tripped over the wreckage — so the report showed the
+      // consequence and never the moment.
+      this.video.addEventListener("error", this.onElementError);
+      this.source.addEventListener("sourceclose", this.onSourceClosed);
+
+      // The system says when it wants data; a page that fetches regardless gets throttled.
+      this.source.addEventListener("startstreaming", this.request);
+      this.video.addEventListener("timeupdate", this.request);
+      this.video.addEventListener("waiting", this.request);
+      // Not merely a hint to fetch more. On this path the transport controls write straight to the
+      // element, as they do for any <video>, so this event is the *only* notice that the viewer
+      // asked to be somewhere else. Without it the element waits at a time nothing will ever be
+      // appended to, while the reader keeps grinding forward from wherever it was — which looks
+      // exactly like the player decoding every frame up to the target before resuming.
+      this.video.addEventListener("seeking", this.onSeeking);
+      this.video.addEventListener("pause", this.guard.paused);
+      this.video.addEventListener("play", this.onPlay);
+      this.video.addEventListener("playing", this.request);
+      this.video.addEventListener("playing", this.onResumed);
+      this.lastAppendAt = Date.now();
+      this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
+
+      // Started, not waited for. Filling runs until there is a comfortable amount of media, and
+      // waiting for that before declaring the player ready makes the whole session hostage to it:
+      // a browser that accepts segments and keeps nothing from them leaves the depth at zero, the
+      // loop reading the film from end to end, and the viewer looking at a spinner that has no
+      // reason to ever stop. The element reports its own readiness, and the controls show the wait.
+      void this.fill();
+    } catch (error) {
+      // Each step of destroy() is guarded or optional, so tearing a half-open source down cannot
+      // replace the error that names why the file would not open.
+      this.destroy();
+      throw error;
     }
-
-    await this.appendTo(this.videoOps, this.plan.videoInit, this.generation);
-    trace("segment d'initialisation vidéo accepté");
-    if (this.audioOps && this.plan.audioInit) {
-      await this.appendTo(this.audioOps, this.plan.audioInit, this.generation);
-      trace("segment d'initialisation audio accepté");
-    }
-
-    // Positioned before the first read, not after it. Filling thirty seconds from the beginning
-    // and then throwing all of it away is what made resuming a part-watched episode feel slow.
-    //
-    // Le lecteur est envoyé chercher le bon endroit tout de suite ; la *tête*, elle, attend que
-    // ce média soit arrivé — voir `placePendingStart`. Déplacer la tête ici, alors que seuls les
-    // segments d'initialisation ont été envoyés et que le tampon est vide, laissait WebKit dans
-    // un `seeking` qu'il ne résolvait plus jamais : mesuré sur un iPhone, un film rouvert à
-    // 23:24 restait figé avec trente secondes de média sous la tête et pas une image décodée,
-    // pendant que le chien de garde redemandait la position toutes les 1,8 s sans effet. Un saut
-    // *pendant* la lecture n'a jamais eu ce défaut — là, le média et le décodeur existent déjà,
-    // et c'est toute la différence.
-    if (startSeconds > 1 && this.remuxer.seekable) {
-      this.remuxer.seekTo(startSeconds);
-      this.lastSeekTarget = startSeconds;
-      this.pendingStart = startSeconds;
-    }
-    // Opening a film is a request to be somewhere, and it is about to be answered with media
-    // that begins a fraction of a second later — a file with B-frames presents its first picture
-    // 210 ms in. Declared as a landing so the playhead may be put onto that media even though
-    // the element, having nothing to play yet, is still paused.
-    //
-    // Pour une ouverture différée, la même déclaration est refaite au moment où la tête est
-    // posée : c'est là que le film s'ouvre vraiment, et l'annoncer ici la placerait à un endroit
-    // où la tête n'ira pas.
-    if (this.pendingStart === null) this.guard.opened(this.video.currentTime);
-
-    // The element's own verdict, recorded when it is delivered. Everything so far learned of it
-    // second-hand, when some later operation tripped over the wreckage — so the report showed the
-    // consequence and never the moment.
-    this.video.addEventListener("error", this.onElementError);
-    this.source.addEventListener("sourceclose", this.onSourceClosed);
-
-    // The system says when it wants data; a page that fetches regardless gets throttled.
-    this.source.addEventListener("startstreaming", this.request);
-    this.video.addEventListener("timeupdate", this.request);
-    this.video.addEventListener("waiting", this.request);
-    // Not merely a hint to fetch more. On this path the transport controls write straight to the
-    // element, as they do for any <video>, so this event is the *only* notice that the viewer
-    // asked to be somewhere else. Without it the element waits at a time nothing will ever be
-    // appended to, while the reader keeps grinding forward from wherever it was — which looks
-    // exactly like the player decoding every frame up to the target before resuming.
-    this.video.addEventListener("seeking", this.onSeeking);
-    this.video.addEventListener("pause", this.guard.paused);
-    this.video.addEventListener("play", this.onPlay);
-    this.video.addEventListener("playing", this.request);
-    this.video.addEventListener("playing", this.onResumed);
-    this.lastAppendAt = Date.now();
-    this.watchdogTimer = setInterval(this.watchdog, WATCHDOG_MS);
-
-    // Started, not waited for. Filling runs until there is a comfortable amount of media, and
-    // waiting for that before declaring the player ready makes the whole session hostage to it:
-    // a browser that accepts segments and keeps nothing from them leaves the depth at zero, the
-    // loop reading the film from end to end, and the viewer looking at a spinner that has no
-    // reason to ever stop. The element reports its own readiness, and the controls show the wait.
-    void this.fill();
   }
 
 
