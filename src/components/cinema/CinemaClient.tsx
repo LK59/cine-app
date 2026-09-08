@@ -280,12 +280,14 @@ export function CinemaClient() {
    * être passé par l'onglet Séries, qui le met en cache. Le défaut est antérieur au chantier du
    * téléphone — il attendait simplement que quelqu'un ouvre une série depuis l'autre onglet.
    */
+  // Les films sont là : on peut préparer les séries sans rien retarder, et la clé ci-dessous
+  // s'y abonne dès que c'est prêt — sans quoi le cache serait rempli pour personne.
+  const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" || route.serie !== null ? SERIES_CATALOGUE_KEY : null,
+    mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
     fetcher
   );
   // Les films sont là : on peut préparer les séries sans rien retarder. Voir le crochet.
-  useWarmSeriesCatalogue(movies !== undefined);
 
   /** Le catalogue de l'onglet affiché est-il arrivé ? Voir la remise à zéro du volet.*/
   const catalogueReady = mediaType === "series" ? series !== undefined : movies !== undefined;

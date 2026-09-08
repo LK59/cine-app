@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { preload } from "swr";
 import { fetcher, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
@@ -25,15 +25,32 @@ import { isWatchingFullScreen } from "@/lib/playbackBusy";
  * pendant qu'un film occupe l'écran, où la bande passante appartient au film — le catalogue se
  * chargera à la demande, comme avant, ce qui est exactement ce qu'on veut dans ce cas-là.
  */
-export function useWarmSeriesCatalogue(ready: boolean): void {
+export function useWarmSeriesCatalogue(ready: boolean): boolean {
+  /**
+   * Et il faut le dire, pas seulement le faire.
+   *
+   * `preload` remplit le cache de SWR, mais un `useSWR` dont la clé vaut `null` ne le lit pas :
+   * les données étaient là et inutilisées. Sur l'onglet Films, le catalogue des séries restait
+   * donc introuvable — et la bannière, qui doit basculer quand on survole une série de la rangée
+   * « Reprendre », ne trouvait aucune série à montrer.
+   *
+   * Le crochet rend donc la main : « c'est chaud, tu peux t'y abonner ». Une seule décision sur le
+   * *quand*, prise ici, et la clé la suit.
+   */
+  const [warmed, setWarmed] = useState(false);
+
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || warmed) return;
     let cancelled = false;
     const warm = () => {
       if (cancelled || isWatchingFullScreen()) return;
       // L'échec ne se rattrape pas : ce n'est qu'une avance prise, et l'écran qui en a
       // vraiment besoin refera la demande lui-même.
-      void preload(SERIES_CATALOGUE_KEY, fetcher).catch(() => {});
+      void preload(SERIES_CATALOGUE_KEY, fetcher)
+        .then(() => {
+          if (!cancelled) setWarmed(true);
+        })
+        .catch(() => {});
     };
     // `timeout` garantit que le réchauffage a bien lieu sur un onglet qui ne devient jamais
     // vraiment inactif ; le repli couvre les navigateurs sans temps mort déclaré.
@@ -46,5 +63,7 @@ export function useWarmSeriesCatalogue(ready: boolean): void {
       if (typeof cancelIdleCallback === "function") cancelIdleCallback(idle);
       else clearTimeout(idle);
     };
-  }, [ready]);
+  }, [ready, warmed]);
+
+  return warmed;
 }

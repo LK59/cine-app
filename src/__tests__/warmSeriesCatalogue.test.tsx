@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import { render, cleanup, act } from "@testing-library/react";
 import { readFileSync } from "fs";
 
 const preload = vi.fn(async () => ({}));
@@ -48,6 +48,24 @@ describe("le réchauffage du catalogue des séries", () => {
     render(<Probe ready />);
     vi.runAllTimers();
     expect(preload).not.toHaveBeenCalled();
+  });
+
+  it("annonce quand le catalogue est prêt, pour que la clé s'y abonne", async () => {
+    // `preload` remplit le cache de SWR, mais un `useSWR` dont la clé vaut `null` ne le lit pas.
+    // Sans ce verdict, les données étaient là et personne ne les voyait — et la bannière du bureau
+    // ne trouvait aucune série à montrer au survol depuis l'onglet Films.
+    // Rendu plutôt que capturé dans une variable : écrire en dehors du composant pendant le rendu
+    // est précisément ce que le compilateur React interdit, et il a raison.
+    function Probe2({ ready }: { ready: boolean }) {
+      return <span data-testid="warmed">{String(useWarmSeriesCatalogue(ready))}</span>;
+    }
+    const { getByTestId } = render(<Probe2 ready />);
+    expect(getByTestId("warmed").textContent).toBe("false");
+    await act(async () => {
+      vi.runAllTimers();
+      await Promise.resolve();
+    });
+    expect(getByTestId("warmed").textContent).toBe("true");
   });
 
   it("n'insiste pas si l'écran disparaît avant le temps mort", () => {

@@ -173,12 +173,14 @@ export function CinemaMobileClient() {
    * jamais avant. Le temps qu'il arrive, la fiche ne rend rien puis apparaît — le même
    * comportement qu'un lien profond ouvert à froid, que ce composant décrit déjà plus haut.
    */
+  // Les films sont là : on peut préparer les séries sans rien retarder, et la clé ci-dessous
+  // s'y abonne dès que c'est prêt — sans quoi le cache serait rempli pour personne.
+  const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
-    mediaType === "series" || route.serie !== null ? SERIES_CATALOGUE_KEY : null,
+    mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
     fetcher
   );
   // Le même réchauffage que sur ordinateur, et le même crochet : c'est une seule décision.
-  useWarmSeriesCatalogue(movies !== undefined);
   /**
    * « À suivre » n'appartient pas à un onglet.
    *
