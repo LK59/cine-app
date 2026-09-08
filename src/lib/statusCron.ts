@@ -1,4 +1,4 @@
-import { runAllServiceChecks, computeCapabilities } from "@/lib/healthChecks";
+import { runAllServiceChecks, computeCapabilities, type CapabilityResult } from "@/lib/healthChecks";
 import { statusHistoryDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 
@@ -18,6 +18,39 @@ const POLL_INTERVAL_MS = 60_000;
  */
 const RETENTION_MS = 10 * 24 * 3600_000;
 
+export interface StatusSnapshot {
+  capabilities: CapabilityResult[];
+  /** Date du passage qui a produit cet état, en millisecondes epoch. */
+  checkedAt: number;
+}
+
+/**
+ * Ce que le dernier passage a vu, gardé en mémoire pour que la page d'état n'ait rien à refaire.
+ *
+ * `capability_checks` porte déjà l'historique, mais pas la forme complète d'une capacité : la
+ * table stocke un identifiant et un statut, jamais la note ni les dépendances, qui se déduisent
+ * des douze services et changent avec eux. Plutôt que de recalculer ces douze appels amont à
+ * chaque ouverture de /status — ce que faisait la route, quatre fois par minute et par onglet —
+ * le cron garde son propre résultat sous la main. Il l'a déjà payé.
+ *
+ * En mémoire, donc perdu au redémarrage : c'est voulu, et c'est exactement pourquoi la route a
+ * un repli. Une capacité rendue depuis une base après un redéploiement dirait l'état du
+ * conteneur d'avant.
+ *
+ * Sur `globalThis` et pas dans une variable de module, parce que l'écrivain et le lecteur
+ * n'entrent pas par la même porte : le cron démarre depuis `instrumentation.ts`, la page d'état
+ * lit depuis une route d'API, et ce sont deux points d'entrée que le bundler compile séparément.
+ * Rien ne garantit qu'ils partagent l'instance de ce module — et si l'écriture atterrissait dans
+ * une copie que la route ne lit pas, le repli masquerait la panne : la page continuerait de
+ * répondre, en repayant à chaque fois le prix qu'on cherche précisément à ne plus payer.
+ */
+const SNAPSHOT_KEY = Symbol.for("cine-app.statusSnapshot");
+type SnapshotHolder = { [SNAPSHOT_KEY]?: StatusSnapshot | null };
+
+export function getLastStatusSnapshot(): StatusSnapshot | null {
+  return (globalThis as SnapshotHolder)[SNAPSHOT_KEY] ?? null;
+}
+
 export async function runStatusPoll(): Promise<void> {
   try {
     const services = await runAllServiceChecks();
@@ -29,6 +62,7 @@ export async function runStatusPoll(): Promise<void> {
     );
 
     const capabilities = computeCapabilities(services);
+    (globalThis as SnapshotHolder)[SNAPSHOT_KEY] = { capabilities, checkedAt };
     statusHistoryDb.recordCapabilityChecks(
       capabilities.map((c) => ({ id: c.id, status: c.status })),
       checkedAt

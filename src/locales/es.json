@@ -359,6 +359,7 @@
       "down": "Crítico — algunos servicios están fuera de línea"
     },
     "updatedAt": "Actualizado a las {time}",
+    "lastCheckAt": "Última comprobación a las {time}",
     "latency": "Latencia",
     "version": "Versión",
     "status": "Estado",

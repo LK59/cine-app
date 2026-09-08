@@ -359,6 +359,7 @@
       "down": "Kritisch — Dienste sind offline"
     },
     "updatedAt": "Aktualisiert um {time}",
+    "lastCheckAt": "Letzte Prüfung um {time}",
     "latency": "Latenz",
     "version": "Version",
     "status": "Status",

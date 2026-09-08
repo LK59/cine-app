@@ -47,6 +47,8 @@ interface CapabilityResult {
 interface PublicStatusResponse {
   overall: CapStatus;
   checkedAt: string;
+  /** Vrai quand les services ont été interrogés pour cette réponse même, faux quand elle vient du dernier relevé. */
+  live: boolean;
   capabilities: CapabilityResult[];
 }
 
@@ -185,19 +187,44 @@ function CapabilityCard({ cap }: { cap: CapabilityResult }) {
 export function CapabilitySection() {
   const t = useT();
   // `INTERVALS.FAST` (15 s) est un rythme de file d'attente Jellyseerr, pas d'une page d'état :
-  // derrière cette route il y a douze appels amont et ~330 ms de SQLite synchrone, et l'état
-  // qu'elle rapporte ne bouge qu'au rythme du cron. Un onglet laissé ouvert bloquait la boucle
-  // d'événements 2,2 % du temps — sur la page qu'on ouvre justement quand l'application rame.
-  // Le bouton de rafraîchissement reste là pour qui veut l'instant présent.
+  // l'état que cette route rapporte ne bouge qu'au rythme du relevé, une fois par minute. Un
+  // onglet laissé ouvert bloquait la boucle d'événements 2,2 % du temps — sur la page qu'on ouvre
+  // justement quand l'application rame.
   const { data, isLoading, mutate, isValidating } = useSWR<PublicStatusResponse>(
     "/api/status/public",
     fetcher,
     { refreshInterval: INTERVALS.SLOW }
   );
 
+  /**
+   * Le seul chemin qui interroge encore les services en direct.
+   *
+   * La réponse ordinaire vient du dernier relevé : elle est gratuite, mais elle a jusqu'à une
+   * minute de retard. Ça ne suffit pas quand on regarde cette page pendant qu'on redémarre un
+   * service — d'où ce bouton, qui demande explicitement le recalcul complet et remplace la donnée
+   * affichée par son résultat. `revalidate: false` : le résultat forcé est plus frais que ce que
+   * la route rendrait juste après, la revalidation automatique le remplacerait par plus vieux.
+   */
+  const [forcing, setForcing] = useState(false);
+  const forceRefresh = async () => {
+    setForcing(true);
+    try {
+      await mutate(fetcher("/api/status/public?refresh=1"), { revalidate: false });
+    } catch {
+      // Le message d'erreur d'un rafraîchissement raté n'apprendrait rien de plus que la page
+      // elle-même, qui garde la donnée précédente et sa date.
+    } finally {
+      setForcing(false);
+    }
+  };
+  const busy = isValidating || forcing;
+
   const overall = data?.overall ?? "ok";
   const capabilities = data?.capabilities ?? [];
   const checkedAt = data?.checkedAt ? fmtTime(data.checkedAt) : null;
+  // La date affichée est celle du relevé, pas celle de la requête : une page servie depuis le
+  // dernier passage qui dirait « mis à jour à l'instant » mentirait par omission.
+  const freshnessKey = data?.live ? 'health.updatedAt' : 'health.lastCheckAt';
 
   const OVERALL_LABEL = {
     ok: t('health.overall.ok'),
@@ -219,13 +246,13 @@ export function CapabilitySection() {
               <span className="text-sm font-medium">{OVERALL_LABEL[overall]}</span>
             </div>
             <div className="flex items-center gap-3">
-              {checkedAt && <span className="text-[11px] opacity-60">{t('health.updatedAt', { time: checkedAt })}</span>}
+              {checkedAt && <span className="text-[11px] opacity-60">{t(freshnessKey, { time: checkedAt })}</span>}
               <button
-                onClick={() => mutate()}
-                disabled={isValidating}
+                onClick={forceRefresh}
+                disabled={busy}
                 className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs border border-current/20 opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
               >
-                <RefreshCw size={11} className={isValidating ? "animate-spin" : ""} />
+                <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
                 {t('common.refresh')}
               </button>
             </div>

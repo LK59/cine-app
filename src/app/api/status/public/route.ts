@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAllServiceChecks, computeCapabilities } from "@/lib/healthChecks";
-import { statusHistoryDb } from "@/lib/db";
-import { analyzeHistory } from "@/lib/statusHistory";
-import { POLL_INTERVAL_MS } from "@/lib/statusCron";
+import { buildStatusPayload } from "@/lib/statusPayload";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { getClientIp } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-const SEVEN_DAYS_MS = 7 * 24 * 3600_000;
-
 /**
  * Le seul point d'entrée public qui coûte cher, donc le seul qui a besoin d'une borne.
  *
- * Une réponse, c'est douze appels aux services amont et surtout ~330 ms de SQLite synchrone —
- * better-sqlite3 tient la boucle d'événements pendant toute la lecture des sept jours
- * d'historique. Trois requêtes par seconde depuis l'extérieur suffisent donc à ce que plus rien
- * ne soit servi à personne, pas même un segment de film. La route doit rester publique (elle
- * existe pour répondre le jour où plus rien ne répond) : ce qui manquait, c'est la borne.
+ * Une réponse en régime normal ne coûte plus rien — l'état vient du dernier relevé du cron et
+ * l'historique d'un cache renouvelé au même rythme (`statusPayload.ts`). Mais `?refresh=1`, et le
+ * repli quand le cron n'a pas tourné, repaient le prix fort : douze appels aux services amont et
+ * ~330 ms de SQLite synchrone, pendant lesquelles better-sqlite3 tient la boucle d'événements et
+ * plus rien n'est servi à personne, pas même un segment de film. Ce chemin-là reste atteignable
+ * par n'importe qui, sans session : la route doit rester publique (elle existe pour répondre le
+ * jour où plus rien ne répond), donc c'est la borne qui le contient.
  *
  * 30 par minute et par IP. Le besoin réel d'un onglet est de 0,5/min — `CapabilityStatus`
  * interroge à `INTERVALS.SLOW` et le `SWRConfig` global coupe `revalidateOnFocus` — donc soixante
@@ -53,33 +50,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "rate limited" }, { status: 429 });
   }
 
-  const services = await runAllServiceChecks();
-  const capabilities = computeCapabilities(services);
-
-  const since = Date.now() - SEVEN_DAYS_MS;
-  const payload = capabilities.map((cap) => {
-    const history = statusHistoryDb.getCapabilityHistory(cap.id, since);
-    const { uptimePct, incidents } = analyzeHistory(history, POLL_INTERVAL_MS);
-    return {
-      id: cap.id,
-      status: cap.status,
-      note: cap.note,
-      dependsOn: cap.dependsOn,
-      softDependsOn: cap.softDependsOn,
-      uptime7d: uptimePct,
-      incidents7d: incidents.slice(0, 10),
-    };
-  });
-
-  const overall = payload.every((c) => c.status === "ok")
-    ? "ok"
-    : payload.some((c) => c.status === "down")
-      ? "down"
-      : "degraded";
-
-  return NextResponse.json({
-    overall,
-    checkedAt: new Date().toISOString(),
-    capabilities: payload,
-  });
+  // `?refresh=1` = le bouton « rafraîchir maintenant ». Tout le reste lit le dernier relevé.
+  return NextResponse.json(await buildStatusPayload(req.nextUrl.searchParams.get("refresh") === "1"));
 }
