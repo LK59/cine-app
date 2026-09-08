@@ -205,6 +205,16 @@ function ActivePlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<import("hls.js").default | null>(null);
+  // Quatre appelants lancent startPlayback sans jamais attendre le précédent (changement de
+  // piste, « Réessayer », montage, échelon de repli audio), et la fonction traverse deux await.
+  // Deux appels qui se chevauchent créaient donc chacun leur Hls : le premier arrivé se faisait
+  // écraser dans hlsRef sans jamais recevoir destroy(), et continuait à télécharger ses
+  // fragments — deux flux HLS en parallèle pour un seul film, sur un appareil qui vient déjà
+  // d'échouer une fois. Même modèle que le `cancelled` du lecteur natif
+  // (ExperimentalPlayerHost), en compteur parce qu'il y a ici plusieurs départs successifs et
+  // pas un effet unique à annuler : chaque appel prend un numéro strictement plus grand, et un
+  // appel qui ne porte plus le numéro courant abandonne au lieu de poser ses effets de bord.
+  const playbackGeneration = useRef(0);
   const networkRetryCount = useRef(0);
   const mediaRetryCount = useRef(0);
   const networkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -348,6 +358,11 @@ function ActivePlayer({
       let video = videoRef.current;
       if (!video) return;
 
+      // Incrémenté à chaque appel, sans exception — l'échelon de repli audio rejoue
+      // délibérément la requête identique (rung 0) et doit donc lui aussi prendre un numéro
+      // neuf, sinon il se reconnaîtrait comme périmé et s'annulerait lui-même.
+      const generation = ++playbackGeneration.current;
+
       // Dropped before the request that will replace it. Advancing to the next episode keeps
       // this component mounted, so the previous episode's name stayed across the top until the
       // server answered — and what the caller passed, which is already the right episode, was
@@ -392,6 +407,7 @@ function ActivePlayer({
       // remount above; hls.js manages its own MediaSource and needs nothing.)
 
       const codecSupport = await detectCodecSupport();
+      if (generation !== playbackGeneration.current) return;
 
       // Safari and iOS play HLS natively and never touch hls.js; everything else needs it, and
       // it is a 376 KB chunk. Awaiting that download only at its point of use — after
@@ -424,6 +440,9 @@ function ActivePlayer({
           nativeHls,
         }),
       });
+      // Avant la lecture du corps, donc avant setNeedsReauth / setError : l'échec d'une
+      // négociation déjà remplacée n'a rien à afficher, c'est la nouvelle qui décide.
+      if (generation !== playbackGeneration.current) return;
       if (res.status === 401) {
         const body = await res.json().catch(() => null);
         if (body?.code === "jellyfin_reauth_required") {
@@ -576,6 +595,13 @@ function ActivePlayer({
         maxBufferLength: 30,
         maxMaxBufferLength: 90,
       });
+      // Dernier recours : l'import de hls.js est lui aussi un await, et l'instance vient d'être
+      // construite. Sans ce garde elle s'écrirait par-dessus celle d'un appel plus récent, qui
+      // resterait vivante et sans propriétaire.
+      if (generation !== playbackGeneration.current) {
+        hls.destroy();
+        return;
+      }
       hlsRef.current = hls;
 
       // A successfully buffered fragment means the stream is healthy again — reset both
