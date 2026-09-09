@@ -261,7 +261,15 @@ installed PWA), and installs to the Home Screen as a PWA with Web Push, Apple We
 Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr install would otherwise be seven
 browser tabs.
 
-<img src="docs/screenshots/dashboard-1.png" height="210"> <img src="docs/screenshots/dashboard-2.png" height="210"> <img src="docs/screenshots/dashboard-mobile.PNG" height="210">
+<!-- CAPTURE : gestion-home-1.png + gestion-home-2.png + gestion-home-mobile.png
+     Three shots of the dashboard home, to sit side by side:
+       1. the top of the page — the rotating hero with its title logo and progress segments
+       2. further down — Continue watching and Recently added, with the IMDb badges visible
+       3. the same page on a phone, sidebar closed
+     Desktop shots at the same width so the two crop to the same height.
+     Then uncomment:
+<img src="docs/screenshots/gestion-home-1.png" height="210"> <img src="docs/screenshots/gestion-home-2.png" height="210"> <img src="docs/screenshots/gestion-home-mobile.png" height="210">
+-->
 
 ## Dashboard home
 
@@ -280,17 +288,41 @@ browser tabs.
 - **Movie and series detail pages** — poster, metadata, cast carousel, active downloads, file info,
   IMDb / RT / Metacritic ratings
 
-<img src="docs/screenshots/fiche-film-1.png" height="210"> <img src="docs/screenshots/fiche-film-2.png" height="210"> <img src="docs/screenshots/fiche-film-mobile.PNG" height="210">
+<!-- CAPTURE : gestion-movie-1.png + gestion-movie-2.png + gestion-movie-mobile.png
+     A movie detail page, three shots:
+       1. the top — poster, metadata, ratings row (pick a title MDBList actually has notes for)
+       2. further down — cast carousel and file info, ideally with a download in progress
+       3. the same page on a phone
+     Same title in all three.
+     Then uncomment:
+<img src="docs/screenshots/gestion-movie-1.png" height="210"> <img src="docs/screenshots/gestion-movie-2.png" height="210"> <img src="docs/screenshots/gestion-movie-mobile.png" height="210">
+-->
 
 - **Watchlist** — add any title from TMDB, classify with 5 statuses (À voir, Favoris, Vus, À
   demander, Abandonnés), personal notes, search and sort, IMDb rating badge on every card
 
-<img src="docs/screenshots/watchlist-1.png" height="260"> <img src="docs/screenshots/watchlist-mobile.PNG" height="260">
+<!-- CAPTURE : gestion-watchlist.png + gestion-watchlist-mobile.png
+     The watchlist grid, desktop and phone. Frame a card mid-hover on the desktop shot so the
+     overlay with the 5 status buttons is visible, and try to have both a "Dispo" (green) and an
+     "Attente" (amber) badge in the same view.
+     On the phone shot, the ActionSheet half-open is the more telling frame.
+     Then uncomment:
+<img src="docs/screenshots/gestion-watchlist.png" height="260"> <img src="docs/screenshots/gestion-watchlist-mobile.png" height="260">
+-->
 
 - **Natural language search** — `film de guerre de Christopher Nolan`, `série avec Clara Galle`,
   `film comédie avec Ryan Gosling`
 
-<img src="docs/screenshots/recherche-naturelle-1.png" height="160"> <img src="docs/screenshots/recherche-naturelle-2.png" height="160"> <img src="docs/screenshots/recherche-naturelle-3.png" height="160"> <img src="docs/screenshots/recherche-mobile.PNG" height="160">
+<!-- CAPTURE : gestion-search-1.png + gestion-search-2.png + gestion-search-3.png + gestion-search-mobile.png
+     Four shots of the global search, one per kind of query, so the point lands:
+       1. a plain title
+       2. a natural-language query naming a director
+       3. a natural-language query naming an actor
+       4. the same search on a phone
+     Keep the typed query legible in each — it is the subject of the shot.
+     Then uncomment:
+<img src="docs/screenshots/gestion-search-1.png" height="160"> <img src="docs/screenshots/gestion-search-2.png" height="160"> <img src="docs/screenshots/gestion-search-3.png" height="160"> <img src="docs/screenshots/gestion-search-mobile.png" height="160">
+-->
 
 - **Discover** — trending movies and series with genre filters, TMDB search, a *Pour vous* tab
   based on Jellyfin play history
@@ -338,7 +370,12 @@ All media grids (Watchlist, Discover, Recommendations) share the same card:
 - Library and person statistics across movies and series
 - Storage breakdown (movies / series / seeds / other) and a disk saturation forecast
 
-<img src="docs/screenshots/menu-stats-mobile.PNG" height="320">
+<!-- CAPTURE : gestion-stats-mobile.png
+     The statistics page on a phone: top actors or directors ranked, or the storage breakdown.
+     Whichever of the two reads best at that width.
+     Then uncomment:
+<img src="docs/screenshots/gestion-stats-mobile.png" height="320">
+-->
 
 ## Ratings
 
@@ -353,19 +390,38 @@ All media grids (Watchlist, Discover, Recommendations) share the same card:
 
 - Service health dashboard
 
-<img src="docs/screenshots/sante-systeme-1.png" width="100%">
+<!-- CAPTURE : gestion-health.png
+     The service health page, full width, desktop. Ideally with a mix of states — everything
+     green is less informative than one service reporting its own error.
+     Redact any hostname or port you would rather not publish.
+     Then uncomment:
+<img src="docs/screenshots/gestion-health.png" width="100%">
+-->
 
 - Bazarr subtitle management per episode, NFO viewer, trailer modal, collection (saga) modal
 - Actor / person modal with filmography
 
-<img src="docs/screenshots/fiche-acteur-1.png" height="260"> <img src="docs/screenshots/fiche-acteur-mobile.png" height="260">
-<img src="docs/screenshots/fiche-acteur-recherche-1.png" width="49%"> <img src="docs/screenshots/fiche-acteur.recherche-2.png" width="49%">
+<!-- CAPTURE : gestion-person.png + gestion-person-mobile.png + gestion-person-search-1.png + gestion-person-search-2.png
+     The person modal, four shots:
+       1. desktop — biography and filmography, with the "x of y available" count visible
+       2. the same on a phone
+       3. and 4. reaching a person from the search, then the filmography it opens
+     Pick someone with a real filmography, several titles of which are in the library.
+     Then uncomment:
+<img src="docs/screenshots/gestion-person.png" height="260"> <img src="docs/screenshots/gestion-person-mobile.png" height="260">
+<img src="docs/screenshots/gestion-person-search-1.png" width="49%"> <img src="docs/screenshots/gestion-person-search-2.png" width="49%">
+-->
 
 - Installable PWA, Web Push including iOS Safari / Apple Web Push
 - Four interface languages — French, English, Spanish, German, the video player included
 - Mobile-first navigation with haptic feedback (Android/Chromium only)
 
-<img src="docs/screenshots/menu-mobile.PNG" height="320">
+<!-- CAPTURE : gestion-mobile-nav.png
+     The mobile navigation drawer open over a page, showing the full list of sections.
+     Phone, portrait.
+     Then uncomment:
+<img src="docs/screenshots/gestion-mobile-nav.png" height="320">
+-->
 
 ### Optional: the Clara Galle gallery page
 
@@ -374,8 +430,14 @@ Disabled by default; it needs `CLARA_GALLERY_ENABLED=true` and a photo folder mo
 containing JPG/PNG/WebP files and a `clarabanner.jpg` used as the page banner. See
 [DEPLOYMENT.md](DEPLOYMENT.md#12-optional-features).
 
+<!-- CAPTURE : clara-1.png … clara-4.png
+     Four shots of the gallery page: the banner at the top, the biography, the photo grid, and
+     one photo open full-screen. Two by two.
+     Optional — this page only exists when the feature is enabled.
+     Then uncomment:
 <img src="docs/screenshots/clara-1.png" width="49%"> <img src="docs/screenshots/clara-2.png" width="49%">
 <img src="docs/screenshots/clara-3.png" width="49%"> <img src="docs/screenshots/clara-4.png" width="49%">
+-->
 
 ---
 
