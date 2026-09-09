@@ -105,8 +105,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   // Gated on the same per-user flag the UI toggles, checked server-side. It only ever refuses
   // now: this is the ordinary path, and the flag exists for the account that has asked to be
   // sent back to the server-side player instead.
-  const prefs = userPrefsDb.getLegacyPlayer(session.jfId ?? session.u);
-  if (prefs.enabled) return NextResponse.json({ error: "Lecteur legacy demandé pour ce compte" }, { status: 403 });
+  //
+  // Honoured only where that player exists. With PLAYER_SERVER_FALLBACK off there is nothing to
+  // send anyone back to, so a preference left over from before — or set through the API — would
+  // refuse the only playback this install has. The interface stops offering the option in that
+  // case; this is the same rule, enforced where it counts.
+  if (config.player.serverFallback) {
+    const prefs = userPrefsDb.getLegacyPlayer(session.jfId ?? session.u);
+    if (prefs.enabled) return NextResponse.json({ error: "Lecteur legacy demandé pour ce compte" }, { status: 403 });
+  }
 
   // Fetched together: the timestamps 404 for films and for episodes nobody has analysed, which
   // simply means no skip-intro and no next-up prompt for this one.

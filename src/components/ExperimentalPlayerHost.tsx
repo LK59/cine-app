@@ -20,6 +20,7 @@ import { describePath } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
+import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
@@ -223,13 +224,39 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     onFallbackRef.current = onFallback;
   }, [onFallback]);
+  // Read through a ref for the same reason as the callback above: `fallToStable` must not change
+  // identity when the answer arrives, or the pipeline is torn down and rebuilt on the spot.
+  const serverFallback = usePlayerServerFallback();
+  const serverFallbackRef = useRef(serverFallback);
+  useEffect(() => {
+    serverFallbackRef.current = serverFallback;
+  }, [serverFallback]);
+  /**
+   * Renoncer — et ce que « renoncer » veut dire dépend de l'installation.
+   *
+   * Avec un lecteur serveur, c'est un repli : le fichier lui est confié, le spectateur voit son
+   * film et n'a rien à faire. Sans lecteur serveur, il n'y a personne à qui le confier : la
+   * raison est toute la réponse, et elle s'affiche. Dans les deux cas elle est écrite au journal
+   * d'abord — un renoncement dont personne n'est averti est un renoncement que personne ne
+   * corrige, et sur un serveur à dix-huit comptes c'est le seul endroit où il se verra.
+   *
+   * Le `undefined` de l'attente compte comme « il y en a un » : le seul appelant qui puisse
+   * renoncer si tôt est le refus du sélecteur de chemin, et se tromper dans ce sens-là donne un
+   * film qui joue par le serveur au lieu d'une erreur — jamais l'inverse.
+   */
   const fallToStable = useCallback((reason: string) => {
     if (steppedAside.current) return;
     steppedAside.current = true;
+    const file = describeFileRef.current();
+    const path = pathRef.current ?? "non décidé";
+    if (serverFallbackRef.current === false) {
+      trace(`abandon : aucun lecteur serveur sur cette installation — ${reason}`);
+      reportPlayback("error", { ...file, reason, path });
+      setRuntimeError(reason);
+      return;
+    }
     trace(`repli : passage au lecteur stable — ${reason}`);
-    // Written down before anything else. A step down nobody is told about is a step down nobody
-    // can fix, and on a server with eighteen accounts this is the only place it will be noticed.
-    reportPlayback("fallback", { ...describeFileRef.current(), reason, path: pathRef.current ?? "non décidé" });
+    reportPlayback("fallback", { ...file, reason, path });
     onFallbackRef.current(reason);
   }, []);
   /**
@@ -1342,14 +1369,27 @@ export function ExperimentalPlayerHost({
       {error && !networkLost && !isMini && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
           <AlertTriangle className="text-amber-400" size={32} />
-          <p className="text-base font-medium text-white">{t("player.experimental.title")}</p>
+          {/* Deux écrans, un seul gabarit. Là où un lecteur serveur existe, cet écran est une
+              proposition — « celui-ci n'y arrive pas, l'autre peut-être » — et le titre dit
+              lequel des deux a renoncé. Là où il n'en existe pas, c'est une fin de course : la
+              phrase ne doit désigner aucun lecteur, puisqu'il n'y a pas de second à essayer, et
+              le bouton qui y menait n'a plus de destination. */}
+          <p className="text-base font-medium text-white">
+            {serverFallback === false ? t("player.unplayable") : t("player.experimental.title")}
+          </p>
           <p className="max-w-lg text-sm leading-6 text-slate-300">{error}</p>
           <ExperimentalPlayerReport input={report} />
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-            <button type="button" onClick={() => onFallback(error ?? "demandé par le spectateur")} className="btn-primary">
-              {t("player.experimental.switchToStable")}
-            </button>
-            <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
+            {serverFallback !== false && (
+              <button type="button" onClick={() => onFallback(error ?? "demandé par le spectateur")} className="btn-primary">
+                {t("player.experimental.switchToStable")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleClose}
+              className={serverFallback === false ? "btn-primary" : "btn btn-ghost px-4 py-2"}
+            >
               {t("common.close")}
             </button>
           </div>

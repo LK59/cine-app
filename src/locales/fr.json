@@ -1444,7 +1444,8 @@
       "finished": "Terminé",
       "replay": "Revoir",
       "done": "Retour"
-    }
+    },
+    "unplayable": "Ce fichier ne peut pas être lu dans ce navigateur."
   },
   "cinema": {
     "standardMode": "Mode standard",

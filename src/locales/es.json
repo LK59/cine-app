@@ -1444,7 +1444,8 @@
       "finished": "Terminado",
       "replay": "Volver a ver",
       "done": "Volver"
-    }
+    },
+    "unplayable": "Este archivo no se puede reproducir en este navegador."
   },
   "cinema": {
     "standardMode": "Modo estándar",

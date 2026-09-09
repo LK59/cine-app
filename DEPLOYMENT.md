@@ -186,7 +186,8 @@ leave empty simply disables the feature that needed it.
 | `OMDB_API_KEY` | IMDb rating badges on cards. |
 | `MDBLIST_API_KEY` | IMDb / Rotten Tomatoes / Metacritic / Letterboxd / Trakt on detail pages. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push notifications — see [step 12](#12-optional-features). |
-| `PLAYER_ENABLED` | In-browser playback. Default `false` — see [step 12](#12-optional-features). |
+| `PLAYER_ENABLED` | In-app playback. Default `true` — see [step 12](#12-optional-features). |
+| `PLAYER_SERVER_FALLBACK` | Whether a file the browser cannot play is handed to Jellyfin. Default `true`; `false` guarantees no playback can start a transcode. |
 | `GUEST_USER` / `GUEST_PASSWORD` | A read-only shared account. Leaving `GUEST_PASSWORD` empty disables it entirely. |
 | `CLARA_GALLERY_ENABLED` | An optional enriched person page. Needs a photo folder mounted; off by default. |
 
@@ -499,24 +500,36 @@ else. Restart, then in the app: **Account → Notifications**, enable them for t
 the test button. On iOS, install to the Home Screen *first*, then enable from inside the installed
 app.
 
-### In-app playback
+### In-app playback, and what it costs
+
+In-app playback is **on by default** — films and episodes play inside Cine App instead of
+redirecting to Jellyfin's web client, with resume, track selection, chapters, speed, trickplay
+previews, skip-intro and next-episode advance.
 
 ```env
-PLAYER_ENABLED=true
+PLAYER_ENABLED=true            # the default; false removes in-app playback entirely
+PLAYER_SERVER_FALLBACK=true    # the default; see below
 ```
 
-Plays films and episodes inside Cine App instead of redirecting to Jellyfin's web client, with
-resume, track selection, chapters, speed, trickplay previews, skip-intro and next-episode advance.
+The ordinary path costs the server nothing beyond serving bytes: the browser fetches the file over
+byte ranges, repackages it in the tab and hands it to a native `<video>` — hardware decoding,
+native HDR, no transcode. That is why the flag defaults to on; it was opt-in when every play meant
+a Jellyfin transcode, and that is no longer what happens.
 
-It is **off by default because of what it can cost the server**. Playback negotiates
-DirectPlay / DirectStream / Transcode the way Jellyfin's own web client does; a genuinely
-incompatible codec triggers a real transcode, and how often that happens depends entirely on your
-library's formats and the browsers people watch on. Enable it if your Jellyfin server has hardware
-transcoding (Quick Sync, NVENC, VAAPI) or spare CPU.
+**The one case that can cost CPU** is the safety net. A file neither the native path nor WebCodecs
+can carry is handed to Jellyfin, which negotiates DirectPlay / DirectStream / Transcode; only that
+last one is real work, and how often it happens depends on your library's formats and the browsers
+people watch on.
 
-There is also a second, opt-in playback path that asks the server for nothing beyond the file
-itself — the browser repackages the `.mkv` in the tab and hands it to a native `<video>`. See
-[DOC-TECH.md](DOC-TECH.md).
+Set `PLAYER_SERVER_FALLBACK=false` for a hard guarantee that **no playback can ever start a
+transcode**. Nothing is then handed to Jellyfin: a file the browser cannot carry ends on a plain
+playback error naming the reason, and the per-account "previous player" option — which selects the
+same server-side player — is neither offered nor honoured. Reach for it if your Jellyfin server has
+no hardware transcoding and no CPU to spare; leave it on otherwise, since it is what makes every
+file playable.
+
+The playback log (`data/logs/player.log`) records every handover with its reason, so you can see
+what your library actually needs before deciding. See [DOC-TECH.md](DOC-TECH.md).
 
 ### Media statistics
 

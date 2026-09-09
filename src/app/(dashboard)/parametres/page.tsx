@@ -16,6 +16,7 @@ import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { hardRefreshApp } from "@/lib/pwaRefresh";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
+import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 
 type TestState = "idle" | "sending" | "sent" | "error";
 
@@ -469,8 +470,13 @@ function PwaUpdateCard() {
 // The opt-out, back to playback through the server. Off by default, and the server enforces
 // that independently of this UI — the route that serves a file to the native player refuses an
 // account that has asked to be sent back.
+//
+// Renders nothing where that player does not exist (PLAYER_SERVER_FALLBACK off): a switch whose
+// two positions do the same thing is worse than no switch. The route applies the same rule, so
+// hiding it here is presentation, not enforcement.
 function LegacyPlayerSection() {
   const t = useT();
+  const serverFallback = usePlayerServerFallback();
   const { data, mutate } = useSWR<{ legacyPlayer?: { enabled: boolean } }>("/api/user/preferences", fetcher);
   const enabled = data?.legacyPlayer?.enabled ?? false;
 
@@ -488,6 +494,8 @@ function LegacyPlayerSection() {
       { optimisticData: { legacyPlayer: { enabled: next } }, revalidate: false }
     );
   }
+
+  if (serverFallback === false) return null;
 
   return (
     <section>

@@ -40,10 +40,23 @@ export const config = {
     apiKey: optional("JELLYFIN_API_KEY"),
   },
   player: {
-    // In-app playback always forces Jellyfin to transcode (see jellyfin.ts) —
-    // real CPU/GPU cost on the server for every play, unlike the plain
-    // redirect-to-Jellyfin-web fallback. Opt-in, off by default.
-    enabled: optional("PLAYER_ENABLED", "false") === "true",
+    // In-app playback. On by default since the native player landed: it reads the file over byte
+    // ranges and repackages it in the browser, so the ordinary playback costs the server nothing
+    // beyond serving bytes. The flag was opt-in while every play meant a Jellyfin transcode, and
+    // that is no longer what happens — see DOC-TECH.md.
+    enabled: optional("PLAYER_ENABLED", "true") === "true",
+    // Whether the server-side player exists at all on this install.
+    //
+    // True (default): a file the browser cannot handle is handed to Jellyfin, which negotiates
+    // and, if it must, transcodes — the historical behaviour, and the safety net that makes any
+    // file playable. The per-account "legacy player" option is part of this: it is the same
+    // server-side player, chosen deliberately.
+    //
+    // False: nothing is ever handed to Jellyfin. A file neither the native path nor WebCodecs
+    // can carry ends on a plain playback error naming the reason, and the per-account option is
+    // neither offered nor honoured. For an operator who wants a hard guarantee that no playback
+    // can ever start a transcode.
+    serverFallback: optional("PLAYER_SERVER_FALLBACK", "true") === "true",
   },
   jellyseerr: {
     url: optional("JELLYSEERR_URL", "http://jellyseerr:5055"),

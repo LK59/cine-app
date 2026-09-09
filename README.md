@@ -197,16 +197,20 @@ that keeps playing while you browse. The player carries resume, audio and subtit
 selection with size and manual offset, chapters, playback speed, trickplay scrubbing previews,
 skip-intro and automatic next-episode advance, AirPlay and Chromecast.
 
-There are two playback paths, and the difference is what the server has to do:
+In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now works:
 
-- **The standard player** negotiates DirectPlay / DirectStream / Transcode the way Jellyfin's own
-  web client does. A "Playback info" panel says which of the three is running, why, and at what
-  bitrate. Off by default (`PLAYER_ENABLED`), because a transcode is real CPU on your server.
-- **The native player** (opt-in) asks the server for nothing beyond the file itself. The browser
-  fetches the `.mkv` by byte ranges, repackages it into fragmented MP4 in the tab, and hands it to
-  a real `<video>` — hardware decoding, native HDR, no transcoding at all. On this library it
-  plays 4K Dolby Vision HEVC with E-AC3 Atmos on an iPhone with nothing running on the server.
-  Where the codecs make that impossible it decodes with WebCodecs onto a canvas instead.
+- **The native player** is the ordinary path. It asks the server for nothing beyond the file
+  itself: the browser fetches the `.mkv` by byte ranges, repackages it into fragmented MP4 in the
+  tab, and hands it to a real `<video>` — hardware decoding, native HDR, no transcoding at all. On
+  this library it plays 4K Dolby Vision HEVC with E-AC3 Atmos on an iPhone with nothing running on
+  the server. Where the codecs make that impossible it decodes with WebCodecs onto a canvas
+  instead.
+- **The server-side player** is the safety net underneath. A file neither browser path can carry is
+  handed to Jellyfin, which negotiates DirectPlay / DirectStream / Transcode the way its own web
+  client does; a "Playback info" panel says which of the three is running, why, and at what
+  bitrate. This is the only case where a playback can cost your server CPU, which is why it can be
+  turned off entirely (`PLAYER_SERVER_FALLBACK=false`) — a file the browser cannot play then ends
+  on a plain error naming the reason, and nothing ever starts a transcode.
 
 **[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the three paths, how the remuxer
 reconstructs decode times, how random access points are verified, how audio is delivered or

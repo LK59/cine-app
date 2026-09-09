@@ -1444,7 +1444,8 @@
       "finished": "Beendet",
       "replay": "Noch einmal",
       "done": "Zurück"
-    }
+    },
+    "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden."
   },
   "cinema": {
     "standardMode": "Standardmodus",

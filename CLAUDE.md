@@ -87,7 +87,8 @@ stays drawn under the one above it.
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`.
 Three paths, chosen per file — remux → native `<video>` (normal), WebCodecs → canvas (fallback),
 direct play. `PlayerHost` chooses between the native player and the legacy server-transcoding one;
-`fallToStable` hands over rather than closing.
+`fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
+is no server-side player to hand to and the same call surfaces a clean playback error instead.
 
 ## Conventions
 

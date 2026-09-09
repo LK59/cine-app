@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/config", () => ({
   config: {
     app: { language: "fr" },
-    player: { enabled: true },
+    player: { enabled: true, serverFallback: false },
     // Une installation où seuls Radarr et TMDB sont branchés : de quoi vérifier que la réponse
     // distingue ce qui l'est de ce qui ne l'est pas.
     radarr: { apiKey: "abc" },
@@ -36,6 +36,8 @@ describe("GET /api/config/public", () => {
     expect(body).toEqual({
       defaultLang: "fr",
       playerEnabled: true,
+      // Lu avant que le moindre lecteur soit monté : c'est lui qui dit lequel des deux existe.
+      playerServerFallback: false,
       configured: {
         radarr: true,
         sonarr: false,

@@ -13,6 +13,10 @@ export async function GET() {
   return NextResponse.json({
     defaultLang: config.app.language,
     playerEnabled: config.player.enabled,
+    // Whether there is a server-side player to hand a difficult file to. The interface needs it
+    // before it mounts a player at all — which of the two it mounts depends on it — and before it
+    // offers the account option that selects it.
+    playerServerFallback: config.player.serverFallback,
     configured: configuredServices(config),
   });
 }

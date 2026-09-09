@@ -12,6 +12,7 @@ import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
+import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeJellyfinPlayback } from "@/lib/playbackPanel";
@@ -103,6 +104,9 @@ export function PlayerHost() {
   const playback = usePlayback();
   const { session, mode } = playback;
   const { legacy } = useLegacyPlayer();
+  // Whether this install has a server-side player at all. When it does not, nothing below can
+  // hand a file to Jellyfin: neither the account option, nor a refusal by the native path.
+  const serverFallback = usePlayerServerFallback();
   // Set by the experimental player's own "switch to the stable player" button. Deliberately not
   // persisted: it applies to this session only, so the option in settings stays the source of
   // truth and the next playback tries the experimental path again — which is what makes it
@@ -135,9 +139,13 @@ export function PlayerHost() {
   // n'appartient à aucun montage, qui la porte. Une version qui la retenait dans l'instance du
   // hook (clé nulle + `keepPreviousData`) a tué le film en production. Couvert par
   // `useLegacyPlayer-public-path.test.tsx`, qui remonte le hook au lieu de le re-rendre.
-  if (legacy === undefined) return null;
+  if (legacy === undefined || serverFallback === undefined) return null;
 
-  const useNative = !legacy && !handedOver.includes(session.itemId);
+  // Sans lecteur serveur, il n'y a pas d'aiguillage : le choix du compte comme le repli
+  // automatique désignent tous deux un lecteur qui n'existe pas sur cette installation. Un
+  // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
+  // transcodage — c'est tout l'objet du réglage.
+  const useNative = !serverFallback || (!legacy && !handedOver.includes(session.itemId));
   if (useNative) {
     return (
       <ExperimentalPlayerHost

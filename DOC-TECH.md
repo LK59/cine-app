@@ -43,7 +43,17 @@ the legacy player in its settings. `PlayerHost` owns that switch, and `fallToSta
 rather than closing.
 
 The design goal is the cost model. A server transcode is expensive, starts slowly and degrades the
-image; here the file leaves the disk as it is.
+image; here the file leaves the disk as it is. That is why in-app playback (`PLAYER_ENABLED`) is on
+by default: the ordinary path costs the server nothing beyond serving bytes.
+
+**The safety net is optional.** `PLAYER_SERVER_FALLBACK=false` removes the server-side player from
+the install: `PlayerHost` then mounts this one unconditionally, the per-account legacy option is
+neither offered nor honoured (enforced in `/api/jellyfin/direct/[itemId]`, not only hidden), and
+`fallToStable` stops handing over — it writes the reason to the log as an `error` and puts it on
+screen. Giving up then means a plain playback error rather than a transcode. While the flag's
+answer is still in flight it counts as "there is one": the only caller that can give up that early
+is the path selector's refusal, and being wrong in that direction plays the film through the
+server instead of showing an error, never the reverse.
 
 ---
 

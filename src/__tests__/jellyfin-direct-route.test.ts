@@ -4,7 +4,17 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerifySessionFull(...a) }));
-vi.mock("@/lib/config", () => ({ config: { player: { enabled: true } } }));
+let serverFallback = true;
+vi.mock("@/lib/config", () => ({
+  config: {
+    player: {
+      enabled: true,
+      get serverFallback() {
+        return serverFallback;
+      },
+    },
+  },
+}));
 const mockGetSources = vi.fn();
 const mockTimestamps = vi.fn();
 const mockNaming = vi.fn();
@@ -60,6 +70,7 @@ async function get() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  serverFallback = true;
   mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok", id: 7 });
   mockPrefs.mockReturnValue({ enabled: false });
   mockGetSources.mockResolvedValue(mediaSource());
@@ -143,6 +154,14 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     // has asked to be sent back to the server-side player instead.
     mockPrefs.mockReturnValue({ enabled: true });
     expect((await get()).status).toBe(403);
+  });
+
+  it("ignores that preference where there is no server-side player to send anyone to", async () => {
+    // Refusing here would refuse the only playback the install has: with PLAYER_SERVER_FALLBACK
+    // off, the account option is neither offered nor honoured.
+    serverFallback = false;
+    mockPrefs.mockReturnValue({ enabled: true });
+    expect((await get()).status).toBe(200);
   });
 
   it("refuses a malformed id, an unauthenticated caller, and a missing file", async () => {

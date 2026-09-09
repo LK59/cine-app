@@ -63,6 +63,14 @@ let swr: { data: Info | undefined; error: unknown };
 vi.mock("swr", () => ({ default: () => swr }));
 
 /**
+ * Y a-t-il un lecteur serveur derrière ? `undefined` par défaut, comme pendant l'attente réelle.
+ *
+ * C'est ce qui décide du sens de « renoncer » : céder la main, ou s'arrêter en le disant.
+ */
+let serverFallback: boolean | undefined;
+vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => serverFallback }));
+
+/**
  * Ce que la route `playback-state` répond — position et préférences.
  *
  * Ces deux champs vivaient dans la charge du fichier, et c'est précisément ce qu'on a séparé :
@@ -205,6 +213,7 @@ const settle = () => act(async () => void (await Promise.resolve()));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  serverFallback = undefined;
   probes = [];
   engineHandlers.clear();
   swr = { data: info(), error: undefined };
@@ -260,6 +269,20 @@ describe("le chemin choisi", () => {
     swr = { data: undefined, error: new Error("réseau") };
     mount();
     await waitFor(() => expect(onFallback).toHaveBeenCalledWith(expect.stringContaining("informations du fichier")));
+  });
+
+  it("s'arrête en le disant là où il n'y a pas de lecteur serveur", async () => {
+    // Le même refus que plus haut, sur une installation qui n'a personne à qui confier le
+    // fichier : la raison ne part pas à un autre lecteur, elle s'affiche.
+    serverFallback = false;
+    swr = { data: info({ refusedReason: "conteneur avi" }), error: undefined };
+    mount();
+
+    await waitFor(() => expect(screen.getByText("player.unplayable")).toBeTruthy());
+    expect(screen.getByText("conteneur avi")).toBeTruthy();
+    expect(onFallback).not.toHaveBeenCalled();
+    // Un bouton vers un lecteur qui n'existe pas mènerait à un écran vide.
+    expect(screen.queryByText("player.experimental.switchToStable")).toBeNull();
   });
 });
 
