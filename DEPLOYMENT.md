@@ -659,4 +659,4 @@ dashboard.
 
 - **[README.md](README.md)** — what the two interfaces do, feature by feature.
 - **[DOC-TECH.md](DOC-TECH.md)** — the in-browser player: the three playback paths, the remuxer,
-  and every trap only real files revealed.
+  audio delivery and diagnostics.

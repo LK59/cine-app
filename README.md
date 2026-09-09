@@ -209,8 +209,8 @@ There are two playback paths, and the difference is what the server has to do:
   Where the codecs make that impossible it decodes with WebCodecs onto a canvas instead.
 
 **[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the three paths, how the remuxer
-reconstructs decode times, what a keyframe really is in Matroska, how audio is delivered or
-re-encoded, and every trap that only real files revealed.
+reconstructs decode times, how random access points are verified, how audio is delivered or
+re-encoded, what the server is still told, and the file map.
 
 <!-- CAPTURE : cinema-player.png
      The player with its controls visible: timeline with chapter marks, the track menus open or
@@ -619,7 +619,7 @@ because `docker logs` dies with the container, and the container is recreated on
 |---|---|
 | **README.md** *(this file)* | What the two interfaces are and what they do |
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it, step by step, from the published image |
-| **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the three playback paths, the remuxer, the traps |
+| **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the three playback paths, the remuxer, audio, diagnostics |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
 | **`.env.example`** | Every configuration variable, annotated in place |
 | **`docker-compose.example.yml`** | The deployment template, annotated in place |
