@@ -1,582 +1,457 @@
 # Cine App
 
-Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / Jellyfin / Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in the household uses, and a management dashboard for whoever runs the box.
+Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / Jellyfin /
+Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in
+the household uses, and a management dashboard for whoever runs the box.
+
+> ### 📦 [**Deployment guide → DEPLOYMENT.md**](DEPLOYMENT.md)
+>
+> Step-by-step installation from the published Docker image: prerequisites, API keys, `.env`,
+> compose file, reverse proxy, first login, updates, backups and troubleshooting. No source
+> checkout, no build toolchain — one container and two configuration files.
 
 ## The two interfaces
 
 | | Address | Who it is for |
 |---|---|---|
-| **Cinema** | `/` | Everyone. Rows of posters, a full-bleed hero, search, personal lists, requests, and in-browser playback. This is the front door. |
-| **Management** | `/gestion` | The administrator. Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin, Jellyseerr, statistics, settings — the whole stack. |
+| **[Cinema](#the-cinema-interface)** | `/` | Everyone. Rows of posters, a full-bleed hero, search, personal lists, requests, and in-browser playback. This is the front door. |
+| **[Management](#the-management-interface)** | `/gestion` | The administrator. Radarr, Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin, Jellyseerr, statistics, settings — the whole stack. |
 
-Both run from the same container, the same session and the same set of API routes. There are only ever **two roles**: `admin` and `user`. A `user` can browse, play, keep lists and request titles; every write to the underlying services is refused server-side in `src/proxy.ts`, whatever the interface happens to show. The management screens are reachable from Cinema through **Compte → Gestion**, which only an administrator sees.
+Both run from the same container, the same session and the same set of API routes. There are only
+ever **two roles**: `admin` and `user`. A `user` can browse, play, keep lists and request titles;
+every write to the underlying services is refused server-side in `src/proxy.ts`, whatever the
+interface happens to show. The management screens are reachable from Cinema through the rail's
+bottom entry, which only an administrator sees.
 
-`/player` and `/cinema` are the addresses Cinema had before it became the root; both answer `308` to `/`, so old links, open tabs and already-installed home-screen shortcuts keep working.
+`/player` and `/cinema` are the addresses Cinema had before it became the root; both answer `308`
+to `/`, so old links, open tabs and already-installed home-screen shortcuts keep working.
 
-<img src="docs/screenshots/dashboard-1.png" height="210"> <img src="docs/screenshots/dashboard-2.png" height="210"> <img src="docs/screenshots/dashboard-mobile.PNG" height="210">
+## Contents
+
+- [The Cinema interface](#the-cinema-interface)
+- [The Management interface](#the-management-interface)
+- [Optional services](#optional-services)
+- [Deployment](#deployment)
+- [Authentication and roles](#authentication-and-roles)
+- [Security](#security)
+- [Development](#development)
+- [Documentation map](#documentation-map)
 
 ---
 
-## Features
+# The Cinema interface
 
-### Home Page
+`/` — the screen every account lands on. It is built around one idea: a library is not a file
+manager. Nothing here names a service, a container or a download client; a title is a poster, and
+everything you can do with it hangs off that poster.
 
-- **Rotating hero banner** - showcases the 10 newest additions across movies and series, TMDB title-logo art when available, auto-advances every 8s with a segmented progress bar to jump back to a previous pick
-- **Continue Watching** - Jellyfin resume progress with IMDb rating badge, click straight through to the sheet
-- **My List** - quick-glance row of watchlist items marked "A voir"; titles not yet in the library get an inline "Demander" action
-- **Recently Added** - separate movie/series rows with a "Voir tout" link to the full library page
-- **TV-remote style keyboard navigation** - arrow keys move focus across every row on the home page, Enter opens the highlighted title
+<!-- CAPTURE : cinema-home-desktop.png
+     THE hero shot of the project — put the most representative one here.
+     Cinema home, desktop, 1920×1080, a full-bleed backdrop at the top with its title logo, and
+     the first two rows of posters visible underneath. Pick a title whose artwork is striking and
+     whose backdrop is dark enough for the gradient to read.
+     Then uncomment:
+<img src="docs/screenshots/cinema-home-desktop.png" width="100%">
+-->
 
-### Library & Media Management
+## Getting around
 
-- **Radarr and Sonarr library views** - grid and list modes, filtering, quick search, sort (including by IMDb rating), keyboard navigation
-- **Movie and series detail pages** - poster, metadata, cast carousel, active downloads, file info, IMDb/RT/Metacritic ratings
+Four entries, and that is a ceiling rather than an accident: past four, a navigation rail stops
+being a landmark and becomes a list you have to read. Everything else — sheets, episodes, people —
+opens from the content itself.
+
+| | | |
+|---|---|---|
+| **Home** | The rows | Pressing it again from anywhere closes what covers it and comes back |
+| **Search** | One field for the library, TMDB and people | Pressing it while already there is the intent to type |
+| **My list** | To watch · Requests · Watched | |
+| **Account** | Language, playback preferences, notifications, devices | |
+| *Management* | `/gestion` | Administrators only; leaves Cinema rather than opening a panel |
+
+On desktop it is a vertical rail on the left, collapsed to icons and expanding on hover. On a
+phone it is a bottom bar with the same four entries. One list describes both, so they cannot
+drift apart.
+
+**Every screen is in the address.** Which sheet is open, which tab, which panel — all of it lives
+in the URL hash, so the browser's Back button and the phone's edge-swipe step back through the
+screens instead of leaving Cinema entirely, and a sheet stays drawn underneath the one above it.
+A film's page can be shared, bookmarked and reopened.
+
+<!-- CAPTURE : cinema-rail-expanded.png
+     The left rail hovered so the labels are visible, over a blurred home screen.
+     Crop to the left third of the screen, portrait-ish.
+     Then uncomment:
+<img src="docs/screenshots/cinema-rail-expanded.png" height="320">
+-->
+
+## The home screen
+
+A **Movies / Series** toggle switches the whole screen; each tab is composed the same way, top to
+bottom:
+
+| Row | What it is |
+|---|---|
+| **Spotlight** | A full-bleed hero over a rotating carousel of picks, with the TMDB title logo when there is one, a muted backdrop trailer, and segmented progress bars to jump back to a previous pick. Moving focus over any card takes the hero over. |
+| **Continue watching** | Jellyfin resume progress, per user, with the time left and the episode it stopped on. |
+| **Top 10 in your library** | Ranked by the IMDb rating the app already caches — no extra integration. |
+| **Recently added** | What Radarr and Sonarr actually landed, with a **New** badge for the last 30 days. |
+| **My list** | What you saved, with a link through to the full list. |
+| **One row per genre** | Alphabetical, each with a *see all* that opens the genre as a full grid. |
+| **Recommended for you / Trending** | TMDB rows of titles that are **not** in the library — a card here opens a request, not a player. |
+| **Browse everything** | The end of the rows: the whole library as one sortable, filterable grid. For someone who has scrolled past everything and found nothing. |
+
+A row with nothing in it hides itself rather than showing an empty shelf.
+
+<!-- CAPTURE : cinema-rows.png
+     Mid-scroll on the home screen: three or four complete rows stacked, including the Top 10
+     with its ranked numerals and a "New" badge visible on a recently-added card.
+     Desktop, full width.
+     Then uncomment:
+<img src="docs/screenshots/cinema-rows.png" width="100%">
+-->
+
+## A title's page
+
+Selecting a poster opens a sheet over the rows — it covers them, it does not replace them, and
+closing it animates back to exactly the row you left.
+
+- **Films** — backdrop, logo, synopsis, cast carousel, ratings, and the actions: play or resume,
+  trailer, my list, mark watched, favourite. The play button knows the resume position before you
+  press it, so it says *Resume* or *Start from the beginning* rather than guessing.
+- **Series** — the same, plus a season and episode browser with per-episode progress, thumbnails,
+  next-up, and what is still missing from a season.
+- **A title not in the library** — reached from a Discover row or from search, identified by its
+  TMDB id. Same layout, different verb: **Request**.
+- **A person** — filmography, how much of it is here, photos. Opens from any cast carousel.
+
+Sheets stack: a person opened from a film's cast sits above the film, and closing it puts the film
+back rather than dropping you home.
+
+<!-- CAPTURE : cinema-movie-sheet.png
+     A film's sheet open over the home screen, showing the backdrop, the logo, the action row
+     and the beginning of the cast carousel.
+     Desktop, full width. Prefer a title with a good logo and a real cast list.
+     Then uncomment:
+<img src="docs/screenshots/cinema-movie-sheet.png" width="100%">
+-->
+
+<!-- CAPTURE : cinema-series-episodes.png
+     A series' episode browser: the season selector, episode thumbnails, a part-watched episode
+     with its progress bar, and the "up next" marker.
+     Desktop, full width.
+     Then uncomment:
+<img src="docs/screenshots/cinema-series-episodes.png" width="100%">
+-->
+
+## Search
+
+One field, and it does not ask you to pick a category first: it searches the library, TMDB and
+people at once, and separates the answers afterwards. A title already here plays; a title that is
+not can be requested from the same result card. Recent searches are kept and can be cleared.
+
+Natural-language queries work — `film de guerre de Christopher Nolan`, `série avec Clara Galle`,
+`comédie avec Ryan Gosling`.
+
+<!-- CAPTURE : cinema-search.png
+     The search panel with a query typed, showing the All / Movies / Series / People filters and
+     a mix of results: something available, something not in the library yet.
+     Desktop, full width.
+     Then uncomment:
+<img src="docs/screenshots/cinema-search.png" width="100%">
+-->
+
+## My list
+
+Three segments, and each one is stored where its truth already lives rather than being copied:
+
+| Segment | Where it comes from |
+|---|---|
+| **To watch** | This app's own SQLite — it is the only place that knows |
+| **Requests** | The live view of your own Jellyseerr requests: not released yet, on the way, available, didn't work out. A badge counts the ones that have arrived since you last looked, and a request can be cancelled from here |
+| **Watched** | Jellyfin's play state, filled in as you watch — correctable from a title's own page |
+
+Searchable and sortable by date added, title or year. "Watched" is never a second copy of
+something Jellyfin already knows: a film finished on the TV reads as watched here, immediately.
+
+<!-- CAPTURE : cinema-mylist.png
+     "My list" open on the Requests segment, showing several states at once (on the way,
+     available, not released yet) and the "arrived" badge if you can stage one.
+     Desktop, full width.
+     Then uncomment:
+<img src="docs/screenshots/cinema-mylist.png" width="100%">
+-->
+
+## Account
+
+Interface language (French, English, Spanish, German), preferred audio and subtitle languages,
+subtitle display mode, notifications, password, and the list of signed-in devices with a
+one-press sign-out for the others.
+
+The playback preferences are **Jellyfin's own**, not a local copy: setting a preferred audio
+language here applies in the Jellyfin apps too.
+
+## Playing something
+
+Playback happens in the page, over the rows, and can be shrunk into a **draggable mini-player**
+that keeps playing while you browse. The player carries resume, audio and subtitle track
+selection with size and manual offset, chapters, playback speed, trickplay scrubbing previews,
+skip-intro and automatic next-episode advance, AirPlay and Chromecast.
+
+There are two playback paths, and the difference is what the server has to do:
+
+- **The standard player** negotiates DirectPlay / DirectStream / Transcode the way Jellyfin's own
+  web client does. A "Playback info" panel says which of the three is running, why, and at what
+  bitrate. Off by default (`PLAYER_ENABLED`), because a transcode is real CPU on your server.
+- **The native player** (opt-in) asks the server for nothing beyond the file itself. The browser
+  fetches the `.mkv` by byte ranges, repackages it into fragmented MP4 in the tab, and hands it to
+  a real `<video>` — hardware decoding, native HDR, no transcoding at all. On this library it
+  plays 4K Dolby Vision HEVC with E-AC3 Atmos on an iPhone with nothing running on the server.
+  Where the codecs make that impossible it decodes with WebCodecs onto a canvas instead.
+
+**[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the three paths, how the remuxer
+reconstructs decode times, what a keyframe really is in Matroska, how audio is delivered or
+re-encoded, and every trap that only real files revealed.
+
+<!-- CAPTURE : cinema-player.png
+     The player with its controls visible: timeline with chapter marks, the track menus open or
+     closed, the title and episode name.
+     Desktop, full width. A trickplay preview hovering over the timeline would be the best frame
+     to catch.
+     Then uncomment:
+<img src="docs/screenshots/cinema-player.png" width="100%">
+-->
+
+<!-- CAPTURE : cinema-playback-info.png
+     The "Playback info" panel open during playback: the path taken, the file's video and audio
+     details, and what the device accepts.
+     Crop to the panel.
+     Then uncomment:
+<img src="docs/screenshots/cinema-playback-info.png" height="360">
+-->
+
+## Keyboard and remote
+
+The home screen is fully drivable with the arrow keys: focus moves across and between rows, the
+hero follows what you land on, Enter opens, Escape or Backspace goes back. A legend in the
+top-right corner says so. It is meant for a keyboard, and it happens to make the app usable from a
+TV remote for the same reason.
+
+## On a phone
+
+Desktop and mobile are genuinely different products here, not one layout reflowed: a
+focus-following hero and an arrow-key grid on one side, flick rows and inline hero actions on the
+other. The phone gets a bottom bar instead of the rail, swipe-to-close action sheets, haptic
+feedback (Android/Chromium — iOS Safari has never implemented the Web Vibration API, even in an
+installed PWA), and installs to the Home Screen as a PWA with Web Push, Apple Web Push included.
+
+<!-- CAPTURE : cinema-mobile-home.png + cinema-mobile-sheet.png + cinema-mobile-search.png
+     Three phone screenshots, same device and theme, to sit side by side:
+       1. the home screen with the hero and the first row, bottom bar visible
+       2. a film's sheet with its inline actions
+       3. the search panel with results
+     Then uncomment:
+<img src="docs/screenshots/cinema-mobile-home.png" height="320"> <img src="docs/screenshots/cinema-mobile-sheet.png" height="320"> <img src="docs/screenshots/cinema-mobile-search.png" height="320">
+-->
+
+---
+
+# The Management interface
+
+`/gestion` — the administrator's second interface over the same stack. Everything a Radarr,
+Sonarr, Bazarr, Jackett, qBittorrent, Jellyfin and Jellyseerr install would otherwise be seven
+browser tabs.
+
+<img src="docs/screenshots/dashboard-1.png" height="210"> <img src="docs/screenshots/dashboard-2.png" height="210"> <img src="docs/screenshots/dashboard-mobile.PNG" height="210">
+
+## Dashboard home
+
+- **Rotating hero banner** — the 10 newest additions across movies and series, TMDB title-logo art
+  when available, auto-advancing every 8 s with a segmented progress bar to jump back
+- **Continue watching** — Jellyfin resume progress with an IMDb rating badge
+- **My list** — quick-glance row of watchlist items marked *À voir*; a title not yet in the library
+  gets an inline *Demander*
+- **Recently added** — separate movie and series rows, with a link to the full library page
+- **TV-remote style keyboard navigation** — arrow keys across every row, Enter to open
+
+## Library and media management
+
+- **Radarr and Sonarr library views** — grid and list modes, filtering, quick search, sorting
+  (including by IMDb rating), keyboard navigation
+- **Movie and series detail pages** — poster, metadata, cast carousel, active downloads, file info,
+  IMDb / RT / Metacritic ratings
 
 <img src="docs/screenshots/fiche-film-1.png" height="210"> <img src="docs/screenshots/fiche-film-2.png" height="210"> <img src="docs/screenshots/fiche-film-mobile.PNG" height="210">
-- **Watchlist** - add any title from TMDB, classify with 5 statuses (A voir, Favoris, Vus, A demander, Abandonnes), personal notes, search and sort, IMDb rating badge on every card
+
+- **Watchlist** — add any title from TMDB, classify with 5 statuses (À voir, Favoris, Vus, À
+  demander, Abandonnés), personal notes, search and sort, IMDb rating badge on every card
 
 <img src="docs/screenshots/watchlist-1.png" height="260"> <img src="docs/screenshots/watchlist-mobile.PNG" height="260">
-- **Natural language search** - find titles with queries like `film de guerre de Christopher Nolan`, `serie avec Clara Galle` or `film comedie avec Ryan Gosling`
+
+- **Natural language search** — `film de guerre de Christopher Nolan`, `série avec Clara Galle`,
+  `film comédie avec Ryan Gosling`
 
 <img src="docs/screenshots/recherche-naturelle-1.png" height="160"> <img src="docs/screenshots/recherche-naturelle-2.png" height="160"> <img src="docs/screenshots/recherche-naturelle-3.png" height="160"> <img src="docs/screenshots/recherche-mobile.PNG" height="160">
-- **Discover** - trending movies and series with genre filters, TMDB search, "Pour vous" tab based on Jellyfin play history
-- **Recommendations** - personalised rows based on recently watched Jellyfin history
-- **Release search modal** - browse and grab releases directly from Radarr/Sonarr inside the app
-- **Interactive search (movies)** - admin-only button on Watchlist, Discover and Recommendations cards to add a movie and open the release search in one step; the movie is added unmonitored until a release is actually picked, so an abandoned search doesn't leave Radarr endlessly re-searching an empty entry
-- **Add to library (series)** - admin-only button that adds a series to Sonarr directly; per-season interactive search and a one-click automatic search (Sonarr's own standard search, available to every user) both live on the series' own detail page
-- **Remove from Radarr/Sonarr** - discrete button on detail pages with in-app confirmation modal, also clears the matching Jellyseerr record so the title can be requested again cleanly
 
-### Unified Visual Identity
+- **Discover** — trending movies and series with genre filters, TMDB search, a *Pour vous* tab
+  based on Jellyfin play history
+- **Recommendations** — personalised rows from recently watched Jellyfin history
+- **Release search modal** — browse and grab releases from Radarr/Sonarr inside the app
+- **Interactive search (movies)** — admin-only, on Watchlist, Discover and Recommendations cards:
+  adds the movie and opens the release search in one step. The movie is added *unmonitored* until
+  a release is actually picked, so an abandoned search does not leave Radarr endlessly re-searching
+  an empty entry
+- **Add to library (series)** — admin-only, adds a series to Sonarr directly; per-season
+  interactive search and a one-click automatic search live on the series' own detail page
+- **Remove from Radarr/Sonarr** — with an in-app confirmation, also clearing the matching
+  Jellyseerr record so the title can be requested again cleanly
 
-All media grids (Watchlist, Discover, Recommendations) share the same card design:
+### One card design everywhere
 
-- Poster-only card with `aspect-[2/3]`
-- **Desktop** - hover overlay with 5 status buttons, Voir la fiche / Demander, and admin-only Recherche interactive (movies) / Ajouter (series)
-- **Mobile** - tap to open an ActionSheet with real-time swipe-to-close gesture
-- **IMDb rating badge** - always visible bottom-left, fetched via OMDB API
-- **"Dispo" badge** (green) - file actually downloaded
-- **"Attente" badge** (amber) - monitored in Radarr/Sonarr but not yet available
-- **Delete confirmation** - native in-app modal before removing from watchlist
+All media grids (Watchlist, Discover, Recommendations) share the same card:
 
-### Jellyfin Integration
+- Poster-only, `aspect-[2/3]`
+- **Desktop** — hover overlay with the 5 status buttons, *Voir la fiche* / *Demander*, and the
+  admin-only *Recherche interactive* (movies) / *Ajouter* (series)
+- **Mobile** — tap for an ActionSheet with a real-time swipe-to-close gesture
+- **IMDb rating badge** — bottom-left, via OMDb
+- **Dispo** (green) — the file is actually downloaded · **Attente** (amber) — monitored but not
+  yet available
+- **Delete confirmation** — an in-app modal, never the browser's
 
-- Resume watching section with per-user progress
-- Recently added and recently played
-- Mark watched / unwatched from any detail page
-- Per-user recommendations based on play history
-- **In-app playback** (optional, disabled by default - see [In-App Playback](#in-app-playback)) - play movies and episodes directly in Cine App instead of redirecting to Jellyfin web, with resume, audio/subtitle track selection, chapters, playback speed, trickplay scrubbing previews, skip-intro and automatic next-episode advance
-- **Draggable mini-player** - shrink playback into a small, freely draggable window while browsing the rest of the app; playback keeps running uninterrupted
+## Requests and downloads
 
-### Requests & Downloads
+- **Jellyseerr request management** — requests are made and tracked with each logged-in user's own
+  Jellyseerr account, auto-linked at login through the same Jellyfin credentials, not a shared
+  admin key, so status and history are attributed to the right person
+  - Movies — one-click request with confirmation
+  - Series — pick specific seasons, based on their actual current status in Jellyseerr
+    (already-requested and available seasons are shown as such and excluded); asking for more
+    seasons later is a normal follow-up request, not a rejected duplicate
+  - Admins see every pending request instance-wide; users see their own
+- **qBittorrent monitoring** — live torrent list with section separators (En cours / Seed /
+  Pausés), progress bars, speed indicators, start/stop/remove
 
-- **Jellyseerr request management** - requests are made and tracked using each logged-in user's own Jellyseerr account (auto-linked at login via the same Jellyfin credentials), not a shared admin key, so status and history are correctly attributed per person
-  - Movies - one-click request with confirmation
-  - Series - pick specific seasons to request, based on their actual current status in Jellyseerr (already requested/available seasons are shown as such and excluded); requesting more seasons later for a partially-requested series works as a normal follow-up request, not a rejected duplicate
-  - Admins see and manage every pending request instance-wide; regular users only see their own
-- **qBittorrent monitoring** - live torrent list with section separators (En cours / Seed / Pauses), progress bars, speed indicators, start/stop/remove actions
+## Calendar, timeline and stats
 
-### Calendar & Timeline
-
-- Media release calendar (upcoming Radarr/Sonarr entries)
-- Activity timeline
-
-### Ratings
-
-- **MDBList** - IMDb, Rotten Tomatoes, Metacritic, Letterboxd, Trakt on detail pages
-- **OMDB** - IMDb rating badge shown on Watchlist cards, the home page (hero, Continue Watching, My List, Recently Added) and the Radarr/Sonarr library grids, cached 24 h server-side; movies read Radarr's own rating data directly with no extra API call
-- **Sort by IMDb rating** - available on the Radarr and Sonarr library pages alongside the existing sort options
-- TMDB vote average shown on Discover and Recommendations cards
-
-### Stats
-
+- Media release calendar from upcoming Radarr/Sonarr entries, and an activity timeline
 - Top actors and directors ranked by number of titles in the library
-- Accurate library/person statistics across movies and series
+- Library and person statistics across movies and series
+- Storage breakdown (movies / series / seeds / other) and a disk saturation forecast
 
 <img src="docs/screenshots/menu-stats-mobile.PNG" height="320">
 
-### Other
+## Ratings
+
+- **MDBList** — IMDb, Rotten Tomatoes, Metacritic, Letterboxd and Trakt on detail pages, from a
+  single API call
+- **OMDb** — IMDb badges on Watchlist cards, the dashboard home and the Radarr/Sonarr grids, cached
+  24 h server-side; movies read Radarr's own rating data directly, with no extra call
+- **Sort by IMDb rating** on the library pages
+- TMDB vote average on Discover and Recommendations cards
+
+## Everything else
 
 - Service health dashboard
 
 <img src="docs/screenshots/sante-systeme-1.png" width="100%">
 
-- Bazarr subtitle management per episode
-- NFO viewer
+- Bazarr subtitle management per episode, NFO viewer, trailer modal, collection (saga) modal
 - Actor / person modal with filmography
 
 <img src="docs/screenshots/fiche-acteur-1.png" height="260"> <img src="docs/screenshots/fiche-acteur-mobile.png" height="260">
 <img src="docs/screenshots/fiche-acteur-recherche-1.png" width="49%"> <img src="docs/screenshots/fiche-acteur.recherche-2.png" width="49%">
 
-- Collection modal (saga grouping)
-- Trailer modal
-- Installable PWA
-- Web Push notifications including iOS Safari / Apple Web Push
-- Multi-language interface - French, English, Spanish, German, including the in-app video player
-- Mobile-first navigation with haptic feedback (Android/Chromium only - iOS Safari has never implemented the Web Vibration API, even in an installed PWA)
+- Installable PWA, Web Push including iOS Safari / Apple Web Push
+- Four interface languages — French, English, Spanish, German, the video player included
+- Mobile-first navigation with haptic feedback (Android/Chromium only)
 
 <img src="docs/screenshots/menu-mobile.PNG" height="320">
 
-- Guest mode (read-only, watchlist allowed)
-- Admin mode (full access including interactive search and deletion)
-
----
-
-## Optional services
-
-Only **Jellyfin** and **TMDB** are needed for Cinema to be worth opening; Radarr and Sonarr are what fill it. Everything else is optional, and an integration that is not configured is treated as a configuration, not as a failure:
-
-- `/api/config/public` reports which services are connected — booleans only, never an address or a key, since that route is read without a session.
-- A page whose service is missing shows what is missing and the exact variables to add to `.env`, instead of a network error.
-- The sidebar dims those entries rather than hiding them, so a page someone is looking for can still be found and explain itself.
-- In Cinema, requests disappear when Jellyseerr is absent, and playback falls back to the server-side player when the browser cannot handle a file.
-
-A service that is configured but **down** is a different thing and reads differently: `/health` and the status cards say so, with the error the service itself returned.
-
-## Requirements
-
-- Docker / Docker Compose
-- Existing media stack services (see https://github.com/LK59/cinema)
-- API keys for Radarr, Sonarr, Bazarr, Jackett, Jellyfin and Jellyseerr
-- A shared Docker network with your media services
-
----
-
-## Deployment
-
-**You do not need to clone this repository.** The published image already
-contains the full built app — all you need on your server are two config
-files. Create a folder and download them directly:
-
-```bash
-mkdir cine-app && cd cine-app
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/.env.example
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
-```
-
-(Cloning the repo works too if you'd rather browse the code or docs locally — it just isn't required.)
-
-Create your environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and configure:
-
-| Variable | Description |
-|---|---|
-| `APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` | Local Cine App admin fallback account |
-| `SESSION_SECRET` | Secret used to sign sessions |
-| `RADARR_URL` / `RADARR_API_KEY` | Radarr connection |
-| `SONARR_URL` / `SONARR_API_KEY` | Sonarr connection |
-| `JELLYFIN_URL` / `JELLYFIN_API_KEY` | Jellyfin connection |
-| `JELLYSEERR_URL` / `JELLYSEERR_API_KEY` | Jellyseerr connection |
-| `QBITTORRENT_URL` / `QBITTORRENT_*` | qBittorrent credentials |
-| `TMDB_API_KEY` | Required for Discover, Recommendations and person/media metadata |
-| `OMDB_API_KEY` | Optional - IMDb ratings on Watchlist cards |
-| `MDBLIST_API_KEY` | Optional - multi-source ratings on detail pages |
-| `APP_LANGUAGE` | Default instance language (`fr` \| `en` \| `es` \| `de`) — used for accounts with no saved preference and on the login page (default: `en`) |
-| `VAPID_*` | Optional - Web Push notifications |
-| `PLAYER_ENABLED` | Optional, default `false` - in-app video playback, may require server-side transcoding depending on the file/browser (see [In-App Playback](#in-app-playback)) |
-
-### Docker Compose Setup
-
-Copy the example compose file, then adapt it to your infrastructure:
-
-```bash
-cp docker-compose.example.yml docker-compose.yml
-nano docker-compose.yml
-```
-
-`docker-compose.yml` is intentionally ignored by git. Keep your production compose local to your server, and commit changes to `docker-compose.example.yml` when you want to update the public template.
-
-`docker-compose.example.yml` uses the pre-built image published on GitHub Container Registry — no build tools, no source checkout required:
-
-```yaml
-networks:
-  media_net:
-    external: true
-    # If your existing Docker network has another name, change both this key
-    # and the service network reference below.
-
-services:
-  cine-app:
-    image: ghcr.io/lk59/cine-app:latest
-    container_name: cine-app
-    env_file:
-      - .env
-    environment:
-      # Adapt to your timezone.
-      - TZ=Europe/Paris
-    volumes:
-      # Persistent app data: SQLite database, watchlist, push subscriptions, etc.
-      - ./data:/app/data
-
-      # Optional media root, read-only.
-      # Keep this enabled if you want disk/media-size stats based on your host path.
-      # Replace the left side with your own media folder. The right side reads
-      # MEDIA_ROOT from .env (defaults to /mnt/media/video) — if you override
-      # MEDIA_ROOT in .env, it's picked up here automatically, no need to edit
-      # this file too.
-      - /path/to/your/media:${MEDIA_ROOT:-/mnt/media/video}:ro
-
-      # Optional Clara Galle gallery.
-      # Enable only if CLARA_GALLERY_ENABLED=true in .env.
-      # The folder must contain:
-      #   - JPG / PNG / WebP photos
-      #   - clarabanner.jpg, used as the page banner
-      # - /path/to/your/clara/photos:/app/gallery/clara:ro
-
-    # If your media folders aren't world-readable (e.g. mode 770 owned by your own
-    # user/group), the container's default user won't be able to read them — stats
-    # will silently under-report. Set this to "<container-uid>:<your-gid>" (keep the
-    # container's own uid, swap in `id -g youruser` from the host) so it can read
-    # your files without loosening permissions on the host.
-    # user: "1001:1000"
-
-    # Optional direct access without a reverse proxy.
-    # If you use Nginx Proxy Manager, Traefik or Caddy, you can leave this commented.
-    # ports:
-    #   - "3000:3000"
-
-    networks:
-      - media_net
-    restart: unless-stopped
-```
-
-This is the exact content of `docker-compose.example.yml` — the two are kept in sync so there's only one template to adapt, not two diverging ones.
-
-The `data` volume stores local app data such as the SQLite database. Do not commit it to git.
-
-The app also keeps its own rolling safety net for that database: once a day it dumps
-`data/cine.db` into `data/backups/cine-YYYY-MM-DD.db` (via SQLite's own online backup API,
-no downtime), keeping only the last 7 days. This is not a substitute for a real backup of
-the `data` volume itself — it only protects against a corrupted/truncated DB file on the
-same host, not disk loss.
-
-In your local `docker-compose.yml`, adapt:
-
-- the external Docker network name;
-- the timezone (`TZ`);
-- the host media path mounted read-only (left side). The container-side path
-  reads `MEDIA_ROOT` from `.env` and defaults to `/mnt/media/video` — same idea
-  as Radarr's `/movies` or Sonarr's `/tv`. If you set `MEDIA_ROOT` (or the
-  individual `MOVIES_PATH`/`TV_PATH`/`SEEDS_PATH`/etc. vars) in `.env`, it's
-  picked up automatically both by the mount and by storage/disk stats — see
-  `.env.example`;
-- optional gallery/photo mounts;
-- the `ports` section if you want direct access without a reverse proxy.
-
-<details>
-<summary>Building from source instead (only if you're modifying the code)</summary>
-
-Replace the `image:` line with:
-
-```yaml
-build:
-  context: .
-  dockerfile: Dockerfile
-```
-
-Then use `docker compose up -d --build` instead of `docker compose pull` everywhere below. The build runs the test suite first — it fails loudly instead of shipping a broken image.
-
-</details>
-
-### Network / Service URLs
-
-Cine App must be able to reach Radarr, Sonarr, Jellyfin, Jellyseerr, qBittorrent and the other services from inside the container.
-
-Recommended setup:
-
-- Put Cine App on the same Docker network as the rest of your media stack.
-- Use Docker service names in `.env`, for example `http://radarr:7878`, `http://sonarr:8989`, `http://jellyfin:8096`.
-
-Alternative setup:
-
-- Use reachable LAN URLs or reverse-proxy URLs if your services are not on the same Docker network.
-- Make sure those URLs are reachable from the Cine App container, not only from your browser.
-
-Start the app:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-The app listens on port `3000` inside Docker. Use a reverse proxy (Nginx Proxy Manager, Traefik, Caddy) or expose the port directly for testing.
-
-#### Development without rebuilding the image
-
-`docker compose build` re-runs the full production build and writes a new set of image layers
-every time — hundreds of megabytes of disk writes per iteration, which is pure waste when all
-that changed is a source file.
-
-For iterating, use the development stack instead. It runs `next dev` against the working tree,
-bind-mounted, so edits are picked up by hot reload and nothing is rebuilt:
-
-```bash
-docker compose -f docker-compose.dev.yml up      # http://<server>:3001, Ctrl-C to stop
-docker compose build && docker compose up -d     # deploy, as before
-```
-
-It runs alongside production — different container, its own port, its own build directory — so
-the two never overwrite each other's output.
-
-When a real build is needed, three things keep it from being expensive:
-
-- `.dockerignore` excludes `data/` — the SQLite database, its backups and the image cache, 633 MB
-  of runtime state that was being copied into the build context and into an image layer on every
-  build while being useless to the image.
-- `npm install` and `next build` use BuildKit cache mounts, so npm's download cache and Next's
-  compiler cache survive between builds and are updated in place rather than recompiled from
-  scratch into a fresh layer.
-- Together: a rebuild after a source change transfers 61 kB of context instead of 676 MB, and
-  takes about 35 seconds instead of a minute and a half.
-
-The build cache does accumulate. `docker builder prune` reclaims it whenever it grows past what
-you want to give it.
-
-One caveat worth knowing: the development port is plain HTTP, and several browser APIs are
-restricted to secure contexts. In particular the experimental WebCodecs player (see below) will
-refuse to start there, saying so explicitly. Testing that specific feature needs HTTPS, so either
-deploy it or point a reverse-proxy host at port 3001.
-
-#### Reverse proxy: request header size (recommended)
-
-Next.js sends a `Next-Router-State-Tree` header on client-side navigations, describing the route
-tree of the page you are leaving. It is normally well under a kilobyte, but it grows with the
-depth and number of segments an app has, and it is generated by the framework — an application
-cannot split it or opt out of it.
-
-nginx (and therefore Nginx Proxy Manager, which is nginx underneath) defaults to
-`large_client_header_buffers 4 8k`, and **does not answer with an error when a header exceeds
-that — it closes the connection**. The browser sees a network failure rather than an HTTP status,
-which is a confusing thing to debug: a full page load of the same URL works, only the fast
-client-side navigation to it dies.
-
-This is a safety margin, not a hard requirement — measured on this deployment, the limit is
-crossed somewhere between 8 KB and 10 KB of header, and normal traffic is nowhere near it. If you
-run behind Nginx Proxy Manager, add this to the proxy host's **Advanced** tab:
-
-```nginx
-large_client_header_buffers 4 32k;
-```
-
-Plain nginx: the same directive in the `server` (or `http`) block. Traefik and Caddy have far
-higher defaults and need nothing.
-
-### First Login
-
-Open Cine App through your configured URL. You land on **Cinema**, at `/`.
-
-For normal use — including your own — log in with an existing **Jellyfin username and password**. That login carries a Jellyfin identity, which is what playback, resume points, watch state and playback preferences are built on.
-
-The **local admin account** (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) exists for setup and for the day Jellyfin is unreachable. It has no Jellyfin identity, so nothing that depends on one works under it — starting a film, chapters, scrub previews, playback preferences. It therefore lands on `/gestion` rather than on Cinema, which is what it is for.
-
-### Updating
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-### After Changing `.env`
-
-Most configuration is read by the server process. After changing `.env`, restart the container so the new values are loaded:
-
-```bash
-docker compose up -d
-```
-
-This restart command is safe to use after any configuration change.
-
----
-
-## Authentication
-
-Cine App supports two authentication methods.
-
-### Jellyfin Users (Recommended)
-
-Existing Jellyfin users can log in with their Jellyfin username and password.
-
-This is the recommended login method for normal users because Cine App can associate the session with the Jellyfin user account. This enables per-user resume watching, play history, watched/unwatched actions and personalised recommendations.
-
-Jellyfin administrator accounts are granted admin access in Cine App. Non-admin Jellyfin users are logged in as guest/read-only users.
-
-### Local Admin Fallback
-
-`APP_ADMIN_USER` and `APP_ADMIN_PASSWORD` define a local Cine App admin account, independent from Jellyfin.
-
-Use it as a fallback/admin account for setup and maintenance.
-
----
-
-## Optional Configuration
-
-### Push Notifications
-
-Cine App supports Web Push notifications for installed PWAs, including iOS Safari / Apple Web Push.
-
-Web Push requires a VAPID key pair. These keys are not tied to a specific machine: they are just two secret strings that you generate once, then copy into the `.env` used by Cine App.
-
-You can generate them in any of these environments:
-
-- **On your Cine App server**, if Node.js/npm is installed.
-- **On your local computer**, if Node.js/npm is installed, then copy the generated values to the server.
-- **With Docker**, if you do not want to install Node.js/npm anywhere.
-
-Option A - generate with Node.js/npm:
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-Option B - generate with Docker:
-
-```bash
-docker run --rm node:20-alpine sh -lc "npm install -g web-push >/dev/null && web-push generate-vapid-keys"
-```
-
-The command prints something like:
-
-```text
-Public Key:
-...
-
-Private Key:
-...
-```
-
-Copy these two values into the `.env` file on the host running Cine App, in the same directory as `docker-compose.yml`:
-
-```env
-VAPID_PUBLIC_KEY=
-VAPID_PRIVATE_KEY=
-VAPID_SUBJECT=mailto:admin@example.com
-```
-
-`VAPID_SUBJECT` can be any contact URI controlled by the administrator, usually an email address.
-
-Then restart the Cine App container so the new environment variables are loaded:
-
-```bash
-docker compose up -d
-```
-
-After deployment, open Cine App as a user, go to **Settings -> Notifications**, enable push notifications for the current browser/PWA, then use the test button to confirm delivery.
-
-### MDBList (Detail Pages)
-
-Multi-source ratings on movie and series pages: IMDb, Rotten Tomatoes, Metacritic, Letterboxd, Trakt - all from a single API call.
-
-Get a free key at **mdblist.com -> Settings -> API Key** (free tier: 1 000 req/day).
-
-```env
-MDBLIST_API_KEY=your_key_here
-```
-
-### OMDB (Watchlist Cards)
-
-IMDb ratings displayed as a badge on each Watchlist card, fetched via the OMDB API and cached 24 h server-side.
-
-Get a free key at **omdbapi.com** (free tier: 1 000 req/day).
-
-```env
-OMDB_API_KEY=your_key_here
-```
-
-Without these keys the rating sections are simply not shown. No rebuild is needed if keys are added after first launch; the app reads them at runtime.
-
-### Clara Galle Gallery Page
-
-Cine App includes an optional enriched page for the actress Clara Galle, with a full-screen photo gallery, detailed biography and external links.
-
-This feature is disabled by default and requires a local photo folder on your host.
-
-#### Enable It
-
-Create a folder anywhere on your host and add your photos (JPG, PNG or WebP).
-
-Also place a file named exactly `clarabanner.jpg` in the same folder. It is used as the full-width banner at the top of the page.
-
-Do not commit this folder or its contents to git.
-
-Mount the folder in your compose file:
-
-```yaml
-volumes:
-  - /path/to/your/clara/photos:/app/gallery/clara:ro
-```
-
-See `docker-compose.example.yml` for the full example.
-
-Set the env var:
-
-```env
-CLARA_GALLERY_ENABLED=true
-```
-
-Restart:
-
-```bash
-docker compose up -d
-```
-
-#### Disable It
-
-Set `CLARA_GALLERY_ENABLED=false` (or remove the variable) and restart.
+### Optional: the Clara Galle gallery page
+
+An enriched page for one actress — full-screen photo gallery, detailed biography, external links.
+Disabled by default; it needs `CLARA_GALLERY_ENABLED=true` and a photo folder mounted read-only,
+containing JPG/PNG/WebP files and a `clarabanner.jpg` used as the page banner. See
+[DEPLOYMENT.md](DEPLOYMENT.md#12-optional-features).
 
 <img src="docs/screenshots/clara-1.png" width="49%"> <img src="docs/screenshots/clara-2.png" width="49%">
 <img src="docs/screenshots/clara-3.png" width="49%"> <img src="docs/screenshots/clara-4.png" width="49%">
 
-### In-App Playback
+---
 
-Play movies and episodes directly inside Cine App - custom player with seek, audio track and subtitle selection (size and manual offset), chapters, playback speed, trickplay scrubbing previews, resume, fullscreen, AirPlay/Chromecast casting, a draggable mini-player, skip-intro and automatic next-episode advance (via the [Intro Skipper](https://github.com/intro-skipper/intro-skipper) Jellyfin plugin, if installed) - instead of redirecting to Jellyfin's own web client.
+# Optional services
 
-Playback negotiates DirectPlay / DirectStream / Transcode the same way Jellyfin's own web client does, based on what the source file and the requesting browser actually support: a compatible file plays untouched (DirectPlay), an incompatible container with compatible streams gets remuxed without re-encoding (DirectStream), and only a genuinely incompatible codec/profile triggers a real transcode. A "Playback Info" panel inside the player shows which of the three is active, the reason if transcoding, and an estimated network bitrate.
+Only **Jellyfin** and **TMDB** are needed for Cinema to be worth opening; Radarr and Sonarr are
+what fill it. Everything else is optional, and an integration that is not configured is treated as
+a configuration, not as a failure:
 
-Transcoding, when it does happen, still needs real server-side CPU/GPU work - how often that is depends entirely on your library's formats and the browsers you actually watch on. In-app playback is disabled by default as a precaution against that variable cost. Only enable it if your Jellyfin server has hardware transcoding (Quick Sync, NVENC, VAAPI, ...) or enough spare CPU to transcode in software when it's actually needed.
+- `/api/config/public` reports which services are connected — booleans only, never an address or a
+  key, since that route is read without a session.
+- A page whose service is missing shows what is missing and the exact variables to add to `.env`,
+  instead of a network error.
+- The sidebar dims those entries rather than hiding them, so a page someone is looking for can
+  still be found and explain itself.
+- In Cinema, requests disappear when Jellyseerr is absent, and playback falls back to the
+  server-side player when the browser cannot handle a file.
 
-Without it, the existing "Open in Jellyfin" link still works exactly as before - this feature is purely additive.
-
-Set the env var:
-
-```env
-PLAYER_ENABLED=true
-```
-
-Restart:
-
-```bash
-docker compose up -d
-```
-
-Disable again with `PLAYER_ENABLED=false` (or removing the variable) and restarting.
-
-#### The second player: no server work at all
-
-Behind an opt-in setting there is a second playback path that asks the server for
-nothing beyond the file itself - no transcoding, no stream negotiation, no HLS.
-The browser fetches the `.mkv` by byte ranges and everything else happens in the
-tab: the file is repackaged into fragmented MP4 and handed to a real `<video>`,
-so the picture is decoded in hardware and HDR is displayed natively. Where the
-codecs make that impossible it decodes with WebCodecs onto a canvas instead, and
-an `.mp4` is simply handed to the browser untouched.
-
-It is the answer to the paragraph above: the transcoding cost is not reduced, it
-is not incurred. On this library it plays 4K Dolby Vision + HDR10+ HEVC with
-E-AC3 Atmos, on an iPhone, with nothing running on the server.
-
-**[Full technical documentation](DOC-TECH.md)** - the three
-paths, how the remuxer reconstructs decode times, what a keyframe really is in
-Matroska (and why trusting the container is the single largest source of crashes
-this player had), how audio is delivered or re-encoded, what the server is still
-told about playback, and every trap that only real files revealed.
+A service that is configured but **down** is a different thing and reads differently: `/status` and
+the health cards say so, with the error the service itself returned.
 
 ---
 
-## Security
+# Deployment
+
+**→ [DEPLOYMENT.md](DEPLOYMENT.md) is the complete guide.** What follows is the shape of it.
+
+You need Docker, an existing media stack, API keys for the services you want to connect, and
+ideally a shared Docker network. You do **not** need to clone this repository or install Node:
+the image published on GHCR contains the built app.
+
+```bash
+mkdir -p ~/cine-app && cd ~/cine-app
+curl -O https://raw.githubusercontent.com/LK59/cine-app/main/.env.example
+curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
+cp .env.example .env && cp docker-compose.example.yml docker-compose.yml
+# edit both, then:
+mkdir -p data/image-cache && sudo chown -R 1001:1001 data
+docker compose pull && docker compose up -d
+```
+
+The app listens on port `3000` inside Docker; put a reverse proxy in front of it. Updating is
+`docker compose pull && docker compose up -d` — migrations run at startup.
+
+`docker-compose.yml` is intentionally git-ignored: keep your production compose local to your
+server, and commit changes to `docker-compose.example.yml` when the public template should change.
+
+The full guide covers the parts that are easy to get wrong: which URLs the *container* can resolve,
+the uid that has to read your media, the nginx header buffer that closes connections instead of
+answering, and what to check when a service reads as unreachable.
+
+---
+
+# Authentication and roles
+
+Two ways in, and exactly two roles.
+
+**Jellyfin accounts (the normal way).** Any existing Jellyfin user logs in with their Jellyfin
+username and password. The session carries a Jellyfin identity, which is what per-user resume,
+play history, watched state, playback preferences and recommendations are all built on. Jellyfin
+administrators are administrators here; everyone else is a regular user.
+
+**The local admin account** (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) is independent from Jellyfin
+— for setup, and for the day Jellyfin is unreachable. It has no Jellyfin identity, so nothing
+depending on one works under it, and it lands on `/gestion` rather than on Cinema.
+
+**A guest account** can be enabled (`GUEST_USER` / `GUEST_PASSWORD`): read-only across the whole
+app, with a single permitted write — requesting a title.
+
+Permissions are never enforced by the interface. `src/proxy.ts` refuses every write a `user`
+should not make, whatever the screen happens to show; hiding a button is presentation, not
+security.
+
+---
+
+# Security
 
 Never commit:
 
@@ -588,81 +463,116 @@ data/
 *.db-shm
 ```
 
-All service API keys are kept server-side and are never exposed to the browser.
+All service API keys stay server-side and are never exposed to the browser.
 
-### Sessions
+## Sessions
 
-A session is a signed token (HMAC-SHA256) in an `httpOnly` cookie, with a server-side row so it can be revoked immediately rather than only on expiry. Three things are worth knowing:
+A session is a signed token (HMAC-SHA256) in an `httpOnly` cookie, with a server-side row so it
+can be revoked immediately rather than only on expiry. Three things are worth knowing:
 
-- **The Jellyfin token and the Jellyseerr cookie travel inside it, encrypted** (AES-GCM, key derived from `SESSION_SECRET`). Signing is not hiding: without this, a stolen cookie handed over a working Jellyfin token rather than just a Cine App session.
-- **Sessions slide.** The cookie is reissued past a day of age, keeping the same session id, so daily use never ends in a weekly sign-out.
-- **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin with it.
+- **The Jellyfin token and the Jellyseerr cookie travel inside it, encrypted** (AES-GCM, key
+  derived from `SESSION_SECRET`). Signing is not hiding: without this, a stolen cookie handed over
+  a working Jellyfin token rather than just a Cine App session.
+- **Sessions slide.** The cookie is reissued past a day of age, keeping the same session id, so
+  daily use never ends in a weekly sign-out.
+- **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
+  opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
+  with it.
 
-`SESSION_SECRET` must be set. Left at its default, the server refuses to start rather than logging a line nobody reads.
-
----
-
-## Troubleshooting
-
-### App Cannot Reach Radarr / Sonarr / Jellyfin
-
-Check that:
-
-- the service URL in `.env` is reachable from inside the Cine App container;
-- Cine App is attached to the same Docker network as your media services, or uses reachable LAN/proxy URLs;
-- the API key is correct;
-- the target service is running.
-
-If you use Docker service names, the name must match the service/container DNS name on the shared network.
-
-### Jellyfin Login Fails
-
-Check that:
-
-- `JELLYFIN_URL` points to the internal URL reachable by Cine App, for example `http://jellyfin:8096`;
-- the Jellyfin username/password works directly in Jellyfin;
-- the Jellyfin server is reachable from the Cine App container.
-
-The local admin login (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) is independent from Jellyfin and can be used as a fallback.
-
-### Push Notifications Do Not Appear
-
-Check that:
-
-- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` are set in `.env`;
-- the app was rebuilt/restarted after setting them;
-- the app is served over HTTPS, which is required by most browsers for Web Push;
-- notifications are enabled in **Settings -> Notifications** for the current browser or installed PWA;
-- browser or OS notification permissions are not blocked.
-
-On iOS, install the app to the Home Screen first, then enable notifications from inside the installed PWA.
-
-### Recommendations Are Empty
-
-Check that:
-
-- `TMDB_API_KEY` is configured;
-- the logged-in Jellyfin user has watch history;
-- Cine App was opened with Jellyfin authentication, so it can associate the session with a Jellyfin user.
-
-### Ratings Are Missing
-
-Check that:
-
-- `MDBLIST_API_KEY` is set for detail-page multi-source ratings;
-- `OMDB_API_KEY` is set for IMDb badges on Watchlist cards;
-- API free-tier limits have not been reached.
-
-Without these keys, the app still works; the rating sections are simply hidden.
+`SESSION_SECRET` must be set. Left at its default, the server refuses to start rather than logging
+a line nobody reads.
 
 ---
 
-## Notes
+# Development
 
-qBittorrent can be reached through a Gluetun container when it shares the same network namespace:
+Only relevant if you are modifying the code — deploying needs none of this.
 
-```env
-QBITTORRENT_URL=http://gluetun:8080
+**There is no Node or npm on the reference host.** Everything runs through Docker.
+
+```sh
+# Iterate — hot reload against the working tree, on http://<server>:3001.
+# Runs alongside production; does not rebuild the image.
+docker compose -f docker-compose.dev.yml up
+
+# The gate — identical to CI's verify job. Run it before every commit.
+docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
+  'set -e; npm run typecheck; npm run lint -- --max-warnings=0; npm test'
+
+# One test file
+docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests__/<file>
 ```
 
-Adjust this value depending on your own stack.
+`set -e` and no pipes: `npm test | grep` swallows the exit code, and a red test has been pushed
+that way before.
+
+**Building from source** instead of pulling the image — replace the `image:` line in your compose
+file with:
+
+```yaml
+build:
+  context: .
+  dockerfile: Dockerfile
+```
+
+then `docker compose up -d --build`. The build runs the test suite first: it fails loudly instead
+of shipping a broken image.
+
+**Why the dev stack exists.** `docker compose build` re-runs the full production build and writes
+a new set of image layers every time — hundreds of megabytes per iteration, pure waste when a
+single source file changed. The dev stack runs `next dev` against the bind-mounted working tree,
+in its own container, on its own port, with its own build directory, so the two never overwrite
+each other's output.
+
+When a real build *is* needed, three things keep it cheap: `.dockerignore` excludes `data/` (633 MB
+of runtime state that used to be copied into the build context and into a layer); `npm install`
+and `next build` use BuildKit cache mounts, so npm's download cache and Next's compiler cache
+survive between builds and are updated in place. Together, a rebuild after a source change
+transfers 61 kB of context instead of 676 MB, in about 35 seconds instead of a minute and a half.
+The build cache does accumulate — `docker builder prune` reclaims it.
+
+One caveat: the development port is plain HTTP, and several browser APIs are restricted to secure
+contexts. The native WebCodecs player refuses to start there and says so. Testing that specific
+feature needs HTTPS — deploy it, or point a reverse-proxy host at port 3001.
+
+## Debugging a running deployment
+
+Diagnose against the container rather than reasoning in the dark. It has every service URL and API
+key in its environment:
+
+```sh
+docker exec cine-app node -e '...'
+docker exec cine-app tail -n 50 /app/data/logs/server.log   # server errors, with stack traces
+docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's player reported
+```
+
+Both are one JSON object per line, rotated at 5 MB, and live in the `data` volume — which matters,
+because `docker logs` dies with the container, and the container is recreated on every deploy.
+
+---
+
+# Documentation map
+
+| Document | What it covers |
+|---|---|
+| **README.md** *(this file)* | What the two interfaces are and what they do |
+| **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it, step by step, from the published image |
+| **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the three playback paths, the remuxer, the traps |
+| **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
+| **`.env.example`** | Every configuration variable, annotated in place |
+| **`docker-compose.example.yml`** | The deployment template, annotated in place |
+
+## Screenshot conventions
+
+Placeholders throughout this file are HTML comments naming the file to produce, what to frame, and
+the `<img>` tag to uncomment once it exists. They live in `docs/screenshots/`.
+
+For a consistent set: desktop shots at 1920×1080 in the dark theme, phone shots from one device,
+and the same handful of titles across all of them so the library reads as one library.
+
+The list of what is still missing is the placeholders themselves — there is no second list to keep
+in sync:
+
+```sh
+grep -n 'CAPTURE :' README.md DEPLOYMENT.md
+```
