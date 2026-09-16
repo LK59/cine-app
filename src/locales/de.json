@@ -1402,7 +1402,16 @@
       "openManage": "Verwaltung öffnen",
       "status": "Dienststatus",
       "openStatus": "Dienststatus ansehen",
-      "statusHint": "Auch ohne Anmeldung lesbar — die Anlaufstelle, wenn die App nicht mehr antwortet."
+      "statusHint": "Auch ohne Anmeldung lesbar — die Anlaufstelle, wenn die App nicht mehr antwortet.",
+      "maintenance": "Wartung",
+      "maintenanceOn": "Wartung einschalten",
+      "maintenanceOff": "Wartung ausschalten",
+      "maintenanceNotify": "Vor einem Neustart warnen",
+      "maintenanceHint": "Das Band erscheint auf allen Bildschirmen. Der Hinweis erreicht nur laufende Wiedergaben.",
+      "maintenanceHintOn": "Das Band ist auf allen Bildschirmen zu sehen.",
+      "maintenanceNoticeSent": "Hinweis an laufende Wiedergaben gesendet.",
+      "maintenanceOnDone": "Wartung eingeschaltet.",
+      "maintenanceOffDone": "Wartung ausgeschaltet."
     },
     "browse": {
       "seeAll": "Alle anzeigen",
@@ -1509,5 +1518,11 @@
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",
     "notConfiguredHint": "Diese Seite braucht einen Dienst, der auf dieser Installation nicht angebunden ist. Trage diese Variablen in deine .env-Datei ein und starte den Container neu."
+  },
+  "maintenance": {
+    "bannerTitle": "Wartung läuft",
+    "bannerText": "Einzelne Dienste oder die Wiedergabe können gestört sein. Schlägt die Wiedergabe fehl, starte sie erneut.",
+    "noticeTitle": "Wartung steht bevor",
+    "noticeText": "Die Anwendung startet gleich neu. Die Wiedergabe kann abbrechen: starte sie erneut, falls sie fehlschlägt."
   }
 }

@@ -274,7 +274,25 @@ function currentDepth(): number {
 export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "replace" = "push"): void {
   if (typeof window === "undefined") return;
   const next = { ...getSnapshot(), ...patch };
-  const url = `${window.location.pathname}${window.location.search}${serialize(next)}`;
+  const serialized = serialize(next);
+  /**
+   * Empiler l'écran où l'on est déjà n'ouvre rien, et coûte un retour.
+   *
+   * Un doigt pressé appuie deux fois sur la même affiche avant que la fiche n'ait fini d'arriver,
+   * et le second appui empilait une entrée identique : il fallait alors deux retours pour sortir
+   * d'un écran qu'on n'avait ouvert qu'une fois, et le premier semblait ne rien faire. La barre du
+   * bas s'en protège déjà pour ses propres boutons (voir `DOUBLE_FIRE_MS`) ; les affiches, les
+   * rangées, les résultats de recherche et les titres similaires, non — et ils sont bien plus
+   * nombreux. La garde est donc posée ici, où toutes les ouvertures passent.
+   *
+   * Comparé sur la forme sérialisée et non sur l'adresse : elle normalise l'ordre des champs, si
+   * bien que deux routes identiques écrites différemment se reconnaissent quand même.
+   *
+   * Un `replace` n'est pas concerné : réécrire l'entrée courante avec la même valeur n'empile
+   * rien, et le faire reste le moyen le plus simple de corriger `history.state`.
+   */
+  if (mode === "push" && serialized === serialize(getSnapshot())) return;
+  const url = `${window.location.pathname}${window.location.search}${serialized}`;
   const depth = currentDepth();
   // Spread whatever Next put in history.state rather than replacing it — its router reads its own
   // keys back on popstate.
@@ -327,8 +345,41 @@ export function openLibraryTitle(
 // Closing a layer. Stepping back is what keeps Forward meaningful and avoids piling up an entry
 // per open/close; but with nothing of ours behind (a deep link straight into a title), back would
 // leave the app, so that case rewrites the current entry instead.
+/**
+ * Un seul retour à la fois.
+ *
+ * `history.back()` ne fait rien tout de suite : il *programme* le retour, et `popstate` arrive au
+ * tour de boucle suivant. Tant qu'il n'est pas arrivé, l'adresse n'a pas bougé — donc deux
+ * fermetures parties dans la même image passent toutes les deux la garde de profondeur et
+ * reculent de deux crans. Un seul geste emportait alors deux écrans, et depuis le premier de la
+ * pile il faisait sortir du mode cinéma.
+ *
+ * Ce n'est pas théorique : deux panneaux sont montés ensemble pendant une bascule — celui qui
+ * part et celui qui arrive — et chacun écoute Échap. Plutôt que de chasser les appelants un par
+ * un, la porte elle-même ne s'ouvre qu'une fois.
+ *
+ * Le minuteur est une ceinture, pas la bretelle : `popstate` suit toujours un `back()` qui avait
+ * quelque chose derrière lui. Mais un drapeau bloqué serait une application dont plus rien ne se
+ * ferme, et c'est la seule panne qu'on ne veut absolument pas échanger contre celle-ci.
+ */
+let backPending = false;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    backPending = false;
+  });
+}
+
 export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   if (typeof window === "undefined") return;
-  if (currentDepth() > 0) window.history.back();
-  else cinemaNavigate(fallback, "replace");
+  if (currentDepth() > 0) {
+    if (backPending) return;
+    backPending = true;
+    setTimeout(() => {
+      backPending = false;
+    }, 400);
+    window.history.back();
+  } else {
+    cinemaNavigate(fallback, "replace");
+  }
 }

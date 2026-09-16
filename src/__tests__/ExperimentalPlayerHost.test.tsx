@@ -131,6 +131,8 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     ],
     subtitleTracks: [{ number: 5, codecId: "S_TEXT/UTF8", language: "fre", name: null, isDefault: false, isForced: false }],
     currentAudioTrack: 1,
+    // Par défaut ce chemin porte tout : les tests qui examinent le refus le disent eux-mêmes.
+    canCarryAudio: vi.fn(() => true),
     selectAudioTrack: vi.fn(async () => {}),
     selectSubtitleTrack: vi.fn(),
     subtitleAt: vi.fn(() => null),
@@ -193,7 +195,9 @@ function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" |
       }
       mode={over.mode ?? "full"}
       // Deliberately a fresh function each time, as the parent used to hand down.
-      onFallback={(reason) => onFallback(reason)}
+      // Le relais n'est transmis que lorsqu'il existe : un repli au démarrage n'en porte pas, et
+      // le noter quand même ferait lire à chaque assertion un argument qui ne veut rien dire.
+      onFallback={(reason, takeover) => (takeover ? onFallback(reason, takeover) : onFallback(reason))}
     />
   );
 }
@@ -234,6 +238,87 @@ afterEach(() => {
 });
 
 // ----------------------------------------------------------------------------------------------
+
+describe("une piste que ce chemin ne portera jamais", () => {
+  // Le cas TrueHD : le film joue parfaitement en français, et la VO est enfermée dans un codec
+  // qu'aucun navigateur ne décode. L'ancien comportement disait au spectateur que sa langue était
+  // indisponible ; le lecteur serveur, lui, sait la porter — Jellyfin ne ré-encode que l'audio et
+  // recopie la vidéo. Renoncer ici serait renoncer pour rien.
+  beforeEach(() => {
+    remux = fakeRemux({
+      audioTracks: [
+        { number: 1, codecId: "A_DTS", language: "fre", name: null, isDefault: true, isForced: false },
+        { number: 2, codecId: "A_TRUEHD", language: "eng", name: null, isDefault: false, isForced: false },
+      ],
+      canCarryAudio: vi.fn((n: number) => n !== 2),
+    });
+    nextProbe = () => ({ path: "remux", start: async () => remux, discard: vi.fn() });
+    serverFallback = true;
+  });
+
+  it("cède la main au lecteur serveur au lieu de refuser la VO", async () => {
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+
+    act(() => void screen.getByText("audio:eng").click());
+
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback.mock.calls[0][0]).toContain("A_TRUEHD");
+    // Et surtout : rien n'a été tenté sur les tampons. Le verdict était connu d'avance.
+    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
+  });
+
+  it("dit au repli où reprendre et sur quelle piste", async () => {
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    videoElement(2400);
+
+    act(() => void screen.getByText("audio:eng").click());
+
+    // La position courante, pas celle de l'ouverture : le spectateur est à quarante minutes.
+    // Et l'index Jellyfin de la piste demandée, pas le numéro Matroska.
+    expect(onFallback.mock.calls[0][1]).toEqual({ resumeAt: 2400, audioStreamIndex: 2 });
+  });
+
+  it("ne nomme aucune piste plutôt que d'en nommer une au hasard", async () => {
+    // Les deux listes décrivent le même fichier ; si elles ne comptent pas le même nombre de
+    // pistes, la correspondance par rang ne tient plus et un index calculé serait une invention.
+    swr = { data: info({ audio: [{ index: 1 }] }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+
+    act(() => void screen.getByText("audio:eng").click());
+
+    expect(onFallback.mock.calls[0][1].audioStreamIndex).toBeUndefined();
+    // La position, elle, reste connue : c'est la piste seule qu'on renonce à nommer.
+    expect(onFallback.mock.calls[0][1].resumeAt).toBe(0);
+  });
+
+  it("s'arrête en le disant là où il n'y a pas de lecteur serveur", async () => {
+    // Sans personne à qui confier le fichier, le repli n'existe pas : la raison est la réponse.
+    serverFallback = false;
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+
+    act(() => void screen.getByText("audio:eng").click());
+
+    expect(onFallback).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText(/A_TRUEHD/)).toBeTruthy());
+  });
+
+  it("laisse passer sans rien déranger une piste que le chemin porte", async () => {
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("audio:fre")).toBeTruthy());
+
+    act(() => void screen.getByText("audio:fre").click());
+
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+});
 
 describe("le chemin choisi", () => {
   it("monte le remultiplexage et publie ses pistes", async () => {

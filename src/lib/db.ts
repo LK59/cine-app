@@ -148,6 +148,23 @@ function migrate(db: Database.Database): void {
     )
   `);
   db.exec(`
+    /* L'état d'exploitation annoncé aux spectateurs — une seule ligne, forcée par le CHECK.
+       
+       En base et non en mémoire, parce que le seul moment où ce drapeau sert est celui où le
+       conteneur est recréé : l'administrateur l'allume *pour* redéployer. Un drapeau qui vit dans
+       le processus s'éteindrait précisément à l'instant où il doit rester allumé, et le bandeau
+       disparaîtrait de tous les écrans au début du redémarrage qu'il annonce. Le dossier data est le
+       seul volume inscriptible, et il survit au conteneur. */
+    CREATE TABLE IF NOT EXISTS maintenance (
+      id        INTEGER PRIMARY KEY CHECK (id = 1),
+      active    INTEGER NOT NULL DEFAULT 0,
+      /* Date du dernier avis « redémarrage imminent », en ms. C'est elle que les lecteurs
+         comparent à ce qu'ils ont déjà montré : une date qui avance est un nouvel avis, ce qui
+         permet d'en envoyer plusieurs sans jamais réafficher le précédent. */
+      notice_at INTEGER
+    )
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS service_checks (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       service    TEXT    NOT NULL,
@@ -725,5 +742,56 @@ export const sessionDb = {
   deleteOthers(userId: string, currentJti: string): number {
     const r = getDb().prepare("DELETE FROM sessions WHERE user_id = ? AND jti != ?").run(userId, currentJti);
     return r.changes;
+  },
+};
+
+
+/**
+ * Le mode maintenance, tel que l'administrateur l'a laissé.
+ *
+ * Deux choses distinctes, et elles ne s'éteignent pas ensemble : un état affiché tant qu'il dure
+ * — le bandeau —, et un avis ponctuel daté — la fenêtre sur les lecteurs en cours. Ranger les deux
+ * dans un seul booléen rendrait impossible d'avertir deux fois, ou d'avertir sans avoir d'abord
+ * allumé le bandeau.
+ */
+export interface MaintenanceState {
+  active: boolean;
+  /** Date du dernier avis de redémarrage imminent, en ms, ou null s'il n'y en a jamais eu. */
+  noticeAt: number | null;
+}
+
+export const maintenanceDb = {
+  get(): MaintenanceState {
+    const row = getDb().prepare("SELECT active, notice_at FROM maintenance WHERE id = 1").get() as
+      | { active: number; notice_at: number | null }
+      | undefined;
+    // Jamais écrit : l'installation n'est pas en maintenance, ce qui est le bon défaut.
+    return { active: !!row?.active, noticeAt: row?.notice_at ?? null };
+  },
+
+  setActive(active: boolean): MaintenanceState {
+    getDb()
+      .prepare(
+        `INSERT INTO maintenance (id, active, notice_at) VALUES (1, ?, NULL)
+         ON CONFLICT(id) DO UPDATE SET active = excluded.active`
+      )
+      .run(active ? 1 : 0);
+    return maintenanceDb.get();
+  },
+
+  /**
+   * Lève un avis de redémarrage imminent, daté de maintenant.
+   *
+   * Ne touche pas à `active` : prévenir et afficher un bandeau sont deux gestes, et l'un peut
+   * précéder l'autre. Renvoie l'état complet pour que l'appelant n'ait pas à relire.
+   */
+  raiseNotice(at = Date.now()): MaintenanceState {
+    getDb()
+      .prepare(
+        `INSERT INTO maintenance (id, active, notice_at) VALUES (1, 0, ?)
+         ON CONFLICT(id) DO UPDATE SET notice_at = excluded.notice_at`
+      )
+      .run(at);
+    return maintenanceDb.get();
   },
 };

@@ -5,6 +5,11 @@ import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheet
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
+  // Ces tests remplacent `history.back` par une fonction vide : le retour est donc *demandé* et
+  // n'arrive jamais. Or `cinemaClose` ne laisse partir qu'un retour à la fois et attend `popstate`
+  // pour rouvrir la porte — c'est ce qui empêche deux fermetures simultanées de reculer de deux
+  // crans. Sans cette remise à zéro, le verrou d'un test fuirait dans le suivant.
+  window.dispatchEvent(new PopStateEvent("popstate"));
 });
 
 afterEach(() => {
@@ -58,6 +63,66 @@ describe("cinemaRoute", () => {
     act(() => cinemaNavigate({ film: 1 }));
     act(() => cinemaClose({ film: null }));
     expect(back).toHaveBeenCalledOnce();
+  });
+
+  it("n'empile rien pour un écran déjà ouvert", () => {
+    // Un doigt pressé appuie deux fois sur la même affiche. Sans garde, il fallait deux retours
+    // pour sortir d'un écran ouvert une seule fois — et le premier semblait ne rien faire.
+    act(() => cinemaNavigate({ film: 603 }));
+    const depth = window.history.length;
+
+    act(() => cinemaNavigate({ film: 603 }));
+    act(() => cinemaNavigate({ film: 603 }));
+
+    expect(window.history.length).toBe(depth);
+    expect(window.location.hash).toBe("#film=603");
+  });
+
+  it("empile quand même dès que quelque chose change vraiment", () => {
+    act(() => cinemaNavigate({ film: 603 }));
+    const before = window.history.length;
+    act(() => cinemaNavigate({ film: 604 }));
+    expect(window.history.length).toBeGreaterThan(before);
+    expect(window.location.hash).toBe("#film=604");
+  });
+
+  it("laisse un « replace » réécrire l'entrée courante à l'identique", () => {
+    // Il n'empile rien par nature, et c'est le moyen le plus simple de corriger `history.state`.
+    act(() => cinemaNavigate({ film: 603 }));
+    const length = window.history.length;
+    act(() => cinemaNavigate({ film: 603 }, "replace"));
+    expect(window.history.length).toBe(length);
+    expect(window.location.hash).toBe("#film=603");
+  });
+
+  it("ne recule que d'un cran quand deux écrans se ferment ensemble", () => {
+    // `history.back()` ne fait rien tout de suite : il programme le retour. Deux fermetures parties
+    // dans la même image — deux panneaux montés pendant une bascule, chacun écoutant Échap —
+    // passaient donc toutes les deux la garde de profondeur, et un seul geste emportait deux
+    // écrans. Depuis le premier de la pile, il faisait sortir du mode cinéma.
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    act(() => cinemaNavigate({ film: 1 }));
+
+    act(() => {
+      cinemaClose({ film: null });
+      cinemaClose({ film: null });
+      cinemaClose({ film: null });
+    });
+
+    expect(back).toHaveBeenCalledOnce();
+  });
+
+  it("rouvre la porte dès que le retour a effectivement eu lieu", () => {
+    // Le verrou ne dure que le temps du vol : deux fermetures successives et volontaires doivent
+    // toutes les deux aboutir, sans quoi on aurait échangé un bug contre une application figée.
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    act(() => cinemaNavigate({ film: 1 }));
+
+    act(() => cinemaClose({ film: null }));
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+    act(() => cinemaClose({ film: null }));
+
+    expect(back).toHaveBeenCalledTimes(2);
   });
 
   it("rewrites the entry instead of leaving the app on a deep link", () => {

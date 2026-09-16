@@ -1402,7 +1402,16 @@
       "openManage": "Ouvrir la gestion",
       "status": "État des services",
       "openStatus": "Voir l'état des services",
-      "statusHint": "Consultable sans être connecté — c'est là qu'il faut aller si l'application ne répond plus."
+      "statusHint": "Consultable sans être connecté — c'est là qu'il faut aller si l'application ne répond plus.",
+      "maintenance": "Maintenance",
+      "maintenanceOn": "Activer la maintenance",
+      "maintenanceOff": "Désactiver la maintenance",
+      "maintenanceNotify": "Prévenir d'un redémarrage",
+      "maintenanceHint": "Le bandeau s'affiche sur tous les écrans. L'avis, lui, ne s'affiche que sur les lectures en cours.",
+      "maintenanceHintOn": "Le bandeau est affiché sur tous les écrans.",
+      "maintenanceNoticeSent": "Avis envoyé aux lectures en cours.",
+      "maintenanceOnDone": "Maintenance activée.",
+      "maintenanceOffDone": "Maintenance désactivée."
     },
     "browse": {
       "seeAll": "Voir tout",
@@ -1509,5 +1518,11 @@
   "services": {
     "notConfigured": "{name} n'est pas configuré.",
     "notConfiguredHint": "Cette page a besoin d'un service qui n'est pas branché sur cette installation. Ajoutez ces variables à votre fichier .env, puis redémarrez le conteneur."
+  },
+  "maintenance": {
+    "bannerTitle": "Maintenance en cours",
+    "bannerText": "Certains services ou la lecture peuvent être perturbés. Si une lecture échoue, relancez-la.",
+    "noticeTitle": "Maintenance imminente",
+    "noticeText": "L'application va redémarrer. Votre lecture peut s'interrompre : relancez-la si elle échoue."
   }
 }

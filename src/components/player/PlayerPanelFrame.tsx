@@ -91,8 +91,13 @@ export function PlayerPanelFrame({
     headingRef.current?.focus({ preventScroll: true });
   }, []);
 
+  // `leaving` compte autant que `covered`, et pour la même raison portée un cran plus loin : la
+  // coquille rend les trois panneaux indépendamment, donc pendant une bascule Recherche → Ma liste
+  // il y en a *deux* montés, celui qui part et celui qui arrive. Sans cette condition, les deux
+  // écoutent Échap, et une seule touche reculait de deux crans — depuis le premier écran de la
+  // pile, elle faisait sortir du mode cinéma. Un écran en train de partir n'a plus d'avis sur rien.
   useEffect(() => {
-    if (covered) return;
+    if (covered || leaving) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
@@ -100,7 +105,7 @@ export function PlayerPanelFrame({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [covered]);
+  }, [covered, leaving]);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
@@ -135,6 +140,9 @@ export function PlayerPanelFrame({
       }`}
       style={{
         zIndex: 46,
+        // Inerte pendant qu'il s'en va. Sa croix reste sous le doigt le temps de l'animation, et
+        // un second appui fermerait l'écran d'en dessous — celui qu'on vient d'ouvrir.
+        pointerEvents: leaving ? "none" : undefined,
         // Le retrait du rail et la marge de l'encoche s'additionnent : le premier vaut zéro sur
         // téléphone, la seconde vaut zéro partout ailleurs.
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -15,6 +15,7 @@ import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
+import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
 
 /**
  * Le compte, en une feuille.
@@ -81,6 +82,8 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
         )}
         <SessionsSection />
         <KnownIssuesSection />
+
+        {me?.role === "admin" && <MaintenanceSection />}
 
         {/* « Gestion » vivait tout en bas du tiroir, qui n'existe plus. Elle atterrit ici, et
             seulement pour l'administrateur : rien n'est bloqué au-delà de l'affichage — le proxy
@@ -510,4 +513,73 @@ const FIREFOX_HDR_PREF = "gfx.color_management.hdr";
 /** Une date lisible, dans la langue de la page. L'heure ne dit rien d'utile ici, le jour si. */
 function formatDay(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/**
+ * Les deux gestes d'exploitation, réservés à l'administrateur.
+ *
+ * Réservés à l'affichage seulement, comme le reste de ce panneau : `src/proxy.ts` refuse déjà tout
+ * POST sur `/api/` à un compte ordinaire, et cette route n'est pas dans la liste blanche des
+ * écritures invitées. Ce qui est caché ici est une porte qui ne s'ouvrirait pas, pas une serrure.
+ *
+ * Deux boutons et non un seul interrupteur à trois états : allumer le bandeau et prévenir les
+ * lecteurs en cours sont deux décisions différentes, et l'ordre entre elles appartient à celui qui
+ * redéploie — on allume souvent le bandeau bien avant de prévenir que ça redémarre maintenant.
+ */
+function MaintenanceSection() {
+  const t = useT();
+  const toast = useToast();
+  const { data, mutate } = useSWR<MaintenanceState>(MAINTENANCE_KEY, fetcher);
+  const [busy, setBusy] = useState<"toggle" | "notice" | null>(null);
+  const active = data?.active ?? false;
+
+  async function send(body: { active?: boolean; notice?: true }, which: "toggle" | "notice") {
+    setBusy(which);
+    try {
+      // `apiAction` et non `fetch` : `fetch` ne lève pas sur un 4xx, et un bouton qui se félicite
+      // d'un 403 est pire que pas de bouton du tout.
+      const next = (await apiAction(MAINTENANCE_KEY, { method: "POST", body: JSON.stringify(body) })) as MaintenanceState;
+      // La réponse porte l'état complet : on la pose dans le cache sans redemander.
+      await mutate(next, { revalidate: false });
+      toast.success(
+        which === "notice"
+          ? t("player.account.maintenanceNoticeSent")
+          : next.active
+            ? t("player.account.maintenanceOnDone")
+            : t("player.account.maintenanceOffDone")
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.unknown"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Section icon={Wrench} title={t("player.account.maintenance")}>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void send({ active: !active }, "toggle")}
+          className={`btn w-full justify-center sm:w-auto ${active ? "btn-ghost text-amber-300" : "btn-ghost"}`}
+        >
+          <Wrench size={16} />
+          {active ? t("player.account.maintenanceOff") : t("player.account.maintenanceOn")}
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void send({ notice: true }, "notice")}
+          className="btn btn-ghost w-full justify-center sm:w-auto"
+        >
+          <Megaphone size={16} />
+          {t("player.account.maintenanceNotify")}
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        {active ? t("player.account.maintenanceHintOn") : t("player.account.maintenanceHint")}
+      </p>
+    </Section>
+  );
 }

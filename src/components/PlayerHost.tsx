@@ -6,7 +6,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, type StableTakeover } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -113,17 +113,19 @@ export function PlayerHost() {
   // useful for finding out which files it actually cannot handle.
   // The handover to the stable player: which files it has taken over, why, and the word shown
   // to the viewer while it settles in. See useStableFallback.
-  const { handedOver, negotiating, reason: fallbackReason, stepAside } = useStableFallback();
+  const { handedOver, negotiating, reason: fallbackReason, takeover, stepAside } = useStableFallback();
 
   // Stable across renders on purpose. Handed down as an inline arrow, this was a different
   // function every time this component drew — and minimising the player draws it — which the
   // experimental player took for a reason to build its whole pipeline again.
   const itemId = session?.itemId;
+  // La séance est jointe au relais ici, et non par le lecteur natif : c'est ce niveau qui la
+  // possède, et le relais ne doit valoir que pour elle — voir `StableTakeover.owner`.
   const handOver = useCallback(
-    (reason: string) => {
-      if (itemId) stepAside(itemId, reason);
+    (reason: string, resumeInto?: StableTakeover) => {
+      if (itemId) stepAside(itemId, reason, resumeInto ? { ...resumeInto, owner: session } : undefined);
     },
-    [itemId, stepAside]
+    [itemId, session, stepAside]
   );
 
   if (!session) return null;
@@ -164,7 +166,12 @@ export function PlayerHost() {
 
   return (
     <>
-      <ActivePlayer session={session} mode={mode === "mini" ? "mini" : "full"} fallbackReason={fallbackReason} />
+      <ActivePlayer
+        session={session}
+        mode={mode === "mini" ? "mini" : "full"}
+        fallbackReason={fallbackReason}
+        takeover={takeover}
+      />
       {/* Shown over the stable player while it makes its own arrangements, and gone on its own.
           Nothing to dismiss and nothing to decide: by the time a viewer has read it, the film is
           usually already playing. */}
@@ -183,22 +190,35 @@ function ActivePlayer({
   session,
   mode,
   fallbackReason,
+  takeover,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   mode: "full" | "mini";
   /** Set when this player took over from the experimental one, and why. Shown in its panel. */
   fallbackReason?: string | null;
+  /** Where to resume and on which track, when the handover happened mid-playback. */
+  takeover?: StableTakeover | null;
 }) {
   const playback = usePlayback();
   const t = useT();
   const {
     itemId,
     title: openedAs,
-    resumeAt: initialResumeAt,
-    initialAudioStreamIndex,
+    resumeAt: sessionResumeAt,
+    initialAudioStreamIndex: sessionAudioStreamIndex,
     fromReload,
     reloadAttempt,
   } = session;
+
+  // Le relais d'un repli survenu *pendant* la lecture prime sur ce que la séance portait : celle-ci
+  // décrit son ouverture, il y a peut-être quarante minutes, et sur la piste par défaut du fichier.
+  // Reprendre là-dessus renverrait le spectateur en arrière et dans la langue qu'il vient justement
+  // de quitter. Le `??` préserve un zéro des deux côtés — voir `PlaybackSession.resumeAt`.
+  // Et seulement si ce relais appartient à *cette* lecture : rouvrir le même film plus tard est
+  // une séance neuve, qui porte sa propre position — « Recommencer » comprise.
+  const mine = takeoverFor(takeover, session);
+  const initialResumeAt = mine?.resumeAt ?? sessionResumeAt;
+  const initialAudioStreamIndex = mine?.audioStreamIndex ?? sessionAudioStreamIndex;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);

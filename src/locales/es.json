@@ -1402,7 +1402,16 @@
       "openManage": "Abrir la gestión",
       "status": "Estado de los servicios",
       "openStatus": "Ver el estado de los servicios",
-      "statusHint": "Se puede consultar sin iniciar sesión: es adonde ir si la aplicación deja de responder."
+      "statusHint": "Se puede consultar sin iniciar sesión: es adonde ir si la aplicación deja de responder.",
+      "maintenance": "Mantenimiento",
+      "maintenanceOn": "Activar el mantenimiento",
+      "maintenanceOff": "Desactivar el mantenimiento",
+      "maintenanceNotify": "Avisar de un reinicio",
+      "maintenanceHint": "El aviso permanente aparece en todas las pantallas. El emergente solo llega a las reproducciones en curso.",
+      "maintenanceHintOn": "El aviso permanente está visible en todas las pantallas.",
+      "maintenanceNoticeSent": "Aviso enviado a las reproducciones en curso.",
+      "maintenanceOnDone": "Mantenimiento activado.",
+      "maintenanceOffDone": "Mantenimiento desactivado."
     },
     "browse": {
       "seeAll": "Ver todo",
@@ -1509,5 +1518,11 @@
   "services": {
     "notConfigured": "{name} no está configurado.",
     "notConfiguredHint": "Esta página necesita un servicio que no está conectado en esta instalación. Añade estas variables a tu archivo .env y reinicia el contenedor."
+  },
+  "maintenance": {
+    "bannerTitle": "Mantenimiento en curso",
+    "bannerText": "Algunos servicios o la reproducción pueden verse afectados. Si la reproducción falla, vuelve a iniciarla.",
+    "noticeTitle": "Mantenimiento inminente",
+    "noticeText": "La aplicación va a reiniciarse. La reproducción puede interrumpirse: vuelve a iniciarla si falla."
   }
 }

@@ -21,6 +21,7 @@ import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
+import type { StableTakeover } from "@/lib/useStableFallback";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
@@ -129,6 +130,32 @@ function formatClock(seconds: number): string {
 }
 
 /** "Français — VFF", falling back to whatever the file actually gives us. */
+/**
+ * Jellyfin's stream index for one of the engine's audio tracks, or undefined if it cannot be
+ * named with confidence.
+ *
+ * The two lists describe the same file from two sides: the engine reads Matroska track *numbers*
+ * out of the container, Jellyfin reports ffmpeg stream *indices*. Neither converts into the
+ * other — Matroska only requires a track number to be unique and positive, so the tempting
+ * `index = number - 1` holds for files mkvmerge wrote and is arithmetic elsewhere. What is
+ * reliable is the order: both lists enumerate the file's audio streams in the order the file
+ * stores them, so the nth audio track here is the nth audio stream there.
+ *
+ * Returns undefined rather than a guess when the two disagree on how many audio streams exist.
+ * The stable player then picks its own default — a film that opens in the wrong language is a
+ * better failure than one that opens on a track chosen by a rule that did not hold.
+ */
+function jellyfinAudioIndex(
+  engineTracks: EngineTrack[],
+  jellyfinTracks: DirectPlayInfo["audio"] | undefined,
+  trackNumber: number
+): number | undefined {
+  if (!jellyfinTracks || jellyfinTracks.length !== engineTracks.length) return undefined;
+  const ordinal = engineTracks.findIndex((t) => t.number === trackNumber);
+  if (ordinal < 0) return undefined;
+  return jellyfinTracks[ordinal]?.index;
+}
+
 function trackLabel(track: EngineTrack): string {
   const parts = [track.language ?? undefined, track.name ?? undefined].filter(Boolean);
   const label = parts.join(" — ");
@@ -156,7 +183,7 @@ export function ExperimentalPlayerHost({
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   mode: "full" | "mini";
-  onFallback: (reason: string) => void;
+  onFallback: (reason: string, takeover?: StableTakeover) => void;
 }) {
   const t = useT();
   const playback = usePlayback();
@@ -244,7 +271,7 @@ export function ExperimentalPlayerHost({
    * renoncer si tôt est le refus du sélecteur de chemin, et se tromper dans ce sens-là donne un
    * film qui joue par le serveur au lieu d'une erreur — jamais l'inverse.
    */
-  const fallToStable = useCallback((reason: string) => {
+  const fallToStable = useCallback((reason: string, takeover?: StableTakeover) => {
     if (steppedAside.current) return;
     steppedAside.current = true;
     const file = describeFileRef.current();
@@ -256,8 +283,8 @@ export function ExperimentalPlayerHost({
       return;
     }
     trace(`repli : passage au lecteur stable — ${reason}`);
-    reportPlayback("fallback", { ...file, reason, path });
-    onFallbackRef.current(reason);
+    reportPlayback("fallback", { ...file, reason, path, ...(takeover ? { takeover } : {}) });
+    onFallbackRef.current(reason, takeover);
   }, []);
   /**
    * A passing notice, with the moment it was raised.
@@ -1476,6 +1503,21 @@ export function ExperimentalPlayerHost({
             audioTracks={tracks.audio.map((track) => ({ id: track.number, label: trackLabel(track) }))}
             currentAudioId={currentAudio}
             onChangeAudio={(id) => {
+              // Une piste que ce chemin ne portera jamais n'est pas un échec à signaler : c'est
+              // un fichier pour le lecteur qui, lui, sait la porter. La question est posée avant
+              // que le menu bouge et avant qu'un seul tampon soit touché — voir `canCarryAudio`.
+              // Le spectateur qui demande la VO obtient la VO, au lieu d'un bandeau lui disant
+              // que sa langue est indisponible.
+              if (path === "remux" && remuxRef.current?.canCarryAudio(id) === false) {
+                const wanted = tracks.audio.find((track) => track.number === id);
+                fallToStable(`la piste ${wanted?.codecId ?? "demandée"} ne peut pas être portée ici`, {
+                  // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`. C'est
+                  // exactement la position que le repli doit reprendre.
+                  resumeAt: videoElRef.current?.currentTime ?? session.resumeAt ?? 0,
+                  audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, id),
+                });
+                return;
+              }
               setCurrentAudio(id);
               if (path === "remux") {
                 // The menu follows what actually happened rather than what was asked for: a track

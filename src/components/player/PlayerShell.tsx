@@ -166,9 +166,27 @@ export function PlayerShell() {
           L'ordre dit la profondeur : depuis une fiche de titre on ouvre un acteur, et depuis un
           acteur une autre fiche de titre. La personne est donc toujours au-dessus. */}
       {person.render && lastPerson !== null ? (
-        <PlayerPersonSheet tmdbId={lastPerson} leaving={person.leaving} />
+        /* Un autre titre est une autre fiche — même raison que le `key` du lecteur sur son film.
+           
+           Sans lui, aller d'un titre à un « titre similaire » réutilisait l'instance, qui est
+           pourtant écrite comme si elle n'en servait qu'un : `arrivedByBack` n'est lu qu'au
+           montage, le focus ne se repose plus, le défilement reste celui du titre précédent, et
+           surtout une fermeture lancée juste avant l'empilement continuait de courir sur la
+           fiche suivante — l'historique reculait tout seul, et la fiche restait bloquée en
+           sortie. Sur téléphone, la barre de navigation s'efface tant qu'une fiche est ouverte :
+           elle ne revenait donc jamais. Remonter coupe le minuteur en attente (voir le nettoyage
+           de `useDelayedClose`) et redonne une instance neuve.
+           
+           Clé prise sur la *dernière* valeur et non sur l'adresse : elle ne bouge pas pendant la
+           sortie, qui garde ainsi son animation. */
+        <PlayerPersonSheet key={lastPerson} tmdbId={lastPerson} leaving={person.leaving} />
       ) : discover.render && lastDiscover !== null ? (
-        <PlayerDiscoverSheet tmdbId={lastDiscover} mediaType={lastDiscoverType} leaving={discover.leaving} />
+        <PlayerDiscoverSheet
+          key={`${lastDiscoverType}:${lastDiscover}`}
+          tmdbId={lastDiscover}
+          mediaType={lastDiscoverType}
+          leaving={discover.leaving}
+        />
       ) : null}
     </>
   );

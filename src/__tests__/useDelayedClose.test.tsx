@@ -64,6 +64,26 @@ describe("useDelayedClose", () => {
     expect(onCloseB).toHaveBeenCalledTimes(1);
   });
 
+  it("se referme encore une fois qu'une première fermeture est allée au bout", () => {
+    // La régression qui faisait disparaître la barre de navigation du téléphone. Le minuteur
+    // n'était jamais relâché, donc la garde anti-double-Échap refusait toutes les fermetures
+    // suivantes — sans effet tant qu'une fermeture entraîne le démontage, mais une fiche survit
+    // à la sienne quand un écran s'empile par-dessus pendant l'animation de sortie. L'adresse
+    // gardait alors sa fiche ouverte, et la barre, qui s'efface sous une fiche, ne revenait plus.
+    const onClose = vi.fn();
+    const { result } = renderHook(() => useDelayedClose(onClose, 200));
+
+    act(() => result.current.requestClose());
+    act(() => vi.advanceTimersByTime(200));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Et l'instance est rendue à un état utilisable, pas laissée en pleine sortie.
+    expect(result.current.closing).toBe(false);
+
+    act(() => result.current.requestClose());
+    act(() => vi.advanceTimersByTime(200));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
   it("clears its pending timer on unmount (no late call into an unmounted component)", () => {
     const onClose = vi.fn();
     const { result, unmount } = renderHook(() => useDelayedClose(onClose, 200));

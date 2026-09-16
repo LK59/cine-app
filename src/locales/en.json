@@ -1402,7 +1402,16 @@
       "openManage": "Open management",
       "status": "Service status",
       "openStatus": "View service status",
-      "statusHint": "Readable without signing in — the place to go if the app stops responding."
+      "statusHint": "Readable without signing in — the place to go if the app stops responding.",
+      "maintenance": "Maintenance",
+      "maintenanceOn": "Turn on maintenance",
+      "maintenanceOff": "Turn off maintenance",
+      "maintenanceNotify": "Warn of a restart",
+      "maintenanceHint": "The banner shows on every screen. The warning only reaches playback in progress.",
+      "maintenanceHintOn": "The banner is showing on every screen.",
+      "maintenanceNoticeSent": "Warning sent to playback in progress.",
+      "maintenanceOnDone": "Maintenance turned on.",
+      "maintenanceOffDone": "Maintenance turned off."
     },
     "browse": {
       "seeAll": "See all",
@@ -1509,5 +1518,11 @@
   "services": {
     "notConfigured": "{name} is not configured.",
     "notConfiguredHint": "This page needs a service that is not connected on this installation. Add these variables to your .env file, then restart the container."
+  },
+  "maintenance": {
+    "bannerTitle": "Maintenance under way",
+    "bannerText": "Some services or playback may be disrupted. If playback fails, start it again.",
+    "noticeTitle": "Maintenance imminent",
+    "noticeText": "The application is about to restart. Playback may stop: start it again if it fails."
   }
 }

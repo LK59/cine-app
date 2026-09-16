@@ -29,6 +29,8 @@ import { PlaybackProvider } from "@/components/PlaybackProvider";
 import { LOCALES, LOCALE_COOKIE, loadLocaleDict, type Locale } from "@/lib/i18n";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PlayerHostLazy } from "@/components/PlayerHostLazy";
+import { MaintenanceNotices } from "@/components/MaintenanceNotices";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
@@ -102,7 +104,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       le tableau de bord sont maintenant deux groupes de routes distincts, et
                       passer de l'un à l'autre démontait l'élément <video>. PlayerHost ne rend
                       rien tant que rien ne joue, donc le coût est nul ailleurs. */}
-                  <PlayerHostLazy />
+                  {/* Chacun dans sa propre barrière, et ce n'est pas de la prudence de principe :
+                      ce qui est monté ici est monté dans le layout *racine*, que `app/error.tsx`
+                      ne couvre pas — seul un `global-error.tsx` le ferait, et il n'y en a pas. Une
+                      erreur de rendu de l'un d'eux remontait donc jusqu'à la racine et laissait un
+                      écran blanc, sans rien à quoi revenir. Isolés, le pire qu'ils puissent faire
+                      est de disparaître : le catalogue, lui, reste debout. */}
+                  <ErrorBoundary>
+                    <PlayerHostLazy />
+                  </ErrorBoundary>
+                  {/* Sous `SWRProvider` — d'où il lit l'état — et sous `PlaybackProvider`, d'où
+                      il apprend qu'un film joue. Les deux lui sont nécessaires, et c'est le seul
+                      point de l'arbre qui les a tous les deux. */}
+                  <ErrorBoundary>
+                    <MaintenanceNotices />
+                  </ErrorBoundary>
                 </PlaybackProvider>
               </ToastProvider>
             </SWRProvider>

@@ -249,6 +249,23 @@ export class RemuxPlayback {
     return this.audioTrack?.number ?? null;
   }
 
+  /**
+   * Whether this path could carry that track's sound at all — asked *before* anything is touched.
+   *
+   * The same verdict is reached by `selectAudioTrack` a moment later, as a thrown error caught
+   * and turned into a warning. That is the right shape for a track that fails for a passing
+   * reason, and the wrong one for a codec no browser decodes: nothing about TrueHD will be
+   * different on the next attempt, and the buffer surgery leading up to the refusal — the audio
+   * hold, the exclusive section, the picture held still — is paid for an answer already known.
+   * Asked here, the caller can step aside to a player that *can* carry it instead of telling the
+   * viewer their language is unavailable.
+   */
+  canCarryAudio(trackNumber: number): boolean {
+    const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
+    // An unknown number is not a codec refusal: let the usual path answer it.
+    return track ? playableAudio(track) : true;
+  }
+
   get currentSubtitleTrack(): number | null {
     return this.currentSubtitle;
   }

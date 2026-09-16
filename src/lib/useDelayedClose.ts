@@ -38,7 +38,24 @@ export function useDelayedClose(onClose: () => void, exitMs: number): { closing:
   const requestClose = useCallback(() => {
     if (timerRef.current) return; // already closing — a repeat Escape/click mid-fade is a no-op
     setClosing(true);
-    timerRef.current = setTimeout(() => onCloseRef.current(), exitMs);
+    timerRef.current = setTimeout(() => {
+      /**
+       * Rendu réutilisable avant d'appeler la fermeture, et non après.
+       *
+       * Le minuteur n'était jamais relâché : une fois parti, `timerRef` restait vrai pour la vie
+       * du composant et la garde du dessus — écrite pour absorber un double Échap — refusait
+       * *toutes* les fermetures suivantes. Sans conséquence tant qu'une fermeture entraîne le
+       * démontage, ce qui est le cas courant. Mais une fiche survit à sa propre fermeture quand
+       * un écran est empilé par-dessus pendant l'animation de sortie : la fermeture d'alors part
+       * quand même, l'historique recule, et l'instance se retrouve montée, `closing` bloqué à
+       * vrai, incapable de se refermer jamais. L'adresse gardait donc `decouverte`, et la barre
+       * de navigation du téléphone — qui s'efface pendant qu'une fiche est ouverte — ne revenait
+       * plus. C'est la panne « la barre disparaît et ne revient pas » en navigation rapide.
+       */
+      timerRef.current = null;
+      setClosing(false);
+      onCloseRef.current();
+    }, exitMs);
   }, [exitMs]);
 
   return { closing, requestClose };

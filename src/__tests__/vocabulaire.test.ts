@@ -43,6 +43,26 @@ describe("le vocabulaire visible", () => {
   });
 });
 
+describe("les quatre dictionnaires", () => {
+  // `CLAUDE.md` le demande depuis toujours — « une clé doit exister dans les quatre » — et rien ne
+  // le vérifiait : seules les clés de l'écran de connexion étaient contrôlées, une à une. Une clé
+  // oubliée dans une langue ne se voit pas en développement, où l'on lit le français : elle
+  // s'affiche telle quelle, en clair, sur l'écran de quelqu'un d'autre.
+  const reference = Object.fromEntries(strings(load("fr")));
+
+  it.each(["en", "es", "de"] as const)("%s dit exactement les mêmes choses que le français", (lang) => {
+    const other = Object.fromEntries(strings(load(lang)));
+    expect(Object.keys(other).filter((k) => !(k in reference))).toEqual([]);
+    expect(Object.keys(reference).filter((k) => !(k in other))).toEqual([]);
+  });
+
+  it.each(LANGS)("%s ne laisse aucune traduction vide", (lang) => {
+    // Une chaîne vide passe la vérification des clés et n'affiche rien du tout — pire qu'une clé
+    // manquante, qui se voit au moins.
+    expect(strings(load(lang)).filter(([, value]) => value.trim() === "").map(([key]) => key)).toEqual([]);
+  });
+});
+
 describe("les textes de l'écran de connexion", () => {
   it.each(LANGS)("%s porte toutes les clés que la page utilise", (lang) => {
     const auth = (load(lang) as { auth: Record<string, unknown> }).auth;
