@@ -1330,10 +1330,7 @@
       "request": "Anfragen",
       "addToList": "Zu meiner Liste",
       "inList": "In meiner Liste",
-      "favorite": "Favorit",
-      "favoriteDisabledHint": "Favoriten gelten nur für Titel, die schon in der Bibliothek sind.",
-      "castTitle": "Besetzung",
-      "favoriteOn": "In meinen Favoriten"
+      "castTitle": "Besetzung"
     },
     "person": {
       "less": "Weniger",

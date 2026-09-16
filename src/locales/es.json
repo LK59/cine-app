@@ -1330,10 +1330,7 @@
       "request": "Pedir",
       "addToList": "Añadir a mi lista",
       "inList": "En mi lista",
-      "favorite": "Favorito",
-      "favoriteDisabledHint": "Los favoritos solo se aplican a los títulos que ya están en la biblioteca.",
-      "castTitle": "Reparto",
-      "favoriteOn": "En mis favoritos"
+      "castTitle": "Reparto"
     },
     "person": {
       "less": "Ver menos",

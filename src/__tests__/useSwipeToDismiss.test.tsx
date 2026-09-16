@@ -93,4 +93,78 @@ describe("useSwipeToDismiss", () => {
     expect(result.current.offset).toBe(0);
     expect(onDismiss).not.toHaveBeenCalled();
   });
+
+  describe("la capture du pointeur", () => {
+    // WebKit cesse d'acheminer les pointeurs vers la page quand une capture reste détenue par un
+    // nœud retiré du DOM : tout est dessiné, plus rien ne répond, et seul un geste du navigateur
+    // en sort. Ces fiches sont montées et démontées par la navigation, et depuis qu'un titre
+    // différent est une instance différente, un appui rapide démonte l'élément porteur du geste.
+    function capturing() {
+      const element = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+      const event = { clientY: 100, pointerId: 7, pointerType: "touch", button: 0, currentTarget: element };
+      return { element, event: event as unknown as React.PointerEvent };
+    }
+
+    it("la rend quand le geste se termine", () => {
+      const { element, event } = capturing();
+      const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
+
+      act(() => result.current.handlers.onPointerDown(event));
+      expect(element.setPointerCapture).toHaveBeenCalledWith(7);
+
+      act(() => result.current.handlers.onPointerUp(event));
+      expect(element.releasePointerCapture).toHaveBeenCalledWith(7);
+    });
+
+    it("la rend aussi quand le geste est annulé", () => {
+      const { element, event } = capturing();
+      const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
+      act(() => result.current.handlers.onPointerDown(event));
+      act(() => result.current.handlers.onPointerCancel(event));
+      expect(element.releasePointerCapture).toHaveBeenCalledWith(7);
+    });
+
+    it("la rend au démontage, doigt encore posé", () => {
+      // Le cas qui gelait l'interface : la fiche disparaît au milieu du geste, le navigateur ne
+      // voit jamais de levée, et personne ne lui rend la capture.
+      const { element, event } = capturing();
+      const { result, unmount } = renderHook(() => useSwipeToDismiss(vi.fn()));
+      act(() => result.current.handlers.onPointerDown(event));
+      expect(element.releasePointerCapture).not.toHaveBeenCalled();
+
+      unmount();
+      expect(element.releasePointerCapture).toHaveBeenCalledWith(7);
+    });
+
+    it("ne la rend qu'une fois", () => {
+      const { element, event } = capturing();
+      const { result, unmount } = renderHook(() => useSwipeToDismiss(vi.fn()));
+      act(() => result.current.handlers.onPointerDown(event));
+      act(() => result.current.handlers.onPointerUp(event));
+      unmount();
+      expect(element.releasePointerCapture).toHaveBeenCalledTimes(1);
+    });
+
+    it("survit à un pointeur déjà parti au moment de la prise", () => {
+      // `setPointerCapture` lève sur un pointeur inactif — un appui déjà relâché quand l'événement
+      // arrive, ce qui se produit sous les doigts pressés. Non rattrapée, l'exception part d'un
+      // gestionnaire React et emporte l'arbre, pour un geste qui n'aurait rien fait.
+      const element = {
+        setPointerCapture: vi.fn(() => {
+          throw new DOMException("InvalidPointerId");
+        }),
+        releasePointerCapture: vi.fn(),
+      };
+      const event = { clientY: 100, pointerId: 7, pointerType: "touch", button: 0, currentTarget: element };
+      const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
+
+      expect(() => act(() => result.current.handlers.onPointerDown(event as unknown as React.PointerEvent))).not.toThrow();
+      // Le geste reste utilisable : il suivra tant que le doigt ne quitte pas l'élément.
+      act(() => result.current.handlers.onPointerMove({ clientY: 180, pointerId: 7 } as unknown as React.PointerEvent));
+      expect(result.current.offset).toBe(80);
+      // Et rien à rendre, puisque rien n'a été pris.
+      act(() => result.current.handlers.onPointerUp(event as unknown as React.PointerEvent));
+      expect(element.releasePointerCapture).not.toHaveBeenCalled();
+    });
+  });
 });

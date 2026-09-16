@@ -87,7 +87,10 @@ export function MaintenanceNotices() {
       {showBanner && (
         <div
           className="pointer-events-none fixed inset-x-0 top-0 z-[65] flex justify-center px-3"
-          style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)" }}
+          // Une respiration en plus sous la zone sûre, et non `max(...)` avec elle : sur un
+          // téléphone à encoche, l'encart se collait sous la barre d'état. Le bandeau n'est pas
+          // urgent — il décrit un état qui dure — donc il peut se permettre de descendre un peu.
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.5rem)" }}
         >
           <div className="glass-panel pointer-events-auto flex max-w-xl items-start gap-3 rounded-2xl border border-amber-400/30 px-4 py-2.5 shadow-glow">
             <Wrench size={15} className="mt-0.5 shrink-0 text-amber-300" />

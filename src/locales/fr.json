@@ -1330,10 +1330,7 @@
       "request": "Demander",
       "addToList": "Ajouter à ma liste",
       "inList": "Dans ma liste",
-      "favorite": "Favori",
-      "favoriteDisabledHint": "Les favoris ne concernent que les titres présents dans la bibliothèque.",
-      "castTitle": "Distribution",
-      "favoriteOn": "Dans mes favoris"
+      "castTitle": "Distribution"
     },
     "person": {
       "less": "Réduire",

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Heart, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, Users, X } from "lucide-react";
+import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, Users, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
@@ -304,20 +304,6 @@ export function PlayerDiscoverSheet({
             {inList ? t("player.discover.inList") : t("player.discover.addToList")}
           </button>
 
-          {/* Les favoris vivent chez Jellyfin : ils n'existent que pour un titre qu'on possède.
-              Le bouton reste, et dit pourquoi juste en dessous — au survol il n'y a personne, sur
-              un téléphone. */}
-          <button
-            type="button"
-            disabled
-            className="mb-1 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-md bg-white/5 px-4 py-3 text-sm font-medium text-white/35"
-          >
-            <Heart size={16} />
-            {t("player.discover.favorite")}
-          </button>
-          <p className="mb-5 text-center text-[11px] leading-4 text-white/35">
-            {t("player.discover.favoriteDisabledHint")}
-          </p>
 
           {data.overview && <p className="mb-4 text-sm leading-6 text-white/90">{data.overview}</p>}
 
@@ -467,24 +453,6 @@ export function PlayerDiscoverSheet({
                   </span>
                 </button>
 
-                {/* Les favoris vivent chez Jellyfin, donc ils n'existent que pour un titre qu'on
-                    possède. Le bouton reste visible et l'explique au survol, plutôt que de
-                    disparaître sans rien dire — c'est une règle, pas un oubli. */}
-                <button
-                  data-detail-menu
-                  disabled
-                  title={t("player.discover.favoriteDisabledHint")}
-                  aria-describedby="player-favorite-hint"
-                  className={`${MENU_ROW} cursor-not-allowed text-white/35`}
-                >
-                  <span className={MENU_BADGE}>
-                    <Heart size={14} />
-                  </span>
-                  <span className="text-sm font-medium">{t("player.discover.favorite")}</span>
-                </button>
-                <p id="player-favorite-hint" className="sr-only">
-                  {t("player.discover.favoriteDisabledHint")}
-                </p>
               </div>
 
               <CastRow cast={data.cast} label={t("player.discover.castTitle")} className="mt-4" />
