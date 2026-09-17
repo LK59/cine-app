@@ -1,7 +1,8 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePointerCapture } from "@/lib/usePointerCapture";
 
 export interface SheetAction {
   label: string;
@@ -68,34 +69,15 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
 
   // ── Swipe-to-close ────────────────────────────────────────────────────────
 
-  const held = useRef<{ element: HTMLElement; pointerId: number } | null>(null);
-  const releaseCapture = useCallback(() => {
-    const capture = held.current;
-    held.current = null;
-    if (!capture) return;
-    try {
-      capture.element.releasePointerCapture(capture.pointerId);
-    } catch {
-      /* déjà rendue */
-    }
-  }, []);
-  useEffect(() => releaseCapture, [releaseCapture]);
+  // Voir `usePointerCapture` : rendue à la fin du geste, et au démontage.
+  const capture = usePointerCapture();
 
   function dragStart(e: React.PointerEvent) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     dragging.current = true;
     startY.current = e.clientY;
     currentY.current = 0;
-    // Sous garde, et rendue au démontage — même raison que `useSwipeToDismiss` : la prise lève si
-    // le pointeur n'est plus actif, et une capture dont l'élément quitte le DOM pendant le geste
-    // laisse WebKit sans acheminement de pointeurs vers la page.
-    const element = e.currentTarget as HTMLElement;
-    try {
-      element.setPointerCapture(e.pointerId);
-      held.current = { element, pointerId: e.pointerId };
-    } catch {
-      /* pointeur déjà parti — le geste suit quand même tant que le doigt reste sur l'élément */
-    }
+    capture.take(e);
     if (sheetRef.current) sheetRef.current.style.transition = "none";
   }
 
@@ -107,7 +89,7 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
   }
 
   function dragEnd() {
-    releaseCapture();
+    capture.release();
     if (!dragging.current) return;
     dragging.current = false;
     const el = sheetRef.current;

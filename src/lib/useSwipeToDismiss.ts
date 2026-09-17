@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { usePointerCapture } from "@/lib/usePointerCapture";
 
 // Drag-down-to-close for a full-screen sheet, driven from one grab handle (here: the banner
 // artwork at the top of the mobile detail sheet, above its Lire button).
@@ -48,34 +49,10 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
   const startY = useRef(0);
   const startedAt = useRef(0);
   const latest = useRef(0);
-  /**
-   * L'élément qui détient la capture, et pour quel pointeur.
-   *
-   * Retenus parce qu'il faut pouvoir la rendre — et que `finish` reçoit parfois un événement dont
-   * la cible n'est plus celle qui l'avait prise. Le navigateur relâche seul à la levée du doigt ;
-   * ce qu'il ne sait pas faire, c'est relâcher une capture dont l'élément a été **retiré du DOM**
-   * pendant le geste. Sur WebKit, il cesse alors d'acheminer les pointeurs vers la page : tout
-   * reste dessiné, plus rien ne répond, et seul un geste du navigateur en sort.
-   *
-   * Ce n'est pas théorique ici : ces fiches sont montées et démontées par la navigation, et depuis
-   * qu'un titre différent est une instance différente, un appui rapide démonte l'élément porteur
-   * du geste. `useCarouselDrag` rendait déjà la sienne ; celle-ci était la seule à ne pas le faire.
-   */
-  const held = useRef<{ element: HTMLElement; pointerId: number } | null>(null);
-
-  const release = useCallback(() => {
-    const capture = held.current;
-    held.current = null;
-    if (!capture) return;
-    try {
-      capture.element.releasePointerCapture(capture.pointerId);
-    } catch {
-      // Déjà rendue — à la levée du doigt, ou avec l'élément lui-même. Rien à réparer.
-    }
-  }, []);
-
-  // Le filet : le démontage rend ce que le geste n'a pas eu l'occasion de rendre.
-  useEffect(() => release, [release]);
+  // Prise et rendue par la primitive partagée : trois gestes de cette application capturent le
+  // pointeur, et le protocole autour — rendre à la fin, rendre au démontage, ne pas lever sur un
+  // pointeur déjà parti — est le seul morceau qu'ils ont en commun. Voir `usePointerCapture`.
+  const capture = usePointerCapture();
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -91,15 +68,8 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
     // Sous garde : la prise lève si le pointeur n'est plus actif — un appui déjà relâché quand
     // l'événement arrive, ce qui se produit sous les doigts pressés. Non rattrapée, l'exception
     // part d'un gestionnaire React et emporte l'arbre, pour un geste qui n'aurait rien fait.
-    const element = e.currentTarget as HTMLElement;
-    try {
-      element.setPointerCapture(e.pointerId);
-      held.current = { element, pointerId: e.pointerId };
-    } catch {
-      // Pas de capture : le geste suivra tant que le doigt reste sur l'élément, ce qui est déjà
-      // mieux que rien, et le relâchement fonctionne à l'identique.
-    }
-  }, []);
+    capture.take(e);
+  }, [capture]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!active.current) return;
@@ -114,7 +84,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
   const finish = useCallback(() => {
     // Rendue avant toute autre chose, et même si le geste n'était pas actif : c'est la seule
     // ligne qui doit s'exécuter quoi qu'il arrive ensuite.
-    release();
+    capture.release();
     if (!active.current) return;
     active.current = false;
     setDragging(false);
@@ -131,7 +101,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
     } else {
       setOffset(0);
     }
-  }, [onDismiss, release]);
+  }, [onDismiss, capture]);
 
   return {
     offset,

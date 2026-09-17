@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePointerCapture } from "@/lib/usePointerCapture";
 import { Play, Pause, X } from "lucide-react";
 
 const MARGIN = 16;
@@ -105,18 +106,8 @@ export function useMiniPlayerDrag(active: boolean, onTap: () => void): MiniPlaye
     };
   }, []);
 
-  const held = useRef<{ element: HTMLElement; pointerId: number } | null>(null);
-  const releaseCapture = useCallback(() => {
-    const capture = held.current;
-    held.current = null;
-    if (!capture) return;
-    try {
-      capture.element.releasePointerCapture(capture.pointerId);
-    } catch {
-      /* déjà rendue */
-    }
-  }, []);
-  useEffect(() => releaseCapture, [releaseCapture]);
+  // Voir `usePointerCapture` : rendue à la fin du geste, et au démontage.
+  const capture = usePointerCapture();
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -125,17 +116,8 @@ export function useMiniPlayerDrag(active: boolean, onTap: () => void): MiniPlaye
     start.current = { x: e.clientX, y: e.clientY };
     origin.current = pos;
     setIsDragging(true);
-    // Sous garde, et rendue au démontage — même raison que `useSwipeToDismiss` : la prise lève si
-    // le pointeur n'est plus actif, et une capture dont l'élément quitte le DOM pendant le geste
-    // laisse WebKit sans acheminement de pointeurs vers la page.
-    const element = e.currentTarget as HTMLElement;
-    try {
-      element.setPointerCapture(e.pointerId);
-      held.current = { element, pointerId: e.pointerId };
-    } catch {
-      /* pointeur déjà parti — le geste suit quand même tant que le doigt reste sur l'élément */
-    }
-  }, [pos]);
+    capture.take(e);
+  }, [pos, capture]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragging.current) return;
@@ -146,12 +128,12 @@ export function useMiniPlayerDrag(active: boolean, onTap: () => void): MiniPlaye
   }, [size]);
 
   const onPointerUp = useCallback(() => {
-    releaseCapture();
+    capture.release();
     if (!dragging.current) return;
     dragging.current = false;
     setIsDragging(false);
     if (moved.current < TAP_THRESHOLD) onTap();
-  }, [onTap, releaseCapture]);
+  }, [onTap, capture]);
 
   return { pos, size, isDragging, handlers: { onPointerDown, onPointerMove, onPointerUp } };
 }

@@ -162,6 +162,33 @@ dictionaries' values.
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.
 
+## The sheet lifecycle
+
+Six pieces, wired by hand into every sheet, and nothing but this section declares the contract
+between them. Every UI bug found on 2026-09-16 lived in the wiring, never in a piece.
+
+- `useExitDelay` (parent-driven) keeps a screen mounted through its exit; `useDelayedClose`
+  (self-driven) delays the close callback instead. A sheet uses one or the other, never both for
+  the same decision.
+- `arrivedByBack()` is read **once, at mount**, and suppresses the entry animation on a Back.
+- `useHideOnScroll` drives the phone's floating bar, and is disabled while a sheet covers it.
+- `useSwipeToDismiss` is the drag-down gesture; its pointer handling belongs to
+  `usePointerCapture` and nowhere else.
+- `cinemaClose` is the only way out, and only one of its `history.back()` is ever in flight.
+
+Four rules, each of which cost a real failure:
+
+1. **A different title is a different sheet.** Give it a `key`. A reused instance freezes
+   `arrivedByBack`, keeps the previous title's scroll and focus, and lets a close started before
+   the swap land on the screen after it.
+2. **A screen on its way out has no opinion.** No key handler, no pointer events. Two panels are
+   mounted during a switch, and both listening to Escape stepped back twice on one key.
+3. **A gesture never outlives its element.** Capture through `usePointerCapture`, which releases
+   on unmount — a capture held by a detached node stops WebKit routing pointers to the page at
+   all: everything painted, nothing responding.
+4. **Closing is a request, not a fact.** The address changes a tick later, so nothing may assume
+   it already has.
+
 ## Do not change these without a reason
 
 - **The reverse proxy.** It fronts about twenty other sites on this machine. The dev stack exists
