@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Clapperboard, Activity } from "lucide-react";
+import { Clapperboard, Activity, Eye, EyeOff } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
 export default function LoginPage() {
@@ -20,6 +20,8 @@ function LoginForm() {
   const t = useT();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  // Un seul interrupteur pour les deux formulaires : ils ne s'affichent jamais ensemble.
+  const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showLocalForm, setShowLocalForm] = useState(false);
@@ -36,6 +38,10 @@ function LoginForm() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        // Le serveur nomme ce qu'il a vu dans ce qui lui a été envoyé — jamais ce qu'il sait du
+        // mot de passe attendu. Une espace de tête est invisible et ne pardonne pas ; la signaler
+        // transforme six tentatives identiques en une correction.
+        if (data.code === "password-leading-space") throw new Error(t("auth.passwordLeadingSpace"));
         throw new Error(data.error || t("auth.error.failed"));
       }
       /**
@@ -134,15 +140,30 @@ function LoginForm() {
               <label htmlFor="login-pass" className="mb-1.5 block text-xs font-medium text-slate-300">
                 {t("auth.jellyfin.password")}
               </label>
-              <input
-                id="login-pass"
-                type="password"
-                className="input py-2.5"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              {/* Un mot de passe qu'on ne voit pas est un mot de passe qu'on ne peut pas
+                  déboguer. Un long mot de passe collé depuis un gestionnaire peut arriver tronqué
+                  au premier saut de ligne, ou lesté d'une espace : il a l'air juste, il ne marche
+                  pas, et l'écran répète « identifiants invalides ». Le voir règle ça en une
+                  seconde. */}
+              <div className="relative">
+                <input
+                  id="login-pass"
+                  type={revealed ? "text" : "password"}
+                  className="input py-2.5 pr-11"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setRevealed((v) => !v)}
+                  aria-label={t(revealed ? "auth.hidePassword" : "auth.showPassword")}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-200"
+                >
+                  {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -191,15 +212,25 @@ function LoginForm() {
                 spellCheck={false}
                 required
               />
-              <input
-                type="password"
-                className="input"
-                placeholder={t("auth.local.passwordPlaceholder")}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              <div className="relative">
+                <input
+                  type={revealed ? "text" : "password"}
+                  className="input w-full pr-11"
+                  placeholder={t("auth.local.passwordPlaceholder")}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setRevealed((v) => !v)}
+                  aria-label={t(revealed ? "auth.hidePassword" : "auth.showPassword")}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-200"
+                >
+                  {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
               {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
               <button type="submit" disabled={loading} className="btn-ghost w-full justify-center">
                 {loading ? t("auth.jellyfin.submitting") : t("auth.local.submit")}

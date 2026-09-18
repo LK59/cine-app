@@ -21,7 +21,10 @@
     },
     "tagline": "Deine Filme und Serien, startklar.",
     "hint": "Melde dich mit deinem Jellyfin-Konto an.",
-    "statusLink": "Dienststatus"
+    "statusLink": "Dienststatus",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "passwordLeadingSpace": "Dein Passwort beginnt mit einem Leerzeichen. Von woanders eingefügt?"
   },
   "nav": {
     "overview": "Übersicht",

@@ -21,7 +21,10 @@
     },
     "tagline": "Vos films et vos séries, prêts à regarder.",
     "hint": "Utilisez les identifiants de votre compte Jellyfin.",
-    "statusLink": "État des services"
+    "statusLink": "État des services",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "passwordLeadingSpace": "Votre mot de passe commence par une espace. Collé depuis ailleurs ?"
   },
   "nav": {
     "overview": "Vue d'ensemble",

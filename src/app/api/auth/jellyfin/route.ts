@@ -5,6 +5,7 @@ import { sessionDb, userPrefsDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
+import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 
 export async function POST(req: NextRequest) {
@@ -33,20 +34,38 @@ export async function POST(req: NextRequest) {
     // in. A fresh random id per login makes every login its own distinct "device" to Jellyfin, so
     // tokens can never collide/evict each other this way again.
     const deviceId = `cine-app-${crypto.randomUUID()}`;
-    jellyfinRes = await fetch(`${config.jellyfin.url}/Users/AuthenticateByName`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="1.0.0"`,
-      },
-      body: JSON.stringify({ Username: username, Pw: password }),
-    });
+    // La forme donnée d'abord, la forme sans espace finale seulement si la première échoue — voir
+    // `passwordAttempts`. Dans le cas courant il n'y a qu'un seul appel, comme avant.
+    jellyfinRes = new Response(null, { status: 401 });
+    for (const candidate of passwordAttempts(password)) {
+      jellyfinRes = await fetch(`${config.jellyfin.url}/Users/AuthenticateByName`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="1.0.0"`,
+        },
+        body: JSON.stringify({ Username: username, Pw: candidate }),
+      });
+      if (jellyfinRes.ok) break;
+    }
   } catch {
     return NextResponse.json({ error: "Impossible de contacter Jellyfin" }, { status: 502 });
   }
 
   if (!jellyfinRes.ok) {
-    return NextResponse.json({ error: "Identifiants Jellyfin invalides" }, { status: 401 });
+    // Nommer ce qu'on voit dans ce que la personne a tapé, jamais ce qu'on sait du mot de passe
+    // attendu. Une espace de tête est invisible et ne pardonne pas : la signaler transforme six
+    // tentatives identiques en une correction.
+    // Un code à côté du message, comme partout ailleurs dans ce dépôt : le serveur ne connaît pas
+    // la langue de qui lit, et l'écran de connexion est justement celui qu'on atteint avant toute
+    // préférence. Le message reste rempli pour qui ne saurait pas lire le code.
+    return NextResponse.json(
+      {
+        error: "Identifiants Jellyfin invalides",
+        ...(hasLeadingSpace(password) ? { code: "password-leading-space" } : {}),
+      },
+      { status: 401 }
+    );
   }
 
   const data = await jellyfinRes.json();

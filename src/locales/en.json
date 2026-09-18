@@ -21,7 +21,10 @@
     },
     "tagline": "Your films and series, ready to watch.",
     "hint": "Sign in with your Jellyfin account details.",
-    "statusLink": "Service status"
+    "statusLink": "Service status",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "passwordLeadingSpace": "Your password starts with a space. Pasted from somewhere else?"
   },
   "nav": {
     "overview": "Overview",

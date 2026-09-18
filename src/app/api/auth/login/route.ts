@@ -6,6 +6,7 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { timingSafeEquals } from "@/lib/timingSafeEquals";
+import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -21,13 +22,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Identifiants requis" }, { status: 400 });
   }
 
+  // La forme donnée d'abord, la forme sans espace finale ensuite — voir `passwordAttempts`. Les
+  // deux passent par `timingSafeEquals` : une comparaison qui s'arrête au premier caractère
+  // différent laisse deviner le mot de passe, et ce n'est pas parce qu'il y en a deux qu'on peut
+  // se le permettre une fois.
   const isAdmin =
     username === config.app.adminUser &&
     !!config.app.adminPassword &&
-    timingSafeEquals(password, config.app.adminPassword);
+    passwordAttempts(password).some((candidate) => timingSafeEquals(candidate, config.app.adminPassword));
 
   if (!isAdmin) {
-    return NextResponse.json({ error: "Identifiants invalides" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Identifiants invalides", ...(hasLeadingSpace(password) ? { code: "password-leading-space" } : {}) },
+      { status: 401 }
+    );
   }
 
   const { token, jti } = await createSessionToken(username, "admin");

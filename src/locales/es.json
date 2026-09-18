@@ -21,7 +21,10 @@
     },
     "tagline": "Tus películas y series, listas para ver.",
     "hint": "Usa los datos de tu cuenta de Jellyfin.",
-    "statusLink": "Estado de los servicios"
+    "statusLink": "Estado de los servicios",
+    "showPassword": "Mostrar la contraseña",
+    "hidePassword": "Ocultar la contraseña",
+    "passwordLeadingSpace": "Tu contraseña empieza por un espacio. ¿Pegada desde otro sitio?"
   },
   "nav": {
     "overview": "Resumen",
