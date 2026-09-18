@@ -765,6 +765,20 @@ export const sessionDb = {
  */
 const MAINTENANCE_MAX_MS = 4 * 60 * 60 * 1000;
 
+/**
+ * Combien de temps un avis de redémarrage reste un avis.
+ *
+ * « L'application va redémarrer » ne veut rien dire une heure après : le redémarrage a eu lieu, ou
+ * il n'aura pas lieu. Sans cette borne, l'avis dormait dans la base et sautait au visage du
+ * premier écran qui lançait une lecture — un autre compte, un autre appareil, un navigateur au
+ * stockage vide — longtemps après que tout soit fini.
+ *
+ * Deux minutes : de quoi couvrir le sondage des écrans, qui est de quinze secondes, et quelqu'un
+ * qui lance un film à l'instant où l'on appuie. Au-delà, ce n'est plus un avertissement, c'est une
+ * embuscade.
+ */
+const MAINTENANCE_NOTICE_FRESH_MS = 2 * 60 * 1000;
+
 export interface MaintenanceState {
   active: boolean;
   /** Date du dernier avis de redémarrage imminent, en ms, ou null s'il n'y en a jamais eu. */
@@ -792,7 +806,12 @@ export const maintenanceDb = {
     // Jamais écrit : l'installation n'est pas en maintenance, ce qui est le bon défaut.
     const expired = row?.expires_at != null && row.expires_at <= now;
     const active = !!row?.active && !expired;
-    return { active, noticeAt: row?.notice_at ?? null, expiresAt: active ? row?.expires_at ?? null : null };
+    // L'avis se périme lui aussi, et bien plus vite que le bandeau : il annonce un instant, pas un
+    // état. Passé sa fenêtre, il n'est plus servi du tout — aucun écran ne peut donc le découvrir
+    // en retard, quel que soit ce qu'il a déjà vu de son côté.
+    const notice = row?.notice_at ?? null;
+    const noticeAt = notice !== null && now - notice <= MAINTENANCE_NOTICE_FRESH_MS ? notice : null;
+    return { active, noticeAt, expiresAt: active ? row?.expires_at ?? null : null };
   },
 
   /** Allumer pose l'échéance ; éteindre l'efface, pour qu'un rallumage reparte d'un compte plein. */

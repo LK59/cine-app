@@ -45,3 +45,35 @@ describe("l'extinction automatique de la maintenance", () => {
     expect(lire(undefined, 0).active).toBe(false);
   });
 });
+
+describe("la péremption de l'avis de redémarrage", () => {
+  // « L'application va redémarrer » ne veut rien dire une heure après. Signalé à l'usage : l'avis
+  // dormait en base et sautait au visage du premier écran qui lançait une lecture — un autre
+  // compte, un autre appareil — longtemps après que tout soit fini.
+  const FENETRE = 2 * 60 * 1000;
+
+  const lire = (notice: number | null, now: number) =>
+    notice !== null && now - notice <= FENETRE ? notice : null;
+
+  it("atteint un écran qui lance une lecture juste après", () => {
+    // Le sondage est de quinze secondes : quelqu'un qui démarre un film à l'instant où l'on
+    // appuie doit être averti.
+    expect(lire(1_000_000, 1_000_000)).toBe(1_000_000);
+    expect(lire(1_000_000, 1_000_000 + 30_000)).toBe(1_000_000);
+  });
+
+  it("cesse d'exister passé sa fenêtre", () => {
+    expect(lire(1_000_000, 1_000_000 + FENETRE)).toBe(1_000_000);
+    expect(lire(1_000_000, 1_000_000 + FENETRE + 1)).toBeNull();
+  });
+
+  it("n'embusque plus personne des heures après", () => {
+    // Le symptôme exact : lecture lancée plus tard, sur un compte qui n'avait jamais vu l'avis.
+    expect(lire(1_000_000, 1_000_000 + 6 * 60 * 60 * 1000)).toBeNull();
+  });
+
+  it("ne dit rien quand aucun avis n'a jamais été levé", () => {
+    expect(lire(null, 1_000_000)).toBeNull();
+  });
+});
+
