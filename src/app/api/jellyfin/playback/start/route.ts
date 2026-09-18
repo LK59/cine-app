@@ -5,10 +5,11 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
-import { buildDeviceProfile } from "@/lib/deviceProfile";
+import { buildDeviceProfile, castRefusalFor } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
 import { displayTitle } from "@/lib/displayTitle";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { signCastToken, CAST_TOKEN_PARAM } from "@/lib/castToken";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -103,6 +104,15 @@ export async function POST(req: NextRequest) {
   // rather than hls.js. Defaults to TRUE when absent, so a client from before this field existed
   // keeps the pre-warm it has always had — see where it's used below.
   const nativeHls = body?.nativeHls !== false;
+  /**
+   * Ce flux part-il vers un téléviseur ?
+   *
+   * Deux conséquences, et aucune n'est cosmétique : les sous-titres doivent voyager **dans** le
+   * manifeste (le récepteur ne voit rien de ce que la page dessine), et l'adresse doit être
+   * absolue et porter son laissez-passer, puisque c'est le téléviseur qui ira la chercher, sans
+   * notre cookie.
+   */
+  const forCast = body?.forCast === true;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -118,7 +128,7 @@ export async function POST(req: NextRequest) {
         Object.entries(codecSupport.audio ?? {}).map(([codec, ok]) => [codec, disableAudioCodecs.includes(codec) ? false : ok])
       ),
     };
-    const deviceProfile = buildDeviceProfile(effectiveSupport, maxBitrate);
+    const deviceProfile = buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast });
     const info = await jellyfin.getPlaybackInfo(session.jfId, itemId, session.jfToken, {
       maxBitrate,
       mediaSourceId: itemId,
@@ -130,6 +140,14 @@ export async function POST(req: NextRequest) {
     const source = info.MediaSources?.[0];
     if (!source) {
       return NextResponse.json({ error: "Jellyfin n'a renvoyé aucun flux" }, { status: 502 });
+    }
+
+    // Refusé avant d'avoir lancé quoi que ce soit : un sous-titre image forcerait Jellyfin à
+    // ré-encoder la vidéo pour l'incruster, et la diffusion perdrait la seule chose qui la rend
+    // acceptable — l'image copiée telle quelle. Le dire vaut mieux que le faire en silence.
+    if (forCast) {
+      const refusal = castRefusalFor(source.MediaStreams, subtitleStreamIndex);
+      if (refusal) return NextResponse.json({ error: "cast-refused", code: refusal }, { status: 409 });
     }
 
     const isDirectPlay = source.SupportsDirectPlay === true;
@@ -244,10 +262,35 @@ export async function POST(req: NextRequest) {
       timestamps?.Introduction?.Valid ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End } : null;
     const creditsStart = timestamps?.Credits?.Valid ? timestamps.Credits.Start : null;
 
+    /**
+     * Pour un téléviseur, l'adresse doit être complète et porter son laissez-passer.
+     *
+     * **Absolue** : une adresse relative n'a de sens que pour qui connaît la page d'où elle vient.
+     * Le récepteur n'a que la chaîne qu'on lui tend.
+     *
+     * **Signée** : il ira la chercher sans notre cookie. Le laissez-passer n'ouvre que ce titre,
+     * en lecture, six heures — voir `castToken`. Le proxy de flux reportera ensuite ce même jeton
+     * dans chaque segment que le manifeste désigne, sans quoi la lecture s'arrêterait au bout de
+     * deux secondes.
+     *
+     * L'origine vient des en-têtes du mandataire inverse, qui est le seul à savoir sous quel nom
+     * le monde extérieur joint cette application — `nextUrl.origin` ne connaît que le conteneur.
+     */
+    let castUrl: string | null = null;
+    if (forCast) {
+      const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
+      const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
+      const pass = await signCastToken(itemId, session.u);
+      const separator = manifestUrl.includes("?") ? "&" : "?";
+      castUrl = `${proto}://${host}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(pass)}`;
+    }
+
     return NextResponse.json({
       playSessionId: info.PlaySessionId,
       mediaSourceId: source.Id,
       manifestUrl,
+      /** Non nulle seulement pour une diffusion : l'adresse que le téléviseur ira chercher. */
+      castUrl,
       isDirectPlay,
       subtitleTracks,
       audioTracks,

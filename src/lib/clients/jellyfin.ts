@@ -93,6 +93,15 @@ export interface JellyfinMediaStream {
   DisplayTitle?: string;
   IsDefault?: boolean;
   IsExternal?: boolean;
+  /**
+   * Vrai pour un sous-titre fait de texte, faux pour un sous-titre fait d'images (PGS, VobSub).
+   *
+   * La distinction n'a pas d'importance dans la page, qui reçoit du VTT dans les deux cas. Elle en
+   * a une décisive pour la diffusion : un sous-titre image ne peut pas devenir une piste du flux,
+   * Jellyfin doit l'incruster — donc **ré-encoder la vidéo**, et la couche Dolby Vision se perd
+   * avec. Voir `castRefusalFor`.
+   */
+  IsTextSubtitleStream?: boolean;
   Codec?: string;
   Profile?: string;
   BitRate?: number;

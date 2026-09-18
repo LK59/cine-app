@@ -62,7 +62,26 @@ const SAFE_VIDEO_RANGES = "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHDR10Pl
 // StreamBuilder do the rest on its own: an mp4-native file with compatible codecs plays
 // untouched (DirectPlay), an mkv file with compatible codecs gets remuxed server-side without
 // re-encoding, and only a genuine codec mismatch falls through to a real Transcode.
-export function buildDeviceProfile(support: CodecSupport, maxBitrate: number): JellyfinDeviceProfile {
+/**
+ * Ce qui change quand le flux part vers un téléviseur plutôt que vers la page.
+ *
+ * Une seule chose, et elle est nécessaire : les sous-titres. `External` fait servir un fichier VTT
+ * à côté, que **la page** va chercher et dessine elle-même en `<track>`. Sur une diffusion, c'est
+ * le téléviseur qui lit le flux : il ne verra jamais ce que la page dessine, et le film partirait
+ * sans sous-titres sans que rien ne le signale. `Hls` les fait entrer dans le manifeste, comme une
+ * piste que le récepteur sait afficher — et que le téléphone continue de choisir, puisque ces
+ * pistes apparaissent elles aussi dans `video.textTracks`.
+ */
+export interface DeviceProfileOptions {
+  /** Les sous-titres doivent voyager dans le flux, pas à côté. */
+  subtitlesInStream?: boolean;
+}
+
+export function buildDeviceProfile(
+  support: CodecSupport,
+  maxBitrate: number,
+  options: DeviceProfileOptions = {}
+): JellyfinDeviceProfile {
   const videoCodecs = [...new Set(VIDEO_CODEC_KEYS.filter((c) => support.video[c.key]).map((c) => c.codec))];
   // The other half of declaring HEVC honestly. Advertising the codec while the device only
   // decodes 8-bit would hand it a Main 10 stream it cannot play — a black screen instead of a
@@ -120,9 +139,39 @@ export function buildDeviceProfile(support: CodecSupport, maxBitrate: number): J
     // being direct-played, where the browser has no way to read them itself) as sidecar VTT,
     // served through the app's existing /api/jellyfin/stream/subtitle proxy. "Hls" covers the
     // Transcode path, where subtitles are embedded as a switchable HLS rendition instead.
-    SubtitleProfiles: [
-      { Format: "vtt", Method: "External" },
-      { Format: "vtt", Method: "Hls" },
-    ],
+    SubtitleProfiles: options.subtitlesInStream
+      ? // Seul `Hls` : laisser `External` dans la liste rendrait à Jellyfin le droit de servir le
+        // fichier à côté, c'est-à-dire exactement ce que le téléviseur ne saura pas lire.
+        [{ Format: "vtt", Method: "Hls" }]
+      : [
+          { Format: "vtt", Method: "External" },
+          { Format: "vtt", Method: "Hls" },
+        ],
   };
+}
+
+/**
+ * Pourquoi ce flux ne peut pas être diffusé tel quel — ou `null` s'il le peut.
+ *
+ * Un seul motif aujourd'hui, et il est net : un sous-titre fait d'**images** (PGS, VobSub) ne peut
+ * pas devenir une piste du manifeste. Jellyfin n'a qu'un moyen de l'afficher, l'incruster dans
+ * l'image — donc ré-encoder la vidéo. On perdrait la seule propriété qui rend cette diffusion
+ * acceptable : la vidéo est **copiée** telle quelle, couche Dolby Vision comprise. Mesuré, pas
+ * supposé : `TranscodeReasons` ne cite que le conteneur et l'audio.
+ *
+ * Le refuser en le disant vaut mieux que le transcoder en silence — un 4K qui part en ré-encodage
+ * complet se voit sur la machine bien avant de se voir à l'écran. Et mieux que le diffuser sans
+ * sous-titres, qui est la troisième option et la pire : elle ne prévient de rien.
+ *
+ * `IsTextSubtitleStream` absent veut dire « Jellyfin ne s'est pas prononcé » : on laisse passer.
+ * Une hypothèse sur le serveur d'en face ne doit pas refuser une diffusion qui aurait marché.
+ */
+export function castRefusalFor(
+  streams: { Type: string; Index: number; IsTextSubtitleStream?: boolean }[] | undefined,
+  subtitleStreamIndex: number | null | undefined
+): "image-subtitle" | null {
+  if (subtitleStreamIndex === null || subtitleStreamIndex === undefined || subtitleStreamIndex < 0) return null;
+  const chosen = streams?.find((s) => s.Type === "Subtitle" && s.Index === subtitleStreamIndex);
+  if (!chosen) return null;
+  return chosen.IsTextSubtitleStream === false ? "image-subtitle" : null;
 }

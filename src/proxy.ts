@@ -6,6 +6,7 @@ import { SESSION_COOKIE, SESSION_MAX_AGE, refreshSessionToken, shouldRefresh } f
 import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
+import { castPassFor } from "@/lib/castToken";
 import { sessionDb } from "@/lib/db";
 
 // Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
@@ -161,6 +162,20 @@ export async function proxy(req: NextRequest) {
   // donc sans effet en pratique, et juste si quelque chose venait un jour à le transmettre.
   const moved = MOVED_PATHS[pathname];
   if (moved) return NextResponse.redirect(new URL(moved + req.nextUrl.hash, req.url), 308);
+
+  /**
+   * Le seul accès sans session de toute l'application, et il tient en une ligne ici.
+   *
+   * Un téléviseur qui diffuse ne reçoit pas le flux de la page : il reçoit une adresse et va le
+   * chercher lui-même, sans notre cookie et sans moyen d'en avoir un. `castPassFor` décide, et
+   * elle est écrite une seule fois — la route de flux pose exactement la même question, avec la
+   * même fonction. Sa portée est dans son nom : un GET, le préfixe du flux, un titre nommé par la
+   * signature elle-même. Tout le reste du site continue d'exiger une session.
+   *
+   * Placé après les chemins publics et les redirections, avant la vérification de session : un
+   * laissez-passer ne doit jamais pouvoir contourner ce qui précède.
+   */
+  if (await castPassFor(req)) return NextResponse.next();
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);

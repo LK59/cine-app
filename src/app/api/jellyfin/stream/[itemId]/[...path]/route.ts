@@ -4,6 +4,7 @@ import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isStreamPath, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
+import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -46,9 +47,14 @@ export async function GET(
   // décodage a eu lieu. Refusé ici, la chaîne n'est jamais assemblée.
   if (!isStreamPath(path)) return new NextResponse(null, { status: 400 });
 
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionFull(token);
-  if (!session?.jfId) return new NextResponse(null, { status: 403 });
+  // Un téléviseur en diffusion n'a pas de cookie : son laissez-passer répond à sa place. Même
+  // fonction que le proxy, jamais une seconde formulation — voir `castPassFor`.
+  const castPass = await castPassFor(req);
+  if (!castPass) {
+    const token = req.cookies.get(SESSION_COOKIE)?.value;
+    const session = await verifySessionFull(token);
+    if (!session?.jfId) return new NextResponse(null, { status: 403 });
+  }
 
   const restPath = path.join("/");
   const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${req.nextUrl.search}`;
@@ -101,7 +107,21 @@ export async function GET(
         new RegExp(`(?:https?:\\/\\/[^/\\s"]+)?\\/videos\\/${itemId}\\/`, "gi"),
         `/api/jellyfin/stream/${itemId}/`
       );
-      const buf = Buffer.from(rewritten, "utf-8");
+      /**
+       * Le laissez-passer est reporté dans chaque adresse que le manifeste désigne.
+       *
+       * Sans cela, la diffusion s'arrêterait après deux secondes : le téléviseur obtiendrait le
+       * manifeste — la seule adresse que nous lui avons donnée — puis demanderait des centaines de
+       * segments sans jeton, tous refusés. Ces adresses sont fabriquées juste au-dessus, donc
+       * c'est ici, et nulle part ailleurs, qu'elles peuvent le recevoir.
+       *
+       * Ajouté seulement quand la requête en cours en portait un : une lecture normale, dans la
+       * page et avec son cookie, ne doit pas se mettre à distribuer des laissez-passer.
+       */
+      const withPass = castPass
+        ? withCastPass(rewritten, itemId, req.nextUrl.searchParams.get(CAST_TOKEN_PARAM) ?? "")
+        : rewritten;
+      const buf = Buffer.from(withPass, "utf-8");
 
       // Playlists are ALWAYS served whole, with Range requests deliberately ignored (a plain 200
       // full-body response is a valid answer to a Range request) and NO Accept-Ranges header.
