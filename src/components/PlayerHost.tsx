@@ -893,7 +893,26 @@ function ActivePlayer({
    * Non détecté, on **reste** sur ce lecteur : le pire cas est le comportement d'avant, jamais
    * pire. C'est ce qui permet de tenter le retour sans risquer d'y perdre la lecture.
    */
+  /**
+   * Rendre la main, sur demande.
+   *
+   * Le geste que le spectateur fait quand il a ouvert le sélecteur puis choisi de rester sur son
+   * téléphone : il n'a rien diffusé, donc aucun événement ne se déclenchera jamais, et sans ceci
+   * il resterait sur ce lecteur jusqu'à la fin du film.
+   */
+  const handleCastReturn = useCallback(() => {
+    onCastEnded?.(videoRef.current?.currentTime || 0);
+  }, [onCastEnded]);
+
   const castAttempted = useRef(false);
+  /**
+   * Quelque chose diffuse-t-il vraiment ?
+   *
+   * Tenu par l'écouteur ci-dessous et par lui seul. Deux endroits qui observeraient le même état
+   * finiraient par ne plus être d'accord, et celui-ci décide d'un mot que le spectateur lit.
+   */
+  const [castActive, setCastActive] = useState(false);
+  const castActiveRef = useRef(false);
   useEffect(() => {
     const video = videoRef.current as CastCapableVideo | null;
     if (!video || !castSession) return;
@@ -914,16 +933,32 @@ function ActivePlayer({
     else video.addEventListener("loadedmetadata", openPicker, { once: true });
 
     const ended = () => onCastEnded?.(video.currentTime || 0);
-    const onWirelessChanged = () => {
-      if (video.webkitCurrentPlaybackTargetIsWireless === false) ended();
+    const setActive = (active: boolean) => {
+      castActiveRef.current = active;
+      setCastActive(active);
     };
-    const onDisconnect = () => ended();
+    const onWirelessChanged = () => {
+      const wireless = video.webkitCurrentPlaybackTargetIsWireless === true;
+      // Ne rend la main que si quelque chose diffusait : l'événement se déclenche aussi en
+      // arrivant, et un « faux » de départ n'est pas une diffusion qui s'arrête.
+      const wasActive = castActiveRef.current;
+      setActive(wireless);
+      if (!wireless && wasActive) ended();
+    };
+    const onConnect = () => setActive(true);
+    const onDisconnect = () => {
+      const wasActive = castActiveRef.current;
+      setActive(false);
+      if (wasActive) ended();
+    };
     video.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
+    video.remote?.addEventListener?.("connect", onConnect);
     video.remote?.addEventListener?.("disconnect", onDisconnect);
 
     return () => {
       video.removeEventListener("loadedmetadata", openPicker);
       video.removeEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
+      video.remote?.removeEventListener?.("connect", onConnect);
       video.remote?.removeEventListener?.("disconnect", onDisconnect);
     };
   }, [castSession, onCastEnded, videoKey]);
@@ -1292,6 +1327,11 @@ function ActivePlayer({
           creditsStart={creditsStart}
           nextEpisode={nextEpisode}
           onAdvance={handleAdvance}
+          /* La sortie de diffusion, et seulement quand cette séance existe pour ça. Elle ne
+             dépend d'aucun événement : c'est ce qui la rend sûre là où la détection, elle, ne
+             peut pas être éprouvée depuis le serveur. Voir `onCastReturn`. */
+          onCastReturn={castSession ? handleCastReturn : undefined}
+          castActive={castActive}
         />
       )}
       {!isMini && (

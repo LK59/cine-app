@@ -1453,7 +1453,9 @@
     },
     "unplayable": "This file cannot be played in this browser.",
     "handingOver": "Getting playback ready…",
-    "castPreparing": "Getting the cast ready…"
+    "castPreparing": "Getting the cast ready…",
+    "castStop": "Stop casting",
+    "castReturn": "Back to the player"
   },
   "cinema": {
     "standardMode": "Standard mode",

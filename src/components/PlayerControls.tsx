@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -46,6 +46,18 @@ interface PlayerControlsProps {
    * lecteur serveur — le sélecteur s'ouvre comme avant, à l'identique.
    */
   onCastRequest?: () => void;
+  /**
+   * La sortie, quand cette séance n'existe que pour diffuser.
+   *
+   * Sans elle, un spectateur qui ouvre le sélecteur puis choisit « iPhone » — donc n'a rien
+   * diffusé du tout — reste sur le lecteur serveur jusqu'à la fin du film. La bascule a bien eu
+   * lieu, elle était nécessaire pour ouvrir le sélecteur, mais rien ne l'a jamais annulée : l'état
+   * sans-fil n'est jamais passé à vrai, donc il ne repasse jamais à faux, donc rien ne se
+   * déclenche. C'est un retour qui ne dépend d'aucun événement, et c'est pour ça qu'il existe.
+   */
+  onCastReturn?: () => void;
+  /** Quelque chose diffuse-t-il vraiment ? Ne change que le mot, jamais le geste. */
+  castActive?: boolean;
   audioTracks: Track[];
   currentAudioId: number | null;
   onChangeAudio: (id: number) => void;
@@ -98,6 +110,8 @@ export function PlayerControls({
   nextEpisode,
   onAdvance,
   onCastRequest,
+  onCastReturn,
+  castActive,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -1275,6 +1289,22 @@ export function PlayerControls({
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
                   >
                     <Cast size={16} /> {t('player.cast')}
+                  </button>
+                )}
+                {/* Le retour, tant que cette séance existe pour diffuser. Il ne dépend d'aucun
+                    événement — voir `onCastReturn` — et c'est précisément ce qui le rend sûr :
+                    la seule partie de la diffusion qu'on ne puisse pas éprouver depuis ici est
+                    la détection, et celle-ci s'en passe. */}
+                {onCastReturn && (
+                  <button
+                    onClick={() => {
+                      onCastReturn();
+                      setMenu(null);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <MonitorSmartphone size={16} />
+                    {castActive ? t("player.castStop") : t("player.castReturn")}
                   </button>
                 )}
                 {/* Une porte plutôt que trois lignes de plus : la taille, la couleur et le fond

@@ -1453,7 +1453,9 @@
     },
     "unplayable": "Este archivo no se puede reproducir en este navegador.",
     "handingOver": "Preparando la reproducción…",
-    "castPreparing": "Preparando la emisión…"
+    "castPreparing": "Preparando la emisión…",
+    "castStop": "Detener la emisión",
+    "castReturn": "Volver al reproductor"
   },
   "cinema": {
     "standardMode": "Modo estándar",

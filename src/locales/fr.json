@@ -1453,7 +1453,9 @@
     },
     "unplayable": "Ce fichier ne peut pas être lu dans ce navigateur.",
     "handingOver": "Préparation de la lecture…",
-    "castPreparing": "Préparation de la diffusion…"
+    "castPreparing": "Préparation de la diffusion…",
+    "castStop": "Arrêter la diffusion",
+    "castReturn": "Revenir au lecteur"
   },
   "cinema": {
     "standardMode": "Mode standard",

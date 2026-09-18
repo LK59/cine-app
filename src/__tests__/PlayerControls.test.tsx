@@ -252,6 +252,47 @@ describe("PlayerControls — le menu", () => {
   });
 });
 
+describe("PlayerControls — la sortie de diffusion", () => {
+  // Sans elle, un spectateur qui ouvre le sélecteur puis choisit de rester sur son téléphone n'a
+  // rien diffusé du tout : l'état sans-fil n'est jamais passé à vrai, donc il ne repasse jamais à
+  // faux, donc aucun événement ne se déclenche — et il reste sur l'autre lecteur jusqu'à la fin
+  // du film. C'est le seul chemin de retour qui ne dépend de rien.
+  async function openMenu(props: Record<string, unknown>) {
+    stubMediaFetches();
+    const { container } = render(<Harness {...props} />);
+    await act(async () => {});
+    const more = container.querySelector('[data-player-nav="more"]') ?? screen.getAllByRole("button").at(-1)!;
+    await act(async () => void fireEvent.click(more));
+    return container;
+  }
+
+  it("n'existe pas dans une lecture ordinaire", async () => {
+    await openMenu({});
+    expect(screen.queryByText("player.castReturn")).toBeNull();
+    expect(screen.queryByText("player.castStop")).toBeNull();
+  });
+
+  it("propose de revenir quand rien ne diffuse", async () => {
+    await openMenu({ onCastReturn: vi.fn(), castActive: false });
+    expect(screen.getByText("player.castReturn")).toBeTruthy();
+  });
+
+  it("propose d'arrêter quand quelque chose diffuse", async () => {
+    // Le mot change, le geste non : revenir au lecteur met fin à la diffusion de toute façon,
+    // puisque l'élément qui l'alimentait disparaît.
+    await openMenu({ onCastReturn: vi.fn(), castActive: true });
+    expect(screen.getByText("player.castStop")).toBeTruthy();
+    expect(screen.queryByText("player.castReturn")).toBeNull();
+  });
+
+  it("rend la main au premier appui", async () => {
+    const onCastReturn = vi.fn();
+    await openMenu({ onCastReturn, castActive: false });
+    await act(async () => void fireEvent.click(screen.getByText("player.castReturn")));
+    expect(onCastReturn).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("PlayerControls — l'attente d'un saut", () => {
   /** The spinner and the centre buttons are exclusive: one replaces the other. */
   /** The thread that runs across the top while the player is working. */

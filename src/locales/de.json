@@ -1453,7 +1453,9 @@
     },
     "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden.",
     "handingOver": "Wiedergabe wird vorbereitet…",
-    "castPreparing": "Übertragung wird vorbereitet…"
+    "castPreparing": "Übertragung wird vorbereitet…",
+    "castStop": "Übertragung beenden",
+    "castReturn": "Zurück zum Player"
   },
   "cinema": {
     "standardMode": "Standardmodus",

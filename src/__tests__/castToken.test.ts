@@ -33,7 +33,16 @@ describe("le laissez-passer de diffusion", () => {
   it("refuse une signature modifiée", async () => {
     const token = await signCastToken(ITEM, "louis");
     const [payload, signature] = token.split(".");
-    const altere = signature.slice(0, -1) + (signature.endsWith("A") ? "B" : "A");
+    // **Pas le dernier caractère.** Une signature HMAC-SHA256 fait 32 octets, soit 43 caractères
+    // base64url dont le dernier ne porte que 4 bits utiles : deux caractères différents y
+    // décodent vers les mêmes octets, et « modifier » la signature ne la modifie pas. Une version
+    // antérieure de ce test faisait exactement ça et passait selon le caractère tiré — un test de
+    // sécurité intermittent, ce qui est pire que pas de test.
+    const altere = signature.slice(0, 5) + (signature[5] === "A" ? "B" : "A") + signature.slice(6);
+    const octets = (v: string) => Buffer.from(v.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    // La garantie que ce test teste quelque chose : les octets doivent vraiment différer.
+    expect(octets(altere).equals(octets(signature))).toBe(false);
+
     expect(await verifyCastToken(`${payload}.${altere}`, ITEM)).toBeNull();
   });
 
