@@ -27,11 +27,40 @@ export interface JellyfinItem {
   ProviderIds?: { Tmdb?: string; Tvdb?: string; Imdb?: string };
   ImageTags?: { Primary?: string };
   RunTimeTicks?: number;
+  /**
+   * Combien d'éléments cette série contient, tous niveaux confondus.
+   *
+   * Demandés explicitement — ils n'arrivent pas sans `Fields`. Ils ne servent qu'à une chose :
+   * distinguer une série réellement finie d'une série vide. Voir `hasSomethingWatched`.
+   */
+  RecursiveItemCount?: number;
+  ChildCount?: number;
   Overview?: string;
   SeriesName?: string;
   SeriesId?: string;
   IndexNumber?: number;
   ParentIndexNumber?: number;
+}
+
+/**
+ * Cet élément dit-il quelque chose de ce que la personne a regardé ?
+ *
+ * `Filters=IsPlayed` répond « oui » pour une série **vide**, et c'est correct : tous ses épisodes
+ * — les zéro — ont été vus. Le résultat est qu'une série présente dans Sonarr mais dont aucun
+ * fichier n'a encore été importé apparaît comme vue par **tout le monde**, y compris un compte
+ * créé à l'instant. Observé le 18/09/2026 sur « La casa de las flores », seule série marquée vue
+ * de toute l'installation : `ChildCount=0`, `RecursiveItemCount=0`, `PlayCount=0`, pour les
+ * vingt-deux comptes.
+ *
+ * Le filtre est volontairement le plus étroit possible : seules les séries sont concernées — un
+ * film ne peut pas être vide — et seul un compte d'épisodes **explicitement nul** écarte. Quand
+ * Jellyfin ne renvoie pas ces champs, on garde : mieux vaut une ligne de trop qu'un historique
+ * amputé par une hypothèse sur le serveur d'en face.
+ */
+export function hasSomethingWatched(item: JellyfinItem): boolean {
+  if (item.Type !== "Series") return true;
+  const episodes = item.RecursiveItemCount ?? item.ChildCount;
+  return episodes !== 0;
 }
 
 export interface JellyfinSession {
@@ -351,9 +380,9 @@ export const jellyfin = {
    */
   getPlayedItems: (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${userId}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,
+      `${url}/Users/${userId}/Items?Filters=IsPlayed&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks,RecursiveItemCount,ChildCount&Limit=500`,
       { headers }
-    ).then((res) => res.Items),
+    ).then((res) => res.Items.filter(hasSomethingWatched)),
 
   getFavorites: (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
