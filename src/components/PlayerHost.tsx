@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
@@ -101,6 +102,7 @@ const MAX_MEDIA_RETRIES = 3;
 // otherwise renders the SAME <video> element regardless of full/mini mode (only the
 // container's size/position/chrome differ), so minimizing never interrupts playback.
 export function PlayerHost() {
+  const t = useT();
   const playback = usePlayback();
   const { session, mode } = playback;
   const { legacy } = useLegacyPlayer();
@@ -113,7 +115,7 @@ export function PlayerHost() {
   // useful for finding out which files it actually cannot handle.
   // The handover to the stable player: which files it has taken over, why, and the word shown
   // to the viewer while it settles in. See useStableFallback.
-  const { handedOver, negotiating, reason: fallbackReason, takeover, stepAside } = useStableFallback();
+  const { handedOver, negotiating, reason: fallbackReason, takeover, stepAside, stepBack, returning } = useStableFallback();
 
   // Stable across renders on purpose. Handed down as an inline arrow, this was a different
   // function every time this component drew — and minimising the player draws it — which the
@@ -126,6 +128,19 @@ export function PlayerHost() {
       if (itemId) stepAside(itemId, reason, resumeInto ? { ...resumeInto, owner: session } : undefined);
     },
     [itemId, session, stepAside]
+  );
+
+  /**
+   * La diffusion s'est arrêtée : on rend la main au lecteur natif.
+   *
+   * `stepBack` ne le fait que si la bascule était une diffusion — une bascule d'échec qui
+   * reviendrait rejouerait son échec en boucle. La règle vit là-bas, pas ici.
+   */
+  const handCastBack = useCallback(
+    (resumeAt: number) => {
+      if (itemId) stepBack(itemId, resumeAt);
+    },
+    [itemId, stepBack]
   );
 
   if (!session) return null;
@@ -143,6 +158,18 @@ export function PlayerHost() {
   // `useLegacyPlayer-public-path.test.tsx`, qui remonte le hook au lieu de le re-rendre.
   if (legacy === undefined || serverFallback === undefined) return null;
 
+  /**
+   * Le lecteur natif reprend là où la diffusion s'est arrêtée, et non là où la séance s'est
+   * ouverte — qui peut dater d'une heure et demie.
+   *
+   * La position voyage par la séance plutôt que par une nouvelle propriété : c'est déjà le champ
+   * dont ce lecteur tire sa réponse, et lui en ajouter un second à consulter serait une seconde
+   * règle sur la même question. `?? 0` n'a pas lieu d'être ici : `returning` porte toujours un
+   * nombre.
+   */
+  const playing =
+    returning && returning.itemId === session.itemId ? { ...session, resumeAt: returning.resumeAt } : session;
+
   // Sans lecteur serveur, il n'y a pas d'aiguillage : le choix du compte comme le repli
   // automatique désignent tous deux un lecteur qui n'existe pas sur cette installation. Un
   // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
@@ -157,7 +184,7 @@ export function PlayerHost() {
         // fetched for the episode before, the position, the count of rebuilds already spent, and
         // a readiness left true while the new one was still opening.
         key={session.itemId}
-        session={session}
+        session={playing}
         mode={mode === "mini" ? "mini" : "full"}
         onFallback={handOver}
       />
@@ -171,14 +198,19 @@ export function PlayerHost() {
         mode={mode === "mini" ? "mini" : "full"}
         fallbackReason={fallbackReason}
         takeover={takeover}
+        onCastEnded={handCastBack}
       />
       {/* Shown over the stable player while it makes its own arrangements, and gone on its own.
           Nothing to dismiss and nothing to decide: by the time a viewer has read it, the film is
           usually already playing. */}
       {negotiating && (
         <div className="pointer-events-none fixed inset-x-0 top-6 z-[70] flex justify-center">
-          <span className="animate-fade-in rounded-full bg-slate-900/85 px-4 py-2 text-sm text-slate-200 shadow-lg ring-1 ring-white/10 backdrop-blur-sm">
-            Négociation avec le serveur…
+          {/* Le mot nomme ce qu'on attend. Un encart qui dit « négociation » pendant qu'on prépare
+              une diffusion ne se lit pas comme une attente utile : il se lit comme un incident.
+              Et un spinner qui nomme ce qu'il attend ne se lit plus comme un spinner. */}
+          <span className="animate-fade-in flex items-center gap-2 rounded-full bg-slate-900/85 px-4 py-2 text-sm text-slate-200 shadow-lg ring-1 ring-white/10 backdrop-blur-sm">
+            <Loader2 size={14} className="animate-spin text-accent-400" />
+            {takeover?.cast ? t("player.castPreparing") : t("player.handingOver")}
           </span>
         </div>
       )}
@@ -186,11 +218,21 @@ export function PlayerHost() {
   );
 }
 
+/**
+ * Ce que WebKit ajoute à un élément vidéo et que `lib.dom` ne décrit pas — même raison que le
+ * type jumeau de `PlayerControls`, qui n'en connaît que la moitié dont il se sert.
+ */
+interface CastCapableVideo extends HTMLVideoElement {
+  webkitShowPlaybackTargetPicker?: () => void;
+  webkitCurrentPlaybackTargetIsWireless?: boolean;
+}
+
 function ActivePlayer({
   session,
   mode,
   fallbackReason,
   takeover,
+  onCastEnded,
 }: {
   session: NonNullable<ReturnType<typeof usePlayback>["session"]>;
   mode: "full" | "mini";
@@ -198,6 +240,8 @@ function ActivePlayer({
   fallbackReason?: string | null;
   /** Where to resume and on which track, when the handover happened mid-playback. */
   takeover?: StableTakeover | null;
+  /** Appelé quand la diffusion s'arrête, avec la position où elle s'est arrêtée. */
+  onCastEnded?: (resumeAt: number) => void;
 }) {
   const playback = usePlayback();
   const t = useT();
@@ -217,6 +261,14 @@ function ActivePlayer({
   // Et seulement si ce relais appartient à *cette* lecture : rouvrir le même film plus tard est
   // une séance neuve, qui porte sa propre position — « Recommencer » comprise.
   const mine = takeoverFor(takeover, session);
+  /**
+   * Cette séance existe-t-elle pour diffuser ?
+   *
+   * Elle décide de trois choses, et de rien d'autre : le serveur met les sous-titres dans le flux,
+   * l'adresse revient absolue et signée, et le sélecteur s'ouvre dès que l'image est prête. Hors
+   * de ce cas, pas une ligne de ce lecteur ne change.
+   */
+  const castSession = mine?.cast === true;
   const initialResumeAt = mine?.resumeAt ?? sessionResumeAt;
   const initialAudioStreamIndex = mine?.audioStreamIndex ?? sessionAudioStreamIndex;
 
@@ -452,6 +504,14 @@ function ActivePlayer({
           startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
           codecSupport,
           disableAudioCodecs,
+          /**
+           * Cette lecture part-elle vers un téléviseur ?
+           *
+           * Le serveur en tire deux conséquences : les sous-titres entrent dans le manifeste — le
+           * récepteur ne voit rien de ce que la page dessine — et l'adresse revient absolue et
+           * signée, puisque c'est lui qui ira la chercher, sans notre cookie.
+           */
+          forCast: castSession,
           // Lets the server skip its manifest pre-warm for us — see the route. hls.js retries a
           // slow first manifest patiently; Safari's native pipeline does not, which is who that
           // pre-warm was built for.
@@ -577,8 +637,18 @@ function ActivePlayer({
 
       // DirectPlay/DirectStream: a plain Range-seekable file, not an HLS manifest — no hls.js,
       // no native-HLS branch below, just a regular <video src>.
+      /**
+       * L'adresse que l'élément reçoit — et donc celle que le récepteur recevra.
+       *
+       * AirPlay comme Remote Playback ne transmettent pas le flux : ils tendent au téléviseur la
+       * `src` courante, à charge pour lui d'aller la chercher. Elle doit donc être absolue et
+       * porter son laissez-passer. Hors diffusion, rien ne change : `castUrl` est nulle et c'est
+       * l'adresse relative d'hier qui sert.
+       */
+      const sourceUrl = data.castUrl ?? data.manifestUrl;
+
       if (data.isDirectPlay) {
-        video.src = data.manifestUrl;
+        video.src = sourceUrl;
         video.load();
         playAllowingGesture();
         return;
@@ -587,7 +657,7 @@ function ActivePlayer({
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
       if (nativeHls) {
-        video.src = data.manifestUrl;
+        video.src = sourceUrl;
         // Reassigning .src alone doesn't reliably tear down Safari's existing
         // HLS session when only the query string changes (e.g. switching
         // audio track) — force a clean reload so it actually picks up the
@@ -680,7 +750,7 @@ function ActivePlayer({
             setError(t('player.playbackInterrupted'));
         }
       });
-      hls.loadSource(data.manifestUrl);
+      hls.loadSource(sourceUrl);
       hls.attachMedia(video);
     },
     // t (from useT()) only changes on a locale switch mid-playback, an edge case not worth
@@ -804,6 +874,59 @@ function ActivePlayer({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPlayback]);
+
+  /**
+   * La diffusion, d'un bout à l'autre : ouvrir le sélecteur, puis guetter sa fin.
+   *
+   * **L'ouverture.** Les navigateurs n'ouvrent un sélecteur d'appareils que dans la fenêtre
+   * d'activation d'un vrai geste — sinon n'importe quel site ferait apparaître « Diffuser vers… »
+   * sans qu'on ait rien demandé. Entre l'appui du spectateur et cet instant, il y a eu une bascule
+   * de lecteur et un aller-retour avec Jellyfin ; la fenêtre est peut-être fermée. On tente
+   * quand même : Chrome accorde quelques secondes et laissera passer, et là où c'est refusé, le
+   * bouton reste en évidence pour un second appui — qui, lui, portera sa propre activation.
+   *
+   * **La fin.** Elle peut venir de trois endroits : cette page, le centre de contrôle du
+   * téléphone, ou le téléviseur lui-même. Seul l'événement les couvre tous les trois. WebKit le
+   * dit par `webkitcurrentplaybacktargetiswirelesschanged`, l'API standard par les changements
+   * d'état de `remote`. On rend alors la main au lecteur natif, à la position atteinte.
+   *
+   * Non détecté, on **reste** sur ce lecteur : le pire cas est le comportement d'avant, jamais
+   * pire. C'est ce qui permet de tenter le retour sans risquer d'y perdre la lecture.
+   */
+  const castAttempted = useRef(false);
+  useEffect(() => {
+    const video = videoRef.current as CastCapableVideo | null;
+    if (!video || !castSession) return;
+
+    const openPicker = () => {
+      if (castAttempted.current) return;
+      castAttempted.current = true;
+      try {
+        if (typeof video.webkitShowPlaybackTargetPicker === "function") video.webkitShowPlaybackTargetPicker();
+        else void video.remote?.prompt().catch(() => {});
+      } catch {
+        // Refusé faute d'activation : le bouton du menu reste, et son appui en portera une.
+      }
+    };
+    // Dès que l'image est là — pas avant : un sélecteur ouvert sur un élément sans source ne
+    // propose rien à quoi se connecter.
+    if (video.readyState >= 1) openPicker();
+    else video.addEventListener("loadedmetadata", openPicker, { once: true });
+
+    const ended = () => onCastEnded?.(video.currentTime || 0);
+    const onWirelessChanged = () => {
+      if (video.webkitCurrentPlaybackTargetIsWireless === false) ended();
+    };
+    const onDisconnect = () => ended();
+    video.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
+    video.remote?.addEventListener?.("disconnect", onDisconnect);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", openPicker);
+      video.removeEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
+      video.remote?.removeEventListener?.("disconnect", onDisconnect);
+    };
+  }, [castSession, onCastEnded, videoKey]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
   useEffect(() => {

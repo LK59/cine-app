@@ -116,3 +116,51 @@ describe("takeoverFor", () => {
     expect(takeoverFor(undefined, session)).toBeNull();
   });
 });
+
+describe("le retour après une diffusion", () => {
+  // Une bascule pour diffuser n'est pas un échec : le lecteur natif marchait très bien, on l'a
+  // quitté parce qu'un flux MediaSource ne se diffuse pas. Lui seul autorise donc le retour.
+  it("rend la main, à la position où la diffusion s'est arrêtée", () => {
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "diffusion demandée", { resumeAt: 120, cast: true }));
+    expect(result.current.handedOver).toEqual(["film-1"]);
+
+    act(() => result.current.stepBack("film-1", 4200));
+
+    expect(result.current.handedOver).toEqual([]);
+    expect(result.current.returning).toEqual({ itemId: "film-1", resumeAt: 4200 });
+    // Le relais est consommé : il ne doit pas resservir au montage suivant.
+    expect(result.current.takeover).toBeNull();
+  });
+
+  it("ne rend pas la main après un échec", () => {
+    // Y revenir rejouerait l'échec, puis rebasculerait, en boucle. C'est la raison d'être de la
+    // distinction, et elle vit dans le hook et non chez l'appelant.
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "le tampon a été refusé", { resumeAt: 120 }));
+
+    act(() => result.current.stepBack("film-1", 4200));
+
+    expect(result.current.handedOver).toEqual(["film-1"]);
+    expect(result.current.returning).toBeNull();
+  });
+
+  it("n'a rien à rendre quand rien n'a été cédé", () => {
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepBack("film-1", 4200));
+    expect(result.current.returning).toBeNull();
+    expect(result.current.handedOver).toEqual([]);
+  });
+
+  it("annule un retour en attente si l'on rebascule", () => {
+    // Diffuser, revenir, rediffuser : la seconde bascule ne doit pas laisser traîner la position
+    // de la première, qui ferait rouvrir le film au mauvais endroit.
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "diffusion", { resumeAt: 0, cast: true }));
+    act(() => result.current.stepBack("film-1", 4200));
+    act(() => result.current.stepAside("film-1", "diffusion", { resumeAt: 4200, cast: true }));
+
+    expect(result.current.returning).toBeNull();
+    expect(result.current.handedOver).toEqual(["film-1"]);
+  });
+});

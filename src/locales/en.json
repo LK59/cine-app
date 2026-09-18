@@ -1451,7 +1451,9 @@
       "replay": "Watch again",
       "done": "Done"
     },
-    "unplayable": "This file cannot be played in this browser."
+    "unplayable": "This file cannot be played in this browser.",
+    "handingOver": "Getting playback ready…",
+    "castPreparing": "Getting the cast ready…"
   },
   "cinema": {
     "standardMode": "Standard mode",

@@ -1451,7 +1451,9 @@
       "replay": "Noch einmal",
       "done": "Zurück"
     },
-    "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden."
+    "unplayable": "Diese Datei kann in diesem Browser nicht abgespielt werden.",
+    "handingOver": "Wiedergabe wird vorbereitet…",
+    "castPreparing": "Übertragung wird vorbereitet…"
   },
   "cinema": {
     "standardMode": "Standardmodus",

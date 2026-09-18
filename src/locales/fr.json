@@ -1451,7 +1451,9 @@
       "replay": "Revoir",
       "done": "Retour"
     },
-    "unplayable": "Ce fichier ne peut pas être lu dans ce navigateur."
+    "unplayable": "Ce fichier ne peut pas être lu dans ce navigateur.",
+    "handingOver": "Préparation de la lecture…",
+    "castPreparing": "Préparation de la diffusion…"
   },
   "cinema": {
     "standardMode": "Mode standard",

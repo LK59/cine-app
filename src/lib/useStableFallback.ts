@@ -45,6 +45,16 @@ export interface StableTakeover {
    * la même lecture ? Un épisode suivant n'hérite pas non plus de la position du précédent.
    */
   owner?: unknown;
+  /**
+   * Cette bascule est-elle un choix, et non un échec ?
+   *
+   * La différence gouverne le retour. `handedOver` ne se vide jamais, et c'est juste : une bascule
+   * ordinaire signifie que le lecteur natif **n'a pas su** porter ce fichier, et y revenir
+   * rejouerait l'échec en boucle. Diffuser n'est pas un échec — le lecteur natif marchait très
+   * bien, on l'a quitté parce qu'un flux MediaSource ne se diffuse pas. Lui seul autorise donc
+   * `stepBack`.
+   */
+  cast?: boolean;
 }
 
 /**
@@ -69,6 +79,16 @@ export interface StableFallback {
   takeover: StableTakeover | null;
   /** Called by the experimental player when it cannot go on. Idempotent per item. */
   stepAside: (itemId: string, reason: string, takeover?: StableTakeover) => void;
+  /**
+   * Rendre la main au lecteur natif, à la position où la diffusion s'est arrêtée.
+   *
+   * Réservé aux bascules de diffusion : une bascule d'échec qui reviendrait rejouerait son échec.
+   * La garde est dans la fonction et non chez l'appelant — c'est la règle, elle ne doit pas
+   * dépendre de qui appelle.
+   */
+  stepBack: (itemId: string, resumeAt: number) => void;
+  /** Où reprendre quand le lecteur natif est repris après une diffusion, et pour quel film. */
+  returning: { itemId: string; resumeAt: number } | null;
 }
 
 /**
@@ -87,6 +107,7 @@ export function useStableFallback(): StableFallback {
   const [negotiating, setNegotiating] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [takeover, setTakeover] = useState<StableTakeover | null>(null);
+  const [returning, setReturning] = useState<{ itemId: string; resumeAt: number } | null>(null);
 
   const stepAside = useCallback((itemId: string, why: string, resumeInto?: StableTakeover) => {
     setHandedOver((ids) => {
@@ -97,8 +118,21 @@ export function useStableFallback(): StableFallback {
       // Cleared as well as set: a later handover on another item must not inherit the position
       // and track of the previous one.
       setTakeover(resumeInto ?? null);
+      // Une nouvelle bascule annule un retour en attente : on repart dans l'autre sens.
+      setReturning(null);
       setNegotiating(true);
       return [...ids, itemId];
+    });
+  }, []);
+
+  const stepBack = useCallback((itemId: string, resumeAt: number) => {
+    setTakeover((current) => {
+      // Seule une bascule de diffusion revient. Vérifié ici plutôt que chez l'appelant : c'est la
+      // règle elle-même, et une règle qui dépend de qui l'invoque n'en est pas une.
+      if (!current?.cast) return current;
+      setHandedOver((ids) => ids.filter((id) => id !== itemId));
+      setReturning({ itemId, resumeAt });
+      return null;
     });
   }, []);
 
@@ -108,5 +142,5 @@ export function useStableFallback(): StableFallback {
     return () => clearTimeout(id);
   }, [negotiating]);
 
-  return { handedOver, negotiating, reason, takeover, stepAside };
+  return { handedOver, negotiating, reason, takeover, stepAside, stepBack, returning };
 }

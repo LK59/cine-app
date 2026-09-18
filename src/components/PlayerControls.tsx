@@ -33,6 +33,19 @@ interface PlayerControlsProps {
   onClose: () => void;
   onMinimize: () => void;
   onTogglePlaybackInfo: () => void;
+  /**
+   * Ce que « Diffuser » veut dire ici, quand le sélecteur ne peut pas s'ouvrir directement.
+   *
+   * Le lecteur natif alimente son élément vidéo par MediaSource, et **rien ne diffuse un
+   * MediaSource** : ni AirPlay ni l'API Remote Playback n'acceptent autre chose qu'une adresse
+   * que le récepteur ira chercher lui-même. Le sélecteur s'ouvrirait donc pour aboutir à un écran
+   * noir sur le téléviseur.
+   *
+   * Quand cette fonction est fournie, le bouton la prend au lieu d'ouvrir le sélecteur : c'est au
+   * lecteur de se faire remplacer par celui qui, lui, joue une adresse. Absente — le cas du
+   * lecteur serveur — le sélecteur s'ouvre comme avant, à l'identique.
+   */
+  onCastRequest?: () => void;
   audioTracks: Track[];
   currentAudioId: number | null;
   onChangeAudio: (id: number) => void;
@@ -84,6 +97,7 @@ export function PlayerControls({
   creditsStart,
   nextEpisode,
   onAdvance,
+  onCastRequest,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -1252,7 +1266,10 @@ export function PlayerControls({
                 {castSupported && (
                   <button
                     onClick={() => {
-                      showCastPicker();
+                      // Voir `onCastRequest` : un MediaSource ne se diffuse pas, il faut d'abord
+                      // que le lecteur cède la place à celui qui joue une adresse.
+                      if (onCastRequest) onCastRequest();
+                      else showCastPicker();
                       setMenu(null);
                     }}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"

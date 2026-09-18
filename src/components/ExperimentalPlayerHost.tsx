@@ -514,6 +514,27 @@ export function ExperimentalPlayerHost({
     revalidateOnReconnect: false,
     revalidateIfStale: false,
   });
+
+  /**
+   * Où en est cette lecture, dans les termes que le lecteur qui reprend comprend.
+   *
+   * Deux gestes s'en servent — la piste que ce chemin ne peut pas porter, et la diffusion — et ils
+   * décrivent exactement la même chose. Deux copies finiraient par diverger sur la seule valeur
+   * qui compte : la position.
+   *
+   * Mémorisé, et placé après ce qu'il lit : une fonction nue dans le corps du composant fait
+   * renoncer le compilateur React à mémoriser le reste — il l'a dit, et il avait raison de le
+   * dire. La position, elle, se lit dans la référence au moment de l'appel : c'est celle de
+   * l'appui qu'on veut, pas celle du rendu qui a créé le gestionnaire.
+   */
+  const takeoverNow = useCallback(
+    (): StableTakeover => ({
+      // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`.
+      resumeAt: videoElRef.current?.currentTime ?? session.resumeAt ?? 0,
+      audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, currentAudio ?? -1),
+    }),
+    [session.resumeAt, tracks.audio, info?.audio, currentAudio]
+  );
   /**
    * Où en est ce spectateur, et dans quelles langues il regarde — relu à chaque ouverture.
    *
@@ -1501,6 +1522,14 @@ export function ExperimentalPlayerHost({
             // Straight from the container the engine is reading, not from Jellyfin's view of the
             // file: those are the tracks it can actually switch between.
             audioTracks={tracks.audio.map((track) => ({ id: track.number, label: trackLabel(track) }))}
+            /* Diffuser depuis ce lecteur est impossible : il alimente son élément vidéo par
+               MediaSource, et ni AirPlay ni Remote Playback ne diffusent autre chose qu'une
+               adresse que le récepteur ira chercher. On cède donc la place au lecteur serveur, qui
+               en joue une — et `cast: true` dit que ce n'est pas un échec, donc qu'on pourra
+               revenir quand la diffusion s'arrêtera. */
+            onCastRequest={() =>
+              fallToStable("diffusion demandée", { ...takeoverNow(), cast: true })
+            }
             currentAudioId={currentAudio}
             onChangeAudio={(id) => {
               // Une piste que ce chemin ne portera jamais n'est pas un échec à signaler : c'est
@@ -1511,9 +1540,8 @@ export function ExperimentalPlayerHost({
               if (path === "remux" && remuxRef.current?.canCarryAudio(id) === false) {
                 const wanted = tracks.audio.find((track) => track.number === id);
                 fallToStable(`la piste ${wanted?.codecId ?? "demandée"} ne peut pas être portée ici`, {
-                  // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`. C'est
-                  // exactement la position que le repli doit reprendre.
-                  resumeAt: videoElRef.current?.currentTime ?? session.resumeAt ?? 0,
+                  ...takeoverNow(),
+                  // La piste *demandée*, et non celle qui joue : c'est elle qu'on va chercher.
                   audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, id),
                 });
                 return;

@@ -1451,7 +1451,9 @@
       "replay": "Volver a ver",
       "done": "Volver"
     },
-    "unplayable": "Este archivo no se puede reproducir en este navegador."
+    "unplayable": "Este archivo no se puede reproducir en este navegador.",
+    "handingOver": "Preparando la reproducción…",
+    "castPreparing": "Preparando la emisión…"
   },
   "cinema": {
     "standardMode": "Modo estándar",
