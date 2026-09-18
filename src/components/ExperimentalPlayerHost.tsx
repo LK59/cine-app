@@ -1527,8 +1527,17 @@ export function ExperimentalPlayerHost({
                adresse que le récepteur ira chercher. On cède donc la place au lecteur serveur, qui
                en joue une — et `cast: true` dit que ce n'est pas un échec, donc qu'on pourra
                revenir quand la diffusion s'arrêtera. */
-            onCastRequest={() =>
-              fallToStable("diffusion demandée", { ...takeoverNow(), cast: true })
+            onCastRequest={
+              // Seulement s'il y a quelqu'un à qui confier le film. Sans lecteur serveur,
+              // `fallToStable` affiche la raison comme une erreur de lecture — « diffusion
+              // demandée » présenté comme une panne. Le bouton retombe alors sur le sélecteur,
+              // c'est-à-dire exactement ce qu'il faisait avant cette fonctionnalité.
+              //
+              // `undefined` compte comme « il y en a un », comme `fallToStable` le fait déjà pour
+              // lui-même : se tromper dans ce sens donne une bascule, jamais une fausse erreur.
+              serverFallback === false
+                ? undefined
+                : () => fallToStable("diffusion demandée", { ...takeoverNow(), cast: true })
             }
             currentAudioId={currentAudio}
             onChangeAudio={(id) => {
