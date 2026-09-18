@@ -7,6 +7,7 @@ import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
+import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -426,6 +427,15 @@ export function CinemaClient() {
   }, []);
   const heroKind = heroKindFor(heroFocus, mediaType);
   const seriesSelectedItem = route.serie !== null ? seriesById.get(route.serie) ?? null : null;
+
+  // Le même filet que sur téléphone : une adresse qui ne mène à aucune fiche s'efface. Le rail
+  // étant permanent ici, le symptôme visible y est moindre — mais l'adresse est fausse des deux
+  // côtés, et un correctif posé d'un seul est un demi-correctif.
+  useRepairUnresolvedSheet(
+    route.film !== null || route.serie !== null,
+    selectedItem !== null || seriesSelectedItem !== null,
+    moviesById.size > 0 && seriesById.size > 0
+  );
   const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
   const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;

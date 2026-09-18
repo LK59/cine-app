@@ -5,6 +5,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
@@ -240,6 +241,15 @@ export function CinemaMobileClient() {
     const item = (target.type === "series" ? byIdSeries : byIdMovies)?.get(target.id);
     return item ? { item, mediaType: target.type } : null;
   }, [mediaType, route.film, route.serie, byIdMovies, byIdSeries]);
+
+  // Le filet : une adresse qui ne mène à aucune fiche ne doit pas laisser l'écran sans
+  // navigation. Voir `useRepairUnresolvedSheet` — la cause est corrigée à la source, ceci couvre
+  // les suivantes.
+  useRepairUnresolvedSheet(
+    route.film !== null || route.serie !== null,
+    selected !== null,
+    !!byIdMovies && !!byIdSeries
+  );
 
   /**
    * La fiche que celle du dessus recouvre.

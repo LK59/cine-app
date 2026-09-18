@@ -337,15 +337,31 @@ export const jellyfin = {
     fetchJson<void>(`${url}/Library/Refresh`, { method: "POST", headers }),
 
   // AnyProviderIdEquals is broken in Jellyfin 10.11 — fetch all and filter in JS
+  /**
+   * `CollapseBoxSetItems=false` — et ce n'est pas une option d'affichage, c'est ce qui décide si
+   * un film existe pour cette application.
+   *
+   * Sans ce paramètre, Jellyfin replie les films appartenant à une collection **dans** leur
+   * collection : l'énumération renvoie le BoxSet à la place de ses membres. Mesuré le 18/09/2026
+   * sur cette installation : 511 films et 54 BoxSet là où la bibliothèque en compte 688. Les 54
+   * titres repliés — « Hannibal », toute une saga à la fois — étaient absents du catalogue, donc
+   * introuvables dans la grille et impossibles à ouvrir depuis la recherche, qui les trouvait
+   * pourtant et pointait vers une fiche que rien ne pouvait résoudre.
+   *
+   * `IncludeItemTypes=Movie` ne suffit pas à s'en protéger : Jellyfin classe le BoxSet parmi les
+   * films et le renvoie quand même. C'est le repliement qu'il faut refuser, pas le type qu'il faut
+   * filtrer.
+   */
   getAllMovies: (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Users/${userId}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=ProviderIds,UserData,ProductionYear,RunTimeTicks&Limit=5000`,
+      `${url}/Users/${userId}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,UserData,ProductionYear,RunTimeTicks&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
+  /** Même repliement, même correctif — voir `getAllMovies`. */
   getAllMoviesAdmin: () =>
     fetchJson<{ Items: JellyfinItem[] }>(
-      `${url}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=ProviderIds,ProductionYear,RunTimeTicks&Limit=5000`,
+      `${url}/Items?IncludeItemTypes=Movie&Recursive=true&CollapseBoxSetItems=false&Fields=ProviderIds,ProductionYear,RunTimeTicks&Limit=5000`,
       { headers }
     ).then((res) => res.Items),
 
