@@ -578,7 +578,16 @@ function MaintenanceSection() {
         </button>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        {active ? t("player.account.maintenanceHintOn") : t("player.account.maintenanceHint")}
+        {active
+          ? // L'heure d'extinction plutôt qu'une durée : « dans 4 heures » oblige à calculer, et
+            // se périme à la seconde où on le lit. Une heure se compare d'un coup d'œil à celle
+            // qu'on a sous les yeux.
+            t("player.account.maintenanceHintOn", {
+              time: data?.expiresAt
+                ? new Date(data.expiresAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+                : "—",
+            })
+          : t("player.account.maintenanceHint")}
       </p>
     </Section>
   );

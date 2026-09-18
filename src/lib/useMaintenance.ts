@@ -22,6 +22,13 @@ export interface MaintenanceState {
   active: boolean;
   /** Date du dernier avis de redémarrage imminent, en ms, ou null. */
   noticeAt: number | null;
+  /**
+   * Quand le bandeau s'éteindra de lui-même, en ms.
+   *
+   * Le serveur évalue l'échéance à chaque lecture, donc aucun écran n'a de décompte à tenir : le
+   * sondage suffit à faire disparaître le bandeau à l'heure dite, même resté ouvert toute la nuit.
+   */
+  expiresAt: number | null;
 }
 
 /**
@@ -55,5 +62,5 @@ export function useMaintenance(): MaintenanceState {
     ...playerBootstrapOptions,
   });
   // Un état inconnu n'est pas une maintenance : tant que la réponse n'est pas là, rien ne s'affiche.
-  return { active: data?.active ?? false, noticeAt: data?.noticeAt ?? null };
+  return { active: data?.active ?? false, noticeAt: data?.noticeAt ?? null, expiresAt: data?.expiresAt ?? null };
 }

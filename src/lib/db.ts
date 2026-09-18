@@ -140,6 +140,7 @@ function migrate(db: Database.Database): void {
 
   // Additive migrations — safe to run multiple times
   try { db.exec("ALTER TABLE watchlist ADD COLUMN vote_average REAL"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE maintenance ADD COLUMN expires_at INTEGER"); } catch { /* already exists */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_preferences (
       user_id    TEXT    PRIMARY KEY,
@@ -754,29 +755,55 @@ export const sessionDb = {
  * dans un seul booléen rendrait impossible d'avertir deux fois, ou d'avertir sans avoir d'abord
  * allumé le bandeau.
  */
+/**
+ * Combien de temps le bandeau tient sans qu'on le retouche.
+ *
+ * Un redéploiement dure des minutes ; cette durée est donc large, et elle n'est pas là pour
+ * mesurer une maintenance mais pour rattraper un oubli. Le vrai risque n'est pas de l'éteindre
+ * trop tôt, c'est qu'il reste des semaines sur les écrans de dix-neuf personnes parce que personne
+ * n'a rouvert le panneau qui l'a allumé.
+ */
+const MAINTENANCE_MAX_MS = 4 * 60 * 60 * 1000;
+
 export interface MaintenanceState {
   active: boolean;
   /** Date du dernier avis de redémarrage imminent, en ms, ou null s'il n'y en a jamais eu. */
   noticeAt: number | null;
+  /** Quand le bandeau s'éteindra tout seul, en ms. Null quand il est éteint. */
+  expiresAt: number | null;
 }
 
 export const maintenanceDb = {
-  get(): MaintenanceState {
-    const row = getDb().prepare("SELECT active, notice_at FROM maintenance WHERE id = 1").get() as
-      | { active: number; notice_at: number | null }
+  /**
+   * L'état, avec l'expiration évaluée **à la lecture**.
+   *
+   * Et non par un minuteur : le seul moment où ce drapeau sert est celui où le conteneur est
+   * recréé, donc un minuteur mourrait précisément quand il aurait dû compter. Une date en base
+   * comparée à l'heure courante survit à tout, y compris à un serveur éteint une nuit entière.
+   *
+   * La ligne n'est pas réécrite en passant : une lecture ne doit pas écrire — plusieurs écrans
+   * sondent cette route toutes les quinze secondes, et la base est synchrone. La date périmée
+   * reste donc en place, inoffensive, jusqu'au prochain allumage.
+   */
+  get(now = Date.now()): MaintenanceState {
+    const row = getDb().prepare("SELECT active, notice_at, expires_at FROM maintenance WHERE id = 1").get() as
+      | { active: number; notice_at: number | null; expires_at: number | null }
       | undefined;
     // Jamais écrit : l'installation n'est pas en maintenance, ce qui est le bon défaut.
-    return { active: !!row?.active, noticeAt: row?.notice_at ?? null };
+    const expired = row?.expires_at != null && row.expires_at <= now;
+    const active = !!row?.active && !expired;
+    return { active, noticeAt: row?.notice_at ?? null, expiresAt: active ? row?.expires_at ?? null : null };
   },
 
-  setActive(active: boolean): MaintenanceState {
+  /** Allumer pose l'échéance ; éteindre l'efface, pour qu'un rallumage reparte d'un compte plein. */
+  setActive(active: boolean, now = Date.now()): MaintenanceState {
     getDb()
       .prepare(
-        `INSERT INTO maintenance (id, active, notice_at) VALUES (1, ?, NULL)
-         ON CONFLICT(id) DO UPDATE SET active = excluded.active`
+        `INSERT INTO maintenance (id, active, notice_at, expires_at) VALUES (1, ?, NULL, ?)
+         ON CONFLICT(id) DO UPDATE SET active = excluded.active, expires_at = excluded.expires_at`
       )
-      .run(active ? 1 : 0);
-    return maintenanceDb.get();
+      .run(active ? 1 : 0, active ? now + MAINTENANCE_MAX_MS : null);
+    return maintenanceDb.get(now);
   },
 
   /**
@@ -788,7 +815,7 @@ export const maintenanceDb = {
   raiseNotice(at = Date.now()): MaintenanceState {
     getDb()
       .prepare(
-        `INSERT INTO maintenance (id, active, notice_at) VALUES (1, 0, ?)
+        `INSERT INTO maintenance (id, active, notice_at, expires_at) VALUES (1, 0, ?, NULL)
          ON CONFLICT(id) DO UPDATE SET notice_at = excluded.notice_at`
       )
       .run(at);

@@ -10,13 +10,13 @@ vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVe
 // `vi.hoisted` parce que `vi.mock` est remonté en tête de fichier : sa fabrique s'exécute avant
 // toute déclaration de module, et ne peut donc pas lire une variable déclarée plus bas.
 const { store, maintenanceDb } = vi.hoisted(() => {
-  const store = { state: { active: false, noticeAt: null as number | null } };
+  const store = { state: { active: false, noticeAt: null as number | null, expiresAt: null as number | null } };
   return {
     store,
     maintenanceDb: {
       get: vi.fn(() => store.state),
       setActive: vi.fn((active: boolean) => {
-        store.state = { ...store.state, active };
+        store.state = { ...store.state, active, expiresAt: active ? Date.now() + 1000 : null };
         return store.state;
       }),
       raiseNotice: vi.fn((at = Date.now()) => {
@@ -49,7 +49,7 @@ function request(body?: unknown, signedIn = true): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  store.state = { active: false, noticeAt: null };
+  store.state = { active: false, noticeAt: null, expiresAt: null };
   mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
 });
 
@@ -57,7 +57,7 @@ describe("l'état d'exploitation", () => {
   it("répond que rien n'est en cours sur une installation qui n'a jamais rien allumé", async () => {
     const res = await GET(request());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ active: false, noticeAt: null });
+    expect(await res.json()).toEqual({ active: false, noticeAt: null, expiresAt: null });
   });
 
   it("se tait devant une requête sans session", async () => {

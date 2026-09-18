@@ -1404,8 +1404,8 @@
       "maintenanceOn": "Turn on maintenance",
       "maintenanceOff": "Turn off maintenance",
       "maintenanceNotify": "Warn of a restart",
-      "maintenanceHint": "The banner shows on every screen. The warning only reaches playback in progress.",
-      "maintenanceHintOn": "The banner is showing on every screen.",
+      "maintenanceHint": "The banner shows on every screen and turns itself off after four hours. The warning only reaches playback in progress.",
+      "maintenanceHintOn": "The banner is showing on every screen. It turns itself off at {time}.",
       "maintenanceNoticeSent": "Warning sent to playback in progress.",
       "maintenanceOnDone": "Maintenance turned on.",
       "maintenanceOffDone": "Maintenance turned off."

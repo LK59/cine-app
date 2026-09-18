@@ -1404,8 +1404,8 @@
       "maintenanceOn": "Activer la maintenance",
       "maintenanceOff": "Désactiver la maintenance",
       "maintenanceNotify": "Prévenir d'un redémarrage",
-      "maintenanceHint": "Le bandeau s'affiche sur tous les écrans. L'avis, lui, ne s'affiche que sur les lectures en cours.",
-      "maintenanceHintOn": "Le bandeau est affiché sur tous les écrans.",
+      "maintenanceHint": "Le bandeau s'affiche sur tous les écrans et s'éteint seul au bout de quatre heures. L'avis, lui, ne s'affiche que sur les lectures en cours.",
+      "maintenanceHintOn": "Le bandeau est affiché sur tous les écrans. Il s'éteindra de lui-même à {time}.",
       "maintenanceNoticeSent": "Avis envoyé aux lectures en cours.",
       "maintenanceOnDone": "Maintenance activée.",
       "maintenanceOffDone": "Maintenance désactivée."

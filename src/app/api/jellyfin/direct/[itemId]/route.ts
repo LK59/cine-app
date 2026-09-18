@@ -76,8 +76,10 @@ export interface DirectPlayInfo {
    *
    * Nothing in the container names them, so without this they simply do not exist for a player
    * that reads the file directly — while Jellyfin, which lists them, shows them. On this library
-   * that is the difference between subtitles and none on the forty-six films whose only embedded
-   * tracks are images, which this player does not render.
+   * that is the difference between subtitles and none on ninety films — remeasured 2026-09-18 over
+   * the full catalogue — which carry no text subtitle inside the container at all. See
+   * `externalSubtitles.ts` for how that number was arrived at, and why the one it replaces was
+   * too small.
    */
   externalSubtitles: ExternalSubtitle[];
   /**

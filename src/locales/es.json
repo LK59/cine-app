@@ -1404,8 +1404,8 @@
       "maintenanceOn": "Activar el mantenimiento",
       "maintenanceOff": "Desactivar el mantenimiento",
       "maintenanceNotify": "Avisar de un reinicio",
-      "maintenanceHint": "El aviso permanente aparece en todas las pantallas. El emergente solo llega a las reproducciones en curso.",
-      "maintenanceHintOn": "El aviso permanente está visible en todas las pantallas.",
+      "maintenanceHint": "El aviso aparece en todas las pantallas y se apaga solo a las cuatro horas. El emergente solo llega a las reproducciones en curso.",
+      "maintenanceHintOn": "El aviso está visible en todas las pantallas. Se apagará solo a las {time}.",
       "maintenanceNoticeSent": "Aviso enviado a las reproducciones en curso.",
       "maintenanceOnDone": "Mantenimiento activado.",
       "maintenanceOffDone": "Mantenimiento desactivado."

@@ -1404,8 +1404,8 @@
       "maintenanceOn": "Wartung einschalten",
       "maintenanceOff": "Wartung ausschalten",
       "maintenanceNotify": "Vor einem Neustart warnen",
-      "maintenanceHint": "Das Band erscheint auf allen Bildschirmen. Der Hinweis erreicht nur laufende Wiedergaben.",
-      "maintenanceHintOn": "Das Band ist auf allen Bildschirmen zu sehen.",
+      "maintenanceHint": "Das Band erscheint auf allen Bildschirmen und endet nach vier Stunden von selbst. Der Hinweis erreicht nur laufende Wiedergaben.",
+      "maintenanceHintOn": "Das Band ist auf allen Bildschirmen zu sehen. Es endet von selbst um {time}.",
       "maintenanceNoticeSent": "Hinweis an laufende Wiedergaben gesendet.",
       "maintenanceOnDone": "Wartung eingeschaltet.",
       "maintenanceOffDone": "Wartung ausgeschaltet."

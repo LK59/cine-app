@@ -6,8 +6,15 @@ import type { EngineTrack, SubtitleCue } from "./engine";
  *
  * Nothing in a Matroska file names them, so a player that opens the file directly cannot find
  * them at all — it is the media server, which sees the folder, that knows they exist. On this
- * library that gap is not academic: forty-six films carry only image subtitles inside the
- * container, which this player does not render, and every one of them has a text file next to it.
+ * library that gap is not academic. Remeasured on 2026-09-18, over the full 688-film catalogue:
+ * ninety films have no text subtitle inside the container at all — their only one is the file
+ * beside it. Not one film is left with image subtitles alone, which is this mechanism working
+ * rather than the problem having gone away: an image track is one this player does not render,
+ * and every such film has since been given a text file next to it.
+ *
+ * The figure this comment used to carry — forty-six — was measured on an enumeration that
+ * silently dropped fifty-four films folded into their collections. Worth knowing twice over: the
+ * gap was wider than it looked, and a count is only ever as good as the query under it.
  *
  * They are fetched whole. A two-hour film's subtitles are on the order of a hundred kilobytes,
  * so streaming them would buy nothing and cost a seek path, and holding all of them in memory
