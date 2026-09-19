@@ -601,13 +601,36 @@ export function fold(planes: Float32Array[], to: number): Float32Array[] {
  * pourquoi seuls les fichiers multicanaux étaient touchés — c'est-à-dire presque toute cette
  * bibliothèque.
  */
-const AAC_ORDER: Record<number, readonly number[]> = {
-  // [L,R,C,LFE,Ls,Rs] → [C,L,R,Ls,Rs,LFE]
-  6: [2, 0, 1, 4, 5, 3],
-  // Le même principe en 7.1 : centre devant, LFE derrière, arrières inchangés.
-  // [L,R,C,LFE,Ls,Rs,Lrs,Rrs] → [C,L,R,Ls,Rs,Lrs,Rrs,LFE]
-  8: [2, 0, 1, 4, 5, 6, 7, 3],
-};
+/**
+ * **Rien à permuter pour l'AAC, et c'est une mesure, pas un raisonnement.**
+ *
+ * Cette table existait et rangeait les plans dans l'ordre du *train binaire* AAC — centre devant,
+ * LFE derrière. Le raisonnement était juste sur le format et faux sur l'interface : on ne donne
+ * pas un train binaire à `AudioEncoder`, on lui donne un `AudioData`, dont l'ordre des canaux est
+ * celui, standard, de l'API Web Audio — L R C LFE Ls Rs. C'est l'encodeur qui fait la conversion
+ * vers son format. Permuter avant lui, c'est l'appliquer deux fois.
+ *
+ * Mesuré le 19/09/2026 pour en avoir le cœur net, plan par plan, sur vingt secondes de dialogue :
+ *
+ * | plan | notre décodeur | ffmpeg (ordre WAVE) |
+ * |------|----------------|---------------------|
+ * | 0    | −29,13 dB      | −29,12 dB (L)       |
+ * | 1    | −30,12 dB      | −30,11 dB (R)       |
+ * | 2    | **−23,11 dB**  | −23,10 dB (**C**)   |
+ * | 3    | −40,64 dB      | −40,63 dB (LFE)     |
+ * | 4    | −33,90 dB      | −33,89 dB (Ls)      |
+ * | 5    | −34,05 dB      | −34,05 dB (Rs)      |
+ *
+ * Identique à deux décimales, sur « Twilight » en E-AC3 comme sur « Titanic » en AC-3. Le
+ * décodeur rend donc exactement ce que l'encodeur attend, et la permutation déplaçait le centre
+ * au rang que l'encodeur lit comme le canal gauche : replié en stéréo, tout le dialogue partait
+ * dans l'oreille gauche. C'est le défaut rapporté au casque sur Chrome, sur les deux pistes d'un
+ * même film.
+ *
+ * On ne remet pas cette table sans une mesure de bout en bout — la précédente a été écrite sur un
+ * raisonnement, et elle a tenu neuf jours.
+ */
+const AAC_ORDER: Record<number, readonly number[]> = {};
 
 /**
  * L'ordre d'Opus, qui est un troisième ordre — ni celui du décodeur, ni celui de l'AAC.
@@ -617,8 +640,14 @@ const AAC_ORDER: Record<number, readonly number[]> = {
  * et qu'on entend tout de suite.
  *
  * Ce codec n'est pas théorique : c'est le repli pour un navigateur sans encodeur AAC — Firefox,
- * qui encode Opus en 5.1 et l'accepte en MediaSource. Le même défaut que celui rapporté sur
- * « Titanic » l'attendait donc là, pour qui regarde depuis un Firefox.
+ * qui encode Opus en 5.1 et l'accepte en MediaSource.
+ *
+ * **Laissée en place alors que celle de l'AAC est partie, et l'asymétrie est volontaire.** Le même
+ * raisonnement s'y applique — un `AudioData` est déjà dans l'ordre standard, et c'est l'encodeur
+ * qui convertit — mais l'AAC a contre elle une mesure *et* deux rapports d'usage, quand Opus n'a
+ * ni l'une ni les autres : personne ici ne regarde depuis Firefox. Retirer les deux sur la foi
+ * d'une seule mesure serait refaire l'erreur qu'on corrige. Au premier « son d'un seul côté »
+ * rapporté depuis Firefox, la réponse est écrite ci-dessus.
  */
 const OPUS_ORDER: Record<number, readonly number[]> = {
   // [L,R,C,LFE,Ls,Rs] → [L,C,R,Ls,Rs,LFE]
@@ -637,9 +666,10 @@ function orderFor(codec: string): Record<number, readonly number[]> | null {
 /**
  * Remet les plans dans l'ordre du codec de destination.
  *
- * Rendus tels quels quand il n'y a rien à faire : la stéréo et le mono, dont L et R sont au même
- * rang partout ; un codec dont on ne connaît pas la convention ; ou un nombre de canaux qu'aucune
- * des tables ne décrit — quadriphonie, 5.0. On préfère alors ne pas permuter que permuter au
+ * Rendus tels quels quand il n'y a rien à faire, ce qui est désormais le cas de l'AAC pour tous
+ * les comptes de canaux — voir `AAC_ORDER`. Et aussi : la stéréo et le mono, dont L et R sont au
+ * même rang partout ; un codec dont on ne connaît pas la convention ; un nombre de canaux
+ * qu'aucune table ne décrit — quadriphonie, 5.0. On préfère alors ne pas permuter que permuter au
  * hasard : un ordre inconnu laissé tel quel est un pari, un ordre inventé est une faute.
  */
 export function toCodecChannelOrder(planes: Float32Array[], codec: string): Float32Array[] {

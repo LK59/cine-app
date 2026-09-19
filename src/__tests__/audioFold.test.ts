@@ -65,21 +65,39 @@ describe("fold — replier vers le bas", () => {
  * du décodeur et lus dans celui de l'AAC, donc chaque canal gardait son rang et changeait de
  * sens. Le centre, c'est-à-dire les dialogues, arrivait au rang du canal droit.
  */
+/**
+ * Ce que l'encodeur attend, mesuré plutôt que déduit.
+ *
+ * Ces tests figeaient une permutation vers l'ordre du *train binaire* AAC. Le raisonnement était
+ * juste sur le format et faux sur l'interface : `AudioEncoder` ne reçoit pas un train binaire mais
+ * un `AudioData`, déjà dans l'ordre standard de l'API Web Audio — L R C LFE Ls Rs —, et c'est lui
+ * qui convertit. La permutation l'appliquait donc deux fois, et envoyait tout le dialogue dans
+ * l'oreille gauche une fois replié en stéréo. Rapporté au casque sur Chrome, sur les deux pistes
+ * d'un même film.
+ *
+ * La mesure qui tranche, plan par plan sur vingt secondes de dialogue : notre décodeur rend
+ * exactement les mêmes niveaux que ffmpeg en ordre WAVE, à deux décimales, sur « Twilight » en
+ * E-AC3 comme sur « Titanic » en AC-3. Le centre est au rang 2 de part et d'autre.
+ */
 describe("toCodecChannelOrder", () => {
-  /** Les plans dans l'ordre du décodeur : L R C LFE Ls Rs. */
+  /** Les plans dans l'ordre du décodeur : L R C LFE Ls Rs. C'est aussi celui de l'encodeur. */
   const surround = [plane(1), plane(2), plane(3), plane(4), plane(5), plane(6)];
 
-  it("met le centre en premier et le LFE en dernier pour l'AAC", () => {
-    // [L,R,C,LFE,Ls,Rs] → [C,L,R,Ls,Rs,LFE]
-    expect(channels(toCodecChannelOrder(surround, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 4]);
+  it("laisse le 5.1 tel quel pour l'AAC : il est déjà dans le bon ordre", () => {
+    expect(toCodecChannelOrder(surround, "mp4a.40.2")).toBe(surround);
   });
 
-  it("place les dialogues au centre, et non à droite", () => {
-    // Le canal du centre vaut 3 à l'entrée ; il doit ressortir au rang 0, celui que l'AAC lit
-    // comme le centre — et surtout pas au rang 2, que l'AAC lit comme la droite.
+  it("laisse le 7.1 tel quel lui aussi", () => {
+    const eight = [...surround, plane(7), plane(8)];
+    expect(toCodecChannelOrder(eight, "mp4a.40.2")).toBe(eight);
+  });
+
+  // Le canal du centre vaut 3 à l'entrée : il doit rester au rang 2, celui que l'encodeur lit
+  // comme le centre. Au rang 0, c'est le canal gauche — et c'était le défaut.
+  it("laisse le dialogue au centre, et non dans l'oreille gauche", () => {
     const out = channels(toCodecChannelOrder(surround, "mp4a.40.2"));
-    expect(out[0]).toBe(3);
-    expect(out[2]).not.toBe(3);
+    expect(out[2]).toBe(3);
+    expect(out[0]).toBe(1);
   });
 
   it("ne touche pas à la stéréo, qui range pareil des deux côtés", () => {
@@ -87,34 +105,14 @@ describe("toCodecChannelOrder", () => {
     expect(toCodecChannelOrder(stereo, "mp4a.40.2")).toBe(stereo);
   });
 
-  it("applique le même principe en 7.1", () => {
-    const eight = [...surround, plane(7), plane(8)];
-    expect(channels(toCodecChannelOrder(eight, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 7, 8, 4]);
-  });
-
-  // Opus reprend la disposition Vorbis — L C R Ls Rs LFE — qui ne diffère de celle de l'AAC que
-  // par les deux premiers rangs. C'est le repli d'un navigateur sans encodeur AAC (Firefox), donc
-  // le même défaut y attendait qui regarde de là.
-  it("range pour Opus dans l'ordre Vorbis, pas dans celui de l'AAC", () => {
-    // [L,R,C,LFE,Ls,Rs] → [L,C,R,Ls,Rs,LFE]
+  /**
+   * Opus garde la sienne, et l'asymétrie est volontaire.
+   *
+   * Le même raisonnement s'y applique, mais l'AAC a contre elle une mesure *et* deux rapports
+   * d'usage quand Opus n'a ni l'une ni les autres — personne ici ne regarde depuis Firefox.
+   * Retirer les deux sur la foi d'une seule mesure serait refaire l'erreur qu'on corrige.
+   */
+  it("garde la convention Vorbis pour Opus, faute de mesure de ce côté", () => {
     expect(channels(toCodecChannelOrder(surround, "opus"))).toEqual([1, 3, 2, 5, 6, 4]);
-  });
-
-  it("distingue bien les deux conventions", () => {
-    const aac = channels(toCodecChannelOrder(surround, "mp4a.40.2"));
-    const opus = channels(toCodecChannelOrder(surround, "opus"));
-    expect(aac).not.toEqual(opus);
-    // Le centre est premier chez l'un, deuxième chez l'autre — et jamais au rang de la droite.
-    expect([aac[0], opus[1]]).toEqual([3, 3]);
-  });
-
-  it("ne touche pas à un codec dont il ignore la convention", () => {
-    expect(toCodecChannelOrder(surround, "vorbis")).toBe(surround);
-  });
-
-  // Mieux vaut ne pas permuter que permuter au hasard.
-  it("ne devine pas une disposition qu'il ne connaît pas", () => {
-    const three = [plane(1), plane(2), plane(3)];
-    expect(toCodecChannelOrder(three, "mp4a.40.2")).toBe(three);
   });
 });
