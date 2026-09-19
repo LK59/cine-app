@@ -227,7 +227,16 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       // L'animation d'entrée pilote la même propriété que le geste : la laisser tourner
       // pendant qu'on tire empêcherait la fiche de suivre le doigt, et la laisser revenir après
       // un retour en place rejouerait toute l'entrée.
-      className={`fixed inset-0 overflow-hidden bg-ink ${
+      /**
+       * Sur téléphone, l'élément animé **est** le conteneur de défilement — comme les fiches de
+       * titre, et c'est exactement le traitement qui leur donne une sortie nette.
+       *
+       * Avec `overflow-hidden` ici et le défilement dans un enfant, WebKit devait déplacer un
+       * calque contenant un défilement imbriqué : le compositeur ne peut plus se contenter de
+       * bouger la couche, et la sortie saccadait. Sur grand écran la question ne se pose pas —
+       * l'animation y est un fondu, pas un déplacement.
+       */
+      className={`fixed inset-0 bg-ink ${isMobile ? "overflow-y-auto overscroll-contain" : "overflow-hidden"} ${
         swipe.touched
           ? ""
           : closing || leaving
@@ -291,7 +300,9 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
       )}
 
       <div
-        className="scrollbar-thin h-full overflow-y-auto px-5 pb-16 sm:px-10"
+        // Le défilement a remonté sur la racine animée quand on est sur téléphone : le laisser ici
+        // aussi ferait deux zones de défilement imbriquées, dont une qui ne défilerait jamais.
+        className={`scrollbar-thin px-5 pb-16 sm:px-10 ${isMobile ? "" : "h-full overflow-y-auto"}`}
         // Sur téléphone, la croix flotte au-dessus du contenu et n'a pas besoin qu'on lui
         // réserve toute une bande : le portrait commence plus haut, ce qui compte sur les
         // ~390 px d'un écran couché.

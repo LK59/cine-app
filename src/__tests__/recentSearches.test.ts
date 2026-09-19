@@ -68,3 +68,39 @@ describe("recentSearches — identité de l'instantané", () => {
     expect(recentSearches()).toBe(recentSearches());
   });
 });
+
+describe("une frappe en cours n'est qu'une recherche", () => {
+  // Signalé à l'usage : « Ryan gosling » tapé en cinq secondes laissait trois lignes — « Ryan »,
+  // « Ryan gosl », « Ryan goslin ». Aucun délai ne règle ça, quelqu'un qui hésite au milieu d'un
+  // nom hésite aussi longtemps qu'il veut. Ce qu'il fallait comprendre, c'est que ces trois-là
+  // sont la même recherche en train de s'écrire.
+  it("ne garde qu'une ligne pour un nom tapé peu à peu", () => {
+    rememberSearch("Ryan");
+    rememberSearch("Ryan gosl");
+    rememberSearch("Ryan goslin");
+    rememberSearch("Ryan gosling");
+    expect(recentSearches()).toEqual(["Ryan gosling"]);
+  });
+
+  it("garde la plus complète quand on efface la fin", () => {
+    // Effacer deux lettres n'est pas chercher autre chose.
+    rememberSearch("Hannibal");
+    rememberSearch("Hannib");
+    expect(recentSearches()).toEqual(["Hannibal"]);
+  });
+
+  it("laisse intactes deux recherches réellement différentes", () => {
+    rememberSearch("Nolan");
+    rememberSearch("Villeneuve");
+    expect(recentSearches()).toEqual(["Villeneuve", "Nolan"]);
+  });
+
+  it("traite « Alien » et « Aliens » comme une frappe, « Alien 3 » comme une autre", () => {
+    rememberSearch("Alien");
+    rememberSearch("Aliens");
+    expect(recentSearches()).toEqual(["Aliens"]);
+    rememberSearch("Alien 3");
+    expect(recentSearches()).toEqual(["Alien 3", "Aliens"]);
+  });
+});
+

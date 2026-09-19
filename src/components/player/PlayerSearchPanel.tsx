@@ -28,6 +28,15 @@ const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
 
 /**
+ * Le temps d'arrêt au bout duquel une recherche est retenue.
+ *
+ * Deux secondes, et non les cent cinquante millisecondes de l'affichage : on ne retient pas une
+ * frappe, on retient une intention. Une recherche menée jusqu'à l'ouverture d'un résultat est
+ * retenue tout de suite, sans attendre — voir `openTitle`.
+ */
+const REMEMBER_MS = 2000;
+
+/**
  * Ce qu'on avait tapé la dernière fois, retenu pour la durée de la visite.
  *
  * Ouvrir un titre trouvé par la recherche garde le panneau monté dessous, donc la requête y
@@ -95,12 +104,25 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   useEffect(() => {
     const term = query.trim();
     lastQuery = term;
-    const timer = setTimeout(() => {
-      setDebounced(term.length >= MIN_QUERY ? term : "");
-      // Retenue une fois la frappe calmée, jamais lettre à lettre : « i », « in », « int » ne
-      // sont pas trois recherches.
-      if (term.length >= MIN_QUERY) rememberSearch(term);
-    }, DEBOUNCE_MS);
+    const timer = setTimeout(() => setDebounced(term.length >= MIN_QUERY ? term : ""), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  /**
+   * Retenir une recherche est un geste bien plus lent que la chercher.
+   *
+   * Cent cinquante millisecondes, c'est le bon délai pour *afficher* des résultats — c'est ce qui
+   * rend la frappe vivante. C'était le mauvais pour *retenir* : quiconque hésite une seconde au
+   * milieu d'un nom laissait une ligne pour chaque hésitation. Trois pour « Ryan gosling ».
+   *
+   * D'où un second minuteur, bien plus long : une vraie pause, pas un souffle entre deux lettres.
+   * `rememberSearch` se charge du reste — une frappe en cours ne laisse plus qu'une seule ligne,
+   * la plus complète.
+   */
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < MIN_QUERY) return;
+    const timer = setTimeout(() => rememberSearch(term), REMEMBER_MS);
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -145,6 +167,9 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   // ramène sur les résultats, avec la requête tapée et le filtre choisi — au lieu de renvoyer à
   // l'accueil comme si l'on n'avait rien cherché.
   function openTitle(result: UnifiedSearchResult) {
+    // Ouvrir un résultat est la preuve qu'on cherchait bien ça : on retient sans attendre le
+    // minuteur, et la recherche est de toute façon complète à cet instant.
+    rememberSearch(query.trim());
     const libraryId = result.type === "movie" ? result.radarrId : result.sonarrId;
     if (libraryId) openLibraryTitle(result.type, libraryId);
     else cinemaNavigate({ discover: result.tmdbId, discoverType: result.type });
@@ -250,7 +275,11 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
                 title={p.name}
                 subtitle={p.libraryCount > 0 ? t("player.search.personTitles", { n: p.libraryCount }) : null}
                 poster={p.profilePath}
-                onOpen={() => cinemaNavigate({ person: p.id })}
+                onOpen={() => {
+                  // Même raison que pour un titre : ouvrir une fiche prouve l'intention.
+                  rememberSearch(query.trim());
+                  cinemaNavigate({ person: p.id });
+                }}
               />
             ))}
           </div>

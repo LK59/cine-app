@@ -50,7 +50,25 @@ export function rememberSearch(query: string): void {
   const clean = query.trim();
   if (clean.length < 2) return;
   try {
-    const kept = recentSearches().filter((q) => q.toLowerCase() !== clean.toLowerCase());
+    const existantes = recentSearches();
+    const bas = clean.toLowerCase();
+
+    /**
+     * « Hannib », « Hanniba », « Hannibal » sont **une** recherche en train de s'écrire.
+     *
+     * C'est la vraie cause du problème, et aucun délai ne la règle : quelqu'un qui hésite trois
+     * secondes au milieu d'un nom laissait une ligne pour chaque hésitation. Trois lignes pour
+     * « Ryan gosling », relevées à l'usage.
+     *
+     * Deux sens, et il faut les deux. Une entrée retenue qui n'est qu'un début de celle-ci
+     * disparaît — c'était la même frappe, en cours. Et si celle-ci n'est que le début d'une entrée
+     * déjà retenue, on ne l'ajoute pas : quelqu'un qui efface la fin de son mot ne cherche pas
+     * quelque chose de nouveau. La plus complète des deux gagne toujours, ce qui est aussi la plus
+     * utile à relire.
+     */
+    if (existantes.some((q) => q.toLowerCase().startsWith(bas) && q.toLowerCase() !== bas)) return;
+    const kept = existantes.filter((q) => !bas.startsWith(q.toLowerCase()));
+
     window.localStorage.setItem(KEY, JSON.stringify([clean, ...kept].slice(0, MAX)));
   } catch {
     // Stockage indisponible : on ne retient rien, et l'écran se contente du reste.
