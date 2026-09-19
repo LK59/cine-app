@@ -138,11 +138,37 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const rangeType = videoStream?.VideoRangeType ?? null;
   const isHdr = !!rangeType && rangeType !== "SDR";
 
+  /**
+   * Le Dolby Vision sans couche de base standard, refusé pour **tout** le lecteur natif.
+   *
+   * Ce refus existait, mais il ne gardait que le chemin canevas — et le commentaire ci-dessous
+   * disait pourquoi : « le chemin natif aurait montré le HDR de ce fichier sans rien convertir ».
+   * C'est vrai d'un HDR10, et faux d'un Dolby Vision profil 5. Le remultiplexeur reconstruit une
+   * entrée `hvc1` à partir du seul `hvcC` et laisse tomber la configuration Dolby : le navigateur
+   * reçoit donc ce qu'il croit être du HEVC Main 10 ordinaire, et décode une couche de base en
+   * IPT-PQ comme si elle était en BT.2020. L'image sort avec des couleurs fausses — pas ternes,
+   * fausses.
+   *
+   * Prédit en lisant le code, puis **confirmé à l'écran par Louis** le 19/09/2026 sur
+   * « Disclosure Day » (profil 5.6, compatibilité 0). Deux fichiers sur 691 sont dans ce cas ;
+   * les 188 autres titres Dolby Vision de cette bibliothèque sont en profil 8 avec une couche de
+   * base HDR10, que ce même chemin rend correctement — en HDR10, faute de porter la
+   * configuration Dolby, ce qui est exact quoique moins riche.
+   *
+   * Refusé par `refusedReason` et non plus par `canvasHdrRefusal` : celui-ci n'est lu qu'une fois
+   * le chemin choisi, alors que le mal est fait des deux côtés. Le lecteur serveur, lui, sait
+   * appliquer le RPU et rend une image juste — au prix d'un ré-encodage, qui est exactement le
+   * bon prix pour deux films.
+   */
+  const dolbyVisionOnly = isHdr && !TONE_MAPPABLE_RANGES.has(rangeType);
+
   // Refused outright: either the remuxer reads the container, or the browser opens it unaided.
   // Anything else — AVI above all, whose codecs no browser decodes — belongs to the server.
-  const refusedReason = SUPPORTED_CONTAINERS.has(container)
-    ? null
-    : `Le lecteur expérimental ne lit pas les fichiers « ${container || "inconnu"} » (Matroska et MP4 seulement).`;
+  const refusedReason = !SUPPORTED_CONTAINERS.has(container)
+    ? `Le lecteur expérimental ne lit pas les fichiers « ${container || "inconnu"} » (Matroska et MP4 seulement).`
+    : dolbyVisionOnly
+      ? `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard : ce lecteur en rendrait les couleurs fausses.`
+      : null;
 
   // HDR is a different matter now, and the server is the wrong place to decide it. Repackaging the
   // file for the browser's own decoder carries the HDR signalling through untouched and the
@@ -154,10 +180,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   // setting because it was the only way HDR played at all and it costs the picture something;
   // now the native path shows it untouched and the conversion is what happens on the fallback
   // instead of nothing. A file that cannot be converted is still refused, and says why.
-  let canvasHdrRefusal: string | null = null;
-  if (isHdr && !TONE_MAPPABLE_RANGES.has(rangeType)) {
-    canvasHdrRefusal = `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard à convertir, et ce navigateur ne le lit pas nativement.`;
-  }
+  // Conservé, et désormais toujours nul en pratique : le seul cas qu'il portait est remonté dans
+  // `refusedReason` ci-dessus, où il garde les deux chemins au lieu d'un. Le champ reste parce que
+  // le canevas peut se voir refuser une conversion pour d'autres raisons que celle-là, et que le
+  // client sait déjà quoi en faire.
+  const canvasHdrRefusal: string | null = null;
 
   // Text only, and external only: an image subtitle has nothing to read, and an embedded text
   // track is already found by whichever pipeline opens the file.

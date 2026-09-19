@@ -110,12 +110,37 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     expect(body.canvasHdrRefusal).toBeNull();
   });
 
-  it("still objects to Dolby Vision without an HDR10 base, which has nothing to convert from", async () => {
+  /**
+   * Le Dolby Vision sans couche de base : refusé pour tout le lecteur natif, pas seulement pour
+   * le canevas.
+   *
+   * Ce test affirmait le contraire — « le chemin natif peut encore s'en sortir » — et c'était
+   * l'hypothèse exacte qui était fausse. Le remultiplexeur reconstruit une entrée `hvc1` à partir
+   * du seul `hvcC` et laisse tomber la configuration Dolby : le navigateur décode une couche de
+   * base en IPT-PQ comme si elle était en BT.2020, et les couleurs sortent fausses.
+   *
+   * Prédit en lisant le code, puis **vu à l'écran** le 19/09/2026 sur « Disclosure Day », profil
+   * 5.6, compatibilité 0. C'est le lecteur serveur qui sait appliquer le RPU, au prix d'un
+   * ré-encodage — le bon prix pour deux fichiers sur 691.
+   */
+  it("refuse tout le lecteur natif pour un Dolby Vision sans couche HDR10", async () => {
     mockPrefs.mockReturnValue({ enabled: false });
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "DOVI" }));
     const body = await (await get()).json();
-    expect(body.refusedReason).toBeNull(); // the native path may still manage it
-    expect(body.canvasHdrRefusal).toContain("Dolby Vision");
+    expect(body.refusedReason).toContain("Dolby Vision");
+    // Et il est refusé *avant* le choix d'un chemin : `canvasHdrRefusal` n'arrive qu'une fois le
+    // canevas retenu, c'est-à-dire trop tard pour le remultiplexage.
+    expect(body.canvasHdrRefusal).toBeNull();
+  });
+
+  // Les 188 titres en profil 8 de cette bibliothèque, eux, gardent le chemin natif : leur couche
+  // de base *est* du HDR10, que ce chemin rend correctement — en HDR10 et non en Dolby Vision,
+  // faute de porter la configuration Dolby, ce qui est exact quoique moins riche.
+  it("laisse passer un Dolby Vision qui porte une couche HDR10", async () => {
+    mockGetSources.mockResolvedValue(mediaSource({ rangeType: "DOVIWithHDR10" }));
+    const body = await (await get()).json();
+    expect(body.refusedReason).toBeNull();
+    expect(body.video.isHdr).toBe(true);
   });
 
   it("passes on Jellyfin's intro and credits markers when it has analysed the episode", async () => {

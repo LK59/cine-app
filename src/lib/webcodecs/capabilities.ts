@@ -68,6 +68,28 @@ export function probeCapabilities(): Promise<Capability[]> {
     // differs by device rather than by browser — Apple's own hardware only learned it recently.
     sourceSupport('video/mp4; codecs="hvc1.1.6.L120.90"', "HEVC 8 bits dans MediaSource"),
     sourceSupport('video/mp4; codecs="hvc1.2.4.L150.90"', "HEVC 10 bits dans MediaSource"),
+    /**
+     * Le Dolby Vision, posé en question plutôt qu'en supposition.
+     *
+     * Cette bibliothèque compte 191 titres Dolby Vision, dont 188 en profil 8 avec une couche de
+     * base HDR10. Le remultiplexeur les livre aujourd'hui en `hvc1` : l'image est juste, mais la
+     * gradation dynamique — tout ce qui distingue le Dolby Vision du HDR10 — est perdue en
+     * chemin, faute de porter la configuration Dolby jusqu'au navigateur.
+     *
+     * Avant d'écrire une ligne pour la porter, il faut savoir si le navigateur la prendrait. La
+     * règle du dépôt vaut ici comme ailleurs : on demande, on ne suppose pas — et la réponse
+     * s'affiche dans le panneau technique, sur l'appareil, plutôt que dans une déduction.
+     *
+     * Deux questions et non une : le profil 8 est celui de presque toute la bibliothèque et se
+     * dégrade proprement en HDR10 ; le profil 5, lui, n'a pas de repli et concerne deux fichiers,
+     * que le lecteur natif refuse désormais d'ouvrir (voir la route `direct`).
+     *
+     * Une réponse positive ne suffira pas à décider : `isTypeSupported` n'a pas de faux négatif
+     * connu mais de vrais faux positifs, et ce dépôt en porte la cicatrice — voir
+     * `TRUST_BUFFER_REBUILD`. Elle dit seulement si la question mérite d'être poursuivie.
+     */
+    sourceSupport('video/mp4; codecs="dvh1.08.06"', "Dolby Vision profil 8 dans MediaSource"),
+    sourceSupport('video/mp4; codecs="dvh1.05.06"', "Dolby Vision profil 5 dans MediaSource"),
     sourceSupport('video/mp4; codecs="av01.0.08M.08"', "AV1 dans MediaSource"),
     sourceSupport('video/mp4; codecs="av01.0.12M.10"', "AV1 10 bits dans MediaSource"),
     sourceSupport('audio/mp4; codecs="dtsc"', "DTS dans MediaSource"),
