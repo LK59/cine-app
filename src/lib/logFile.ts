@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { DATA_DIR } from "@/lib/dataDir";
 
 /**
@@ -36,6 +37,25 @@ function rotate(file: string): void {
  * raison d'interrompre ce qu'on était en train de faire.
  */
 export function appendJsonLine(file: string, entry: Record<string, unknown>): void {
+  /**
+   * Une exécution de tests n'écrit pas dans le carnet de la production.
+   *
+   * La porte de vérification tourne dans un conteneur qui monte le dépôt entier, `data/` compris :
+   * chaque route testée dont le double lève écrivait donc une ligne dans le vrai journal
+   * d'erreurs. Cinq lignes sur quarante, relevées le 19/09/2026 — des `[vitest] No "tmdb"
+   * export…` au milieu de vraies pannes.
+   *
+   * Ce n'est pas qu'une question de propreté. `server.log` est l'outil de diagnostic de référence
+   * de ce dépôt, et il a servi deux fois aujourd'hui ; des lignes qui décrivent un double de test
+   * y font perdre exactement le temps qu'il fait gagner.
+   *
+   * La borne est le dossier temporaire, et non l'exécution de tests elle-même : plusieurs tests
+   * vérifient précisément ce qui s'écrit — la rotation, le bornage des champs, la pile sur disque
+   * — et le font en pointant `DATA_DIR` vers un `mkdtemp`. Ceux-là écrivent, parce qu'ils lisent
+   * ensuite. Les autres, qui ne montent rien, ne peuvent atteindre que le vrai dossier : c'est
+   * exactement ce qu'on refuse. Une première version coupait tout et rendait sept tests muets.
+   */
+  if (process.env.VITEST && !file.startsWith(os.tmpdir())) return;
   try {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     rotate(file);

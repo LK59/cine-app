@@ -1,4 +1,5 @@
 import fs from "fs";
+import Database from "better-sqlite3";
 import path from "path";
 import { getDb, DATA_DIR } from "@/lib/db";
 import { logError } from "@/lib/logger";
@@ -26,10 +27,52 @@ function backupFileName(date = new Date()): string {
   return `cine-${year}-${month}-${day}.db`;
 }
 
+/**
+ * Ce qu'une sauvegarde n'a aucune raison de porter.
+ *
+ * Les relevés de sondes sont de l'observation, pas des données : une ligne par capacité et par
+ * minute, gardée dix jours, qui se reconstitue toute seule en quelques minutes après une
+ * restauration. Elles représentaient pourtant l'essentiel du poids sauvegardé — mesuré sur cette
+ * installation le 19/09/2026 : **131 Mo par fichier, 42 Mo une fois ces deux tables retirées**,
+ * soit 917 Mo de sauvegardes ramenés à moins de 300.
+ *
+ * Retirées de la *copie*, jamais de la base vivante : les deux vues d'état lisent sept jours de
+ * relevés bruts, et c'est exactement ce qu'il faut leur laisser.
+ */
+const DISPOSABLE_TABLES = ["service_checks", "capability_checks"] as const;
+
+/**
+ * Allège la copie qu'on vient d'écrire.
+ *
+ * Le `VACUUM` est ce qui rend la place, une suppression seule laissant les pages libres dans le
+ * fichier. Il est synchrone, comme tout better-sqlite3 — d'où la mesure, faite sur le vrai
+ * fichier plutôt que devinée : **35 ms de suppression et 243 ms de compactage**, une fois par
+ * jour, et sur un fichier que personne ne lit. L'échec ne remonte pas : une sauvegarde complète
+ * mais volumineuse vaut infiniment mieux que pas de sauvegarde du tout.
+ */
+function trimBackup(file: string): void {
+  let copy: Database.Database | null = null;
+  try {
+    copy = new Database(file);
+    for (const table of DISPOSABLE_TABLES) copy.exec(`DELETE FROM ${table}`);
+    copy.exec("VACUUM");
+  } catch (err) {
+    logError("db.backup.trim", err);
+  } finally {
+    try {
+      copy?.close();
+    } catch {
+      // Déjà fermée, ou jamais ouverte. Rien à réparer.
+    }
+  }
+}
+
 export async function runDbBackup(): Promise<void> {
   try {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    await getDb().backup(path.join(BACKUP_DIR, backupFileName()));
+    const file = path.join(BACKUP_DIR, backupFileName());
+    await getDb().backup(file);
+    trimBackup(file);
 
     // One file per day, named by ISO date — sorting the filenames is enough to find the
     // oldest ones, no need to stat/parse anything.
