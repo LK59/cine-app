@@ -4,6 +4,7 @@ import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId, isSubtitleStreamIndex, isUnderJellyfinPrefix } from "@/lib/jellyfinPath";
+import { castPassFor } from "@/lib/castToken";
 
 export async function GET(
   req: NextRequest,
@@ -14,9 +15,19 @@ export async function GET(
   const { itemId } = await params;
   if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
 
+  /**
+   * Le cookie, ou le laissez-passer de diffusion — la même règle que la route des segments.
+   *
+   * Un téléviseur qui reçoit l'image par AirPlay va chercher les pistes de sous-titres lui-même,
+   * sans notre cookie et sans moyen d'en avoir un. Il n'obtenait donc que des 401, et ce qu'on
+   * voyait à l'écran n'était plus que ce que le téléviseur devinait seul. Voir `castItemOf` : le
+   * titre n'est pas au même rang dans cette adresse que dans celle des segments, et c'est
+   * exactement ce que la règle ne reconnaissait pas.
+   */
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);
-  if (!session?.jfId) return new NextResponse(null, { status: 403 });
+  const castPass = session?.jfId ? null : await castPassFor(req);
+  if (!session?.jfId && !castPass) return new NextResponse(null, { status: 403 });
 
   const mediaSourceId = req.nextUrl.searchParams.get("mediaSourceId");
   const index = req.nextUrl.searchParams.get("index");

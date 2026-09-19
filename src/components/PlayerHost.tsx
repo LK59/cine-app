@@ -22,6 +22,7 @@ import { isWebKit } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
+import { reportPlayback } from "@/lib/reportPlayback";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -1073,6 +1074,31 @@ function ActivePlayer({
     function onError() {
       const code = video!.error?.code;
       if (code === MediaError.MEDIA_ERR_ABORTED) return;
+      /**
+       * Pendant une diffusion, cet élément ne lit rien — et son erreur n'en est pas une.
+       *
+       * En AirPlay, le téléviseur décode et l'élément local ne sert plus que de télécommande :
+       * WebKit y signale des erreurs qui décrivent sa propre situation, pas celle de la lecture.
+       * L'échelle ci-dessous les prenait pour une panne, et sa toute première marche rejoue la
+       * requête — `video.src = …` — ce qui **rompt la route AirPlay**. Le téléviseur s'arrête, la
+       * page reprend la main, et le lecteur natif redémarre. Le journal le montrait sans qu'on
+       * l'ait lu ainsi : après chaque bascule vers la diffusion, un `start` du lecteur natif
+       * quarante-cinq secondes plus tard, systématiquement. Signalé le 19/09/2026 — « ça bloque au
+       * bout d'environ trente secondes ».
+       *
+       * Une vraie panne pendant la diffusion se voit ailleurs, et de la bonne façon : c'est le
+       * téléviseur qui lâche la route, et l'écouteur de `webkitcurrentplaybacktargetiswireless`
+       * rend alors la main proprement, à la position atteinte.
+       */
+      if (castActiveRef.current) {
+        reportPlayback("error", {
+          itemId,
+          title,
+          reason: "erreur de l'élément local pendant une diffusion — ignorée",
+          code: code ?? 0,
+        });
+        return;
+      }
       // Walks AUDIO_FALLBACK_RUNGS (see its comment for the why): rung 0 replays the identical
       // request (absorbs transient teardown races and learns nothing), each further rung
       // disables more audio codecs until the AAC-only rung guarantees a clean server-side audio

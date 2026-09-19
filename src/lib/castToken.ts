@@ -128,11 +128,30 @@ export async function castPassFor(req: {
   nextUrl: { pathname: string; searchParams: URLSearchParams };
 }): Promise<string | null> {
   if (req.method !== "GET") return null;
-  const match = /^\/api\/jellyfin\/stream\/([^/]+)\//.exec(req.nextUrl.pathname);
-  if (!match) return null;
-  const itemId = match[1];
-  if (!isJellyfinId(itemId)) return null;
+  const itemId = castItemOf(req.nextUrl.pathname);
+  if (!itemId) return null;
   return verifyCastToken(req.nextUrl.searchParams.get(CAST_TOKEN_PARAM), itemId);
+}
+
+/**
+ * Le titre que cette adresse sert, quand elle fait partie de ce qu'une diffusion doit atteindre.
+ *
+ * Deux formes, et la seconde manquait. Les segments et les manifestes vivent sous
+ * `/api/jellyfin/stream/{id}/…` ; les sous-titres, eux, sous `/api/jellyfin/stream/subtitle/{id}`
+ * — le titre n'y est pas au même rang, si bien que la règle ne les reconnaissait pas et que le
+ * téléviseur recevait un 401 sur chacun d'eux. Vérifié en direct le 19/09/2026 : le manifeste
+ * répond 200 avec un laissez-passer, la piste de sous-titres 401 avec le même.
+ *
+ * C'est ce qui explique ce qu'on voyait à l'écran — « des sous-titres français / anglais alors
+ * qu'il y en a plein de types » : les seuls qui arrivaient étaient ceux que le téléviseur devinait
+ * lui-même, aucun des nôtres.
+ */
+export function castItemOf(pathname: string): string | null {
+  const direct = /^\/api\/jellyfin\/stream\/subtitle\/([^/?]+)$/.exec(pathname);
+  if (direct) return isJellyfinId(direct[1]) ? direct[1] : null;
+  const match = /^\/api\/jellyfin\/stream\/([^/]+)\//.exec(pathname);
+  if (!match) return null;
+  return isJellyfinId(match[1]) ? match[1] : null;
 }
 
 /**

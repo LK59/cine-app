@@ -101,12 +101,32 @@ describe("la portée du laissez-passer", () => {
       "/api/auth/me",
       "/api/maintenance",
       "/api/jellyfin/favorite",
-      `/api/jellyfin/stream/subtitle/${ITEM}`,
       "/gestion",
       "/",
     ]) {
       expect(await castPassFor(requete(ailleurs, token))).toBeNull();
     }
+  });
+
+  /**
+   * Les sous-titres du **même** titre, et la borne se déplace d'un cran seulement.
+   *
+   * Ils étaient exclus, et ce test l'affirmait. C'était une erreur de portée, pas de principe :
+   * une diffusion ne donne au téléviseur que des adresses, et il va chercher les pistes de
+   * sous-titres lui-même, sans cookie. Chacune lui répondait 401 — ce qui se voyait comme une
+   * liste réduite à ce que le téléviseur devinait seul. Vérifié en direct le 19/09/2026 : le
+   * manifeste répond 200 avec un laissez-passer, la piste de sous-titres 401 avec le même.
+   *
+   * Ce qui ne change pas : le jeton nomme un titre, et ne vaut que pour lui.
+   */
+  it("ouvre les sous-titres du titre qu'il nomme", async () => {
+    const token = await signCastToken(ITEM, "louis");
+    expect(await castPassFor(requete(`/api/jellyfin/stream/subtitle/${ITEM}`, token))).toBe("louis");
+  });
+
+  it("n'ouvre pas les sous-titres d'un autre titre", async () => {
+    const token = await signCastToken(ITEM, "louis");
+    expect(await castPassFor(requete(`/api/jellyfin/stream/subtitle/${AUTRE}`, token))).toBeNull();
   });
 
   it("n'ouvre pas un chemin qui commence seulement par le même texte", async () => {

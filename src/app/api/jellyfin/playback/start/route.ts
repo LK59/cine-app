@@ -227,6 +227,15 @@ export async function POST(req: NextRequest) {
     // deviceProfile.ts) — this is the client's primary subtitle source in every case, with
     // real DisplayTitle/Language from the source file rather than hls.js's own less complete
     // SUBTITLE_TRACKS_UPDATED-derived names.
+    /**
+     * Le laissez-passer, signé une fois et porté aussi par les sous-titres.
+     *
+     * Une diffusion ne donne au téléviseur que des adresses ; il ira chercher lui-même les pistes
+     * de sous-titres, sans notre cookie. Sans jeton dessus, chacune lui répondait 401 — ce qui se
+     * voyait comme une liste réduite à ce qu'il devinait tout seul. Signé ici, à côté de l'adresse
+     * du manifeste, plutôt que deux fois : c'est le même titre et le même spectateur.
+     */
+    const castPass = forCast ? await signCastToken(itemId, session.u) : null;
     const subtitleTracks = (source.MediaStreams ?? [])
       .filter((s) => s.Type === "Subtitle")
       .map((s) => ({
@@ -234,7 +243,9 @@ export async function POST(req: NextRequest) {
         language: s.Language,
         label: s.DisplayTitle ?? s.Language ?? `Piste ${s.Index}`,
         isDefault: s.IsDefault ?? false,
-        url: `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}`,
+        url:
+          `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}` +
+          (castPass ? `&${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass)}` : ""),
       }));
 
     const audioTracks = (source.MediaStreams ?? [])
@@ -280,9 +291,8 @@ export async function POST(req: NextRequest) {
     if (forCast) {
       const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
       const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
-      const pass = await signCastToken(itemId, session.u);
       const separator = manifestUrl.includes("?") ? "&" : "?";
-      castUrl = `${proto}://${host}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(pass)}`;
+      castUrl = `${proto}://${host}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass!)}`;
     }
 
     return NextResponse.json({
