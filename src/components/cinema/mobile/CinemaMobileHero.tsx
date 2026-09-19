@@ -141,10 +141,19 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                     ) : (
                       <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{item.title}</h1>
                     )}
-                    <QualityBadges quality={"quality" in item ? item.quality : undefined} />
-          {item.genres.length > 0 && (
-                      <p className="mb-3 truncate text-xs text-white/70">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>
-                    )}
+                    {/* Une rangée, et c'est tout le correctif.
+                        Les pastilles étaient posées seules dans cette colonne flex : chacune s'y
+                        étirait sur toute la largeur et elles s'empilaient l'une sous l'autre,
+                        deux longs rectangles bordés là où il fallait deux étiquettes. Signalé le
+                        19/09/2026, visible seulement en paysage — c'est la seule branche qui les
+                        portait. Elles rejoignent les genres sur la même ligne, comme sur la
+                        bannière du bureau. */}
+                    <div className="mb-3 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-white/70">
+                      <QualityBadges quality={"quality" in item ? item.quality : undefined} />
+                      {item.genres.length > 0 && (
+                        <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>
+                      )}
+                    </div>
                     {actions(item)}
                   </div>
                 </div>

@@ -92,7 +92,7 @@ export function CinemaHero({
           <span>{formatMinutes(item.runtimeMinutes)}</span>
         )}
         <QualityBadges quality={item.quality} />
-          {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
+        {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
       </div>
 
       {/* Rien plutôt que de l'anglais. Le synopsis traduit vient de TMDB et met un instant à

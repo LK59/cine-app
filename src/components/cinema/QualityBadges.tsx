@@ -12,6 +12,11 @@ import { qualityBadges, type VideoQuality } from "@/lib/videoQuality";
  * Ce qu'on n'y met pas compte autant que ce qu'on y met : rien pour le 1080p, qui est la moitié de
  * cette bibliothèque et ne distingue donc rien, et rien sur l'audio, que le lecteur ré-encode —
  * voir `videoQuality`.
+ *
+ * **Des pastilles nues, à poser dans une rangée.** Le fragment est délibéré : les quatre appelants
+ * les mêlent à d'autres informations — la note, la durée, les genres — et un conteneur imposé ici
+ * casserait cet alignement. Le prix est qu'une colonne flex les étire chacune sur toute sa
+ * largeur, ce qui est arrivé une fois, sur la bannière du téléphone en paysage.
  */
 export function QualityBadges({ quality, className = "" }: { quality: VideoQuality | null | undefined; className?: string }) {
   const badges = qualityBadges(quality);
