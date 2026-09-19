@@ -126,6 +126,22 @@ defects; probes are for capabilities.
 file, not a constant.** Chrome rejects a whole init segment over a FLAC sample size that disagrees
 with STREAMINFO; Safari does not check. The forgiving browser is not the specification.
 
+**A `AudioData` is in the standard channel order — the encoder converts, you do not.** L R C LFE
+Ls Rs Lrs Rrs, whatever the destination codec orders its own bitstream by. Permuting into AAC's
+order (centre first, LFE last) before `AudioEncoder` applies the mapping twice and sends the whole
+dialogue into one ear; it was written from the format's specification, held for nine days, and was
+caught only by a viewer on Chrome — everyone else here is on Safari, where E-AC3 is carried
+untouched and none of this code runs. **And the channel count does not name the layout**: five
+channels is a 5.0 in one file and a 4.1 in another, seven is a 6.1 whose fifth rank is a back
+centre. The decoder gives the count and nothing else (mediabunny exposes no layout), so anything
+outside 1/2/3/6/8 keeps its first three planes — L, R, C, the only ranks every layout agrees on —
+and the rest is dropped rather than guessed.
+
+The way both were settled is the point: decode the real file in Node with the same decoder the
+browser uses, and compare its per-channel RMS against `ffmpeg -filter:a astats` on the same
+seconds. They matched to two decimals, which said the decoder was never the problem. Reasoning
+about someone else's channel order has now failed twice here; measuring took ten minutes.
+
 **A check that runs on someone else's error path must not become the error.** Detection that threw
 replaced the server's real message on screen; reconciliation that threw made a live subscription
 read as off. Both now sit in their own guard.
