@@ -272,7 +272,17 @@ export function PlayerPersonSheet({
         // Un cran sous la fiche de titre qui la recouvre, un cran au-dessus du panneau d'où l'on
         // vient — c'est exactement la place qui manquait. Voir PlayerPanelFrame pour l'échelle.
         zIndex: underneath ? 47 : 48,
-        pointerEvents: underneath ? "none" : undefined,
+        /* Et surtout : *pas* de `pointer-events: none` ici.
+         *
+         * C'était ma première façon de la rendre inerte, et elle a produit le défaut suivant —
+         * la fiche revenait bien mais ne répondait plus, et le doigt traversait jusqu'au panneau
+         * de recherche. Sur téléphone, cet élément **est** le conteneur de défilement : couper
+         * puis rendre `pointer-events` dessus laisse WebKit avec un calque qu'il n'a pas réarmé,
+         * et il continue de laisser passer les pointeurs.
+         *
+         * Rien à couper de toute façon : ce qui la recouvre est une fiche pleine et opaque qui
+         * arrête déjà tout. L'inertie qui compte est ailleurs, et elle n'a rien à voir avec le
+         * dessin — pas d'Échap, pas de geste, pas de fermeture. Voir plus haut. */
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
         transform: !underneath && swipe.touched ? `translateY(${swipe.offset}px)` : undefined,

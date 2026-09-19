@@ -83,6 +83,27 @@ describe("useSwipeToDismiss", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  /**
+   * Un appui n'est pas un geste, même très rapide.
+   *
+   * Signalé le 19/09/2026 : « au toucher, ça enlève la fiche ». Un doigt qui se pose et se lève
+   * aussitôt bouge toujours de deux ou trois pixels, et sur quelques millisecondes cela dépasse
+   * largement le seuil de vitesse — la fiche se refermait donc parce qu'on l'avait touchée. Ça ne
+   * se produit que sur un appui vif, d'où une panne longtemps invisible et très déroutante.
+   */
+  it("ne referme pas sur un appui vif de quelques pixels", () => {
+    const onDismiss = vi.fn();
+    const { result } = renderHook(() => useSwipeToDismiss(onDismiss));
+
+    act(() => result.current.handlers.onPointerDown(pointer(0)));
+    act(() => result.current.handlers.onPointerMove(pointer(3)));
+    act(() => result.current.handlers.onPointerUp(pointer(3)));
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    // Et elle revient exactement d'où elle vient.
+    expect(result.current.offset).toBe(0);
+  });
+
   it("ignores a move that never started with a press", () => {
     const onDismiss = vi.fn();
     const { result } = renderHook(() => useSwipeToDismiss(onDismiss));

@@ -21,6 +21,20 @@ const DISTANCE_RATIO = 0.22;
 const MAX_DISTANCE = 160;
 // px per millisecond — a flick, not a slow drag that happened to be brief.
 const VELOCITY_THRESHOLD = 0.5;
+/**
+ * En dessous, un geste n'est pas un geste : c'est un appui.
+ *
+ * La vitesse seule ne sait pas les distinguer. Un doigt qui se pose et se lève aussitôt bouge
+ * toujours de deux ou trois pixels, et sur quatre millisecondes cela fait 0,75 px/ms — au-delà du
+ * seuil, donc une fiche qui se referme parce qu'on l'a touchée. Ça n'arrive que sur un appui vif,
+ * ce qui explique que ce soit resté longtemps invisible et que ce soit très déroutant quand ça
+ * arrive : « au toucher, ça enlève la fiche ».
+ *
+ * Vingt-quatre pixels, c'est le seuil habituel au-delà duquel un appui devient un glissement.
+ * La distance seule garde son propre seuil, bien plus grand : celui-ci ne fait qu'interdire au
+ * raccourci de la vitesse de s'appliquer à quelque chose qui n'a pas bougé.
+ */
+const MIN_FLICK_PX = 24;
 
 export interface SwipeToDismiss {
   /** Current downward offset in px. 0 when idle. */
@@ -93,7 +107,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
     const elapsed = Math.max(performance.now() - startedAt.current, 1);
     const threshold = Math.min(MAX_DISTANCE, window.innerHeight * DISTANCE_RATIO);
 
-    if (distance > threshold || distance / elapsed > VELOCITY_THRESHOLD) {
+    if (distance > threshold || (distance >= MIN_FLICK_PX && distance / elapsed > VELOCITY_THRESHOLD)) {
       // Carries on off the bottom instead of snapping back first — the close animation is the
       // continuation of the gesture, not a separate thing that happens after it.
       setOffset(window.innerHeight);
