@@ -42,6 +42,17 @@ export interface MatroskaTrack {
   isEnabled: boolean;
   defaultDurationNs: number | null;
   video?: { width: number; height: number; displayWidth?: number; displayHeight?: number; colour?: TrackColour };
+  /**
+   * L'enregistrement de configuration Dolby Vision, tel que le conteneur le porte.
+   *
+   * Lu, et pour l'instant seulement observé : l'étape suivante — l'écrire dans le MP4 — ne se fera
+   * qu'une fois qu'on saura ce que le navigateur répond à la chaîne de codec construite depuis
+   * *ce* champ, et non depuis une chaîne écrite à la main.
+   *
+   * `type` vaut « dvcC » ou « dvvC » selon la version du format ; c'est le nom de la boîte MP4
+   * correspondante, et il se recopie tel quel.
+   */
+  dolbyVision?: { type: string; record: Uint8Array };
   audio?: { sampleRate: number; channels: number; bitDepth?: number };
 }
 
@@ -145,6 +156,25 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
       case ID.DefaultDuration:
         track.defaultDurationNs = readUint(await payload(source, el));
         break;
+      case ID.BlockAdditionMapping: {
+        // Deux enfants, et il faut les deux : le nom de la boîte et son contenu. Un
+        // `BlockAdditionMapping` peut décrire autre chose que du Dolby Vision — on ne retient que
+        // ce qu'on sait nommer.
+        let type: string | null = null;
+        let record: Uint8Array | null = null;
+        await forEachChild(source, el.offset, el.offset + (el.size ?? 0), async (b) => {
+          if (b.id === ID.BlockAddIDType) {
+            // Stocké comme un entier, lu comme quatre caractères : c'est un FourCC.
+            const value = readUint(await payload(source, b));
+            type = String.fromCharCode((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff);
+          } else if (b.id === ID.BlockAddIDExtraData) {
+            // Recopié hors du cache de blocs, comme `CodecPrivate` et pour la même raison.
+            record = new Uint8Array(await payload(source, b));
+          }
+        });
+        if ((type === "dvcC" || type === "dvvC") && record) track.dolbyVision = { type, record };
+        break;
+      }
       case ID.Video: {
         const video = { width: 0, height: 0 } as NonNullable<MatroskaTrack["video"]>;
         await forEachChild(source, el.offset, el.offset + (el.size ?? 0), async (v) => {

@@ -20,6 +20,20 @@ export const ID = {
   TrackType: 0x83,
   CodecID: 0x86,
   CodecPrivate: 0x63a2,
+  /**
+   * La configuration Dolby Vision, rangée là où Matroska range les extensions de piste.
+   *
+   * `BlockAdditionMapping` décrit ce qui s'ajoute aux blocs d'une piste ; pour le Dolby Vision il
+   * ne s'agit pas de données par bloc mais d'un enregistrement de configuration, porté une fois
+   * par `BlockAddIDExtraData` et nommé par `BlockAddIDType` — « dvcC » ou « dvvC », selon la
+   * version du format. C'est exactement l'enregistrement que le MP4 attend dans sa propre boîte.
+   *
+   * Relevé sur « Retour vers le futur II » : présent à l'octet 4612, donc dans l'en-tête que cet
+   * analyseur lit déjà, et nommé `dvvC`.
+   */
+  BlockAdditionMapping: 0x41e4,
+  BlockAddIDType: 0x41e7,
+  BlockAddIDExtraData: 0x41ed,
   DefaultDuration: 0x23e383,
   Language: 0x22b59c,
   LanguageBCP47: 0x22b59d,

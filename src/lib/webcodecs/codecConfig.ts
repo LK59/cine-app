@@ -88,6 +88,32 @@ export function hevcCodecString(hvcC: Uint8Array): string | null {
   ].join(".");
 }
 
+/**
+ * Construit une chaîne `dvh1.PP.LL` depuis l'enregistrement Dolby Vision du conteneur.
+ *
+ * Disposition, vérifiée contre ffprobe sur un vrai fichier de cette bibliothèque plutôt que lue
+ * dans une spécification : deux octets de version, puis seize bits portant le profil sur sept
+ * bits, le niveau sur six, et trois drapeaux — RPU, couche d'amélioration, couche de base.
+ *
+ *     01 00 10 35 …  →  version 1.0, profil 8, niveau 6, rpu=1 el=0 bl=1
+ *
+ * `dvh1` et non `dvhe` : les deux ne diffèrent que par l'endroit où vivent les jeux de paramètres,
+ * et le remultiplexeur les écrit dans l'entrée d'échantillon — ce que `dvh1` désigne, exactement
+ * comme `hvc1` le fait face à `hev1`.
+ *
+ * Les deux nombres sont sur deux chiffres, zéro devant compris : `dvh1.08.06`, jamais `dvh1.8.6`.
+ * Aucun navigateur ne reconnaît la seconde forme.
+ */
+export function dolbyVisionCodecString(record: Uint8Array): string | null {
+  if (record.length < 4) return null;
+  const bits = (record[2] << 8) | record[3];
+  const profile = (bits >> 9) & 0x7f;
+  const level = (bits >> 3) & 0x3f;
+  if (profile === 0 || level === 0) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `dvh1.${pad(profile)}.${pad(level)}`;
+}
+
 /** Builds an `avc1.*` string from the avcC record: profile, compatibility and level. */
 export function avcCodecString(avcC: Uint8Array): string | null {
   if (avcC.length < 4) return null;

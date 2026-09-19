@@ -22,7 +22,7 @@
 // exactly how a performance problem stays invisible for months.
 
 import type { ByteSource } from "./byteSource";
-import { unsupportedReason } from "./codecConfig";
+import { unsupportedReason, dolbyVisionCodecString } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { canRebuildAudioBuffer, playabilityOf } from "./mseSource";
 import { trace } from "./trace";
@@ -132,7 +132,42 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     }
   }
 
-  // Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
+  /**
+ * Ce que le navigateur *répondrait* si on lui proposait du Dolby Vision — et rien de plus.
+ *
+ * Première étape d'un chantier délibérément coupé en deux, et cette moitié-ci ne change pas un
+ * octet de la sortie. Le remultiplexeur continue d'écrire `hvc1` et de livrer du HDR10 : 188
+ * titres de cette bibliothèque portent du Dolby Vision et sont lus ainsi, correctement, depuis
+ * toujours. Rien de ce qui marche n'est mis en jeu tant que cette ligne n'a pas parlé.
+ *
+ * Ce qu'elle apporte que la sonde du panneau technique n'apportait pas : la chaîne est construite
+ * depuis l'enregistrement **de ce fichier-ci**, et non écrite à la main. Un `dvh1.08.06` tapé au
+ * clavier dit que l'appareil connaît le profil 8 ; celui-ci dit que l'appareil accepte ce que nous
+ * saurions réellement lui donner.
+ *
+ * Le témoin du panneau — un profil 42 qui n'existe pas — a déjà répondu « non » sur un iPhone,
+ * donc la validation porte bien sur le numéro. Reste à voir si elle porte aussi sur le reste.
+ */
+function observeDolbyVision(videoTrack: MatroskaTrack | null, audioMime: string | null): void {
+  const dv = videoTrack?.dolbyVision;
+  if (!dv) return;
+  const codec = dolbyVisionCodecString(dv.record);
+  if (!codec) {
+    trace(`dolby vision : enregistrement ${dv.type} illisible (${dv.record.length} octets)`);
+    return;
+  }
+  const mimeType = `video/mp4; codecs="${codec}"`;
+  const answer = playabilityOf({
+    videoMimeType: mimeType,
+    audioMimeType: audioMime,
+    videoInit: EMPTY,
+    audioInit: null,
+    durationSeconds: 0,
+  });
+  trace(`dolby vision : ${dv.type} présent, ${mimeType} → ${answer.ok ? "accepté" : "refusé"}`);
+}
+
+// Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
   // file, and there is no reason to pay for that only to be told the browser wanted none of it.
   const mime = plannedMimeTypes(videoTrack, audioTrack, file);
   const playable = playabilityOf({
@@ -143,6 +178,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     durationSeconds: 0,
   });
   trace(`chemin : le navigateur accepte-t-il ${mime.video ?? "?"} + ${mime.audio ?? "aucun"} → ${playable.ok ? "oui" : "non"}`);
+  observeDolbyVision(videoTrack, mime.audio);
   if (!playable.ok) return playable.reason;
 
   try {
