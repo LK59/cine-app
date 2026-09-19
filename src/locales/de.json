@@ -1491,7 +1491,7 @@
     "search": "Suchen",
     "myList": "Meine Liste",
     "recentlyAdded": "Kürzlich hinzugefügt",
-    "top10": "Top 10 in deiner Bibliothek",
+    "top10": "Top 10 heute",
     "newBadge": "Neu",
     "similar": "Ähnliche Titel",
     "collection": "Reihe",
@@ -1517,7 +1517,9 @@
     "reload": "Seite neu laden",
     "upNext": "Als Nächstes",
     "becauseWatched": "Weil du {title} gesehen hast",
-    "castTitle": "Besetzung"
+    "castTitle": "Besetzung",
+    "top10Theme": "Top 10 heute · {theme}",
+    "decade": "{decade}er"
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",

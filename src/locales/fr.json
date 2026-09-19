@@ -1491,7 +1491,7 @@
     "search": "Rechercher",
     "myList": "Ma liste",
     "recentlyAdded": "Récemment ajoutés",
-    "top10": "Top 10 dans votre bibliothèque",
+    "top10": "Top 10 du jour",
     "newBadge": "Nouveau",
     "similar": "Titres similaires",
     "collection": "Collection",
@@ -1517,7 +1517,9 @@
     "reload": "Recharger la page",
     "upNext": "À suivre",
     "becauseWatched": "Parce que vous avez regardé {title}",
-    "castTitle": "Distribution"
+    "castTitle": "Distribution",
+    "top10Theme": "Top 10 du jour · {theme}",
+    "decade": "années {decade}"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

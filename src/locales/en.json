@@ -1491,7 +1491,7 @@
     "search": "Search",
     "myList": "My list",
     "recentlyAdded": "Recently added",
-    "top10": "Top 10 in your library",
+    "top10": "Top 10 today",
     "newBadge": "New",
     "similar": "More like this",
     "collection": "Collection",
@@ -1517,7 +1517,9 @@
     "reload": "Reload the page",
     "upNext": "Up next",
     "becauseWatched": "Because you watched {title}",
-    "castTitle": "Cast"
+    "castTitle": "Cast",
+    "top10Theme": "Top 10 today · {theme}",
+    "decade": "the {decade}s"
   },
   "services": {
     "notConfigured": "{name} is not configured.",

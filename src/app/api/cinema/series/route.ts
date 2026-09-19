@@ -5,7 +5,7 @@ import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } fro
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { getImdbRating } from "@/lib/imdb-rating";
-import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
+import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 
 export interface CinemaSeries {
@@ -33,6 +33,8 @@ export interface CinemaSeriesPayload {
   spotlight: CinemaSeries[];
   recentlyAdded: CinemaSeries[];
   top10: CinemaSeries[];
+  /** Le thème du palmarès du jour — voir la route des films, même mécanisme. */
+  top10Theme: Top10Theme | null;
 }
 
 // Mirrors /api/cinema/movies/route.ts exactly (see its own comments for the reasoning behind
@@ -106,12 +108,19 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map((s) => bySonarrId.get(s.id)!);
 
+    // La graine est la date, mais les thèmes éligibles ne sont pas les mêmes que pour les films —
+    // une collection de séries n'a ni les mêmes genres ni les mêmes décennies en quantité. Les deux
+    // rangées peuvent donc porter des thèmes différents le même jour, et c'est très bien : chacune
+    // parle de ce qu'elle contient.
+    const top10OfTheDay = dailyTop10(cinemaSeries);
+
     const payload: CinemaSeriesPayload = {
       genres: [...genreSet].sort(),
       rows,
       spotlight,
       recentlyAdded: recentlyAddedRail(cinemaSeries),
-      top10: top10Rail(cinemaSeries),
+      top10: top10OfTheDay.items,
+      top10Theme: top10OfTheDay.theme,
     };
     // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
     // entier, il demande seulement s'il a changé. Voir `cachedJson`.

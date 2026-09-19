@@ -4,7 +4,7 @@ import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
-import { recentlyAddedRail, top10Rail } from "@/lib/cinemaRails";
+import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
 export interface CinemaMovie {
@@ -48,6 +48,14 @@ export interface CinemaMoviesPayload {
   // mean (see lib/cinemaRails for each one's definition).
   recentlyAdded: CinemaMovie[];
   top10: CinemaMovie[];
+  /**
+   * Ce que le palmarès du jour classe — un genre, une décennie, ou rien.
+   *
+   * Renvoyé plutôt que déduit côté écran : c'est le serveur qui tire le thème de la date, et deux
+   * écrans qui le calculeraient chacun de leur côté pourraient tomber sur des jours différents —
+   * celui de l'appareil, pas celui du serveur.
+   */
+  top10Theme: Top10Theme | null;
 }
 
 // Bulk-included here (like poster/backdrop already were) rather than fetched per-item on focus
@@ -141,12 +149,17 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map((m) => byRadarrId.get(m.id)!);
 
+    // Le thème du jour est tiré de la date, donc le même pour tout le monde et stable tant que la
+    // journée dure — voir `dailyTop10`.
+    const top10OfTheDay = dailyTop10(cinemaMovies);
+
     const payload: CinemaMoviesPayload = {
       genres: [...genreSet].sort(),
       rows,
       spotlight,
       recentlyAdded: recentlyAddedRail(cinemaMovies),
-      top10: top10Rail(cinemaMovies),
+      top10: top10OfTheDay.items,
+      top10Theme: top10OfTheDay.theme,
     };
     // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
     // entier, il demande seulement s'il a changé. Voir `cachedJson`.

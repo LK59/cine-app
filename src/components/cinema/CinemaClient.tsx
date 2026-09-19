@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
+import { top10Label } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -1018,7 +1019,7 @@ export function CinemaClient() {
                   what make it read as a home screen. Each one hides itself when empty. */}
               {movies && (
                 <CinemaTop10Row
-                  label={t("cinema.top10")}
+                  label={top10Label(movies?.top10Theme ?? null, t)}
                   rowKey="top10-movies"
                   rowIndex={hasContinue ? 2 : 1}
                   items={movies.top10}
@@ -1138,7 +1139,7 @@ export function CinemaClient() {
               {/* Same three rails as the movies tab — see its own note above. */}
               {series && (
                 <CinemaTop10Row
-                  label={t("cinema.top10")}
+                  label={top10Label(series?.top10Theme ?? null, t)}
                   rowKey="top10-series"
                   rowIndex={hasContinue ? 1 : 0}
                   items={series.top10}

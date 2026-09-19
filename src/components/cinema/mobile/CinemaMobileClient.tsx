@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
+import { top10Label } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
@@ -638,7 +639,7 @@ export function CinemaMobileClient() {
         {/* The curated rails, ahead of the genre rows — same three as desktop, same definitions
             (see lib/cinemaRails). Each hides itself when it has nothing to show. */}
         {payload && payload.top10.length > 0 && (
-          <MobileRow label={t("cinema.top10")}>
+          <MobileRow label={top10Label(payload.top10Theme ?? null, t)}>
             {payload.top10.map((item, i) => (
               <CinemaTop10Card
                 key={itemId(item)}
