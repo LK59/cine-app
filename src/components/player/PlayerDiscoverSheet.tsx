@@ -10,7 +10,6 @@ import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
-import { useDelayedClose } from "@/lib/useDelayedClose";
 import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
@@ -121,17 +120,21 @@ export function PlayerDiscoverSheet({
 
   const close = () => cinemaClose({ discover: null, person: null });
   /**
-   * La fermeture attend son animation, comme sur les fiches de bibliothèque.
+   * Un seul mécanisme de sortie, et c'est le parent qui l'a.
    *
-   * `cinemaClose` change l'adresse tout de suite : la fiche cessait donc d'être celle du dessus au
-   * premier pixel de sa sortie, et le geste — qui vient pourtant de la lancer, offset et inertie
-   * compris — n'avait plus le temps d'aller au bout. Lâchée, elle disparaissait net là où la fiche
-   * d'à côté finissait sa course.
+   * Cette fiche en avait **deux**, ce que la section « The sheet lifecycle » de CLAUDE.md
+   * interdit explicitement : `useDelayedClose` à l'intérieur, qui retenait l'adresse 280 ms, et
+   * `useExitDelay` dans la coquille, qui la gardait montée 280 ms de plus *après* que l'adresse
+   * ait changé. Les deux s'enchaînaient au lieu de se recouvrir — jusqu'à une demi-seconde de
+   * fiche sortante, pendant laquelle la suivante se montait déjà. C'est ce qui rendait les
+   * imbrications profondes poisseuses puis bloquées : refermer deux fois de suite laissait deux
+   * écrans pleins vivants en même temps, chacun avec son geste et son écouteur de touches.
    *
-   * `useDelayedClose` est exactement ce que fait CinemaMobileDetail, et pour la même raison. Sur
-   * grand écran le sursis reste nul : la sortie y est un fondu de 200 ms que `leaving` pilote déjà.
+   * La fermeture est donc immédiate. La coquille, qui rend cette fiche d'après l'adresse, sait
+   * seule combien de temps la garder ensuite — et elle sait aussi quand ce n'est pas la peine,
+   * parce qu'une autre fiche attend derrière. Voir `sheetExitMs` dans PlayerShell.
    */
-  const { closing, requestClose } = useDelayedClose(close, isMobile ? SHEET_OUT_MS : 0);
+  const requestClose = close;
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
   const swipe = useSwipeToDismiss(requestClose);
@@ -189,7 +192,7 @@ export function PlayerDiscoverSheet({
         // Exactement les classes des fiches de bibliothèque : dans une rangée de saga, un titre
         // sur trois ouvre celle-ci et les autres ouvrent l'autre, et rien dans le geste ne dit
         // laquelle — les deux doivent donc entrer et sortir de la même façon.
-        swipe.touched ? "" : closing || leaving ? "sheet-out" : revealed ? "" : "sheet-in"
+        swipe.touched ? "" : leaving ? "sheet-out" : revealed ? "" : "sheet-in"
       }`}
       style={{
         zIndex: 48,
@@ -320,7 +323,7 @@ export function PlayerDiscoverSheet({
     <div
       ref={containerRef}
       className={`fixed inset-0 overflow-hidden bg-ink ${
-        closing || leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
+        leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
       }`}
       // Le rail passe par-dessus tout : la fiche lui réserve sa bande, comme celles de la
       // bibliothèque. La variable vaut 0 hors du lecteur.

@@ -79,23 +79,41 @@ describe("les fiches TMDB s'animent comme les fiches de bibliothèque", () => {
 });
 
 /**
- * Le geste de fermeture va au bout sur une fiche TMDB comme sur une fiche de bibliothèque.
+ * Le geste de fermeture va au bout — et **un seul** mécanisme s'en charge.
  *
- * `cinemaClose` change l'adresse immédiatement : sans sursis, la fiche cessait d'être celle du
- * dessus au premier pixel de sa sortie, et le lancer du doigt s'interrompait net.
+ * `cinemaClose` change l'adresse immédiatement : sans sursis, la fiche cesserait d'être dessinée
+ * au premier pixel de sa sortie et le lancer du doigt s'interromprait net. La garantie n'a pas
+ * bougé ; ce qui a changé, c'est qui la tient.
+ *
+ * Ces deux fiches en avaient deux à la fois, ce que la section « The sheet lifecycle » de
+ * CLAUDE.md interdit : `useDelayedClose` à l'intérieur, qui retenait l'adresse 280 ms, et
+ * `useExitDelay` dans la coquille, qui les gardait montées 280 ms *après* que l'adresse ait
+ * changé. Les deux s'enchaînaient au lieu de se recouvrir — jusqu'à une demi-seconde de fiche
+ * sortante pendant laquelle la suivante se montait déjà. C'est ce qui rendait les imbrications
+ * profondes poisseuses puis bloquées : refermer deux fois de suite laissait deux écrans pleins
+ * vivants en même temps, chacun avec son geste et son écouteur de touches. Signalé le 19/09/2026.
+ *
+ * Le sursis appartient donc à la coquille seule, qui est aussi la seule à savoir quand il est
+ * inutile — une autre fiche attend derrière. Voir `sheetExitMs` dans PlayerShell.
  */
-describe("la sortie des fiches TMDB attend son animation", () => {
+describe("la sortie des fiches TMDB n'a qu'un seul maître", () => {
   it.each([
     "src/components/player/PlayerDiscoverSheet.tsx",
     "src/components/player/PlayerPersonSheet.tsx",
-  ])("%s ferme par requestClose, jamais par close directement", (file) => {
+  ])("%s laisse le sursis à la coquille", (file) => {
     const src = readFileSync(file, "utf8");
-    expect(src).toMatch(/useDelayedClose\(close, isMobile \? SHEET_OUT_MS : 0\)/);
+    // Le second mécanisme, celui qui s'ajoutait à l'autre. Sur l'appel, pas sur le mot : les
+    // commentaires le nomment, et ils expliquent précisément pourquoi il n'est plus là.
+    expect(src).not.toMatch(/useDelayedClose\(/);
+    // Et l'état qu'il portait : la classe de sortie ne part plus que de `leaving`, donc du parent.
+    expect(src).not.toMatch(/\bclosing\b/);
     expect(src).toMatch(/useSwipeToDismiss\(requestClose\)/);
-    // Plus aucun bouton ni raccourci ne court-circuite le sursis.
-    expect(src).not.toMatch(/onClick=\{close\}/);
-    expect(src).not.toMatch(/^ +close\(\);$/m);
-    // Et la classe de sortie part du sursis, pas seulement de l'adresse.
-    expect(src).toMatch(/closing \|\| leaving/);
+  });
+
+  // Et le sursis existe bel et bien, sinon la fiche disparaîtrait sous le doigt.
+  it("la coquille garde la fiche montée le temps de son animation", () => {
+    const src = readFileSync("src/components/player/PlayerShell.tsx", "utf8");
+    expect(src).toMatch(/useExitDelay\(route\.person !== null, sheetExitMs\)/);
+    expect(src).toMatch(/useExitDelay\(route\.discover !== null, sheetExitMs\)/);
   });
 });

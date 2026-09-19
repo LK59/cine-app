@@ -112,8 +112,8 @@ export function PlayerShell() {
    * grand écran la sortie est un fondu que `useSheetBehind` réduit déjà à zéro : rien à découvrir,
    * donc rien à dessiner.
    */
-  const titleOpen = route.film !== null || route.serie !== null;
-  const personUnder = isMobile && titleOpen && route.person === null ? personBehind(behind) : null;
+  const covering = route.film !== null || route.serie !== null || route.discover !== null;
+  const personUnder = isMobile && covering && route.person === null ? personBehind(behind) : null;
   const sheetExitMs =
     useSheetBehind() && !behindIsLibrarySheet ? 0 : isMobile ? SHEET_OUT_MS : EXIT_MS;
   const person = useExitDelay(route.person !== null, sheetExitMs);
@@ -194,7 +194,7 @@ export function PlayerShell() {
           elle aussi. Sur un téléphone, ça se sent. Un seul emplacement et une clé stable : React
           garde le nœud, seul `underneath` change, et le défilement de la filmographie est même
           retrouvé tel quel en refermant le film. */}
-      {personId !== null ? (
+      {personId !== null && (
         <PlayerPersonSheet
           /* Un autre acteur est une autre fiche — même raison que le `key` du lecteur sur son
              film : `arrivedByBack` n'est lu qu'au montage, le défilement et le focus sont ceux de
@@ -205,14 +205,19 @@ export function PlayerShell() {
           leaving={personTop !== null && person.leaving}
           underneath={personTop === null}
         />
-      ) : discover.render && lastDiscover !== null ? (
+      )}
+      {/* Une fiche découverte se rend quand aucune fiche personne ne la recouvre — mais elle se
+          rend *avec* celle qu'elle recouvre, s'il y en a une : c'est la même pile, à l'étage du
+          dessous. Sans ce « et », l'acteur dont on vient prenait sa place au lieu de se ranger
+          dessous, et un film pas encore là ouvert depuis une filmographie n'affichait rien. */}
+      {personTop === null && discover.render && lastDiscover !== null && (
         <PlayerDiscoverSheet
           key={`${lastDiscoverType}:${lastDiscover}`}
           tmdbId={lastDiscover}
           mediaType={lastDiscoverType}
           leaving={discover.leaving}
         />
-      ) : null}
+      )}
     </>
   );
 }

@@ -11,7 +11,6 @@ import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
-import { useDelayedClose } from "@/lib/useDelayedClose";
 import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 
 interface PersonCredit {
@@ -216,17 +215,21 @@ export function PlayerPersonSheet({
 
   const close = () => cinemaClose({ person: null });
   /**
-   * La fermeture attend son animation, comme sur les fiches de bibliothèque.
+   * Un seul mécanisme de sortie, et c'est le parent qui l'a.
    *
-   * `cinemaClose` change l'adresse tout de suite : la fiche cessait donc d'être celle du dessus au
-   * premier pixel de sa sortie, et le geste — qui vient pourtant de la lancer, offset et inertie
-   * compris — n'avait plus le temps d'aller au bout. Lâchée, elle disparaissait net là où la fiche
-   * d'à côté finissait sa course.
+   * Cette fiche en avait **deux**, ce que la section « The sheet lifecycle » de CLAUDE.md
+   * interdit explicitement : `useDelayedClose` à l'intérieur, qui retenait l'adresse 280 ms, et
+   * `useExitDelay` dans la coquille, qui la gardait montée 280 ms de plus *après* que l'adresse
+   * ait changé. Les deux s'enchaînaient au lieu de se recouvrir — jusqu'à une demi-seconde de
+   * fiche sortante, pendant laquelle la suivante se montait déjà. C'est ce qui rendait les
+   * imbrications profondes poisseuses puis bloquées : refermer deux fois de suite laissait deux
+   * écrans pleins vivants en même temps, chacun avec son geste et son écouteur de touches.
    *
-   * `useDelayedClose` est exactement ce que fait CinemaMobileDetail, et pour la même raison. Sur
-   * grand écran le sursis reste nul : la sortie y est un fondu de 200 ms que `leaving` pilote déjà.
+   * La fermeture est donc immédiate. La coquille, qui rend cette fiche d'après l'adresse, sait
+   * seule combien de temps la garder ensuite — et elle sait aussi quand ce n'est pas la peine,
+   * parce qu'une autre fiche attend derrière. Voir `sheetExitMs` dans PlayerShell.
    */
-  const { closing, requestClose } = useDelayedClose(close, isMobile ? SHEET_OUT_MS : 0);
+  const requestClose = close;
   // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
   // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
   const swipe = useSwipeToDismiss(requestClose);
@@ -305,7 +308,7 @@ export function PlayerPersonSheet({
       className={`fixed inset-0 bg-ink ${isMobile ? "overflow-y-auto overscroll-contain" : "overflow-hidden"} ${
         swipe.touched
           ? ""
-          : closing || leaving
+          : leaving
             ? "sheet-out md:animate-fade-out"
             : revealed
               ? ""
