@@ -296,3 +296,56 @@ describe("useRouteBehind", () => {
     expect(result.current).toBe(first);
   });
 });
+
+/**
+ * Un titre ne peut pas être dessiné au-dessus d'une fiche personne.
+ *
+ * Les plans sont une échelle fixe — grille 45, panneaux 46, fiches de titre 47, personne et
+ * découverte 48 —, donc « par-dessus la fiche personne » ne se voit pas : la fiche existait, sous
+ * la personne et inerte, et comme la barre du bas s'efface tant qu'une fiche est adressée,
+ * l'écran restait sans navigation. Signalé le 19/09/2026.
+ */
+describe("openLibraryTitle — ce qui la couvre se referme", () => {
+  it("referme la fiche personne d'où l'on vient", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ person: 6384 }));
+    expect(result.current.person).toBe(6384);
+
+    act(() => openLibraryTitle("movie", 42));
+    expect(result.current.person).toBeNull();
+    expect(result.current.film).toBe(42);
+  });
+
+  it("en fait autant pour une fiche découverte", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ discover: 693134 }));
+
+    act(() => openLibraryTitle("series", 50));
+    expect(result.current.discover).toBeNull();
+    expect(result.current.serie).toBe(50);
+  });
+
+  // Et le retour y ramène : l'entrée précédente porte encore la personne. « Par-dessus » et « à sa
+  // place, avec un retour qui y ramène » se voient pareil — seul le second sait s'afficher.
+  it("empile plutôt que de remplacer, pour que le retour rouvre la personne", () => {
+    renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ person: 6384 }));
+    const avant = window.history.state.cinemaDepth as number;
+
+    act(() => openLibraryTitle("movie", 42));
+    // Un cran de plus : l'entrée qui porte la personne est toujours là, derrière celle-ci. C'est
+    // ce qui distingue « refermer » de « perdre ».
+    expect(window.history.state.cinemaDepth).toBe(avant + 1);
+  });
+
+  // Ce que l'écran d'origine n'a pas à subir : la recherche et Ma liste restent ouvertes dessous.
+  it("ne referme pas les panneaux, qui sont sous la fiche et non dessus", () => {
+    const { result } = renderHook(() => useCinemaRoute());
+    act(() => cinemaNavigate({ search: true }));
+    act(() => cinemaNavigate({ person: 6384 }));
+
+    act(() => openLibraryTitle("movie", 42));
+    expect(result.current.search).toBe(true);
+    expect(result.current.person).toBeNull();
+  });
+});

@@ -398,13 +398,20 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
                         subtitle={c.year ? String(c.year) : c.character || null}
                         poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
                         missing={!c.inLibrary}
-                        // Par-dessus la fiche personne, pas à sa place : le retour ramène à la
-                        // filmographie. Et l'onglet suit le type, sans quoi une série ouverte
-                        // depuis un acteur ne se résolvait pas.
+                        /* La fiche prend la place de celle-ci, et le retour y ramène.
+                           Elle passait « par-dessus », ce qui ne peut pas s'afficher : les plans
+                           sont une échelle fixe et une fiche de titre (47) ne monte pas au-dessus
+                           d'une fiche personne (48). Rien ne s'ouvrait donc, et la barre du bas —
+                           qui s'efface tant qu'une fiche est adressée — laissait l'écran sans
+                           navigation. Voir `openLibraryTitle`, qui referme désormais ce qui la
+                           couvre ; ici il reste à en faire autant pour la fiche découverte, qui
+                           ne passe pas par elle.
+                           L'onglet suit le type, sans quoi une série ouverte depuis un acteur ne
+                           se résout pas. */
                         onOpen={() =>
                           c.libraryId !== null
                             ? openLibraryTitle(type, c.libraryId)
-                            : cinemaNavigate({ discover: c.tmdbId, discoverType: type })
+                            : cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null })
                         }
                       />
                     );

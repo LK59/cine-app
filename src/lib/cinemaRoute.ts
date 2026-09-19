@@ -329,16 +329,34 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
  * `extra` sert à emporter ce qui doit changer en même temps — jamais à refermer l'écran d'origine :
  * la recherche et Ma liste restent ouvertes *sous* la fiche, pour qu'un retour y ramène avec la
  * requête et l'onglet intacts.
+ *
+ * Les fiches personne et découverte, elles, se referment — et ce n'est pas un choix de confort,
+ * c'est la seule issue cohérente. Les plans sont une échelle fixe : la grille au 45, les panneaux
+ * au 46, les fiches de titre au 47, la personne et la découverte au 48. Un titre ne peut donc
+ * *pas* être dessiné au-dessus d'une fiche personne, quoi qu'on fasse de l'adresse.
+ *
+ * Signalé le 19/09/2026, et les trois symptômes sont le même : ouvrir un film depuis la
+ * filmographie d'un acteur ne montrait rien — la fiche existait, au 47, sous la personne, et
+ * rendue inerte par-dessus le marché (`covered` dans le client mobile) ; en refermant l'acteur on
+ * la voyait apparaître puis disparaître d'un coup ; et comme la barre du bas s'efface tant qu'une
+ * fiche est adressée, il ne restait plus de navigation du tout — l'application semblait bloquée.
+ *
+ * La fiche découverte se refermait déjà, la fiche personne non : la même décision, prise à deux
+ * endroits, et qui a dérivé. Elle est prise ici, une fois, pour tous les appelants — ceux qui
+ * n'ont ni personne ni découverte ouverte n'y perdent rien, l'adresse ne change pas. Le retour
+ * rouvre la personne, puisque l'entrée précédente la porte encore : « par-dessus » et « à sa
+ * place, avec un retour qui y ramène » se voient pareil, et seul le second sait s'afficher.
  */
 export function openLibraryTitle(
   type: "movie" | "series",
   libraryId: number,
   extra: Partial<CinemaRoute> = {}
 ): void {
+  const above = { person: null, discover: null };
   cinemaNavigate(
     type === "series"
-      ? { ...extra, tab: "series", serie: libraryId, film: null }
-      : { ...extra, tab: "movies", film: libraryId, serie: null }
+      ? { ...above, ...extra, tab: "series", serie: libraryId, film: null }
+      : { ...above, ...extra, tab: "movies", film: libraryId, serie: null }
   );
 }
 
