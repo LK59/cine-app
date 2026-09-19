@@ -81,6 +81,26 @@ export interface SheetRef {
   film: number | null;
   serie: number | null;
   tab: "movies" | "series";
+  /**
+   * La personne recouverte, s'il s'agit d'elle.
+   *
+   * Exclusif des deux champs ci-dessus : une entrée recouvre une fiche de titre **ou** une fiche
+   * personne, jamais les deux — c'est ce qui rend la question décidable sans rien stocker de plus.
+   *
+   * C'était le défaut structurel de la fiche personne : elle ne faisait pas partie de la pile. Une
+   * fiche de titre recouverte est redessinée dessous à partir de cette référence (voir
+   * `behindSelected` dans CinemaMobileClient), et c'est ce qui rend l'empilement des « titres
+   * similaires » net — on tire la carte du dessus, celle du dessous est déjà là. La personne, elle,
+   * n'était nommée nulle part : il n'y avait donc rien à dessiner sous le film, et la sortie
+   * découvrait l'écran de recherche, deux crans plus bas.
+   */
+  person: number | null;
+}
+
+/** La fiche personne que l'entrée courante recouvre, quand c'est d'elle qu'on vient. */
+export function personBehind(behind: SheetRef | null): number | null {
+  if (behind === null) return null;
+  return behind.film === null && behind.serie === null ? behind.person : null;
 }
 
 /** Un titre, une personne : quelque chose est ouvert par-dessus la grille. */
@@ -90,8 +110,8 @@ function hasSheet(route: CinemaRoute): boolean {
 
 /** La fiche que cette route affiche, réduite à ce qu'il faut pour la retrouver. */
 function sheetRef(route: CinemaRoute): SheetRef | null {
-  if (route.film === null && route.serie === null) return null;
-  return { film: route.film, serie: route.serie, tab: route.tab };
+  if (route.film === null && route.serie === null && route.person === null) return null;
+  return { film: route.film, serie: route.serie, tab: route.tab, person: route.person };
 }
 
 function readNumber(params: URLSearchParams, key: string): number | null {
@@ -232,7 +252,7 @@ let cachedBehind: SheetRef | null = null;
 function readBehindSheet(): SheetRef | null {
   const value = readBehind();
   const next = typeof value === "object" && value !== null ? value : null;
-  const key = next ? `${next.film}:${next.serie}:${next.tab}` : "";
+  const key = next ? `${next.film}:${next.serie}:${next.tab}:${next.person}` : "";
   if (key !== cachedBehindKey) {
     cachedBehindKey = key;
     cachedBehind = next;
@@ -330,17 +350,16 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
  * la recherche et Ma liste restent ouvertes *sous* la fiche, pour qu'un retour y ramène avec la
  * requête et l'onglet intacts.
  *
- * Les fiches personne et découverte, elles, se referment. Le retour les rouvre, l'entrée
- * précédente les portant toujours — et il les rouvre *instantanément*, sans que l'accueil ni le
- * panneau de recherche n'apparaisse entre les deux : voir `useSheetBehind`, que les fiches de
- * titre consultent pour supprimer leur animation de sortie dans ce cas précis.
+ * Les fiches personne et découverte se referment dans l'adresse — et c'est ce qui simplifie tout
+ * le reste : tant que le film est ouvert, plus rien n'est ambigu, ni les permissions de l'écran du
+ * dessus, ni qui écoute Échap, ni qui recouvre quoi.
  *
- * Trois formes successives le 19/09/2026, et la simplicité a gagné. D'abord la personne restait
- * ouverte *sous* le film : invisible, les plans en faisant un écran couvrant. Puis dessous pour de
- * bon, avec une échelle de plans remaniée — mais deux écrans entiers montés en même temps sur un
- * téléphone, et un empilement d'états dont plus rien ne garantissait la justesse. Ce qu'on veut
- * tenait en une phrase : un seul écran à la fois, et un échange qui ne laisse rien voir entre les
- * deux. C'est ce que le reste de l'application fait déjà pour les fiches de titre.
+ * La personne n'en disparaît pas pour autant : l'entrée d'historique qu'on vient d'empiler la
+ * nomme (voir `SheetRef.person`), et la coquille la **redessine dessous**, inerte, exactement
+ * comme la pile des fiches de titre redessine celle qu'on recouvre. C'est ce qui donne aux
+ * « titres similaires » leur empilement net, et c'est ce qui manquait ici : la personne n'était
+ * nommée nulle part, il n'y avait donc rien sous le film, et la sortie découvrait l'écran de
+ * recherche deux crans plus bas.
  */
 export function openLibraryTitle(
   type: "movie" | "series",

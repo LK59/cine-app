@@ -92,23 +92,18 @@ export function CinemaMobileDetail({
   // (voir la pile dans CinemaMobileClient). La carte redescend donc par où elle est venue, et ce
   // qu'elle recouvrait apparaît sous elle au fur et à mesure.
   /**
-   * Une sortie qui ne découvre rien ne doit pas durer.
+   * Une sortie qui ne découvre rien ne doit pas durer — mais elle en découvre presque toujours.
    *
-   * Refermer une fiche ouverte depuis une filmographie faisait glisser le film vers le bas
-   * pendant 280 ms, et ce qu'on voyait dessous n'était pas l'acteur — il avait été refermé en
-   * ouvrant le film — mais l'écran de recherche, deux crans plus bas. L'acteur ne réapparaissait
-   * qu'à la fin. Signalé le 19/09/2026 : « ça affiche brièvement l'écran de recherche avant de
-   * réafficher la fiche personne ».
+   * La carte redescend par où elle est venue, et ce qu'elle recouvrait apparaît sous elle au fur
+   * et à mesure : c'est ce qui fait l'empilement des « titres similaires », et depuis le
+   * 19/09/2026 c'est vrai aussi de la fiche personne, que la coquille redessine dessous à partir
+   * de l'entrée d'historique (voir `SheetRef.person`). Avant cela il n'y avait rien sous le film
+   * ouvert depuis une filmographie, et sa sortie découvrait l'écran de recherche, deux crans plus
+   * bas — l'acteur ne reparaissait qu'à la fin.
    *
-   * Alors on ne l'anime pas : l'échange se fait dans un seul rendu, la fiche s'en va et l'acteur
-   * paraît au même instant. C'est ce que les deux fiches de la version bureau font depuis
-   * toujours, et ce qui manquait ici.
-   *
-   * La condition est en deux temps, et le second compte autant que le premier : quelque chose
-   * derrière (`useSheetBehind`), et ce quelque chose n'est **pas** une fiche de bibliothèque
-   * (`useRouteBehind`, qui ne rend un objet que pour celles-là). Une fiche de titre, elle, reste
-   * montée dessous — la sortie découvre exactement ce qu'il faut, et la supprimer priverait les
-   * « titres similaires » de leur glissement.
+   * Reste le cas où rien n'est dessiné derrière : quelque chose attend (`useSheetBehind`) mais
+   * l'entrée ne le nomme pas (`useRouteBehind`). L'animation découvrirait alors l'accueil, donc on
+   * la supprime et l'échange se fait dans un seul rendu.
    */
   const behindIsDrawn = useRouteBehind() !== null;
   const swapsInPlace = useSheetBehind() && !behindIsDrawn;

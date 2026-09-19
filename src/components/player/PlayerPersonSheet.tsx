@@ -163,7 +163,28 @@ const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
  * qu'on le possède ou non, au lieu de renvoyer vers une page d'outillage. C'est ce qui fait que
  * l'on ne sort jamais de l'interface.
  */
-export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number; leaving?: boolean }) {
+export function PlayerPersonSheet({
+  tmdbId,
+  leaving = false,
+  /**
+   * Cette fiche est celle du **dessous** : le film ouvert depuis sa filmographie la recouvre.
+   *
+   * Même rôle exactement que `underneath` sur les fiches de titre, et pour la même raison — c'est
+   * ce qu'on découvre en tirant la carte du dessus vers le bas, et ce qui fait que l'empilement se
+   * lit comme un empilement. Elle n'est pas « restée ouverte » : elle est redessinée à partir de
+   * l'entrée d'historique que le film recouvre (voir `personBehind`), ce qui évite d'avoir à
+   * décider qui, de la personne ou du titre, est au-dessus — l'adresse ne porte plus que le titre.
+   *
+   * Inerte, et l'inertie ne touche pas au dessin : pas d'Échap — deux écouteurs sur la même touche
+   * reculeraient de deux crans —, pas de geste, pas de fermeture. Rien à couper côté pointeurs en
+   * revanche, ce qui la recouvre est une fiche pleine et opaque.
+   */
+  underneath = false,
+}: {
+  tmdbId: number;
+  leaving?: boolean;
+  underneath?: boolean;
+}) {
   const t = useT();
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
@@ -202,7 +223,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
     // Silencieux tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
     // écouteurs posés sur la même cible se déclenchent tous les deux — une seule touche aurait
     // fermé la photo *et* la fiche derrière.
-    if (photoIndex !== null) return;
+    if (photoIndex !== null || underneath) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape" && e.key !== "Backspace") return;
       e.preventDefault();
@@ -211,7 +232,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [photoIndex, requestClose]);
+  }, [photoIndex, underneath, requestClose]);
 
   // Ce qu'on possède d'abord : c'est ce qui se regarde ce soir. Le serveur trie déjà ainsi, on
   // garde son ordre et on se contente de retirer les entrées sans titre.
@@ -246,7 +267,10 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
               : "sheet-in md:animate-fade-in"
       }`}
       style={{
-        zIndex: 48,
+        // Le même couple que la pile des fiches de titre sur téléphone : 47 dessous, 48 dessus.
+        // Ils ne se disputent jamais le 47 — une entrée recouvre une fiche de titre *ou* une fiche
+        // personne, et c'est précisément ce que `SheetRef` sait dire.
+        zIndex: underneath ? 47 : 48,
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
         transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
@@ -323,7 +347,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
                   pas ce mouvement pour son propre défilement, sinon il vole le flux de pointeurs
                   au milieu du glissement. Le reste de la fiche défile normalement. */}
               <div
-                {...(isMobile ? swipe.handlers : {})}
+                {...(isMobile && !underneath ? swipe.handlers : {})}
                 style={isMobile ? { touchAction: "none" } : undefined}
                 className={`flex gap-6 ${short ? "flex-row items-start" : "flex-col sm:flex-row sm:items-start"} ${isMobile ? "pr-12" : ""}`}
               >

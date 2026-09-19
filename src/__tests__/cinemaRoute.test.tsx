@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personBehind } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -275,14 +275,14 @@ describe("useRouteBehind", () => {
     expect(result.current).toBeNull(); // la grille, pas une fiche
 
     act(() => openLibraryTitle("movie", 2));
-    expect(result.current).toEqual({ film: 1, serie: null, tab: "movies" });
+    expect(result.current).toEqual({ film: 1, serie: null, tab: "movies", person: null });
   });
 
   it("carries the tab, since each one resolves only its own ids", () => {
     const { result } = renderHook(() => useRouteBehind());
     act(() => openLibraryTitle("series", 50));
     act(() => openLibraryTitle("movie", 42));
-    expect(result.current).toEqual({ film: null, serie: 50, tab: "series" });
+    expect(result.current).toEqual({ film: null, serie: 50, tab: "series", person: null });
   });
 
   // useSyncExternalStore exige une identité stable entre deux changements ; l'objet vient de
@@ -339,6 +339,7 @@ describe("openLibraryTitle — ce qui la couvre se referme", () => {
     act(() => openLibraryTitle("movie", 1));
     act(() => openLibraryTitle("movie", 2));
     expect(result.current).not.toBeNull();
+    expect(personBehind(result.current)).toBeNull();
   });
 
   it("en fait autant pour une fiche découverte", () => {
@@ -372,5 +373,44 @@ describe("openLibraryTitle — ce qui la couvre se referme", () => {
     act(() => openLibraryTitle("movie", 42));
     expect(result.current.search).toBe(true);
     expect(result.current.person).toBeNull();
+  });
+});
+
+/**
+ * La fiche personne appartient à la pile.
+ *
+ * C'était son défaut structurel : une fiche de titre recouverte est redessinée dessous à partir de
+ * l'entrée d'historique — c'est ce qui donne aux « titres similaires » leur empilement net —, mais
+ * la personne n'était nommée nulle part. Il n'y avait donc rien sous le film, et sa sortie
+ * découvrait l'écran de recherche, deux crans plus bas.
+ */
+describe("personBehind", () => {
+  it("nomme la personne que le film recouvre", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    act(() => cinemaNavigate({ search: true }));
+    act(() => cinemaNavigate({ person: 6384 }));
+    act(() => openLibraryTitle("movie", 42));
+
+    expect(personBehind(result.current)).toBe(6384);
+  });
+
+  // Exclusif : une entrée recouvre une fiche de titre *ou* une fiche personne, jamais les deux —
+  // c'est ce qui rend la question décidable sans rien stocker de plus, et ce qui fait que les deux
+  // ne se disputent jamais le plan du dessous.
+  it("ne nomme personne quand c'est un titre qui est recouvert", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    act(() => openLibraryTitle("movie", 1));
+    act(() => cinemaNavigate({ person: 6384 }));
+
+    expect(result.current?.film).toBe(1);
+    expect(personBehind(result.current)).toBeNull();
+  });
+
+  it("ne nomme personne quand il n'y a rien derrière", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    act(() => cinemaNavigate({ search: true }));
+    act(() => openLibraryTitle("movie", 42));
+
+    expect(personBehind(result.current)).toBeNull();
   });
 });

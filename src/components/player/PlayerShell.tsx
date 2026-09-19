@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind, personBehind } from "@/lib/cinemaRoute";
 import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { preload } from "swr";
 import { fetcher } from "@/lib/swr";
@@ -99,7 +99,21 @@ export function PlayerShell() {
    * TMDB. `useRouteBehind` ne rend un objet que pour une fiche de bibliothèque — c'est ce qui les
    * distingue.
    */
-  const behindIsLibrarySheet = useRouteBehind() !== null;
+  const behind = useRouteBehind();
+  // « Une fiche de bibliothèque derrière », et non « quelque chose derrière » : `useRouteBehind`
+  // nomme aussi les fiches personne recouvertes depuis qu'elles appartiennent à la pile.
+  const behindIsLibrarySheet = behind !== null && (behind.film !== null || behind.serie !== null);
+  /**
+   * La fiche personne que le titre ouvert recouvre, redessinée dessous.
+   *
+   * Sur téléphone seulement, et pour deux raisons qui vont ensemble : c'est là que la sortie est
+   * un glissement, donc que le dessous se voit ; et c'est là qu'il y a la place, la pile mobile
+   * ayant déjà ses deux crans (47 dessous, 48 dessus) là où la version bureau n'en a qu'un. Sur
+   * grand écran la sortie est un fondu que `useSheetBehind` réduit déjà à zéro : rien à découvrir,
+   * donc rien à dessiner.
+   */
+  const titleOpen = route.film !== null || route.serie !== null;
+  const personUnder = isMobile && titleOpen && route.person === null ? personBehind(behind) : null;
   const sheetExitMs =
     useSheetBehind() && !behindIsLibrarySheet ? 0 : isMobile ? SHEET_OUT_MS : EXIT_MS;
   const person = useExitDelay(route.person !== null, sheetExitMs);
@@ -188,6 +202,9 @@ export function PlayerShell() {
           leaving={discover.leaving}
         />
       ) : null}
+      {/* Le fond de la pile. Rendu après les panneaux et avant rien : la fiche de titre, qui vient
+          de l'écran cinéma, est au 48 et passe donc par-dessus. */}
+      {personUnder !== null && <PlayerPersonSheet key={`sous-${personUnder}`} tmdbId={personUnder} underneath />}
     </>
   );
 }
