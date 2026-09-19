@@ -1058,6 +1058,9 @@ export function ExperimentalPlayerHost({
     probePlaybackPath({
       streamUrl: info.streamUrl,
       startSeconds,
+      // Ce que le serveur sait de la plage dynamique : le conteneur seul ne suffit pas à décider
+      // si un Dolby Vision refusé a une couche de base où se rattraper. Voir `planDolbyVision`.
+      videoRangeType: info.video?.rangeType ?? null,
       onError: (message, kind) => {
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {

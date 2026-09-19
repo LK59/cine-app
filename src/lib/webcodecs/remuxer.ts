@@ -9,7 +9,7 @@
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
-import { av1CodecString, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize } from "./codecConfig";
+import { av1CodecString, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
@@ -510,7 +510,16 @@ export class Remuxer {
     private readonly reader: SampleReader,
     private readonly source: ByteSource,
     /** Present only when the chosen track has to be re-encoded to be carried at all. */
-    private transcoder: AudioTranscoder | null
+    private transcoder: AudioTranscoder | null,
+    /**
+     * La chaîne annoncée pour la vidéo quand on livre du Dolby Vision, ou rien.
+     *
+     * Portée par le remultiplexeur, et pas recalculée ailleurs : c'est lui qui écrit l'entrée
+     * d'échantillon, donc lui seul sait ce qu'elle contient. Déclarer `hvc1` en écrivant `dvh1`
+     * ferait rejeter le segment d'initialisation entier — la règle de CLAUDE.md sur les boîtes qui
+     * se contredisent, appliquée cette fois entre le conteneur et le type MIME.
+     */
+    private readonly dolbyVisionCodec: string | null = null
   ) {
     this.nalLength = nalLengthSize(videoTrack.codecId, videoTrack.codecPrivate);
   }
@@ -520,7 +529,14 @@ export class Remuxer {
     file: MatroskaFile,
     videoTrack: MatroskaTrack,
     audioTrack: MatroskaTrack | null,
-    dimensions: { width: number; height: number }
+    dimensions: { width: number; height: number },
+    /**
+     * L'enregistrement Dolby Vision à porter dans l'entrée d'échantillon, ou rien.
+     *
+     * Décidé par le sélecteur de chemin, qui est le seul à pouvoir demander au navigateur s'il en
+     * veut — voir `planDolbyVision`. Absent, la sortie est à l'octet près celle d'avant.
+     */
+    dolbyVision: { type: string; record: Uint8Array } | null = null
   ): Promise<Remuxer> {
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
@@ -544,19 +560,35 @@ export class Remuxer {
       id: 1,
       kind: "video",
       timescale: TIMESCALE,
-      sampleEntry: videoSampleEntry(videoTrack.codecId, videoTrack.codecPrivate!, dimensions.width, dimensions.height),
+      sampleEntry: videoSampleEntry(
+        videoTrack.codecId,
+        videoTrack.codecPrivate!,
+        dimensions.width,
+        dimensions.height,
+        dolbyVision
+      ),
       width: dimensions.width,
       height: dimensions.height,
       language: videoTrack.language ?? "und",
     };
 
-    return new Remuxer(file, videoTrack, audioTrack, videoInfo, audioInfo, reader, source, transcoder);
+    return new Remuxer(
+      file,
+      videoTrack,
+      audioTrack,
+      videoInfo,
+      audioInfo,
+      reader,
+      source,
+      transcoder,
+      dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null
+    );
   }
 
   plan(): RemuxPlan {
     const duration = this.file.durationSeconds ?? 0;
     return {
-      videoMimeType: `video/mp4; codecs="${videoCodecString(this.videoTrack)}"`,
+      videoMimeType: `video/mp4; codecs="${this.dolbyVisionCodec ?? videoCodecString(this.videoTrack)}"`,
       // Once there is a transcoder, it is the authority on what the audio buffer will carry:
       // `plannedMimeTypes` has to guess before one exists, and an encoder is free to answer with
       // a different profile than the one asked for.

@@ -31,6 +31,16 @@ export interface RemuxPlaybackOptions {
   onWarning?: (message: string) => void;
   /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
   onStarting?: (startedAt: number | null) => void;
+  /**
+   * Ce que le serveur sait de la plage dynamique — `"DOVI"`, `"DOVIWithHDR10"`, `"HDR10"`, `"SDR"`…
+   *
+   * Descendu jusqu'ici pour une seule décision, mais elle est décisive : un Dolby Vision refusé
+   * par le navigateur se rattrape sur sa couche de base **quand il y en a une**, et n'a nulle part
+   * où aller quand il n'y en a pas. Le conteneur seul ne suffit pas à trancher — un fichier peut
+   * être en Dolby Vision sans porter d'enregistrement dans son en-tête —, alors que cette valeur
+   * vient de l'analyse du flux par le serveur et ne se trompe pas.
+   */
+  videoRangeType?: string | null;
 }
 
 export type PathProbe = { discard: () => void } & (
@@ -144,6 +154,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
     videoTrack,
     audioTrack,
     dimensions: { width: videoTrack.video?.width ?? 1920, height: videoTrack.video?.height ?? 1080 },
+    videoRangeType: options.videoRangeType,
   });
 
   trace(`chemin choisi : ${describePath(chosen)}`);

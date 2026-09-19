@@ -155,20 +155,20 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
    * base HDR10, que ce même chemin rend correctement — en HDR10, faute de porter la
    * configuration Dolby, ce qui est exact quoique moins riche.
    *
-   * Refusé par `refusedReason` et non plus par `canvasHdrRefusal` : celui-ci n'est lu qu'une fois
-   * le chemin choisi, alors que le mal est fait des deux côtés. Le lecteur serveur, lui, sait
-   * appliquer le RPU et rend une image juste — au prix d'un ré-encodage, qui est exactement le
-   * bon prix pour deux films.
+   * **Et la décision est repassée au client.** Elle a vécu ici le temps d'un correctif, parce que
+   * le serveur savait nommer le cas et que le lecteur natif ne le savait pas. Il le sait
+   * maintenant — et lui seul peut poser la seule question qui décide vraiment : *ce navigateur-ci
+   * accepte-t-il le Dolby Vision ?* Un appareil Apple le lit, un PC sous Chrome non, et le serveur
+   * n'a aucun moyen de les distinguer. Voir `planDolbyVision`, qui porte les trois issues.
+   *
+   * Ce qui reste ici est la donnée, pas le verdict : `rangeType` descend jusqu'au sélecteur de
+   * chemin, parce que le conteneur seul ne dit pas toujours s'il existe une couche de base.
    */
-  const dolbyVisionOnly = isHdr && !TONE_MAPPABLE_RANGES.has(rangeType);
-
   // Refused outright: either the remuxer reads the container, or the browser opens it unaided.
   // Anything else — AVI above all, whose codecs no browser decodes — belongs to the server.
-  const refusedReason = !SUPPORTED_CONTAINERS.has(container)
-    ? `Le lecteur expérimental ne lit pas les fichiers « ${container || "inconnu"} » (Matroska et MP4 seulement).`
-    : dolbyVisionOnly
-      ? `Le Dolby Vision sans couche HDR10 (${rangeType}) n'a pas de base standard : ce lecteur en rendrait les couleurs fausses.`
-      : null;
+  const refusedReason = SUPPORTED_CONTAINERS.has(container)
+    ? null
+    : `Le lecteur expérimental ne lit pas les fichiers « ${container || "inconnu"} » (Matroska et MP4 seulement).`;
 
   // HDR is a different matter now, and the server is the wrong place to decide it. Repackaging the
   // file for the browser's own decoder carries the HDR signalling through untouched and the

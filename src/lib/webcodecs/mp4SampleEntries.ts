@@ -75,9 +75,48 @@ function visualSampleEntry(type: string, width: number, height: number, configur
   );
 }
 
-export function videoSampleEntry(codecId: string, codecPrivate: Uint8Array, width: number, height: number): Uint8Array {
+/**
+ * Ce qu'il faut pour annoncer du Dolby Vision, quand on a de quoi le faire.
+ *
+ * L'entrée s'appelle `dvh1` au lieu de `hvc1` et porte **deux** boîtes : le `hvcC` habituel, qui
+ * configure le décodeur HEVC, *et* l'enregistrement Dolby — `dvcC` ou `dvvC` selon la version du
+ * format. Ce n'est pas un remplacement : un lecteur qui ne sait rien du Dolby Vision lit le
+ * `hvcC` et décode la couche de base, ce qui est précisément ce qui rend le profil 8 sûr.
+ *
+ * L'enregistrement est **recopié tel quel**, jamais reconstruit. C'est la règle de CLAUDE.md sur
+ * ce qui s'écrit dans une boîte MP4 — et ici elle est doublement vraie : ce que nous savons de ce
+ * record, nous l'avons lu dans le conteneur, et un lecteur qui le comparerait à ce que porte le
+ * flux trouverait exactement la même chose.
+ */
+function dolbyVisionSampleEntry(
+  codecPrivate: Uint8Array,
+  width: number,
+  height: number,
+  dolbyVision: { type: string; record: Uint8Array }
+): Uint8Array {
+  return visualSampleEntry(
+    "dvh1",
+    width,
+    height,
+    concat(box("hvcC", codecPrivate), box(dolbyVision.type, dolbyVision.record))
+  );
+}
+
+export function videoSampleEntry(
+  codecId: string,
+  codecPrivate: Uint8Array,
+  width: number,
+  height: number,
+  /**
+   * Fourni seulement quand on a décidé de livrer du Dolby Vision — c'est-à-dire quand le
+   * conteneur porte l'enregistrement *et* que le navigateur a dit accepter la chaîne construite
+   * depuis lui. Absent, rien ne change : l'entrée reste `hvc1`, comme depuis toujours.
+   */
+  dolbyVision?: { type: string; record: Uint8Array } | null
+): Uint8Array {
   switch (codecId) {
     case "V_MPEGH/ISO/HEVC":
+      if (dolbyVision) return dolbyVisionSampleEntry(codecPrivate, width, height, dolbyVision);
       // hvc1: parameter sets live in this box rather than in the stream, which is what Matroska
       // already stores and what MP4 expects.
       return visualSampleEntry("hvc1", width, height, box("hvcC", codecPrivate));

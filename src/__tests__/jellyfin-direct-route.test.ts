@@ -111,26 +111,26 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
   });
 
   /**
-   * Le Dolby Vision sans couche de base : refusé pour tout le lecteur natif, pas seulement pour
-   * le canevas.
+   * Le Dolby Vision n'est plus jugé ici, et c'est un aller-retour assumé.
    *
-   * Ce test affirmait le contraire — « le chemin natif peut encore s'en sortir » — et c'était
-   * l'hypothèse exacte qui était fausse. Le remultiplexeur reconstruit une entrée `hvc1` à partir
-   * du seul `hvcC` et laisse tomber la configuration Dolby : le navigateur décode une couche de
-   * base en IPT-PQ comme si elle était en BT.2020, et les couleurs sortent fausses.
+   * Le 19/09/2026, ce test a d'abord affirmé « le chemin natif peut encore s'en sortir » — faux,
+   * vu à l'écran sur « Disclosure Day ». Le refus a donc vécu ici le temps d'un correctif, parce
+   * que le serveur savait nommer le cas et que le lecteur natif ne le savait pas.
    *
-   * Prédit en lisant le code, puis **vu à l'écran** le 19/09/2026 sur « Disclosure Day », profil
-   * 5.6, compatibilité 0. C'est le lecteur serveur qui sait appliquer le RPU, au prix d'un
-   * ré-encodage — le bon prix pour deux fichiers sur 691.
+   * Il le sait maintenant, et lui seul peut poser la question qui décide vraiment : *ce
+   * navigateur-ci accepte-t-il le Dolby Vision ?* Un appareil Apple le lit, un PC sous Chrome non,
+   * et le serveur n'a aucun moyen de les distinguer. Le verdict est donc repassé au client — voir
+   * `planDolbyVision` — et ce qui descend d'ici est la donnée, pas la décision.
    */
-  it("refuse tout le lecteur natif pour un Dolby Vision sans couche HDR10", async () => {
+  it("ne juge plus le Dolby Vision, et transmet la plage telle quelle", async () => {
     mockPrefs.mockReturnValue({ enabled: false });
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "DOVI" }));
     const body = await (await get()).json();
-    expect(body.refusedReason).toContain("Dolby Vision");
-    // Et il est refusé *avant* le choix d'un chemin : `canvasHdrRefusal` n'arrive qu'une fois le
-    // canevas retenu, c'est-à-dire trop tard pour le remultiplexage.
+    expect(body.refusedReason).toBeNull();
     expect(body.canvasHdrRefusal).toBeNull();
+    // La donnée sur laquelle le client tranchera.
+    expect(body.video.rangeType).toBe("DOVI");
+    expect(body.video.isHdr).toBe(true);
   });
 
   // Les 188 titres en profil 8 de cette bibliothèque, eux, gardent le chemin natif : leur couche

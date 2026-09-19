@@ -104,14 +104,44 @@ export function hevcCodecString(hvcC: Uint8Array): string | null {
  * Les deux nombres sont sur deux chiffres, zéro devant compris : `dvh1.08.06`, jamais `dvh1.8.6`.
  * Aucun navigateur ne reconnaît la seconde forme.
  */
-export function dolbyVisionCodecString(record: Uint8Array): string | null {
-  if (record.length < 4) return null;
+export interface DolbyVisionInfo {
+  /** La chaîne à proposer au navigateur : `dvh1.PP.LL`. */
+  codec: string;
+  profile: number;
+  level: number;
+  /**
+   * Ce que vaut la couche de base pour un lecteur qui ignore le Dolby Vision.
+   *
+   * `0` veut dire « rien » : la couche est en IPT-PQ, propriétaire, et la décoder comme du HDR10
+   * donne des couleurs fausses — c'est le cas du profil 5, deux fichiers de cette bibliothèque.
+   * `1` veut dire « c'est du HDR10 », et `2` « c'est du SDR » : dans les deux cas, un lecteur sans
+   * Dolby Vision affiche quelque chose de juste. C'est ce chiffre, et lui seul, qui décide si un
+   * refus du navigateur laisse une porte de sortie ou non.
+   *
+   * Relevé sur « Retour vers le futur II » : `01 00 10 35 10 …`, l'octet 4 portant `1` dans son
+   * quartet haut — ce que ffprobe nomme `dv_bl_signal_compatibility_id=1`.
+   */
+  compatibilityId: number;
+}
+
+export function dolbyVisionInfo(record: Uint8Array): DolbyVisionInfo | null {
+  if (record.length < 5) return null;
   const bits = (record[2] << 8) | record[3];
   const profile = (bits >> 9) & 0x7f;
   const level = (bits >> 3) & 0x3f;
   if (profile === 0 || level === 0) return null;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `dvh1.${pad(profile)}.${pad(level)}`;
+  return {
+    codec: `dvh1.${pad(profile)}.${pad(level)}`,
+    profile,
+    level,
+    compatibilityId: (record[4] >> 4) & 0x0f,
+  };
+}
+
+/** La seule chaîne, pour qui n'a pas besoin du reste. */
+export function dolbyVisionCodecString(record: Uint8Array): string | null {
+  return dolbyVisionInfo(record)?.codec ?? null;
 }
 
 /** Builds an `avc1.*` string from the avcC record: profile, compatibility and level. */

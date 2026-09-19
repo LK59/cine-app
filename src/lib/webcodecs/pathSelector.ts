@@ -22,7 +22,7 @@
 // exactly how a performance problem stays invisible for months.
 
 import type { ByteSource } from "./byteSource";
-import { unsupportedReason, dolbyVisionCodecString } from "./codecConfig";
+import { unsupportedReason, dolbyVisionInfo } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { canRebuildAudioBuffer, playabilityOf } from "./mseSource";
 import { trace } from "./trace";
@@ -82,6 +82,64 @@ export interface PathInput {
   videoTrack: MatroskaTrack;
   audioTrack: MatroskaTrack | null;
   dimensions: { width: number; height: number };
+  /** Ce que le serveur sait de la plage dynamique — voir `RemuxPlaybackOptions.videoRangeType`. */
+  videoRangeType?: string | null;
+}
+
+/**
+ * **L'interrupteur du Dolby Vision.**
+ *
+ * Même rôle et même raison d'être que `TRUST_BUFFER_REBUILD` quelques lignes plus bas : la sonde
+ * tourne, sa réponse est écrite dans le journal, et ce drapeau décide si on la croit.
+ *
+ * À `false`, le remultiplexeur écrit `hvc1` comme il l'a toujours fait et les 188 titres Dolby
+ * Vision de cette bibliothèque continuent d'être lus en HDR10 — c'est-à-dire correctement. Un
+ * doute sur une image se lève donc en changeant un mot, pas en défaisant un lot de commits.
+ *
+ * Il est à `true` parce que trois mesures le justifient, prises sur un iPhone le 19/09/2026 : le
+ * témoin d'un profil inexistant est refusé (donc le numéro est validé), l'enregistrement est bien
+ * dans le conteneur (donc on recopie au lieu de fabriquer), et la chaîne construite depuis un
+ * vrai fichier est acceptée. Ce qu'aucune des trois ne prouve, c'est que l'image soit juste — un
+ * `isTypeSupported` satisfait n'a jamais promis un rendu. Seul un œil sur une scène sombre le dira.
+ */
+const TRUST_DOLBY_VISION = true;
+
+/**
+ * Ce qu'on fait d'une piste qui porte du Dolby Vision, en trois issues et pas une de plus.
+ *
+ * L'ordre est celui que le foyer a demandé : le Dolby Vision quand tout s'y prête, sa couche de
+ * base sinon, et le serveur quand il n'y a pas de couche de base du tout.
+ *
+ * Fonction pure, et c'est délibéré : c'est la seule partie de ce chantier où une erreur de
+ * raisonnement ne se verrait pas à la lecture, donc c'est celle qu'il faut pouvoir éprouver sans
+ * navigateur, sans fichier et sans appareil.
+ */
+export type DolbyVisionPlan =
+  | { kind: "dolby"; codec: string; box: { type: string; record: Uint8Array } }
+  | { kind: "hdr10" }
+  | { kind: "server"; reason: string };
+
+export function planDolbyVision(
+  track: Pick<MatroskaTrack, "dolbyVision">,
+  videoRangeType: string | null | undefined,
+  accepts: (mimeType: string) => boolean,
+  trusted = TRUST_DOLBY_VISION
+): DolbyVisionPlan {
+  // « DOVI » tout court est la seule plage sans couche de base : le profil 5, dont la couche est
+  // en IPT-PQ. Tout le reste — DOVIWithHDR10, DOVIWithSDR, HDR10, SDR… — se lit correctement sans
+  // Dolby Vision, et c'est ce qui rend un refus sans conséquence.
+  const noBaseLayer = videoRangeType === "DOVI";
+  const dv = track.dolbyVision;
+  const info = dv ? dolbyVisionInfo(dv.record) : null;
+
+  if (trusted && dv && info && accepts(`video/mp4; codecs="${info.codec}"`)) {
+    return { kind: "dolby", codec: info.codec, box: dv };
+  }
+  if (!noBaseLayer) return { kind: "hdr10" };
+  return {
+    kind: "server",
+    reason: `Le Dolby Vision sans couche HDR10 n'a pas de base standard : ce lecteur en rendrait les couleurs fausses.`,
+  };
 }
 
 /** Why the remux path cannot carry this file, or null if it can. */
@@ -132,42 +190,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     }
   }
 
-  /**
- * Ce que le navigateur *répondrait* si on lui proposait du Dolby Vision — et rien de plus.
- *
- * Première étape d'un chantier délibérément coupé en deux, et cette moitié-ci ne change pas un
- * octet de la sortie. Le remultiplexeur continue d'écrire `hvc1` et de livrer du HDR10 : 188
- * titres de cette bibliothèque portent du Dolby Vision et sont lus ainsi, correctement, depuis
- * toujours. Rien de ce qui marche n'est mis en jeu tant que cette ligne n'a pas parlé.
- *
- * Ce qu'elle apporte que la sonde du panneau technique n'apportait pas : la chaîne est construite
- * depuis l'enregistrement **de ce fichier-ci**, et non écrite à la main. Un `dvh1.08.06` tapé au
- * clavier dit que l'appareil connaît le profil 8 ; celui-ci dit que l'appareil accepte ce que nous
- * saurions réellement lui donner.
- *
- * Le témoin du panneau — un profil 42 qui n'existe pas — a déjà répondu « non » sur un iPhone,
- * donc la validation porte bien sur le numéro. Reste à voir si elle porte aussi sur le reste.
- */
-function observeDolbyVision(videoTrack: MatroskaTrack | null, audioMime: string | null): void {
-  const dv = videoTrack?.dolbyVision;
-  if (!dv) return;
-  const codec = dolbyVisionCodecString(dv.record);
-  if (!codec) {
-    trace(`dolby vision : enregistrement ${dv.type} illisible (${dv.record.length} octets)`);
-    return;
-  }
-  const mimeType = `video/mp4; codecs="${codec}"`;
-  const answer = playabilityOf({
-    videoMimeType: mimeType,
-    audioMimeType: audioMime,
-    videoInit: EMPTY,
-    audioInit: null,
-    durationSeconds: 0,
-  });
-  trace(`dolby vision : ${dv.type} présent, ${mimeType} → ${answer.ok ? "accepté" : "refusé"}`);
-}
-
-// Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
+  // Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
   // file, and there is no reason to pay for that only to be told the browser wanted none of it.
   const mime = plannedMimeTypes(videoTrack, audioTrack, file);
   const playable = playabilityOf({
@@ -178,11 +201,32 @@ function observeDolbyVision(videoTrack: MatroskaTrack | null, audioMime: string 
     durationSeconds: 0,
   });
   trace(`chemin : le navigateur accepte-t-il ${mime.video ?? "?"} + ${mime.audio ?? "aucun"} → ${playable.ok ? "oui" : "non"}`);
-  observeDolbyVision(videoTrack, mime.audio);
   if (!playable.ok) return playable.reason;
 
+  /**
+   * Le Dolby Vision, décidé ici parce que c'est ici qu'on sait demander au navigateur.
+   *
+   * La question posée est complète — l'image *et* le son —, comme celle du dessus : un navigateur
+   * peut accepter `dvh1` seul et refuser l'assemblage. Et la réponse est écrite dans le journal
+   * quoi qu'il arrive, y compris quand l'interrupteur est fermé : savoir ce qu'on aurait pu faire
+   * vaut mieux que ne rien noter.
+   */
+  const dv = planDolbyVision(videoTrack, input.videoRangeType, (videoMimeType) =>
+    playabilityOf({ videoMimeType, audioMimeType: mime.audio, videoInit: EMPTY, audioInit: null, durationSeconds: 0 }).ok
+  );
+  if (videoTrack.dolbyVision) {
+    const detail =
+      dv.kind === "dolby"
+        ? `livré en ${dv.codec}`
+        : dv.kind === "hdr10"
+          ? "refusé ou non demandé — la couche de base HDR10 prend le relais"
+          : "refusé, et sans couche de base : passage au lecteur serveur";
+    trace(`dolby vision : ${videoTrack.dolbyVision.type} présent — ${detail}`);
+  }
+  if (dv.kind === "server") return dv.reason;
+
   try {
-    const remuxer = await Remuxer.open(source, file, videoTrack, audioTrack, dimensions);
+    const remuxer = await Remuxer.open(source, file, videoTrack, audioTrack, dimensions, dv.kind === "dolby" ? dv.box : null);
     trace("chemin : remultiplexeur ouvert");
     return { remuxer, plan: remuxer.plan() };
   } catch (error) {
