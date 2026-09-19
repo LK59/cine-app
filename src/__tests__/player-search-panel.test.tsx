@@ -254,3 +254,46 @@ describe("PlayerSearchPanel — deviner la fin du mot", () => {
     await waitFor(() => expect(screen.getAllByText("Hannibal")).toHaveLength(1));
   });
 });
+
+/**
+ * Au clavier, entrer dans les résultats.
+ *
+ * Les flèches parcourent déjà la grille, mais elles se taisent tant qu'on écrit — la bonne règle,
+ * sans quoi elles voleraient le curseur du champ. Restait le pas manquant, et il est au seul
+ * endroit qui compte : passer du champ à la première affiche.
+ */
+describe("PlayerSearchPanel — du champ aux résultats", () => {
+  it("descend sur la première carte à la flèche du bas", async () => {
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+    await screen.findByText("Matrix");
+
+    const box = screen.getByRole("searchbox");
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    expect((document.activeElement as HTMLElement).textContent).toContain("Matrix");
+  });
+
+  // La loupe du clavier : elle valide, retient, et le focus quitte le champ — ce qui range le
+  // clavier, lui qui recouvrait la moitié des résultats qu'on venait de demander.
+  it("fait la même chose à la loupe du clavier, et retient la recherche", async () => {
+    window.localStorage.clear();
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+    await screen.findByText("Matrix");
+
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+    expect(document.activeElement).not.toBe(screen.getByRole("searchbox"));
+    expect(window.localStorage.getItem("cine.player.recentSearches")).toContain("matrix");
+  });
+
+  // Rien à viser : la touche range quand même le clavier plutôt que de ne rien faire.
+  it("range le clavier quand il n'y a rien à viser", async () => {
+    payload = { library: [], tmdb: [], persons: [] };
+    await type("zzzzqqq");
+
+    const box = screen.getByRole("searchbox");
+    box.focus();
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(document.activeElement).not.toBe(box);
+  });
+});

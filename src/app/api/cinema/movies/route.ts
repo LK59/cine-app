@@ -5,6 +5,7 @@ import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
+import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
 import { toDynamicRange, type VideoQuality } from "@/lib/videoQuality";
 import type { RadarrMovie } from "@/lib/clients/radarr";
@@ -14,6 +15,19 @@ export interface CinemaMovie {
   jellyfinItemId: string;
   tmdbId: number;
   title: string;
+  /**
+   * Le titre d'origine, seulement quand il diffère de celui qu'on affiche.
+   *
+   * Cent neuf films sur sept cent dix, sur cette bibliothèque. Sans lui, « Die Hard » ne trouvait
+   * pas *Piège de cristal* et « The Hunt » pas *La Chasse* — alors que le serveur, lui, sait déjà
+   * faire ce pont avec TMDB. Il n'est écrit que lorsqu'il apporte quelque chose, ce qui laisse la
+   * charge utile à cinq kilo-octets près : un champ absent est un champ qui ne coûte rien.
+   *
+   * Les *titres alternatifs* de Radarr ont été écartés après mesure : sept mille neuf cent
+   * soixante et onze entrées, cent quatre-vingts kilo-octets, et ce Radarr n'indique pas leur
+   * langue — impossible de garder « FNaF 2 » sans embarquer aussi le hongrois et le turc.
+   */
+  originalTitle?: string;
   year: number;
   posterUrl: string | null;
   backdropUrl: string | null;
@@ -90,6 +104,7 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
     jellyfinItemId,
     tmdbId: m.tmdbId,
     title: m.title,
+    ...(m.originalTitle && m.originalTitle !== m.title ? { originalTitle: m.originalTitle } : {}),
     year: m.year,
     posterUrl: posterUrl(m.images, "thumb"),
     backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
@@ -186,7 +201,7 @@ export async function GET(req: Request) {
 
     // Le thème du jour est tiré de la date, donc le même pour tout le monde et stable tant que la
     // journée dure — voir `dailyTop10`.
-    const top10OfTheDay = dailyTop10(cinemaMovies, undefined, (item) => item.radarrId);
+    const top10OfTheDay = dailyTop10(cinemaMovies, undefined, (item) => item.radarrId, dailyTop10Db.forKind("movies"));
 
     const payload: CinemaMoviesWire = {
       genres: [...genreSet].sort(),

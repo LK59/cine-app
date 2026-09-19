@@ -204,7 +204,7 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
   if (!tmdbPrimary.isEnabled()) return NextResponse.json({ library: [], tmdb: [], persons: [] } satisfies SearchResponse);
 
-  const cacheKey = `search:v9:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
+  const cacheKey = `search:v10:${includeDebug ? "debug" : "normal"}:${locale}:${type}:${q}`;
 
   const result = await withCache<SearchResponse>(cacheKey, TTL.MEDIUM, async () => {
     const searchMovie = type === "all" || type === "movie";
@@ -369,20 +369,65 @@ export async function GET(req: NextRequest) {
       addResult(entry, `tmdb: searchMulti fallback; title score ${score}`);
     }
 
-    // Persons
-    const persons: PersonResult[] = personResults.results.slice(0, 5).map((p) => {
+    /**
+     * Les personnes — et d'abord celles qui veulent dire quelque chose ici.
+     *
+     * TMDB rend les homonymes dans son propre ordre de popularité mondiale, ce qui donnait, pour
+     * « Hann », cinq inconnus sans photo poussant vers le bas le seul film qu'on possédait
+     * vraiment. Or il n'y a qu'une question qui vaille sur cet écran : *est-ce que je peux
+     * regarder quelque chose de cette personne ce soir ?*
+     *
+     * Deux corrections, et elles vont ensemble.
+     *
+     * 1. **Le décompte était faux.** Il ne regardait que les cinq titres « connus pour » de TMDB,
+     *    donc un acteur présent dans douze films d'ici n'en affichait jamais plus de trois. On lit
+     *    maintenant sa filmographie complète, croisée avec Radarr et Sonarr — c'est le nombre que
+     *    la carte annonce, et il est vrai.
+     * 2. **Le classement suit ce décompte**, et qui n'a ni titre ici ni même un visage ne figure
+     *    plus du tout : un nom seul, sur un écran de recherche, n'est pas un résultat.
+     *
+     * Le coût est borné : cinq filmographies au plus, en parallèle, et gardées sur disque une
+     * semaine — le même cache persistant que la recherche par casting utilise déjà, donc un foyer
+     * qui cherche toujours les mêmes acteurs cesse très vite d'appeler TMDB. L'échec reste hors du
+     * cache : une panne passagère ne doit pas se figer en « cette personne n'a rien ici ».
+     */
+    const candidates = personResults.results.slice(0, 8);
+    const credits = await Promise.all(
+      candidates.map((p) =>
+        withPersistentCache(`search:person-credits:${p.id}`, 7 * 24 * 3600_000, () => tmdb.getPersonCredits(p.id))
+          .catch(() => null)
+      )
+    );
+
+    const scored = candidates.map((p, i) => {
       const knownForItems = p.known_for?.slice(0, 5) ?? [];
-      const libraryKnown = knownForItems.filter((k: { id: number }) => radarrByTmdb.has(k.id) || sonarrByTmdb.has(k.id));
+      const owned = (credits[i]?.cast ?? []).filter((c) =>
+        c.media_type === "tv" ? sonarrByTmdb.has(c.id) : radarrByTmdb.has(c.id)
+      );
+      // Le repli quand TMDB n'a pas répondu : l'ancien décompte, sous-évalué mais jamais faux
+      // dans l'autre sens — mieux vaut annoncer moins que d'effacer une personne qu'on possède.
+      const fallback = knownForItems.filter((k) => radarrByTmdb.has(k.id) || sonarrByTmdb.has(k.id));
+      const libraryItems = credits[i] ? owned : fallback;
+      const titles = [...new Map(libraryItems.map((k) => [k.id, (k as { title?: string; name?: string }).title ?? (k as { title?: string; name?: string }).name ?? ""])).values()].filter(Boolean);
       return {
-        id: p.id,
-        name: p.name,
-        profilePath: p.profile_path ? `${TMDB_IMAGE_BASE}/w185${p.profile_path}` : null,
-        department: p.known_for_department ?? "",
-        knownFor: knownForItems.map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
-        libraryCount: libraryKnown.length,
-        libraryTitles: libraryKnown.slice(0, 3).map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
+        person: {
+          id: p.id,
+          name: p.name,
+          profilePath: p.profile_path ? `${TMDB_IMAGE_BASE}/w185${p.profile_path}` : null,
+          department: p.known_for_department ?? "",
+          knownFor: knownForItems.map((k: { title?: string; name?: string }) => k.title ?? k.name ?? "").filter(Boolean),
+          libraryCount: titles.length,
+          libraryTitles: titles.slice(0, 3),
+        } satisfies PersonResult,
+        rank: i,
       };
     });
+
+    const persons: PersonResult[] = scored
+      .filter(({ person }) => person.libraryCount > 0 || person.profilePath !== null)
+      .sort((a, b) => (b.person.libraryCount - a.person.libraryCount) || (a.rank - b.rank))
+      .slice(0, 5)
+      .map(({ person }) => person);
 
     const debug = includeDebug
       ? {

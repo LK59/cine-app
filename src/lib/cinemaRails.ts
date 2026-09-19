@@ -171,6 +171,65 @@ function eligibleThemes<T extends ThemedItem>(items: T[]): Top10Theme[] {
   return [...genres, ...decades, ...pairs];
 }
 
+/**
+ * Le nom propre d'un thème — ce qui l'identifie d'un jour à l'autre, et d'une version de la
+ * bibliothèque à l'autre.
+ */
+export function themeKey(theme: Top10Theme): string {
+  if (theme.kind === "genre") return `g:${theme.genre}`;
+  if (theme.kind === "decade") return `d:${theme.decade}`;
+  return `gd:${theme.genre}:${theme.decade}`;
+}
+
+/**
+ * Le thème d'un jour, tiré sans jamais dépendre du *nombre* de thèmes.
+ *
+ * C'était tout le défaut. `themes[graine % themes.length]` semble inoffensif et ne l'est pas : le
+ * modulo lie le résultat à la longueur de la liste, si bien qu'un seul thème qui entre ou qui sort
+ * redistribue **tous** les jours à la fois. Or cette liste bouge sans arrêt — un film ajouté fait
+ * franchir à un genre la barre des dix titres, et surtout un catalogue construit pendant que
+ * Jellyfin finit de démarrer est amputé : moins de titres, moins de thèmes éligibles, autre
+ * palmarès. D'où la plainte, exacte : « le top 10 change à chaque redémarrage ».
+ *
+ * On pèse donc chaque thème séparément — sa propre graine, tirée de son nom et de la date — et on
+ * garde le plus lourd. Retirer un thème qui ne gagnait pas ne change rien du tout ; en ajouter un
+ * ne change la journée que s'il gagne vraiment, soit une fois sur n. Le tirage reste entièrement
+ * déduit de la date : rien n'est stocké pour qu'il fonctionne, et deux serveurs répondraient
+ * pareil.
+ */
+export function themeOfDay<T extends ThemedItem>(items: T[], day: string): Top10Theme | null {
+  let best: Top10Theme | null = null;
+  let bestWeight = -1;
+  for (const theme of eligibleThemes(items)) {
+    const weight = seedFrom(`${day}|${themeKey(theme)}`);
+    // À poids égal — improbable mais pas impossible sur 32 bits —, le nom tranche, pour que deux
+    // machines ne puissent pas répondre différemment.
+    if (weight > bestWeight || (weight === bestWeight && best !== null && themeKey(theme) < themeKey(best))) {
+      best = theme;
+      bestWeight = weight;
+    }
+  }
+  return best;
+}
+
+/**
+ * De quoi se souvenir de ce qui a réellement été montré.
+ *
+ * Le tirage ci-dessus est déjà stable face à une bibliothèque qui bouge, mais « stable » n'est pas
+ * « garanti » : si le genre gagnant passe lui-même sous la barre des dix titres — ce qu'un
+ * catalogue amputé au démarrage provoque —, un autre thème gagne, et la journée change en cours de
+ * route. Une ligne en base ferme la question : le premier calcul de la journée fait foi, quoi qu'il
+ * arrive ensuite au conteneur.
+ *
+ * Volontairement facultative : la fonction reste pure et testable sans base, et une installation
+ * qui ne fournit rien retombe sur le tirage seul, qui est déjà le bon.
+ */
+export interface Top10Memory {
+  /** Le thème retenu pour ce jour-là. `undefined` si on n'en sait rien, `null` s'il n'y en avait aucun. */
+  recall(day: string): Top10Theme | null | undefined;
+  remember(day: string, theme: Top10Theme | null): void;
+}
+
 function matches(item: ThemedItem, theme: Top10Theme): boolean {
   const inGenre = (genre: string) => (item.genres ?? []).includes(genre);
   if (theme.kind === "genre") return inGenre(theme.genre);
@@ -205,18 +264,36 @@ export function dailyTop10<T extends ThemedItem>(
    * Passé en paramètre plutôt que lu sur l'objet : ces deux collections ne nomment pas leur clé
    * pareil, et une rangée de films ne doit pas dépendre de la forme d'une série.
    */
-  keyOf?: (item: T) => string | number
+  keyOf?: (item: T) => string | number,
+  /** Voir `Top10Memory` : ce qui rend la journée définitive une fois qu'elle a commencé. */
+  memory?: Top10Memory
 ): DailyTop10<T> {
-  const themes = eligibleThemes(items);
-  if (themes.length === 0) return { theme: null, items: top10Rail(items) };
+  /**
+   * Le thème d'aujourd'hui est retenu ; ceux d'hier sont seulement relus.
+   *
+   * Écrire les jours passés fabriquerait une histoire qui n'a jamais été montrée — la première
+   * installation les inventerait tous. Ils sont donc recalculés quand la base ne les a pas, ce
+   * qui est exactement ce que faisait la version précédente.
+   */
+  const themeFor = (d: string): Top10Theme | null => {
+    const known = memory?.recall(d);
+    if (known !== undefined) return known;
+    const theme = themeOfDay(items, d);
+    if (d === day) memory?.remember(d, theme);
+    return theme;
+  };
+
+  const todaysTheme = themeFor(day);
+  if (todaysTheme === null) return { theme: null, items: top10Rail(items) };
 
   const pick = (d: string, banned: ReadonlySet<string | number>) => {
-    const theme = themes[seedFrom(d) % themes.length];
+    const theme = d === day ? todaysTheme : themeFor(d);
+    if (theme === null) return { theme, items: [] as T[] };
     const pool = items.filter((i) => matches(i, theme) && !(keyOf && banned.has(keyOf(i))));
     return { theme, items: top10Rail(pool) };
   };
 
-  if (!keyOf) return pick(day, new Set());
+  if (!keyOf) return { theme: todaysTheme, items: pick(day, new Set()).items };
 
   /**
    * Les trois jours précédents, recalculés plutôt que retenus.
@@ -232,5 +309,5 @@ export function dailyTop10<T extends ThemedItem>(
    */
   const history = Array.from({ length: MAX_STREAK }, (_, i) => i + 1).map((back) => new Set(pick(previousDay(day, back), new Set()).items.map(keyOf)));
   const banned = new Set([...history[0]].filter((id) => history.every((day) => day.has(id))));
-  return pick(day, banned);
+  return { theme: todaysTheme, items: pick(day, banned).items };
 }

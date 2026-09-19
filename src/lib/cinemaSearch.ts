@@ -95,7 +95,14 @@ export function searchCinemaLibrary(
 
     // With no title left, the genre/year filters *are* the query — everything surviving them is a
     // hit, ranked by rating below. Otherwise the title has to actually match.
-    const score = title ? bestTitleMatchScore([item.title], title) : 50;
+    //
+    // Le titre d'origine compte autant que celui qu'on affiche : dans un foyer francophone, la
+    // moitié des films se cherchent sous leur nom anglais — « Die Hard » pour *Piège de cristal*.
+    // `bestTitleMatchScore` prend déjà le meilleur des deux, et la carte, elle, continue
+    // d'afficher le titre traduit : on cherche par ce dont on se souvient, on lit ce qu'on connaît.
+    const score = title
+      ? bestTitleMatchScore(["originalTitle" in item ? item.originalTitle : undefined, item.title], title)
+      : 50;
     if (score <= 0) return;
     results.push({ kind, item, score } as CinemaSearchResult);
   }

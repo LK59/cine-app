@@ -52,6 +52,7 @@ beforeEach(() => {
   mockTmdbSingleton.isEnabled.mockReturnValue(true);
   mockTmdbSingleton.searchMulti.mockResolvedValue({ results: [] });
   mockTmdbSingleton.searchPerson.mockResolvedValue({ results: [] });
+  mockTmdbSingleton.getPersonCredits.mockResolvedValue({ cast: [] });
   mockTmdbSingleton.movieGenres.mockResolvedValue({ genres: [] });
   mockTmdbSingleton.tvGenres.mockResolvedValue({ genres: [] });
   mockTmdbSingleton.discover.mockResolvedValue({ results: [] });
@@ -123,5 +124,89 @@ describe("GET /api/search", () => {
     const res = await GET(fakeReq({ q: "films avec jean dujardin" }));
     await expect(res.json()).resolves.toBeDefined();
     expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * Ce qu'une personne fait sur cet écran.
+ *
+ * Signalé capture à l'appui : « Hann » rendait cinq homonymes sans visage, dans l'ordre de
+ * popularité mondiale de TMDB, poussant vers le bas le seul titre qu'on possédait. La seule
+ * question qui vaille ici est « puis-je regarder quelque chose de cette personne ce soir ? ».
+ */
+describe("GET /api/search — les personnes", () => {
+  const PHOTO = "/p.jpg";
+
+  beforeEach(() => {
+    mockCachedMovies.mockResolvedValue([
+      { id: 1, tmdbId: 500 },
+      { id: 2, tmdbId: 501 },
+      { id: 3, tmdbId: 502 },
+    ]);
+    mockCachedSeries.mockResolvedValue([{ id: 9, tmdbId: 700 }]);
+  });
+
+  it("écarte un homonyme sans visage et sans rien chez nous", async () => {
+    mockTmdbSingleton.searchPerson.mockResolvedValue({
+      results: [
+        { id: 1, name: "Todd Hann", profile_path: null, known_for: [] },
+        { id: 2, name: "Adam Hann", profile_path: PHOTO, known_for: [] },
+      ],
+    });
+
+    const { GET } = await import("@/app/api/search/route");
+    const body = await (await GET(fakeReq({ q: "hann" }))).json();
+    expect(body.persons.map((p: { name: string }) => p.name)).toEqual(["Adam Hann"]);
+  });
+
+  // Le décompte ne regardait que les cinq titres « connus pour » de TMDB : un acteur présent dans
+  // douze films d'ici n'en affichait jamais plus de trois.
+  it("compte tous les titres qu'on possède, pas seulement les plus connus", async () => {
+    mockTmdbSingleton.searchPerson.mockResolvedValue({
+      results: [{ id: 42, name: "Ryan Gosling", profile_path: PHOTO, known_for: [{ id: 500, title: "Drive" }] }],
+    });
+    mockTmdbSingleton.getPersonCredits.mockResolvedValue({
+      cast: [
+        { id: 500, title: "Drive", media_type: "movie" },
+        { id: 501, title: "Blade Runner 2049", media_type: "movie" },
+        { id: 502, title: "First Man", media_type: "movie" },
+        { id: 700, name: "Une série", media_type: "tv" },
+        { id: 999, title: "Pas chez nous", media_type: "movie" },
+      ],
+    });
+
+    const { GET } = await import("@/app/api/search/route");
+    const body = await (await GET(fakeReq({ q: "gosling" }))).json();
+    expect(body.persons[0].libraryCount).toBe(4);
+    expect(body.persons[0].libraryTitles).toHaveLength(3);
+  });
+
+  it("fait passer devant celui dont on possède des titres", async () => {
+    mockTmdbSingleton.searchPerson.mockResolvedValue({
+      results: [
+        { id: 1, name: "Célèbre ailleurs", profile_path: PHOTO, known_for: [] },
+        { id: 2, name: "Chez nous", profile_path: PHOTO, known_for: [] },
+      ],
+    });
+    mockTmdbSingleton.getPersonCredits.mockImplementation((id: number) =>
+      Promise.resolve({ cast: id === 2 ? [{ id: 500, title: "Drive", media_type: "movie" }] : [] })
+    );
+
+    const { GET } = await import("@/app/api/search/route");
+    const body = await (await GET(fakeReq({ q: "x" + "y" }))).json();
+    expect(body.persons.map((p: { name: string }) => p.name)).toEqual(["Chez nous", "Célèbre ailleurs"]);
+  });
+
+  // Une panne passagère ne doit pas effacer une personne qu'on possède : on retombe sur l'ancien
+  // décompte, sous-évalué mais jamais faux dans l'autre sens.
+  it("retombe sur les titres connus quand TMDB ne répond pas", async () => {
+    mockTmdbSingleton.searchPerson.mockResolvedValue({
+      results: [{ id: 42, name: "Quelqu'un", profile_path: null, known_for: [{ id: 500, title: "Drive" }] }],
+    });
+    mockTmdbSingleton.getPersonCredits.mockRejectedValue(new Error("tmdb timeout"));
+
+    const { GET } = await import("@/app/api/search/route");
+    const body = await (await GET(fakeReq({ q: "quelquun" }))).json();
+    expect(body.persons[0].libraryCount).toBe(1);
   });
 });

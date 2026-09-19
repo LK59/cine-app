@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dailyTop10, dayKey, type ThemedItem } from "@/lib/cinemaRails";
+import { dailyTop10, dayKey, themeKey, themeOfDay, type ThemedItem, type Top10Theme, type Top10Memory } from "@/lib/cinemaRails";
 
 // Le classement ne bouge pas — c'est ce qu'on classe qui change. Un palmarès qui se remélange
 // chaque matin n'est plus un palmarès : le premier d'hier disparaît sans que rien ne l'explique.
@@ -160,5 +160,95 @@ describe("le repos après trois jours d'affilée", () => {
       const { items: sortie } = dailyTop10(items, `2026-09-${j}`, idDe);
       expect(sortie.length).toBe(10);
     }
+  });
+});
+
+
+/**
+ * Le palmarès ne doit pas bouger parce que le serveur a redémarré.
+ *
+ * Signalé à l'usage, et la cause n'était pas le redémarrage lui-même : le tirage se déduisait de
+ * la date *et du nombre de thèmes éligibles*, via un modulo. Or un catalogue construit pendant
+ * que Jellyfin finit de démarrer est amputé — moins de titres, moins de genres assez fournis — et
+ * un seul thème en plus ou en moins redistribuait tous les jours à la fois.
+ */
+describe("le palmarès du jour — une bibliothèque qui bouge", () => {
+  const JOUR = "2026-09-19";
+
+  /** La même collection, plus un genre entier qui vient de franchir la barre des dix titres. */
+  function pluslarge(): ThemedItem[] {
+    const out = collection();
+    for (let i = 0; i < 12; i++) out.push(film(4 + i * 0.1, ["Western"], 1975));
+    return out;
+  }
+
+  it("garde le même thème quand un genre entre dans la liste sans gagner", () => {
+    const avant = themeOfDay(collection(), JOUR)!;
+    const apres = themeOfDay(pluslarge(), JOUR)!;
+    // Le nouveau venu ne peut changer la journée que s'il l'emporte vraiment. Ici il ne l'emporte
+    // pas — et avec un modulo, il aurait tout décalé.
+    if (themeKey(apres) !== "g:Western" && themeKey(apres) !== "d:1970") {
+      expect(themeKey(apres)).toBe(themeKey(avant));
+    }
+  });
+
+  // La propriété qui compte vraiment, vérifiée sur un mois : ajouter des titres ne doit presque
+  // jamais changer la journée, là où le modulo la changeait presque toujours.
+  it("ne change presque jamais de thème quand la collection grandit", () => {
+    let changes = 0;
+    for (let d = 1; d <= 28; d++) {
+      const jour = `2026-09-${String(d).padStart(2, "0")}`;
+      if (themeKey(themeOfDay(collection(), jour)!) !== themeKey(themeOfDay(pluslarge(), jour)!)) changes++;
+    }
+    // Deux thèmes nouveaux sur six : au pire un tiers des jours, jamais la totalité.
+    expect(changes).toBeLessThan(14);
+  });
+
+  it("donne toujours la même réponse pour une date donnée", () => {
+    expect(themeKey(themeOfDay(collection(), JOUR)!)).toBe(themeKey(themeOfDay(collection(), JOUR)!));
+  });
+});
+
+/**
+ * Et la garantie dure, elle, ne se déduit de rien : elle se retient.
+ *
+ * Le tirage pondéré est robuste, pas inviolable — si le thème gagnant passe lui-même sous la barre
+ * des dix titres, un autre gagne. La première réponse de la journée fait donc foi.
+ */
+describe("le palmarès du jour — la mémoire", () => {
+  const JOUR = "2026-09-19";
+
+  function memoire(): Top10Memory & { rows: Map<string, Top10Theme | null> } {
+    const rows = new Map<string, Top10Theme | null>();
+    return {
+      rows,
+      recall: (day) => (rows.has(day) ? rows.get(day)! : undefined),
+      // Le premier a raison : c'est exactement ce que fait le DO NOTHING de la table.
+      remember: (day, theme) => { if (!rows.has(day)) rows.set(day, theme); },
+    };
+  }
+
+  it("retient le thème du jour à la première réponse", () => {
+    const m = memoire();
+    const { theme } = dailyTop10(collection(), JOUR, (i) => (i as unknown as { id: number }).id, m);
+    expect(m.rows.get(JOUR)).toEqual(theme);
+  });
+
+  it("le rejoue tel quel même si la bibliothèque a changé entre-temps", () => {
+    const m = memoire();
+    const premier = dailyTop10(collection(), JOUR, (i) => (i as unknown as { id: number }).id, m).theme!;
+
+    // Le pire cas réel : Jellyfin démarre encore, le catalogue arrive amputé du genre gagnant.
+    const ampute = collection().filter((i) => !i.genres!.includes(premier.kind === "genre" ? premier.genre : "—"));
+    const second = dailyTop10(ampute, JOUR, (i) => (i as unknown as { id: number }).id, m).theme!;
+    expect(themeKey(second)).toBe(themeKey(premier));
+  });
+
+  // Elle n'invente pas d'histoire : les jours passés qu'elle n'a pas vécus sont recalculés, pas
+  // écrits — une première installation les fabriquerait tous.
+  it("n'écrit que le jour demandé", () => {
+    const m = memoire();
+    dailyTop10(collection(), JOUR, (i) => (i as unknown as { id: number }).id, m);
+    expect([...m.rows.keys()]).toEqual([JOUR]);
   });
 });

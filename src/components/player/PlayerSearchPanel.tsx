@@ -108,6 +108,25 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   const [debounced, setDebounced] = useState(lastQuery.length >= MIN_QUERY ? lastQuery : "");
   const [requested, setFilter] = useState<Filter>("all");
   const inputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Passer du champ aux résultats sans toucher la souris.
+   *
+   * Les flèches parcourent déjà la grille (`usePanelArrowNav`), mais elles se taisent tant qu'on
+   * écrit — et c'est la bonne règle, sans quoi elles voleraient le curseur du champ. Restait donc
+   * un pas manquant, exactement là où il compte : on ne pouvait *entrer* dans les résultats qu'à
+   * la tabulation, case par case, en passant d'abord par les filtres.
+   *
+   * La première carte, et seulement elle : les filtres sont eux aussi marqués `data-nav-item`,
+   * mais ils précèdent la grille dans le document. On cherche donc à l'intérieur de la grille.
+   */
+  function enterResults(): boolean {
+    const first = gridRef.current?.querySelector<HTMLElement>("[data-nav-item]");
+    if (!first) return false;
+    first.focus();
+    return true;
+  }
 
   /**
    * Le clavier n'arrive que si on le demande.
@@ -300,16 +319,20 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            /* La loupe du clavier valide.
-               Le champ n'est dans aucun formulaire — la touche ne faisait donc rien du tout, alors
-               qu'elle est le geste par lequel on *termine* une recherche au pouce. Elle retient
-               maintenant sans attendre le minuteur et range le clavier, qui recouvrait la moitié
-               des résultats qu'on venait de demander. Rien à relancer : les résultats sont déjà
-               là, c'est le sens de la frappe qui les affiche. */
+            /* Valider, et descendre dans ce qu'on a trouvé.
+               Le champ n'est dans aucun formulaire : la loupe du clavier ne faisait rien du tout,
+               alors qu'elle est le geste par lequel on *termine* une recherche au pouce. Elle
+               retient maintenant sans attendre le minuteur, et le focus part sur la première
+               carte — ce qui range le clavier par la même occasion, lui qui recouvrait la moitié
+               des résultats qu'on venait de demander.
+               La flèche du bas fait le même trajet sans rien valider : c'est le geste du clavier
+               d'ordinateur, et il manquait — voir `enterResults`. Rien à relancer dans les deux
+               cas, les résultats sont déjà là. */
             onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              rememberSearch(typed);
-              inputRef.current?.blur();
+              if (e.key !== "Enter" && e.key !== "ArrowDown") return;
+              e.preventDefault();
+              if (e.key === "Enter") rememberSearch(typed);
+              if (!enterResults()) inputRef.current?.blur();
             }}
             type="search"
             enterKeyHint="search"
@@ -376,7 +399,7 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
         )}
 
         {(shownTitles.length > 0 || shownPersons.length > 0) && (
-          <div className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={gridRef} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {shownTitles.map((r) => (
               <PlayerResultCard
                 key={r.key}

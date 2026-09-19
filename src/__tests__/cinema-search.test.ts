@@ -40,6 +40,9 @@ const MOVIES = [
   movie(1, "Interstellar", 2014, ["Science Fiction", "Adventure"], "8.7"),
   movie(2, "Mad Max: Fury Road", 2015, ["Action", "Adventure"], "8.1"),
   movie(3, "John Wick", 2014, ["Action", "Thriller"], "7.4"),
+  // Cent neuf des sept cent dix films d'ici portent un titre d'origine différent de celui qu'on
+  // affiche, et dans un foyer francophone c'est souvent par celui-là qu'on les cherche.
+  { ...movie(4, "Piège de cristal", 1988, ["Action"], "8.2"), originalTitle: "Die Hard" },
 ];
 const SERIES = [
   series(10, "Breaking Bad", 2008, ["Drama", "Crime"]),
@@ -63,7 +66,7 @@ describe("searchCinemaLibrary", () => {
 
   it("lists a whole genre when the query is only a genre phrase", () => {
     const r = searchCinemaLibrary("films d'action", MOVIES, SERIES, "fr");
-    expect(r.map((x) => x.item.title).sort()).toEqual(["John Wick", "Mad Max: Fury Road"]);
+    expect(r.map((x) => x.item.title).sort()).toEqual(["John Wick", "Mad Max: Fury Road", "Piège de cristal"]);
   });
 
   it("honours a media-type hint", () => {
@@ -86,5 +89,25 @@ describe("searchCinemaLibrary", () => {
     expect(searchCinemaLibrary("a", MOVIES, SERIES, "fr")).toEqual([]);
     expect(searchCinemaLibrary("de", MOVIES, SERIES, "fr")).toEqual([]);
     expect(searchCinemaLibrary("zzzz", MOVIES, SERIES, "fr")).toEqual([]);
+  });
+});
+
+describe("searchCinemaLibrary — le titre d'origine", () => {
+  it("trouve un film par son titre d'origine", () => {
+    const r = searchCinemaLibrary("die hard", MOVIES, SERIES, "fr");
+    expect(r.map((x) => x.item.title)).toEqual(["Piège de cristal"]);
+  });
+
+  // Et sur son début, comme n'importe quel titre : c'est le même score de préfixe.
+  it("le trouve aussi sur le début du titre d'origine", () => {
+    const r = searchCinemaLibrary("die ha", MOVIES, SERIES, "fr");
+    expect(r.map((x) => x.item.title)).toEqual(["Piège de cristal"]);
+  });
+
+  // On cherche par ce dont on se souvient, on lit ce qu'on connaît : la carte garde le titre
+  // traduit, et le titre affiché continue évidemment de marcher.
+  it("garde le titre affiché comme voie d'accès", () => {
+    const r = searchCinemaLibrary("piege de cristal", MOVIES, SERIES, "fr");
+    expect(r.map((x) => x.item.title)).toEqual(["Piège de cristal"]);
   });
 });

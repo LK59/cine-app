@@ -1,3 +1,4 @@
+import type { Top10Theme, Top10Memory } from "@/lib/cinemaRails";
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
@@ -163,6 +164,22 @@ function migrate(db: Database.Database): void {
          comparent à ce qu'ils ont déjà montré : une date qui avance est un nouvel avis, ce qui
          permet d'en envoyer plusieurs sans jamais réafficher le précédent. */
       notice_at INTEGER
+    )
+  `);
+  db.exec(`
+    /* Le thème du palmarès du jour, une ligne par collection et par date.
+       Le tirage se déduit entièrement de la date et n'a rien à stocker pour fonctionner — mais il
+       se déduit aussi de la *bibliothèque*, et celle-ci est amputée tant que Jellyfin finit de
+       démarrer : moins de titres, moins de thèmes assez fournis, autre palmarès. Un redémarrage en
+       début de soirée changeait donc la sélection sous les yeux de tout le monde. La première
+       réponse de la journée fait foi ; le reste de la journée la relit. */
+    CREATE TABLE IF NOT EXISTS daily_top10 (
+      kind  TEXT NOT NULL,
+      day   TEXT NOT NULL,
+      /* Le thème sérialisé, ou la chaîne vide quand ce jour-là n'en avait aucun — une absence
+         décidée est une réponse, et elle doit tenir jusqu'à demain comme les autres. */
+      theme TEXT NOT NULL,
+      PRIMARY KEY (kind, day)
     )
   `);
   db.exec(`
@@ -839,5 +856,46 @@ export const maintenanceDb = {
       )
       .run(at);
     return maintenanceDb.get();
+  },
+};
+
+
+/**
+ * La mémoire du palmarès du jour — voir `Top10Memory` dans `cinemaRails`.
+ *
+ * Deux lignes par jour au plus, une par collection, et rien à faire vieillir : sept octets de
+ * texte par journée passée, soit quelques kilo-octets par décennie. Les purger coûterait plus
+ * cher à écrire qu'à garder, et l'historique sert — c'est lui qui empêche un film de tenir
+ * l'affiche plus de trois jours d'affilée.
+ */
+export const dailyTop10Db = {
+  recall(kind: string, day: string): Top10Theme | null | undefined {
+    const row = getDb().prepare("SELECT theme FROM daily_top10 WHERE kind = ? AND day = ?").get(kind, day) as
+      | { theme: string }
+      | undefined;
+    if (!row) return undefined;
+    if (row.theme === "") return null;
+    try {
+      return JSON.parse(row.theme) as Top10Theme;
+    } catch {
+      // Une ligne illisible vaut mieux oubliée que crue : on retombe sur le tirage, qui est juste.
+      return undefined;
+    }
+  },
+
+  remember(kind: string, day: string, theme: Top10Theme | null): void {
+    // `DO NOTHING` et non `DO UPDATE` : le premier à répondre aujourd'hui a raison, et deux
+    // requêtes arrivées ensemble ne doivent pas se contredire. C'est tout l'objet de cette table.
+    getDb()
+      .prepare("INSERT INTO daily_top10 (kind, day, theme) VALUES (?, ?, ?) ON CONFLICT(kind, day) DO NOTHING")
+      .run(kind, day, theme === null ? "" : JSON.stringify(theme));
+  },
+
+  /** Ce que les routes passent à `dailyTop10`, déjà lié à leur collection. */
+  forKind(kind: "movies" | "series"): Top10Memory {
+    return {
+      recall: (day) => dailyTop10Db.recall(kind, day),
+      remember: (day, theme) => dailyTop10Db.remember(kind, day, theme),
+    };
   },
 };

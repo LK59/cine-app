@@ -6,6 +6,7 @@ import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
+import { dailyTop10Db } from "@/lib/db";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 
@@ -121,7 +122,7 @@ export async function GET(req: Request) {
     // une collection de séries n'a ni les mêmes genres ni les mêmes décennies en quantité. Les deux
     // rangées peuvent donc porter des thèmes différents le même jour, et c'est très bien : chacune
     // parle de ce qu'elle contient.
-    const top10OfTheDay = dailyTop10(cinemaSeries, undefined, (item) => item.sonarrId);
+    const top10OfTheDay = dailyTop10(cinemaSeries, undefined, (item) => item.sonarrId, dailyTop10Db.forKind("series"));
 
     const payload: CinemaSeriesWire = {
       genres: [...genreSet].sort(),
