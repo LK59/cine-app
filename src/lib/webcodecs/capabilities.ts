@@ -90,6 +90,20 @@ export function probeCapabilities(): Promise<Capability[]> {
      */
     sourceSupport('video/mp4; codecs="dvh1.08.06"', "Dolby Vision profil 8 dans MediaSource"),
     sourceSupport('video/mp4; codecs="dvh1.05.06"', "Dolby Vision profil 5 dans MediaSource"),
+    /**
+     * Le témoin, et c'est lui qui donne leur valeur aux deux lignes du dessus.
+     *
+     * Un iPhone a répondu « oui » aux deux profils le 19/09/2026. Reste à savoir ce que ce oui
+     * mesure : la prise en charge réelle du Dolby Vision, ou simplement le fait que la chaîne
+     * `dvh1.PP.LL` se ramène à du HEVC Main 10, que tout appareil décode. Les deux hypothèses
+     * expliquent la même réponse, et l'une des deux rendrait le chantier inutile.
+     *
+     * Le profil 42 n'existe pas — la spécification Dolby en compte huit. Un appareil qui le
+     * déclare pris en charge ne valide pas un profil : il reconnaît une famille de codecs et
+     * répond oui à tout ce qui lui ressemble. Ce témoin-là ne coûte rien et tranche seul, sans
+     * avoir à comparer deux machines.
+     */
+    sourceSupport('video/mp4; codecs="dvh1.42.06"', "Témoin : profil Dolby Vision inexistant"),
     sourceSupport('video/mp4; codecs="av01.0.08M.08"', "AV1 dans MediaSource"),
     sourceSupport('video/mp4; codecs="av01.0.12M.10"', "AV1 10 bits dans MediaSource"),
     sourceSupport('audio/mp4; codecs="dtsc"', "DTS dans MediaSource"),
