@@ -6,6 +6,7 @@ import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import type { HydratedPayload } from "@/lib/cinemaPayload";
+import { toDynamicRange, type VideoQuality } from "@/lib/videoQuality";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
 export interface CinemaMovie {
@@ -35,6 +36,14 @@ export interface CinemaMovie {
    * déjà pour chacun des titres de cette bibliothèque ; la porter ici coûte un nombre par film.
    */
   runtimeMinutes: number | null;
+  /**
+   * La qualité de l'image, que Radarr connaît déjà pour 690 fichiers sur 690.
+   *
+   * Gratuite : elle vient de `movieFile`, déjà présent dans la réponse que cette route demandait
+   * de toute façon. Les champs sont omis quand ils sont inconnus, donc un film sans information
+   * ne coûte rien à la charge utile — voir `videoQuality` pour ce qu'on accepte d'en dire.
+   */
+  quality?: VideoQuality;
   genres: string[];
   // Drives the "Nouveau" badge and the "Récemment ajoutés" rail. Null when Radarr has no real
   // date for it (its "never" sentinel included — see lib/cinemaRails).
@@ -90,8 +99,25 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
     // Radarr already resolves this itself at add/refresh time (Skyhook) — free, no
     // OMDb/TMDB round trip needed, same field fetchHero() in the dashboard route uses.
     imdbRating: m.ratings?.imdb?.value != null ? m.ratings.imdb.value.toFixed(1) : null,
+    quality: videoQualityOf(m),
     genres: m.genres ?? [],
     addedAt: m.added ?? null,
+  };
+}
+
+/**
+ * Ce que Radarr sait du fichier, réduit à ce qui s'affiche.
+ *
+ * `undefined` plutôt qu'un objet vide quand il n'y a rien à dire : c'est ce qui fait qu'un film
+ * sans information ne pèse pas une clé de plus dans la charge utile.
+ */
+function videoQualityOf(m: RadarrMovie): VideoQuality | undefined {
+  const resolution = m.movieFile?.quality?.quality?.resolution;
+  const dynamicRange = toDynamicRange(m.movieFile?.mediaInfo?.videoDynamicRangeType);
+  if (!resolution && !dynamicRange) return undefined;
+  return {
+    ...(resolution ? { resolution } : {}),
+    ...(dynamicRange ? { dynamicRange } : {}),
   };
 }
 

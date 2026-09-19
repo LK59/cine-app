@@ -7,6 +7,8 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { useCarouselDrag, carouselTransform, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
 import { useT } from "@/components/TranslationProvider";
+import { genreLabel } from "@/lib/top10Label";
+import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -139,8 +141,9 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                     ) : (
                       <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{item.title}</h1>
                     )}
-                    {item.genres.length > 0 && (
-                      <p className="mb-3 truncate text-xs text-white/70">{item.genres.slice(0, 3).join(" · ")}</p>
+                    <QualityBadges quality={"quality" in item ? item.quality : undefined} />
+          {item.genres.length > 0 && (
+                      <p className="mb-3 truncate text-xs text-white/70">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>
                     )}
                     {actions(item)}
                   </div>
@@ -155,7 +158,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                       <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
                     )}
                     {item.genres.length > 0 && (
-                      <p className="mb-3 text-center text-xs text-white/70">{item.genres.slice(0, 3).join(" · ")}</p>
+                      <p className="mb-3 text-center text-xs text-white/70">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>
                     )}
                     {actions(item)}
                   </div>

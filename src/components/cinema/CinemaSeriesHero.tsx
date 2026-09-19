@@ -4,6 +4,8 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { useT } from "@/components/TranslationProvider";
+import { genreLabel } from "@/lib/top10Label";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
@@ -31,6 +33,7 @@ export function CinemaSeriesHero({
   item: CinemaSeries;
   onTrailerKeyChange?: (key: string | null) => void;
 }) {
+  const t = useT();
   const [debouncedId, setDebouncedId] = useState(item.sonarrId);
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedId(item.sonarrId), 200);
@@ -61,7 +64,7 @@ export function CinemaSeriesHero({
       <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
         <span>{item.year}</span>
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-        {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
+        {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
       </div>
 
       <p /* Voir CinemaHero : la même coupure, au même endroit de l'écran, pour l'autre onglet. */

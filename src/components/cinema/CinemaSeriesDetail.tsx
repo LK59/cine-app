@@ -19,6 +19,7 @@ import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
+import { genreLabel } from "@/lib/top10Label";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
@@ -279,7 +280,7 @@ export function CinemaSeriesDetail({
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
-            {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
+            {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
           <CinemaOverview

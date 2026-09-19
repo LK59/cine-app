@@ -32,7 +32,11 @@ export interface RadarrMovie {
   physicalRelease?: string;
   movieFile?: {
     id: number;
-    quality: { quality: { name: string } };
+    /**
+     * `resolution` est la hauteur en pixels — 2160, 1080, 720 — telle que Radarr classe le fichier.
+     * Vérifié en direct : présente sur 685 des 690 fichiers de cette bibliothèque.
+     */
+    quality: { quality: { name: string; resolution?: number } };
     size: number;
     relativePath: string;
     dateAdded?: string;

@@ -23,9 +23,11 @@ import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
 import { useT } from "@/components/TranslationProvider";
+import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
@@ -342,7 +344,8 @@ export function CinemaMobileDetail({
               avant de lancer un film, et la seule des trois qui manquait. Pour une série, elle
               n'aurait aucun sens — c'est celle d'un épisode, et elle est déjà sur chacun. */}
           {!isSeries && formatMinutes(info?.tmdb?.runtime) && <span>{formatMinutes(info?.tmdb?.runtime)}</span>}
-          {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).join(" · ")}</span>}
+          <QualityBadges quality={"quality" in item ? item.quality : undefined} />
+          {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
         </div>
 
         {playerEnabled && playTargetId && (

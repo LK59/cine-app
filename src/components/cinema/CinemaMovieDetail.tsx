@@ -9,6 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { formatMinutes } from "@/lib/format";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaCollectionRow, useCinemaCollection } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
@@ -21,6 +22,7 @@ import { cinemaNavigate, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
+import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
@@ -306,7 +308,8 @@ export function CinemaMovieDetail({
             {/* Voir la note jumelle de la fiche téléphone : la durée manquait, et c'est la
                 troisième chose qu'on veut savoir avant de lancer un film. */}
             {formatMinutes(info?.tmdb?.runtime) && <span>{formatMinutes(info?.tmdb?.runtime)}</span>}
-            {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
+            <QualityBadges quality={item.quality} />
+          {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
           <CinemaOverview

@@ -5,6 +5,9 @@ import { formatMinutes } from "@/lib/format";
 import { useEffect, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
+import { QualityBadges } from "@/components/cinema/QualityBadges";
+import { useT } from "@/components/TranslationProvider";
+import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
@@ -41,6 +44,7 @@ export function CinemaHero({
   // (and therefore possibly briefly disagreeing) opinions about what the current trailer is.
   onTrailerKeyChange?: (key: string | null) => void;
 }) {
+  const t = useT();
   const [debouncedId, setDebouncedId] = useState(item.radarrId);
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedId(item.radarrId), 200);
@@ -87,7 +91,8 @@ export function CinemaHero({
         {"runtimeMinutes" in item && formatMinutes(item.runtimeMinutes) && (
           <span>{formatMinutes(item.runtimeMinutes)}</span>
         )}
-        {item.genres.length > 0 && <span>{item.genres.slice(0, 3).join(" · ")}</span>}
+        <QualityBadges quality={item.quality} />
+          {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
       </div>
 
       {/* Rien plutôt que de l'anglais. Le synopsis traduit vient de TMDB et met un instant à
