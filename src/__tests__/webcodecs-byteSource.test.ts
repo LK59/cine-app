@@ -205,3 +205,61 @@ describe("HttpByteSource", () => {
     source.close();
   });
 });
+
+/**
+ * Une socket qui pend, et tout ce qui n'arrivait jamais derrière.
+ *
+ * Le lecteur natif a déjà tout ce qu'il faut pour survivre à une coupure : quatre tentatives avec
+ * temporisation, l'attente du retour du réseau, un écran « Connexion perdue » avec son bouton, et
+ * la reprise automatique à la position exacte. Rien de tout cela ne s'armait dans un cas précis,
+ * qui est le plus courant sur un téléphone — une bascule Wi-Fi → 5G ne *refuse* pas les connexions
+ * en cours, elle les laisse pendre. Sans échéance, le `fetch` ne se résout jamais : pas d'erreur,
+ * donc pas de nouvelle tentative, donc pas d'écran, donc une image figée pour toujours.
+ */
+describe("HttpByteSource — une requête qui ne revient pas", () => {
+  /**
+   * Ce que ce test prouve, et ce qu'il ne prouve pas.
+   *
+   * Il vérifie le maillon qui compte : un abandon **qui ne vient pas du lecteur** est traité comme
+   * un échec réseau ordinaire — nouvelle tentative — et non comme une annulation à faire remonter.
+   * C'est exactement le chemin qu'emprunte une échéance, et c'est la distinction que fait le
+   * `catch` de `fetchWithRetries`.
+   *
+   * Il ne vérifie pas les vingt-cinq secondes elles-mêmes : `AbortSignal.timeout` tient son propre
+   * horloge, hors de portée des minuteurs simulés, et figer une constante n'apprend rien.
+   */
+  it("traite un abandon qui n'est pas le sien comme un échec réseau, et redemande", async () => {
+    let calls = 0;
+    const pendantes: (() => void)[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") {
+        return { ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } };
+      }
+      calls += 1;
+      // La première plage pend, et n'est délivrée que par l'abandon du signal — exactement ce que
+      // fait une socket morte. Les suivantes répondent normalement.
+      if (calls === 1) {
+        return new Promise((_resolve, reject) => {
+          const signal = init?.signal;
+          const fail = () => reject(new DOMException("aborted", "AbortError"));
+          if (signal?.aborted) fail();
+          else signal?.addEventListener("abort", fail, { once: true });
+          pendantes.push(fail);
+        });
+      }
+      return {
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(Math.min(CHUNK, SIZE)),
+      };
+    });
+
+    const source = await HttpByteSource.open("/film.mkv");
+    const lecture = source.read(0, 4);
+    // L'échéance réelle est de vingt-cinq secondes ; on la déclenche à la main plutôt que
+    // d'attendre, ce qui testerait la patience de la machine et non le code.
+    pendantes.forEach((fail) => fail());
+    await expect(lecture).resolves.toBeInstanceOf(Uint8Array);
+    // Elle a bien été redemandée : sans échéance, il n'y aurait jamais eu de seconde requête.
+    expect(calls).toBeGreaterThan(1);
+  });
+});

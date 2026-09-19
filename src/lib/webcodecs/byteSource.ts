@@ -104,6 +104,37 @@ const PREFETCH_CHUNKS = 6;
 const FETCH_ATTEMPTS = 4;
 const FETCH_BACKOFF_MS = [200, 600, 1500];
 
+/**
+ * Le temps qu'une plage a pour arriver — et ce qui manquait à tout le reste pour fonctionner.
+ *
+ * Les quatre tentatives ci-dessus, l'attente du retour du réseau, l'écran « Connexion perdue »
+ * avec son bouton, la reprise automatique à la position exacte : tout cela existait déjà et rien
+ * ne s'armait dans un cas précis, qui est justement le plus courant sur un téléphone. Une bascule
+ * Wi-Fi → 5G ne *refuse* pas les connexions en cours, elle les laisse **pendre** : la socket ne
+ * répond plus et ne se ferme pas. Sans échéance, ce `fetch` ne se résout jamais — pas d'erreur,
+ * donc pas de nouvelle tentative, donc pas d'écran, donc une image figée pour toujours.
+ *
+ * Vingt-cinq secondes pour un mégaoctet, soit quarante-deux kilo-octets par seconde. C'est le
+ * point qui rend ce garde-fou incapable de nuire : un flux remultiplexé demande plusieurs
+ * centaines de kilo-octets par seconde pour tenir, donc en dessous de ce seuil la lecture est de
+ * toute façon perdue. Une connexion lente mais réelle ne peut pas être coupée par cette échéance ;
+ * seule une connexion morte l'atteint.
+ */
+const REQUEST_TIMEOUT_MS = 25_000;
+
+/**
+ * L'échéance, ajoutée à l'annulation du lecteur — quand le navigateur sait les combiner.
+ *
+ * `AbortSignal.any` date de Safari 17.4 et de Chrome 116. Là où il manque, on rend le signal du
+ * lecteur seul : on perd l'échéance, pas la lecture. Dégradé, jamais cassé — c'est la règle de ce
+ * dossier pour tout ce qui dépend d'une capacité du navigateur.
+ */
+function readSignal(playerSignal: AbortSignal): AbortSignal {
+  const any = (AbortSignal as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof any !== "function" || typeof AbortSignal.timeout !== "function") return playerSignal;
+  return any([playerSignal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
+}
+
 /** How long a read waits for the network to come back before admitting it is not going to. */
 const OFFLINE_PATIENCE_MS = 60_000;
 
@@ -233,7 +264,10 @@ export class HttpByteSource implements ByteSource {
       try {
         const res = await fetch(this.url, {
           headers: { Range: `bytes=${start}-${end}` },
-          signal: this.controller.signal,
+          // Le signal du lecteur *et* une échéance — voir `readSignal`. L'abandon sur échéance
+          // laisse `this.controller.signal.aborted` à faux, si bien que la boucle ci-dessous le
+          // traite comme n'importe quel échec réseau : une nouvelle tentative, puis l'écran.
+          signal: readSignal(this.controller.signal),
         });
         // 206 is the expected answer; a 200 means the server ignored the Range and sent the whole
         // file, which for a 40 GB movie must not be treated as a successful chunk read.
