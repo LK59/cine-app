@@ -5,6 +5,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
@@ -157,7 +158,7 @@ export function CinemaMobileClient() {
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
-    fetcher
+    cinemaFetcher
   );
   // Series (and its Continue Watching feed) stay unfetched until the tab is actually opened —
   // same lazy contract as desktop, and more valuable here where the connection may be mobile data.
@@ -180,7 +181,7 @@ export function CinemaMobileClient() {
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
-    fetcher
+    cinemaFetcher
   );
   // Le même réchauffage que sur ordinateur, et le même crochet : c'est une seule décision.
   /**

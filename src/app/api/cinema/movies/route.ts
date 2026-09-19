@@ -5,6 +5,7 @@ import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from
 import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
+import type { HydratedPayload } from "@/lib/cinemaPayload";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 
 export interface CinemaMovie {
@@ -40,14 +41,20 @@ export interface CinemaMovie {
   addedAt: string | null;
 }
 
-export interface CinemaMoviesPayload {
+export interface CinemaMoviesWire {
   genres: string[];
-  rows: Record<string, CinemaMovie[]>;
-  spotlight: CinemaMovie[];
+  /**
+   * Les titres une fois chacun. Tout le reste ne porte que des identifiants — voir
+   * `cinemaPayload` : un titre était sérialisé une fois par genre, soit deux fois et demie
+   * la charge nécessaire sur cette bibliothèque.
+   */
+  items: CinemaMovie[];
+  rows: Record<string, number[]>;
+  spotlight: number[];
   // Curated rails, computed here so the movie and series screens can't drift apart on what they
   // mean (see lib/cinemaRails for each one's definition).
-  recentlyAdded: CinemaMovie[];
-  top10: CinemaMovie[];
+  recentlyAdded: number[];
+  top10: number[];
   /**
    * Ce que le palmarès du jour classe — un genre, une décennie, ou rien.
    *
@@ -132,14 +139,16 @@ export async function GET(req: Request) {
     const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id)));
 
     const byRadarrId = new Map<number, CinemaMovie>();
-    const rows: Record<string, CinemaMovie[]> = {};
+    // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois
+    // fois. Voir `cinemaPayload` — le client reconstruit la forme complète à l'arrivée.
+    const rows: Record<string, number[]> = {};
     const genreSet = new Set<string>();
 
     for (const cinemaMovie of cinemaMovies) {
       byRadarrId.set(cinemaMovie.radarrId, cinemaMovie);
       for (const g of cinemaMovie.genres) {
         genreSet.add(g);
-        (rows[g] ??= []).push(cinemaMovie);
+        (rows[g] ??= []).push(cinemaMovie.radarrId);
       }
     }
 
@@ -153,12 +162,13 @@ export async function GET(req: Request) {
     // journée dure — voir `dailyTop10`.
     const top10OfTheDay = dailyTop10(cinemaMovies, undefined, (item) => item.radarrId);
 
-    const payload: CinemaMoviesPayload = {
+    const payload: CinemaMoviesWire = {
       genres: [...genreSet].sort(),
       rows,
-      spotlight,
-      recentlyAdded: recentlyAddedRail(cinemaMovies),
-      top10: top10OfTheDay.items,
+      items: cinemaMovies,
+      spotlight: spotlight.map((i) => i.radarrId),
+      recentlyAdded: recentlyAddedRail(cinemaMovies).map((i) => i.radarrId),
+      top10: top10OfTheDay.items.map((i) => i.radarrId),
       top10Theme: top10OfTheDay.theme,
     };
     // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
@@ -169,3 +179,11 @@ export async function GET(req: Request) {
     return upstreamFailure(err, "cinema-movies");
   }
 }
+
+/**
+ * Ce que les écrans lisent : les mêmes listes, mais pleines de titres.
+ *
+ * `CinemaMoviesWire` est ce qui voyage — les titres une fois, des identifiants ailleurs. `cinemaFetcher`
+ * rend cette forme-ci à l'arrivée, si bien qu'aucun écran n'a eu à changer. Voir `cinemaPayload`.
+ */
+export type CinemaMoviesPayload = HydratedPayload<CinemaMovie> & { top10Theme: Top10Theme | null };

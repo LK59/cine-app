@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
@@ -272,7 +273,7 @@ export function CinemaClient() {
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
-    fetcher
+    cinemaFetcher
   );
   /**
    * Différé, sauf quand une série est visée — la même règle que sur téléphone.
@@ -287,7 +288,7 @@ export function CinemaClient() {
   const seriesWarmed = useWarmSeriesCatalogue(movies !== undefined);
   const { data: series, error: seriesError, isLoading: seriesLoading } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" || route.serie !== null || seriesWarmed ? SERIES_CATALOGUE_KEY : null,
-    fetcher
+    cinemaFetcher
   );
   // Les films sont là : on peut préparer les séries sans rien retarder. Voir le crochet.
 

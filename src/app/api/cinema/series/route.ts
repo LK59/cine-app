@@ -6,6 +6,7 @@ import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
+import type { HydratedPayload } from "@/lib/cinemaPayload";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 
 export interface CinemaSeries {
@@ -27,12 +28,18 @@ export interface CinemaSeries {
   addedAt: string | null;
 }
 
-export interface CinemaSeriesPayload {
+export interface CinemaSeriesWire {
   genres: string[];
-  rows: Record<string, CinemaSeries[]>;
-  spotlight: CinemaSeries[];
-  recentlyAdded: CinemaSeries[];
-  top10: CinemaSeries[];
+  /**
+   * Les titres une fois chacun. Tout le reste ne porte que des identifiants — voir
+   * `cinemaPayload` : un titre était sérialisé une fois par genre, soit deux fois et demie
+   * la charge nécessaire sur cette bibliothèque.
+   */
+  items: CinemaSeries[];
+  rows: Record<string, number[]>;
+  spotlight: number[];
+  recentlyAdded: number[];
+  top10: number[];
   /** Le thème du palmarès du jour — voir la route des films, même mécanisme. */
   top10Theme: Top10Theme | null;
 }
@@ -91,14 +98,16 @@ export async function GET(req: Request) {
     const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id)));
 
     const bySonarrId = new Map<number, CinemaSeries>();
-    const rows: Record<string, CinemaSeries[]> = {};
+    // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois
+    // fois. Voir `cinemaPayload` — le client reconstruit la forme complète à l'arrivée.
+    const rows: Record<string, number[]> = {};
     const genreSet = new Set<string>();
 
     for (const cs of cinemaSeries) {
       bySonarrId.set(cs.sonarrId, cs);
       for (const g of cs.genres) {
         genreSet.add(g);
-        (rows[g] ??= []).push(cs);
+        (rows[g] ??= []).push(cs.sonarrId);
       }
     }
 
@@ -114,12 +123,13 @@ export async function GET(req: Request) {
     // parle de ce qu'elle contient.
     const top10OfTheDay = dailyTop10(cinemaSeries, undefined, (item) => item.sonarrId);
 
-    const payload: CinemaSeriesPayload = {
+    const payload: CinemaSeriesWire = {
       genres: [...genreSet].sort(),
       rows,
-      spotlight,
-      recentlyAdded: recentlyAddedRail(cinemaSeries),
-      top10: top10OfTheDay.items,
+      items: cinemaSeries,
+      spotlight: spotlight.map((i) => i.sonarrId),
+      recentlyAdded: recentlyAddedRail(cinemaSeries).map((i) => i.sonarrId),
+      top10: top10OfTheDay.items.map((i) => i.sonarrId),
       top10Theme: top10OfTheDay.theme,
     };
     // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
@@ -130,3 +140,11 @@ export async function GET(req: Request) {
     return upstreamFailure(err, "cinema-series");
   }
 }
+
+/**
+ * Ce que les écrans lisent : les mêmes listes, mais pleines de titres.
+ *
+ * `CinemaSeriesWire` est ce qui voyage — les titres une fois, des identifiants ailleurs. `cinemaFetcher`
+ * rend cette forme-ci à l'arrivée, si bien qu'aucun écran n'a eu à changer. Voir `cinemaPayload`.
+ */
+export type CinemaSeriesPayload = HydratedPayload<CinemaSeries> & { top10Theme: Top10Theme | null };

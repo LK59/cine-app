@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { RotateCcw, X } from "lucide-react";
 import { fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useT } from "@/components/TranslationProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
@@ -39,7 +40,7 @@ export function PlayerEndScreen({
   const t = useT();
   // Lu dans le cache, jamais redemandé : c'est la charge utile que l'écran d'accueil tient déjà
   // à jour, et la revalider ici coûterait un mégaoctet et demi pour une rangée de fin.
-  const { data } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, fetcher, {
+  const { data } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, {
     revalidateOnMount: false,
     revalidateIfStale: false,
     revalidateOnFocus: false,

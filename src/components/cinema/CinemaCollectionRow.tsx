@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { PosterImage } from "@/components/PosterImage";
 import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import { useT } from "@/components/TranslationProvider";
@@ -102,7 +103,7 @@ export function useCinemaCollection(radarrId: number): { name: string; parts: Re
    * L'appartenance se décide donc contre le catalogue de cet écran, lu dans le cache comme
    * partout ailleurs. Ce qui n'y est pas ouvre sa fiche TMDB, où « Lire » est devenu « Demander ».
    */
-  const { data: catalogue } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, fetcher, {
+  const { data: catalogue } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, {
     revalidateOnMount: false,
     revalidateIfStale: false,
     revalidateOnFocus: false,

@@ -73,9 +73,12 @@ describe("GET /api/cinema/movies", () => {
     const body = await (await GET(fakeReq())).json();
 
     expect(body.genres.sort()).toEqual(["Action", "Comedy"]);
-    expect(body.rows.Action).toHaveLength(1);
-    expect(body.rows.Comedy).toHaveLength(1);
-    expect(body.rows.Action[0].radarrId).toBe(1);
+    // Les rangées ne portent plus que des identifiants : un film à deux genres est écrit une
+    // seule fois dans `items` et cité deux fois. C'est tout l'objet de la déduplication.
+    expect(body.rows.Action).toEqual([1]);
+    expect(body.rows.Comedy).toEqual([1]);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].radarrId).toBe(1);
   });
 
   it("derives imdbRating from Radarr's own ratings field, formatted to one decimal", async () => {
@@ -85,7 +88,7 @@ describe("GET /api/cinema/movies", () => {
     const { GET } = await import("@/app/api/cinema/movies/route");
     const body = await (await GET(fakeReq())).json();
 
-    expect(body.rows.Action[0].imdbRating).toBe("8.0");
+    expect(body.items[0].imdbRating).toBe("8.0");
   });
 
   it("resolves jellyfinItemId onto the returned movie", async () => {
@@ -95,7 +98,7 @@ describe("GET /api/cinema/movies", () => {
     const { GET } = await import("@/app/api/cinema/movies/route");
     const body = await (await GET(fakeReq())).json();
 
-    expect(body.rows.Action[0].jellyfinItemId).toBe("b".repeat(32));
+    expect(body.items[0].jellyfinItemId).toBe("b".repeat(32));
   });
 
   it("sorts spotlight by most-recently-added and caps it at 10, skipping unmatched items", async () => {
@@ -113,8 +116,10 @@ describe("GET /api/cinema/movies", () => {
 
     expect(body.spotlight).toHaveLength(10);
     // Most recently added (2024-01-12, tmdbId 111) comes first.
-    expect(body.spotlight[0].tmdbId).toBe(111);
-    expect(body.spotlight.some((m: { tmdbId: number }) => m.tmdbId === 100)).toBe(false);
+    // `spotlight` ne porte plus que des identifiants : on retrouve le titre dans `items`.
+    const parId = new Map<number, { tmdbId: number }>(body.items.map((m: { radarrId: number; tmdbId: number }) => [m.radarrId, m]));
+    expect(parId.get(body.spotlight[0])!.tmdbId).toBe(111);
+    expect(body.spotlight.some((id: number) => parId.get(id)?.tmdbId === 100)).toBe(false);
   });
 });
 
@@ -165,5 +170,27 @@ describe("GET /api/cinema/movies — ce qui repart sur le réseau", () => {
     const compressed = Number(gzipped.headers.get("content-length"));
     expect(compressed).toBeGreaterThan(0);
     expect(compressed).toBeLessThan((await plain.text()).length);
+  });
+});
+
+describe("la charge utile ne répète plus les titres", () => {
+  // Elle partait avec chaque titre sérialisé une fois par genre : 689 films devenaient 1730
+  // entrées sur cette bibliothèque, soit deux fois et demie ce qu'il fallait — et c'est la
+  // ressource qui bloque l'écran d'accueil sur un réseau faible.
+  it("écrit chaque titre une fois, quel que soit son nombre de genres", async () => {
+    mockCachedMovies.mockResolvedValue([
+      radarrMovie({ id: 1, tmdbId: 100, genres: ["Action", "Comedy", "Drama"] }),
+    ]);
+    mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "a".repeat(32), ProviderIds: { Tmdb: "100" } }]);
+
+    const { GET } = await import("@/app/api/cinema/movies/route");
+    const body = await (await GET(fakeReq())).json();
+
+    expect(body.items).toHaveLength(1);
+    expect(body.rows.Action).toEqual([1]);
+    expect(body.rows.Comedy).toEqual([1]);
+    expect(body.rows.Drama).toEqual([1]);
+    // Et la sérialisation ne contient qu'un seul exemplaire du titre.
+    expect(JSON.stringify(body).split(radarrMovie({}).title).length - 1).toBe(1);
   });
 });

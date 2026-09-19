@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 import { uniqueById } from "@/lib/cinemaRails";
 import { PosterImage } from "@/components/PosterImage";
@@ -41,12 +42,12 @@ export function useCinemaSimilar(
   const swrOptions = { revalidateOnMount: false, revalidateOnFocus: false, revalidateIfStale: false };
   const { data: movies } = useSWR<CinemaMoviesPayload>(
     mediaType === "movies" ? MOVIES_CATALOGUE_KEY : null,
-    fetcher,
+    cinemaFetcher,
     swrOptions
   );
   const { data: series } = useSWR<CinemaSeriesPayload>(
     mediaType === "series" ? SERIES_CATALOGUE_KEY : null,
-    fetcher,
+    cinemaFetcher,
     swrOptions
   );
 
