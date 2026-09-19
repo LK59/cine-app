@@ -81,6 +81,29 @@ export interface SheetRef {
   film: number | null;
   serie: number | null;
   tab: "movies" | "series";
+  /**
+   * La personne recouverte, quand c'est elle qu'on recouvre.
+   *
+   * Ajoutée pour répondre à une question que l'adresse seule ne sait pas trancher : une adresse
+   * portant *à la fois* une personne et un titre peut vouloir dire deux choses opposées — un
+   * acteur ouvert depuis une fiche de film, ou un film ouvert depuis une filmographie. Dans le
+   * premier cas la personne est au-dessus, dans le second en dessous, et il n'y a que l'entrée
+   * précédente pour le dire : si elle ne portait *que* la personne, c'est qu'on est monté dessus.
+   */
+  person: number | null;
+}
+
+/**
+ * Où se trouve la fiche personne par rapport à la fiche de titre affichée.
+ *
+ * Voir `SheetRef.person`. Écrit une fois ici plutôt que déduit dans chaque client : la coquille du
+ * lecteur et les deux écrans cinéma prennent la même décision, et une divergence se verrait comme
+ * une fiche inerte ou une fiche invisible.
+ */
+export function personIsBelow(route: CinemaRoute, behind: SheetRef | null): boolean {
+  if (route.person === null) return false;
+  if (route.film === null && route.serie === null && route.discover === null) return false;
+  return behind !== null && behind.person !== null && behind.film === null && behind.serie === null;
 }
 
 /** Un titre, une personne : quelque chose est ouvert par-dessus la grille. */
@@ -90,8 +113,8 @@ function hasSheet(route: CinemaRoute): boolean {
 
 /** La fiche que cette route affiche, réduite à ce qu'il faut pour la retrouver. */
 function sheetRef(route: CinemaRoute): SheetRef | null {
-  if (route.film === null && route.serie === null) return null;
-  return { film: route.film, serie: route.serie, tab: route.tab };
+  if (route.film === null && route.serie === null && route.person === null) return null;
+  return { film: route.film, serie: route.serie, tab: route.tab, person: route.person };
 }
 
 function readNumber(params: URLSearchParams, key: string): number | null {
@@ -232,7 +255,7 @@ let cachedBehind: SheetRef | null = null;
 function readBehindSheet(): SheetRef | null {
   const value = readBehind();
   const next = typeof value === "object" && value !== null ? value : null;
-  const key = next ? `${next.film}:${next.serie}:${next.tab}` : "";
+  const key = next ? `${next.film}:${next.serie}:${next.tab}:${next.person}` : "";
   if (key !== cachedBehindKey) {
     cachedBehindKey = key;
     cachedBehind = next;
@@ -330,33 +353,27 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
  * la recherche et Ma liste restent ouvertes *sous* la fiche, pour qu'un retour y ramène avec la
  * requête et l'onglet intacts.
  *
- * Les fiches personne et découverte, elles, se referment — et ce n'est pas un choix de confort,
- * c'est la seule issue cohérente. Les plans sont une échelle fixe : la grille au 45, les panneaux
- * au 46, les fiches de titre au 47, la personne et la découverte au 48. Un titre ne peut donc
- * *pas* être dessiné au-dessus d'une fiche personne, quoi qu'on fasse de l'adresse.
+ * La fiche découverte se referme, la fiche personne **reste** — et la différence n'est pas un
+ * oubli. Une fiche découverte et une fiche de titre disent la même chose de deux façons, et
+ * l'ouverture est un remplacement ; une personne, elle, est l'écran d'où l'on vient, et elle doit
+ * vivre dessous le temps qu'on regarde le film — c'est ce qui fait qu'en refermant celui-ci on la
+ * retrouve, au lieu de la voir se reconstruire après un éclair de l'écran de recherche.
  *
- * Signalé le 19/09/2026, et les trois symptômes sont le même : ouvrir un film depuis la
- * filmographie d'un acteur ne montrait rien — la fiche existait, au 47, sous la personne, et
- * rendue inerte par-dessus le marché (`covered` dans le client mobile) ; en refermant l'acteur on
- * la voyait apparaître puis disparaître d'un coup ; et comme la barre du bas s'efface tant qu'une
- * fiche est adressée, il ne restait plus de navigation du tout — l'application semblait bloquée.
- *
- * La fiche découverte se refermait déjà, la fiche personne non : la même décision, prise à deux
- * endroits, et qui a dérivé. Elle est prise ici, une fois, pour tous les appelants — ceux qui
- * n'ont ni personne ni découverte ouverte n'y perdent rien, l'adresse ne change pas. Le retour
- * rouvre la personne, puisque l'entrée précédente la porte encore : « par-dessus » et « à sa
- * place, avec un retour qui y ramène » se voient pareil, et seul le second sait s'afficher.
+ * Elle l'a fait de deux façons successives, toutes deux signalées le 19/09/2026 : d'abord dessous
+ * et *invisible*, parce que les plans en faisaient un écran couvrant ; puis refermée, ce qui
+ * réglait l'affichage et laissait l'éclair. Elle passe maintenant sous la fiche de titre pour de
+ * bon — voir `personIsBelow`, qui dit *où* elle est, et les plans, qui lui laissent la place.
  */
 export function openLibraryTitle(
   type: "movie" | "series",
   libraryId: number,
   extra: Partial<CinemaRoute> = {}
 ): void {
-  const above = { person: null, discover: null };
+  const replaced = { discover: null };
   cinemaNavigate(
     type === "series"
-      ? { ...above, ...extra, tab: "series", serie: libraryId, film: null }
-      : { ...above, ...extra, tab: "movies", film: libraryId, serie: null }
+      ? { ...replaced, ...extra, tab: "series", serie: libraryId, film: null }
+      : { ...replaced, ...extra, tab: "movies", film: libraryId, serie: null }
   );
 }
 

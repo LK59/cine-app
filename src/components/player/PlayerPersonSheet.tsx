@@ -163,7 +163,27 @@ const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
  * qu'on le possède ou non, au lieu de renvoyer vers une page d'outillage. C'est ce qui fait que
  * l'on ne sort jamais de l'interface.
  */
-export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number; leaving?: boolean }) {
+export function PlayerPersonSheet({
+  tmdbId,
+  leaving = false,
+  /**
+   * La fiche est recouverte par une fiche de titre ouverte depuis sa filmographie.
+   *
+   * Elle reste montée, dessinée, et parfaitement inerte : c'est ce qu'on découvre en tirant le
+   * film vers le bas, et ce qu'on retrouve en le refermant — sans remontage, donc sans le
+   * clignement de l'écran de recherche qui a valu ce correctif. Même traitement que la pile des
+   * fiches de titre, qui garde de la même façon celle du dessous (voir `underneath` côté cinéma).
+   *
+   * « Inerte » n'est pas décoratif : un écran qui n'est pas celui du dessus n'a pas d'avis. Pas de
+   * geste, pas d'Échap — deux écouteurs sur la même touche reculaient de deux crans d'un coup —,
+   * et rien à cliquer sous ce qui est au-dessus.
+   */
+  underneath = false,
+}: {
+  tmdbId: number;
+  leaving?: boolean;
+  underneath?: boolean;
+}) {
   const t = useT();
   const isMobile = useIsMobile();
   const short = useIsShortViewport();
@@ -193,6 +213,8 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
   const { closing, requestClose } = useDelayedClose(close, isMobile ? SHEET_OUT_MS : 0);
   // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
   // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
+  // Le geste est branché même dessous, mais jamais posé : les crochets ne se rendent pas sous
+  // condition, et c'est la poignée qu'on retire plus bas.
   const swipe = useSwipeToDismiss(requestClose);
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
@@ -202,7 +224,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
     // Silencieux tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
     // écouteurs posés sur la même cible se déclenchent tous les deux — une seule touche aurait
     // fermé la photo *et* la fiche derrière.
-    if (photoIndex !== null) return;
+    if (photoIndex !== null || underneath) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape" && e.key !== "Backspace") return;
       e.preventDefault();
@@ -211,7 +233,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [photoIndex, requestClose]);
+  }, [photoIndex, underneath, requestClose]);
 
   // Ce qu'on possède d'abord : c'est ce qui se regarde ce soir. Le serveur trie déjà ainsi, on
   // garde son ordre et on se contente de retirer les entrées sans titre.
@@ -236,8 +258,9 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
        * bouger la couche, et la sortie saccadait. Sur grand écran la question ne se pose pas —
        * l'animation y est un fondu, pas un déplacement.
        */
+      aria-hidden={underneath || undefined}
       className={`fixed inset-0 bg-ink ${isMobile ? "overflow-y-auto overscroll-contain" : "overflow-hidden"} ${
-        swipe.touched
+        underneath || swipe.touched
           ? ""
           : closing || leaving
             ? "sheet-out md:animate-fade-out"
@@ -246,10 +269,13 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
               : "sheet-in md:animate-fade-in"
       }`}
       style={{
-        zIndex: 48,
+        // Un cran sous la fiche de titre qui la recouvre, un cran au-dessus du panneau d'où l'on
+        // vient — c'est exactement la place qui manquait. Voir PlayerPanelFrame pour l'échelle.
+        zIndex: underneath ? 47 : 48,
+        pointerEvents: underneath ? "none" : undefined,
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
-        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+        transform: !underneath && swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
         // elle *est* où il est. C'est le relâchement qu'on adoucit — le retour en place comme le
         // reste du chemin vers le bas.
@@ -323,7 +349,7 @@ export function PlayerPersonSheet({ tmdbId, leaving = false }: { tmdbId: number;
                   pas ce mouvement pour son propre défilement, sinon il vole le flux de pointeurs
                   au milieu du glissement. Le reste de la fiche défile normalement. */}
               <div
-                {...(isMobile ? swipe.handlers : {})}
+                {...(isMobile && !underneath ? swipe.handlers : {})}
                 style={isMobile ? { touchAction: "none" } : undefined}
                 className={`flex gap-6 ${short ? "flex-row items-start" : "flex-col sm:flex-row sm:items-start"} ${isMobile ? "pr-12" : ""}`}
               >

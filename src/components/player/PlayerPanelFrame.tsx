@@ -16,9 +16,15 @@ import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
  * porte de `transform`), le décalage du rail, et la fermeture — Échap, la croix, et le retour du
  * navigateur, qui doivent toutes les trois faire exactement la même chose.
  *
- * L'ordre des plans, de bas en haut : la grille (45), les panneaux (46), les fiches de titre et
- * de personne (47), les fenêtres qu'une fiche ouvre — synopsis, épisodes (49) — et le rail (50),
- * toujours au-dessus, parce que la navigation ne doit jamais être hors d'atteinte.
+ * L'ordre des plans, de bas en haut : la grille (45), les panneaux (46), une fiche personne
+ * *recouverte* par une fiche de titre (47), les fiches de titre (48) et la personne ou la
+ * découverte quand elles sont dessus (48 elles aussi, la coquille étant rendue après la grille),
+ * les fenêtres qu'une fiche ouvre — synopsis, épisodes (49) — et le rail (50), toujours
+ * au-dessus, parce que la navigation ne doit jamais être hors d'atteinte.
+ *
+ * Le 47 a été libéré le 19/09/2026 : il n'y avait aucun cran entre le panneau et la fiche de
+ * titre, donc une fiche personne ouverte *avant* un film n'avait nulle part où se tenir — elle
+ * passait forcément devant lui, ou disparaissait. Voir `personIsBelow`.
  *
  * Ce qui compte ici : une fiche passe **par-dessus** un panneau et ne le referme pas. C'est ce
  * qui fait qu'un retour depuis un film ouvert en cherchant ramène sur la recherche, avec la

@@ -10,7 +10,7 @@ import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
-import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle, personIsBelow } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -532,8 +532,14 @@ export function CinemaClient() {
   // (recherche, Ma liste, compte) la recouvre, et sans cette garde on déplaçait le focus dans des
   // affiches invisibles pendant qu'on lisait autre chose.
   const panelOpen = searchOpen || route.list || route.account;
-  /** Une fiche TMDB ou une fiche personne est ouverte par-dessus celles de la bibliothèque. */
-  const sheetAbove = route.discover !== null || route.person !== null;
+  const routeBehind = useRouteBehind();
+  /**
+   * Une fiche TMDB ou une fiche personne est ouverte par-dessus celles de la bibliothèque.
+   *
+   * « Par-dessus » et non « en même temps » : une personne dont on vient est dessous, et la fiche
+   * de titre reste alors celle du dessus. Voir `personIsBelow`.
+   */
+  const sheetAbove = route.discover !== null || (route.person !== null && !personIsBelow(route, routeBehind));
   useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen);
 
   // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
@@ -658,7 +664,7 @@ export function CinemaClient() {
   if (route.browse !== null && route.browse !== lastBrowse) setLastBrowse(route.browse);
 
   const noop = useCallback(() => {}, []);
-  const behind = useRouteBehind();
+  const behind = routeBehind;
   const movieStack = useMemo(() => {
     if (!selectedItem) return [];
     const under =

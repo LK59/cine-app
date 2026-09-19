@@ -238,7 +238,7 @@ export function CinemaMovieDetail({
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
       inert={underneath}
       aria-hidden={underneath || undefined}
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{ zIndex: 48, paddingLeft: "var(--player-rail, 0px)" }}
     >
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind, personIsBelow } from "@/lib/cinemaRoute";
 import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { preload } from "swr";
 import { fetcher } from "@/lib/swr";
@@ -99,7 +99,19 @@ export function PlayerShell() {
    * TMDB. `useRouteBehind` ne rend un objet que pour une fiche de bibliothèque — c'est ce qui les
    * distingue.
    */
-  const behindIsLibrarySheet = useRouteBehind() !== null;
+  const behind = useRouteBehind();
+  // `useRouteBehind` rend désormais un objet pour une personne recouverte aussi : ce qui distingue
+  // les fiches TMDB entre elles reste « une fiche de *bibliothèque* derrière », pas « quelque
+  // chose derrière ».
+  const behindIsLibrarySheet = behind !== null && (behind.film !== null || behind.serie !== null);
+  /**
+   * La personne est-elle sous la fiche de titre, ou dessus ?
+   *
+   * L'adresse ne le dit pas : elle porte les deux, et les deux ordres sont légitimes — un acteur
+   * ouvert depuis un film, un film ouvert depuis une filmographie. Seule l'entrée précédente
+   * tranche. Voir `personIsBelow`, écrit une fois pour la coquille et les deux écrans cinéma.
+   */
+  const personBelow = personIsBelow(route, behind);
   const sheetExitMs =
     useSheetBehind() && !behindIsLibrarySheet ? 0 : isMobile ? SHEET_OUT_MS : EXIT_MS;
   const person = useExitDelay(route.person !== null, sheetExitMs);
@@ -179,8 +191,16 @@ export function PlayerShell() {
            
            Clé prise sur la *dernière* valeur et non sur l'adresse : elle ne bouge pas pendant la
            sortie, qui garde ainsi son animation. */
-        <PlayerPersonSheet key={lastPerson} tmdbId={lastPerson} leaving={person.leaving} />
-      ) : discover.render && lastDiscover !== null ? (
+        <PlayerPersonSheet
+          key={lastPerson}
+          tmdbId={lastPerson}
+          leaving={person.leaving}
+          underneath={personBelow}
+        />
+      ) : null}
+      {/* Elle passe *aussi* quand la personne est dessous — une seule fiche à la fois reste la
+          règle pour deux écrans du dessus, pas pour un écran du dessus et celui qu'il recouvre. */}
+      {discover.render && lastDiscover !== null && (!person.render || personBelow) ? (
         <PlayerDiscoverSheet
           key={`${lastDiscoverType}:${lastDiscover}`}
           tmdbId={lastDiscover}
