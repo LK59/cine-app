@@ -269,22 +269,18 @@ export function dailyTop10<T extends ThemedItem>(
   memory?: Top10Memory
 ): DailyTop10<T> {
   /**
-   * Le thème d'aujourd'hui est retenu ; ceux d'hier sont seulement relus.
+   * Le thème d'un jour : celui qu'on a retenu, sinon celui que la date désigne.
    *
-   * Écrire les jours passés fabriquerait une histoire qui n'a jamais été montrée — la première
-   * installation les inventerait tous. Ils sont donc recalculés quand la base ne les a pas, ce
-   * qui est exactement ce que faisait la version précédente.
+   * Les jours passés ne sont jamais écrits — une première installation les inventerait tous, et
+   * cette histoire-là n'a jamais été montrée à personne. Ils sont recalculés quand la base ne les
+   * a pas, exactement comme avant.
    */
   const themeFor = (d: string): Top10Theme | null => {
     const known = memory?.recall(d);
-    if (known !== undefined) return known;
-    const theme = themeOfDay(items, d);
-    if (d === day) memory?.remember(d, theme);
-    return theme;
+    return known !== undefined ? known : themeOfDay(items, d);
   };
 
   const todaysTheme = themeFor(day);
-  if (todaysTheme === null) return { theme: null, items: top10Rail(items) };
 
   const pick = (d: string, banned: ReadonlySet<string | number>) => {
     const theme = d === day ? todaysTheme : themeFor(d);
@@ -293,6 +289,25 @@ export function dailyTop10<T extends ThemedItem>(
     return { theme, items: top10Rail(pool) };
   };
 
+  /**
+   * On ne retient qu'une réponse qu'on sait saine — et c'est la moitié qui manquait.
+   *
+   * Vérifié sur la production dès le premier déploiement : la ligne du jour avait été écrite
+   * *vide*. Aucun thème, donc un catalogue trop maigre pour en porter un — la panne même qu'on
+   * cherchait à figer, figée pour vingt-quatre heures. « Le premier a raison » n'est vrai que si
+   * le premier sait de quoi il parle. Une journée sans thème reste donc ouverte : elle est servie
+   * telle quelle, sur toute la collection, et la prochaine réponse saine l'emportera.
+   *
+   * La condition des dix titres, elle, ne couvre pas ce cas-là — un thème éligible en compte dix
+   * par construction, donc un thème calculé en rend toujours dix. Elle couvre l'autre : un thème
+   * **relu en base** que la bibliothèque d'aujourd'hui ne peut plus remplir. On ne réécrit alors
+   * rien, ce qui est de toute façon ce qu'on veut, et la garde reste juste si le seuil
+   * d'éligibilité change un jour.
+   */
+  const healthy = todaysTheme !== null && pick(day, new Set()).items.length === 10;
+  if (memory && healthy && memory.recall(day) === undefined) memory.remember(day, todaysTheme);
+
+  if (todaysTheme === null) return { theme: null, items: top10Rail(items) };
   if (!keyOf) return { theme: todaysTheme, items: pick(day, new Set()).items };
 
   /**

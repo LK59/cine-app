@@ -252,3 +252,42 @@ describe("le palmarès du jour — la mémoire", () => {
     expect([...m.rows.keys()]).toEqual([JOUR]);
   });
 });
+
+/**
+ * Et surtout : ne pas figer une panne.
+ *
+ * Vérifié sur la production au premier déploiement — la ligne du jour avait été écrite *vide*,
+ * c'est-à-dire qu'un catalogue trop maigre pour porter un thème venait de s'installer pour
+ * vingt-quatre heures. « Le premier a raison » n'est vrai que si le premier sait de quoi il parle.
+ */
+describe("le palmarès du jour — ne pas retenir une réponse malade", () => {
+  const JOUR = "2026-09-19";
+
+  function memoire(): Top10Memory & { rows: Map<string, Top10Theme | null> } {
+    const rows = new Map<string, Top10Theme | null>();
+    return {
+      rows,
+      recall: (day) => (rows.has(day) ? rows.get(day)! : undefined),
+      remember: (day, theme) => { if (!rows.has(day)) rows.set(day, theme); },
+    };
+  }
+
+  it("n'écrit rien quand la bibliothèque ne porte aucun thème", () => {
+    const m = memoire();
+    // Trois films : aucun genre n'atteint les dix titres, donc aucun thème éligible.
+    const maigre = [film(7, ["Thriller"], 1995), film(6, ["Comedy"], 2015), film(5, ["Thriller"], 1995)];
+    const { theme } = dailyTop10(maigre, JOUR, (i) => (i as unknown as { id: number }).id, m);
+    expect(theme).toBeNull();
+    expect(m.rows.size).toBe(0);
+  });
+
+  // Et la journée reste ouverte : la première réponse saine l'emporte et devient celle de tous.
+  it("retient la première réponse saine, même si une malade l'a précédée", () => {
+    const m = memoire();
+    dailyTop10([film(7, ["Thriller"], 1995)], JOUR, (i) => (i as unknown as { id: number }).id, m);
+    expect(m.rows.size).toBe(0);
+
+    const { theme } = dailyTop10(collection(), JOUR, (i) => (i as unknown as { id: number }).id, m);
+    expect(m.rows.get(JOUR)).toEqual(theme);
+  });
+});
