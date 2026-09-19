@@ -86,6 +86,47 @@ describe("getTitleArt", () => {
   it("answers with nothing rather than throwing when TMDB fails", async () => {
     mockGetMovieImages.mockRejectedValue(new Error("429"));
     const { getTitleArt } = await import("@/lib/title-art");
-    expect(await getTitleArt(603, "movie")).toEqual({ logoUrl: null, posterTextlessUrl: null });
+    expect(await getTitleArt(603, "movie")).toEqual({ logoUrl: null, posterTextlessUrl: null, posterByLang: {} });
+  });
+});
+
+/**
+ * L'affiche dans la langue de l'interface, l'originale sinon.
+ *
+ * Signalé le 19/09/2026 : « Le Prénom » dans une rangée, « What's in a Name? » dans la suivante.
+ * Radarr ne connaît qu'une affiche par film — celle que TMDB sert par défaut —, alors que les
+ * rangées venues de TMDB étaient déjà dans la langue du site.
+ */
+describe("l'affiche selon la langue", () => {
+  it("retient la mieux notée de chaque langue de l'interface", async () => {
+    mockGetMovieImages.mockResolvedValue({
+      logos: [],
+      posters: [
+        { file_path: "/fr-mauvaise.jpg", iso_639_1: "fr", vote_average: 2 },
+        { file_path: "/fr-bonne.jpg", iso_639_1: "fr", vote_average: 9 },
+        { file_path: "/en.jpg", iso_639_1: "en", vote_average: 5 },
+        { file_path: "/muette.jpg", iso_639_1: null, vote_average: 8 },
+      ],
+    });
+
+    const { getTitleArt } = await import("@/lib/title-art");
+    const art = await getTitleArt(700001, "movie");
+    expect(art.posterByLang.fr).toContain("/fr-bonne.jpg");
+    expect(art.posterByLang.en).toContain("/en.jpg");
+    // Une langue sans affiche n'en invente pas : l'appelant retombe alors sur celle de Radarr.
+    expect(art.posterByLang.es).toBeUndefined();
+    expect(art.posterByLang.de).toBeUndefined();
+  });
+
+  // La taille des vignettes de rangée, la même que celle demandée aux visuels de Radarr : la
+  // remplacer ne doit changer ni le poids ni la netteté.
+  it("la demande à la taille des vignettes", async () => {
+    mockGetMovieImages.mockResolvedValue({
+      logos: [],
+      posters: [{ file_path: "/a.jpg", iso_639_1: "fr", vote_average: 1 }],
+    });
+    const { getTitleArt } = await import("@/lib/title-art");
+    const art = await getTitleArt(700002, "movie");
+    expect(art.posterByLang.fr).toContain("/w342/");
   });
 });

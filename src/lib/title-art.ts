@@ -1,5 +1,6 @@
 import { tmdb, TMDB_IMAGE_BASE, type TmdbImage } from "@/lib/clients/tmdb";
 import { withPersistentCache } from "@/lib/server-cache";
+import { LOCALES, type Locale } from "@/lib/i18n";
 
 export interface TitleArt {
   /** Le logo du titre — une image transparente, pas une affiche. `null` s'il n'y en a pas. */
@@ -16,9 +17,22 @@ export interface TitleArt {
    * ce qui vaut toujours mieux qu'un visuel muet.
    */
   posterTextlessUrl: string | null;
+  /**
+   * L'affiche dans chacune des langues de l'interface, quand TMDB en a une.
+   *
+   * Signalé le 19/09/2026, capture à l'appui : « Le Prénom » s'affichait sous son titre français
+   * dans la rangée des recommandations et sous « What's in a Name? » dans Ma liste. Les deux
+   * disaient vrai à leur façon — les recommandations viennent de TMDB, interrogé dans la langue
+   * du site, et tout le reste de Radarr, qui ne connaît qu'une affiche par film, celle que TMDB
+   * sert par défaut. Deux sources pour une même chose, donc deux réponses.
+   *
+   * Elles sont toutes retenues ici, et le choix se fait à l'affichage : le catalogue est unique
+   * et servi à tout le foyer, alors que la langue, elle, appartient à chacun.
+   */
+  posterByLang: Partial<Record<Locale, string>>;
 }
 
-const EMPTY: TitleArt = { logoUrl: null, posterTextlessUrl: null };
+const EMPTY: TitleArt = { logoUrl: null, posterTextlessUrl: null, posterByLang: {} };
 
 /**
  * Une file d'attente pour les appels à TMDB.
@@ -69,6 +83,23 @@ function pickTextlessPoster(posters: TmdbImage[]): string | null {
 }
 
 /**
+ * La meilleure affiche de chaque langue, quand il y en a une.
+ *
+ * `w342`, la taille des vignettes de rangée — la même que celle demandée aux visuels de Radarr,
+ * pour que remplacer l'un par l'autre ne change rien au poids ni à la netteté.
+ */
+function postersByLang(posters: TmdbImage[]): Partial<Record<Locale, string>> {
+  const out: Partial<Record<Locale, string>> = {};
+  for (const locale of LOCALES) {
+    const best = posters
+      .filter((p) => p.iso_639_1 === locale)
+      .sort((a, b) => b.vote_average - a.vote_average)[0];
+    if (best) out[locale] = `${TMDB_IMAGE_BASE}/w342${best.file_path}`;
+  }
+  return out;
+}
+
+/**
  * Le logo d'un titre et son affiche sans texte, en un seul appel et une seule entrée de cache.
  *
  * Les deux sortent de la même réponse `/images` de TMDB, qui était déjà demandée pour le logo :
@@ -78,13 +109,17 @@ function pickTextlessPoster(posters: TmdbImage[]): string | null {
  */
 export async function getTitleArt(tmdbId: number, mediaType: "movie" | "series"): Promise<TitleArt> {
   if (!tmdb.isEnabled() || !tmdbId) return EMPTY;
-  return withPersistentCache<TitleArt>(`tmdb:art:${mediaType}:${tmdbId}`, 7 * 24 * 3600_000, async () => {
+  // `v2` : la forme a changé (les affiches par langue s'y ajoutent), et une entrée de la version
+  // précédente relue telle quelle rendrait un catalogue sans aucune affiche localisée pendant une
+  // semaine, sans que rien ne le signale.
+  return withPersistentCache<TitleArt>(`tmdb:art:v2:${mediaType}:${tmdbId}`, 7 * 24 * 3600_000, async () => {
     const images = await withSlot(() =>
       mediaType === "movie" ? tmdb.getMovieImages(tmdbId) : tmdb.getTvImages(tmdbId)
     );
     return {
       logoUrl: pickLogo(images.logos ?? []),
       posterTextlessUrl: pickTextlessPoster(images.posters ?? []),
+      posterByLang: postersByLang(images.posters ?? []),
     };
   }).catch(() => EMPTY);
 }

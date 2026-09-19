@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedMovies, cachedJellyfinMoviesAdmin, findJellyfinMovieByTmdb } from "@/lib/server-cache";
-import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
+import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
+import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
@@ -94,7 +95,7 @@ export interface CinemaMoviesWire {
 // /api/radarr/movies/[id]/info route already populates), so only the very first request after a
 // cold cache pays the full TMDB round-trip for the whole library at once — every request after
 // that, including this one, is cache reads only.
-async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<CinemaMovie> {
+async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Locale): Promise<CinemaMovie> {
   // Le logo et l'affiche sans texte viennent de la même réponse TMDB et de la même entrée de
   // cache : la seconde ne coûte donc pas un appel de plus.
   const art = await getTitleArt(m.tmdbId, "movie");
@@ -106,7 +107,8 @@ async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string): Promise<Ci
     title: m.title,
     ...(m.originalTitle && m.originalTitle !== m.title ? { originalTitle: m.originalTitle } : {}),
     year: m.year,
-    posterUrl: posterUrl(m.images, "thumb"),
+    // L'affiche dans la langue de qui regarde, celle de Radarr sinon. Voir `libraryPoster`.
+    posterUrl: libraryPoster(art.posterByLang, m.images, locale),
     backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
     logoUrl: art.logoUrl,
     posterTextlessUrl: art.posterTextlessUrl,
@@ -177,7 +179,8 @@ export async function GET(req: Request) {
       .map((m) => ({ m, jfItem: findJellyfinMovieByTmdb(jellyfinMovies, m.tmdbId, m.title, m.year, m.imdbId ?? null) }))
       .filter((x): x is { m: RadarrMovie; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
 
-    const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id)));
+    const locale = localeOf(req);
+    const cinemaMovies = await Promise.all(matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id, locale)));
 
     const byRadarrId = new Map<number, CinemaMovie>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois

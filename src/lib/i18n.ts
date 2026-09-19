@@ -78,3 +78,19 @@ export function getVideoLangs(locale: string | undefined | null): string {
     default:   return "fr,en,null";
   }
 }
+
+/**
+ * La langue d'une requête, lue sur son cookie.
+ *
+ * Les routes qui servent des visuels en ont besoin — l'affiche d'un film suit la langue de qui
+ * regarde — et elles reçoivent un `Request` nu, sans l'aide de Next sur les cookies. Une ligne,
+ * mais écrite trois fois avant d'atterrir ici.
+ */
+export function localeOf(req: { headers?: { get(name: string): string | null } }): Locale {
+  // Une requête sans en-têtes n'est pas une anomalie à signaler : le français est la valeur par
+  // défaut de cette installation, et c'est exactement ce que rend un cookie absent.
+  const cookie = req.headers?.get("cookie") ?? "";
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]+)`));
+  const raw = match ? decodeURIComponent(match[1]) : "";
+  return LOCALES.includes(raw as Locale) ? (raw as Locale) : "fr";
+}

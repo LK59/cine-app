@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { upstreamFailure } from "@/lib/upstreamResponse";
 import { cachedJson } from "@/lib/cachedJson";
 import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
-import { posterUrl, backdropUrl, tmdbResize } from "@/lib/images";
+import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
+import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
@@ -51,7 +52,7 @@ export interface CinemaSeriesWire {
 // (Skyhook, free), but Sonarr doesn't for series, hence the extra getImdbRating() call here
 // (OMDb-backed, 24h persistently cached — same helper the dashboard route already uses for its
 // own "recently added series" rail).
-async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<CinemaSeries> {
+async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: Locale): Promise<CinemaSeries> {
   // Independent lookups (different upstreams, different cache keys) — run concurrently rather
   // than one after the other, halving the cold-cache latency per series that hasn't been seen
   // by either cache before (steady state is unaffected either way, both are cache reads then).
@@ -66,7 +67,8 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string): Promise<
     tmdbId: s.tmdbId ?? null,
     title: s.title,
     year: s.year,
-    posterUrl: posterUrl(s.images, "thumb"),
+    // Voir `libraryPoster` : la langue de qui regarde, l'affiche de Sonarr sinon.
+    posterUrl: libraryPoster(art.posterByLang, s.images, locale),
     backdropUrl: tmdbResize(backdropUrl(s.images, "full"), "w1280"),
     logoUrl: art.logoUrl,
     posterTextlessUrl: art.posterTextlessUrl,
@@ -96,7 +98,8 @@ export async function GET(req: Request) {
       .map((s) => ({ s, jfItem: findJellyfinSeriesByTvdb(jellyfinSeries, s.tvdbId, s.title, s.year) }))
       .filter((x): x is { s: SonarrSeries; jfItem: NonNullable<typeof x.jfItem> } => x.jfItem !== null);
 
-    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id)));
+    const locale = localeOf(req);
+    const cinemaSeries = await Promise.all(matched.map(({ s, jfItem }) => toCinemaSeries(s, jfItem.Id, locale)));
 
     const bySonarrId = new Map<number, CinemaSeries>();
     // Des identifiants, pas des titres : un film à trois genres n'a pas à être écrit trois

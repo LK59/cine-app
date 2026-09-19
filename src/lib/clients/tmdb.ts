@@ -154,6 +154,9 @@ function enabled(): boolean {
   return Boolean(apiKey);
 }
 
+/** Les quatre langues de l'interface, plus les visuels sans texte. Voir `getMovieImages`. */
+const IMAGE_LANGS = "fr,en,es,de,null";
+
 function createTmdbClient(lang = "fr-FR") {
   const videoLangs = lang.startsWith("en") ? "en,null" : lang.startsWith("es") ? "es,en,null" : "fr,en,null";
   return {
@@ -218,13 +221,22 @@ function createTmdbClient(lang = "fr-FR") {
     // `posters` arrive dans la même réponse et n'étaient simplement pas déclarés. C'est ce qui
     // permet de récupérer une affiche sans texte — `iso_639_1: null` chez TMDB — sans un seul
     // appel de plus : `include_image_language` demande déjà « fr, en, et sans langue ».
+    /*
+     * Les visuels, dans les quatre langues de l'application et sans langue.
+     *
+     * `videoLangs` suit la langue du client et servait aussi ici : une installation en français
+     * ne recevait donc jamais les affiches espagnoles ni allemandes. Or ces images ne sont pas
+     * demandées pour un lecteur mais pour *le catalogue*, qui est unique et servi à tout le
+     * foyer — c'est au moment de l'afficher qu'on choisit la langue, pas au moment de la
+     * demander. Une seule liste, mise en cache une semaine, et chacun y lit la sienne.
+     */
     getMovieImages: (tmdbId: number) =>
       fetchJson<TmdbImages>(
-        `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${videoLangs}`
+        `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${IMAGE_LANGS}`
       ),
     getTvImages: (tmdbTvId: number) =>
       fetchJson<TmdbImages>(
-        `${BASE}/tv/${tmdbTvId}/images?api_key=${apiKey}&include_image_language=${videoLangs}`
+        `${BASE}/tv/${tmdbTvId}/images?api_key=${apiKey}&include_image_language=${IMAGE_LANGS}`
       ),
     getPersonDetails: (personId: number) =>
       fetchJson<{

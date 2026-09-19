@@ -6,7 +6,9 @@ import { migrateFavoritesToWatchlist } from "@/lib/migrateFavorites";
 import { cachedJellyfinPlayed, cachedJellyfinFavorites, getProviderIdCI } from "@/lib/server-cache";
 import { playableLibrary } from "@/lib/playerLibrary";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
-import { posterUrl } from "@/lib/images";
+import { posterUrl, libraryPoster } from "@/lib/images";
+import { getTitleArt } from "@/lib/title-art";
+import { localeOf } from "@/lib/i18n";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { config } from "@/lib/config";
@@ -107,6 +109,28 @@ export async function GET(req: NextRequest) {
     const seriesLibrary = lib.series;
 
     const local = watchlistDb.getAll(userId);
+    /**
+     * Les affiches localisées des titres qu'on possède, lues au même endroit que le catalogue.
+     *
+     * Sans ça, « Ma liste » montrait l'affiche de Radarr là où la rangée d'à côté montrait celle
+     * du site — le défaut signalé le 19/09/2026. `getTitleArt` est en cache disque une semaine et
+     * ne concerne ici que les titres de la liste, qui se comptent en dizaines.
+     */
+    const locale = localeOf(req);
+    // Dans sa propre garde : une affiche est un ornement, et rien de ce qui la cherche ne doit
+    // pouvoir emporter la liste elle-même. C'est la règle de CLAUDE.md sur les vérifications qui
+    // tournent sur le chemin d'erreur d'autrui — ici, on retombe simplement sur l'affiche de
+    // Radarr, c'est-à-dire sur ce qui s'affichait hier.
+    const artByTmdb = await Promise.all(
+      local.map(async (w) => {
+        const entry = w.mediaType === "series" ? seriesLibrary.get(w.tmdbId) : movieLibrary.get(w.tmdbId);
+        if (!entry) return [w.tmdbId, undefined] as const;
+        const art = await getTitleArt(w.tmdbId, w.mediaType === "series" ? "series" : "movie");
+        return [w.tmdbId, art.posterByLang] as const;
+      })
+    )
+      .then((rows) => new Map(rows))
+      .catch(() => new Map<number, Partial<Record<string, string>> | undefined>());
     const fromWatchlist = (statuses: string[]): PlayerListItem[] =>
       local
         .filter((w) => statuses.includes(w.status))
@@ -120,7 +144,9 @@ export async function GET(req: NextRequest) {
             // L'affiche de la bibliothèque quand on l'a : c'est celle que le reste de l'interface
             // montre, et elle est à jour. Celle enregistrée dans la liste sert de repli — pour un
             // titre qu'on ne possède pas, c'est la seule.
-            poster: (entry ? posterUrl(entry.images) : null) ?? watchlistPoster(w.posterPath),
+            poster:
+              (entry ? libraryPoster(artByTmdb.get(w.tmdbId), entry.images, locale) : null) ??
+              watchlistPoster(w.posterPath),
             libraryId: entry?.id ?? null,
             jellyfinId: null,
             addedAt: w.updatedAt,

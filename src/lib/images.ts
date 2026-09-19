@@ -54,3 +54,26 @@ export function tmdbResize(url: string | null | undefined, size: string): string
   if (!/^https?:\/\/(image\.tmdb\.org|www\.themoviedb\.org)\//.test(url)) return url;
   return url.replace(/\/(original|w\d+)\//, `/${size}/`);
 }
+
+/**
+ * L'affiche d'un titre de la bibliothèque, dans la langue de qui regarde.
+ *
+ * Un seul endroit décide, et c'est tout l'objet de cette fonction. Avant elle, chaque écran
+ * prenait l'affiche là où il en trouvait une : Radarr et Sonarr pour le catalogue et Ma liste,
+ * TMDB interrogé dans la langue du site pour les recommandations. Radarr ne connaît qu'une
+ * affiche par film — celle que TMDB sert par défaut, presque toujours l'originale —, si bien que
+ * « Le Prénom » apparaissait sous ce nom dans une rangée et sous « What's in a Name? » dans la
+ * suivante. Signalé le 19/09/2026, capture à l'appui.
+ *
+ * L'ordre est celui que Louis a demandé, et c'est aussi celui de TMDB lui-même : la langue de
+ * l'application si elle existe, l'affiche d'origine sinon. Cette dernière est justement celle que
+ * Radarr porte déjà — il n'y a donc aucun repli à aller chercher, et un titre sans affiche
+ * localisée s'affiche exactement comme aujourd'hui.
+ */
+export function libraryPoster(
+  posterByLang: Partial<Record<string, string>> | undefined,
+  images: RadarrSonarrImage[] | undefined,
+  locale: string
+): string | null {
+  return posterByLang?.[locale] ?? posterUrl(images, "thumb");
+}
