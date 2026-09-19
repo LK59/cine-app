@@ -122,6 +122,14 @@ export function PlayerShell() {
   // L'identifiant survit à sa disparition de l'adresse, le temps que la fiche finisse de sortir :
   // sans lui, elle se viderait de son contenu avant de s'en aller.
   const lastPerson = useLastValue(route.person);
+  /**
+   * Qui est la fiche personne, et à quel étage.
+   *
+   * `personTop` quand elle est l'écran du dessus, `personUnder` quand un film la recouvre — et
+   * `personId` les réunit, parce que c'est le même acteur et que ce doit être le même nœud.
+   */
+  const personTop = person.render && lastPerson !== null ? lastPerson : null;
+  const personId = personTop ?? personUnder;
   const lastDiscover = useLastValue(route.discover);
   // Le type suit l'identifiant : sans lui, une fiche de série en train de sortir repassait sur
   // « film » — l'adresse ayant repris sa valeur par défaut — et allait rechercher le mauvais
@@ -172,28 +180,31 @@ export function PlayerShell() {
       {search.render && <PlayerSearchPanel leaving={search.leaving} />}
       {list.render && <PlayerListPanel leaving={list.leaving} />}
       {account.render && <PlayerAccountPanel leaving={account.leaving} />}
-      {/* Une seule fiche à la fois, la plus profonde. Elles partagent le même plan (47) : deux
-          rendues ensemble se recouvraient dans l'ordre de montage, et surtout écoutaient Échap
-          toutes les deux — une touche remontait alors de deux crans. L'historique garde la
-          précédente, et le retour la rouvre.
+      {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
+          de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
+          deux crans. L'historique garde la précédente, et le retour la rouvre.
 
-          L'ordre dit la profondeur : depuis une fiche de titre on ouvre un acteur, et depuis un
-          acteur une autre fiche de titre. La personne est donc toujours au-dessus. */}
-      {person.render && lastPerson !== null ? (
-        /* Un autre titre est une autre fiche — même raison que le `key` du lecteur sur son film.
-           
-           Sans lui, aller d'un titre à un « titre similaire » réutilisait l'instance, qui est
-           pourtant écrite comme si elle n'en servait qu'un : `arrivedByBack` n'est lu qu'au
-           montage, le focus ne se repose plus, le défilement reste celui du titre précédent, et
-           surtout une fermeture lancée juste avant l'empilement continuait de courir sur la
-           fiche suivante — l'historique reculait tout seul, et la fiche restait bloquée en
-           sortie. Sur téléphone, la barre de navigation s'efface tant qu'une fiche est ouverte :
-           elle ne revenait donc jamais. Remonter coupe le minuteur en attente (voir le nettoyage
-           de `useDelayedClose`) et redonne une instance neuve.
-           
-           Clé prise sur la *dernière* valeur et non sur l'adresse : elle ne bouge pas pendant la
-           sortie, qui garde ainsi son animation. */
-        <PlayerPersonSheet key={lastPerson} tmdbId={lastPerson} leaving={person.leaving} />
+          La fiche personne fait exception, et d'une seule façon : elle peut aussi être le *fond*
+          de la pile, sous un film ouvert depuis sa filmographie. C'est le même nœud, pas un
+          second — voir juste en dessous. */}
+      {/* Une seule et même instance, qu'elle soit dessus ou dessous.
+          Elle occupait deux emplacements du JSX — celui du dessus et celui du fond de la pile —,
+          donc ouvrir un film depuis une filmographie la démontait pour en monter une autre, avec
+          la même identité et le même contenu, à l'instant précis où la fiche du film se monte
+          elle aussi. Sur un téléphone, ça se sent. Un seul emplacement et une clé stable : React
+          garde le nœud, seul `underneath` change, et le défilement de la filmographie est même
+          retrouvé tel quel en refermant le film. */}
+      {personId !== null ? (
+        <PlayerPersonSheet
+          /* Un autre acteur est une autre fiche — même raison que le `key` du lecteur sur son
+             film : `arrivedByBack` n'est lu qu'au montage, le défilement et le focus sont ceux de
+             la fiche précédente, et une fermeture lancée juste avant l'échange continuerait de
+             courir sur la suivante. */
+          key={personId}
+          tmdbId={personId}
+          leaving={personTop !== null && person.leaving}
+          underneath={personTop === null}
+        />
       ) : discover.render && lastDiscover !== null ? (
         <PlayerDiscoverSheet
           key={`${lastDiscoverType}:${lastDiscover}`}
@@ -202,9 +213,6 @@ export function PlayerShell() {
           leaving={discover.leaving}
         />
       ) : null}
-      {/* Le fond de la pile. Rendu après les panneaux et avant rien : la fiche de titre, qui vient
-          de l'écran cinéma, est au 48 et passe donc par-dessus. */}
-      {personUnder !== null && <PlayerPersonSheet key={`sous-${personUnder}`} tmdbId={personUnder} underneath />}
     </>
   );
 }

@@ -155,6 +155,21 @@ function PhotoViewer({
 const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
 
 /**
+ * Ce qu'on dessine à la première image, avant que le reste ne suive.
+ *
+ * Mesuré sur TMDB depuis cette installation : soixante-seize titres pour Ryan Gosling, **cent
+ * cinquante-huit** pour Brad Pitt. Une grille de cent cinquante-huit cartes construite d'un seul
+ * coup se sent sur un téléphone — c'est le micro-blocage signalé le 19/09/2026 « autour de la
+ * fiche personne ». Les images, elles, sont déjà différées par le navigateur ; ce qui coûte est le
+ * nombre de nœuds et le travail de React.
+ *
+ * Dix-huit remplissent l'écran à toutes les densités. Le reste arrive au temps mort suivant, donc
+ * avant même qu'un doigt ait pu descendre jusque-là : rien n'est retiré, seulement étalé sur deux
+ * images au lieu d'une.
+ */
+const FIRST_PAINT = 18;
+
+/**
  * La fiche d'une personne, dans le lecteur.
  *
  * Elle existait déjà côté gestion, en neuf cents lignes ; celle-ci en garde ce qui sert à
@@ -238,6 +253,36 @@ export function PlayerPersonSheet({
   // garde son ordre et on se contente de retirer les entrées sans titre.
   const credits = useMemo(() => (data?.credits ?? []).filter((c) => c.title), [data]);
   const owned = credits.filter((c) => c.inLibrary).length;
+
+  /**
+   * La filmographie entière, une image après la première.
+   *
+   * `setState` dans le rappel d'un temps mort, jamais dans le corps de l'effet — voir la règle du
+   * compilateur React dans CLAUDE.md. Le repli par minuteur couvre Safari, qui n'a pas
+   * `requestIdleCallback`.
+   *
+   * La fiche du dessous, elle, n'en sort jamais : elle est recouverte par une fiche pleine, on n'en
+   * voit que le haut pendant le glissement, et personne ne la fait défiler. Dix-huit cartes
+   * suffisent donc à ce qu'elle a à montrer — et c'est autant de travail en moins à l'instant
+   * précis où le film du dessus se monte.
+   */
+  const [complete, setComplete] = useState(false);
+  useEffect(() => {
+    // Armé sur l'arrivée des données, et non sur le montage : la filmographie vient d'une requête,
+    // donc au montage il n'y a rien à étaler et le temps mort passait avant elle — la borne ne
+    // servait alors jamais. Vérifié en test : soixante cartes dès la première image.
+    if (underneath || !data) return;
+    const fill = () => setComplete(true);
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    if (idle) {
+      const handle = idle(fill, { timeout: 300 });
+      return () => (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(handle);
+    }
+    const timer = window.setTimeout(fill, 60);
+    return () => clearTimeout(timer);
+  }, [underneath, data]);
+
+  const shownCredits = complete ? credits : credits.slice(0, FIRST_PAINT);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
@@ -401,7 +446,9 @@ export function PlayerPersonSheet({
                 </div>
               </div>
 
-              <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />
+              {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
+                  à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
+              {!underneath && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
 
               <div className={short ? "mt-6" : "mt-10"}>
                 <h2 className="font-display text-lg font-semibold text-white">
@@ -412,7 +459,7 @@ export function PlayerPersonSheet({
                 </h2>
 
                 <div className="player-grid mt-5 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                  {credits.map((c) => {
+                  {shownCredits.map((c) => {
                     const type = c.mediaType === "movie" ? "movie" : "series";
                     return (
                       <PlayerResultCard
