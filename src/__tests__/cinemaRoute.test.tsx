@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personIsBelow } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -275,14 +275,14 @@ describe("useRouteBehind", () => {
     expect(result.current).toBeNull(); // la grille, pas une fiche
 
     act(() => openLibraryTitle("movie", 2));
-    expect(result.current).toEqual({ film: 1, serie: null, tab: "movies", person: null });
+    expect(result.current).toEqual({ film: 1, serie: null, tab: "movies" });
   });
 
   it("carries the tab, since each one resolves only its own ids", () => {
     const { result } = renderHook(() => useRouteBehind());
     act(() => openLibraryTitle("series", 50));
     act(() => openLibraryTitle("movie", 42));
-    expect(result.current).toEqual({ film: null, serie: 50, tab: "series", person: null });
+    expect(result.current).toEqual({ film: null, serie: 50, tab: "series" });
   });
 
   // useSyncExternalStore exige une identité stable entre deux changements ; l'objet vient de
@@ -305,35 +305,40 @@ describe("useRouteBehind", () => {
  * la personne et inerte, et comme la barre du bas s'efface tant qu'une fiche est adressée,
  * l'écran restait sans navigation. Signalé le 19/09/2026.
  */
-describe("openLibraryTitle — ce qui la couvre, et ce qui vit dessous", () => {
-  it("garde la fiche personne d'où l'on vient, pour qu'elle vive sous le film", () => {
+describe("openLibraryTitle — ce qui la couvre se referme", () => {
+  it("referme la fiche personne d'où l'on vient", () => {
     const { result } = renderHook(() => useCinemaRoute());
     act(() => cinemaNavigate({ person: 6384 }));
     expect(result.current.person).toBe(6384);
 
-    // Elle reste adressée : c'est ce qui permet de la découvrir en tirant le film vers le bas, et
-    // de la retrouver en le refermant sans qu'elle se reconstruise.
     act(() => openLibraryTitle("movie", 42));
-    expect(result.current.person).toBe(6384);
+    expect(result.current.person).toBeNull();
     expect(result.current.film).toBe(42);
   });
 
-  // Et l'entrée précédente dit *où* elle se tient : elle seule le sait.
-  it("dit que la personne est dessous quand le film a été ouvert depuis elle", () => {
-    const route = renderHook(() => useCinemaRoute());
-    const behind = renderHook(() => useRouteBehind());
+  /**
+   * Et l'échange ne laisse rien voir entre les deux.
+   *
+   * C'est `useSheetBehind` qui le dit aux fiches de titre, et c'est ce qui remplace tout ce qu'on
+   * aurait pu bâtir pour garder la personne montée dessous : l'entrée qu'on recouvre portait un
+   * écran, donc la sortie n'a rien à découvrir et ne s'anime pas.
+   */
+  it("annonce qu'un écran attend derrière, pour supprimer l'animation de sortie", () => {
+    const { result } = renderHook(() => useSheetBehind());
+    act(() => cinemaNavigate({ search: true }));
     act(() => cinemaNavigate({ person: 6384 }));
+    expect(result.current).toBe(false); // un panneau n'est pas une fiche
+
     act(() => openLibraryTitle("movie", 42));
-    expect(personIsBelow(route.result.current, behind.result.current)).toBe(true);
+    expect(result.current).toBe(true);
   });
 
-  // L'ordre inverse, tout aussi légitime : un acteur ouvert depuis une fiche de film est dessus.
-  it("dit qu'elle est dessus quand elle a été ouverte depuis le film", () => {
-    const route = renderHook(() => useCinemaRoute());
-    const behind = renderHook(() => useRouteBehind());
-    act(() => openLibraryTitle("movie", 42));
-    act(() => cinemaNavigate({ person: 6384 }));
-    expect(personIsBelow(route.result.current, behind.result.current)).toBe(false);
+  // Mais une fiche de *bibliothèque* derrière reste dessinée : celle-là garde son glissement.
+  it("distingue une fiche de bibliothèque derrière, qui reste montée", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    act(() => openLibraryTitle("movie", 1));
+    act(() => openLibraryTitle("movie", 2));
+    expect(result.current).not.toBeNull();
   });
 
   it("en fait autant pour une fiche découverte", () => {
@@ -366,5 +371,6 @@ describe("openLibraryTitle — ce qui la couvre, et ce qui vit dessous", () => {
 
     act(() => openLibraryTitle("movie", 42));
     expect(result.current.search).toBe(true);
+    expect(result.current.person).toBeNull();
   });
 });

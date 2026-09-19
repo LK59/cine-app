@@ -8,7 +8,7 @@ import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
-import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle, personIsBelow } from "@/lib/cinemaRoute";
+import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
@@ -282,8 +282,6 @@ export function CinemaMobileClient() {
   const noop = useCallback(() => {}, []);
   const closeSheet = useCallback(() => cinemaClose({ film: null, serie: null }), []);
   const behind = useRouteBehind();
-  // Voir `personIsBelow` : l'adresse porte les deux, seule l'entrée précédente dit lequel est dessus.
-  const personBelow = personIsBelow(route, behind);
   const behindSelected = useMemo(() => {
     if (!behind || !selected) return null;
     /**
@@ -761,10 +759,7 @@ export function CinemaMobileClient() {
            * Rien à changer aux plans : la fiche découverte est au 48, une fiche recouverte au 47.
            * Il suffisait de la laisser exister.
            */
-          // Une fiche personne ouverte *depuis* cette fiche-ci la recouvre ; une fiche
-          // personne dont on vient, elle, est dessous — et la fiche de titre reste alors celle du
-          // dessus, donc vivante. Voir `personIsBelow`.
-          const covered = route.discover !== null || (route.person !== null && !personBelow);
+          const covered = route.discover !== null || route.person !== null;
           const top = !covered && i === stack.length - 1;
           return (
             <CinemaMobileDetail

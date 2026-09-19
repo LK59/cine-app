@@ -8,7 +8,7 @@ import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, 
 import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { arrivedByBack } from "@/lib/cinemaRoute";
+import { arrivedByBack, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
@@ -91,7 +91,28 @@ export function CinemaMobileDetail({
   // découvrait l'accueil quand la fiche du dessous n'était pas dessinée, ce qui n'est plus le cas
   // (voir la pile dans CinemaMobileClient). La carte redescend donc par où elle est venue, et ce
   // qu'elle recouvrait apparaît sous elle au fur et à mesure.
-  const { closing, requestClose } = useDelayedClose(onClose, SHEET_OUT_MS);
+  /**
+   * Une sortie qui ne découvre rien ne doit pas durer.
+   *
+   * Refermer une fiche ouverte depuis une filmographie faisait glisser le film vers le bas
+   * pendant 280 ms, et ce qu'on voyait dessous n'était pas l'acteur — il avait été refermé en
+   * ouvrant le film — mais l'écran de recherche, deux crans plus bas. L'acteur ne réapparaissait
+   * qu'à la fin. Signalé le 19/09/2026 : « ça affiche brièvement l'écran de recherche avant de
+   * réafficher la fiche personne ».
+   *
+   * Alors on ne l'anime pas : l'échange se fait dans un seul rendu, la fiche s'en va et l'acteur
+   * paraît au même instant. C'est ce que les deux fiches de la version bureau font depuis
+   * toujours, et ce qui manquait ici.
+   *
+   * La condition est en deux temps, et le second compte autant que le premier : quelque chose
+   * derrière (`useSheetBehind`), et ce quelque chose n'est **pas** une fiche de bibliothèque
+   * (`useRouteBehind`, qui ne rend un objet que pour celles-là). Une fiche de titre, elle, reste
+   * montée dessous — la sortie découvre exactement ce qu'il faut, et la supprimer priverait les
+   * « titres similaires » de leur glissement.
+   */
+  const behindIsDrawn = useRouteBehind() !== null;
+  const swapsInPlace = useSheetBehind() && !behindIsDrawn;
+  const { closing, requestClose } = useDelayedClose(onClose, swapsInPlace ? 0 : SHEET_OUT_MS);
   const similar = useCinemaSimilar(item, mediaType);
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.
@@ -248,7 +269,7 @@ export function CinemaMobileDetail({
       // Une fiche recouverte ne peut de toute façon être ni tirée ni fermée — ses gestes sont
       // débranchés —, donc les deux autres branches restent fausses pour elle.
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        swipe.touched ? "" : closing ? "sheet-out" : revealed ? "" : "sheet-in"
+        swipe.touched ? "" : closing ? (swapsInPlace ? "" : "sheet-out") : revealed ? "" : "sheet-in"
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
