@@ -933,7 +933,23 @@ function ActivePlayer({
     if (video.readyState >= 1) openPicker();
     else video.addEventListener("loadedmetadata", openPicker, { once: true });
 
-    const ended = () => onCastEnded?.(video.currentTime || 0);
+    /**
+     * Rendre la main, en disant d'où vient la décision.
+     *
+     * Sans cette ligne, une diffusion qui s'arrête ne laisse aucune trace : le journal ne montre
+     * que le lecteur natif qui redémarre, sans dire si c'est le téléviseur qui a lâché, le centre
+     * de contrôle du téléphone, ou nous. C'est précisément ce qui a coûté une demi-journée à
+     * comprendre le 19/09/2026, et la question se reposera.
+     */
+    const ended = (source: string) => {
+      reportPlayback("fallback", {
+        itemId,
+        title,
+        reason: `fin de diffusion (${source})`,
+        at: Math.round(video.currentTime || 0),
+      });
+      onCastEnded?.(video.currentTime || 0);
+    };
     const setActive = (active: boolean) => {
       castActiveRef.current = active;
       setCastActive(active);
@@ -944,13 +960,13 @@ function ActivePlayer({
       // arrivant, et un « faux » de départ n'est pas une diffusion qui s'arrête.
       const wasActive = castActiveRef.current;
       setActive(wireless);
-      if (!wireless && wasActive) ended();
+      if (!wireless && wasActive) ended("route sans fil perdue");
     };
     const onConnect = () => setActive(true);
     const onDisconnect = () => {
       const wasActive = castActiveRef.current;
       setActive(false);
-      if (wasActive) ended();
+      if (wasActive) ended("appareil distant déconnecté");
     };
     video.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
     video.remote?.addEventListener?.("connect", onConnect);
@@ -962,6 +978,10 @@ function ActivePlayer({
       video.remote?.removeEventListener?.("connect", onConnect);
       video.remote?.removeEventListener?.("disconnect", onDisconnect);
     };
+    // `itemId` et `title` ne servent qu'à nommer la ligne de journal ; les mettre en dépendance
+    // réarmerait les écouteurs de diffusion sur un changement d'épisode, ce qui perdrait la route
+    // en cours. Ils ne changent pas sans que cet effet ne soit déjà remonté par `videoKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [castSession, onCastEnded, videoKey]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
@@ -1111,6 +1131,24 @@ function ActivePlayer({
         setReconnecting(true);
         if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
         nativeErrorRetryTimer.current = setTimeout(() => {
+          /**
+           * Relu au moment d'agir, pas seulement au moment de l'erreur.
+           *
+           * Entre les deux il s'écoule plus d'une seconde, et c'est exactement la fenêtre dans
+           * laquelle le spectateur choisit son téléviseur dans le sélecteur : l'erreur précède la
+           * connexion, la garde du dessus la laisse passer, et la reprise arrive une seconde trop
+           * tard pour rompre une diffusion qui vient tout juste de s'établir. Deux lectures du même
+           * drapeau, aux deux instants où il peut décider.
+           */
+          if (castActiveRef.current) {
+            reportPlayback("error", {
+              itemId,
+              title,
+              reason: "reprise abandonnée : une diffusion s'est établie entre-temps",
+            });
+            setReconnecting(false);
+            return;
+          }
           startPlaybackRef.current({
             ...lastPlaybackOpts.current,
             resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
