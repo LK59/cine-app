@@ -1449,8 +1449,20 @@ function ActivePlayer({
               </div>
             </div>
           )}
+          {/* Sous la roue d'attente, et non en bas de l'écran.
+              Ces messages — « le chargement est toujours en cours », « reconnexion », « hors
+              ligne » — étaient collés au bord inférieur, c'est-à-dire exactement là où la barre de
+              progression et les commandes se posent : elles passaient par-dessus et le message
+              devenait illisible au moment précis où il sert. Signalé le 19/09/2026.
+
+              Ils rejoignent donc la roue, qui est déjà au centre et dit la même chose sans les
+              mots : un demi-écran plus deux rems et demie, soit juste sous elle. Et un plan
+              au-dessus des commandes, pour que plus rien ne les recouvre. */}
           {!error && !isMini && (isOffline || reconnecting || (loading && loadingLong)) && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div
+              className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-6"
+              style={{ top: "calc(50% + 2.5rem)" }}
+            >
               <div className="rounded-full bg-black/80 px-4 py-1.5 text-center text-xs text-white shadow-lg ring-1 ring-white/10">
                 {isOffline
                   ? t('player.offline')
@@ -1462,8 +1474,10 @@ function ActivePlayer({
           )}
           {/* Non-interactive by design — a measured signal (recent rebuffers + decoder dropped-
               frame ratio, see badConnection's own comment), not a settings toggle with a detail
-              view to open. Top-right so it never overlaps the bottom pill above, which the two
-              can legitimately show at the same time (e.g. offline AND already mid-rebuffer). */}
+              view to open. En haut à droite pour ne jamais recouvrir la pastille ci-dessus, que
+              les deux peuvent légitimement afficher en même temps (hors ligne *et* déjà en train
+              de se remplir). Elles se croisaient d'autant moins quand celle-ci était en bas ;
+              depuis qu'elle est sous la roue, l'écart reste large — un demi-écran contre 4,5 rem. */}
           {!error && !isMini && badConnection && (
             <div
               className="pointer-events-none absolute z-20 rounded-full bg-black/80 px-3 py-1 text-xs text-amber-300 shadow-lg ring-1 ring-white/10"
