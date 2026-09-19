@@ -4,7 +4,9 @@ import { dailyTop10, dayKey, type ThemedItem } from "@/lib/cinemaRails";
 // Le classement ne bouge pas — c'est ce qu'on classe qui change. Un palmarès qui se remélange
 // chaque matin n'est plus un palmarès : le premier d'hier disparaît sans que rien ne l'explique.
 
-const film = (note: number, genres: string[], year: number): ThemedItem => ({
+let prochain = 1;
+const film = (note: number, genres: string[], year: number): ThemedItem & { id: number } => ({
+  id: prochain++,
   imdbRating: String(note),
   addedAt: "2026-01-01T00:00:00Z",
   genres,
@@ -81,5 +83,82 @@ describe("dayKey", () => {
     expect(dayKey(new Date(2026, 8, 19, 0, 1))).toBe("2026-09-19");
     expect(dayKey(new Date(2026, 8, 19, 23, 59))).toBe("2026-09-19");
     expect(dayKey(new Date(2026, 8, 20, 0, 0))).toBe("2026-09-20");
+  });
+});
+
+describe("les tranches croisées", () => {
+  // « Comédie · années 2000 » : une tranche qui se comprend mieux qu'un genre seul, et qui
+  // multiplie les combinaisons sans rien coûter de plus.
+  function large() {
+    const out: (ThemedItem & { id: number })[] = [];
+    for (const g of ["Comedy", "Horror"]) for (const y of [1995, 2005]) for (let i = 0; i < 12; i++) out.push(film(5 + i * 0.1, [g], y));
+    return out;
+  }
+
+  it("propose des thèmes qui croisent un genre et une décennie", () => {
+    const vus = new Set<string>();
+    for (let j = 1; j <= 28; j++) {
+      const t = dailyTop10(large(), `2026-11-${String(j).padStart(2, "0")}`).theme;
+      if (t?.kind === "genreDecade") vus.add(`${t.genre}|${t.decade}`);
+    }
+    expect(vus.size).toBeGreaterThan(0);
+  });
+
+  it("ne retient alors que ce qui satisfait les deux conditions", () => {
+    for (let j = 1; j <= 28; j++) {
+      const { theme, items } = dailyTop10(large(), `2026-11-${String(j).padStart(2, "0")}`);
+      if (theme?.kind !== "genreDecade") continue;
+      for (const i of items) {
+        expect(i.genres).toContain(theme.genre);
+        expect(Math.floor((i.year as number) / 10) * 10).toBe(theme.decade);
+      }
+    }
+  });
+
+  it("écarte une combinaison trop maigre", () => {
+    // Douze comédies de 2005, mais deux seulement en 1975 : la seconde tranche n'existe pas.
+    const maigre = [...large(), film(9.9, ["Comedy"], 1975), film(9.8, ["Comedy"], 1975)];
+    for (let j = 1; j <= 31; j++) {
+      const t = dailyTop10(maigre, `2026-12-${String(j).padStart(2, "0")}`).theme;
+      if (t?.kind === "genreDecade") expect(t.decade).not.toBe(1970);
+    }
+  });
+});
+
+describe("le repos après trois jours d'affilée", () => {
+  // Un très bon film appartient à plusieurs genres et à une décennie : sans borne, il reviendrait
+  // presque tous les jours et le palmarès redeviendrait la liste figée qu'il remplace.
+  function collectionAvecUneVedette() {
+    const out = collection() as (ThemedItem & { id: number })[];
+    // Notée au-dessus de tout, et dans les deux genres : elle sortirait chaque jour.
+    out.push(film(9.9, ["Thriller", "Comedy"], 1995));
+    return out;
+  }
+
+  const idDe = (i: ThemedItem & { id: number }) => i.id;
+
+  it("met au repos un titre sorti les trois jours précédents", () => {
+    const items = collectionAvecUneVedette();
+    const vedette = items[items.length - 1].id;
+    const jours = ["2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22"];
+    const sorties = jours.map((j) => dailyTop10(items, j, idDe).items.map(idDe));
+    // Le dernier jour ne doit pas la reprendre si les trois précédents l'avaient.
+    const troisAvant = sorties.slice(0, 3).every((s) => s.includes(vedette));
+    if (troisAvant) expect(sorties[3]).not.toContain(vedette);
+  });
+
+  it("ne bannit personne sans moyen de reconnaître les titres", () => {
+    // Sans clé, on ne peut pas suivre un titre d'un jour à l'autre : on ne prétend pas le faire.
+    const items = collectionAvecUneVedette();
+    expect(() => dailyTop10(items, "2026-09-22")).not.toThrow();
+    expect(dailyTop10(items, "2026-09-22").items.length).toBeGreaterThan(0);
+  });
+
+  it("rend toujours dix titres malgré les exclusions", () => {
+    const items = collectionAvecUneVedette();
+    for (let j = 19; j <= 30; j++) {
+      const { items: sortie } = dailyTop10(items, `2026-09-${j}`, idDe);
+      expect(sortie.length).toBe(10);
+    }
   });
 });

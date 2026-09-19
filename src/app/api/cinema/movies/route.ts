@@ -151,7 +151,7 @@ export async function GET(req: Request) {
 
     // Le thème du jour est tiré de la date, donc le même pour tout le monde et stable tant que la
     // journée dure — voir `dailyTop10`.
-    const top10OfTheDay = dailyTop10(cinemaMovies);
+    const top10OfTheDay = dailyTop10(cinemaMovies, undefined, (item) => item.radarrId);
 
     const payload: CinemaMoviesPayload = {
       genres: [...genreSet].sort(),

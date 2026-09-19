@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
-import { top10Label } from "@/lib/top10Label";
+import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
@@ -689,7 +689,7 @@ export function CinemaMobileClient() {
           return (
             <PosterRow
               key={genre}
-              label={genre}
+              label={genreLabel(genre, t)}
               items={items}
               itemId={itemId}
               onSelect={openHero}

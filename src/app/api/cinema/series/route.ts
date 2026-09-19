@@ -112,7 +112,7 @@ export async function GET(req: Request) {
     // une collection de séries n'a ni les mêmes genres ni les mêmes décennies en quantité. Les deux
     // rangées peuvent donc porter des thèmes différents le même jour, et c'est très bien : chacune
     // parle de ce qu'elle contient.
-    const top10OfTheDay = dailyTop10(cinemaSeries);
+    const top10OfTheDay = dailyTop10(cinemaSeries, undefined, (item) => item.sonarrId);
 
     const payload: CinemaSeriesPayload = {
       genres: [...genreSet].sort(),

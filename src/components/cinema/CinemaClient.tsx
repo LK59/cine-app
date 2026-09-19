@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
-import { top10Label } from "@/lib/top10Label";
+import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -1057,7 +1057,7 @@ export function CinemaClient() {
               {movies?.genres.map((genre, i) => (
                 <CinemaRow
                   key={genre}
-                  label={genre}
+                  label={genreLabel(genre, t)}
                   rowKey={`genre-${genre}`}
                   rowIndex={i + RAIL_COUNT}
                   items={movies.rows[genre] ?? []}
@@ -1177,7 +1177,7 @@ export function CinemaClient() {
               {series?.genres.map((genre, i) => (
                 <CinemaSeriesRow
                   key={genre}
-                  label={genre}
+                  label={genreLabel(genre, t)}
                   rowKey={`genre-${genre}`}
                   rowIndex={i + RAIL_COUNT}
                   items={series.rows[genre] ?? []}
