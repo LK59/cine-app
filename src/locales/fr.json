@@ -1458,7 +1458,11 @@
     "handingOver": "Préparation de la lecture…",
     "castPreparing": "Préparation de la diffusion…",
     "castStop": "Arrêter la diffusion",
-    "castReturn": "Revenir au lecteur"
+    "castReturn": "Revenir au lecteur",
+    "castInterrupted": "La diffusion s'est interrompue.",
+    "castRelaunch": "Relancer la diffusion",
+    "castAudioWarning": "Changer de piste audio recharge le lecteur : la diffusion vers l'appareil va s'arrêter. Vous pourrez la relancer juste après, depuis le bouton de diffusion.",
+    "castAudioContinue": "Changer quand même"
   },
   "cinema": {
     "standardMode": "Mode standard",

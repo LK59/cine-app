@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "fs";
 
 vi.mock("@/lib/config", () => ({ config: { app: { sessionSecret: "un-secret-de-test" } } }));
 
@@ -193,5 +194,50 @@ describe("le report du laissez-passer dans le manifeste", () => {
   it("échappe ce qui doit l'être", () => {
     const m = `/api/jellyfin/stream/${ITEM}/a.mp4\n`;
     expect(withCastPass(m, ITEM, "a+b/c=d")).toContain("a%2Bb%2Fc%3Dd");
+  });
+});
+
+/**
+ * Ce que le lecteur doit faire quand une diffusion s'interrompt.
+ *
+ * Testé sur la source, comme la pile des fiches : la faute possible est une *condition de rendu*
+ * et un branchement, et les reproduire dans un DOM demanderait un élément `<video>`, une route
+ * AirPlay et un téléviseur. La règle, elle, tient en quelques lignes — et c'est elle qui a été
+ * écrite de travers deux fois.
+ */
+describe("l'interruption d'une diffusion", () => {
+  const source = readFileSync("src/components/PlayerHost.tsx", "utf8");
+
+  it("ne relance jamais la lecture toute seule pendant une diffusion", () => {
+    // La première marche de l'échelle rejoue la requête, ce qui remonte l'élément sur WebKit —
+    // et un élément neuf n'a plus de route AirPlay. « Rattraper » et « couper » sont le même
+    // geste, donc l'échelle se tait.
+    expect(source).toMatch(/if \(castActiveRef\.current\) \{[\s\S]{0,400}setCastInterrupted\(true\);/);
+  });
+
+  // Le drapeau est relu au moment d'agir, pas seulement à l'arrivée de l'erreur : entre les deux
+  // il s'écoule plus d'une seconde, et c'est la fenêtre où le spectateur choisit son téléviseur.
+  it("relit le drapeau au moment où la reprise partirait", () => {
+    const timer = source.slice(source.indexOf("nativeErrorRetryTimer.current = setTimeout"));
+    expect(timer.slice(0, 1400)).toMatch(/if \(castActiveRef\.current\)/);
+  });
+
+  // Sans ça, le sélecteur ne se rouvrirait pas : son verrou est à un coup par lecteur.
+  it("relâche le verrou du sélecteur avant de refaire la bascule", () => {
+    const relaunch = source.slice(source.indexOf("function relaunchCast()"));
+    expect(relaunch.slice(0, 700)).toMatch(/castAttempted\.current = false;/);
+    expect(relaunch.slice(0, 700)).toMatch(/startPlaybackRef\.current\(/);
+  });
+
+  /**
+   * Et le changement de piste audio prévient avant d'agir.
+   *
+   * Il recharge la page sur WebKit — la seule façon connue d'y ouvrir une seconde session HLS —
+   * donc il rompt la route sans exception. Le geste reste permis ; c'est la surprise qui ne l'est
+   * plus. Hors diffusion, rien ne s'interpose.
+   */
+  it("demande confirmation avant de changer de piste pendant une diffusion", () => {
+    expect(source).toMatch(/if \(castActiveRef\.current\) setPendingAudioTrack\(id\);\s*\n\s*else changeAudio\(id\);/);
+    expect(source).toMatch(/onChangeAudio=\{requestAudioChange\}/);
   });
 });

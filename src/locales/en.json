@@ -1458,7 +1458,11 @@
     "handingOver": "Getting playback ready…",
     "castPreparing": "Getting the cast ready…",
     "castStop": "Stop casting",
-    "castReturn": "Back to the player"
+    "castReturn": "Back to the player",
+    "castInterrupted": "The cast was interrupted.",
+    "castRelaunch": "Restart the cast",
+    "castAudioWarning": "Changing the audio track reloads the player, so the cast to your device will stop. You can start it again right after, from the cast button.",
+    "castAudioContinue": "Change anyway"
   },
   "cinema": {
     "standardMode": "Standard mode",

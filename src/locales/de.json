@@ -1458,7 +1458,11 @@
     "handingOver": "Wiedergabe wird vorbereitet…",
     "castPreparing": "Übertragung wird vorbereitet…",
     "castStop": "Übertragung beenden",
-    "castReturn": "Zurück zum Player"
+    "castReturn": "Zurück zum Player",
+    "castInterrupted": "Die Übertragung wurde unterbrochen.",
+    "castRelaunch": "Übertragung neu starten",
+    "castAudioWarning": "Ein Wechsel der Tonspur lädt den Player neu, die Übertragung an das Gerät wird daher beendet. Sie können sie direkt danach über die Übertragungsschaltfläche neu starten.",
+    "castAudioContinue": "Trotzdem wechseln"
   },
   "cinema": {
     "standardMode": "Standardmodus",

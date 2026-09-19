@@ -810,6 +810,24 @@ function ActivePlayer({
     [startPlayback, itemId, title]
   );
 
+  /**
+   * Changer de piste pendant une diffusion : on prévient, on ne surprend pas.
+   *
+   * Le changement de piste recharge la page sur WebKit — c'est la seule façon connue d'ouvrir une
+   * seconde session HLS, voir `changeAudio`. Or la route AirPlay appartient à l'élément : le
+   * rechargement la rompt, sans exception. Le geste est donc légitime mais il a une conséquence,
+   * et la conséquence doit être dite avant, pas découverte après. Ailleurs — hors diffusion —
+   * rien ne change et rien ne s'interpose.
+   */
+  const [pendingAudioTrack, setPendingAudioTrack] = useState<number | null>(null);
+  const requestAudioChange = useCallback(
+    (id: number) => {
+      if (castActiveRef.current) setPendingAudioTrack(id);
+      else changeAudio(id);
+    },
+    [changeAudio]
+  );
+
   // Manual "Réessayer" after retries are exhausted and `error` is showing — a full re-fetch
   // of PlaybackInfo (not just hls.startLoad()) since the old PlaySessionId/manifest may itself
   // be stale by then, picking up from the last position we saw before the stream died.
@@ -914,6 +932,43 @@ function ActivePlayer({
    */
   const [castActive, setCastActive] = useState(false);
   const castActiveRef = useRef(false);
+  /**
+   * La diffusion s'est arrêtée toute seule, et on ne peut pas la relancer en silence.
+   *
+   * Relancer un flux veut dire ouvrir une nouvelle session HLS, ce que WebKit ne permet pas dans
+   * la même page : il faut un élément neuf, ou un rechargement. Or la route AirPlay appartient à
+   * l'élément — « rattraper » et « mettre fin à la diffusion » sont donc le même geste. C'est
+   * exactement pour cela que l'ancienne échelle de reprise ressemblait à une réparation et était
+   * le défaut.
+   *
+   * Puisqu'on ne peut pas réparer sans rompre, on le dit et on laisse le geste au spectateur :
+   * mieux vaut un écran qui explique et un bouton, qu'un téléviseur figé sans raison.
+   */
+  const [castInterrupted, setCastInterrupted] = useState(false);
+
+  /**
+   * Refaire la bascule, sélecteur compris.
+   *
+   * La route est perdue : il n'y a rien à reprendre, seulement à recommencer. Le verrou du
+   * sélecteur est relâché — sans quoi il ne s'ouvrirait pas une seconde fois — et l'échelle de
+   * reprise repart de zéro, parce que la panne précédente n'apprenait rien sur les codecs.
+   */
+  // Fonction simple, et non `useCallback` : elle n'est lue que par un bouton, et le compilateur
+  // React refuse qu'un rappel mémoïsé modifie une référence qu'un crochet a déjà reçue.
+  function relaunchCast() {
+    castAttempted.current = false;
+    // `castActiveRef` n'est pas touché ici, et c'est son invariant : il appartient à l'écouteur de
+    // diffusion et à lui seul. Le laisser à « vrai » le temps de la relance est d'ailleurs la
+    // bonne valeur — si la nouvelle tentative échoue à son tour, on remontre cet écran-ci plutôt
+    // que de repartir dans l'échelle de reprise, qui n'a rien à faire ici.
+    nativeErrorRetryCount.current = 0;
+    setCastInterrupted(false);
+    setLoading(true);
+    startPlaybackRef.current({
+      ...lastPlaybackOpts.current,
+      resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt,
+    });
+  }
   useEffect(() => {
     const video = videoRef.current as CastCapableVideo | null;
     if (!video || !castSession) return;
@@ -1114,9 +1169,13 @@ function ActivePlayer({
         reportPlayback("error", {
           itemId,
           title,
-          reason: "erreur de l'élément local pendant une diffusion — ignorée",
+          reason: "erreur pendant une diffusion — reprise refusée, relance proposée",
           code: code ?? 0,
         });
+        // Ni reprise ni échelle : voir `castInterrupted`. L'écran prend le relais.
+        setReconnecting(false);
+        setLoading(false);
+        setCastInterrupted(true);
         return;
       }
       // Walks AUDIO_FALLBACK_RUNGS (see its comment for the why): rung 0 replays the identical
@@ -1325,7 +1384,53 @@ function ActivePlayer({
               <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
             ))}
           </video>
-          {error && !isMini && (
+          {/* La diffusion interrompue passe devant l'erreur ordinaire : elle a son propre geste,
+              et proposer « Réessayer » ici ne voudrait rien dire — il n'y a plus de route à
+              reprendre, seulement une bascule à refaire. */}
+          {/* La conséquence, dite avant le geste. Voir `requestAudioChange`. */}
+          {pendingAudioTrack !== null && !isMini && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 px-6 text-center">
+              <div className="max-w-md">
+                <p className="mb-4 text-sm text-white">{t("player.castAudioWarning")}</p>
+                <div className="flex justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPendingAudioTrack(null)}
+                    className="btn btn-ghost px-4 py-2"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = pendingAudioTrack;
+                      setPendingAudioTrack(null);
+                      changeAudio(id);
+                    }}
+                    className="btn-primary inline-flex justify-center"
+                  >
+                    {t("player.castAudioContinue")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {castInterrupted && !isMini && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-6 text-center">
+              <div>
+                <p className="mb-4 text-sm text-white">{t("player.castInterrupted")}</p>
+                <div className="flex justify-center gap-3">
+                  <button type="button" onClick={handleClose} className="btn btn-ghost px-4 py-2">
+                    {t("player.quit")}
+                  </button>
+                  <button type="button" onClick={relaunchCast} className="btn-primary inline-flex justify-center">
+                    {t("player.castRelaunch")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {error && !castInterrupted && !isMini && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-6 text-center">
               <div>
                 <p className="mb-4 text-sm text-red-400">{error}</p>
@@ -1381,7 +1486,7 @@ function ActivePlayer({
           onTogglePlaybackInfo={() => setShowPlaybackInfo((v) => !v)}
           audioTracks={audioTracks}
           currentAudioId={currentAudioId}
-          onChangeAudio={changeAudio}
+          onChangeAudio={requestAudioChange}
           subtitleTracks={subtitleTracks}
           currentSubtitleId={currentSubtitleId}
           onChangeSubtitle={changeSubtitle}
