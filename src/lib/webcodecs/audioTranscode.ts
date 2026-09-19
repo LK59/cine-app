@@ -525,9 +525,54 @@ function toFrame(chunk: EncodedAudioChunk): TranscodedFrame {
  * décodeurs matériels : le centre et l'ambiance entrent à −3 dB dans chaque côté, la basse
  * fréquence est écartée plutôt que sommée, où elle ne ferait que de la boue.
  */
+/**
+ * Les dispositions dont on connaît le rang de chaque canal.
+ *
+ * Tout ce qui suit — le repli comme le complément — lit les plans à des rangs fixes : L R C LFE
+ * Ls Rs Lrs Rrs. Ce n'est vrai que de ces comptes-là. Relevé sur cette bibliothèque le
+ * 19/09/2026, 1 462 pistes : 1 ch × 15, 2 ch × 208, 3 ch × 2, **5 ch × 2**, 6 ch × 1 113,
+ * **7 ch × 2**, 8 ch × 120.
+ *
+ * Les six pistes à 5 et 7 canaux sont celles qui n'entrent dans aucun modèle, et pour une raison
+ * de fond : le nombre ne dit pas la disposition. Cinq canaux, c'est un 5.0 — L R C Ls Rs, sans
+ * caisson — chez « Mamma Mia! », et un 4.1 — L R C LFE Cs — chez « Point Break ». Sept, c'est un
+ * 6.1 dont le rang 4 est un arrière central là où le modèle attend une ambiance gauche. Le
+ * décodeur ne rend que le compte, jamais la disposition : mediabunny n'expose que
+ * `numberOfChannels`, vérifié dans son interface.
+ *
+ * Trois canaux entrent dans le modèle parce que les trois premiers rangs sont les mêmes partout.
+ */
+const KNOWN_LAYOUTS = new Set([1, 2, 3, 6, 8]);
+
+/**
+ * Le coefficient de demi-puissance, écrit exactement.
+ *
+ * `0.707` traînait ici quand l'autre repli — celui du canevas — utilisait `Math.SQRT1_2`. Le
+ * commentaire du repli disait pourtant « 0,707, soit 1/√2 » : c'était la même intention notée deux
+ * fois, arrondie d'un côté. Un écart de 10⁻⁴, inaudible, mais c'est exactement le genre de
+ * divergence silencieuse qui fait dire à un test qu'un des deux chemins a changé.
+ */
+const HALF_POWER = Math.SQRT1_2;
+
+/**
+ * Ce que l'on peut affirmer d'une disposition inconnue : ses trois premiers canaux.
+ *
+ * Toutes celles qu'on croise ici — 5.0, 4.1, 6.1 — commencent par avant gauche, avant droit,
+ * centre. Au-delà, les rangs divergent, et les lire quand même revient à envoyer une ambiance
+ * droite dans le caisson ou un arrière central dans l'oreille gauche. On garde donc les trois
+ * premiers et on laisse le reste : perdre l'ambiance de six pistes sur mille quatre cent
+ * soixante-deux vaut mieux que la déplacer sur toutes.
+ */
+function frontOnly(planes: Float32Array[]): Float32Array[] {
+  return planes.slice(0, 3);
+}
+
 export function fold(planes: Float32Array[], to: number): Float32Array[] {
   const from = planes.length;
   if (to === from) return planes;
+  // Ramenée à ce qu'on sait d'elle avant toute chose : la suite lit des rangs, et une disposition
+  // inconnue ne les respecte pas. Voir `frontOnly`.
+  if (!KNOWN_LAYOUTS.has(from)) return fold(frontOnly(planes), to);
 
   /**
    * Compléter vers le haut : les canaux qui manquent sont ajoutés silencieux, à leur place.
@@ -560,23 +605,32 @@ export function fold(planes: Float32Array[], to: number): Float32Array[] {
     return [...planes, ...silence(to - from)];
   }
   const [L, R, C, , Ls, Rs, Lrs, Rrs] = planes;
+  /**
+   * La somme se fait en double précision, puis se range en simple.
+   *
+   * Écrite plan par plan dans le tampon de sortie, chaque addition arrondissait au format 32 bits
+   * avant la suivante : un repli 5.1 → stéréo, qui somme trois termes, s'écartait de 8·10⁻⁵ du
+   * résultat exact. Inaudible — quelque chose comme −81 dB —, mais gratuit à éviter, et c'est ce
+   * qu'un test de repli du canevas mesurait déjà sans que personne n'ait à le demander.
+   */
   const mix = (...parts: [Float32Array | undefined, number][]) => {
     const out = new Float32Array(planes[0].length);
-    for (const [plane, gain] of parts) {
-      if (!plane) continue;
-      for (let i = 0; i < out.length; i++) out[i] += plane[i] * gain;
+    for (let i = 0; i < out.length; i++) {
+      let sum = 0;
+      for (const [plane, gain] of parts) if (plane) sum += plane[i] * gain;
+      out[i] = sum;
     }
     return out;
   };
 
   if (from === 8 && to === 6) {
-    return [L, R, C, planes[3], mix([Ls, 0.707], [Lrs, 0.707]), mix([Rs, 0.707], [Rrs, 0.707])];
+    return [L, R, C, planes[3], mix([Ls, HALF_POWER], [Lrs, HALF_POWER]), mix([Rs, HALF_POWER], [Rrs, HALF_POWER])];
   }
   if (to === 2) {
     const back = from >= 8 ? [[Lrs, 0.5], [Rrs, 0.5]] : [];
     return [
-      mix([L, 1], [C, 0.707], [Ls, 0.707], ...(back.slice(0, 1) as [Float32Array | undefined, number][])),
-      mix([R, 1], [C, 0.707], [Rs, 0.707], ...(back.slice(1, 2) as [Float32Array | undefined, number][])),
+      mix([L, 1], [C, HALF_POWER], [Ls, HALF_POWER], ...(back.slice(0, 1) as [Float32Array | undefined, number][])),
+      mix([R, 1], [C, HALF_POWER], [Rs, HALF_POWER], ...(back.slice(1, 2) as [Float32Array | undefined, number][])),
     ];
   }
   // Une disposition qu'on ne sait pas replier proprement : on garde les premiers canaux plutôt

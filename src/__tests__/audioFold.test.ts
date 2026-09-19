@@ -38,16 +38,16 @@ describe("fold — replier vers le bas", () => {
     const source = [plane(1), plane(2), plane(3), plane(4), plane(5), plane(6), plane(7), plane(8)];
     const out = channels(fold(source, 6));
     expect(out.slice(0, 4)).toEqual([1, 2, 3, 4]);
-    expect(out[4]).toBeCloseTo(5 * 0.707 + 7 * 0.707, 3);
-    expect(out[5]).toBeCloseTo(6 * 0.707 + 8 * 0.707, 3);
+    expect(out[4]).toBeCloseTo((5 + 7) * Math.SQRT1_2, 3);
+    expect(out[5]).toBeCloseTo((6 + 8) * Math.SQRT1_2, 3);
   });
 
   it("un 5.1 vers stéréo suit la matrice BS.775 et écarte la basse fréquence", () => {
     const source = [plane(1), plane(1), plane(1), plane(9), plane(1), plane(1)];
     const out = channels(fold(source, 2));
     // Gauche = L + 0,707·C + 0,707·Ls. Le canal LFE, à 9, ne doit apparaître nulle part.
-    expect(out[0]).toBeCloseTo(1 + 0.707 + 0.707, 3);
-    expect(out[1]).toBeCloseTo(1 + 0.707 + 0.707, 3);
+    expect(out[0]).toBeCloseTo(1 + Math.SQRT1_2 + Math.SQRT1_2, 3);
+    expect(out[1]).toBeCloseTo(1 + Math.SQRT1_2 + Math.SQRT1_2, 3);
   });
 
   it("garde les premiers canaux plutôt que d'inventer une matrice inconnue", () => {
@@ -56,15 +56,53 @@ describe("fold — replier vers le bas", () => {
   });
 });
 
-
 /**
- * L'ordre des canaux entre le décodeur et l'encodeur.
+ * Les dispositions que le nombre de canaux ne suffit pas à nommer.
  *
- * Le symptôme, rapporté au casque sur « Titanic » : les voix uniquement à droite, la musique à
- * gauche, sur les quatre pistes — toutes en 6 canaux. Les plans étaient entrelacés dans l'ordre
- * du décodeur et lus dans celui de l'AAC, donc chaque canal gardait son rang et changeait de
- * sens. Le centre, c'est-à-dire les dialogues, arrivait au rang du canal droit.
+ * Relevé sur cette bibliothèque le 19/09/2026, 1 462 pistes : 1 ch × 15, 2 ch × 208, 3 ch × 2,
+ * **5 ch × 2**, 6 ch × 1 113, **7 ch × 2**, 8 ch × 120. Les six pistes à 5 et 7 canaux n'entrent
+ * dans aucun modèle, et pour une raison de fond : cinq canaux, c'est un 5.0 — L R C Ls Rs, sans
+ * caisson — chez « Mamma Mia! », et un 4.1 — L R C LFE Cs — chez « Point Break ». Le décodeur ne
+ * rend que le compte, jamais la disposition.
+ *
+ * Lus aux rangs du 5.1, ces plans envoyaient l'ambiance *droite* dans l'ambiance gauche et
+ * laissaient le côté droit sans la sienne.
  */
+describe("fold — une disposition qu'on ne sait pas nommer", () => {
+  /** 5.0 : L R C Ls Rs. Le rang 3 n'est pas un caisson, c'est déjà une ambiance. */
+  const fiveOh = [plane(1), plane(2), plane(3), plane(4), plane(5)];
+
+  it("ne range pas l'ambiance d'un 5.0 dans le caisson d'un 5.1", () => {
+    // Les trois de devant à leur place, et rien d'inventé derrière : mieux vaut perdre l'ambiance
+    // de deux pistes que la déplacer sur toutes.
+    expect(channels(fold(fiveOh, 6))).toEqual([1, 2, 3, 0, 0, 0]);
+  });
+
+  it("replie un 5.0 en stéréo sans déséquilibrer les côtés", () => {
+    const out = channels(fold(fiveOh, 2));
+    // Gauche = L + 0,707·C ; droite = R + 0,707·C. Symétrique, ce que l'ancienne lecture n'était
+    // pas : elle prenait le rang 4 pour l'ambiance gauche — c'est-à-dire l'ambiance droite — et
+    // ne trouvait rien pour la droite.
+    expect(out[0]).toBeCloseTo(1 + 3 * Math.SQRT1_2, 3);
+    expect(out[1]).toBeCloseTo(2 + 3 * Math.SQRT1_2, 3);
+  });
+
+  /** 6.1 : L R C LFE Cs Ls Rs — le rang 4 est un arrière central, pas une ambiance. */
+  it("ne lit pas l'arrière central d'un 6.1 comme une ambiance", () => {
+    const sixOne = [plane(1), plane(2), plane(3), plane(4), plane(5), plane(6), plane(7)];
+    expect(channels(fold(sixOne, 8))).toEqual([1, 2, 3, 0, 0, 0, 0, 0]);
+    const stereo = channels(fold(sixOne, 2));
+    expect(stereo[0]).toBeCloseTo(1 + 3 * Math.SQRT1_2, 3);
+    expect(stereo[1]).toBeCloseTo(2 + 3 * Math.SQRT1_2, 3);
+  });
+
+  // Trois canaux, eux, sont sûrs : les trois premiers rangs sont les mêmes partout.
+  it("laisse passer un 3.0, dont les trois rangs sont ceux de tout le monde", () => {
+    expect(channels(fold([plane(1), plane(2), plane(3)], 6))).toEqual([1, 2, 3, 0, 0, 0]);
+  });
+});
+
+
 /**
  * Ce que l'encodeur attend, mesuré plutôt que déduit.
  *

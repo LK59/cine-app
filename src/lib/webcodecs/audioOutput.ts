@@ -5,6 +5,8 @@
 // overlap in audio is immediately audible. So audio is scheduled on the AudioContext's own
 // hardware clock and video is presented against it, rather than the other way round.
 
+import { fold } from "./audioTranscode";
+
 /** How far ahead of the playhead audio is queued. Enough to ride out a decode hiccup. */
 const SCHEDULE_AHEAD_SECONDS = 0.6;
 
@@ -17,38 +19,27 @@ export interface AudioOutputOptions {
 /**
  * Folds a multichannel block down to stereo.
  *
- * Channel order follows the usual convention — front left, front right, centre, LFE, then the
- * surrounds — which is what both libav and the browser decoders produce. The centre goes to both
- * sides at -3 dB and each surround to its own side at -3 dB, which is the standard fold; the LFE
- * is dropped, as it is in every stereo downmix, because a phone has nothing to reproduce it with
- * and summing it in only eats headroom. The result is scaled to keep a loud mix from clipping.
+ * La matrice elle-même vient de `fold`, et ce n'est pas un raccourci : c'était la **même décision
+ * prise à deux endroits**, celle que CLAUDE.md décrit comme la dette de ce dépôt. Les deux
+ * chemins audio replient du multicanal — celui-ci pour le canevas, l'autre avant le ré-encodage —
+ * et ils l'écrivaient chacun de son côté. Les deux ont donc partagé le même angle mort : lire le
+ * rang 4 comme une ambiance gauche sur une piste 5.0, qui n'en a pas, y envoyait l'ambiance
+ * *droite* — et laissait le côté droit sans la sienne. Six pistes de cette bibliothèque sont dans
+ * ce cas ; corrigé une fois, c'est corrigé des deux côtés.
+ *
+ * Ce qui reste ici est ce qui n'appartient qu'à ce chemin : la marge de sécurité. L'autre remet
+ * ses plans à un encodeur, qui a la sienne ; celui-ci les écrit dans un `AudioBuffer` que le
+ * graphe audio joue tel quel, où une somme au-delà de 1 s'entend.
  */
+const HEADROOM = 0.8;
+
 function foldToStereo(planes: Float32Array[], frames: number): Float32Array[] {
+  const [l, r] = fold(planes, 2);
   const left = new Float32Array(frames);
   const right = new Float32Array(frames);
-  const centre = planes[2];
-  const surroundLeft = planes[4];
-  const surroundRight = planes[5];
-  const HALF_POWER = Math.SQRT1_2;
-  const HEADROOM = 0.8;
-
   for (let i = 0; i < frames; i++) {
-    let l = planes[0][i];
-    let r = planes[1][i];
-    if (centre) {
-      l += HALF_POWER * centre[i];
-      r += HALF_POWER * centre[i];
-    }
-    if (surroundLeft) l += HALF_POWER * surroundLeft[i];
-    if (surroundRight) r += HALF_POWER * surroundRight[i];
-    // Anything beyond 5.1 (height channels, a second surround pair) is spread evenly rather than
-    // discarded — quieter is better than absent.
-    for (let extra = 6; extra < planes.length; extra++) {
-      l += 0.5 * planes[extra][i];
-      r += 0.5 * planes[extra][i];
-    }
-    left[i] = Math.max(-1, Math.min(1, l * HEADROOM));
-    right[i] = Math.max(-1, Math.min(1, r * HEADROOM));
+    left[i] = Math.max(-1, Math.min(1, l[i] * HEADROOM));
+    right[i] = Math.max(-1, Math.min(1, r[i] * HEADROOM));
   }
   return [left, right];
 }
