@@ -436,7 +436,9 @@ export function CinemaClient() {
   useRepairUnresolvedSheet(
     route.film !== null || route.serie !== null,
     selectedItem !== null || seriesSelectedItem !== null,
-    moviesById.size > 0 && seriesById.size > 0
+    // Celui du titre demandé, et lui seul : exiger les deux catalogues rendait ce filet inerte
+    // tant que celui des séries n'était pas chargé, c'est-à-dire dans le cas le plus courant.
+    route.film !== null ? moviesById.size > 0 : seriesById.size > 0
   );
   const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
   const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);

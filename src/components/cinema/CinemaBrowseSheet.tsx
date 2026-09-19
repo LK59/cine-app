@@ -5,6 +5,7 @@ import { useT } from "@/components/TranslationProvider";
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
 import { PlayerResultCard } from "@/components/player/PlayerResultCard";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
+import { genreLabel } from "@/lib/top10Label";
 import {
   browseTitles,
   decadesOf,
@@ -59,7 +60,9 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
     [items, genre, decade, sort, query]
   );
 
-  const title = genre === BROWSE_ALL ? t(`player.browse.all.${mediaType}`) : genre;
+  // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
+  // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.
+  const title = genre === BROWSE_ALL ? t(`player.browse.all.${mediaType}`) : genreLabel(genre, t);
 
   return (
     <PlayerPanelFrame
@@ -102,7 +105,9 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
                 <option value="">{t("player.browse.allDecades")}</option>
                 {decades.map((d) => (
                   <option key={d} value={d}>
-                    {d}s
+                    {/* La même tournure que le palmarès du jour : l'application disait « années
+                        1990 » à un endroit et « 1990s » à l'autre. */}
+                    {t("cinema.decade", { decade: d })}
                   </option>
                 ))}
               </select>

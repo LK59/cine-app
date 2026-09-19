@@ -250,7 +250,10 @@ export function CinemaMobileClient() {
   useRepairUnresolvedSheet(
     route.film !== null || route.serie !== null,
     selected !== null,
-    !!byIdMovies && !!byIdSeries
+    // Le catalogue qui décide est **celui du titre demandé**, pas les deux. Exiger les deux rendait
+    // ce filet inerte tant que celui des séries n'était pas chargé — or il ne l'est qu'au premier
+    // besoin, donc le cas courant était précisément celui où le filet ne servait à rien.
+    route.film !== null ? !!byIdMovies : !!byIdSeries
   );
 
   /**
