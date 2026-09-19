@@ -12,7 +12,27 @@ vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: async () => payload,
 }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
+vi.mock("@/components/TranslationProvider", () => ({
+  useT: () => (key: string) => key,
+  useLocale: () => ({ locale: "fr" }),
+}));
+
+/**
+ * Le catalogue que l'écran a déjà en mémoire, et sur lequel il devine.
+ *
+ * Constant et posé avant le rendu : ces deux clés sont demandées dès le montage, contrairement à
+ * celle de la recherche, qui n'existe qu'une fois qu'on a tapé.
+ */
+const HANNIBAL = {
+  radarrId: 7, tmdbId: 1000, title: "Hannibal", year: 2001, posterUrl: null,
+  genres: ["Thriller"], imdbRating: "6.8", addedAt: null,
+};
+vi.mock("@/lib/cinemaPayload", () => ({
+  cinemaFetcher: async (url: string) =>
+    url.includes("/series")
+      ? { items: [], rows: {}, spotlight: [], recentlyAdded: [], top10: [] }
+      : { items: [HANNIBAL], rows: { Thriller: [HANNIBAL] }, spotlight: [], recentlyAdded: [], top10: [] },
+}));
 vi.mock("@/components/PosterImage", () => ({
   // eslint-disable-next-line @next/next/no-img-element
   PosterImage: ({ alt }: { alt: string }) => <img alt={alt} />,
@@ -41,6 +61,10 @@ const OWNED_SERIES = {
 const MISSING = {
   tmdbId: 693134, title: "Dune", year: 2024, posterPath: null, type: "movie",
   overview: "", rating: 8, radarrId: null, sonarrId: null, inLibrary: false, sources: ["tmdb"],
+};
+const SHORT_FILM_HANN = {
+  tmdbId: 55555, title: "Hann, Hein und Henny", year: 1917, posterPath: null, type: "movie",
+  overview: "", rating: 5, radarrId: null, sonarrId: null, inLibrary: false, sources: ["tmdb"],
 };
 const PERSON = { id: 6384, name: "Keanu Reeves", profilePath: null, department: "Acting", knownFor: [], libraryCount: 3, libraryTitles: [] };
 
@@ -185,5 +209,48 @@ describe("PlayerSearchPanel — remembering the query", () => {
 
     expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("matrix");
     expect(await screen.findByText("Matrix")).toBeTruthy();
+  });
+});
+
+
+/**
+ * La moitié d'un titre doit suffire.
+ *
+ * Signalé à l'usage, capture à l'appui : « Hann » ne rendait que les deux obscurités qui
+ * s'appellent littéralement ainsi, pendant qu'Hannibal dormait dans la bibliothèque. TMDB veut un
+ * titre à peu près entier ; le catalogue, lui, est en mémoire et se cherche au préfixe.
+ */
+describe("PlayerSearchPanel — deviner la fin du mot", () => {
+  it("trouve un titre de la bibliothèque sur son début, là où le serveur ne le voit pas", async () => {
+    payload = { library: [], tmdb: [SHORT_FILM_HANN], persons: [] };
+    await type("hann");
+
+    expect(await screen.findByText("Hannibal")).toBeTruthy();
+    // Et il passe devant : on peut le lancer tout de suite.
+    const titles = screen.getAllByRole("button").map((b) => b.textContent ?? "");
+    const owned = titles.findIndex((text) => text.includes("Hannibal"));
+    const other = titles.findIndex((text) => text.includes("Hann,"));
+    expect(owned).toBeGreaterThanOrEqual(0);
+    expect(other === -1 || owned < other).toBe(true);
+  });
+
+  it("ouvre la fiche de la bibliothèque, pas une fiche à demander", async () => {
+    payload = { library: [], tmdb: [], persons: [] };
+    await type("hanni");
+
+    fireEvent.click(await screen.findByText("Hannibal"));
+    expect(mockNavigate).toHaveBeenCalledWith({ tab: "movies", film: 7, serie: null });
+  });
+
+  // Les deux moteurs voient le même titre dès que la requête est entière : le serveur ignore ce
+  // que la bibliothèque vient de trouver, et sans dédoublonnage la carte apparaissait deux fois.
+  it("ne montre pas deux fois le titre que les deux moteurs ont trouvé", async () => {
+    payload = {
+      library: [{ ...OWNED, tmdbId: 1000, title: "Hannibal", year: 2001, radarrId: 7 }],
+      tmdb: [], persons: [],
+    };
+    await type("hannibal");
+
+    await waitFor(() => expect(screen.getAllByText("Hannibal")).toHaveLength(1));
   });
 });

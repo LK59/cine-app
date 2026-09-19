@@ -3,20 +3,50 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon, X } from "lucide-react";
-import { fetcher, MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { recentSearches, rememberSearch, forgetSearches } from "@/lib/recentSearches";
 import { onSearchFocusRequest } from "@/lib/searchFocus";
+import { searchCinemaLibrary } from "@/lib/cinemaSearch";
+import { uniqueById } from "@/lib/cinemaRails";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
+import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
-import type { SearchResponse, UnifiedSearchResult, PersonResult } from "@/app/api/search/route";
+import type { SearchResponse, PersonResult } from "@/app/api/search/route";
 
 type Filter = "all" | "movie" | "series" | "person";
 
+/**
+ * Un résultat, d'où qu'il vienne.
+ *
+ * Les deux moteurs ne rendent pas la même chose — l'un des entrées de catalogue, l'autre des
+ * fiches TMDB — mais la grille, elle, n'affiche qu'une sorte de carte. Une seule forme ici, et le
+ * reste de l'écran ignore lequel des deux a trouvé quoi.
+ */
+interface Entry {
+  key: string;
+  kind: "movie" | "series";
+  title: string;
+  year: number | null;
+  poster: string | null;
+  /** L'identifiant Radarr/Sonarr quand on l'a — c'est lui qui ouvre une fiche jouable. */
+  libraryId: number | null;
+  tmdbId: number | null;
+}
+
 const MIN_QUERY = 2;
+
+/**
+ * Combien de titres la bibliothèque peut mettre devant.
+ *
+ * Deux lettres suffisent à en faire correspondre beaucoup, et une grille de quarante affiches
+ * n'aide personne : passé la vingtaine, ce n'est plus une prédiction mais une liste. Ce qui reste
+ * vient du serveur, derrière.
+ */
+const MAX_LOCAL = 24;
 /**
  * L'attente avant d'interroger le serveur.
  *
@@ -132,19 +162,92 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
     { keepPreviousData: true, revalidateOnFocus: false }
   );
 
-  // Bibliothèque d'abord, puis le reste : à pertinence comparable, un titre qu'on peut lancer
-  // tout de suite vaut mieux qu'un titre à demander. Le serveur a déjà trié chaque groupe.
-  const titles: UnifiedSearchResult[] = useMemo(
-    () => [...(data?.library ?? []), ...(data?.tmdb ?? [])],
-    [data]
+  /**
+   * La bibliothèque, cherchée sur place — et c'est elle qui devine.
+   *
+   * `/api/search` interroge TMDB, dont le moteur veut un titre à peu près entier : « hann » lui
+   * rend les deux obscurités qui s'appellent littéralement « Hann », et pas Hannibal, qu'on
+   * possède pourtant. Une demi-frappe n'est pas une faute de frappe, c'est un début de mot, et
+   * aucune tolérance à l'orthographe ne remplace un préfixe.
+   *
+   * Or la réponse est déjà là : le catalogue est en mémoire — l'accueil l'a chargé, et le
+   * réchauffage a fait le reste pour les séries. `searchCinemaLibrary` est le moteur que la
+   * recherche du mode cinéma utilise déjà, préfixe compris (`titleMatchScore` donne 90 à un titre
+   * qui commence par ce qu'on tape), avec le même langage naturel et la même tolérance aux fautes.
+   * Il tournait sur un seul des deux écrans de recherche ; c'est exactement la divergence que
+   * CLAUDE.md décrit, et le remède est de partager la fonction, pas de réécrire la règle.
+   *
+   * Zéro réseau, zéro attente : ces résultats-là s'affichent à la lettre tapée, pendant que le
+   * serveur cherche ce qu'on ne possède pas. Et ils passent devant, ce qui est doublement juste —
+   * ils sont plus pertinents, et on peut les lancer tout de suite.
+   */
+  const { locale } = useLocale();
+  const { data: moviesPayload } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher);
+  const { data: seriesPayload } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher);
+  const allMovies = useMemo(
+    () => uniqueById([...(moviesPayload?.spotlight ?? []), ...Object.values(moviesPayload?.rows ?? {}).flat()], (m) => m.radarrId),
+    [moviesPayload]
   );
+  const allSeries = useMemo(
+    () => uniqueById([...(seriesPayload?.spotlight ?? []), ...Object.values(seriesPayload?.rows ?? {}).flat()], (s) => s.sonarrId),
+    [seriesPayload]
+  );
+
+  // Ce qui est tapé à l'instant, et non ce que le serveur a eu le temps d'apprendre : la
+  // bibliothèque répond sans attendre les cent cinquante millisecondes de l'autre moteur.
+  const typed = query.trim();
+  const searching = typed.length >= MIN_QUERY;
+
+  const local: Entry[] = useMemo(() => {
+    if (!searching) return [];
+    return searchCinemaLibrary(typed, allMovies, allSeries, locale)
+      .slice(0, MAX_LOCAL)
+      .map((r) =>
+        r.kind === "movie"
+          ? { key: `movie-${r.item.radarrId}`, kind: "movie" as const, title: r.item.title, year: r.item.year, poster: r.item.posterUrl, libraryId: r.item.radarrId, tmdbId: r.item.tmdbId }
+          : { key: `series-${r.item.sonarrId}`, kind: "series" as const, title: r.item.title, year: r.item.year, poster: r.item.posterUrl, libraryId: r.item.sonarrId, tmdbId: r.item.tmdbId }
+      );
+  }, [searching, typed, allMovies, allSeries, locale]);
+
+  /**
+   * Les deux moteurs mis bout à bout, sans jamais montrer deux fois le même titre.
+   *
+   * Le serveur ignore ce que la bibliothèque vient de trouver : un titre possédé ressortira des
+   * deux côtés. On le reconnaît à son identifiant TMDB ou à celui de Radarr/Sonarr — le premier
+   * suffit presque toujours, le second rattrape les séries que Sonarr connaît sans TMDB.
+   */
+  const titles: Entry[] = useMemo(() => {
+    const server = [...(data?.library ?? []), ...(data?.tmdb ?? [])];
+    const seen = new Set<string>();
+    for (const e of local) {
+      if (e.tmdbId !== null) seen.add(`${e.kind}:tmdb:${e.tmdbId}`);
+      seen.add(`${e.kind}:lib:${e.libraryId}`);
+    }
+    const extra: Entry[] = [];
+    for (const r of server) {
+      const libraryId = r.type === "movie" ? r.radarrId : r.sonarrId;
+      if (seen.has(`${r.type}:tmdb:${r.tmdbId}`)) continue;
+      if (libraryId !== null && seen.has(`${r.type}:lib:${libraryId}`)) continue;
+      extra.push({
+        key: `${r.type}-${r.tmdbId}`,
+        kind: r.type,
+        title: r.title,
+        year: r.year,
+        poster: r.posterPath,
+        libraryId,
+        tmdbId: r.tmdbId,
+      });
+    }
+    return [...local, ...extra];
+  }, [local, data]);
+
   const persons: PersonResult[] = useMemo(() => data?.persons ?? [], [data]);
 
   const counts = useMemo(
     () => ({
       all: titles.length + persons.length,
-      movie: titles.filter((r) => r.type === "movie").length,
-      series: titles.filter((r) => r.type === "series").length,
+      movie: titles.filter((r) => r.kind === "movie").length,
+      series: titles.filter((r) => r.kind === "series").length,
       person: persons.length,
     }),
     [titles, persons]
@@ -159,20 +262,26 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   // la clé change — ce qui est ce qu'on veut en tapant, et pas du tout ce qu'on veut quand on
   // efface : le champ redevenait vide, l'invitation réapparaissait, et la grille précédente
   // restait affichée dessous.
-  const shownTitles = !debounced || filter === "person" ? [] : titles.filter((r) => filter === "all" || r.type === filter);
-  const shownPersons = debounced && (filter === "all" || filter === "person") ? persons : [];
-  const empty = debounced && !isLoading && counts.all === 0;
+  const shownTitles = !searching || filter === "person" ? [] : titles.filter((r) => filter === "all" || r.kind === filter);
+  const shownPersons = searching && (filter === "all" || filter === "person") ? persons : [];
+  /**
+   * « Rien trouvé » ne se dit qu'une fois la réponse connue.
+   *
+   * La bibliothèque répond à la lettre, le serveur cent cinquante millisecondes plus tard : entre
+   * les deux, une recherche sans résultat local aurait affiché « aucun résultat » puis les
+   * résultats. La condition attend donc que le serveur ait répondu pour *cette* frappe-là.
+   */
+  const empty = searching && debounced === typed && !isLoading && counts.all === 0;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
   // ramène sur les résultats, avec la requête tapée et le filtre choisi — au lieu de renvoyer à
   // l'accueil comme si l'on n'avait rien cherché.
-  function openTitle(result: UnifiedSearchResult) {
+  function openTitle(entry: Entry) {
     // Ouvrir un résultat est la preuve qu'on cherchait bien ça : on retient sans attendre le
     // minuteur, et la recherche est de toute façon complète à cet instant.
-    rememberSearch(query.trim());
-    const libraryId = result.type === "movie" ? result.radarrId : result.sonarrId;
-    if (libraryId) openLibraryTitle(result.type, libraryId);
-    else cinemaNavigate({ discover: result.tmdbId, discoverType: result.type });
+    rememberSearch(typed);
+    if (entry.libraryId !== null) openLibraryTitle(entry.kind, entry.libraryId);
+    else if (entry.tmdbId !== null) cinemaNavigate({ discover: entry.tmdbId, discoverType: entry.kind });
   }
 
   const FILTERS: { key: Filter; label: string }[] = [
@@ -191,6 +300,17 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            /* La loupe du clavier valide.
+               Le champ n'est dans aucun formulaire — la touche ne faisait donc rien du tout, alors
+               qu'elle est le geste par lequel on *termine* une recherche au pouce. Elle retient
+               maintenant sans attendre le minuteur et range le clavier, qui recouvrait la moitié
+               des résultats qu'on venait de demander. Rien à relancer : les résultats sont déjà
+               là, c'est le sens de la frappe qui les affiche. */
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              rememberSearch(typed);
+              inputRef.current?.blur();
+            }}
             type="search"
             enterKeyHint="search"
             autoComplete="off"
@@ -223,7 +343,7 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
           )}
         </div>
 
-        {debounced && counts.all > 0 && (
+        {searching && counts.all > 0 && (
           <div className="mt-5 flex flex-wrap gap-2">
             {FILTERS.map(({ key, label }) => {
               if (key !== "all" && counts[key] === 0) return null;
@@ -249,22 +369,22 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
             quoi. Il porte maintenant ses propres recherches — on cherche souvent deux fois la
             même chose — et ce qui vient d'arriver dans la bibliothèque, qui est la réponse la
             plus fréquente à « quoi de neuf ». */}
-        {!debounced && <SearchStart onPick={setQuery} />}
+        {!searching && <SearchStart onPick={setQuery} />}
 
         {empty && (
-          <p className="mt-10 text-sm text-slate-400">{t("player.search.noResults", { query: debounced })}</p>
+          <p className="mt-10 text-sm text-slate-400">{t("player.search.noResults", { query: typed })}</p>
         )}
 
         {(shownTitles.length > 0 || shownPersons.length > 0) && (
           <div className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {shownTitles.map((r) => (
               <PlayerResultCard
-                key={`${r.type}-${r.tmdbId}`}
-                kind={r.type}
+                key={r.key}
+                kind={r.kind}
                 title={r.title}
                 subtitle={r.year ? String(r.year) : null}
-                poster={r.posterPath}
-                missing={!r.inLibrary}
+                poster={r.poster}
+                missing={r.libraryId === null}
                 onOpen={() => openTitle(r)}
               />
             ))}
@@ -277,7 +397,7 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
                 poster={p.profilePath}
                 onOpen={() => {
                   // Même raison que pour un titre : ouvrir une fiche prouve l'intention.
-                  rememberSearch(query.trim());
+                  rememberSearch(typed);
                   cinemaNavigate({ person: p.id });
                 }}
               />
@@ -285,7 +405,7 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
           </div>
         )}
 
-        {isLoading && debounced && (
+        {isLoading && searching && (
           <div className="mt-10 flex justify-center">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>

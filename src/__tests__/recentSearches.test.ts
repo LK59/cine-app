@@ -89,6 +89,22 @@ describe("une frappe en cours n'est qu'une recherche", () => {
     expect(recentSearches()).toEqual(["Hannibal"]);
   });
 
+  /**
+   * Rechercher ce qu'on a déjà cherché doit se voir.
+   *
+   * La règle du préfixe se contentait de ne rien faire, ce qui se lisait comme une panne :
+   * « Hann » tapé alors que « Hannibal » est retenu laissait la liste immobile, quoi qu'on tape
+   * et quoi qu'on ouvre. La plus complète gagne toujours — mais elle remonte.
+   */
+  it("remonte l'entrée complète quand on retape son début", () => {
+    rememberSearch("Hannibal");
+    rememberSearch("Nolan");
+    expect(recentSearches()).toEqual(["Nolan", "Hannibal"]);
+
+    rememberSearch("Hann");
+    expect(recentSearches()).toEqual(["Hannibal", "Nolan"]);
+  });
+
   it("laisse intactes deux recherches réellement différentes", () => {
     rememberSearch("Nolan");
     rememberSearch("Villeneuve");

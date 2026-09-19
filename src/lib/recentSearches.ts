@@ -62,14 +62,19 @@ export function rememberSearch(query: string): void {
      *
      * Deux sens, et il faut les deux. Une entrée retenue qui n'est qu'un début de celle-ci
      * disparaît — c'était la même frappe, en cours. Et si celle-ci n'est que le début d'une entrée
-     * déjà retenue, on ne l'ajoute pas : quelqu'un qui efface la fin de son mot ne cherche pas
-     * quelque chose de nouveau. La plus complète des deux gagne toujours, ce qui est aussi la plus
-     * utile à relire.
+     * déjà retenue, c'est **cette entrée-là** qui remonte en tête : la plus complète des deux
+     * gagne toujours, ce qui est aussi la plus utile à relire.
+     *
+     * Remonter et non ignorer, et c'est tout le correctif. Ne rien faire du tout se voyait comme
+     * une panne : quelqu'un qui cherche « Hann » alors que « Hannibal » est déjà retenu voyait sa
+     * liste ne pas bouger d'un pouce, quoi qu'il tape et quoi qu'il ouvre — « l'historique ne
+     * marche plus du tout ». Une recherche refaite est une recherche récente.
      */
-    if (existantes.some((q) => q.toLowerCase().startsWith(bas) && q.toLowerCase() !== bas)) return;
-    const kept = existantes.filter((q) => !bas.startsWith(q.toLowerCase()));
+    const plusComplete = existantes.find((q) => q.toLowerCase().startsWith(bas) && q.toLowerCase() !== bas);
+    const tete = plusComplete ?? clean;
+    const kept = existantes.filter((q) => q !== tete && !bas.startsWith(q.toLowerCase()));
 
-    window.localStorage.setItem(KEY, JSON.stringify([clean, ...kept].slice(0, MAX)));
+    window.localStorage.setItem(KEY, JSON.stringify([tete, ...kept].slice(0, MAX)));
   } catch {
     // Stockage indisponible : on ne retient rien, et l'écran se contente du reste.
   }
