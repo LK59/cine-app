@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { preload } from "swr";
 import { fetcher, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
 
 /**
@@ -46,7 +47,11 @@ export function useWarmSeriesCatalogue(ready: boolean): boolean {
       if (cancelled || isWatchingFullScreen()) return;
       // L'échec ne se rattrape pas : ce n'est qu'une avance prise, et l'écran qui en a
       // vraiment besoin refera la demande lui-même.
-      void preload(SERIES_CATALOGUE_KEY, fetcher)
+      // `cinemaFetcher`, jamais le récupérateur nu : un préchargement remplit le même cache SWR
+      // que le composant lira ensuite. Avec le mauvais, la forme brute — des identifiants là où
+      // l'écran attend des titres — y était déposée, et la grille tombait trois secondes après le
+      // lancement, le temps que ce réchauffage se déclenche.
+      void preload(SERIES_CATALOGUE_KEY, cinemaFetcher)
         .then(() => {
           if (!cancelled) setWarmed(true);
         })
