@@ -176,15 +176,32 @@ function rank<T extends NamedTrack>(tracks: T[], wanted: string | null, carriabl
        * préférable à une piste jouable dans une autre — c'est bien la langue qu'on a demandée.
        */
       if (carriable && carriable(track)) score += 20;
-      if (track.isDefault) score += 5;
       if (isAudioDescription(track)) score -= 200;
       if (isCommentary(track)) score -= 150;
       return { track, score, order };
     })
-    // À score égal, la plus riche : deux pistes anglaises jouables, on prend la 5.1 et non la
-    // stéréo. `channels` n'existe pas sur toutes les sortes de pistes — les sous-titres n'en ont
-    // pas — d'où la lecture prudente plutôt qu'un champ obligatoire.
-    .sort((a, b) => b.score - a.score || canaux(b.track) - canaux(a.track) || a.order - b.order)
+    /**
+     * L'ordre des départages, et `isDefault` **après** la richesse — corrigé le 20/09/2026.
+     *
+     * Il valait cinq points dans le score, donc il passait devant le nombre de canaux, qui n'est
+     * qu'un départage. Conséquence visible dans le journal sur « 2001 » : la piste française
+     * stéréo, marquée par défaut dans le fichier, battait la française 5.1 — on ouvrait sur la
+     * stéréo alors que la 5.1 était là. Ce n'est pas ce qu'on veut dire par « la meilleure ».
+     *
+     * L'ordre est donc : la langue demandée, puis ce qui joue ici, puis **la plus riche**, puis
+     * le drapeau du fichier, puis l'ordre des pistes. Le drapeau garde son rôle — départager deux
+     * pistes que rien d'autre ne sépare — et le perd là où il n'avait pas à l'avoir.
+     *
+     * Rien ne change pour les sous-titres : ils n'ont pas de canaux, donc la comparaison est
+     * toujours nulle et `isDefault` tranche exactement comme avant.
+     */
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        canaux(b.track) - canaux(a.track) ||
+        Number(b.track.isDefault) - Number(a.track.isDefault) ||
+        a.order - b.order
+    )
     .map((entry) => entry.track);
 }
 

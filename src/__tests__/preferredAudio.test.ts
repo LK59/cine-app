@@ -132,3 +132,36 @@ describe("à langue égale, la meilleure piste jouable", () => {
     expect(preferredAudio(fichier(pistes), prefs)?.number).toBe(chooseAudioTrack(pistes, prefs, jouable)?.number);
   });
 });
+
+/**
+ * « La meilleure lisible » veut dire la plus riche — et le drapeau du fichier ne doit pas s'y
+ * substituer.
+ *
+ * Le cas de « 2001 : L'Odyssée de l'espace », relevé dans le journal : quatre pistes E-AC3, dont
+ * une française stéréo marquée par défaut et une française 5.1 qui ne l'est pas. Le drapeau
+ * valait cinq points dans le score, donc il passait devant le nombre de canaux — on ouvrait sur
+ * la stéréo. Le drapeau départage maintenant *après* la richesse.
+ */
+describe("la plus riche passe avant le drapeau « par défaut »", () => {
+  it("prend la 5.1 même quand la stéréo est la piste par défaut du fichier", () => {
+    const f = fichier([piste(1, "A_EAC3", "fra", 2, true), piste(2, "A_EAC3", "fra", 6)]);
+    expect(preferredAudio(f, veut("fra"))?.number).toBe(2);
+  });
+
+  it("préfère l'E-AC3 5.1 à l'AAC stéréo de la même langue", () => {
+    const f = fichier([piste(1, "A_AAC", "eng", 2, true), piste(2, "A_EAC3", "eng", 6)]);
+    expect(preferredAudio(f, veut("eng"))?.number).toBe(2);
+  });
+
+  it("mais le drapeau tranche toujours entre deux pistes également riches", () => {
+    const f = fichier([piste(1, "A_EAC3", "eng", 6), piste(2, "A_EAC3", "eng", 6, true)]);
+    expect(preferredAudio(f, veut("eng"))?.number).toBe(2);
+  });
+
+  it("et ce qui joue ici passe toujours avant la richesse", () => {
+    // Une TrueHD 7.1 reste refusée devant une AC-3 5.1 : 20 points dans le score battent un
+    // départage, quel que soit le nombre de canaux.
+    const f = fichier([piste(1, "A_TRUEHD", "eng", 8), piste(2, "A_AC3", "eng", 6)]);
+    expect(preferredAudio(f, veut("eng"))?.number).toBe(2);
+  });
+});
