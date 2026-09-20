@@ -506,11 +506,27 @@ export function ExperimentalPlayerHost({
    * navigateur n'ouvre pas laisse la précédente en place, et le menu suit ce qui s'est passé.
    */
   const reportAudioSwitch = useCallback(
-    (from: number | null, to: number, startedAt: number, playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined) => {
+    (
+      from: number | null,
+      fromLabel: string,
+      to: number,
+      startedAt: number,
+      playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined
+    ) => {
       reportPlayback("audio", {
         ...describeFileRef.current(),
         from: from ?? -1,
         to,
+        /**
+         * Les deux pistes décrites, et pas seulement numérotées.
+         *
+         * « A_DTS 6 canaux » → « A_EAC3 8 canaux » se lit tout seul ; « 3 → 5 » oblige à rouvrir
+         * le fichier pour savoir de quoi on parle. Un journal qu'il faut recroiser à la main est
+         * un journal que personne ne dépouille — et ces lignes sont écrites pour être lues dans
+         * une semaine, par quelqu'un qui n'aura pas le film sous les yeux.
+         */
+        fromTrack: fromLabel,
+        toTrack: playback?.diagnostics["Audio"] ?? "",
         applied: (playback?.currentAudioTrack ?? -1) === to,
         tookMs: Date.now() - startedAt,
         // « copié tel quel » ou « décodé puis ré-encodé en AAC » : c'est toute la question du coût.
@@ -881,6 +897,7 @@ export function ExperimentalPlayerHost({
         wantedAudioRef.current = wantedAudio;
         setSwitchingAudio(true);
         const from = playback.currentAudioTrack;
+        const fromLabel = playback.diagnostics["Audio"] ?? "";
         const startedAt = Date.now();
         void playback
           .selectAudioTrack(wantedAudio)
@@ -888,7 +905,7 @@ export function ExperimentalPlayerHost({
           .catch(() => {})
           .finally(() => {
             setSwitchingAudio(false);
-            reportAudioSwitch(from, wantedAudio, startedAt, playback);
+            reportAudioSwitch(from, fromLabel, wantedAudio, startedAt, playback);
           });
       }
 
@@ -1604,13 +1621,14 @@ export function ExperimentalPlayerHost({
                 wantedAudioRef.current = id;
                 setSwitchingAudio(true);
                 const from = remuxRef.current?.currentAudioTrack ?? null;
+                const fromLabel = remuxRef.current?.diagnostics["Audio"] ?? "";
                 const startedAt = Date.now();
                 void remuxRef.current
                   ?.selectAudioTrack(id)
                   .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id))
                   .finally(() => {
                     setSwitchingAudio(false);
-                    reportAudioSwitch(from, id, startedAt, remuxRef.current);
+                    reportAudioSwitch(from, fromLabel, id, startedAt, remuxRef.current);
                   });
               } else {
                 void engineRef.current?.setAudioTrack(id);
