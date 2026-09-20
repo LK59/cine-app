@@ -7,6 +7,8 @@ import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { buildDeviceProfile, castRefusalFor } from "@/lib/deviceProfile";
 import type { CodecSupport } from "@/lib/codecSupport";
+import { cachedMovies } from "@/lib/server-cache";
+import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle } from "@/lib/displayTitle";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { signCastToken, CAST_TOKEN_PARAM } from "@/lib/castToken";
@@ -236,13 +238,28 @@ export async function POST(req: NextRequest) {
      * du manifeste, plutôt que deux fois : c'est le même titre et le même spectateur.
      */
     const castPass = forCast ? await signCastToken(itemId, session.u) : null;
+    /**
+     * Les **faits** des pistes, et non une étiquette déjà écrite.
+     *
+     * Cette route composait le libellé du menu à partir du `DisplayTitle` de Jellyfin — « French -
+     * Dolby Digital - 5.1 - Par défaut ». Le lecteur natif, lui, écrit « Français — 5.1 » depuis
+     * `src/lib/trackLabel.ts`. Deux vocabulaires pour les mêmes pistes, et le second s'affiche
+     * précisément quand on vient de basculer depuis le premier : au moment où quelque chose s'est
+     * mal passé, le menu se mettait à parler autrement.
+     *
+     * L'étiquette se construit donc côté navigateur, parce que lui seul sait dans quelle langue
+     * l'interface est réglée. Ici on n'envoie que ce qui vient du fichier.
+     */
     const subtitleTracks = (source.MediaStreams ?? [])
       .filter((s) => s.Type === "Subtitle")
       .map((s) => ({
         index: s.Index,
-        language: s.Language,
-        label: s.DisplayTitle ?? s.Language ?? `Piste ${s.Index}`,
+        language: s.Language ?? null,
+        title: s.Title ?? null,
         isDefault: s.IsDefault ?? false,
+        isForced: s.IsForced ?? false,
+        isHearingImpaired: s.IsHearingImpaired ?? false,
+        isExternal: s.IsExternal ?? false,
         url:
           `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}` +
           (castPass ? `&${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass)}` : ""),
@@ -252,8 +269,11 @@ export async function POST(req: NextRequest) {
       .filter((s) => s.Type === "Audio")
       .map((s) => ({
         index: s.Index,
-        language: s.Language,
-        label: s.DisplayTitle ?? s.Language ?? `Piste ${s.Index}`,
+        language: s.Language ?? null,
+        title: s.Title ?? null,
+        codec: s.Codec ?? null,
+        channels: s.Channels ?? null,
+        profile: s.Profile ?? null,
         isDefault: s.IsDefault ?? false,
       }));
 
@@ -268,6 +288,21 @@ export async function POST(req: NextRequest) {
       // Alongside the others, so naming the film costs nothing on the way to its first frame.
       jellyfin.getItemNaming(session.jfId, itemId).catch(() => null),
     ]);
+
+    /**
+     * La langue de tournage, reliée au film par son identifiant TMDB — voir la route « direct ».
+     *
+     * Recherche en mémoire dans le cache Radarr, qui est chargé au démarrage du conteneur : aucun
+     * appel réseau. Toute incertitude — série, film absent du catalogue, langue non reconnue —
+     * rend `null`, et le lecteur n'affiche alors aucune mention.
+     */
+    const tmdbId = Number(naming?.ProviderIds?.Tmdb ?? "");
+    const originalLanguage =
+      Number.isFinite(tmdbId) && tmdbId > 0
+        ? await cachedMovies()
+            .then((films) => originalLanguageCode(films.find((f) => f.tmdbId === tmdbId)?.originalLanguage?.name))
+            .catch(() => null)
+        : null;
 
     const introSkip =
       timestamps?.Introduction?.Valid ? { start: timestamps.Introduction.Start, end: timestamps.Introduction.End } : null;
@@ -304,6 +339,13 @@ export async function POST(req: NextRequest) {
       isDirectPlay,
       subtitleTracks,
       audioTracks,
+      /**
+       * La langue de tournage, pour la mention « (VO) » — la même que sur le lecteur natif.
+       *
+       * Reliée au film par son identifiant TMDB, dans le cache Radarr déjà chargé : aucun appel
+       * réseau, et l'item est déjà demandé ici pour nommer le titre. Nulle pour une série.
+       */
+      originalLanguage,
       introSkip,
       creditsStart,
       /** "Série — S02E05 · Titre", from the server rather than from whoever opened the player. */

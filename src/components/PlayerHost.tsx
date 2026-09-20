@@ -12,6 +12,7 @@ import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/Pla
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
+import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useLegacyPlayer } from "@/lib/useLegacyPlayer";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
@@ -20,7 +21,7 @@ import { describeJellyfinPlayback } from "@/lib/playbackPanel";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { isWebKit } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
 
@@ -51,9 +52,20 @@ export interface PlaybackInfoSummary {
 interface ExternalSubtitleTrack {
   index: number;
   url: string;
+  /**
+   * L'étiquette construite ici, et non reçue du serveur.
+   *
+   * Elle sert deux fois : dans notre menu, et dans l'attribut `label` de la balise `<track>` —
+   * que le navigateur affiche dans **son propre** sélecteur, et que l'Apple TV montre en AirPlay.
+   * D'où l'importance qu'elle se tienne hors de notre interface aussi.
+   */
   label: string;
-  language?: string;
+  language?: string | null;
+  title?: string | null;
   isDefault: boolean;
+  isForced?: boolean;
+  isHearingImpaired?: boolean;
+  isExternal?: boolean;
 }
 
 const MAX_NETWORK_RETRIES = 6;
@@ -246,6 +258,7 @@ function ActivePlayer({
 }) {
   const playback = usePlayback();
   const t = useT();
+  const { locale } = useLocale();
   const {
     itemId,
     title: openedAs,
@@ -546,11 +559,41 @@ function ActivePlayer({
       const data = await res.json();
 
       setPlaySession({ itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId });
+      /**
+       * Les mêmes étiquettes que le lecteur natif, écrites par le même module.
+       *
+       * On atterrit ici quand quelque chose vient de mal se passer — un TrueHD refusé, un
+       * AirPlay, un tampon récalcitrant. C'est exactement le moment où un menu qui se met à
+       * parler un autre vocabulaire ajoute de la confusion à une situation déjà dégradée.
+       */
+      const faitsAudio = (data.audioTracks ?? []) as {
+        index: number;
+        language: string | null;
+        title: string | null;
+        codec: string | null;
+        channels: number | null;
+        profile: string | null;
+        isDefault: boolean;
+      }[];
       setAudioTracks(
-        (data.audioTracks ?? []).map((t: { index: number; label: string }) => ({
-          id: t.index,
-          label: t.label,
-        }))
+        labelAudioTracks(
+          faitsAudio.map((t) => ({
+            number: t.index,
+            language: t.language,
+            name: t.title,
+            isDefault: t.isDefault,
+            isForced: false,
+            codecId: t.codec,
+            channels: t.channels,
+            profile: t.profile,
+          })),
+          {
+            locale,
+            originalLanguage: data.originalLanguage ?? null,
+            canaux: (n: number) => t("player.trackLabel.channels", { n }),
+            piste: (n: number) => t("player.trackLabel.track", { n }),
+          }
+        ).map((e) => ({ id: e.number, label: e.label }))
       );
       setCurrentAudioId(opts?.audioStreamIndex ?? data.audioTracks?.find((t: { isDefault: boolean }) => t.isDefault)?.index ?? null);
       setServerTitle(data.title ?? null);
@@ -614,11 +657,34 @@ function ActivePlayer({
       // check: DirectStream (an mkv container remuxed to HLS, video copied untouched) is the
       // dominant case for an HEVC-in-mkv library, not the exception — so this isn't a narrow
       // DirectPlay-only fix, it's the primary path.
-      const tracks: ExternalSubtitleTrack[] = (data.subtitleTracks ?? []).map(
-        (t: { index: number; url: string; label: string; language?: string; isDefault: boolean }) => t
+      const faitsSt = (data.subtitleTracks ?? []) as Omit<ExternalSubtitleTrack, "label">[];
+      const etiquettesSt = new Map(
+        labelSubtitleTracks(
+          faitsSt.map((st) => ({
+            number: st.index,
+            language: st.language ?? null,
+            name: st.title ?? null,
+            isDefault: st.isDefault,
+            isForced: st.isForced ?? false,
+            isHearingImpaired: st.isHearingImpaired,
+            isExternal: st.isExternal,
+          })),
+          {
+            locale,
+            forces: t("player.trackLabel.forced"),
+            complets: t("player.trackLabel.full"),
+            malentendants: t("player.trackLabel.sdh"),
+            externe: t("player.trackLabel.external"),
+            piste: (n: number) => t("player.trackLabel.track", { n }),
+          }
+        ).map((e) => [e.number, e.label])
       );
+      const tracks: ExternalSubtitleTrack[] = faitsSt.map((st) => ({
+        ...st,
+        label: etiquettesSt.get(st.index) ?? String(st.index),
+      }));
       setExternalSubtitleTracks(tracks);
-      setSubtitleTracks(tracks.map((t) => ({ id: t.index, label: t.label })));
+      setSubtitleTracks(tracks.map((st) => ({ id: st.index, label: st.label })));
       setCurrentSubtitleId(null);
 
       // A play() rejected with NotAllowedError is iOS's autoplay policy, not a media failure:
@@ -1381,7 +1447,7 @@ function ActivePlayer({
             {...{ "x-webkit-airplay": "allow" }}
           >
             {externalSubtitleTracks.map((t) => (
-              <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language} label={t.label} />
+              <track key={t.index} kind="subtitles" src={t.url} srcLang={t.language ?? undefined} label={t.label} />
             ))}
           </video>
           {/* La diffusion interrompue passe devant l'erreur ordinaire : elle a son propre geste,

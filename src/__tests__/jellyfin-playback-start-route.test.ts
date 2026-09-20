@@ -7,6 +7,16 @@ const mockJellyfin = {
   getEpisodeTimestamps: vi.fn(),
   getItemNaming: vi.fn(),
 };
+/**
+ * Le catalogue Radarr, doublé plutôt que joint.
+ *
+ * Cette route y puise la langue de tournage du film, pour la mention « (VO) » du menu audio :
+ * une lecture du cache déjà chargé, sans appel réseau — mais le vrai module ouvrirait la
+ * configuration de Radarr au chargement, que ce test n'a pas à connaître.
+ */
+const mockFilms = vi.fn(async () => [] as { tmdbId: number; originalLanguage?: { id: number; name: string } }[]);
+vi.mock("@/lib/server-cache", () => ({ cachedMovies: () => mockFilms() }));
+
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const mockVerifySessionFull = vi.fn();
@@ -294,5 +304,55 @@ describe("POST /api/jellyfin/playback/start", () => {
     const res = await POST(fakeReq({ itemId: validId, nativeHls: false }));
     expect(mockFetch).not.toHaveBeenCalled();
     expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * Les pistes voyagent en **faits**, plus en étiquettes déjà écrites.
+ *
+ * Cette route composait le libellé du menu depuis le `DisplayTitle` de Jellyfin — « French -
+ * Dolby Digital - 5.1 - Par défaut ». Le lecteur natif écrit « Français — 5.1 ». Deux
+ * vocabulaires pour les mêmes pistes, et le second s'affichait précisément quand on venait de
+ * basculer depuis le premier. L'étiquette se construit désormais côté navigateur, qui seul sait
+ * dans quelle langue l'interface est réglée.
+ */
+describe("ce que la route dit des pistes", () => {
+  /** Une source minimale qui porte une piste de chaque sorte. */
+  async function corps() {
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [
+        {
+          Id: "src",
+          SupportsDirectPlay: true,
+          MediaStreams: [
+            { Type: "Audio", Index: 1, Language: "fra", Title: "VFF", Codec: "eac3", Channels: 6, Profile: null, IsDefault: true },
+            { Type: "Subtitle", Index: 2, Language: "fra", Title: "Forcés", IsForced: true, IsHearingImpaired: false, IsExternal: false, IsDefault: false },
+          ],
+        },
+      ],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    return (await POST(fakeReq({ itemId: validId }))).json();
+  }
+
+  it("envoie les faits du fichier, et aucune étiquette", async () => {
+    const body = await corps();
+    const audio = body.audioTracks?.[0];
+    expect(audio).toBeDefined();
+    expect(audio).not.toHaveProperty("label");
+    for (const champ of ["index", "language", "title", "codec", "channels", "profile", "isDefault"]) {
+      expect(audio, champ).toHaveProperty(champ);
+    }
+  });
+
+  it("dit d'un sous-titre s'il est forcé, pour malentendants, ou posé à côté du film", async () => {
+    const body = await corps();
+    const st = body.subtitleTracks?.[0];
+    if (!st) return;
+    expect(st).not.toHaveProperty("label");
+    for (const champ of ["isForced", "isHearingImpaired", "isExternal", "url"]) {
+      expect(st, champ).toHaveProperty(champ);
+    }
   });
 });
