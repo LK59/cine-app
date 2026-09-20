@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { PlayerShell } from "@/components/player/PlayerShell";
-import { MOVIES_CATALOGUE_KEY } from "@/lib/swr";
+import { MOVIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 
 /**
  * Le lecteur a sa propre coquille, et c'est tout l'intérêt du groupe de routes : pas de barre

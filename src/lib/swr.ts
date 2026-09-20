@@ -64,8 +64,9 @@ export const playerBootstrapOptions = { isPaused: () => false } as const;
  * des URL : deux écritures qui divergent d'un caractère, ce sont deux caches qui s'ignorent, donc
  * un catalogue téléchargé deux fois sans que rien ne le signale.
  */
-export const MOVIES_CATALOGUE_KEY = "/api/cinema/movies";
-export const SERIES_CATALOGUE_KEY = "/api/cinema/series";
+// Définies dans un module sans import, pour que le rendu serveur puisse les lire sans traîner
+// `swr` avec elles — voir `catalogueKeys.ts`. Réexportées ici : c'est d'ici qu'on les lit.
+export { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 
 /** La clé qui porte « vu », « favori » et le point de reprise d'un titre. */
 export const progressKey = (itemId: string) => `/api/cinema/progress/${itemId}`;
