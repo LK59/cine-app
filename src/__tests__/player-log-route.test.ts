@@ -7,7 +7,7 @@ vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVe
 const mockLog = vi.fn();
 vi.mock("@/lib/playerLog", () => ({
   logPlaybackEvent: (...a: unknown[]) => mockLog(...a),
-  isPlayerEventKind: (v: unknown) => ["start", "fallback", "network", "rebuild", "error", "stop"].includes(v as string),
+  isPlayerEventKind: (v: unknown) => ["start", "fallback", "network", "rebuild", "error", "stop", "audio"].includes(v as string),
 }));
 let playerEnabled = true;
 vi.mock("@/lib/config", () => ({ config: { get player() { return { enabled: playerEnabled }; } } }));

@@ -89,3 +89,26 @@ describe("logPlaybackEvent", () => {
     vi.restoreAllMocks();
   });
 });
+
+/**
+ * Le changement de piste audio est devenu un événement qu'on écrit.
+ *
+ * C'était le seul des trois gestes coûteux — lancement, saut, changement de piste — sur lequel on
+ * n'avait aucun chiffre, faute de trace. Les lignes `rebuild`, qu'on avait d'abord prises pour
+ * lui, sont des reprises après coupure réseau : deux choses différentes qui se seraient mélangées
+ * dans la même lecture du journal.
+ */
+describe("l'événement d'un changement de piste audio", () => {
+  it("est accepté, et reste distinct d'une reconstruction", async () => {
+    const { isPlayerEventKind } = await import("@/lib/playerLog");
+    expect(isPlayerEventKind("audio")).toBe(true);
+    expect(isPlayerEventKind("rebuild")).toBe(true);
+    expect(isPlayerEventKind("piste")).toBe(false);
+  });
+
+  it("s'écrit avec ce qu'il faut pour être exploitable", async () => {
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "audio", { from: 2, to: 3, tookMs: 412, applied: true, processing: "copié tel quel" });
+    expect(lines()[0]).toMatchObject({ kind: "audio", user: "louis", from: 2, to: 3, tookMs: 412, applied: true });
+  });
+});

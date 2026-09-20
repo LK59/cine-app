@@ -490,6 +490,37 @@ export function ExperimentalPlayerHost({
   const [openedAt, setOpenedAt] = useState(() => Date.now());
 
   /** Builds the pipeline again from where the viewer is, keeping what they had chosen. */
+  /**
+   * Chronométrer un changement de piste audio — et **rien de plus**.
+   *
+   * Deux endroits le demandent : la préférence de langue du compte, appliquée à l'ouverture, et le
+   * menu du lecteur. Un seul compte rendu pour les deux, sinon ils diront deux choses différentes
+   * du même geste le jour où l'un des deux évoluera.
+   *
+   * Posé **autour** de l'appel, jamais dedans : `selectAudioTrack` est la seule forme de
+   * changement de piste qui survive à WebKit — image figée, section exclusive, tampon audio
+   * remplacé sans toucher à celui de l'image — et chaque raccourci qu'on pourrait y voir a déjà
+   * été essayé et annoté. Mesurer ne doit rien en déplacer.
+   *
+   * `applied` est ce qui distingue un changement lent d'un changement refusé : une piste que le
+   * navigateur n'ouvre pas laisse la précédente en place, et le menu suit ce qui s'est passé.
+   */
+  const reportAudioSwitch = useCallback(
+    (from: number | null, to: number, startedAt: number, playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined) => {
+      reportPlayback("audio", {
+        ...describeFileRef.current(),
+        from: from ?? -1,
+        to,
+        applied: (playback?.currentAudioTrack ?? -1) === to,
+        tookMs: Date.now() - startedAt,
+        // « copié tel quel » ou « décodé puis ré-encodé en AAC » : c'est toute la question du coût.
+        processing: playback?.diagnostics["Traitement audio"] ?? "",
+        at: Math.round(positionRef.current),
+      });
+    },
+    []
+  );
+
   const restart = useCallback((at: number, why: string) => {
     trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
     traceKeepAcrossReset();
@@ -849,11 +880,16 @@ export function ExperimentalPlayerHost({
       if (wantedAudio !== null && wantedAudio !== playback.currentAudioTrack) {
         wantedAudioRef.current = wantedAudio;
         setSwitchingAudio(true);
+        const from = playback.currentAudioTrack;
+        const startedAt = Date.now();
         void playback
           .selectAudioTrack(wantedAudio)
           .then(() => setCurrentAudio(playback.currentAudioTrack))
           .catch(() => {})
-          .finally(() => setSwitchingAudio(false));
+          .finally(() => {
+            setSwitchingAudio(false);
+            reportAudioSwitch(from, wantedAudio, startedAt, playback);
+          });
       }
 
       const onTime = () => {
@@ -1154,7 +1190,10 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle, spendRebuild]);
+  // `reportAudioSwitch` est un `useCallback` à dépendances vides : son identité ne change jamais,
+  // donc l'ajouter ici ne peut pas relancer la construction du pipeline. C'est la seule raison
+  // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`.
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle, spendRebuild, reportAudioSwitch]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -1564,10 +1603,15 @@ export function ExperimentalPlayerHost({
                 // the browser turns out not to be able to open leaves the previous one playing.
                 wantedAudioRef.current = id;
                 setSwitchingAudio(true);
+                const from = remuxRef.current?.currentAudioTrack ?? null;
+                const startedAt = Date.now();
                 void remuxRef.current
                   ?.selectAudioTrack(id)
                   .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id))
-                  .finally(() => setSwitchingAudio(false));
+                  .finally(() => {
+                    setSwitchingAudio(false);
+                    reportAudioSwitch(from, id, startedAt, remuxRef.current);
+                  });
               } else {
                 void engineRef.current?.setAudioTrack(id);
               }

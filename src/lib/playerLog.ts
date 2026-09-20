@@ -18,9 +18,17 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
 const LOG_FILE = path.join(LOG_DIR, "player.log");
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio"]);
 
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop";
+/**
+ * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
+ * piste est l'un des trois gestes dont on se demandait s'il était lent, et **le seul sur lequel
+ * on n'avait aucun chiffre** — il n'écrivait rien nulle part. Les lignes `rebuild`, qu'on avait
+ * d'abord prises pour lui, sont des reprises après coupure réseau.
+ *
+ * Il ne change rien au comportement du lecteur : il le raconte.
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio";
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);
