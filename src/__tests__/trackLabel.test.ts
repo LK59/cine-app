@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { languageName, audioCodecName, channelLayout, labelAudioTracks, type AudioTrackFacts } from "@/lib/trackLabel";
+import {
+  languageName,
+  audioCodecName,
+  channelLayout,
+  labelAudioTracks,
+  labelSubtitleTracks,
+  type AudioTrackFacts,
+  type SubtitleTrackFacts,
+} from "@/lib/trackLabel";
 
 /**
  * La forme des étiquettes de pistes : langue — codec — canaux.
@@ -210,5 +218,75 @@ describe("les variantes régionales", () => {
     );
     expect(etiquettes[0].label).toBe("Français — 5.1 (VFI)");
     expect(etiquettes[1].label).toBe("Français — 5.1 (VFF)");
+  });
+});
+
+/**
+ * Les sous-titres : langue — type.
+ *
+ * Choisir un sous-titre, c'est répondre à une seule question — traduit-il tout, ou seulement ce
+ * que le film traite comme étranger ? Le format du fichier n'intéresse personne au moment de
+ * choisir, et c'est pourtant ce que les titres bruts répètent : « FR Full : SRT » revient 137
+ * fois dans cette bibliothèque, et 459 pistes sur 855 n'ont aucun titre du tout.
+ */
+const stOptions = {
+  locale: "fr",
+  forces: "Forcés",
+  complets: "Complets",
+  malentendants: "Malentendants",
+  externe: "externe",
+  piste: (n: number) => `Piste ${n}`,
+};
+
+const st = (o: Partial<SubtitleTrackFacts> & { number: number }): SubtitleTrackFacts => ({
+  language: null, name: null, isDefault: false, isForced: false, ...o,
+});
+
+describe("labelSubtitleTracks", () => {
+  it("nomme le type depuis les drapeaux, pas depuis le titre", () => {
+    // 459 pistes sur 855 n'ont aucun titre : le type ne peut pas venir du texte.
+    const etiquettes = labelSubtitleTracks(
+      [
+        st({ number: 5, language: "fra", isForced: true }),
+        st({ number: 6, language: "fra" }),
+        st({ number: 7, language: "eng", isHearingImpaired: true }),
+      ],
+      stOptions
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual([
+      "Français — Forcés",
+      "Français — Complets",
+      "Anglais — Malentendants",
+    ]);
+  });
+
+  it("lit le titre en repli, quand aucun drapeau n'a été posé", () => {
+    const etiquettes = labelSubtitleTracks(
+      [st({ number: 5, language: "fra", name: "Français forcés" }), st({ number: 6, language: "eng", name: "English SDH" })],
+      stOptions
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — Forcés", "Anglais — Malentendants"]);
+  });
+
+  it("met les malentendants devant les forcés quand une piste porte les deux", () => {
+    // C'est la description des sons qui change le plus ce qu'on voit à l'écran.
+    const [a] = labelSubtitleTracks([st({ number: 5, language: "fra", isForced: true, isHearingImpaired: true })], stOptions);
+    expect(a.label).toBe("Français — Malentendants");
+  });
+
+  it("n'annonce l'origine externe que lorsqu'elle départage", () => {
+    const seule = labelSubtitleTracks([st({ number: -1, language: "fra", isExternal: true })], stOptions);
+    expect(seule[0].label).toBe("Français — Complets");
+
+    const paire = labelSubtitleTracks(
+      [st({ number: 5, language: "fra", isForced: true }), st({ number: -1, language: "fra", isForced: true, isExternal: true })],
+      stOptions
+    );
+    expect(paire.map((e) => e.label)).toEqual(["Français — Forcés (Piste 5)", "Français — Forcés (externe)"]);
+  });
+
+  it("ne prétend pas connaître une langue absente", () => {
+    const [a] = labelSubtitleTracks([st({ number: 9 })], stOptions);
+    expect(a.label).toBe("Piste 9 — Complets");
   });
 });

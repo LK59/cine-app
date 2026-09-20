@@ -1465,7 +1465,11 @@
     "castAudioContinue": "Trotzdem wechseln",
     "trackLabel": {
       "channels": "{n} Kanäle",
-      "track": "Spur {n}"
+      "track": "Spur {n}",
+      "forced": "Erzwungen",
+      "full": "Vollständig",
+      "sdh": "Hörgeschädigte",
+      "external": "extern"
     }
   },
   "cinema": {

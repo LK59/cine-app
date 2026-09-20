@@ -1,4 +1,4 @@
-import { normaliseLanguage, isAudioDescription, type NamedTrack } from "@/lib/trackPreferences";
+import { normaliseLanguage, isAudioDescription, isForcedTrack, type NamedTrack } from "@/lib/trackPreferences";
 
 /**
  * L'étiquette d'une piste, écrite **une seule fois** pour toute l'application.
@@ -237,4 +237,74 @@ export function labelAudioTracks(tracks: AudioTrackFacts[], options: LabelOption
     number: track.number,
     label: (compte.get(bases[i]) ?? 0) > 1 ? `${bases[i]} (${discriminant(track, options)})` : bases[i],
   }));
+}
+
+
+/**
+ * Les sous-titres : **langue — type**, et le type est ce qu'on veut vraiment savoir.
+ *
+ * Choisir un sous-titre, c'est répondre à une question et une seule : est-ce qu'il traduit tout,
+ * ou seulement ce que le film traite comme étranger ? Le reste — le format du fichier, SRT ou
+ * ASS, interne ou externe — n'intéresse personne au moment de choisir, et c'est pourtant ce que
+ * les titres bruts répètent : « FR Full : SRT » revient 137 fois dans cette bibliothèque.
+ *
+ *     Français — Forcés
+ *     Français — Complets
+ *     Anglais — Malentendants
+ *     Français — Forcés (externe)
+ *
+ * Sur 855 pistes, 459 n'ont **aucun titre**. Le type ne peut donc pas venir du texte : il vient
+ * des drapeaux du conteneur, et le titre ne sert que de repli — Jellyfin marque 112 pistes pour
+ * malentendants là où le titre ne le dit que sur 85.
+ */
+const DIT_MALENTENDANTS = /\b(sdh|hi|cc)\b|malentendant|hearing/i;
+
+export interface SubtitleTrackFacts extends NamedTrack {
+  number: number;
+  isHearingImpaired?: boolean;
+  /** Un fichier posé à côté du film plutôt qu'une piste du conteneur. */
+  isExternal?: boolean;
+}
+
+export interface SubtitleLabelOptions {
+  locale: string;
+  forces: string;
+  complets: string;
+  malentendants: string;
+  externe: string;
+  piste: (n: number) => string;
+}
+
+function typeSousTitre(track: SubtitleTrackFacts, options: SubtitleLabelOptions): string {
+  // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
+  // description des sons qui change le plus ce qu'on voit à l'écran.
+  if (track.isHearingImpaired || DIT_MALENTENDANTS.test(track.name ?? "")) return options.malentendants;
+  if (isForcedTrack(track)) return options.forces;
+  return options.complets;
+}
+
+export function labelSubtitleTracks(
+  tracks: SubtitleTrackFacts[],
+  options: SubtitleLabelOptions
+): { number: number; label: string }[] {
+  const bases = tracks.map((track) => {
+    const langue = languageName(track.language, options.locale);
+    const type = typeSousTitre(track, options);
+    return langue ? `${langue} — ${type}` : `${options.piste(track.number)} — ${type}`;
+  });
+  const compte = new Map<string, number>();
+  for (const b of bases) compte.set(b, (compte.get(b) ?? 0) + 1);
+
+  return tracks.map((track, i) => {
+    /**
+     * L'origine ne s'affiche que lorsqu'elle départage.
+     *
+     * « Français — Forcés » et « Français — Forcés (externe) » côte à côte, c'est utile : ce sont
+     * deux fichiers différents et l'un peut être meilleur que l'autre. Une piste externe seule de
+     * sa langue n'a en revanche aucune raison d'annoncer d'où elle vient.
+     */
+    if ((compte.get(bases[i]) ?? 0) === 1) return { number: track.number, label: bases[i] };
+    const detail = track.isExternal ? options.externe : discriminant(track, { ...options, canaux: () => "" });
+    return { number: track.number, label: `${bases[i]} (${detail})` };
+  });
 }

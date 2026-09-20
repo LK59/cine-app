@@ -23,6 +23,7 @@ const piste = (n: number, codecId: string, language: string | null, channels = 6
     name: null,
     isDefault,
     isForced: false,
+    isHearingImpaired: false,
     audio: { channels, sampleRate: 48000 },
   }) as unknown as MatroskaTrack;
 

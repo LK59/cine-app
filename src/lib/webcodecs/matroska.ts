@@ -39,6 +39,14 @@ export interface MatroskaTrack {
   name: string | null;
   isDefault: boolean;
   isForced: boolean;
+  /**
+   * Sous-titres pour malentendants : ils décrivent aussi les sons, pas seulement les paroles.
+   *
+   * Lu du conteneur parce que c'est là qu'il est juste : Jellyfin le marque sur 112 pistes de
+   * cette bibliothèque quand le titre ne le dit que sur 85. Le titre reste un repli, pour les
+   * fichiers dont le multiplexeur n'a posé aucun drapeau.
+   */
+  isHearingImpaired: boolean;
   isEnabled: boolean;
   defaultDurationNs: number | null;
   video?: { width: number; height: number; displayWidth?: number; displayHeight?: number; colour?: TrackColour };
@@ -117,6 +125,7 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
     name: null,
     isDefault: false,
     isForced: false,
+    isHearingImpaired: false,
     isEnabled: true,
     defaultDurationNs: null,
   };
@@ -165,6 +174,9 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
         break;
       case ID.FlagDefault:
         track.isDefault = readUint(await payload(source, el)) === 1;
+        break;
+      case ID.FlagHearingImpaired:
+        track.isHearingImpaired = readUint(await payload(source, el)) === 1;
         break;
       case ID.FlagForced:
         track.isForced = readUint(await payload(source, el)) === 1;

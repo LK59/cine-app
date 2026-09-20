@@ -38,7 +38,7 @@ import {
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
-import { labelAudioTracks } from "@/lib/trackLabel";
+import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
@@ -158,15 +158,28 @@ function jellyfinAudioIndex(
 }
 
 /**
- * L'étiquette d'un sous-titre — **inchangée, et c'est provisoire**.
+ * Les étiquettes des sous-titres — langue et type, dans la même forme que l'audio.
  *
- * Le second lot lui donnera la même forme que l'audio (langue — type, avec « Forcés »,
- * « Complets », « Malentendants », « externe »). D'ici là elle reste ce qu'elle était, plutôt que
- * de laisser un menu à moitié refait.
+ * Les pistes externes portent un identifiant négatif (voir `ExternalSubtitle`), ce qui suffit à
+ * les reconnaître sans leur ajouter un champ.
  */
-function subtitleLabel(track: EngineTrack): string {
-  const parts = [track.language ?? undefined, track.name ?? undefined].filter(Boolean);
-  return parts.join(" — ") || `Piste ${track.number}`;
+function useSubtitleLabels(tracks: EngineTrack[]) {
+  const t = useT();
+  const { locale } = useLocale();
+  return useMemo(() => {
+    const etiquettes = labelSubtitleTracks(
+      tracks.map((track) => ({ ...track, isExternal: track.number < 0 })),
+      {
+        locale,
+        forces: t("player.trackLabel.forced"),
+        complets: t("player.trackLabel.full"),
+        malentendants: t("player.trackLabel.sdh"),
+        externe: t("player.trackLabel.external"),
+        piste: (n) => t("player.trackLabel.track", { n }),
+      }
+    );
+    return new Map(etiquettes.map((e) => [e.number, e.label]));
+  }, [tracks, locale, t]);
 }
 
 /**
@@ -607,6 +620,18 @@ export function ExperimentalPlayerHost({
    * second lot. Une mention qu'on ne peut pas garantir vaut moins que pas de mention du tout.
    */
   const audioLabels = useAudioLabels(tracks.audio, info?.audio, null);
+  /**
+   * Les sous-titres du menu : ceux du fichier, puis ceux posés à côté de lui.
+   *
+   * Construits ici plutôt que dans le rendu, pour que les étiquettes soient calculées sur la
+   * liste complète — savoir qu'une étiquette est ambiguë demande de voir les autres, et une
+   * piste interne peut être le sosie d'une externe.
+   */
+  const subtitleChoices = useMemo(
+    () => [...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToEngineTrack)],
+    [tracks.subtitles, info?.externalSubtitles]
+  );
+  const subtitleLabels = useSubtitleLabels(subtitleChoices);
 
   /**
    * Où en est cette lecture, dans les termes que le lecteur qui reprend comprend.
@@ -1701,9 +1726,10 @@ export function ExperimentalPlayerHost({
                 void engineRef.current?.setAudioTrack(id);
               }
             }}
-            subtitleTracks={[...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToEngineTrack)].map(
-              (track) => ({ id: track.number, label: subtitleLabel(track) })
-            )}
+            subtitleTracks={subtitleChoices.map((track) => ({
+              id: track.number,
+              label: subtitleLabels.get(track.number) ?? String(track.number),
+            }))}
             currentSubtitleId={currentSubtitle}
             onChangeSubtitle={(id) => chooseSubtitle(id, info?.externalSubtitles ?? [])}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}

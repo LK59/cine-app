@@ -1465,7 +1465,11 @@
     "castAudioContinue": "Changer quand même",
     "trackLabel": {
       "channels": "{n} canaux",
-      "track": "Piste {n}"
+      "track": "Piste {n}",
+      "forced": "Forcés",
+      "full": "Complets",
+      "sdh": "Malentendants",
+      "external": "externe"
     }
   },
   "cinema": {

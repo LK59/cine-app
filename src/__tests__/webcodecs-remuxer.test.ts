@@ -48,7 +48,7 @@ const AAC_CONFIG = new Uint8Array([0x11, 0x90]);
 function track(o: Partial<MatroskaTrack> & Pick<MatroskaTrack, "number" | "type" | "codecId">): MatroskaTrack {
   return {
     codecPrivate: null, language: "fra", name: null,
-    isDefault: true, isForced: false, isEnabled: true, defaultDurationNs: null, ...o,
+    isDefault: true, isForced: false, isHearingImpaired: false, isEnabled: true, defaultDurationNs: null, ...o,
   };
 }
 

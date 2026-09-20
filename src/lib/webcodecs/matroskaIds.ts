@@ -40,6 +40,8 @@ export const ID = {
   TrackName: 0x536e,
   FlagDefault: 0x88,
   FlagForced: 0x55aa,
+  /** `FlagHearingImpaired` — les sous-titres qui décrivent aussi les sons, pas seulement les mots. */
+  FlagHearingImpaired: 0x55ab,
   FlagEnabled: 0xb9,
 
   Video: 0xe0,

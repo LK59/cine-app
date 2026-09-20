@@ -14,7 +14,7 @@ const AAC_CONFIG = new Uint8Array([0x11, 0x90]); // AAC-LC, 48 kHz, stereo
 function track(overrides: Partial<MatroskaTrack> & Pick<MatroskaTrack, "number" | "type" | "codecId">): MatroskaTrack {
   return {
     codecPrivate: null, language: "fra", name: null,
-    isDefault: true, isForced: false, isEnabled: true, defaultDurationNs: null,
+    isDefault: true, isForced: false, isHearingImpaired: false, isEnabled: true, defaultDurationNs: null,
     ...overrides,
   };
 }

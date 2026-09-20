@@ -36,6 +36,7 @@ function track(partial: Partial<MatroskaTrack>): MatroskaTrack {
     name: null,
     isDefault: true,
     isForced: false,
+    isHearingImpaired: false,
     isEnabled: true,
     defaultDurationNs: null,
     ...partial,

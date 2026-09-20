@@ -15,7 +15,9 @@ import { render, screen, cleanup, act, waitFor, fireEvent } from "@testing-libra
 // `useLocale` est arrivé avec les étiquettes de pistes : le double doit suivre, sinon tout le
 // fichier tombe sur un export manquant plutôt que sur ce qu'il teste.
 vi.mock("@/components/TranslationProvider", () => ({
-  useT: () => (key: string) => key,
+  // Le dernier segment de la clé plutôt que la clé entière : les étiquettes de pistes en
+  // deviennent lisibles dans les assertions — « Français — full (external) ».
+  useT: () => (key: string) => key.split(".").pop() ?? key,
   useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }));
@@ -334,7 +336,7 @@ describe("le chemin choisi", () => {
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
     expect(screen.getByText(/^audio:Français/)).toBeTruthy();
-    expect(screen.getByText("st:fre")).toBeTruthy();
+    expect(screen.getByText(/^st:Français — full/)).toBeTruthy();
   });
 
   it("donne l'URL à l'élément lui-même quand le fichier est déjà un MP4", async () => {
@@ -372,7 +374,7 @@ describe("le chemin choisi", () => {
     swr = { data: info({ refusedReason: "conteneur avi" }), error: undefined };
     mount();
 
-    await waitFor(() => expect(screen.getByText("player.unplayable")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("unplayable")).toBeTruthy());
     expect(screen.getByText("conteneur avi")).toBeTruthy();
     expect(onFallback).not.toHaveBeenCalled();
     // Un bouton vers un lecteur qui n'existe pas mènerait à un écran vide.
@@ -576,8 +578,8 @@ describe("ce que le spectateur avait choisi", () => {
     };
     stubFetch();
     mount();
-    await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
+    await waitFor(() => expect(screen.getByText(/^st:Français — full \(external\)/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français — full \(external\)/)));
 
     const rebuilt = fakeRemux();
     nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
@@ -723,16 +725,16 @@ describe("les sous-titres posés à côté du film", () => {
   it("les propose à côté de celles du conteneur", async () => {
     withExternal();
     mount();
-    await waitFor(() => expect(screen.getByText("st:fre")).toBeTruthy());
-    expect(screen.getByText("st:fra — Français")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/^st:Français — full \(track\)/)).toBeTruthy());
+    expect(screen.getByText(/^st:Français — full \(external\)/)).toBeTruthy();
   });
 
   it("éteint la piste du conteneur et affiche le fichier, à la bonne seconde", async () => {
     withExternal();
     stubFetch(() => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nBonjour." }));
     mount();
-    await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
+    await waitFor(() => expect(screen.getByText(/^st:Français — full \(external\)/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français — full \(external\)/)));
 
     // Two sources writing the same line would race; the container's is turned off first.
     expect(remux.selectSubtitleTrack).toHaveBeenCalledWith(null);
@@ -747,8 +749,8 @@ describe("les sous-titres posés à côté du film", () => {
     withExternal();
     stubFetch(() => ({ ok: false, status: 404 }));
     mount();
-    await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
+    await waitFor(() => expect(screen.getByText(/^st:Français — full \(external\)/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français — full \(external\)/)));
 
     await waitFor(() => expect(screen.getByText(/Sous-titres externes indisponibles/)).toBeTruthy());
     // A subtitle that could not be fetched is not a reason to abandon the film.
@@ -775,8 +777,8 @@ describe("le chemin canvas", () => {
     stubFetch(() => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nDu fichier." }));
     nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
     mount();
-    await waitFor(() => expect(screen.getByText("st:fra — Français")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("st:fra — Français")));
+    await waitFor(() => expect(screen.getByText(/^st:Français — full/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français — full/)));
     await waitFor(() => expect(fetch).toHaveBeenCalled());
 
     emit("subtitle", "Du conteneur.");
