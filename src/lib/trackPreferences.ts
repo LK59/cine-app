@@ -145,7 +145,15 @@ export interface TrackPreferences {
   playDefaultAudioTrack: boolean;
 }
 
-function rank<T extends NamedTrack>(tracks: T[], wanted: string | null): T[] {
+/**
+ * Ce que ce chemin de lecture sait porter — une question, pas une propriété de la piste.
+ *
+ * La réponse dépend du lecteur et du navigateur : le TrueHD n'a de décodeur nulle part, le DTS en
+ * a un chez nous, l'AAC en a un partout. L'appelant la pose donc lui-même.
+ */
+export type Carriable<T> = (track: T) => boolean;
+
+function rank<T extends NamedTrack>(tracks: T[], wanted: string | null, carriable?: Carriable<T>): T[] {
   return tracks
     .map((track, order) => {
       const language = trackLanguage(track);
@@ -154,13 +162,44 @@ function rank<T extends NamedTrack>(tracks: T[], wanted: string | null): T[] {
       // A track that says nothing about its language is not evidence of anything — it is only
       // ever taken when nothing better exists, and never mistaken for the language asked for.
       else if (language === null) score += 10;
+      /**
+       * Ce qui joue ici passe devant, à langue égale — décidé le 20/09/2026.
+       *
+       * « Le Mans 66 » porte deux pistes anglaises : une TrueHD 7.1 et une AC-3 5.1. La première
+       * gagnait, parce qu'elle vient en premier dans le fichier ; or rien ne la décode, et le
+       * lecteur cédait donc la place au lecteur serveur — six fois pour le même spectateur, qui
+       * ne demandait que la VO. Il l'obtient maintenant sans quitter le lecteur natif, en 5.1 au
+       * lieu de 7.1.
+       *
+       * Vingt points : assez pour départager deux pistes de la même langue, jamais assez pour
+       * passer devant la langue demandée (cent). Une piste injouable dans la bonne langue reste
+       * préférable à une piste jouable dans une autre — c'est bien la langue qu'on a demandée.
+       */
+      if (carriable && carriable(track)) score += 20;
       if (track.isDefault) score += 5;
       if (isAudioDescription(track)) score -= 200;
       if (isCommentary(track)) score -= 150;
       return { track, score, order };
     })
-    .sort((a, b) => b.score - a.score || a.order - b.order)
+    // À score égal, la plus riche : deux pistes anglaises jouables, on prend la 5.1 et non la
+    // stéréo. `channels` n'existe pas sur toutes les sortes de pistes — les sous-titres n'en ont
+    // pas — d'où la lecture prudente plutôt qu'un champ obligatoire.
+    .sort((a, b) => b.score - a.score || canaux(b.track) - canaux(a.track) || a.order - b.order)
     .map((entry) => entry.track);
+}
+
+/**
+ * Le nombre de canaux, quelle que soit la forme de la piste.
+ *
+ * Deux vocabulaires se croisent ici : une piste Matroska le range sous `audio.channels`, une
+ * piste telle que l'écran la voit sous `channels`. N'en lire qu'un rendait le départage inerte de
+ * l'autre côté — attrapé par un test, et c'est précisément le genre de panne muette qu'un
+ * classement silencieux produit : rien n'échoue, on prend simplement la stéréo.
+ */
+function canaux(track: unknown): number {
+  const t = track as { channels?: number | null; audio?: { channels?: number | null } | null };
+  const n = t.channels ?? t.audio?.channels;
+  return typeof n === "number" ? n : 0;
 }
 
 /**
@@ -170,13 +209,17 @@ function rank<T extends NamedTrack>(tracks: T[], wanted: string | null): T[] {
  * for French and gets handed the only other track has been given a film in a language they did
  * not ask for, and told nothing about it.
  */
-export function chooseAudioTrack<T extends NamedTrack>(tracks: T[], preferences: TrackPreferences): T | null {
+export function chooseAudioTrack<T extends NamedTrack>(
+  tracks: T[],
+  preferences: TrackPreferences,
+  carriable?: Carriable<T>
+): T | null {
   if (tracks.length === 0) return null;
   if (preferences.playDefaultAudioTrack) return null;
   const wanted = normaliseLanguage(preferences.audioLanguage);
   if (!wanted) return null;
 
-  const best = rank(tracks, wanted)[0];
+  const best = rank(tracks, wanted, carriable)[0];
   return best && trackLanguage(best) === wanted ? best : null;
 }
 

@@ -85,3 +85,50 @@ describe("preferredAudio", () => {
     expect(preferredAudio(f, veut("eng"))?.codecId).toBe("A_TRUEHD");
   });
 });
+
+/**
+ * Le cas « Le Mans 66 », décidé le 20/09/2026 : à langue égale, on prend la meilleure piste qui
+ * **joue ici**.
+ *
+ * Le fichier porte trois pistes — DTS 5.1 française par défaut, TrueHD 7.1 anglaise, AC-3 5.1
+ * anglaise. Le spectateur demandait la VO ; il recevait la TrueHD, que rien ne décode, et le
+ * lecteur lui cédait la place au lecteur serveur. Six fois, relevé dans le journal. Il obtient
+ * maintenant la VO sans quitter le lecteur natif, en 5.1 au lieu de 7.1.
+ */
+describe("à langue égale, la meilleure piste jouable", () => {
+  const leMans = () =>
+    fichier([
+      piste(1, "A_DTS", "fra", 6, true),
+      piste(2, "A_TRUEHD", "eng", 8),
+      piste(3, "A_AC3", "eng", 6),
+    ]);
+
+  it("préfère l'AC-3 anglaise à la TrueHD anglaise", () => {
+    expect(preferredAudio(leMans(), veut("eng"))?.number).toBe(3);
+  });
+
+  it("ouvre sur ce qui joue quand la langue demandée n'existe qu'en injouable", () => {
+    /**
+     * Deux règles, et elles ne se contredisent pas : on **ouvre** sur une piste qui joue, pour
+     * que le film démarre, et c'est l'écran qui décide ensuite de céder la place au lecteur
+     * serveur — parce que le spectateur qui demande la VO doit obtenir la VO. Sans cela, on
+     * paierait une tentative de plus pour arriver au même endroit.
+     */
+    const f = fichier([piste(1, "A_AC3", "fra", 6, true), piste(2, "A_TRUEHD", "eng", 8)]);
+    expect(preferredAudio(f, veut("eng"))?.number).toBe(1);
+  });
+
+  it("entre deux pistes jouables de la même langue, prend la plus riche", () => {
+    const f = fichier([piste(1, "A_AC3", "fra", 6, true), piste(2, "A_AC3", "eng", 2), piste(3, "A_EAC3", "eng", 6)]);
+    expect(preferredAudio(f, veut("eng"))?.number).toBe(3);
+  });
+
+  it("l'écran et l'ouverture répondent la même chose", () => {
+    // Le contrat de tout le dispositif : si les deux divergent, on ouvre sur l'une et on bascule
+    // aussitôt vers l'autre — c'est le geste qu'on cherche à supprimer.
+    const pistes = leMans().tracks;
+    const prefs = veut("eng");
+    const jouable = (t: (typeof pistes)[number]) => !/TRUEHD|MLP/.test(t.codecId);
+    expect(preferredAudio(fichier(pistes), prefs)?.number).toBe(chooseAudioTrack(pistes, prefs, jouable)?.number);
+  });
+});

@@ -798,11 +798,26 @@ export function ExperimentalPlayerHost({
      * French and is handed the only other track has been given a film in a language they did not
      * ask for, and told nothing about it.
      */
-    const applyPreferences = (audio: EngineTrack[], subtitles: EngineTrack[]): number | null => {
+    const applyPreferences = (
+      audio: EngineTrack[],
+      subtitles: EngineTrack[],
+      /**
+       * « Cette piste joue-t-elle par ce chemin ? », posée par celui qui sait répondre.
+       *
+       * Fournie par le chemin remultiplexé, absente pour le chemin canevas : celui-ci décode en
+       * logiciel et n'a pas les mêmes limites, donc lui prêter les réponses de l'autre serait une
+       * supposition. Sans elle, le classement est exactement celui d'avant.
+       */
+      carriable?: (track: EngineTrack) => boolean
+    ): number | null => {
       const preferences = playbackState?.preferences ?? null;
       if (!preferences || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
 
-      const wantedAudio = chooseAudioTrack(audio, preferences);
+      // La même question que celle posée à l'ouverture, et il faut qu'elle le reste : une piste
+      // que ce chemin ne porte pas ne doit pas être « voulue », sinon on ouvre sur l'une et on
+      // bascule vers l'autre — ou, pire, on cède la place au lecteur serveur alors qu'une piste
+      // de la même langue joue très bien ici. Voir `preferredAudio` et `rank`.
+      const wantedAudio = chooseAudioTrack(audio, preferences, carriable);
       const spoken = trackLanguage(wantedAudio ?? audio.find((track) => track.isDefault) ?? audio[0] ?? {
         language: null,
         name: null,
@@ -884,7 +899,9 @@ export function ExperimentalPlayerHost({
       // subtitles gone, has not really come back.
       // What the viewer chose, if this pipeline replaces one that had it — and otherwise what
       // their account asks for, which is what a first opening gets.
-      const preferred = applyPreferences(playback.audioTracks, playback.subtitleTracks);
+      const preferred = applyPreferences(playback.audioTracks, playback.subtitleTracks, (track) =>
+        playback.canCarryAudio(track.number)
+      );
       const wantedAudio = wantedAudioRef.current ?? preferred;
       const wantedSubtitle = wantedSubtitleRef.current;
       // A track number from a file beside the film means nothing to a pipeline reading the

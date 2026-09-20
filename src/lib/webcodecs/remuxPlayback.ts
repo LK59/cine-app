@@ -95,6 +95,7 @@ function toEngineTrack(track: MatroskaTrack): EngineTrack {
     name: track.name,
     isDefault: track.isDefault,
     isForced: track.isForced,
+    channels: track.audio?.channels ?? null,
   };
 }
 
@@ -132,7 +133,20 @@ export function preferredAudio(file: MatroskaFile, preferences?: TrackPreference
    * préférence n'est exprimée.
    */
   if (preferences && playable.length > 0) {
-    const wanted = chooseAudioTrack(playable, preferences);
+    /**
+     * Parmi les pistes jouables, et le prédicat sert à départager celles de la même langue.
+     *
+     * Deux règles se superposent, et elles ne disent pas la même chose :
+     *
+     *  * **ici**, on ouvre sur quelque chose qui joue — le film doit démarrer ;
+     *  * **à l'écran**, `chooseAudioTrack` voit toutes les pistes, et si la langue demandée
+     *    n'existe qu'en TrueHD il cède la place au lecteur serveur. C'est voulu : le spectateur
+     *    qui demande la VO obtient la VO, fût-ce par un autre lecteur.
+     *
+     * Les deux tombent d'accord dans le cas qui nous occupe — deux pistes de la même langue dont
+     * une seule joue, « Le Mans 66 » — et c'est là que le changement de piste disparaît.
+     */
+    const wanted = chooseAudioTrack(playable, preferences, playableAudio);
     if (wanted) return wanted;
   }
   // Nothing here works: the file's own default is returned so the refusal names its real codec.

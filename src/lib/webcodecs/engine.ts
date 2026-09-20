@@ -49,6 +49,14 @@ export interface EngineTrack {
   name: string | null;
   isDefault: boolean;
   isForced: boolean;
+  /**
+   * Le nombre de canaux, quand la piste en a un — nul pour un sous-titre.
+   *
+   * Porté jusqu'ici pour départager deux pistes audio de la même langue : à défaut, « la
+   * meilleure » n'a pas de sens de ce côté de l'application, qui ne voit que des numéros et des
+   * noms. Voir `rank` dans `trackPreferences`.
+   */
+  channels?: number | null;
 }
 
 /** A subtitle line, already decoded to text and timed in seconds. */
