@@ -540,6 +540,28 @@ sequence of gaps between presentation timestamps** against ffprobe's reading of 
 
 `raps.spec.ts` measures the proportion of false keyframes in a file and what refusing them costs.
 
+`cout.spec.ts` answers the other question — not *is it right* but *where does the time go*:
+
+```bash
+docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
+  -e COUT_FILE="/media/movies/…/file.mkv" node:24-alpine npx vitest run cout.spec.ts
+```
+
+It reports reads, bytes and milliseconds for four moments: reading the header, opening the
+remuxer, producing the first segment, and seeking. Measured on this library on 2026-09-20:
+
+| | header | before the first frame | seek |
+|---|---|---|---|
+| 4K, 8.3 GB, 13 tracks | 77 ms / 0.2 MB | **4.2 MB** | 4.4 MB |
+| HD, 2.3 GB, 7 tracks | 79 ms / 0.2 MB | **2.0 MB** | 1.4 MB |
+
+That 2.1× ratio is the one `data/logs/player.log` reports for real openings on real devices (4K
+1250–1600 ms, HD 565–690 ms), which is the whole point: **launching is bound by bytes, not by
+CPU** — remuxing costs 2 to 20 ms per segment, and everything above totals about 110 ms. And
+those bytes are the file's own interleaving: producing 29 KB of video means traversing 2.8 MB,
+because thirteen tracks are braided together in the same clusters. No change on this side removes
+them; only remuxing the files themselves would, and those belong to Radarr.
+
 Synthetic tests pass on files real ones fail; this harness exists because that gap is where the
 original defects lived.
 

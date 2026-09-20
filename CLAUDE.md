@@ -43,7 +43,16 @@ docker compose build && docker compose up -d
 that way before. Read the gate's exit status before committing.
 
 Tests default to the `node` environment; a component test opts into jsdom with a
-`// @vitest-environment jsdom` docblock on its first line.
+`// @vitest-environment jsdom` docblock on its first line. `clearMocks` is pinned to `false` in
+`vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
+test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
+
+**Two benches sit beside the suite, both skipped unless given a file.** `bench.spec.ts` checks
+what the remuxer *produces* (bytes, to be decoded by ffmpeg and compared against ffprobe);
+`cout.spec.ts` measures what it *costs* — reads, bytes and milliseconds for the header, the open,
+the first segment and a seek. The second answers "why is it slow" without guessing: it established
+that launching is bound by bytes, not by CPU, and its header carries the numbers measured on this
+library.
 
 **Diagnose against the running container rather than reasoning in the dark.**
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
@@ -63,6 +72,15 @@ guest write whitelist, `308` redirects for addresses that moved (`/player`, `/ci
 sliding session refresh, and the `x-session-expired: 1` header. **It is that header's only
 emitter**: a bare 401 may come from an upstream service whose key is wrong, and only this header
 means the viewer's own session is gone.
+
+It also owns `ACTIFS_PUBLICS`, **the files served without a session** — the manifest, the service
+worker, the offline page, the icons, and `/splash/`. These are what a browser or an operating
+system fetches on its own, outside any page, with no reason to present a cookie. Forgetting one
+does not look like a bug: `/splash/*` was missing for a day and every launch image answered `307`
+to `/login`, so iOS silently fell back to its own background and nothing appeared in any log.
+**A redirect is not a failure — it leaves no trace.** When something served over HTTP behaves
+oddly, ask what the URL actually returns before reading any more code. The list is written twice,
+because Next demands a literal string for its `matcher`; a test compares the two.
 
 **API routes are thin** (~59 lines average). Logic lives in `src/lib`:
 
