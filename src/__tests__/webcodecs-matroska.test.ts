@@ -219,6 +219,19 @@ describe("parseMatroska", () => {
     const audio = file.tracks.find((t) => t.type === "audio")!;
     expect(audio.codecId).toBe("A_EAC3");
     expect(audio.language).toBe("fra");
+    /**
+     * La vidéo de ce fichier ne déclare aucune langue — et l'absence est une valeur : Matroska
+     * dit qu'elle vaut « eng ».
+     *
+     * Beaucoup de multiplexeurs s'y fient en ne l'écrivant pas sur la piste anglaise. « 1917 » en
+     * est un : sa piste française déclare `fre`, sa piste anglaise ne déclare rien. Nous rendions
+     * `null`, donc un compte réglé sur l'anglais ne pouvait jamais être servi — la piste ne se
+     * nommait pas — et le lecteur retombait sur le défaut du fichier, en français. Signalé le
+     * 20/09/2026, après que le classement des pistes eut été corrigé : c'était la donnée d'entrée
+     * qui manquait, pas la règle. Jellyfin applique déjà ce défaut sur le même fichier, et
+     * l'écart entre nos deux lectures était le défaut lui-même.
+     */
+    expect(video.language).toBe("eng");
     expect(audio.name).toBe("VFF");
     expect(audio.audio).toMatchObject({ sampleRate: 48000, channels: 6 });
   });
@@ -310,3 +323,4 @@ describe("parseBlock lacing", () => {
     expect(out.every((s) => s.timestampUs === 100_000)).toBe(true);
   });
 });
+

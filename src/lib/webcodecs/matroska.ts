@@ -121,6 +121,22 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
     defaultDurationNs: null,
   };
 
+  /**
+   * La langue absente n'est pas une langue inconnue : Matroska dit qu'elle vaut « eng ».
+   *
+   * L'élément `Language` a une valeur par défaut dans la spécification, et beaucoup de
+   * multiplexeurs s'y fient en ne l'écrivant pas sur la piste anglaise. « 1917 » en est un : sa
+   * piste française déclare `fre`, sa piste anglaise ne déclare rien. Nous rendions `null`, donc
+   * la préférence de langue d'un compte réglé sur l'anglais ne pouvait jamais être honorée — la
+   * piste ne se nommait pas — et le lecteur retombait sur le défaut du fichier, en français.
+   * Signalé le 20/09/2026, après que le reste du classement eut été corrigé : c'est la donnée
+   * d'entrée qui manquait, pas la règle.
+   *
+   * Jellyfin applique déjà ce défaut — il rapporte cette piste en `eng` — et l'écart entre les
+   * deux lectures du même fichier était précisément le défaut.
+   */
+  let langueDeclaree = false;
+
   await forEachChild(source, start, end, async (el) => {
     switch (el.id) {
       case ID.TrackNumber:
@@ -138,9 +154,12 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
         track.codecPrivate = new Uint8Array(await payload(source, el));
         break;
       case ID.Language:
-      case ID.LanguageBCP47:
-        track.language = readString(await payload(source, el)) || track.language;
+      case ID.LanguageBCP47: {
+        const lu = readString(await payload(source, el));
+        if (lu) langueDeclaree = true;
+        track.language = lu || track.language;
         break;
+      }
       case ID.TrackName:
         track.name = readString(await payload(source, el));
         break;
@@ -238,6 +257,9 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
     }
     return "continue";
   });
+
+  // Voir la note sur `langueDeclaree` : l'absence de l'élément est une valeur, pas un vide.
+  if (!langueDeclaree) track.language = "eng";
 
   return track.number > 0 ? track : null;
 }
