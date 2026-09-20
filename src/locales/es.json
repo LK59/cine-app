@@ -1462,7 +1462,11 @@
     "castInterrupted": "La emisión se ha interrumpido.",
     "castRelaunch": "Reiniciar la emisión",
     "castAudioWarning": "Cambiar de pista de audio recarga el reproductor, así que la emisión al dispositivo se detendrá. Podrá reiniciarla justo después, desde el botón de emisión.",
-    "castAudioContinue": "Cambiar de todos modos"
+    "castAudioContinue": "Cambiar de todos modos",
+    "trackLabel": {
+      "channels": "{n} canales",
+      "track": "Pista {n}"
+    }
   },
   "cinema": {
     "standardMode": "Modo estándar",

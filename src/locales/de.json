@@ -1462,7 +1462,11 @@
     "castInterrupted": "Die Übertragung wurde unterbrochen.",
     "castRelaunch": "Übertragung neu starten",
     "castAudioWarning": "Ein Wechsel der Tonspur lädt den Player neu, die Übertragung an das Gerät wird daher beendet. Sie können sie direkt danach über die Übertragungsschaltfläche neu starten.",
-    "castAudioContinue": "Trotzdem wechseln"
+    "castAudioContinue": "Trotzdem wechseln",
+    "trackLabel": {
+      "channels": "{n} Kanäle",
+      "track": "Spur {n}"
+    }
   },
   "cinema": {
     "standardMode": "Standardmodus",

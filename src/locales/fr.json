@@ -1462,7 +1462,11 @@
     "castInterrupted": "La diffusion s'est interrompue.",
     "castRelaunch": "Relancer la diffusion",
     "castAudioWarning": "Changer de piste audio recharge le lecteur : la diffusion vers l'appareil va s'arrêter. Vous pourrez la relancer juste après, depuis le bouton de diffusion.",
-    "castAudioContinue": "Changer quand même"
+    "castAudioContinue": "Changer quand même",
+    "trackLabel": {
+      "channels": "{n} canaux",
+      "track": "Piste {n}"
+    }
   },
   "cinema": {
     "standardMode": "Mode standard",

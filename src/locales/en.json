@@ -1462,7 +1462,11 @@
     "castInterrupted": "The cast was interrupted.",
     "castRelaunch": "Restart the cast",
     "castAudioWarning": "Changing the audio track reloads the player, so the cast to your device will stop. You can start it again right after, from the cast button.",
-    "castAudioContinue": "Change anyway"
+    "castAudioContinue": "Change anyway",
+    "trackLabel": {
+      "channels": "{n} channels",
+      "track": "Track {n}"
+    }
   },
   "cinema": {
     "standardMode": "Standard mode",

@@ -12,7 +12,7 @@ import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
@@ -38,6 +38,7 @@ import {
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
+import { labelAudioTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
@@ -156,10 +157,46 @@ function jellyfinAudioIndex(
   return jellyfinTracks[ordinal]?.index;
 }
 
-function trackLabel(track: EngineTrack): string {
+/**
+ * L'étiquette d'un sous-titre — **inchangée, et c'est provisoire**.
+ *
+ * Le second lot lui donnera la même forme que l'audio (langue — type, avec « Forcés »,
+ * « Complets », « Malentendants », « externe »). D'ici là elle reste ce qu'elle était, plutôt que
+ * de laisser un menu à moitié refait.
+ */
+function subtitleLabel(track: EngineTrack): string {
   const parts = [track.language ?? undefined, track.name ?? undefined].filter(Boolean);
-  const label = parts.join(" — ");
-  return label || `Piste ${track.number}`;
+  return parts.join(" — ") || `Piste ${track.number}`;
+}
+
+/**
+ * Les étiquettes des pistes audio, dans la forme partagée par toute l'application.
+ *
+ * Le fichier et Jellyfin décrivent les mêmes pistes, chacun avec ce que l'autre n'a pas : le
+ * premier porte la langue et le nom bruts, le second le profil — Atmos, DTS-HD MA — et un nombre
+ * de canaux déjà résolu. On les apparie dans l'ordre, comme `jellyfinAudioIndex` le fait déjà, et
+ * on étiquette avec les deux. Sans Jellyfin, l'étiquette est simplement moins précise.
+ */
+function useAudioLabels(engineTracks: EngineTrack[], jellyfin: DirectPlayInfo["audio"] | undefined, originalLanguage: string | null) {
+  const t = useT();
+  const { locale } = useLocale();
+  return useMemo(() => {
+    const apparie = jellyfin && jellyfin.length === engineTracks.length ? jellyfin : null;
+    const faits = engineTracks.map((track, i) => ({
+      ...track,
+      codecId: track.codecId || apparie?.[i]?.codec || null,
+      channels: track.channels ?? apparie?.[i]?.channels ?? null,
+      profile: apparie?.[i]?.profile ?? null,
+      name: track.name ?? apparie?.[i]?.displayTitle ?? null,
+    }));
+    const etiquettes = labelAudioTracks(faits, {
+      locale,
+      originalLanguage,
+      canaux: (n) => t("player.trackLabel.channels", { n }),
+      piste: (n) => t("player.trackLabel.track", { n }),
+    });
+    return new Map(etiquettes.map((e) => [e.number, e.label]));
+  }, [engineTracks, jellyfin, originalLanguage, locale, t]);
 }
 
 const TRANSITION =
@@ -561,6 +598,15 @@ export function ExperimentalPlayerHost({
     revalidateOnReconnect: false,
     revalidateIfStale: false,
   });
+
+  /**
+   * Les étiquettes des pistes audio, calculées une fois pour les deux menus qui les montrent.
+   *
+   * `originalLanguage` reste nul pour l'instant : la mention « (VO) » demande la langue originale
+   * du film, que Jellyfin n'expose pas sur un item — Radarr la donne, et elle arrivera avec le
+   * second lot. Une mention qu'on ne peut pas garantir vaut moins que pas de mention du tout.
+   */
+  const audioLabels = useAudioLabels(tracks.audio, info?.audio, null);
 
   /**
    * Où en est cette lecture, dans les termes que le lecteur qui reprend comprend.
@@ -1601,7 +1647,7 @@ export function ExperimentalPlayerHost({
             onMinimize={() => playback.minimize()}
             // Straight from the container the engine is reading, not from Jellyfin's view of the
             // file: those are the tracks it can actually switch between.
-            audioTracks={tracks.audio.map((track) => ({ id: track.number, label: trackLabel(track) }))}
+            audioTracks={tracks.audio.map((track) => ({ id: track.number, label: audioLabels.get(track.number) ?? String(track.number) }))}
             /* Diffuser depuis ce lecteur est impossible : il alimente son élément vidéo par
                MediaSource, et ni AirPlay ni Remote Playback ne diffusent autre chose qu'une
                adresse que le récepteur ira chercher. On cède donc la place au lecteur serveur, qui
@@ -1656,7 +1702,7 @@ export function ExperimentalPlayerHost({
               }
             }}
             subtitleTracks={[...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToEngineTrack)].map(
-              (track) => ({ id: track.number, label: trackLabel(track) })
+              (track) => ({ id: track.number, label: subtitleLabel(track) })
             )}
             currentSubtitleId={currentSubtitle}
             onChangeSubtitle={(id) => chooseSubtitle(id, info?.externalSubtitles ?? [])}

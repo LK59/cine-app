@@ -28,6 +28,14 @@ export interface DirectPlayAudioTrack {
   displayTitle: string | null;
   channels: number | null;
   isDefault: boolean;
+  /**
+   * Ce que Jellyfin sait du profil : « Dolby Digital Plus + Dolby Atmos », « DTS-HD MA », « DTS:X ».
+   *
+   * Le conteneur ne le porte pas — le fichier dit `A_EAC3`, point — alors que c'est exactement ce
+   * qui distingue une piste d'une autre à l'œil de qui choisit. Descendu jusqu'ici pour l'étiquette
+   * du menu, et pour rien d'autre.
+   */
+  profile: string | null;
 }
 
 export interface ExternalSubtitle {
@@ -223,6 +231,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
         displayTitle: s.DisplayTitle ?? null,
         channels: s.Channels ?? null,
         isDefault: s.IsDefault ?? false,
+        profile: s.Profile ?? null,
       })),
     refusedReason,
     canvasHdrRefusal,

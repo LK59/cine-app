@@ -8,7 +8,16 @@ import { render, screen, cleanup, act, waitFor, fireEvent } from "@testing-libra
 // Everything under it is mocked here on purpose — those layers have their own tests, and what is
 // worth checking at this level is the decisions, not the decoding.
 
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
+// Les étiquettes de pistes ont une forme fixe depuis le 20/09/2026 — « Anglais — Dolby TrueHD —
+// 7.1 » et non plus le code de langue brut. Ces tests interrogent donc le début de l'étiquette
+// plutôt que sa totalité : ce qu'ils vérifient est le comportement du menu, pas la typographie.
+//
+// `useLocale` est arrivé avec les étiquettes de pistes : le double doit suivre, sinon tout le
+// fichier tombe sur un export manquant plutôt que sur ce qu'il teste.
+vi.mock("@/components/TranslationProvider", () => ({
+  useT: () => (key: string) => key,
+  useLocale: () => ({ locale: "fr", setLocale: () => {} }),
+}));
 vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }));
 vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn() }));
 vi.mock("@/lib/webcodecs/pathSelector", () => ({ describePath: () => "raison du choix" }));
@@ -259,9 +268,9 @@ describe("une piste que ce chemin ne portera jamais", () => {
   it("cède la main au lecteur serveur au lieu de refuser la VO", async () => {
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
-    act(() => void screen.getByText("audio:eng").click());
+    act(() => void screen.getByText(/^audio:Anglais/).click());
 
     expect(onFallback).toHaveBeenCalledTimes(1);
     expect(onFallback.mock.calls[0][0]).toContain("A_TRUEHD");
@@ -272,10 +281,10 @@ describe("une piste que ce chemin ne portera jamais", () => {
   it("dit au repli où reprendre et sur quelle piste", async () => {
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
     videoElement(2400);
 
-    act(() => void screen.getByText("audio:eng").click());
+    act(() => void screen.getByText(/^audio:Anglais/).click());
 
     // La position courante, pas celle de l'ouverture : le spectateur est à quarante minutes.
     // Et l'index Jellyfin de la piste demandée, pas le numéro Matroska.
@@ -287,9 +296,9 @@ describe("une piste que ce chemin ne portera jamais", () => {
     // pistes, la correspondance par rang ne tient plus et un index calculé serait une invention.
     swr = { data: info({ audio: [{ index: 1 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
-    act(() => void screen.getByText("audio:eng").click());
+    act(() => void screen.getByText(/^audio:Anglais/).click());
 
     expect(onFallback.mock.calls[0][1].audioStreamIndex).toBeUndefined();
     // La position, elle, reste connue : c'est la piste seule qu'on renonce à nommer.
@@ -301,9 +310,9 @@ describe("une piste que ce chemin ne portera jamais", () => {
     serverFallback = false;
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
-    act(() => void screen.getByText("audio:eng").click());
+    act(() => void screen.getByText(/^audio:Anglais/).click());
 
     expect(onFallback).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText(/A_TRUEHD/)).toBeTruthy());
@@ -312,9 +321,9 @@ describe("une piste que ce chemin ne portera jamais", () => {
   it("laisse passer sans rien déranger une piste que le chemin porte", async () => {
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText("audio:fre")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/^audio:Français/)).toBeTruthy());
 
-    act(() => void screen.getByText("audio:fre").click());
+    act(() => void screen.getByText(/^audio:Français/).click());
 
     expect(onFallback).not.toHaveBeenCalled();
   });
@@ -324,7 +333,7 @@ describe("le chemin choisi", () => {
   it("monte le remultiplexage et publie ses pistes", async () => {
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    expect(screen.getByText("audio:fre")).toBeTruthy();
+    expect(screen.getByText(/^audio:Français/)).toBeTruthy();
     expect(screen.getByText("st:fre")).toBeTruthy();
   });
 
@@ -547,8 +556,8 @@ describe("ce que le spectateur avait choisi", () => {
     // A pipeline built again knows nothing: it opens on the file's own default track, which
     // after a cut means coming back to a film in the wrong language.
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("audio:eng")));
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
 
     const rebuilt = fakeRemux({ currentAudioTrack: 1 });
     nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
@@ -645,8 +654,8 @@ describe("les préférences du compte Jellyfin", () => {
     // would have picked.
     viewerState = { resumeSeconds: 0, preferences };
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("audio:eng")));
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
 
     const rebuilt = fakeRemux({ currentAudioTrack: 1 });
     nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
@@ -687,8 +696,8 @@ describe("un autre film", () => {
     // level variable would survive the remount and carry a track number — which on another file
     // may well be another language — straight into the next episode.
     mount();
-    await waitFor(() => expect(screen.getByText("audio:eng")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("audio:eng")));
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
     cleanup();
 
     const next = fakeRemux({ currentAudioTrack: 1 });
