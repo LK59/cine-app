@@ -133,6 +133,16 @@ export type DolbyVisionPlan =
  * attendant, ce fichier reprend exactement le chemin qu'il avait hier : sa couche de base, qui
  * est du HDR10 (compatibilité 1), lue par le chemin natif comme n'importe quel HDR.
  */
+/**
+ * Les codecs audio que **personne** ne décode ici — ni le navigateur, ni nos décodeurs embarqués.
+ *
+ * Le TrueHD et son ancêtre MLP sont seuls dans ce cas : `@mediabunny/ac3` couvre l'AC-3 et
+ * l'E-AC-3, `@mediabunny/dts` le DTS, et le navigateur fait le reste. Une entrée de plus ici
+ * envoie des fichiers au lecteur serveur — à n'ajouter qu'après avoir constaté un refus réel de
+ * `canDecode()`, jamais par prudence.
+ */
+const SANS_DECODEUR = /^A_TRUEHD|^A_MLP/;
+
 const DOLBY_VISION_CODECS = new Set(["V_MPEGH/ISO/HEVC"]);
 
 export function planDolbyVision(
@@ -198,7 +208,34 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     );
   }
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
-  if (audioTrack && !playableAudio(audioTrack)) return `audio ${audioTrack.codecId} non remultiplexable`;
+  if (audioTrack && !playableAudio(audioTrack)) {
+    /**
+     * Refuser ce chemin, et parfois refuser le lecteur entier — mais pas avec le même prédicat.
+     *
+     * Première version de ce correctif, fausse, et attrapée par un test existant : j'avais pris
+     * `playableAudio` pour « aucun décodeur local ». Il ne dit pas cela. Il dit « ne peut pas
+     * traverser MediaSource », ni copié ni ré-encodé — ce qui est vrai d'un AAC dans un navigateur
+     * qui n'encode rien, alors que le chemin canevas le décode très bien en logiciel. Céder le
+     * fichier au serveur dans ce cas serait une régression franche.
+     *
+     * Ce qui ferme réellement toutes les portes, c'est **l'absence de décodeur, où que ce soit** :
+     * le navigateur en a pour l'AAC, le FLAC, l'Opus, le Vorbis ; nous embarquons ceux de l'AC-3
+     * et du DTS. Personne n'a celui du TrueHD — ni Dolby, ni les nôtres — et c'est la seule
+     * famille dans ce cas sur cette bibliothèque.
+     *
+     * D'où une liste explicite et courte, comme celle du Dolby Vision plus haut, plutôt qu'une
+     * déduction depuis un prédicat voisin. Elle se vérifie : `SoftwareAudioTrack.open` finit par
+     * demander `canDecode()` à mediabunny, et c'est ce refus-là qu'on anticipe ici.
+     *
+     * Et la condition porte sur **toutes** les pistes du fichier : les TrueHD portent presque
+     * tous une AC-3 à côté, que le chemin canevas saura décoder. Sur cette bibliothèque, trois
+     * films sur 521 et zéro épisode sur 3 000 n'ont que du TrueHD.
+     */
+    const raison = `audio ${audioTrack.codecId} non remultiplexable`;
+    const audios = file.tracks.filter((t) => t.type === "audio");
+    const aucunDecodeur = audios.length > 0 && audios.every((t) => SANS_DECODEUR.test(t.codecId));
+    return aucunDecodeur ? { reason: raison, server: true } : raison;
+  }
 
   // Asked before a megabyte and a half of decoder is fetched. A track that has to be re-encoded
   // is only carried here if this browser will do the encoding, and finding that out afterwards

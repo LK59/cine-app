@@ -139,6 +139,38 @@ describe("choosePlaybackPath", () => {
   });
 });
 
+/**
+ * Un son qu'aucun décodeur local ne sait produire arrête la chaîne.
+ *
+ * Relevé dans le journal le 20/09/2026 sur « American Sniper » : le remultiplexage refuse le
+ * TrueHD, le chemin canevas est essayé quand même, ouvre un décodeur vidéo 4K, puis échoue sur
+ * ce qu'on savait déjà — trois lancements, 250 à 700 ms perdues chaque fois avant le repli
+ * serveur qui était acquis d'avance.
+ *
+ * La garde compte autant que le refus, et c'est le second test qui la tient : la plupart des
+ * fichiers TrueHD portent une piste AC-3 à côté, et là une piste injouable est un choix à
+ * corriger, pas un fichier à céder au lecteur serveur.
+ */
+describe("un son qu'aucun décodeur local ne porte", () => {
+  const TRUEHD = track({ number: 2, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 8 } });
+  const AC3 = track({ number: 3, type: "audio", codecId: "A_AC3", isDefault: false, audio: { sampleRate: 48000, channels: 6 } });
+
+  it("ne laisse pas essayer le canevas quand aucune piste du fichier n'est livrable", async () => {
+    supported = new Set([mimeFor(VIDEO, null).video]);
+    await expect(choosePlaybackPath(input(VIDEO, TRUEHD))).rejects.toThrow(/Aucun chemin de lecture/);
+  });
+
+  it("reste un simple refus de chemin quand une autre piste du fichier est livrable", async () => {
+    supported = new Set([mimeFor(VIDEO, null).video]);
+    const entree = input(VIDEO, TRUEHD);
+    entree.file.tracks.push(AC3);
+    // Le canevas garde sa chance : le fichier a de quoi sonner, c'est la piste retenue qui est
+    // mauvaise, et ça se corrige sans changer de lecteur.
+    const chosen = await choosePlaybackPath(entree);
+    expect(chosen.path).toBe("webcodecs");
+  });
+});
+
 describe("describePath", () => {
   it("names the path taken, and every one refused before it", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
