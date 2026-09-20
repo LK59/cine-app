@@ -158,8 +158,25 @@ export function planDolbyVision(
   };
 }
 
+/**
+ * Un refus qui ne vise pas le remultiplexage, mais **ce lecteur**.
+ *
+ * Presque tous les refus de `tryRemux` disent « pas par ce chemin-là », et le chemin canevas prend
+ * la suite. Celui du Dolby Vision sans couche de base ne dit pas cela : il dit que le fichier n'a
+ * aucune image juste à offrir ici, canevas compris, et qu'il faut le lecteur serveur.
+ *
+ * La distinction manquait, et le journal l'a montrée le 20/09/2026. « Disclosure Day » sur Chrome :
+ * le remultiplexage refuse en annonçant « passage au lecteur serveur », le canevas est essayé
+ * quand même, décode, puis échoue à convertir l'image — deux tentatives perdues avant le repli
+ * qu'on avait déjà décidé. La trace disait la bonne chose, le code faisait l'autre.
+ */
+interface NoLocalPath {
+  reason: string;
+  server: true;
+}
+
 /** Why the remux path cannot carry this file, or null if it can. */
-async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: RemuxPlan } | string> {
+async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: RemuxPlan } | string | NoLocalPath> {
   const { file, videoTrack, audioTrack, dimensions, source } = input;
 
   trace(`chemin : examen du remultiplexage — vidéo ${videoTrack.codecId}, audio ${audioTrack?.codecId ?? "aucune"}`);
@@ -239,7 +256,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
           : "refusé, et sans couche de base : passage au lecteur serveur";
     trace(`dolby vision : ${videoTrack.dolbyVision.type} présent — ${detail}`);
   }
-  if (dv.kind === "server") return dv.reason;
+  if (dv.kind === "server") return { reason: dv.reason, server: true };
 
   try {
     const remuxer = await Remuxer.open(source, file, videoTrack, audioTrack, dimensions, dv.kind === "dolby" ? dv.box : null);
@@ -254,12 +271,20 @@ export async function choosePlaybackPath(input: PathInput): Promise<ChosenPath> 
   const attempts: PathAttempt[] = [];
 
   const remux = await tryRemux(input);
-  if (typeof remux === "string") trace(`chemin : remultiplexage refusé — ${remux}`);
-  if (typeof remux !== "string") {
+  if (typeof remux === "object" && "remuxer" in remux) {
     attempts.push({ path: "remux", ok: true });
     return { path: "remux", remuxer: remux.remuxer, plan: remux.plan, attempts };
   }
-  attempts.push({ path: "remux", ok: false, reason: remux });
+  const refus = typeof remux === "string" ? { reason: remux, server: false as const } : remux;
+  trace(`chemin : remultiplexage refusé — ${refus.reason}`);
+  attempts.push({ path: "remux", ok: false, reason: refus.reason });
+
+  // Un refus qui vise ce lecteur et non ce chemin s'arrête ici : voir `NoLocalPath`. Essayer le
+  // canevas par-dessus, c'est décoder un 4K pour aboutir au repli qu'on vient de choisir.
+  if (refus.server) {
+    attempts.push({ path: "webcodecs", ok: false, reason: refus.reason });
+    throw new Error(`Aucun chemin de lecture disponible pour ce fichier. remux : ${refus.reason}`);
+  }
 
   // Second choice, and it has to be able to say no as clearly as the first did.
   const webcodecsReason = unsupportedReason(input.videoTrack);

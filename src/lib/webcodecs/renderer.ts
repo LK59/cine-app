@@ -299,6 +299,23 @@ class ToneMapRenderer implements FrameRenderer {
     // directly as a texture would hand back pixels the browser has already flattened to sRGB,
     // with the HDR information gone before the shader ever sees it. It is asynchronous, and the
     // result must be awaited — uploading the buffer before it is filled draws a green screen.
+    /**
+     * Une image sans format ne se relit pas, et le dire soi-même vaut mieux que de le subir.
+     *
+     * Un décodeur matériel peut rendre une `VideoFrame` opaque — `format: null` — dont les octets
+     * vivent sur le processeur graphique et que `copyTo` refuse. `allocationSize` lève alors une
+     * exception du navigateur, qui remontait telle quelle jusqu'à l'écran : « Failed to execute
+     * 'allocationSize' on 'VideoFrame': Operation is not supported when format is null. » Relevée
+     * dans le journal le 20/09/2026, sur Chrome/Windows.
+     *
+     * Le repli était le bon — c'est le message qui ne l'était pas. Il emprunte donc le chemin déjà
+     * prévu pour l'appareil trop lent, juste en dessous : une phrase qui dit ce qui s'est passé, et
+     * la conversion HDR qui s'écarte. Voir `engine.ts`, qui sait abandonner la conversion.
+     */
+    if (frame.format === null) {
+      throw new Error("cette image est opaque : ses octets ne sont pas relisibles pour la conversion HDR");
+    }
+
     const size = frame.allocationSize();
     if (!this.buffer || this.buffer.byteLength < size) this.buffer = new ArrayBuffer(size);
     const bytes = new Uint8Array(this.buffer, 0, size);

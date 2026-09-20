@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { dolbyVisionCodecString } from "@/lib/webcodecs/codecConfig";
 import { planDolbyVision } from "@/lib/webcodecs/pathSelector";
 
@@ -139,5 +139,55 @@ describe("planDolbyVision — le Dolby Vision n'est pas qu'une affaire de profil
     expect(
       planDolbyVision({ codecId: "V_MPEG4/ISO/AVC", dolbyVision: { type: "dvcC", record: av1 } }, "DOVIWithHDR10", () => true).kind
     ).toBe("hdr10");
+  });
+});
+
+/**
+ * Ce que le journal a montré le 20/09/2026, et que rien ne disait avant lui.
+ *
+ * « Disclosure Day » sur Chrome/Windows : le remultiplexage refuse en annonçant « passage au
+ * lecteur serveur », puis le chemin canevas est essayé quand même — il décode un 4K, échoue à
+ * convertir l'image (`allocationSize` sur une image opaque) et retombe enfin sur le repli qu'on
+ * avait déjà choisi deux étapes plus tôt.
+ *
+ * Le refus du Dolby Vision sans couche de base ne vise pas *un chemin*, il vise **ce lecteur** :
+ * il doit donc arrêter la chaîne. Ce test échoue sans le correctif — l'ancienne version rendait
+ * un chemin `webcodecs` au lieu de lever.
+ */
+describe("un refus qui vise le lecteur arrête la chaîne", () => {
+  const profil5 = new Uint8Array([0x01, 0x00, 5 << 1, (6 << 3) | 0b101, 0x00, ...new Array(19).fill(0)]);
+
+  // Ce navigateur accepte le HEVC ordinaire et refuse le Dolby Vision : exactement Chrome devant
+  // ce fichier, et la seule combinaison qui mène à l'issue « lecteur serveur ».
+  const navigateur = {
+    isTypeSupported: (mime: string) => !mime.includes("dvh1") && !mime.includes("dvhe"),
+  };
+
+  it("ne tente pas le canevas quand le Dolby Vision n'a pas de couche de base", async () => {
+    vi.stubGlobal("MediaSource", navigateur);
+    vi.stubGlobal("window", { ManagedMediaSource: navigateur });
+    const { choosePlaybackPath } = await import("@/lib/webcodecs/pathSelector");
+
+    const videoTrack = {
+      codecId: "V_MPEGH/ISO/HEVC",
+      dolbyVision: { type: "dvcC", record: profil5 },
+      video: { pixelWidth: 3840, pixelHeight: 1606 },
+      codecPrivate: new Uint8Array([0x01, ...new Array(22).fill(0)]),
+      number: 1,
+      type: 1,
+    };
+
+    await expect(
+      choosePlaybackPath({
+        source: { size: 0, read: async () => new Uint8Array() },
+        file: { tracks: [videoTrack], timecodeScale: 1_000_000, duration: 0, cues: [], segmentStart: 0, segmentEnd: 0 },
+        videoTrack,
+        audioTrack: null,
+        dimensions: { width: 3840, height: 1606 },
+        videoRangeType: "DOVI",
+      } as never)
+    ).rejects.toThrow(/Aucun chemin de lecture/);
+
+    vi.unstubAllGlobals();
   });
 });
