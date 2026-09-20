@@ -58,6 +58,12 @@ library.
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
 `data/logs/player.log` holds what each viewer's player reported about itself — path taken,
 fallbacks, browser, file. Several bugs this repository has fixed were found there and nowhere else.
+`player.log` records `start`, `fallback`, `network`, `rebuild`, `error`, `stop` **and `audio`** —
+the last one added on 2026-09-20 because a track change was the one costly gesture leaving no
+trace, and the `rebuild` lines that look like it are network recoveries. It carries the elapsed
+time, both tracks described, whether the sound was copied or re-encoded, and `applied` — a track
+the browser refuses leaves the previous one playing, and without that field a refusal reads as
+slowness.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Both are one
@@ -107,6 +113,45 @@ Three paths, chosen per file — remux → native `<video>` (normal), WebCodecs 
 direct play. `PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
 is no server-side player to hand to and the same call surfaces a clean playback error instead.
+
+**A refusal that names the player, not the path, must stop the chain.** `tryRemux` returns either
+a plain string — "not by this route, try the next" — or `{ reason, server: true }`, which means no
+local path can carry this file at all and the server player is the answer. Two cases reach it:
+Dolby Vision with no HDR10 base layer, and audio no decoder anywhere can produce (TrueHD, the only
+such family here — `@mediabunny/truehd` does not exist). Both were found the same way: the log
+showed the canvas path being opened, failing on something already known, and only then falling
+back. Use the **same predicate** that refuses at runtime, never a neighbouring one —
+`playableAudio` means "cannot cross MediaSource", which is true of an AAC in a browser that
+cannot encode, and that shortcut would have handed working files to the server.
+
+**Track names are written once, in `src/lib/trackLabel.ts`** — by both players, and by the
+`<track>` elements the browser and the Apple TV display in their own pickers. The form is fixed:
+*language — [remarkable codec] — channels*, and *language — type* for subtitles. What it leaves
+out is as deliberate as what it keeps: ordinary codecs are silent (AAC, Dolby Digital, Dolby
+Digital+ are 949 of 1 097 tracks here — naming them lengthened the label until it was cut on
+screen and departed nothing); channel counts are only named where unambiguous (1.0, 2.0, 5.1,
+7.1 — 99.7 % of this library); regional variants join the language (`VFQ` → "Français
+(Canadien)") rather than trailing in a bracket. A bracket appears **only** when two tracks would
+read identically, and then it carries the raw title — *2001* has two English 5.1 E-AC3 tracks
+that are two different masters. `Intl.DisplayNames` gives the language names in all four
+languages, so there is no dictionary to keep.
+
+**Which audio track is opened, in order: the language asked for (100), then what this path can
+carry (20), then the most channels, then the file's own default flag, then file order.** The flag
+used to be worth points *in the score* and so outranked channels, which opened *2001* on its
+stereo track while the 5.1 sat next to it. And the track is chosen **before the pipeline is
+built** — it used to be built on the file's default and switched a second later, which cost 429 ms
+on a copied file, 1 784 ms on DTS and 7.9 s on the slowest device in the house. The opening choice
+and the screen's own `chooseAudioTrack` must agree, or that switch simply comes back.
+
+**A Matroska track with no `Language` element is English.** The spec says so, and many muxers rely
+on it — *1917* declares `fre` on its French track and nothing on its English one. Reading that as
+`null` made every such film unreachable for an account set to English, subtitles included; the
+giveaway was that Jellyfin reported `eng` for the same track. When two readings of one file
+disagree, that gap *is* the bug.
+
+**A subtitle is forced when the flag says so — or when only its title does** (51 of 392 here).
+Its type comes from flags and not from text: 459 of 855 tracks have no title at all.
 
 ## Conventions
 
