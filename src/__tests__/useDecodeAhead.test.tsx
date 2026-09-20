@@ -101,3 +101,43 @@ describe("useDecodeAhead", () => {
     expect(dernier.disconnected).toBe(true);
   });
 });
+
+/**
+ * Le défaut que la relecture du 20/09/2026 a trouvé, et que le nombre d'éléments cachait.
+ *
+ * L'effet dépendait de `items.length`. Changer le tri garde exactement le même nombre de cartes,
+ * donc il ne repartait pas — et comme l'observateur cesse de suivre une carte dès qu'il l'a
+ * chauffée, le premier écran n'était plus anticipé du tout après un tri, là même où quelqu'un se
+ * remet à faire défiler.
+ */
+describe("useDecodeAhead, quand la liste change sans changer de taille", () => {
+  // Le double est posé par le `beforeEach` de l'autre bloc, qui ne s'applique pas ici : sans
+  // celui-ci, le test lisait l'observateur du bloc précédent et passait pour de mauvaises raisons.
+  beforeEach(() => vi.stubGlobal("IntersectionObserver", FakeObserver));
+  afterEach(() => vi.unstubAllGlobals());
+
+  function Triable({ liste }: { liste: string[] }) {
+    const grid = useRef<HTMLDivElement>(null);
+    useDecodeAhead(grid, liste);
+    return (
+      <div ref={grid}>
+        {liste.map((s, i) => (
+          <div key={i} data-testid={`c${i}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- voir le banc ci-dessus. */}
+            <img src={s} alt="" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  it("reprend les cartes après un changement de tri", () => {
+    const r = render(<Triable liste={["/a.png", "/b.png"]} />);
+    dernier.cb([{ isIntersecting: true, target: r.getByTestId("c0") }]);
+    const apresPremier = dernier.observes.length;
+
+    // Même nombre de cartes, contenu différent : l'observateur doit repartir de zéro.
+    r.rerender(<Triable liste={["/c.png", "/d.png"]} />);
+    expect(dernier.observes.length).toBeGreaterThan(apresPremier);
+  });
+});

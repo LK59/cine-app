@@ -231,3 +231,20 @@ describe("l'amorce du catalogue et la requête qui la consomme", () => {
     expect(lire("public/sw.js")).toMatch(/if \(url\.pathname\.startsWith\("\/api\/"\)\) return;/);
   });
 });
+
+describe("le décodage anticipé suit la liste, pas son nombre", () => {
+  /**
+   * Le défaut trouvé en relisant le travail du 20/09/2026, et que les tests du crochet ne
+   * pouvaient pas voir : il était dans l'appel, pas dans le crochet.
+   *
+   * `useDecodeAhead(gridRef, shown.length)` a l'air prudent et il est faux — changer le tri garde
+   * exactement le même nombre de cartes, donc l'effet ne repartait pas. Or l'observateur cesse de
+   * suivre chaque carte dès qu'il l'a chauffée : après un tri, le premier écran n'était plus
+   * anticipé du tout, précisément là où quelqu'un se remet à faire défiler.
+   */
+  it("la grille passe la liste elle-même", () => {
+    const src = lire("src/components/cinema/CinemaBrowseSheet.tsx");
+    expect(src).toMatch(/useDecodeAhead\(gridRef, shown\)/);
+    expect(src).not.toMatch(/useDecodeAhead\([^)]*\.length\)/);
+  });
+});

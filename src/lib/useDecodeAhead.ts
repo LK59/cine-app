@@ -27,7 +27,7 @@ import { useEffect, type RefObject } from "react";
  */
 const AHEAD_PX = 3000;
 
-export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: number): void {
+export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown): void {
   useEffect(() => {
     const root = grid.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
@@ -56,7 +56,17 @@ export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: numbe
 
     for (const card of root.children) observer.observe(card);
     return () => observer.disconnect();
-    // Le nombre d'éléments et non la liste : trier ou filtrer remplace les cartes, et l'observateur
-    // doit alors reprendre les nouvelles. Une identité de tableau changerait à chaque rendu.
+    /**
+     * **La liste elle-même, et non son nombre d'éléments.**
+     *
+     * Première version : `items.length`. Elle a l'air prudente et elle est fausse — changer le
+     * tri garde exactement le même nombre de cartes, donc l'effet ne repartait pas. Or
+     * l'observateur cesse de suivre chaque carte dès qu'il l'a chauffée (`unobserve`) : après un
+     * changement de tri, le premier écran n'était plus anticipé du tout, précisément là où
+     * quelqu'un se remet à faire défiler.
+     *
+     * La liste est mémoïsée par l'appelant sur ses filtres, donc son identité ne change que
+     * lorsque son contenu change : c'est exactement la dépendance qu'il fallait.
+     */
   }, [grid, items]);
 }

@@ -64,7 +64,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
   // Les affiches des deux écrans suivants sont décodées d'avance : c'est leur arrivée pendant le
   // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.
   const gridRef = useRef<HTMLDivElement>(null);
-  useDecodeAhead(gridRef, shown.length);
+  useDecodeAhead(gridRef, shown);
 
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.
