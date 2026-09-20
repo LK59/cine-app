@@ -15,6 +15,8 @@ export interface NamedItem {
   /** The season. Zero is not missing — it is where a server keeps specials. */
   ParentIndexNumber?: number | null;
   IndexNumber?: number | null;
+  /** Demandé avec le reste pour relier l'item au film de Radarr — voir la route « direct ». */
+  ProviderIds?: { Tmdb?: string } | null;
 }
 
 const pad = (value: number) => String(value).padStart(2, "0");

@@ -3,6 +3,8 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
+import { cachedMovies } from "@/lib/server-cache";
+import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle } from "@/lib/displayTitle";
 import { userPrefsDb } from "@/lib/db";
 import { isJellyfinId } from "@/lib/jellyfinPath";
@@ -72,6 +74,16 @@ export interface DirectPlayInfo {
     isHdr: boolean;
   } | null;
   audio: DirectPlayAudioTrack[];
+  /**
+   * La langue de tournage, quand on la tient d'une source sûre — pour la mention « (VO) ».
+   *
+   * Elle vient de Radarr, qui la tient de TMDB, et se trouve **déjà dans le cache du serveur** :
+   * la relier à cet item ne coûte donc aucun appel réseau, seulement une recherche par
+   * identifiant TMDB. Nulle pour une série, dont le chemin équivalent passerait par Sonarr et n'a
+   * pas été fait — et nulle aussi quand le nom de langue n'est pas reconnu, parce qu'une mention
+   * « (VO) » posée à côté de la mauvaise piste serait pire que pas de mention du tout.
+   */
+  originalLanguage: string | null;
   /** Null when the file can be attempted; a user-facing explanation when it cannot. */
   refusedReason: string | null;
   /**
@@ -194,6 +206,21 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   // client sait déjà quoi en faire.
   const canvasHdrRefusal: string | null = null;
 
+  /**
+   * La langue de tournage, reliée au film par son identifiant TMDB.
+   *
+   * `cachedMovies()` est déjà chargé — il l'est au démarrage du conteneur — donc c'est une
+   * recherche en mémoire et rien d'autre. Un épisode n'a pas de correspondance ici : son chemin
+   * passerait par Sonarr, et il n'a pas été fait. Toute incertitude rend `null`, et la mention
+   * « (VO) » disparaît simplement.
+   */
+  const tmdbId = Number(naming?.ProviderIds?.Tmdb ?? "");
+  const originalLanguage = Number.isFinite(tmdbId) && tmdbId > 0
+    ? await cachedMovies()
+        .then((films) => originalLanguageCode(films.find((f) => f.tmdbId === tmdbId)?.originalLanguage?.name))
+        .catch(() => null)
+    : null;
+
   // Text only, and external only: an image subtitle has nothing to read, and an embedded text
   // track is already found by whichever pipeline opens the file.
   const externalSubtitles: ExternalSubtitle[] = streams
@@ -233,6 +260,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
         isDefault: s.IsDefault ?? false,
         profile: s.Profile ?? null,
       })),
+    originalLanguage,
     refusedReason,
     canvasHdrRefusal,
     externalSubtitles,

@@ -615,11 +615,12 @@ export function ExperimentalPlayerHost({
   /**
    * Les étiquettes des pistes audio, calculées une fois pour les deux menus qui les montrent.
    *
-   * `originalLanguage` reste nul pour l'instant : la mention « (VO) » demande la langue originale
-   * du film, que Jellyfin n'expose pas sur un item — Radarr la donne, et elle arrivera avec le
-   * second lot. Une mention qu'on ne peut pas garantir vaut moins que pas de mention du tout.
+   * La mention « (VO) » vient de la langue de tournage, que Jellyfin n'expose pas sur un item :
+   * elle est reliée au film par son identifiant TMDB, dans la route qui décrit le fichier, et
+   * puisée dans le cache Radarr déjà chargé. Nulle pour une série et pour toute langue non
+   * reconnue — une mention qu'on ne peut pas garantir vaut moins que pas de mention du tout.
    */
-  const audioLabels = useAudioLabels(tracks.audio, info?.audio, null);
+  const audioLabels = useAudioLabels(tracks.audio, info?.audio, info?.originalLanguage ?? null);
   /**
    * Les sous-titres du menu : ceux du fichier, puis ceux posés à côté de lui.
    *

@@ -321,7 +321,7 @@ export const jellyfin = {
    */
   getItemNaming: (userId: string, itemId: string) =>
     fetchJson<{ Items?: NamedItem[] }>(
-      `${url}/Items?ids=${itemId}&userId=${userId}&fields=ParentIndexNumber,IndexNumber`,
+      `${url}/Items?ids=${itemId}&userId=${userId}&fields=ParentIndexNumber,IndexNumber,ProviderIds`,
       { headers }
     ).then((page) => page.Items?.[0] ?? null),
 

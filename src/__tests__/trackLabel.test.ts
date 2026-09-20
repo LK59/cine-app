@@ -8,6 +8,7 @@ import {
   type AudioTrackFacts,
   type SubtitleTrackFacts,
 } from "@/lib/trackLabel";
+import { originalLanguageCode } from "@/lib/originalLanguage";
 
 /**
  * La forme des étiquettes de pistes : langue — codec — canaux.
@@ -288,5 +289,34 @@ describe("labelSubtitleTracks", () => {
   it("ne prétend pas connaître une langue absente", () => {
     const [a] = labelSubtitleTracks([st({ number: 9 })], stOptions);
     expect(a.label).toBe("Piste 9 — Complets");
+  });
+});
+
+/**
+ * La langue de tournage, ramenée à un code comparable.
+ *
+ * Radarr la nomme en anglais parce que TMDB la donne ainsi ; le lecteur compare des codes. Un nom
+ * inconnu rend `null` et la mention « (VO) » disparaît : c'était la condition posée en la
+ * demandant — seulement si l'information est sûre.
+ */
+describe("originalLanguageCode", () => {
+  it("reconnaît les dix-sept langues présentes dans cette bibliothèque", () => {
+    const presentes: [string, string][] = [
+      ["English", "en"], ["French", "fr"], ["Spanish", "es"], ["German", "de"], ["Italian", "it"],
+      ["Portuguese", "pt"], ["Russian", "ru"], ["Japanese", "ja"], ["Korean", "ko"],
+      ["Chinese", "zh"], ["Danish", "da"], ["Swedish", "sv"], ["Polish", "pl"],
+      ["Romanian", "ro"], ["Hindi", "hi"], ["Persian", "fa"], ["Estonian", "et"],
+    ];
+    for (const [nom, code] of presentes) expect(originalLanguageCode(nom), nom).toBe(code);
+  });
+
+  it("ne prétend rien d'un nom qu'elle ne connaît pas", () => {
+    expect(originalLanguageCode("Klingon")).toBeNull();
+    expect(originalLanguageCode(null)).toBeNull();
+    expect(originalLanguageCode("")).toBeNull();
+  });
+
+  it("se moque de la casse et des espaces", () => {
+    expect(originalLanguageCode("  FRENCH ")).toBe("fr");
   });
 });

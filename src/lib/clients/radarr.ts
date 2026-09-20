@@ -20,6 +20,14 @@ export interface RadarrMovie {
   qualityProfileId: number;
   sizeOnDisk: number;
   tmdbId: number;
+  /**
+   * La langue de tournage, telle que TMDB la connaît — « English », « French », « Korean »…
+   *
+   * Elle ne sert qu'à une chose : dire « (VO) » à côté de la piste audio qui est l'originale.
+   * Sur cette bibliothèque, 584 films sur 720 sont en anglais et 88 en français ; c'est pour ces
+   * derniers, et pour les 48 autres langues, que la mention apprend quelque chose.
+   */
+  originalLanguage?: { id: number; name: string };
   imdbId?: string;
   added?: string;
   genres?: string[];

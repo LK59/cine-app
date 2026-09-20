@@ -28,6 +28,17 @@ vi.mock("@/lib/clients/jellyfin", () => ({
 const mockPrefs = vi.fn();
 vi.mock("@/lib/db", () => ({ userPrefsDb: { getLegacyPlayer: (...a: unknown[]) => mockPrefs(...a) } }));
 
+/**
+ * Le catalogue Radarr, doublé plutôt que joint.
+ *
+ * Cette route y puise depuis le 20/09/2026 une seule chose : la langue de tournage du film, pour
+ * la mention « (VO) » du menu audio. C'est une lecture du cache déjà chargé, sans appel réseau —
+ * mais le vrai module ouvrirait la configuration de Radarr au chargement, que ce test n'a pas à
+ * connaître.
+ */
+const mockFilms = vi.fn(async () => [] as { tmdbId: number; originalLanguage?: { id: number; name: string } }[]);
+vi.mock("@/lib/server-cache", () => ({ cachedMovies: () => mockFilms() }));
+
 const validId = "c".repeat(32);
 
 function fakeReq(): NextRequest {
@@ -286,5 +297,36 @@ describe("nommer et régler ce qui est lu", () => {
     const body = await (await get()).json();
     expect(body.title).toBeNull();
     expect(body.refusedReason).toBeNull();
+  });
+});
+
+/**
+ * La langue de tournage, pour la mention « (VO) » du menu audio.
+ *
+ * Elle est reliée au film par son identifiant TMDB, dans le cache Radarr déjà chargé — aucun
+ * appel réseau. Toute incertitude rend `null`, et le lecteur n'affiche alors aucune mention :
+ * c'était la condition posée en demandant cette mention.
+ */
+describe("la langue de tournage", () => {
+  it("la relie au film par son identifiant TMDB", async () => {
+    mockNaming.mockResolvedValue({ Name: "Un film", Type: "Movie", ProviderIds: { Tmdb: "603" } });
+    mockFilms.mockResolvedValue([
+      { tmdbId: 11, originalLanguage: { id: 2, name: "French" } },
+      { tmdbId: 603, originalLanguage: { id: 1, name: "English" } },
+    ]);
+    expect((await (await get()).json()).originalLanguage).toBe("en");
+  });
+
+  it("ne dit rien quand le film est introuvable, sans identifiant, ou dans une langue inconnue", async () => {
+    mockFilms.mockResolvedValue([{ tmdbId: 603, originalLanguage: { id: 99, name: "Klingon" } }]);
+
+    mockNaming.mockResolvedValue({ Name: "Un film", ProviderIds: { Tmdb: "603" } });
+    expect((await (await get()).json()).originalLanguage).toBeNull();
+
+    mockNaming.mockResolvedValue({ Name: "Un film", ProviderIds: { Tmdb: "12345" } });
+    expect((await (await get()).json()).originalLanguage).toBeNull();
+
+    mockNaming.mockResolvedValue({ Name: "Un épisode", Type: "Episode" });
+    expect((await (await get()).json()).originalLanguage).toBeNull();
   });
 });
