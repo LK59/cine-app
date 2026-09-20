@@ -130,6 +130,9 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
                 title={item.title}
                 subtitle={item.year ? String(item.year) : null}
                 poster={posterOf(item)}
+                // Cette grille ne montre qu'une sorte à la fois : l'étiquette répéterait « Film »
+                // six cent soixante-dix fois, pour un `backdrop-filter` par carte. Voir `showKind`.
+                showKind={false}
                 onOpen={() => openLibraryTitle(mediaType === "series" ? "series" : "movie", libraryIdOf(item))}
               />
             ))}

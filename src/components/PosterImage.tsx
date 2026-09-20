@@ -93,10 +93,13 @@ export function PosterImage({
 
   return (
     <div className={`${aspectRatio} ${className} relative overflow-hidden`}>
-      {/* Laissé en place plutôt que retiré à l'arrivée de l'image : celle-ci le recouvre
-          entièrement — `object-cover` remplit toujours la boîte — et le faire disparaître
-          coûterait précisément ce qu'on cherche à éviter, un rendu de plus. */}
-      <div className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />
+      {/* Retiré quand l'image arrive, mais par le nœud et non par un rendu.
+          Le laisser en place était une erreur de ma part : `skeleton` porte une animation de
+          miroitement **infinie**, qui repeint son dégradé seize fois par seconde. Invisible sous
+          une affiche opaque, mais bien en train de tourner — une par carte, pour toujours. La
+          variante `subtle` n'anime rien, ce qui expliquait qu'on ne l'ait pas vue : la grille
+          complète l'utilise, et c'est ailleurs que ça coûtait. */}
+      <div data-poster-placeholder className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />
       <Image
         src={src}
         alt={alt}
@@ -118,8 +121,14 @@ export function PosterImage({
          * transition, même durée — sans traverser React. Un événement peut toucher son propre
          * nœud ; c'est le rendu qu'il déclenchait qui coûtait.
          */
+        decoding="async"
         onLoad={(event) => {
           event.currentTarget.style.opacity = "1";
+          // Le voile s'en va avec son animation. `display: none` et non l'opacité : une animation
+          // continue de tourner sur un élément transparent.
+          event.currentTarget.parentElement
+            ?.querySelector<HTMLElement>("[data-poster-placeholder]")
+            ?.style.setProperty("display", "none");
         }}
         onError={() => {
           reportRemoteImageFailure(src);

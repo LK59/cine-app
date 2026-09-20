@@ -27,6 +27,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   poster,
   missing,
   onOpen,
+  showKind = true,
 }: {
   kind: ResultKind;
   title: string;
@@ -35,6 +36,15 @@ export const PlayerResultCard = memo(function PlayerResultCard({
   /** Absent de la bibliothèque — la carte le dit, discrètement, plutôt que de mentir. */
   missing?: boolean;
   onOpen: () => void;
+  /**
+   * L'étiquette « Film » / « Série » / « Personne », à couper quand la grille n'en montre qu'une.
+   *
+   * Elle départage un film et une série du même nom dans une recherche, où les deux se côtoient.
+   * Dans une grille qui ne contient qu'une sorte, elle ne départage rien — et elle coûte un
+   * `backdrop-filter` par carte, que le navigateur doit recalculer à chaque image tant que ce
+   * qu'il y a derrière bouge. C'est-à-dire pendant tout un défilement.
+   */
+  showKind?: boolean;
 }) {
   const t = useT();
   const Icon = kind === "movie" ? Film : kind === "series" ? Tv : User;
@@ -71,11 +81,19 @@ export const PlayerResultCard = memo(function PlayerResultCard({
 
         {/* Deux étiquettes mangeaient l'affiche par les deux bouts. Le type reste — c'est lui
             qui départage un film et une série du même nom — mais posé sur un voile sombre plutôt
-            que dans un cadre à lui, et sans son propre fond : il se lit, il ne se réclame pas. */}
-        <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-          <Icon size={10} />
-          {kindLabel}
-        </span>
+            que dans un cadre à lui, et sans son propre fond : il se lit, il ne se réclame pas.
+
+            Absent quand la grille ne montre qu'une sorte, et ce n'est pas qu'une question de
+            bruit visuel. Un `backdrop-filter` doit être recalculé à chaque image tant que ce
+            qu'il y a derrière bouge — c'est-à-dire à chaque image d'un défilement. Sur la grille
+            complète, six cent soixante-dix cartes en portaient une chacune, pour répéter « Film »
+            six cent soixante-dix fois sous l'onglet Films. */}
+        {showKind && (
+          <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+            <Icon size={10} />
+            {kindLabel}
+          </span>
+        )}
 
         {/* « Pas encore là » est l'état par défaut d'une liste d'envies : c'était l'information la
             moins importante de la grille et la plus voyante, un bandeau violet pleine largeur en
