@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
@@ -34,6 +34,7 @@ export function PlayerPanelFrame({
   subtitle,
   actions,
   leaving = false,
+  back = false,
   children,
 }: {
   title: string;
@@ -41,6 +42,20 @@ export function PlayerPanelFrame({
   actions?: React.ReactNode;
   /** Piloté par la coquille : l'écran est en train de sortir — voir useExitDelay. */
   leaving?: boolean;
+  /**
+   * Cet écran a été poussé depuis un autre, et non choisi dans le rail.
+   *
+   * Les trois panneaux du rail sont des onglets : on n'en sort pas, on va ailleurs, et c'est
+   * pourquoi la croix disparaît sur téléphone (voir plus bas). La grille complète emprunte le même
+   * cadre mais n'est pas un onglet — on y entre depuis « Voir tout », et il y a donc bel et bien un
+   * *derrière*. Sans ce drapeau elle héritait de la règle des onglets : aucune sortie sur
+   * téléphone, et il fallait retoucher Accueil pour revenir. Signalé le 20/09/2026.
+   *
+   * Un retour, et pas une croix de plus : ce sont deux vocabulaires — une croix ferme, une flèche
+   * revient — et ici c'est bien revenir qu'on fait. Il remplace donc la croix à toutes les tailles
+   * plutôt que de s'ajouter à elle.
+   */
+  back?: boolean;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -160,6 +175,15 @@ export function PlayerPanelFrame({
         // marge en mangeaient le quart avant la première affiche.
         style={{ paddingTop: `calc(${short ? "0.75rem" : "1.5rem"} + env(safe-area-inset-top))` }}
       >
+        {back && (
+          <button
+            type="button"
+            onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
+            className="btn btn-ghost -ml-1 mt-0.5 shrink-0 rounded-full px-3 py-2"
+          >
+            <ArrowLeft size={16} /> {t("cinema.back")}
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <h1
             ref={headingRef}
@@ -178,7 +202,7 @@ export function PlayerPanelFrame({
               qui n'a plus de derrière — et laissait deux façons de faire la même chose, dont une
               dans le coin le plus hors de portée du pouce. Le rail, lui, est un compagnon et non
               une destination : la croix y garde son sens. */}
-          {!isMobile && (
+          {!isMobile && !back && (
             <button
               type="button"
               onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}

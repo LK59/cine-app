@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { PlayerPanelFrame } from "@/components/player/PlayerPanelFrame";
 import { PlayerResultCard } from "@/components/player/PlayerResultCard";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
+import { useDecodeAhead } from "@/lib/useDecodeAhead";
 import { genreLabel } from "@/lib/top10Label";
 import {
   browseTitles,
@@ -60,6 +61,11 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
     [items, genre, decade, sort, query]
   );
 
+  // Les affiches des deux écrans suivants sont décodées d'avance : c'est leur arrivée pendant le
+  // défilement qui saccadait, et non la grille elle-même. Voir `useDecodeAhead`.
+  const gridRef = useRef<HTMLDivElement>(null);
+  useDecodeAhead(gridRef, shown.length);
+
   // Le genre traduit, comme la rangée d'où l'on vient : « Comédie » sur l'accueil puis « Comedy »
   // ici, c'étaient deux noms pour la même chose à un appui d'intervalle.
   const title = genre === BROWSE_ALL ? t(`player.browse.all.${mediaType}`) : genreLabel(genre, t);
@@ -67,6 +73,9 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
   return (
     <PlayerPanelFrame
       leaving={leaving}
+      // Poussée depuis « Voir tout », et non choisie dans le rail : elle a un derrière, donc un
+      // retour. Voir `back` dans PlayerPanelFrame.
+      back
       title={title}
       subtitle={t("player.browse.count", { n: shown.length })}
     >
@@ -122,7 +131,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
           // `player-grid` : c'est lui qui porte `content-visibility`, et sans lui le navigateur
           // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille
           // complète est justement le seul écran où ce nombre est atteint.
-          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={gridRef} className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {shown.map((item) => (
               <PlayerResultCard
                 key={idOf(item)}

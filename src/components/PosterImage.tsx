@@ -93,12 +93,12 @@ export function PosterImage({
 
   return (
     <div className={`${aspectRatio} ${className} relative overflow-hidden`}>
-      {/* Retiré quand l'image arrive, mais par le nœud et non par un rendu.
-          Le laisser en place était une erreur de ma part : `skeleton` porte une animation de
-          miroitement **infinie**, qui repeint son dégradé seize fois par seconde. Invisible sous
-          une affiche opaque, mais bien en train de tourner — une par carte, pour toujours. La
-          variante `subtle` n'anime rien, ce qui expliquait qu'on ne l'ait pas vue : la grille
-          complète l'utilise, et c'est ailleurs que ça coûtait. */}
+      {/* Retiré quand l'image arrive **s'il s'anime**, et par le nœud plutôt que par un rendu.
+          Le laisser en place quand il miroite était une erreur de ma part : `skeleton` porte une
+          animation infinie, qui repeint son dégradé seize fois par seconde. Invisible sous une
+          affiche opaque, mais bien en train de tourner — une par carte, pour toujours.
+          La variante `subtle`, elle, n'anime rien : la retirer ne gagnait aucune image par seconde
+          et coûtait une recherche dans le parent par affiche chargée. Voir `onLoad`. */}
       <div data-poster-placeholder className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />
       <Image
         src={src}
@@ -124,8 +124,20 @@ export function PosterImage({
         decoding="async"
         onLoad={(event) => {
           event.currentTarget.style.opacity = "1";
-          // Le voile s'en va avec son animation. `display: none` et non l'opacité : une animation
-          // continue de tourner sur un élément transparent.
+          /**
+           * Le voile ne s'efface que s'il s'anime, et c'est ce qui reste de plus cher ici.
+           *
+           * `display: none` était écrit sur les deux variantes, donc une recherche dans le parent
+           * et une seconde écriture de style par affiche qui arrive — sur la grille complète, par
+           * dizaines pendant qu'on fait défiler. Mesuré le 20/09/2026 : les supprimer rend 7 à 10 %
+           * de débit de défilement, et l'anticipation du décodage le reste (voir `useDecodeAhead`).
+           *
+           * La variante `subtle` n'anime rien — c'est sa raison d'être, et c'est celle de toutes
+           * les grilles denses. Son voile, resté en place, est simplement recouvert par une image
+           * opaque : rien ne tourne derrière. Le miroitement de l'autre variante, lui, repeint son
+           * dégradé seize fois par seconde tant qu'il existe, et doit bien partir.
+           */
+          if (subtle) return;
           event.currentTarget.parentElement
             ?.querySelector<HTMLElement>("[data-poster-placeholder]")
             ?.style.setProperty("display", "none");
