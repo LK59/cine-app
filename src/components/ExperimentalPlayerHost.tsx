@@ -1114,6 +1114,10 @@ export function ExperimentalPlayerHost({
       // Ce que le serveur sait de la plage dynamique : le conteneur seul ne suffit pas à décider
       // si un Dolby Vision refusé a une couche de base où se rattraper. Voir `planDolbyVision`.
       videoRangeType: info.video?.rangeType ?? null,
+      // Connue avant que quoi que ce soit ne soit ouvert — elle vient de la même charge que la
+      // position de reprise. La donner ici évite le changement de piste immédiat qui suivait le
+      // démarrage, et qui était le plus cher de tous ceux qu'on a mesurés.
+      audioPreferences: playbackState?.preferences ?? null,
       onError: (message, kind) => {
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {

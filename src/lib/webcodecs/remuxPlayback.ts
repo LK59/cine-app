@@ -10,6 +10,7 @@ import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
+import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
@@ -41,6 +42,19 @@ export interface RemuxPlaybackOptions {
    * vient de l'analyse du flux par le serveur et ne se trompe pas.
    */
   videoRangeType?: string | null;
+  /**
+   * Ce que ce compte veut entendre — pour **ouvrir** dessus, et non pour y basculer ensuite.
+   *
+   * Le pipeline se construisait sur la piste par défaut du *fichier*, le film démarrait, puis le
+   * lecteur appliquait la préférence du compte en défaisant ce qu'il venait de faire. Mesuré le
+   * 20/09/2026 sur quatre films : ça arrivait à chacun d'eux, donc c'était le cas normal et non
+   * l'exception. Le coût de ce geste inutile allait de 429 ms sur un fichier copié tel quel à
+   * 1 784 ms sur du DTS — et jusqu'à 7,9 s sur l'appareil le plus lent du foyer.
+   *
+   * Absentes, tout se passe comme avant : c'est le repli quand la préférence n'est pas encore
+   * chargée, et c'est aussi ce que voit le chemin WebCodecs, qui choisit sa piste autrement.
+   */
+  audioPreferences?: TrackPreferences | null;
 }
 
 export type PathProbe = { discard: () => void } & (
@@ -94,9 +108,33 @@ function toEngineTrack(track: MatroskaTrack): EngineTrack {
  * that plays perfectly on the track next to it. The default still decides among the ones that
  * work, and if none do the default is returned anyway so the refusal names the real codec.
  */
-function preferredAudio(file: MatroskaFile): MatroskaTrack | null {
+export function preferredAudio(file: MatroskaFile, preferences?: TrackPreferences | null): MatroskaTrack | null {
   const audio = file.tracks.filter((t) => t.type === "audio");
   const playable = audio.filter(playableAudio);
+
+  /**
+   * La langue du compte d'abord, quand elle désigne une piste que ce chemin sait porter.
+   *
+   * Posé **avant** la règle du défaut, et seulement sur les pistes jouables : une préférence qui
+   * désignerait une piste TrueHD ferait refuser le fichier entier alors qu'il joue très bien sur
+   * celle d'à côté. `chooseAudioTrack` rend `null` dès que rien ne correspond — le compte réglé
+   * sur « piste par défaut » compris —, et on retombe alors exactement sur ce qui suit.
+   *
+   * **C'est `chooseAudioTrack` et rien d'autre**, et ce n'est pas un détail d'implémentation :
+   * l'écran applique la même fonction dès que le film démarre, et bascule si la piste ouverte
+   * n'est pas la sienne. Ouvrir sur un autre choix — fût-il meilleur — ne supprimerait pas le
+   * changement qu'on cherche à éviter, il le rendrait seulement invisible dans le code.
+   *
+   * En particulier, `rank` ne regarde pas le nombre de canaux : entre deux pistes anglaises, une
+   * stéréo et une 5.1, il prend la première du fichier. C'est déjà ce qui se passe aujourd'hui,
+   * une seconde après le démarrage — ici on arrive au même endroit sans le détour. La règle « la
+   * plus riche de la langue », elle, garde tout son sens juste en dessous, là où aucune
+   * préférence n'est exprimée.
+   */
+  if (preferences && playable.length > 0) {
+    const wanted = chooseAudioTrack(playable, preferences);
+    if (wanted) return wanted;
+  }
   // Nothing here works: the file's own default is returned so the refusal names its real codec.
   if (playable.length === 0) return audio.find((t) => t.isDefault) ?? audio[0] ?? null;
 
@@ -145,7 +183,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
 
   const videoTrack = file.tracks.find((t) => t.type === "video");
   if (!videoTrack) throw new Error("Ce fichier ne contient aucune piste vidéo.");
-  const audioTrack = preferredAudio(file);
+  const audioTrack = preferredAudio(file, options.audioPreferences);
   trace(`piste audio retenue : ${audioTrack ? `${audioTrack.codecId} ${audioTrack.audio?.channels ?? "?"}ch ${audioTrack.language ?? "?"}` : "aucune"}`);
 
   const chosen = await choosePlaybackPath({
