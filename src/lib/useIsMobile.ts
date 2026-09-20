@@ -52,3 +52,24 @@ export function useIsMobile(): boolean {
 export function useIsShortViewport(): boolean {
   return useMediaQuery(SHORT_QUERY);
 }
+
+/**
+ * Un appareil qu'on touche, et non qu'on pointe.
+ *
+ * Distinct de `useIsMobile`, et la nuance est tout l'intérêt : une tablette a la **taille** d'un
+ * bureau et le **pointeur** d'un téléphone. Elle reçoit donc la mise en page large — trois colonnes
+ * d'affiches énormes seraient absurdes sur un écran de treize pouces — tout en n'ayant aucun des
+ * gestes qu'elle suppose.
+ *
+ * C'est la règle qui manquait : la mise en page suit la taille, l'interaction suit le pointeur.
+ * Relevé le 20/09/2026 en auditant ce que l'écran bureau attend d'une souris — une bannière qui
+ * suit le survol, des fiches qu'on ferme par une croix, et rien qui réponde au doigt.
+ *
+ * `hover: none` plutôt que `pointer: coarse` seul : un écran tactile de portable a les deux, et
+ * c'est bien l'absence de survol qui décide ici, pas la grosseur du pointeur.
+ */
+const TOUCH_QUERY = "(hover: none) and (pointer: coarse)";
+
+export function useIsTouch(): boolean {
+  return useMediaQuery(TOUCH_QUERY);
+}

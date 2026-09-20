@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 /**
  * La mise en scène d'une fiche en mode cinéma : les voiles, la colonne, la barre de progression.
  *
@@ -212,4 +213,48 @@ export function CinemaDetailModal({
     </div>,
     document.body
   );
+}
+
+/**
+ * La poignée : de quoi refermer une fiche du bureau au doigt.
+ *
+ * Les fiches larges se ferment par la croix ou par Échap — deux gestes de souris et de clavier.
+ * Sur une tablette, qui reçoit cette mise en page parce qu'elle en a la taille (voir `useIsTouch`),
+ * il ne restait donc que le petit bouton du coin, là où le téléphone se referme d'un glissement
+ * vers le bas. Signalé le 20/09/2026, en même temps que la bannière qui ne suivait pas le doigt.
+ *
+ * **Une poignée, et non la fiche entière.** Ici, contrairement au téléphone, le contenu défile
+ * verticalement sur toute la hauteur et en accrochage obligatoire : un glissement vers le bas
+ * appartient déjà au défilement. Prendre la fiche n'importe où reviendrait à disputer chaque geste
+ * au navigateur, qui gagne — il annule le pointeur dès qu'il décide de faire défiler. La poignée
+ * est donc une bande au-dessus du défilement, avec `touch-action: none` pour que ce geste-là lui
+ * revienne franchement, et un trait visible qui dit qu'elle est là.
+ *
+ * **Seulement au doigt.** À la souris, tirer une fiche vers le bas ne veut rien dire, et la bande
+ * mangerait des clics au profit d'un geste que personne ne ferait.
+ */
+export function useSheetGrip(onDismiss: () => void, enabled: boolean) {
+  const swipe = useSwipeToDismiss(onDismiss);
+  const held = enabled && (swipe.dragging || swipe.offset > 0);
+  return {
+    /**
+     * Aucun `transform` au repos, et c'est délibéré : sur cette fiche le bouton Retour est en
+     * `fixed`, et un `transform` sur son ancêtre — fût-il nul — en ferait le référent, ce qui le
+     * décrocherait de la fenêtre. Pendant le geste c'est justement ce qu'on veut, toute la fiche
+     * partant d'un bloc ; au repos, rien ne doit être posé.
+     */
+    style: held
+      ? { transform: `translateY(${swipe.offset}px)`, transition: swipe.dragging ? "none" : "transform 220ms ease-out" }
+      : undefined,
+    grip: enabled ? (
+      <div
+        {...swipe.handlers}
+        aria-hidden
+        className="absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-center"
+        style={{ touchAction: "none" }}
+      >
+        <div className="mt-2 h-1 w-10 rounded-full bg-white/35" />
+      </div>
+    ) : null,
+  };
 }

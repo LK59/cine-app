@@ -26,6 +26,8 @@ import { CinemaRow } from "@/components/cinema/CinemaRow";
 import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
+import { useIsTouch } from "@/lib/useIsMobile";
+import { useCentredCard } from "@/lib/useCentredCard";
 
 /** La durée de l'animation de sortie de la grille — celle de `--animate-fade-out`. */
 const BROWSE_EXIT_MS = 200;
@@ -531,6 +533,19 @@ export function CinemaClient() {
   /** Une fiche TMDB ou une fiche personne est ouverte par-dessus celles de la bibliothèque. */
   const sheetAbove = route.discover !== null || route.person !== null;
   useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen);
+
+  /**
+   * Au doigt, la carte arrêtée au centre prend la bannière — l'équivalent du survol.
+   *
+   * Même garde que la navigation aux flèches, et pour la même raison : ces deux-là posent le focus,
+   * et rien ne doit le faire tant qu'un autre écran est au-dessus. La condition tactile en plus,
+   * parce qu'une souris a déjà son propre chemin vers la bannière.
+   */
+  const touch = useIsTouch();
+  useCentredCard(
+    rowsPaneRef,
+    touch && selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen && !sheetAbove
+  );
 
   // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
   // and the reason the button itself can stay a small icon rather than a full-width field.

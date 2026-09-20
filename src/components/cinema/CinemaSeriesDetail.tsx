@@ -17,6 +17,7 @@ import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useIsTouch } from "@/lib/useIsMobile";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
@@ -24,7 +25,7 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -110,6 +111,13 @@ export function CinemaSeriesDetail({
   const [revealed] = useState(() => arrivedByBack());
   const sheetBehind = useSheetBehind();
   const { closing, requestClose } = useDelayedClose(onClose, sheetBehind ? 0 : 220);
+
+  /**
+   * Refermer au doigt : la poignée du haut, écrite une fois pour les deux fiches du bureau.
+   * Inerte à la souris, et inerte aussi sous une fiche posée par-dessus — un écran qui s'en va
+   * n'a pas d'avis, et celui du dessous non plus.
+   */
+  const { style: gripStyle, grip } = useSheetGrip(requestClose, useIsTouch() && !underneath);
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.
@@ -223,7 +231,7 @@ export function CinemaSeriesDetail({
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
       inert={underneath}
       aria-hidden={underneath || undefined}
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)" }}
+      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
     >
       {item.backdropUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -241,6 +249,11 @@ export function CinemaSeriesDetail({
           CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
       <div className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
       <div className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+
+      {/* Posée avant le bouton Retour, et non après : les deux sont au même rang, et le dernier
+          dessiné reçoit les appuis — la poignée traverse toute la largeur, le bouton doit rester
+          au-dessus d'elle. Voir `useSheetGrip`. */}
+      {grip}
 
       <button
         onClick={requestClose}

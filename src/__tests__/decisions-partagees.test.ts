@@ -146,3 +146,54 @@ describe("un seul geste d'ouverture", () => {
     expect(src).toMatch(/export function openDiscoveryItem[\s\S]{0,300}openLibraryTitle\(/);
   });
 });
+
+describe("un seul geste tactile de fermeture sur les fiches du bureau", () => {
+  /**
+   * Les deux fiches larges — film et série — ont la même mise en scène, et l'ont déjà payée : les
+   * voiles et la colonne y étaient écrits deux fois, à la virgule près, avant de rejoindre
+   * `CinemaDetailLayout`. La poignée du 20/09/2026 est arrivée par le même besoin et part au même
+   * endroit ; ce test interdit la troisième copie.
+   */
+  it("aucune des deux fiches ne câble le geste elle-même", () => {
+    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
+      const src = lire(f);
+      expect(src).toMatch(/useSheetGrip/);
+      expect(src).not.toMatch(/useSwipeToDismiss/);
+    }
+  });
+
+  it("la poignée ne s'arme qu'au doigt", () => {
+    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
+      expect(lire(f)).toMatch(/useSheetGrip\(requestClose, useIsTouch\(\)/);
+    }
+  });
+
+  it("ne pose aucun transform au repos — le bouton Retour est en fixed", () => {
+    const src = lire("src/components/cinema/CinemaDetailLayout.tsx");
+    expect(src).toMatch(/style: held\s*\n?\s*\?/);
+    expect(src).not.toMatch(/transform: `translateY\(\$\{swipe\.offset\}px\)` }\s*;/);
+  });
+});
+
+describe("une seule source pour la bannière", () => {
+  /**
+   * Le survol, les flèches et le doigt mènent tous les trois à `onFocusItem` — par le focus natif
+   * du navigateur, que `useTvGridNav` a établi et que `useCentredCard` emprunte. Une quatrième
+   * source qui appellerait `setFocusedItem` de son côté rouvrirait la question « qui commande la
+   * bannière », à laquelle ce dépôt a déjà répondu.
+   */
+  it("le geste tactile passe par le focus, et non par un état à lui", () => {
+    const src = lire("src/lib/useCentredCard.ts");
+    expect(src).toMatch(/\.focus\(\{ preventScroll: true \}\)/);
+    expect(src).not.toMatch(/useState|setFocusedItem/);
+  });
+
+  it("un seul écouteur pour toutes les rangées, et il est passif", () => {
+    const src = lire("src/lib/useCentredCard.ts");
+    expect(src).toMatch(/addEventListener\("scroll", onScroll, \{ capture: true, passive: true \}\)/);
+    // Une rangée qui se câblerait elle-même serait la copie qu'on évite.
+    for (const f of ["CinemaRow", "CinemaSeriesRow", "CinemaTop10Row", "CinemaDiscoveryRow"]) {
+      expect(lire(`src/components/cinema/${f}.tsx`)).not.toMatch(/useCentredCard/);
+    }
+  });
+});
