@@ -34,17 +34,46 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
-const SPLASH_SCREENS: { width: number; height: number; dpr: number; file: string }[] = [
-  { width: 430, height: 932, dpr: 3, file: "1290-2796" },
-  { width: 393, height: 852, dpr: 3, file: "1179-2556" },
-  { width: 390, height: 844, dpr: 3, file: "1170-2532" },
-  { width: 428, height: 926, dpr: 3, file: "1284-2778" },
-  { width: 375, height: 812, dpr: 3, file: "1125-2436" },
-  { width: 414, height: 896, dpr: 3, file: "1242-2688" },
-  { width: 414, height: 896, dpr: 2, file: "828-1792" },
-  { width: 414, height: 736, dpr: 3, file: "1242-2208" },
-  { width: 375, height: 667, dpr: 2, file: "750-1334" },
-  { width: 320, height: 568, dpr: 2, file: "640-1136" },
+/**
+ * Les écrans de lancement d'iOS — et ce qu'il se passe quand aucun ne correspond.
+ *
+ * Une application posée sur l'écran d'accueil affiche une image pendant que WebKit démarre. iOS ne
+ * la redimensionne pas : il cherche un `apple-touch-startup-image` dont la requête média désigne
+ * **exactement** cet appareil, dans cette orientation. Faute de quoi il affiche du **blanc**, quel
+ * que soit le `background_color` du manifeste.
+ *
+ * C'est ce que Louis voyait le 20/09/2026 : la liste ne couvrait que dix iPhone, tous en portrait,
+ * et aucun iPad. Les images sont du noir uni — vérifié en décodant l'une d'elles, pixel du centre
+ * compris — donc en ajouter ne coûte presque rien : une de 2048×2732 pèse 16 Ko.
+ *
+ * Les deux orientations sont émises depuis la même ligne : oublier le paysage sur un iPad, c'était
+ * se retrouver blanc une fois sur deux. Un appareil absent de cette liste redevient blanc au
+ * lancement — c'est la seule chose à savoir en la relisant.
+ */
+const SPLASH_SCREENS: { width: number; height: number; dpr: number }[] = [
+  // iPhone
+  { width: 440, height: 956, dpr: 3 },
+  { width: 430, height: 932, dpr: 3 },
+  { width: 428, height: 926, dpr: 3 },
+  { width: 414, height: 896, dpr: 3 },
+  { width: 414, height: 896, dpr: 2 },
+  { width: 414, height: 736, dpr: 3 },
+  { width: 402, height: 874, dpr: 3 },
+  { width: 393, height: 852, dpr: 3 },
+  { width: 390, height: 844, dpr: 3 },
+  { width: 375, height: 812, dpr: 3 },
+  { width: 375, height: 667, dpr: 2 },
+  { width: 320, height: 568, dpr: 2 },
+  // iPad
+  { width: 1032, height: 1376, dpr: 2 },
+  { width: 1024, height: 1366, dpr: 2 },
+  { width: 834, height: 1210, dpr: 2 },
+  { width: 834, height: 1194, dpr: 2 },
+  { width: 820, height: 1180, dpr: 2 },
+  { width: 834, height: 1112, dpr: 2 },
+  { width: 810, height: 1080, dpr: 2 },
+  { width: 768, height: 1024, dpr: 2 },
+  { width: 744, height: 1133, dpr: 2 },
 ];
 
 export const metadata: Metadata = {
@@ -82,16 +111,38 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={lang} className={`dark ${inter.variable} ${display.variable}`}>
       <head>
+        {/*
+          Le fond du document, déclaré en ligne — et ce qu'on n'a **pas** prouvé.
+
+          Entre l'aboutissement de la navigation et le premier dessin, le navigateur montre sa
+          propre page vide, blanche. L'idée était que ces quelques octets la rendent noire. Mesuré
+          le 20/09/2026 : **non vérifié**. Une feuille de style bloque le rendu, donc rien ne se
+          dessine avant son arrivée, style en ligne ou pas ; et le banc sans interface ne rapporte
+          aucun temps de dessin, donc il n'a pas pu trancher.
+
+          Gardé quand même : quarante octets, aucun risque, et le fond de la racine gagne à être
+          déclaré sans dépendre d'un fichier. Mais ce n'est pas le correctif du blanc au
+          lancement — celui-là, ce sont les images ci-dessous. Ne pas le créditer d'un gain qu'il
+          n'a jamais montré.
+        */}
+        <style dangerouslySetInnerHTML={{ __html: "html,body{background:#0a0a0c}" }} />
         {/* Apply saved theme before first paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;}catch(e){}` }} />
-        {SPLASH_SCREENS.map((s) => (
-          <link
-            key={s.file}
-            rel="apple-touch-startup-image"
-            href={`/splash/apple-splash-${s.file}.png`}
-            media={`(device-width: ${s.width}px) and (device-height: ${s.height}px) and (-webkit-device-pixel-ratio: ${s.dpr}) and (orientation: portrait)`}
-          />
-        ))}
+        {SPLASH_SCREENS.flatMap((s) =>
+          (["portrait", "landscape"] as const).map((orientation) => {
+            // iOS veut la taille du fichier en pixels de l'appareil, et dans le sens où il se
+            // tient : en paysage, c'est la hauteur qui devient la largeur.
+            const [w, h] = orientation === "portrait" ? [s.width, s.height] : [s.height, s.width];
+            return (
+              <link
+                key={`${s.width}-${s.height}-${s.dpr}-${orientation}`}
+                rel="apple-touch-startup-image"
+                href={`/splash/apple-splash-${w * s.dpr}-${h * s.dpr}.png`}
+                media={`(device-width: ${s.width}px) and (device-height: ${s.height}px) and (-webkit-device-pixel-ratio: ${s.dpr}) and (orientation: ${orientation})`}
+              />
+            );
+          })
+        )}
       </head>
       <body>
         <TranslationProvider initialLocale={lang} initialDict={dict}>
