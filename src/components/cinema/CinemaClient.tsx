@@ -11,6 +11,7 @@ import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { openDiscoveryItem, openResumeTarget, openTitle } from "@/lib/cinemaOpen";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -388,13 +389,8 @@ export function CinemaClient() {
     setHeroFocus({ tab: "movies", kind: "movies" });
   }, []);
 
-  const openDiscovery = useCallback((item: DiscoveryItem) => {
-    if (item.libraryId !== null) {
-      openLibraryTitle(item.type, item.libraryId);
-      return;
-    }
-    cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
-  }, []);
+  // Voir `cinemaOpen` : cette décision était écrite ici *et* sur le téléphone, mot pour mot.
+  const openDiscovery = useCallback((item: DiscoveryItem) => openDiscoveryItem(item), []);
   // Which sheet is open is read back out of the URL, not held here: that's what makes Back close
   // it. Until the payload has loaded (a cold deep link into a title) the lookup simply finds
   // nothing and the sheet opens as soon as the data lands.
@@ -557,7 +553,7 @@ export function CinemaClient() {
   // arrow keypress, since focus changes re-render this component by design.
   const openDetail = useCallback((item: CinemaMovie) => {
     lastFocusedCard.current = document.activeElement as HTMLElement;
-    cinemaNavigate({ film: item.radarrId, serie: null });
+    openTitle("movies", item.radarrId);
   }, []);
 
   /**
@@ -599,17 +595,12 @@ export function CinemaClient() {
     [moviesById]
   );
 
-  const openResume = useCallback(
-    (href: string | null, play: () => void) => {
-      lastFocusedCard.current = document.activeElement as HTMLElement;
-      const film = href?.match(/^\/radarr\/(\d+)$/);
-      if (film) return cinemaNavigate({ film: Number(film[1]), serie: null });
-      const serie = href?.match(/^\/sonarr\/(\d+)$/);
-      if (serie) return cinemaNavigate({ serie: Number(serie[1]), film: null });
-      play();
-    },
-    []
-  );
+  const openResume = useCallback((href: string | null, play: () => void) => {
+    // La carte d'où l'on part, retenue avant de partir : c'est ce qui rend le focus au bon
+    // endroit en revenant, et c'est la seule chose que cet écran ajoute au geste commun.
+    lastFocusedCard.current = document.activeElement as HTMLElement;
+    openResumeTarget(href, play);
+  }, []);
 
   const closeDetail = useCallback(() => {
     // Le focus ne revient à la grille que si l'on y revient.
@@ -628,7 +619,7 @@ export function CinemaClient() {
 
   const openSeriesDetail = useCallback((item: CinemaSeries) => {
     lastFocusedCard.current = document.activeElement as HTMLElement;
-    cinemaNavigate({ serie: item.sonarrId, film: null });
+    openTitle("series", item.sonarrId);
   }, []);
 
   const closeSeriesDetail = useCallback(() => {

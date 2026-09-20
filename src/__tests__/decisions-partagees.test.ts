@@ -99,3 +99,50 @@ describe("un seul mécanisme de sortie par fiche", () => {
     expect(src).toMatch(/useDelayedClose\(onClose,/);
   });
 });
+
+/**
+ * Les gestes d'ouverture, écrits une fois pour les deux écrans.
+ *
+ * Relevé le 20/09/2026 en comparant les deux clients cinéma : `openDiscovery` y était identique
+ * octet pour octet, `openResume` ne différait que par une écriture de focus propre au clavier, et
+ * `openDetail` avait **déjà divergé** — le bureau ne savait ouvrir qu'un film et omettait
+ * l'onglet, le mobile prenait les deux et le posait.
+ */
+describe("un seul geste d'ouverture", () => {
+  const CLIENTS = [
+    "src/components/cinema/CinemaClient.tsx",
+    "src/components/cinema/mobile/CinemaMobileClient.tsx",
+  ];
+
+  it.each(CLIENTS)("%s délègue l'ouverture au module commun", (client) => {
+    const src = lire(client);
+    expect(src).toMatch(/from "@\/lib\/cinemaOpen"/);
+    // Les formes exactes qui s'étaient dédoublées : une adresse de fiche écrite à la main.
+    expect(src).not.toMatch(/cinemaNavigate\(\{ film: Number\(/);
+    expect(src).not.toMatch(/cinemaNavigate\(\{ serie: Number\(/);
+    expect(src).not.toMatch(/cinemaNavigate\(\{ discover: item\.tmdbId/);
+  });
+
+  /**
+   * Et la décision que l'extraction a failli effacer.
+   *
+   * « Reprendre » est une rangée mixte : basculer sur l'onglet Séries pour ouvrir un épisode puis
+   * rebasculer en refermant se voyait comme un clignotement de toute la grille. C'est la seule des
+   * trois ouvertures qui ne passe pas par `openLibraryTitle`, et ce qui la rend sûre est qu'elle
+   * efface l'autre champ — le repli de `sheetTarget` fait le reste.
+   */
+  it("n'impose pas d'onglet à une reprise, et efface l'autre champ", () => {
+    const src = lire("src/lib/cinemaOpen.ts");
+    const reprise = src.slice(src.indexOf("export function openResumeTarget"));
+    expect(reprise).not.toMatch(/tab:/);
+    expect(reprise).toMatch(/film: Number\(film\[1\]\), serie: null/);
+    expect(reprise).toMatch(/serie: Number\(serie\[1\]\), film: null/);
+  });
+
+  // Les deux autres, elles, portent l'onglet — c'est `openLibraryTitle` qui le garantit.
+  it("fait porter l'onglet aux ouvertures qui en ont besoin", () => {
+    const src = lire("src/lib/cinemaOpen.ts");
+    expect(src).toMatch(/export function openTitle[\s\S]{0,200}openLibraryTitle\(/);
+    expect(src).toMatch(/export function openDiscoveryItem[\s\S]{0,300}openLibraryTitle\(/);
+  });
+});

@@ -9,6 +9,7 @@ import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { openDiscoveryItem, openResumeTarget, openTitle } from "@/lib/cinemaOpen";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
@@ -148,13 +149,8 @@ export function CinemaMobileClient() {
     revalidateOnFocus: false,
   });
 
-  const openDiscovery = useCallback((item: DiscoveryItem) => {
-    if (item.libraryId !== null) {
-      openLibraryTitle(item.type, item.libraryId);
-      return;
-    }
-    cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
-  }, []);
+  // Voir `cinemaOpen` : cette décision était écrite ici *et* sur le bureau, mot pour mot.
+  const openDiscovery = useCallback((item: DiscoveryItem) => openDiscoveryItem(item), []);
 
   const { data: movies, error: moviesError, isLoading: moviesLoading } = useSWR<CinemaMoviesPayload>(
     MOVIES_CATALOGUE_KEY,
@@ -350,11 +346,7 @@ export function CinemaMobileClient() {
   const myList = isSeries ? myListSeries : myListMovies;
 
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
-    cinemaNavigate(
-      type === "series"
-        ? { tab: "series", serie: (item as CinemaSeries).sonarrId, film: null }
-        : { tab: "movies", film: (item as CinemaMovie).radarrId, serie: null }
-    );
+    openTitle(type, type === "series" ? (item as CinemaSeries).sonarrId : (item as CinemaMovie).radarrId);
   }, []);
 
   /**
@@ -363,17 +355,8 @@ export function CinemaMobileClient() {
    * Elle lançait la lecture au premier appui : pas moyen de regarder de quoi il s'agit, ni de
    * repartir du début. La fiche porte les deux, et « Reprendre » y est la première ligne.
    */
-  const openResume = useCallback((href: string | null, play: () => void) => {
-    // Sans toucher à l'onglet : la rangée est mixte par nature, et basculer pour ouvrir puis
-    // rebasculer en refermant se voyait comme un clignotement. `sheetTarget` retrouve la fiche
-    // sans l'onglet dès lors que le champ de l'onglet, lui, est vide — ce que ces deux écritures
-    // garantissent en effaçant l'autre.
-    const film = href?.match(/^\/radarr\/(\d+)$/);
-    if (film) return cinemaNavigate({ film: Number(film[1]), serie: null });
-    const serie = href?.match(/^\/sonarr\/(\d+)$/);
-    if (serie) return cinemaNavigate({ serie: Number(serie[1]), film: null });
-    play();
-  }, []);
+  // Voir `cinemaOpen` : le geste est commun, y compris sa décision de ne pas toucher à l'onglet.
+  const openResume = useCallback((href: string | null, play: () => void) => openResumeTarget(href, play), []);
 
   /**
    * La piste suit le doigt.
