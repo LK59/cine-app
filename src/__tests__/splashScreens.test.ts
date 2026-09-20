@@ -63,3 +63,61 @@ describe("écrans de lancement iOS", () => {
     expect(readFileSync("public/manifest.json", "utf8")).toMatch(/"background_color": "#0a0a0c"/);
   });
 });
+
+/**
+ * Le défaut réel, et celui qu'aucun des tests ci-dessus n'aurait vu.
+ *
+ * Les images étaient bonnes, les liens étaient dans la page, l'appareil était dans la liste — et
+ * iOS n'affichait rien, parce que `/splash/*` n'était pas dans la liste des chemins que le proxy
+ * laisse passer : chaque image répondait `307` vers `/login`. Une redirection n'est pas une
+ * panne, rien n'apparaît dans les journaux, et le symptôme — un fond qui suit le mode clair ou
+ * sombre du téléphone — ne désigne pas la cause.
+ *
+ * Ce test-ci est donc le seul qui compte vraiment : tout fichier que le document réclame au
+ * système d'exploitation doit être atteignable **sans session**.
+ */
+describe("les actifs que le système va chercher lui-même sont publics", () => {
+  const proxy = readFileSync("src/proxy.ts", "utf8");
+  // Le seul tableau qui nous intéresse, délimité : `proxy.ts` en contient un autre, la liste des
+  // écritures qu'un invité a le droit de faire, dont les entrées ressemblent à celles-ci.
+  const bloc = proxy.slice(proxy.indexOf("const ACTIFS_PUBLICS = ["), proxy.indexOf("];", proxy.indexOf("const ACTIFS_PUBLICS = [")));
+  const actifs = [...bloc.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const ignore = (chemin: string) => actifs.some((a) => chemin.slice(1).startsWith(a));
+
+  it("chaque écran de lancement déclaré échappe au proxy", () => {
+    const refuses = declares
+      .flatMap((d) => [
+        `/splash/apple-splash-${d.width * d.dpr}-${d.height * d.dpr}.png`,
+        `/splash/apple-splash-${d.height * d.dpr}-${d.width * d.dpr}.png`,
+      ])
+      .filter((chemin) => !ignore(chemin));
+    expect(refuses).toEqual([]);
+  });
+
+  it("le manifeste, le service worker, la page hors ligne et les icônes aussi", () => {
+    for (const chemin of [
+      "/manifest.json",
+      "/sw.js",
+      "/offline.html",
+      "/favicon.svg",
+      "/icon-192.png",
+      "/icon-512.png",
+      "/apple-touch-icon.png",
+    ]) {
+      expect(ignore(chemin), chemin).toBe(true);
+    }
+  });
+
+  it("la liste documentée et celle que Next lit sont la même", () => {
+    // Next veut une chaîne littérale — il lit ce fichier sans l'exécuter — donc la liste est
+    // écrite deux fois. Ce test est tout ce qui empêche les deux de se séparer.
+    const matcher = proxy.match(/"(\/\(\(\?![^"]+)"/)![1];
+    expect(matcher).toBe(`/((?!${actifs.join("|")}).*)`);
+  });
+
+  it("et rien d'autre : une page ou une API reste derrière la session", () => {
+    for (const chemin of ["/", "/gestion", "/api/cinema/movies", "/api/watchlist"]) {
+      expect(ignore(chemin), chemin).toBe(false);
+    }
+  });
+});

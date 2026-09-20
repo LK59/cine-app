@@ -230,8 +230,51 @@ export async function proxy(req: NextRequest) {
   return res;
 }
 
+/**
+ * Ce que le proxy ne regarde pas — et pourquoi cette liste est une famille, pas un tas.
+ *
+ * Tout ce qui est ici est **servi sans session**. Ce n'est pas une commodité : ce sont les
+ * fichiers qu'un navigateur ou un système d'exploitation va chercher de lui-même, hors de toute
+ * page, à des moments où il n'a aucune raison de présenter un cookie — l'icône d'un onglet, le
+ * manifeste, le service worker, la page hors ligne, et les écrans de lancement qu'iOS capture au
+ * moment où l'on pose l'application sur l'écran d'accueil.
+ *
+ * C'est ce dernier cas qui a coûté la journée du 20/09/2026 : `/splash/*` manquait à la liste,
+ * donc iOS recevait une redirection vers `/login` à la place de chaque image, et affichait son
+ * propre fond — celui qui suit le mode clair ou sombre du téléphone. Aucun journal, aucune erreur,
+ * et trois réinstallations pour rien : une redirection n'est pas une panne, c'est une page.
+ *
+ * **Rien de confidentiel ne doit être servi depuis ces chemins**, et `/splash` est un dossier :
+ * ce qu'on y dépose est public par construction.
+ */
+const ACTIFS_PUBLICS = [
+  "_next/static",
+  "_next/image",
+  "favicon.ico",
+  "favicon.svg",
+  "favicon-32.png",
+  "manifest.json",
+  "sw.js",
+  "offline.html",
+  "icon-192.png",
+  "icon-512.png",
+  "icon.svg",
+  "apple-touch-icon.png",
+  "splash/",
+];
+
+/**
+ * Écrit à la main, et non construit depuis le tableau ci-dessus : Next exige une **chaîne
+ * littérale** ici — il lit ce fichier à la compilation, sans l'exécuter, et refuse tout ce qu'il
+ * ne peut pas lire tel quel (« matcher[0] need to be static strings »). La tentative de
+ * l'assembler a été refusée par la construction de l'image le 20/09/2026.
+ *
+ * Deux écritures d'une même liste, donc, ce qui est exactement ce que ce dépôt sait voir dériver.
+ * Un test les compare caractère par caractère — c'est lui qui tient le lien, puisque le langage
+ * ne peut pas.
+ */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|favicon-32.png).*)",
+    "/((?!_next/static|_next/image|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|splash/).*)",
   ],
 };
