@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { preferredAudio } from "@/lib/webcodecs/remuxPlayback";
-import { chooseAudioTrack } from "@/lib/trackPreferences";
+import { chooseAudioTrack, isForcedTrack } from "@/lib/trackPreferences";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 
 /**
@@ -163,5 +163,37 @@ describe("la plus riche passe avant le drapeau « par défaut »", () => {
     // départage, quel que soit le nombre de canaux.
     const f = fichier([piste(1, "A_TRUEHD", "eng", 8), piste(2, "A_AC3", "eng", 6)]);
     expect(preferredAudio(f, veut("eng"))?.number).toBe(2);
+  });
+});
+
+/**
+ * Une piste forcée, reconnue même quand le drapeau manque.
+ *
+ * Relevé sur cette bibliothèque le 20/09/2026 : **51 pistes sur 392** portent « forcé » dans leur
+ * titre sans que `FlagForced` soit posé — « Français forcés », « forced », « VFF Forced »,
+ * « VFQ : Forced ». Une sur huit était invisible au choix automatique, donc les modes « forcés
+ * seulement » et « intelligent » n'affichaient rien sur ces films-là.
+ */
+describe("isForcedTrack", () => {
+  const st = (name: string | null, isForced = false) =>
+    ({ language: "fra", name, isDefault: false, isForced }) as never;
+
+  it("croit le drapeau quand il est posé", () => {
+    expect(isForcedTrack(st(null, true))).toBe(true);
+    expect(isForcedTrack(st("Complet", true))).toBe(true);
+  });
+
+  it("lit le titre quand le drapeau manque — les quatre formes relevées", () => {
+    for (const titre of ["Français forcés", "forced", "VFF Forced", "VFQ : Forced", "Forcé", "French (France) Forced"]) {
+      expect(isForcedTrack(st(titre)), titre).toBe(true);
+    }
+  });
+
+  it("exige un mot entier, pour qu'un titre qui parle d'autre chose ne s'y glisse pas", () => {
+    // « Forces » et « force » sont des mots français ordinaires : les reconnaître ferait passer
+    // « Forces spéciales » pour un sous-titre forcé. Seules les formes sans ambiguïté comptent.
+    for (const titre of ["Renforcement", "Forces spéciales : commentaire", "La force tranquille", "SDH", "Complet", null]) {
+      expect(isForcedTrack(st(titre)), String(titre)).toBe(false);
+    }
   });
 });

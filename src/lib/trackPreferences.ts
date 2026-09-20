@@ -74,6 +74,34 @@ const NAMED_IN_TITLE: [RegExp, string][] = [
 ];
 
 /**
+ * Forcée — par le drapeau, ou par son titre quand le drapeau manque.
+ *
+ * Une piste forcée ne traduit que ce que le film lui-même traite comme étranger : un panneau, une
+ * réplique dans une autre langue. C'est le seul sous-titre qu'on veuille voir sur un film qu'on
+ * comprend, et c'est sur ce drapeau que reposent les modes « forcés seulement » et « intelligent ».
+ *
+ * Or le drapeau manque souvent. Relevé le 20/09/2026 sur cette bibliothèque : **51 pistes portent
+ * « forcé » dans leur titre sans que `FlagForced` soit posé** — « Français forcés », « forced »,
+ * « VFF Forced », « VFQ : Forced » — sur un total de 392. Une sur huit était donc invisible pour
+ * le choix automatique, et les films concernés affichaient soit rien, soit une piste complète.
+ *
+ * Le titre est du texte libre : on ne s'y fie que **faute de drapeau**, jamais contre lui. Et le
+ * motif a été écrit deux fois, la première étant fausse de deux façons qu'un test a montrées :
+ *
+ *  * `\b` ne délimite pas après un `é` — ce n'est pas un caractère de mot pour l'expression
+ *    régulière —, donc « Forcé » n'était pas reconnu. D'où des frontières écrites à la main sur
+ *    `\p{L}`, qui couvre les lettres accentuées ;
+ *  * « Forces spéciales » était pris pour une piste forcée. On ne reconnaît donc que les formes
+ *    sans ambiguïté — `forcé`, `forcée`, `forcés`, `forcées`, `forced` — et surtout **pas**
+ *    `force` ni `forces`, qui sont des mots français ordinaires.
+ */
+const DIT_FORCE = /(^|[^\p{L}])forc(é|ée|és|ées|ed)([^\p{L}]|$)/iu;
+
+export function isForcedTrack(track: NamedTrack): boolean {
+  return track.isForced || DIT_FORCE.test(track.name ?? "");
+}
+
+/**
  * An audio description: a mix with a narrator describing the picture.
  *
  * Never chosen automatically. Handing one to somebody who asked for French because it happens to
@@ -261,17 +289,17 @@ export function chooseSubtitleTrack<T extends NamedTrack>(
 
   // Only the forced ones, which exist to translate a sign or a line spoken in another language
   // inside a film the viewer otherwise understands.
-  if (mode === "OnlyForced") return inWanted.find((track) => track.isForced) ?? null;
+  if (mode === "OnlyForced") return inWanted.find(isForcedTrack) ?? null;
 
   // Nothing to translate: the film is already being heard in the language the subtitles would
   // have been in. Forced ones still apply, for the lines the audio itself does not cover.
   if ((mode === "Smart" || mode === "Default") && wanted && spoken === wanted) {
-    return inWanted.find((track) => track.isForced) ?? null;
+    return inWanted.find(isForcedTrack) ?? null;
   }
 
   if (inWanted.length === 0) return null;
   // A full track first: at this point the viewer is being shown subtitles because they cannot
   // follow the audio, and a forced track carries only the handful of lines the film itself
   // treats as foreign.
-  return inWanted.find((track) => !track.isForced) ?? inWanted[0];
+  return inWanted.find((track) => !isForcedTrack(track)) ?? inWanted[0];
 }
