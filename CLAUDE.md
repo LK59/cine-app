@@ -181,7 +181,13 @@ dictionaries' values.
   `PlaybackProvider` re-asks for every key left with neither data nor error when the screen comes
   back.
 - **Only `/api/jellyfin/resume` and `/api/cinema/next-up` revalidate on focus** (`liveFeedOptions`).
-  The rest of the catalogue is deliberately frozen; a 1.4 MB payload is not refetched on every wake.
+  The rest of the catalogue is deliberately frozen — but **not because it is heavy**. Measured on
+  2026-09-20 over 720 films: 623 KB raw, **118 KB gzipped**, of which the synopses alone are 76%
+  of the compressed size (without them it is 28 KB, since URLs and repeated structure compress to
+  nothing while prose does not). The number to quote is the compressed one; an earlier note said
+  "1.4 MB" and that raw figure made the payload look like a bottleneck it is not. It is half the
+  JavaScript bundle. The freeze is about not re-asking a question whose answer changes daily, not
+  about bytes — and splitting the catalogue into a "first screen" payload would buy nothing.
 - **Closing the player leaves four views stale, and it revalidates all four**
   (`refreshAfterPlayback`): the resume feed, next-up, the title's own progress, and — through a key
   filter, since a close only knows the *episode* id — every series episode list. It waits for two
