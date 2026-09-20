@@ -119,8 +119,24 @@ export type DolbyVisionPlan =
   | { kind: "hdr10" }
   | { kind: "server"; reason: string };
 
+/**
+ * Le Dolby Vision se porte dans une entrée `dvh1`, qui est de la famille HEVC — et seulement elle.
+ *
+ * Trouvé en balayant la bibliothèque une heure après avoir livré ce chantier, et jamais en
+ * relisant le code : « Marty Supreme » est en **AV1** avec un Dolby Vision profil 10. Le record
+ * est là, lisible, et produit une chaîne parfaitement formée — `dvh1.10.08`. Elle est pourtant
+ * fausse : `dvh1` annonce du HEVC, alors que l'entrée écrite pour une piste AV1 est `av01`. Le
+ * type déclaré et la boîte écrite se seraient contredits, et le segment d'initialisation aurait
+ * été rejeté en bloc : un film qui marchait serait devenu injouable.
+ *
+ * L'AV1 a sa propre forme — `dav1` — et c'est un autre chantier, pour un seul fichier. En
+ * attendant, ce fichier reprend exactement le chemin qu'il avait hier : sa couche de base, qui
+ * est du HDR10 (compatibilité 1), lue par le chemin natif comme n'importe quel HDR.
+ */
+const DOLBY_VISION_CODECS = new Set(["V_MPEGH/ISO/HEVC"]);
+
 export function planDolbyVision(
-  track: Pick<MatroskaTrack, "dolbyVision">,
+  track: Pick<MatroskaTrack, "dolbyVision" | "codecId">,
   videoRangeType: string | null | undefined,
   accepts: (mimeType: string) => boolean,
   trusted = TRUST_DOLBY_VISION
@@ -129,7 +145,7 @@ export function planDolbyVision(
   // en IPT-PQ. Tout le reste — DOVIWithHDR10, DOVIWithSDR, HDR10, SDR… — se lit correctement sans
   // Dolby Vision, et c'est ce qui rend un refus sans conséquence.
   const noBaseLayer = videoRangeType === "DOVI";
-  const dv = track.dolbyVision;
+  const dv = DOLBY_VISION_CODECS.has(track.codecId) ? track.dolbyVision : undefined;
   const info = dv ? dolbyVisionInfo(dv.record) : null;
 
   if (trusted && dv && info && accepts(`video/mp4; codecs="${info.codec}"`)) {

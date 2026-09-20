@@ -51,7 +51,10 @@ describe("planDolbyVision", () => {
     0x01, 0x00, 0x10, 0x35, 0x10, ...new Array(19).fill(0),
   ]);
   const profil5 = new Uint8Array([0x01, 0x00, (5 << 1), (6 << 3) | 0b101, 0x00, ...new Array(19).fill(0)]);
-  const piste = (r: Uint8Array | null) => ({ dolbyVision: r ? { type: "dvvC", record: r } : undefined });
+  const piste = (r: Uint8Array | null, codecId = "V_MPEGH/ISO/HEVC") => ({
+    codecId,
+    dolbyVision: r ? { type: "dvvC", record: r } : undefined,
+  });
   const oui = () => true;
   const non = () => false;
 
@@ -107,5 +110,34 @@ describe("planDolbyVision", () => {
     const casse = new Uint8Array([0x01, 0x00]);
     expect(planDolbyVision(piste(casse), "DOVIWithHDR10", oui).kind).toBe("hdr10");
     expect(planDolbyVision(piste(casse), "DOVI", oui).kind).toBe("server");
+  });
+});
+
+/**
+ * Ce que le balayage de la bibliothèque a trouvé, une heure après la livraison.
+ *
+ * « Marty Supreme » est en AV1 avec un Dolby Vision profil 10. Son enregistrement est lisible et
+ * produit une chaîne parfaitement formée — `dvh1.10.08` — qui est pourtant fausse : `dvh1` annonce
+ * du HEVC quand l'entrée écrite pour de l'AV1 est `av01`. Le type déclaré et la boîte écrite se
+ * seraient contredits, et le segment d'initialisation rejeté en bloc. Un film qui marchait serait
+ * devenu injouable, et aucune relecture de code ne l'avait vu.
+ */
+describe("planDolbyVision — le Dolby Vision n'est pas qu'une affaire de profil", () => {
+  const av1 = new Uint8Array([0x01, 0x00, (10 << 1), (8 << 3) | 0b101, 0x10, ...new Array(19).fill(0)]);
+
+  it("ne propose pas une chaîne HEVC pour une piste AV1", () => {
+    const plan = planDolbyVision(
+      { codecId: "V_AV1", dolbyVision: { type: "dvvC", record: av1 } },
+      "DOVIWithHDR10Plus",
+      () => true
+    );
+    // Sa couche de base est du HDR10 : il reprend exactement le chemin qu'il avait avant.
+    expect(plan.kind).toBe("hdr10");
+  });
+
+  it("n'en propose pas davantage pour de l'AVC", () => {
+    expect(
+      planDolbyVision({ codecId: "V_MPEG4/ISO/AVC", dolbyVision: { type: "dvcC", record: av1 } }, "DOVIWithHDR10", () => true).kind
+    ).toBe("hdr10");
   });
 });
