@@ -70,6 +70,23 @@ const NOMS: [RegExp, string][] = [
   [/^(a_)?pcm/i, "PCM"],
 ];
 
+/**
+ * Les codecs qu'on **tait**, parce qu'ils sont la norme ici.
+ *
+ * Mesuré sur cette bibliothèque : AAC, Dolby Digital et Dolby Digital+ font 949 pistes sur 1 097.
+ * Les écrire dans chaque entrée du menu allongeait l'étiquette jusqu'à la couper à l'écran — les
+ * captures du 20/09/2026 montrent « Français — Dolby Digital+ — 5.1 (Piste… » — pour une
+ * information qui ne départage rien : quand tout est en Dolby Digital+, le dire n'aide personne à
+ * choisir.
+ *
+ * Ce qu'on garde est ce qui sort de l'ordinaire et qui se voit à l'oreille ou sur une jaquette :
+ * l'Atmos, le TrueHD, la famille DTS, et le sans-perte. Le reste tient dans la langue et les
+ * canaux, qui sont les deux vraies raisons de choisir une piste.
+ */
+function estRemarquable(nom: string): boolean {
+  return /atmos|truehd|dts|flac|pcm/i.test(nom);
+}
+
 export function audioCodecName(codec: string | null | undefined, profile?: string | null): string | null {
   if (!codec) return null;
   const base = NOMS.find(([motif]) => motif.test(codec))?.[1];
@@ -104,6 +121,30 @@ export function channelLayout(channels: number | null | undefined, canaux: (n: n
   return connus[channels] ?? canaux(channels);
 }
 
+/**
+ * Les variantes régionales d'une langue, telles que les multiplexeurs les écrivent.
+ *
+ * « VFQ » et « French (Canadien) » ne sont pas des titres à mettre entre parenthèses au bout de
+ * l'étiquette : ce sont des *langues*, et elles ont leur place dans la case prévue. « La Fin
+ * d'Oak Street » porte VFF et VFQ, « Disclosure Day » porte French (France) et French (Canadien) —
+ * deux fichiers où, sans cela, les deux pistes françaises s'affichent identiques et ne se
+ * distinguent que par une parenthèse tronquée à l'écran.
+ *
+ * Seules les variantes qui s'écartent de la langue de base sont nommées : « VFF » et « French
+ * (France) » sont du français tout court, et l'écrire serait du bruit.
+ */
+const VARIANTES: [RegExp, string][] = [
+  [/\bvfq\b|\bvf2\b|qu[ée]b[ée]cois|canadien|\bcanada\b/i, "Canadien"],
+  [/\bvfb\b|\bbelge\b/i, "Belge"],
+  [/latino|latinoam[ée]ricain/i, "Latino"],
+  [/br[ée]silien|brazilian|brasil/i, "Brésilien"],
+];
+
+function variante(name: string | null | undefined): string | null {
+  if (!name) return null;
+  return VARIANTES.find(([motif]) => motif.test(name))?.[1] ?? null;
+}
+
 export interface AudioTrackFacts extends NamedTrack {
   /** Le numéro de la piste dans le fichier — dernier recours pour la nommer. */
   number: number;
@@ -131,9 +172,11 @@ function base(track: AudioTrackFacts, options: LabelOptions): string {
       : "";
   // « AD » colle à la langue : c'est une variante de cette langue, pas un format.
   const ad = isAudioDescription(track) ? " AD" : "";
+  const region = variante(track.name);
+  const codec = audioCodecName(track.codecId, track.profile);
   const morceaux = [
-    langue ? `${langue}${vo}${ad}` : null,
-    audioCodecName(track.codecId, track.profile),
+    langue ? `${langue}${region ? ` (${region})` : ""}${vo}${ad}` : null,
+    codec && estRemarquable(codec) ? codec : null,
     channelLayout(track.channels, options.canaux),
   ].filter(Boolean);
   return morceaux.length > 0 ? morceaux.join(" — ") : options.piste(track.number);
@@ -149,7 +192,16 @@ function base(track: AudioTrackFacts, options: LabelOptions): string {
  */
 function discriminant(track: AudioTrackFacts, options: LabelOptions): string {
   const brut = (track.name ?? "")
-    .replace(/\b(vff|vfq|vfi|vfb|vf|vo|eng|fra|fre|français|french|english|anglais)\b/gi, "")
+    /**
+     * **`vff`, `vfq` et consorts ne sont pas retirés**, et c'est le correctif du 20/09/2026 :
+     * ils étaient traités comme des marqueurs de langue alors qu'ils sont, dans ces fichiers, la
+     * seule chose qui distingue les deux pistes. « La Fin d'Oak Street » affichait « (Piste 2) »
+     * et « (Piste 3) » là où le fichier disait VFF et VFQ.
+     *
+     * Ils rejoignent désormais la langue quand on sait les nommer (voir `VARIANTES`) ; s'il en
+     * reste un qu'on ne sait pas nommer, il vaut mieux l'afficher tel quel que l'effacer.
+     */
+    .replace(/\b(vo|eng|fra|fre|français|french|english|anglais)\b/gi, "")
     .replace(/\b(aac|e-?ac-?3|ddp|ac-?3|dts(-hd)?(\s*ma|\s*hra)?|truehd|flac|opus|atmos)\b/gi, "")
     .replace(/\b\d\.\d\b|\b(mono|st[ée]r[ée]o)\b/gi, "")
     // Les crochets et la ponctuation de structure s'en vont ; **les traits d'union internes

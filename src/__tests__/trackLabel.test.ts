@@ -85,9 +85,27 @@ describe("channelLayout", () => {
 });
 
 describe("labelAudioTracks", () => {
-  it("écrit langue — codec — canaux", () => {
+  it("tait les codecs ordinaires : la langue et les canaux suffisent", () => {
+    // 949 pistes sur 1 097 sont en AAC, Dolby Digital ou Dolby Digital+ sur cette bibliothèque.
+    // Les écrire allongeait l'étiquette jusqu'à la couper à l'écran, sans départager quoi que ce
+    // soit — relevé sur des captures du lecteur le 20/09/2026.
     const [a] = labelAudioTracks([piste({ number: 2, language: "fra", codecId: "A_AAC", channels: 6 })], options);
-    expect(a.label).toBe("Français — AAC — 5.1");
+    expect(a.label).toBe("Français — 5.1");
+    const [b] = labelAudioTracks([piste({ number: 2, language: "fra", codecId: "A_EAC3", channels: 6 })], options);
+    expect(b.label).toBe("Français — 5.1");
+  });
+
+  it("dit le codec quand il sort de l'ordinaire", () => {
+    const cas: [string, string | null, string][] = [
+      ["A_TRUEHD", "Dolby TrueHD + Dolby Atmos", "Anglais — Dolby TrueHD Atmos — 7.1"],
+      ["A_DTS", "DTS-HD MA", "Anglais — DTS-HD MA — 7.1"],
+      ["eac3", "Dolby Digital Plus + Dolby Atmos", "Anglais — Dolby Digital+ Atmos — 7.1"],
+      ["A_FLAC", null, "Anglais — FLAC — 7.1"],
+    ];
+    for (const [codecId, profile, attendu] of cas) {
+      const [a] = labelAudioTracks([piste({ number: 3, language: "eng", codecId, profile, channels: 8 })], options);
+      expect(a.label, codecId).toBe(attendu);
+    }
   });
 
   it("marque une audiodescription sur la langue, pas sur le format", () => {
@@ -95,7 +113,7 @@ describe("labelAudioTracks", () => {
       [piste({ number: 2, language: "fra", name: "Audiodescription", codecId: "eac3", channels: 2 })],
       options
     );
-    expect(a.label).toBe("Français AD — Dolby Digital+ — 2.0");
+    expect(a.label).toBe("Français AD — 2.0");
   });
 
   it("marque la VO quand la langue originale est connue", () => {
@@ -124,8 +142,8 @@ describe("labelAudioTracks", () => {
       ],
       options
     );
-    expect(etiquettes[0].label).toBe("Anglais — Dolby Digital+ — 5.1 (Mix 6-Tracks Original du LaserDisc)");
-    expect(etiquettes[1].label).toBe("Anglais — Dolby Digital+ — 5.1 (Restauré et Remixé)");
+    expect(etiquettes[0].label).toBe("Anglais — 5.1 (Mix 6-Tracks Original du LaserDisc)");
+    expect(etiquettes[1].label).toBe("Anglais — 5.1 (Restauré et Remixé)");
   });
 
   it("n'ajoute la parenthèse que là où elle sert", () => {
@@ -136,11 +154,60 @@ describe("labelAudioTracks", () => {
       ],
       options
     );
-    expect(etiquettes.map((e) => e.label)).toEqual(["Français — Dolby Digital — 5.1", "Anglais — Dolby Digital — 5.1"]);
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — 5.1", "Anglais — 5.1"]);
   });
 
   it("retombe sur le numéro quand rien ne distingue ni ne nomme", () => {
     const etiquettes = labelAudioTracks([piste({ number: 7 }), piste({ number: 8 })], options);
     expect(etiquettes.map((e) => e.label)).toEqual(["Piste 7", "Piste 8"]);
+  });
+});
+
+/**
+ * Les variantes régionales appartiennent à la langue, pas à une parenthèse en bout de ligne.
+ *
+ * Les deux fichiers qui ont fait remonter le problème, le 20/09/2026 : « La Fin d'Oak Street »
+ * porte VFF et VFQ, « Disclosure Day » porte French (France) et French (Canadien). Sans cela les
+ * deux pistes françaises s'affichent identiques, et le discriminant — qui effaçait justement ces
+ * marqueurs — rendait « (Piste 2) » et « (Piste 3) ».
+ */
+describe("les variantes régionales", () => {
+  it("distingue la VFQ de la VFF sans parenthèse de secours", () => {
+    const etiquettes = labelAudioTracks(
+      [
+        piste({ number: 2, language: "fra", codecId: "eac3", channels: 6, name: "VFF" }),
+        piste({ number: 3, language: "fra", codecId: "eac3", channels: 6, name: "VFQ" }),
+        piste({ number: 4, language: "eng", codecId: "eac3", channels: 6, name: "English" }),
+      ],
+      options
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual([
+      "Français — 5.1",
+      "Français (Canadien) — 5.1",
+      "Anglais — 5.1",
+    ]);
+  });
+
+  it("comprend aussi la forme écrite en toutes lettres", () => {
+    const etiquettes = labelAudioTracks(
+      [
+        piste({ number: 2, language: "fra", codecId: "eac3", channels: 6, name: "French (France)" }),
+        piste({ number: 3, language: "fra", codecId: "eac3", channels: 6, name: "French (Canadien)" }),
+      ],
+      options
+    );
+    expect(etiquettes.map((e) => e.label)).toEqual(["Français — 5.1", "Français (Canadien) — 5.1"]);
+  });
+
+  it("garde un marqueur qu'elle ne sait pas nommer plutôt que de l'effacer", () => {
+    const etiquettes = labelAudioTracks(
+      [
+        piste({ number: 2, language: "fra", codecId: "eac3", channels: 6, name: "VFI" }),
+        piste({ number: 3, language: "fra", codecId: "eac3", channels: 6, name: "VFF" }),
+      ],
+      options
+    );
+    expect(etiquettes[0].label).toBe("Français — 5.1 (VFI)");
+    expect(etiquettes[1].label).toBe("Français — 5.1 (VFF)");
   });
 });
