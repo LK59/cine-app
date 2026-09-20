@@ -1362,7 +1362,16 @@ export function PlayerControls({
                     else onChangeSubtitle(tr.id);
                     setMenu(null);
                   }}
-                  className={`block w-full truncate px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                  /**
+                   * Deux lignes plutôt qu'une coupure.
+                   *
+                   * Les étiquettes de pistes sont courtes par construction — langue, format
+                   * remarquable, canaux — sauf lorsqu'une parenthèse doit distinguer deux pistes
+                   * que rien d'autre ne sépare : « Anglais — 5.1 (Mix 6-Tracks Original du
+                   * LaserDisc) ». C'est précisément le cas où couper efface ce qu'on avait mis là
+                   * pour choisir. Deux lignes suffisent à tout ce que la bibliothèque contient.
+                   */
+                  className={`block w-full px-3 py-2 text-left text-sm line-clamp-2 hover:bg-white/10 ${
                     (menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id ? "text-accent-400" : "text-white"
                   }`}
                 >

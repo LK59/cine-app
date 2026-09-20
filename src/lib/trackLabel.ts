@@ -98,7 +98,16 @@ export function audioCodecName(codec: string | null | undefined, profile?: strin
   const p = profile ?? "";
   // Le profil n'est ajouté que lorsqu'il dit quelque chose de plus que le codec. « LC » ne
   // distingue rien pour qui regarde un film ; « Atmos » et « DTS-HD MA », si.
-  if (/atmos/i.test(p)) return `${base} Atmos`;
+  /**
+   * L'Atmos se nomme seul.
+   *
+   * « Dolby Digital+ Atmos » et « Dolby TrueHD Atmos » disent deux fois la même chose à qui
+   * choisit une piste : ce qu'on retient, c'est l'Atmos. C'est aussi ainsi que les plateformes
+   * l'écrivent. Vérifié avant de simplifier : **aucun fichier de cette bibliothèque ne porte de
+   * l'Atmos dans deux codecs différents**, donc rien ne devient ambigu — et si cela arrivait, le
+   * discriminant s'en chargerait.
+   */
+  if (/atmos/i.test(p)) return "Dolby Atmos";
   if (/dts[-: ]?x\b/i.test(p)) return "DTS:X";
   if (/dts-hd\s*ma/i.test(p)) return "DTS-HD MA";
   if (/dts-hd\s*hra/i.test(p)) return "DTS-HD HRA";

@@ -51,8 +51,9 @@ describe("audioCodecName", () => {
 
   it("ajoute le profil seulement quand il dit quelque chose de plus", () => {
     // Relevés sur cette bibliothèque : 70 pistes Atmos, 77 DTS-HD MA, 71 HE-AAC, 1 DTS:X.
-    expect(audioCodecName("eac3", "Dolby Digital Plus + Dolby Atmos")).toBe("Dolby Digital+ Atmos");
-    expect(audioCodecName("truehd", "Dolby TrueHD + Dolby Atmos")).toBe("Dolby TrueHD Atmos");
+    // L'Atmos se nomme seul : « Dolby Digital+ Atmos » dit deux fois la même chose à qui choisit.
+    expect(audioCodecName("eac3", "Dolby Digital Plus + Dolby Atmos")).toBe("Dolby Atmos");
+    expect(audioCodecName("truehd", "Dolby TrueHD + Dolby Atmos")).toBe("Dolby Atmos");
     expect(audioCodecName("dts", "DTS-HD MA")).toBe("DTS-HD MA");
     expect(audioCodecName("dts", "DTS-HD MA + DTS:X")).toBe("DTS:X");
     expect(audioCodecName("aac", "HE-AAC")).toBe("HE-AAC");
@@ -97,9 +98,9 @@ describe("labelAudioTracks", () => {
 
   it("dit le codec quand il sort de l'ordinaire", () => {
     const cas: [string, string | null, string][] = [
-      ["A_TRUEHD", "Dolby TrueHD + Dolby Atmos", "Anglais — Dolby TrueHD Atmos — 7.1"],
+      ["A_TRUEHD", "Dolby TrueHD + Dolby Atmos", "Anglais — Dolby Atmos — 7.1"],
       ["A_DTS", "DTS-HD MA", "Anglais — DTS-HD MA — 7.1"],
-      ["eac3", "Dolby Digital Plus + Dolby Atmos", "Anglais — Dolby Digital+ Atmos — 7.1"],
+      ["eac3", "Dolby Digital Plus + Dolby Atmos", "Anglais — Dolby Atmos — 7.1"],
       ["A_FLAC", null, "Anglais — FLAC — 7.1"],
     ];
     for (const [codecId, profile, attendu] of cas) {
