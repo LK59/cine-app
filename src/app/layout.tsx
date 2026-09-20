@@ -125,6 +125,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           lancement — celui-là, ce sont les images ci-dessous. Ne pas le créditer d'un gain qu'il
           n'a jamais montré.
         */}
+        {/*
+          La méta qu'Apple exige pour les écrans de lancement, et que Next n'écrit plus.
+
+          Sa documentation est explicite : `apple-touch-startup-image` n'est lu que si
+          l'application est déclarée plein écran par `apple-mobile-web-app-capable`. Next 16 ne
+          produit plus que son successeur, `mobile-web-app-capable` — assez pour qu'iOS lance bien
+          l'application sans barre d'adresse, visiblement pas pour qu'il aille chercher l'image de
+          lancement.
+
+          Écrite à la main, donc, à côté de celle de Next et sans la remplacer : les deux noms
+          coexistent chez Apple, et celui-ci est le seul que la documentation des images cite.
+
+          Relevé le 20/09/2026 après avoir éliminé tout le reste — les images existent, le proxy
+          les sert (200, image/png, vérifié jusque depuis l'extérieur), l'appareil est dans la
+          liste, le manifeste porte son fond sombre. C'était la dernière pièce manquante.
+        */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <style dangerouslySetInnerHTML={{ __html: "html,body{background:#0a0a0c}" }} />
         {/* Apply saved theme before first paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: `try{var a=localStorage.getItem("cine-accent")||"violet";document.documentElement.dataset.accent=a;}catch(e){}` }} />

@@ -55,6 +55,14 @@ describe("écrans de lancement iOS", () => {
     }
   });
 
+  it("l'application se déclare plein écran sous les deux noms", () => {
+    // `apple-touch-startup-image` n'est lu par iOS que si `apple-mobile-web-app-capable` est là.
+    // Next n'émet plus que `mobile-web-app-capable` : celle-ci est écrite à la main et doit le
+    // rester. La perdre ne casse rien de visible — l'application se lance toujours — mais
+    // l'écran de lancement redevient le fond système, sans une ligne nulle part.
+    expect(layout).toMatch(/name="apple-mobile-web-app-capable" content="yes"/);
+  });
+
   it("le fond de la racine est déclaré dans le document lui-même", () => {
     // Sans prétendre que cela corrige le blanc du lancement : ce point-là n'a pas pu être
     // démontré, et le commentaire du layout dit pourquoi. La couleur, elle, doit rester celle
