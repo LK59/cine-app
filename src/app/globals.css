@@ -961,9 +961,35 @@
    laisse le navigateur sauter entièrement la mise en page et le dessin de ce qui est hors écran.
    La taille de substitution évite que la barre de défilement saute pendant qu'on descend — c'est
    le même réglage que les rangées de l'écran mobile, à la hauteur d'une carte près. */
+/* La hauteur supposée d'une carte tant qu'elle n'a pas été dessinée.
+   
+   `content-visibility: auto` évite de mettre en page les six cent soixante-dix cartes de la
+   grille complète d'un coup — mais le navigateur doit bien leur supposer une taille, et chaque
+   écart entre la supposition et la réalité décale tout ce qui suit au moment où la carte entre
+   dans l'écran. D'où un défilement qui accroche **vers le bas seulement** : vers le haut, les
+   tailles réelles sont déjà connues (c'est ce que le mot-clé `auto` retient).
+   
+   Une carte vaut la largeur de sa colonne multipliée par 1,5 — l'affiche est en 2/3 — plus une
+   cinquantaine de pixels de titre et d'année. Or le nombre de colonnes change à chaque palier :
+   une valeur unique était juste sur un téléphone et se trompait de quatre-vingt-dix pixels par
+   rangée sur un grand écran. Les valeurs ci-dessous sont calculées palier par palier, à la
+   largeur courante de chacun. */
 .player-grid > * {
   content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
+  contain-intrinsic-size: auto 228px;
+}
+
+@media (min-width: 640px) {
+  .player-grid > * { contain-intrinsic-size: auto 274px; }
+}
+@media (min-width: 768px) {
+  .player-grid > * { contain-intrinsic-size: auto 286px; }
+}
+@media (min-width: 1024px) {
+  .player-grid > * { contain-intrinsic-size: auto 307px; }
+}
+@media (min-width: 1280px) {
+  .player-grid > * { contain-intrinsic-size: auto 333px; }
 }
 
 /* Le mouvement, quand on n'en veut pas.

@@ -80,7 +80,6 @@ export function PosterImage({
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw",
   priority = false,
 }: PosterImageProps) {
-  const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
   const skipOptimizer = unoptimized || (typeof src === "string" && src.startsWith("/api/"));
 
@@ -94,7 +93,10 @@ export function PosterImage({
 
   return (
     <div className={`${aspectRatio} ${className} relative overflow-hidden`}>
-      {!loaded && <div className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />}
+      {/* Laissé en place plutôt que retiré à l'arrivée de l'image : celle-ci le recouvre
+          entièrement — `object-cover` remplit toujours la boîte — et le faire disparaître
+          coûterait précisément ce qu'on cherche à éviter, un rendu de plus. */}
+      <div className={`absolute inset-0 ${subtle ? "bg-slate-800/50" : "skeleton"}`} />
       <Image
         src={src}
         alt={alt}
@@ -102,8 +104,23 @@ export function PosterImage({
         unoptimized={skipOptimizer}
         sizes={sizes}
         priority={priority}
-        className={`object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
-        onLoad={() => setLoaded(true)}
+        className="object-cover opacity-0 transition-opacity duration-500"
+        /**
+         * L'apparition se joue sur le nœud, pas dans un état React.
+         *
+         * Chaque affiche qui arrivait appelait `setState`, donc un rendu React — et sur la grille
+         * complète, qui compte six cent soixante-dix cartes, les images arrivent par dizaines
+         * pendant qu'on fait défiler. Le résultat était un défilement légèrement saccadé **vers le
+         * bas seulement** : vers le haut, les affiches sont déjà chargées et plus rien ne se
+         * rend. C'est cette asymétrie qui a désigné la cause.
+         *
+         * Une écriture directe sur l'élément fait exactement la même chose à l'œil — même
+         * transition, même durée — sans traverser React. Un événement peut toucher son propre
+         * nœud ; c'est le rendu qu'il déclenchait qui coûtait.
+         */
+        onLoad={(event) => {
+          event.currentTarget.style.opacity = "1";
+        }}
         onError={() => {
           reportRemoteImageFailure(src);
           setErrored(true);
