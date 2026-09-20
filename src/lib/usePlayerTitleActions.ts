@@ -6,6 +6,7 @@ import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import type { WatchlistStatus } from "@/lib/db";
+import { noteWatchlistChange, refreshWatchlistViews } from "@/lib/watchlistCache";
 
 export interface PlayerTitleRef {
   tmdbId: number;
@@ -33,19 +34,6 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
-  // Toutes les vues de listes, quelle que soit leur source : la watchlist locale (dont la clé
-  // porte le statut demandé), la vue agrégée du lecteur, et la fiche ouverte s'il y en a une.
-  // Oublier la vue agrégée était le bug le plus prévisible de ce lot : on ajoutait un titre à
-  // « À voir » et l'onglet d'à côté continuait de dire qu'il n'y avait rien.
-  const refreshLists = useCallback(() => {
-    void mutate(
-      (key) =>
-        typeof key === "string" &&
-        (key.startsWith("/api/watchlist") ||
-          key === "/api/player/lists" ||
-          key.startsWith("/api/player/title/"))
-    );
-  }, []);
 
   const setStatus = useCallback(
     async (status: WatchlistStatus | null) => {
@@ -73,14 +61,19 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
           });
           toast.success(t(`player.actions.addedTo.${status}`));
         }
-        refreshLists();
+        // Le même geste que les fiches du mode cinéma, par la même fonction : la rangée « Ma
+        // liste » change tout de suite, le reste se relit derrière. Voir `noteWatchlistChange`.
+        noteWatchlistChange(
+          { tmdbId: ref.tmdbId, mediaType: ref.type, title: ref.title, year: ref.year, posterPath: ref.poster, voteAverage: ref.rating },
+          status
+        );
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t("common.unknown"));
       } finally {
         setBusy(false);
       }
     },
-    [ref, busy, toast, t, refreshLists]
+    [ref, busy, toast, t]
   );
 
   const request = useCallback(async () => {
@@ -92,14 +85,14 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
         body: JSON.stringify({ type: ref.type, tmdbId: ref.tmdbId }),
       });
       toast.success(t("player.actions.requested", { title: ref.title }));
-      refreshLists();
+      refreshWatchlistViews();
       void mutate("/api/player/requests");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.unknown"));
     } finally {
       setBusy(false);
     }
-  }, [ref, busy, toast, t, refreshLists]);
+  }, [ref, busy, toast, t]);
 
   const cancelRequest = useCallback(
     async (requestId: number) => {
@@ -108,7 +101,7 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
       try {
         await apiAction(`/api/player/requests/${requestId}`, { method: "DELETE" });
         toast.success(t("player.actions.requestCancelled"));
-        refreshLists();
+        refreshWatchlistViews();
         void mutate("/api/player/requests");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t("common.unknown"));
@@ -116,7 +109,7 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
         setBusy(false);
       }
     },
-    [busy, toast, t, refreshLists]
+    [busy, toast, t]
   );
 
   return { busy, setStatus, request, cancelRequest };

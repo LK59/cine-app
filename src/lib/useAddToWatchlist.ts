@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
+import { noteWatchlistChange } from "@/lib/watchlistCache";
 import { useT } from "@/components/TranslationProvider";
 import type { WatchlistStatus } from "@/lib/db";
 
@@ -45,6 +46,11 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     setAddedStatus(status);
     try {
       await apiAction("/api/watchlist", { method: "POST", body: JSON.stringify({ ...payload, status }) });
+      // Les vues qui montrent une liste l'apprennent tout de suite — la rangée de l'accueil
+      // comprise, et même si elle n'existait pas encore. Voir `noteWatchlistChange` : ce geste
+      // était posé par le lecteur et pas ici, donc un ajout depuis une fiche cinéma ne se voyait
+      // nulle part avant de recharger la page.
+      noteWatchlistChange(payload, status);
       // Dit à voix haute, et pas seulement montré : en mode cinéma le bouton est une ligne parmi
       // d'autres dans un menu, et un changement d'icône à cet endroit passe inaperçu.
       toast.success(t("watchlist.addedToast"));
@@ -63,6 +69,7 @@ export function useAddToWatchlist(initialStatus: WatchlistStatus | null = null) 
     setAddedStatus(null);
     try {
       await apiAction("/api/watchlist", { method: "DELETE", body: JSON.stringify(payload) });
+      noteWatchlistChange(payload, null);
       toast.success(t("watchlist.removedToast"));
     } catch (error) {
       setAddedStatus(previous);

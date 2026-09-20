@@ -68,6 +68,15 @@ export const playerBootstrapOptions = { isPaused: () => false } as const;
 // `swr` avec elles — voir `catalogueKeys.ts`. Réexportées ici : c'est d'ici qu'on les lit.
 export { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 
+/**
+ * La clé de la rangée « Ma liste » — celle de l'accueil, du téléphone et du tableau de bord.
+ *
+ * Écrite trois fois à la main avant d'être nommée ici, et c'est une clé qu'on doit pouvoir
+ * retoucher à chaud (voir `noteWatchlistChange`) : une chaîne recopiée n'est pas une clé, c'est
+ * trois caches qui ne se parlent pas.
+ */
+export const TO_WATCH_KEY = "/api/watchlist?status=to_watch";
+
 /** La clé qui porte « vu », « favori » et le point de reprise d'un titre. */
 export const progressKey = (itemId: string) => `/api/cinema/progress/${itemId}`;
 

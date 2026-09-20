@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, TO_WATCH_KEY } from "@/lib/swr";
 import { uniqueById } from "@/lib/cinemaRails";
 import type { WatchlistItem } from "@/lib/db";
 
@@ -26,7 +26,7 @@ export function useCinemaMyList<T extends CinemaLibraryItem>(
   mediaType: "movie" | "series",
   payload: CinemaLibraryPayload<T> | undefined
 ): T[] {
-  const { data } = useSWR<{ items: WatchlistItem[] }>("/api/watchlist?status=to_watch", fetcher);
+  const { data } = useSWR<{ items: WatchlistItem[] }>(TO_WATCH_KEY, fetcher);
 
   return useMemo(() => {
     if (!payload || !data?.items?.length) return [];

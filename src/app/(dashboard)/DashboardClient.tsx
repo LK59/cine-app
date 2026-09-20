@@ -6,7 +6,7 @@ import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { fetcher } from "@/lib/swr";
+import { fetcher, TO_WATCH_KEY } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { LoadingState, EmptyState } from "@/components/StateViews";
 import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight, CirclePlus } from "lucide-react";
@@ -390,7 +390,7 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
 // up next, not the whole watchlist (that's what the dedicated /watchlist page is for).
 function WatchlistSection() {
   const t = useT();
-  const { data } = useSWR<{ items: WatchlistItem[] }>("/api/watchlist?status=to_watch", fetcher);
+  const { data } = useSWR<{ items: WatchlistItem[] }>(TO_WATCH_KEY, fetcher);
   const { data: libMap } = useSWR<{
     movieMap: Record<number, number>;
     seriesMap: Record<number, number>;
