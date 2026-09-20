@@ -197,3 +197,37 @@ describe("une seule source pour la bannière", () => {
     }
   });
 });
+
+describe("l'amorce du catalogue et la requête qui la consomme", () => {
+  /**
+   * Le catalogue part avec le HTML (voir le `layout` du groupe `(player)`), et c'est une décision
+   * prise à **deux endroits qui doivent se correspondre au bit près** : l'amorce dans le document,
+   * et le récupérateur qui suivra. Le navigateur ne réutilise l'une pour l'autre que si le mode et
+   * le régime d'identification coïncident.
+   *
+   * Mesuré le 20/09/2026 dans Chrome, sur un banc où le serveur compte ce qu'il reçoit :
+   *
+   *     crossorigin="anonymous"        → 1 requête   (l'amorce est reprise)
+   *     aucun attribut crossorigin     → 2 requêtes
+   *     crossorigin="use-credentials"  → 2 requêtes
+   *
+   * Deux requêtes, ici, c'est le plus gros envoi du démarrage téléchargé deux fois. D'où ces deux
+   * assertions, qui tiennent chacune un bout du contrat.
+   */
+  it("l'amorce déclare le régime qui correspond à un fetch nu", () => {
+    const src = lire("src/app/(player)/layout.tsx");
+    expect(src).toMatch(/rel="preload" as="fetch" crossOrigin="anonymous" href=\{MOVIES_CATALOGUE_KEY\}/);
+  });
+
+  it("le récupérateur du catalogue reste un fetch nu", () => {
+    // `fetch(url, { … })` — en-têtes, `credentials`, `cache` — romprait la correspondance sans
+    // qu'aucun écran ne change d'apparence : le catalogue partirait deux fois, en silence.
+    const src = lire("src/lib/cinemaPayload.ts");
+    expect(src).toMatch(/const res = await fetch\(url\);/);
+  });
+
+  it("le service worker laisse passer les appels d'API sans les toucher", () => {
+    // Une amorce interceptée puis resservie par le worker ne serait plus la même requête.
+    expect(lire("public/sw.js")).toMatch(/if \(url\.pathname\.startsWith\("\/api\/"\)\) return;/);
+  });
+});
