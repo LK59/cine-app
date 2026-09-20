@@ -17,6 +17,19 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    /**
+     * L'ancien défaut, écrit noir sur blanc plutôt que subi.
+     *
+     * Vitest 5 a retourné ce réglage : l'historique d'un double — qui l'a appelé, avec quoi — est
+     * désormais effacé avant **chaque** test. C'est probablement le meilleur défaut, mais ce n'est
+     * pas celui sous lequel ces 1 958 tests ont été écrits, et un test qui compte les appels
+     * accumulés par un `beforeAll` changerait de résultat sans que rien ne le dise.
+     *
+     * La migration du 20/09/2026 avait une consigne : aucune régression. On fige donc le
+     * comportement d'avant. Passer à `true` est une décision séparée, qui se prend en lisant les
+     * tests qui en dépendent, pas en montant de version.
+     */
+    clearMocks: false,
   },
   resolve: {
     alias: {
