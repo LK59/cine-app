@@ -257,13 +257,17 @@ dictionaries' values.
   in the address.
 - **Sheets and panels leave through `useDelayedClose`**, which holds the address for the length of
   the animation. Anything closing by changing the route directly cuts its own animation short.
-- **Two pictures never share a presentation instant in what the remuxer emits.** Some files carry
-  one anyway — *Dirty Dancing* (2026-09-21): a picture read at 2.5 s stamped 42 ms, open-GOP
-  leading pictures stamped like the previous group's last, two pictures 1 ms apart across a group
-  boundary. ffmpeg shrugs; MediaSource removes the buffered picture a new one covers, and whatever
-  referenced it fails to decode a few frames later — three rebuilds, then the server player.
-  `PresentationDeduper` (`decodeOrder.ts`) moves such a picture 1 ms past the one it hits, and
-  drops nothing. "Images en double décalées" in the technical panel counts them.
+- **The HEVC header sent to the browser is the one the pictures justify.** *Dirty Dancing*
+  (2026-09-21) declares one PPS in its Matroska `hvcC` and carries another, same id, in its first
+  picture — the one every slice uses. ffmpeg reads parameter sets in-band and plays it; Safari,
+  handed `hvc1`, reads them **only** from the header, decoded with the wrong PPS, lasted a few
+  seconds, then "Media failed to decode" — three rebuilds, then the server player.
+  `withTrueParameterSets` (`hvcc.ts`) rebuilds the header from the first picture's VPS/SPS/PPS
+  when they disagree, for both paths; "En-tête vidéo" in the technical panel says when it did.
+  The same file also stamps some pictures with another's instant; `PresentationDeduper`
+  (`decodeOrder.ts`) moves them 1 ms past the one they hit, since MediaSource removes the buffered
+  picture a new one covers. That was real but was **not** the cause — the first fix shipped
+  targeted it, and the film still broke. When a fix does not hold, the diagnosis was incomplete.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.
