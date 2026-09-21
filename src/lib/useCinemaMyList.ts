@@ -36,3 +36,9 @@ export function useCinemaMyList<T extends CinemaLibraryItem>(
     return all.filter((item) => item.tmdbId !== null && wanted.has(item.tmdbId));
   }, [payload, data, mediaType]);
 }
+
+/** La rangée « Ma liste » est-elle en train d'arriver ? Voir `CinemaSkeletonCards`. */
+export function useCinemaMyListPending(): boolean {
+  const { data, error } = useSWR<{ items: WatchlistItem[] }>(TO_WATCH_KEY, fetcher);
+  return data === undefined && error === undefined;
+}

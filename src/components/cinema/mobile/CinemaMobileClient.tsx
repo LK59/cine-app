@@ -23,7 +23,8 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
-import { useCinemaMyList } from "@/lib/useCinemaMyList";
+import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
+import { CinemaSkeletonCards, isRowPending } from "@/components/cinema/CinemaRowSkeleton";
 import { useT } from "@/components/TranslationProvider";
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
 import { CinemaMobileHero } from "@/components/cinema/mobile/CinemaMobileHero";
@@ -189,8 +190,8 @@ export function CinemaMobileClient() {
    * l'application. « Reprendre » est personnel : il traverse les deux onglets, comme la rangée
    * du même nom chez Netflix.
    */
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
-  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
+  const { data: nextUp, error: nextUpError } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
+  const { data: resume, error: resumeError } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
 
   const resumeMovies = (resume?.items ?? []).filter((r) => r.type === "Movie");
   /**
@@ -209,6 +210,8 @@ export function CinemaMobileClient() {
   );
   const continueSeries = nextUp?.items ?? [];
   const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
+  // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
+  const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const isSeries = mediaType === "series";
   const payload = isSeries ? series : movies;
 
@@ -344,6 +347,7 @@ export function CinemaMobileClient() {
     [series]
   );
   const myList = isSeries ? myListSeries : myListMovies;
+  const myListPending = useCinemaMyListPending();
 
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
     openTitle(type, type === "series" ? (item as CinemaSeries).sonarrId : (item as CinemaMovie).radarrId);
@@ -541,6 +545,11 @@ export function CinemaMobileClient() {
 
         {/* Continue watching — landscape stills with a progress bar and the same resume wording
             the desktop cards use. */}
+        {continuePending && (
+          <MobileRow label={t("cinema.continueWatching")}>
+            <CinemaSkeletonCards cardClassName={CONTINUE_WIDTH} shape="still" count={3} />
+          </MobileRow>
+        )}
         {hasContinue && (
           <MobileRow label={t("cinema.continueWatching")}>
             {resumeMovies.map((entry) => (
@@ -644,6 +653,11 @@ export function CinemaMobileClient() {
         )}
 
         <PosterRow label={t("cinema.recentlyAdded")} items={payload?.recentlyAdded ?? []} itemId={itemId} onSelect={openHero} showNewBadge={false} />
+        {myListPending && (
+          <MobileRow label={t("cinema.myList")}>
+            <CinemaSkeletonCards cardClassName={POSTER_WIDTH} shape="poster" count={4} />
+          </MobileRow>
+        )}
         <PosterRow
           label={t("cinema.myList")}
           items={myList}

@@ -370,3 +370,17 @@ describe("les notes critiques : dans « Voir plus », sur grand écran seulement
     expect(lire("src/components/cinema/mobile/CinemaMobileDetail.tsx")).not.toContain("CinemaRatingsLine");
   });
 });
+
+describe("« Reprendre » et « Ma liste » tiennent leur place, sur les deux interfaces", () => {
+  // Pas gardées sur l'appareil (une rangée d'hier serait fausse), donc demandées à chaque lancement
+  // — et le squelette évite qu'elles fassent sauter l'écran en arrivant.
+  it.each(["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"])(
+    "%s",
+    (f) => {
+      const src = lire(f);
+      expect(src).toContain("useCinemaMyListPending()");
+      expect(src).toMatch(/isRowPending\(resume, resumeError\)/);
+      expect(src.match(/<CinemaSkeletonCards /g)?.length).toBeGreaterThanOrEqual(2);
+    }
+  );
+});
