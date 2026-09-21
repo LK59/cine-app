@@ -43,9 +43,19 @@ describe("POST /api/jellyfin/library/refresh", () => {
 });
 
 describe("GET /api/jellyfin/sessions", () => {
-  it("returns jellyfin.getSessions()'s result", async () => {
+  it("returns jellyfin.getSessions()'s result to an administrator", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
     mockJellyfin.getSessions.mockResolvedValue([{ Id: "s1" }]);
     const { GET } = await import("@/app/api/jellyfin/sessions/route");
-    expect(await (await GET()).json()).toEqual([{ Id: "s1" }]);
+    expect(await (await GET(fakeReq())).json()).toEqual([{ Id: "s1" }]);
+  });
+
+  // Qui regarde quoi, sur quel appareil, depuis quelle adresse — de tous les comptes. Elle était
+  // ouverte à toute session : le proxy ne filtre que les écritures.
+  it("refuse un compte ordinaire, et ne demande rien à Jellyfin", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "mathis", role: "user" });
+    const { GET } = await import("@/app/api/jellyfin/sessions/route");
+    expect((await GET(fakeReq())).status).toBe(403);
+    expect(mockJellyfin.getSessions).not.toHaveBeenCalled();
   });
 });
