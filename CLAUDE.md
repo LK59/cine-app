@@ -257,6 +257,13 @@ dictionaries' values.
   in the address.
 - **Sheets and panels leave through `useDelayedClose`**, which holds the address for the length of
   the animation. Anything closing by changing the route directly cuts its own animation short.
+- **Two pictures never share a presentation instant in what the remuxer emits.** Some files carry
+  one anyway — *Dirty Dancing* (2026-09-21): a picture read at 2.5 s stamped 42 ms, open-GOP
+  leading pictures stamped like the previous group's last, two pictures 1 ms apart across a group
+  boundary. ffmpeg shrugs; MediaSource removes the buffered picture a new one covers, and whatever
+  referenced it fails to decode a few frames later — three rebuilds, then the server player.
+  `PresentationDeduper` (`decodeOrder.ts`) moves such a picture 1 ms past the one it hits, and
+  drops nothing. "Images en double décalées" in the technical panel counts them.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.
