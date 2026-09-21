@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
-import { sendPushToAll } from "@/lib/push";
 import { logError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +25,8 @@ function broadcast(event: string, data: unknown) {
   }
 }
 
+// Les messages dans la page seulement. Les notifications, elles, partent de `torrentWatch`, qui
+// tourne avec le serveur : d'ici, elles ne partaient que tant qu'un onglet de la gestion était ouvert.
 function startSharedPolling() {
   if (intervalId !== null) return;
   intervalId = setInterval(async () => {
@@ -55,11 +56,9 @@ function startSharedPolling() {
 
       for (const name of started) {
         broadcast("torrent-started", { name });
-        sendPushToAll({ title: "Téléchargement démarré", body: name, tag: "torrent-started", url: "/qbittorrent", category: "torrent-started" }).catch(() => {});
       }
       for (const name of completed) {
         broadcast("torrent-complete", { name });
-        sendPushToAll({ title: "Téléchargement terminé ✓", body: name, tag: "torrent-complete", url: "/qbittorrent", category: "torrent-complete" }).catch(() => {});
       }
     } catch (err) {
       logError("sse-polling", err);

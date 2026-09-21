@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { notificationPrefsDb } from "@/lib/db";
-import { isNotificationCategory, type NotificationCategory } from "@/lib/notifications";
+import { isNotificationCategory, isViewerNotificationCategory, type NotificationCategory } from "@/lib/notifications";
 
 async function getUser(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -27,8 +27,11 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Préférences invalides" }, { status: 400 });
   }
 
+  // Un compte ordinaire règle ce qu'il peut recevoir, pas les annonces de téléchargement, qui ne
+  // lui parviennent jamais : les écrire ne ferait que remplir la table.
+  const admin = session.role === "admin";
   for (const [category, enabled] of Object.entries(preferences)) {
-    if (isNotificationCategory(category) && typeof enabled === "boolean") {
+    if (isNotificationCategory(category) && (admin || isViewerNotificationCategory(category)) && typeof enabled === "boolean") {
       notificationPrefsDb.set(session.u, category, enabled);
     }
   }

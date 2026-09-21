@@ -20,6 +20,9 @@ export async function register() {
     const { startNotificationCron } = await import("./lib/notificationJobs");
     startNotificationCron();
 
+    const { startTorrentWatch } = await import("./lib/torrentWatch");
+    startTorrentWatch();
+
     const { startStatusCron } = await import("./lib/statusCron");
     startStatusCron();
 

@@ -19,7 +19,10 @@ vi.mock("@/lib/db", () => ({
   userPrefsDb: mockUserPrefsDb,
   sessionDb: mockSessionDb,
 }));
-vi.mock("@/lib/notifications", () => ({ isNotificationCategory: (c: string) => ["push-torrent", "watchlist-available"].includes(c) }));
+vi.mock("@/lib/notifications", () => ({
+  isNotificationCategory: (c: string) => ["push-torrent", "watchlist-available"].includes(c),
+  isViewerNotificationCategory: (c: string) => c === "watchlist-available",
+}));
 const mockIsWebPushConfigured = vi.fn();
 const mockSendWebPush = vi.fn();
 const mockShouldRemovePushSubscription = vi.fn();
@@ -67,12 +70,23 @@ describe("/api/notifications/settings", () => {
   });
 
   it("PUT only applies known notification categories, ignoring unknown keys", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis" });
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
     mockNotificationPrefsDb.getForUser.mockReturnValue({});
     const { PUT } = await import("@/app/api/notifications/settings/route");
     await PUT(fakeReq({ body: { preferences: { "push-torrent": false, "not-a-real-category": true } } }));
     expect(mockNotificationPrefsDb.set).toHaveBeenCalledWith("louis", "push-torrent", false);
     expect(mockNotificationPrefsDb.set).toHaveBeenCalledTimes(1);
+  });
+
+  // Depuis le panneau Compte du cinéma : un spectateur règle ce qu'il peut recevoir, pas les
+  // annonces de téléchargement, qui ne partent qu'aux administrateurs.
+  it("PUT d'un compte ordinaire n'écrit que les annonces d'un spectateur", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "mathis", role: "user" });
+    mockNotificationPrefsDb.getForUser.mockReturnValue({});
+    const { PUT } = await import("@/app/api/notifications/settings/route");
+    await PUT(fakeReq({ body: { preferences: { "push-torrent": true, "watchlist-available": false } } }));
+    expect(mockNotificationPrefsDb.set).toHaveBeenCalledTimes(1);
+    expect(mockNotificationPrefsDb.set).toHaveBeenCalledWith("mathis", "watchlist-available", false);
   });
 });
 

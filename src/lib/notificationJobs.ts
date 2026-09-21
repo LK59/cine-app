@@ -3,7 +3,7 @@ import { cachedMovies, cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeri
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { sonarr } from "@/lib/clients/sonarr";
 import { logError } from "@/lib/logger";
-import { sendPushToAll, sendPushToUser } from "@/lib/push";
+import { sendPushToUser } from "@/lib/push";
 
 /**
  * Où mène une notification.
@@ -23,39 +23,56 @@ function playerUrl(mediaType: "movie" | "series", tmdbId?: number | null): strin
 export async function checkWatchlistAvailability(): Promise<void> {
   try {
     const db = getDb();
-    const items = db.prepare(
-      "SELECT DISTINCT media_type, tmdb_id, title FROM watchlist WHERE status = 'to_watch'"
-    ).all() as { media_type: string; tmdb_id: number; title: string }[];
+    // Qui a rangé quoi : la liste est à chacun, l'annonce aussi.
+    const rows = db.prepare(
+      "SELECT user_id, media_type, tmdb_id, title FROM watchlist WHERE status = 'to_watch'"
+    ).all() as { user_id: string; media_type: string; tmdb_id: number; title: string }[];
 
-    if (items.length === 0) return;
+    if (rows.length === 0) return;
 
-    const [movies, series] = await Promise.all([
+    const [movies, series, users] = await Promise.all([
       cachedMovies().catch(() => []),
       cachedSeries().catch(() => []),
+      jellyfin.getUsers().catch(() => [] as { Id: string; Name: string }[]),
     ]);
 
     const availableMovieTmdbIds = new Set(movies.filter((m) => m.hasFile && m.tmdbId).map((m) => m.tmdbId));
     const availableSeriesTmdbIds = new Set(
       series.filter((s) => s.tmdbId && (s.statistics?.episodeFileCount ?? 0) > 0).map((s) => s.tmdbId!)
     );
+    // La liste range un compte sous son identifiant Jellyfin, les abonnements sous son nom : le
+    // passage de l'un à l'autre est ici. Un identifiant inconnu de Jellyfin (le compte local) est
+    // déjà un nom.
+    const nameOf = new Map(users.map((u) => [u.Id, u.Name]));
 
-    for (const item of items) {
+    for (const row of rows) {
       const isAvailable =
-        (item.media_type === "movie" && availableMovieTmdbIds.has(item.tmdb_id)) ||
-        (item.media_type === "series" && availableSeriesTmdbIds.has(item.tmdb_id));
-
+        (row.media_type === "movie" && availableMovieTmdbIds.has(row.tmdb_id)) ||
+        (row.media_type === "series" && availableSeriesTmdbIds.has(row.tmdb_id));
       if (!isAvailable) continue;
-      if (availabilityNotifDb.hasBeenNotified(item.media_type, item.tmdb_id)) continue;
 
-      await sendPushToAll({
+      const userName = nameOf.get(row.user_id) ?? row.user_id;
+      /**
+       * Une fois par personne, et plus une fois pour tout le monde.
+       *
+       * L'annonce partait à **tous** les abonnés — « X est disponible dans ta bibliothèque » pour
+       * un titre de n'importe quelle liste — et la première la faisait taire pour les suivants.
+       * La clé globale d'avant (`movie` / `series`) compte encore comme « déjà dit » : sans elle,
+       * les titres déjà annoncés le seraient une seconde fois après ce changement.
+       */
+      const key = `watchlist:${userName}:${row.media_type}`;
+      if (availabilityNotifDb.hasBeenNotified(key, row.tmdb_id)) continue;
+      if (availabilityNotifDb.hasBeenNotified(row.media_type, row.tmdb_id)) continue;
+
+      await sendPushToUser(userName, {
         title: "🎬 Disponible maintenant",
-        body: `${item.title} est disponible dans ta bibliothèque`,
-        url: playerUrl(item.media_type === "movie" ? "movie" : "series", item.tmdb_id),
+        body: `${row.title} est disponible dans ta bibliothèque`,
+        url: playerUrl(row.media_type === "movie" ? "movie" : "series", row.tmdb_id),
         tag: "watchlist-available",
         category: "watchlist-available",
       });
 
-      availabilityNotifDb.markNotified(item.media_type, item.tmdb_id);
+      availabilityNotifDb.markNotified(key, row.tmdb_id);
     }
 
     availabilityNotifDb.cleanup(30 * 24 * 3600_000);

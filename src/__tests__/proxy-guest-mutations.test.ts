@@ -44,6 +44,8 @@ describe("proxy — what a plain user may write", () => {
       // Une erreur rencontrée dans le navigateur : c'est d'abord des comptes ordinaires qu'on
       // veut l'entendre — un 403 ici, et tout le mécanisme ne marchait que pour l'administrateur.
       ["POST", "/api/client-error"],
+      // Ce que chacun veut recevoir, depuis le cinéma (21/09/2026).
+      ["PUT", "/api/notifications/settings"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

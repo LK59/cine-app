@@ -52,3 +52,15 @@ export function getDefaultNotificationPreferences(): Record<NotificationCategory
 export function isNotificationCategory(value: string): value is NotificationCategory {
   return NOTIFICATION_CATEGORIES.some((category) => category.id === value);
 }
+
+/**
+ * Ce qu'un spectateur peut recevoir, et donc régler depuis le cinéma.
+ *
+ * Les deux autres parlent de téléchargements : elles ne partent qu'aux administrateurs (voir
+ * `sendPushToAdmins`) et se règlent dans la gestion. Un compte ordinaire ne peut pas les écrire.
+ */
+export const VIEWER_NOTIFICATION_CATEGORIES = ["new-episode", "request-available", "watchlist-available"] as const satisfies readonly NotificationCategory[];
+
+export function isViewerNotificationCategory(value: string): boolean {
+  return (VIEWER_NOTIFICATION_CATEGORIES as readonly string[]).includes(value);
+}

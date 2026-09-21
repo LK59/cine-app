@@ -40,7 +40,7 @@ describe("GET /api/sse", () => {
     expect(chunk).toContain("event: connected");
   });
 
-  it("broadcasts torrent-started only for downloads not already active on a previous tick", async () => {
+  it("broadcasts torrent-started only for downloads not already active on a previous tick, without a push", async () => {
     mockQbittorrent.getTorrents.mockResolvedValue([{ hash: "h1", name: "Movie X", state: "downloading" }]);
     const { GET } = await import("@/app/api/sse/route");
     const { req } = fakeReq();
@@ -58,7 +58,12 @@ describe("GET /api/sse", () => {
       { hash: "h2", name: "Movie Y", state: "downloading" },
     ]);
     await vi.advanceTimersByTimeAsync(6000);
-    expect(mockSendPushToAll).toHaveBeenCalledWith(expect.objectContaining({ tag: "torrent-started", body: "Movie Y" }));
+    // Annoncé dans la page…
+    const { value } = await reader.read();
+    expect(new TextDecoder().decode(value)).toContain("Movie Y");
+    // …mais plus en notification : elles partent de `torrentWatch`, qui tourne avec le serveur, et
+    // non d'ici, où elles n'existaient que tant qu'un onglet de la gestion était ouvert.
+    expect(mockSendPushToAll).not.toHaveBeenCalled();
     reader.releaseLock();
   });
 

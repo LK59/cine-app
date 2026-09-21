@@ -75,16 +75,26 @@ beforeEach(() => {
 });
 
 describe("checkWatchlistAvailability", () => {
+  // Jusqu'au 21/09/2026 l'annonce partait à *tous* les abonnés, pour un titre de n'importe quelle
+  // liste. Elle va maintenant à la personne qui l'a rangé, et une fois par personne.
+  const dune = { user_id: "jf-louis", media_type: "movie", tmdb_id: 42, title: "Dune" };
+  beforeEach(() => {
+    mockGetUsers.mockResolvedValue([
+      { Id: "jf-louis", Name: "louis" },
+      { Id: "jf-arthur", Name: "arthur" },
+    ]);
+  });
+
   it("does nothing when the watchlist is empty", async () => {
     prepareReturning([]);
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
     expect(mockCachedMovies).not.toHaveBeenCalled();
-    expect(mockSendPushToAll).not.toHaveBeenCalled();
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
   });
 
-  it("notifies for a movie that became available and is not yet notified", async () => {
-    prepareReturning([{ media_type: "movie", tmdb_id: 42, title: "Dune" }]);
+  it("prévient la personne dont c'est la liste, et elle seule", async () => {
+    prepareReturning([dune]);
     mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
     mockCachedSeries.mockResolvedValue([]);
     mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
@@ -92,37 +102,52 @@ describe("checkWatchlistAvailability", () => {
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
 
-    expect(mockSendPushToAll).toHaveBeenCalledWith(
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    expect(mockSendPushToUser).toHaveBeenCalledWith(
+      "louis",
       expect.objectContaining({ category: "watchlist-available", tag: "watchlist-available" })
     );
-    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("movie", 42);
+    expect(mockSendPushToAll).not.toHaveBeenCalled();
+    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("watchlist:louis:movie", 42);
   });
 
-  it("skips items already notified", async () => {
-    prepareReturning([{ media_type: "movie", tmdb_id: 42, title: "Dune" }]);
+  it("prévient chacun de ceux qui l'ont rangé, une fois chacun", async () => {
+    prepareReturning([dune, { ...dune, user_id: "jf-arthur" }]);
     mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
     mockCachedSeries.mockResolvedValue([]);
-    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(true);
+    mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((key: string) => key === "watchlist:louis:movie");
 
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
 
-    expect(mockSendPushToAll).not.toHaveBeenCalled();
+    expect(mockSendPushToUser.mock.calls.map((c) => c[0])).toEqual(["arthur"]);
+  });
+
+  it("ne répète pas ce que l'ancienne clé commune avait déjà annoncé", async () => {
+    prepareReturning([dune]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
+    mockCachedSeries.mockResolvedValue([]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((key: string) => key === "movie");
+
+    const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
+    await checkWatchlistAvailability();
+
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
   });
 
   it("skips items not yet available", async () => {
-    prepareReturning([{ media_type: "movie", tmdb_id: 42, title: "Dune" }]);
+    prepareReturning([dune]);
     mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: false }]);
     mockCachedSeries.mockResolvedValue([]);
 
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
 
-    expect(mockSendPushToAll).not.toHaveBeenCalled();
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
   });
 
-  it("checks series availability via episodeFileCount", async () => {
-    prepareReturning([{ media_type: "series", tmdb_id: 7, title: "Severance" }]);
+  it("checks series availability via episodeFileCount, and links to the player", async () => {
+    prepareReturning([{ user_id: "jf-louis", media_type: "series", tmdb_id: 7, title: "Severance" }]);
     mockCachedMovies.mockResolvedValue([]);
     mockCachedSeries.mockResolvedValue([{ tmdbId: 7, statistics: { episodeFileCount: 3 } }]);
     mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
@@ -130,21 +155,17 @@ describe("checkWatchlistAvailability", () => {
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
 
-    // La notification mène au lecteur, sur la fiche du titre : elle s'adresse à quelqu'un à qui
-    // on annonce qu'une série est arrivée, pas à quelqu'un qui vient administrer Sonarr.
-    expect(mockSendPushToAll).toHaveBeenCalledWith(
-      expect.objectContaining({ url: "/#decouverte=7&type=series" })
-    );
+    expect(mockSendPushToUser).toHaveBeenCalledWith("louis", expect.objectContaining({ url: "/#decouverte=7&type=series" }));
   });
 
   it("swallows cachedMovies/cachedSeries failures instead of throwing", async () => {
-    prepareReturning([{ media_type: "movie", tmdb_id: 42, title: "Dune" }]);
+    prepareReturning([dune]);
     mockCachedMovies.mockRejectedValue(new Error("tmdb down"));
     mockCachedSeries.mockResolvedValue([]);
 
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await expect(checkWatchlistAvailability()).resolves.toBeUndefined();
-    expect(mockSendPushToAll).not.toHaveBeenCalled();
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
   });
 });
 

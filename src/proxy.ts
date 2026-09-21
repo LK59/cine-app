@@ -72,6 +72,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // sessions supprimées sont les siennes — donc les ouvrir n'ouvre rien d'autre.
   "POST /api/push/subscribe",
   "DELETE /api/push/subscribe",
+  // Ce que chacun veut recevoir, depuis le panneau Compte du cinéma (21/09/2026). La route n'écrit
+  // que sous le nom de l'appelant, et seulement les annonces qu'un spectateur peut recevoir.
+  "PUT /api/notifications/settings",
   "DELETE /api/auth/sessions",
 ]);
 

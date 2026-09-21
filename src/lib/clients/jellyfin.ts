@@ -484,7 +484,7 @@ export const jellyfin = {
    * notifications sont rangés (voir `pushDb`), et sous l'identifiant que Jellyfin répond.
    */
   getUsers: () =>
-    fetchJson<{ Id: string; Name: string }[]>(`${url}/Users`, { headers }),
+    fetchJson<{ Id: string; Name: string; Policy?: { IsAdministrator?: boolean } }[]>(`${url}/Users`, { headers }),
 
   getNextUpGlobal: (userId: string, limit = 10) =>
     fetchJson<{ Items: JellyfinItem[] }>(

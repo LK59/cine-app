@@ -1261,8 +1261,8 @@
         "jpn": "Japanisch"
       },
       "notifications": "Benachrichtigungen",
-      "notificationsLabel": "Bescheid geben, wenn ein Titel ankommt",
-      "notificationsHint": "Eine Benachrichtigung, sobald eine deiner Anfragen verfügbar ist.",
+      "notificationsLabel": "Benachrichtigungen auf diesem Gerät",
+      "notificationsHint": "Dann wähle, worüber du informiert wirst.",
       "password": "Passwort",
       "currentPassword": "Aktuelles Passwort",
       "newPassword": "Neues Passwort",
@@ -1307,7 +1307,13 @@
       "maintenanceHintOn": "Das Band ist auf allen Bildschirmen zu sehen. Es endet von selbst um {time}.",
       "maintenanceNoticeSent": "Hinweis an laufende Wiedergaben gesendet.",
       "maintenanceOnDone": "Wartung eingeschaltet.",
-      "maintenanceOffDone": "Wartung ausgeschaltet."
+      "maintenanceOffDone": "Wartung ausgeschaltet.",
+      "notifNewEpisode": "Neue Folge",
+      "notifNewEpisodeHint": "Einer Serie, die du begonnen hast",
+      "notifRequest": "Meine Anfragen",
+      "notifRequestHint": "Wenn ein angefragter Titel verfügbar ist",
+      "notifList": "Meine Liste",
+      "notifListHint": "Wenn ein Titel aus deiner Liste ankommt"
     },
     "browse": {
       "seeAll": "Alle anzeigen",

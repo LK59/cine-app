@@ -4,14 +4,20 @@ export function Toggle({
   checked,
   onChange,
   label,
+  ariaLabel,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label?: string;
+  /** Le nom de l'interrupteur quand l'intitulé est écrit à côté, et non dedans. */
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       className="inline-flex items-center gap-2 text-sm text-slate-300"
     >
