@@ -66,6 +66,18 @@ export const SECTION_CLASS =
 
 
 
+/**
+ * Le second écran des fiches — distribution, saga, titres similaires.
+ *
+ * Centré tant qu'il tient dans la fenêtre ; mais avec trois rangées il la dépasse, commence alors
+ * tout en haut, et sa première rangée passait sous le bouton Retour, qui est fixe (1 rem du bord,
+ * ~2,5 rem de haut) : « Distribution » se confondait avec lui. La réserve du haut lui laisse sa
+ * place, quelle que soit la hauteur du contenu. Une seule écriture pour le film et la série.
+ */
+export const BELOW_SECTION_CLASS =
+  "flex min-h-full snap-start flex-col justify-center gap-6 px-8 pb-12 sm:px-16 " +
+  "pt-[calc(5rem+env(safe-area-inset-top))]";
+
 /** La distribution reste, quelle que soit la hauteur : elle tient sur une ligne tronquée. */
 export const CAST_CLASS = "truncate text-xs text-white/60";
 

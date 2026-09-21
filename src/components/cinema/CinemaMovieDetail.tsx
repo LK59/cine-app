@@ -27,7 +27,7 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -481,7 +481,7 @@ export function CinemaMovieDetail({
             deux écrans pleins à faire défiler l'un après l'autre, pour deux rangées, c'est une
             promenade là où on voulait une réponse. */}
         {hasBelow && (
-          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center gap-6 px-8 sm:px-16">
+          <div data-snap-section className={BELOW_SECTION_CLASS}>
             {/* Le même rappel que la rangée du dessous : ouvrir un titre de la saga et ouvrir un
                 titre similaire sont le même geste, donc le même chemin — et donc, à la fermeture,
                 la même animation. */}

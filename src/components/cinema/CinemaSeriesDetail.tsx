@@ -26,7 +26,7 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
+import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
 
@@ -460,7 +460,7 @@ export function CinemaSeriesDetail({
             on it reads as a deliberate second screen instead of one row stranded above a lot of
             empty backdrop. */}
         {hasBelow && (
-          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center gap-6 px-8 sm:px-16">
+          <div data-snap-section className={BELOW_SECTION_CLASS}>
             <CinemaCastRow cast={cast} />
             {hasSimilar && <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaSeries)} />}
           </div>

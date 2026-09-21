@@ -316,3 +316,14 @@ describe("une seule rangée de casting pour les trois fiches", () => {
     }
   });
 });
+
+describe("le second écran des fiches laisse sa place au bouton Retour", () => {
+  // Vu le 21/09/2026 sur Dirty Dancing : avec trois rangées, l'écran dépassait la fenêtre,
+  // commençait en haut, et « Distribution » passait sous le bouton Retour, fixe.
+  it("une réserve en haut, écrite une fois pour le film et la série", () => {
+    expect(lire("src/components/cinema/CinemaDetailLayout.tsx")).toMatch(/BELOW_SECTION_CLASS =[\s\S]{0,200}pt-\[calc\(5rem/);
+    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
+      expect([f, lire(f)]).toEqual([f, expect.stringContaining("className={BELOW_SECTION_CLASS}")]);
+    }
+  });
+});
