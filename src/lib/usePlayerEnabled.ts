@@ -6,6 +6,7 @@ import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 interface PublicPlayerConfig {
   playerEnabled: boolean;
   playerServerFallback: boolean;
+  claraGallery?: boolean;
 }
 
 /**
@@ -48,4 +49,16 @@ export function usePlayerEnabled(): boolean {
 export function usePlayerServerFallback(): boolean | undefined {
   const { data } = usePublicPlayerConfig();
   return data?.playerServerFallback;
+}
+
+/**
+ * La galerie Clara Galle est-elle ouverte sur cette installation ? `false` tant qu'on ne sait pas :
+ * c'est une option, et la montrer par défaut la rouvrirait chez qui ne l'a pas demandée.
+ *
+ * Même réponse de configuration que le lecteur, une seule requête. Elle se lisait dans
+ * `NEXT_PUBLIC_CLARA_GALLERY_ENABLED`, figé au build — voir `config.gallery.clara`.
+ */
+export function useClaraGalleryEnabled(): boolean {
+  const { data } = usePublicPlayerConfig();
+  return data?.claraGallery ?? false;
 }

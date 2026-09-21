@@ -34,8 +34,6 @@ const nextConfig = {
     minimumCacheTTL: 31536000,
   },
   env: {
-    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? "",
-    NEXT_PUBLIC_CLARA_GALLERY_ENABLED: process.env.CLARA_GALLERY_ENABLED ?? "true",
     NEXT_PUBLIC_APP_VERSION: version,
     // Ce qui distingue réellement deux builds. `version` vient de package.json et n'a pas bougé
     // depuis le premier jour : la ligne des réglages affichait « v1.0.0 » quel que soit le code

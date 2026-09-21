@@ -17,6 +17,8 @@ export async function GET() {
     // before it mounts a player at all — which of the two it mounts depends on it — and before it
     // offers the account option that selects it.
     playerServerFallback: config.player.serverFallback,
+    // L'option galerie : lue au démarrage du serveur, et non plus figée dans l'image.
+    claraGallery: config.gallery.clara,
     configured: configuredServices(config),
   });
 }

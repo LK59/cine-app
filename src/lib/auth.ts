@@ -1,3 +1,4 @@
+import { sessionSecretProblem } from "./sessionSecret";
 import { config } from "@/lib/config";
 
 const COOKIE_NAME = "cine_session";
@@ -45,9 +46,10 @@ function fromBase64url(input: string): Uint8Array {
 
 async function getKey(): Promise<CryptoKey> {
   const secret = config.app.sessionSecret;
-  if (secret === "change-me-in-production") {
-    console.error("[auth] SESSION_SECRET not set — using insecure default. Set SESSION_SECRET in .env");
-  }
+  // Le démarrage refuse déjà un tel secret (instrumentation.ts) ; ceci ne sert qu'aux chemins qui
+  // n'y passent pas — un test, un script —, pour qu'ils le disent au lieu de signer en silence.
+  const problem = sessionSecretProblem(secret);
+  if (problem) console.error(`[auth] ${problem}`);
   const enc = new TextEncoder();
   return crypto.subtle.importKey(
     "raw",

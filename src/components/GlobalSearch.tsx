@@ -1,5 +1,7 @@
 "use client";
 
+import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
+import { isVip as isVipPerson } from "@/lib/vip-persons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -173,6 +175,7 @@ export function GlobalSearch() {
   const { mutate } = useSWRConfig();
   const { role } = useRole();
   const t = useT();
+  const claraGallery = useClaraGalleryEnabled();
   const toast = useToast();
   const [searchDebug, setSearchDebug] = useState(false);
 
@@ -441,7 +444,7 @@ export function GlobalSearch() {
               <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('search.people')}</p>
               {persons.map((p, i) => {
                 const idx = libraryResults.length + i;
-                const isVip = p.id === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
+                const isVip = isVipPerson(p.id) && claraGallery;
                 return (
                   <button
                     key={`person-${p.id}`}

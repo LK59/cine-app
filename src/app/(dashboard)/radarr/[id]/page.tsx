@@ -1,5 +1,7 @@
 "use client";
 
+import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
+import { isVip as isVipPerson } from "@/lib/vip-persons";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
@@ -94,6 +96,7 @@ export default function RadarrMovieDetailPage() {
   const { isReadOnly, jfId } = useRole();
   const toast = useToast();
   const t = useT();
+  const claraGallery = useClaraGalleryEnabled();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
   const [showCollection, setShowCollection] = useState(false);
 
@@ -654,12 +657,12 @@ export default function RadarrMovieDetailPage() {
         <Collapsible title={t('radarr.tabCasting')} badge={info.tmdb.cast.length} icon={<Film size={15} className="text-accent-400" />}>
           <Rail>
             {info.tmdb.cast.map((actor) => {
-              const isVip = actor.tmdbId === 3247402 && process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
+              const isVip = isVipPerson(actor.tmdbId) && claraGallery;
               return (
                 <button
                   key={actor.tmdbId}
                   className="w-20 shrink-0 snap-start text-center touch-manipulation"
-                  onClick={() => isVip ? router.push("/person/3247402") : setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
+                  onClick={() => isVip ? router.push(`/person/${actor.tmdbId}`) : setSelectedActor({ tmdbId: actor.tmdbId, name: actor.name, photoUrl: actor.photoUrl })}
                 >
                   <div className={`mb-1.5 aspect-square overflow-hidden rounded-full bg-slate-800 transition-shadow ${
                     isVip

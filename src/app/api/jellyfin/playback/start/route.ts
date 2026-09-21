@@ -1,3 +1,4 @@
+import { publicOrigin } from "@/lib/publicOrigin";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { HttpError } from "@/lib/http";
@@ -324,10 +325,8 @@ export async function POST(req: NextRequest) {
      */
     let castUrl: string | null = null;
     if (forCast) {
-      const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
-      const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
       const separator = manifestUrl.includes("?") ? "&" : "?";
-      castUrl = `${proto}://${host}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass!)}`;
+      castUrl = `${publicOrigin(req)}${manifestUrl}${separator}${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass!)}`;
     }
 
     return NextResponse.json({

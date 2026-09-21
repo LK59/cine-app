@@ -5,6 +5,7 @@ vi.mock("@/lib/config", () => ({
   config: {
     app: { language: "fr" },
     player: { enabled: true, serverFallback: false },
+    gallery: { clara: false },
     // Une installation où seuls Radarr et TMDB sont branchés : de quoi vérifier que la réponse
     // distingue ce qui l'est de ce qui ne l'est pas.
     radarr: { apiKey: "abc" },
@@ -38,6 +39,8 @@ describe("GET /api/config/public", () => {
       playerEnabled: true,
       // Lu avant que le moindre lecteur soit monté : c'est lui qui dit lequel des deux existe.
       playerServerFallback: false,
+      // L'option galerie, lue au démarrage et non plus figée dans l'image.
+      claraGallery: false,
       configured: {
         radarr: true,
         sonarr: false,

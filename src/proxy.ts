@@ -18,7 +18,7 @@ import { sessionDb } from "@/lib/db";
 // force-expired) stayed fully usable against most of the app for up to its full 7-day lifetime.
 
 // The slideshow page (/random, og:image preview + <img> tags) and the individual photo files it
-// hotlinks (/[filename]) both need to work for an anonymous visitor of clara.kakol.fr. The list
+// hotlinks (/[filename]) both need to work for an anonymous visitor (a public link to the gallery). The list
 // endpoint (/api/gallery/clara, no trailing segment) is deliberately excluded: it's what lets
 // someone enumerate the whole gallery in one call, and is only used by the in-app authenticated
 // person page.

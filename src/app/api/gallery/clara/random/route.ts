@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { config } from "@/lib/config";
+import { publicOrigin } from "@/lib/publicOrigin";
 import fs from "fs";
 import path from "path";
 
 const GALLERY_DIR = "/app/gallery/clara";
 const EXCLUDE = new Set(["clarabanner.jpg", "favicon.jpeg"]);
-const BASE = "https://cine.kakol.fr/api/gallery/clara/";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,17 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-export async function GET() {
-  const raw = fs.readdirSync(GALLERY_DIR).filter((f) => !EXCLUDE.has(f));
+export async function GET(req: NextRequest) {
+  if (!config.gallery.clara) return new NextResponse("Not found", { status: 404 });
+  // Absolue, parce que les aperçus de lien l'exigent — et déduite de la requête : elle était
+  // écrite en dur avec le domaine de l'installation de référence. Voir `publicOrigin`.
+  const BASE = `${publicOrigin(req)}/api/gallery/clara/`;
+  let raw: string[];
+  try {
+    raw = fs.readdirSync(GALLERY_DIR).filter((f) => !EXCLUDE.has(f));
+  } catch {
+    return new NextResponse("No photos", { status: 404 });
+  }
   if (!raw.length) return new NextResponse("No photos", { status: 404 });
 
   const files = shuffle(raw);

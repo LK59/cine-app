@@ -34,11 +34,20 @@ jobs:
 
       # Runs `npm test` inside the build (see Dockerfile) — the build fails,
       # and nothing gets published, if a test breaks.
+      - name: Short commit ref
+        id: ref
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
+          # The commit the image was built from, shown in the settings page (and naming the
+          # service worker's cache generation) — without it the published image showed a
+          # build timestamp instead. Short form, like a local `git rev-parse --short HEAD`.
+          build-args: |
+            BUILD_REF=${{ steps.ref.outputs.short }}
           tags: |
             ghcr.io/lk59/cine-app:latest
             ghcr.io/lk59/cine-app:${{ github.sha }}

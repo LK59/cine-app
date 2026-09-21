@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { config } from "@/lib/config";
 
 const GALLERY_DIR = "/app/gallery/clara";
 const THUMB_DIR = "/app/data/thumbs/clara";
@@ -31,6 +32,8 @@ async function getOrBuildThumb(filepath: string, thumbPath: string): Promise<boo
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ filename: string }> }) {
+  // Ces adresses sont publiques (voir proxy.ts) : l'option fermée, elles ne servent rien.
+  if (!config.gallery.clara) return new NextResponse("Not found", { status: 404 });
   const params = await props.params;
   const filename = path.basename(params.filename);
   if (!filename || filename !== params.filename) {

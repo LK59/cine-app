@@ -89,7 +89,3 @@ Her subsequent work confirms her range. In 2024, she played Greta in Ni una más
 export function isVip(tmdbId: number): boolean {
   return tmdbId in VIP_PERSONS;
 }
-
-export function isClaraGalleryEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_CLARA_GALLERY_ENABLED !== "false";
-}

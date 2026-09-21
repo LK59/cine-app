@@ -14,7 +14,8 @@ import {
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { VipPerson } from "@/lib/vip-persons";
-import { isVip, isClaraGalleryEnabled } from "@/lib/vip-persons";
+import { isVip } from "@/lib/vip-persons";
+import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
 import type { NewsArticle } from "@/app/api/news/clara/route";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
@@ -951,11 +952,12 @@ export default function PersonPage() {
   const t = useT();
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useSWR<PersonData>(`/api/tmdb/person/${id}`, fetcher);
+  const claraGallery = useClaraGalleryEnabled();
   if (isLoading) return <DetailSkeleton />;
   if (error || !data) return <ErrorState message={t("errors.loadFailed")} />;
 
   const numId = Number(id);
-  if (isVip(numId) && isClaraGalleryEnabled()) {
+  if (isVip(numId) && claraGallery) {
     return <VipPersonPage id={id} data={data} />;
   }
 

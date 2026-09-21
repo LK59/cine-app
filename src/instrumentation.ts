@@ -11,10 +11,16 @@ export async function register() {
      * jamais pendant la compilation, où le secret n'a aucune raison d'être présent.
      */
     const { config } = await import("./lib/config");
-    if (config.app.sessionSecret === "change-me-in-production") {
+    const { sessionSecretProblem, adminPasswordProblem } = await import("./lib/sessionSecret");
+    const secretProblem = sessionSecretProblem(config.app.sessionSecret);
+    if (secretProblem) {
       throw new Error(
-        "SESSION_SECRET n'est pas défini. Posez-en un dans .env — sans lui, une session administrateur peut être forgée."
+        `${secretProblem} Posez-en un dans .env (openssl rand -hex 32) — sans lui, une session administrateur peut être forgée.`
       );
+    }
+    const passwordProblem = adminPasswordProblem(config.app.adminPassword);
+    if (passwordProblem) {
+      throw new Error(`${passwordProblem} Choisissez-en un dans .env, ou laissez-le vide pour désactiver le compte local.`);
     }
 
     const { startNotificationCron } = await import("./lib/notificationJobs");
