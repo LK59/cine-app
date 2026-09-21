@@ -10,7 +10,10 @@ export function ServiceWorkerRegistration() {
     // priverait le prochain onglet périmé de son unique tentative — voir `chunkError.ts`.
     forgetChunkReload();
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      // Le numéro du build dans l'adresse : chaque déploiement installe son propre worker, qui
+      // range le code dans un cache à son nom et fait le ménage de l'avant-dernier. Voir sw.js.
+      const build = encodeURIComponent(process.env.NEXT_PUBLIC_APP_BUILD ?? "dev");
+      navigator.serviceWorker.register(`/sw.js?v=${build}`).catch(() => {});
     }
   }, []);
 

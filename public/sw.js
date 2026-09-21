@@ -8,8 +8,43 @@
 // qu'une version précédente aurait pu garder — une réponse RSC, une ressource d'un ancien build —
 // désigne une arborescence qui n'existe plus. On repart de zéro : `activate` supprime tout cache
 // dont le nom n'est pas celui-ci.
-const CACHE_NAME = "cine-app-v11";
+// v12 (21/09/2026) : le cache grossissait sans fin. Chaque déploiement — plusieurs par jour —
+// renomme ses fichiers JS/CSS, et les anciens restaient là pour toujours, puisque `activate` ne
+// vise que les caches d'une autre *version*. Les images, elles, y étaient rangées en double : le
+// navigateur les garde déjà un an. Safari finit par vider d'un coup tout le stockage d'une
+// application qui en prend trop — on perdait alors ce qui compte avec ce qui ne sert plus. Le
+// changement de nom évince une dernière fois tout l'ancien cache ; la suite ne grossit plus
+// (voir STATIC_PREFIX et le traitement des images plus bas).
+const CACHE_NAME = "cine-app-v12";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
+
+/**
+ * Le code de l'application, par génération : celle du déploiement en cours, et la précédente.
+ *
+ * L'adresse d'enregistrement porte le numéro du build (`/sw.js?v=…`, voir
+ * ServiceWorkerRegistration) : un déploiement installe donc un nouveau worker, qui range son code
+ * dans un cache à son nom. Un fichier resté identique d'un build à l'autre garde le même nom —
+ * mediabunny et ses décodeurs (~850 Ko compressés) ne changent presque jamais — : il est alors
+ * repris du cache précédent sans être retéléchargé. Tout ce que le build courant n'a pas
+ * redemandé disparaît au déploiement suivant. Deux générations au plus, jamais davantage.
+ */
+const STATIC_PREFIX = "cine-static-";
+const BUILD = (() => {
+  try {
+    return new URL(self.location.href).searchParams.get("v") || "dev";
+  } catch {
+    return "dev";
+  }
+})();
+const STATIC_CACHE = STATIC_PREFIX + BUILD;
+
+/** La génération précédente : le dernier cache de code créé avant celui-ci. */
+function previousStaticCache() {
+  return caches.keys().then((keys) => {
+    const older = keys.filter((k) => k.startsWith(STATIC_PREFIX) && k !== STATIC_CACHE);
+    return older.length > 0 ? older[older.length - 1] : null;
+  });
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -18,10 +53,21 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  // Garde : le cache de l'application, le code de ce build, et la génération d'avant — dont le
+  // code resté identique sera repris à la demande. Tout le reste part.
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+    previousStaticCache()
+      .then((previous) =>
+        caches
+          .keys()
+          .then((keys) =>
+            Promise.all(
+              keys
+                .filter((k) => k !== CACHE_NAME && k !== STATIC_CACHE && k !== previous)
+                .map((k) => caches.delete(k))
+            )
+          )
+      )
       .then(() => self.clients.claim())
   );
 });
@@ -47,21 +93,35 @@ self.addEventListener("fetch", (event) => {
   // navigation for JS/CSS chunks that never change between deploys.
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetch(event.request).then((response) => {
-          if (!response.ok) return response;
-          const copy = response.clone();
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put(event.request, copy))
-            .catch(() => {});
-          return response;
-        });
-      })
+      caches.open(STATIC_CACHE).then((current) =>
+        current.match(event.request).then((cached) => {
+          if (cached) return cached;
+          // Pas dans ce build : peut-être le même fichier, gardé par le précédent.
+          return previousStaticCache()
+            .then((previous) => (previous ? caches.open(previous).then((c) => c.match(event.request)) : undefined))
+            .then((carried) => {
+              if (carried) {
+                current.put(event.request, carried.clone()).catch(() => {});
+                return carried;
+              }
+              return fetch(event.request).then((response) => {
+                if (!response.ok) return response;
+                current.put(event.request, response.clone()).catch(() => {});
+                return response;
+              });
+            });
+        })
+      )
     );
     return;
   }
+  /**
+   * Les images passent sans s'arrêter : le navigateur les garde déjà un an (l'optimiseur répond
+   * `max-age` d'un an, les affiches du cinéma sont des adresses stables), et le worker en rangeait
+   * une seconde copie — chaque grande image de bannière vue, pour toujours. C'est le cache HTTP
+   * qui fait ce travail, sans rien compter en double.
+   */
+  if (url.pathname.startsWith("/_next/image") || event.request.destination === "image") return;
 
   /**
    * Les documents HTML ne sont pas mis en cache — ils sont seulement servis depuis le réseau.

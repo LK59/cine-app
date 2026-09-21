@@ -304,7 +304,10 @@ Four rules, each of which cost a real failure:
   transition rather than trying to survive it, after every attempt at surviving it turned out to be
   a guess about someone else's decoder.
 - **`CACHE_NAME` in `public/sw.js`.** Bumping it evicts every cached asset for every installed PWA;
-  the version history in that file's header says why each bump happened.
+  the version history in that file's header says why each bump happened. Since v12 the app's code lives in
+  per-build caches (`cine-static-<build>`, the build number rides on `/sw.js?v=`): the current
+  generation and the previous one, an unchanged file carried over without a download — so a
+  deploy no longer needs a bump, and the cache no longer grows. Images are left to the HTTP cache.
 - **`SESSION_SECRET`.** Startup throws on the default value rather than warning — a forged admin
   session is not a log line.
 
