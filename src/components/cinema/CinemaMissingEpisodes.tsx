@@ -3,6 +3,7 @@
 import { Download, Check, CalendarClock } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import type { MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
+import { CinemaDownloading } from "@/components/cinema/CinemaDetailExtras";
 
 /**
  * Ce qui manque à une saison, et de quoi le demander.
@@ -83,6 +84,11 @@ export function CinemaMissingEpisodes({
                   </span>
                 )}
               </span>
+              {ep.downloading != null ? (
+                /* En route : ni « Demander », ni « Demandé » — ce qu'on veut savoir, c'est où il
+                   en est. C'est aussi ce qui rend la demande visible d'une séance à l'autre. */
+                <CinemaDownloading progress={ep.downloading} className="shrink-0 px-2" />
+              ) : (
               <button
                 type="button"
                 disabled={!ep.released || busy || episodeAsked}
@@ -104,6 +110,7 @@ export function CinemaMissingEpisodes({
                   </>
                 )}
               </button>
+              )}
             </li>
           );
         })}

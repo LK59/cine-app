@@ -36,12 +36,13 @@ import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/seri
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
+import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
 interface DetailInfo {
   /** `runtime` est la durée du film en minutes : elle vient de TMDB, comme le synopsis. */
-  tmdb: { overview: string; cast: CinemaCastMember[]; runtime?: number | null } | null;
+  tmdb: { overview: string; tagline?: string | null; cast: CinemaCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
 }
 
@@ -83,6 +84,7 @@ export function CinemaMobileDetail({
   underneath?: boolean;
 }) {
   const t = useT();
+  const runtimeLabel = useRuntimeLabel();
   const short = useIsShortViewport();
   const playback = usePlayback();
   const playerEnabled = usePlayerEnabled();
@@ -358,9 +360,9 @@ export function CinemaMobileDetail({
             <span>{t("cinema.seasonCount", { n: seasons.length })}</span>
           )}
           {/* La durée, à côté de l'année et du genre : c'est la troisième chose qu'on veut savoir
-              avant de lancer un film, et la seule des trois qui manquait. Pour une série, elle
-              n'aurait aucun sens — c'est celle d'un épisode, et elle est déjà sur chacun. */}
-          {!isSeries && formatMinutes(info?.tmdb?.runtime) && <span>{formatMinutes(info?.tmdb?.runtime)}</span>}
+              avant de lancer un film. Pour une série, celle d'un épisode (« 45min/ép. ») — ce
+              qu'engage le premier, avant d'en avoir ouvert aucun (21/09/2026). */}
+          {runtimeLabel(info?.tmdb?.runtime, isSeries) && <span>{runtimeLabel(info?.tmdb?.runtime, isSeries)}</span>}
           <QualityBadges quality={"quality" in item ? item.quality : undefined} />
           {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
         </div>
@@ -404,6 +406,8 @@ export function CinemaMobileDetail({
           </button>
         )}
 
+        {/* Avec le synopsis plutôt qu'avec l'année : placée plus haut, elle repoussait « Lire ». */}
+        <CinemaTagline text={info?.tmdb?.tagline} className="mb-1.5" />
         <p className="mb-3 text-sm leading-6 text-white/90">{info?.tmdb?.overview || item.overview}</p>
 
 

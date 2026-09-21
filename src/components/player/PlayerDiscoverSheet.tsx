@@ -26,6 +26,7 @@ import {
 import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
+import { CinemaTagline, CinemaDownloading, useRuntimeLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
@@ -65,8 +66,11 @@ export function PlayerDiscoverSheet({
   const { data, isLoading, error } = useSWR<PlayerTitlePayload>(
     `/api/player/title/${mediaType}/${tmdbId}`,
     fetcher,
-    { revalidateOnFocus: false }
+    // Relue toute seule tant que le titre arrive, pour que le pourcentage avance sous les yeux ;
+    // jamais sinon.
+    { revalidateOnFocus: false, refreshInterval: (latest) => (latest?.downloading != null ? DOWNLOAD_REFRESH_MS : 0) }
   );
+  const runtimeLabel = useRuntimeLabel();
 
   const { busy, setStatus, request } = usePlayerTitleActions(
     data ? { tmdbId, type: mediaType, title: data.title, year: data.year, poster: data.poster, rating: data.rating } : null
@@ -220,6 +224,7 @@ export function PlayerDiscoverSheet({
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
             {data.year && <span>{data.year}</span>}
             {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
+            {runtimeLabel(data.runtime, data.type === "series") && <span>{runtimeLabel(data.runtime, data.type === "series")}</span>}
             {data.genres.length > 0 && <span className="truncate">{data.genres.slice(0, 3).join(" · ")}</span>}
           </div>
 
@@ -236,8 +241,14 @@ export function PlayerDiscoverSheet({
             </button>
           ) : data.requestState ? (
             <div className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white/80">
-              <StateIcon size={16} />
-              {t(`player.requests.state.${data.requestState}`)}
+              {data.downloading != null ? (
+                <CinemaDownloading progress={data.downloading} className="text-sm" />
+              ) : (
+                <>
+                  <StateIcon size={16} />
+                  {t(`player.requests.state.${data.requestState}`)}
+                </>
+              )}
             </div>
           ) : (
             <button
@@ -262,6 +273,7 @@ export function PlayerDiscoverSheet({
           </button>
 
 
+          <CinemaTagline text={data.tagline} className="mb-1.5" />
           {data.overview && <p className="mb-4 text-sm leading-6 text-white/90">{data.overview}</p>}
 
           <CinemaCastRow cast={castFromTitle(data.cast)} />
@@ -346,8 +358,11 @@ export function PlayerDiscoverSheet({
               <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
                 {data.year && <span>{data.year}</span>}
                 {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
+                {runtimeLabel(data.runtime, data.type === "series") && <span>{runtimeLabel(data.runtime, data.type === "series")}</span>}
                 {data.genres.length > 0 && <span>{data.genres.slice(0, 3).join(" · ")}</span>}
               </div>
+
+              <CinemaTagline text={data.tagline} />
 
               {data.overview && (
                 <CinemaOverview
@@ -383,7 +398,11 @@ export function PlayerDiscoverSheet({
                     <span className={MENU_BADGE}>
                       <StateIcon size={14} />
                     </span>
-                    <span className="text-sm font-medium">{t(`player.requests.state.${data.requestState}`)}</span>
+                    {data.downloading != null ? (
+                      <CinemaDownloading progress={data.downloading} className="text-sm" />
+                    ) : (
+                      <span className="text-sm font-medium">{t(`player.requests.state.${data.requestState}`)}</span>
+                    )}
                   </div>
                 ) : (
                   <button

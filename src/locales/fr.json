@@ -1427,7 +1427,9 @@
     "becauseWatched": "Parce que vous avez regardé {title}",
     "castTitle": "Distribution",
     "top10Theme": "Top 10 du jour · {theme}",
-    "decade": "années {decade}"
+    "decade": "années {decade}",
+    "perEpisode": "{time}/ép.",
+    "downloading": "Arrive · {pct} %"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",

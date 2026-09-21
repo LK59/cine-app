@@ -29,6 +29,7 @@ import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -42,7 +43,7 @@ interface RadarrCastMember {
 
 interface RadarrInfo {
   /** `runtime` est la durée du film en minutes : elle vient de TMDB, comme le synopsis. */
-  tmdb: { overview: string; cast: RadarrCastMember[]; runtime?: number | null } | null;
+  tmdb: { overview: string; tagline?: string | null; cast: RadarrCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
 }
 
@@ -329,6 +330,8 @@ export function CinemaMovieDetail({
             <QualityBadges quality={item.quality} />
           {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
+
+          <CinemaTagline text={info?.tmdb?.tagline} />
 
           <CinemaOverview
             text={info?.tmdb?.overview || item.overview || ""}

@@ -29,6 +29,7 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstA
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
+import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -41,7 +42,8 @@ interface SonarrCastMember {
 }
 
 interface SonarrInfo {
-  tmdb: { overview: string; cast: SonarrCastMember[] } | null;
+  /** `runtime` : la durée d'un épisode, en minutes (TMDB). */
+  tmdb: { overview: string; tagline?: string | null; cast: SonarrCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
 }
 
@@ -126,6 +128,7 @@ export function CinemaSeriesDetail({
   const similar = useCinemaSimilar(item, "series");
   const hasSimilar = !!onSelectSimilar && similar.length > 0;
   const cast = info?.tmdb?.cast ?? [];
+  const runtimeLabel = useRuntimeLabel();
   const hasBelow = hasSimilar || cast.length > 0;
 
   // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
@@ -292,8 +295,11 @@ export function CinemaSeriesDetail({
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+            {runtimeLabel(info?.tmdb?.runtime, true) && <span>{runtimeLabel(info?.tmdb?.runtime, true)}</span>}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
+
+          <CinemaTagline text={info?.tmdb?.tagline} />
 
           <CinemaOverview
             text={info?.tmdb?.overview || item.overview || ""}

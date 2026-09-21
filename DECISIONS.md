@@ -192,6 +192,19 @@ forme de la fiche acteur de la gestion (`ActorModal`), sur la mécanique du cin�
 **Voulu.** La gestion garde `ActorModal` : elle y ajoute un titre à Radarr, ce que le cinéma fait
 autrement (la fiche découverte, puis « Demander »).
 
+## 7 ter. Accroche, durée, arrivée
+
+**Règle.** Des détails légers et discrets : l'accroche en italique sous les métadonnées ; la durée
+d'un film, ou d'un épisode pour une série (« 45min/ép. ») ; « Arrive · 63 % » là où un spectateur
+attend quelque chose — un titre demandé (fiche découverte) ou un épisode manquant. Jamais sur un
+film de la bibliothèque : il a déjà un fichier, un téléchargement n'y serait qu'un remplacement.
+
+**Porteurs.** `CinemaTagline`, `useRuntimeLabel`, `CinemaDownloading` (`CinemaDetailExtras.tsx`) ;
+`queueProgress` / `titleDownloadProgress` (`src/lib/downloadProgress.ts`) côté serveur. Les fiches
+se relisent toutes seules toutes les 15 s tant que quelque chose arrive, jamais sinon.
+
+**Tests.** `CinemaDetailExtras.test.tsx`, `player-routes.test.ts`, `decisions-partagees.test.ts`.
+
 ## 8. Pastilles de qualité
 
 **Porteur.** `qualityBadges` (`videoQuality.ts`) et `QualityBadges.tsx`, pour les deux bannières et

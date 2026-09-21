@@ -1427,7 +1427,9 @@
     "becauseWatched": "Because you watched {title}",
     "castTitle": "Cast",
     "top10Theme": "Top 10 today · {theme}",
-    "decade": "the {decade}s"
+    "decade": "the {decade}s",
+    "perEpisode": "{time}/ep",
+    "downloading": "Arriving · {pct}%"
   },
   "services": {
     "notConfigured": "{name} is not configured.",

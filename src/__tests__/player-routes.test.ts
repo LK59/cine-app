@@ -21,11 +21,14 @@ vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr }));
 
 const sonarr = {
   getEpisodes: vi.fn(),
+  getQueue: vi.fn(async () => ({ records: [] as unknown[] })),
   updateEpisode: vi.fn(),
   triggerSearch: vi.fn(),
   triggerEpisodeSearch: vi.fn(),
 };
 vi.mock("@/lib/clients/sonarr", () => ({ sonarr }));
+const radarr = { getQueue: vi.fn(async () => ({ records: [] as unknown[] })) };
+vi.mock("@/lib/clients/radarr", () => ({ radarr }));
 
 const tmdbClient = { isEnabled: () => true, getMovie: vi.fn(), getTv: vi.fn() };
 vi.mock("@/lib/clients/tmdb", () => ({
@@ -53,7 +56,7 @@ vi.mock("@/lib/server-cache", () => ({
   getProviderIdCI: (ids: Record<string, string> | undefined, key: string) =>
     ids ? ids[key] ?? ids[key[0].toUpperCase() + key.slice(1)] : undefined,
   withCache: async (_k: string, _t: number, fn: () => unknown) => fn(),
-  TTL: { LONG: 1, MEDIUM: 1, SHORT: 1, MEDIA_INFO: 1 },
+  TTL: { LONG: 1, MEDIUM: 1, SHORT: 1, VERY_SHORT: 1, MEDIA_INFO: 1 },
   invalidateKey: () => {},
 }));
 
@@ -115,6 +118,44 @@ describe("GET /api/player/title", () => {
     const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "555" }) })).json();
     expect(body.requestState).toBe("unreleased");
     expect(body.libraryId).toBeNull();
+    expect(body.downloading).toBeNull();
+  });
+
+  // « Arrive · 63 % » : un film demandé, surveillé par Radarr sans fichier, dans sa file.
+  it("dit où en est le téléchargement d'un titre demandé qui arrive", async () => {
+    tmdbClient.getMovie.mockResolvedValue({
+      title: "En route", release_date: "2020-01-01", overview: "", genres: [], runtime: 100,
+      vote_average: 0, poster_path: null, backdrop_path: null, credits: { cast: [] },
+    });
+    jellyseerr.getMovieMedia.mockResolvedValue({ mediaInfo: { id: 1, status: 3 } });
+    radarr.getQueue.mockResolvedValueOnce({ records: [{ movieId: 99, size: 1000, sizeleft: 370 }] });
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "700" }) })).json();
+    expect(body.downloading).toBeCloseTo(0.63);
+  });
+
+  // Jamais sur un film qu'on a : ce serait un remplacement de qualité, pas une arrivée.
+  it("ne dit rien d'un film de la bibliothèque, même dans la file", async () => {
+    tmdbClient.getMovie.mockResolvedValue({
+      title: "Skyfall", release_date: "2012-10-24", overview: "", genres: [], runtime: 143,
+      vote_average: 0, poster_path: null, backdrop_path: null, credits: { cast: [] },
+    });
+    jellyseerr.getMovieMedia.mockResolvedValue({});
+    radarr.getQueue.mockResolvedValueOnce({ records: [{ movieId: 42, size: 1000, sizeleft: 500 }] });
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
+    expect(body.downloading).toBeNull();
+  });
+
+  it("donne la durée d'un épisode pour une série", async () => {
+    tmdbClient.getTv.mockResolvedValue({
+      name: "Série", first_air_date: "2020-01-01", overview: "", genres: [], episode_run_time: [45],
+      vote_average: 0, poster_path: null, backdrop_path: null, credits: { cast: [] },
+    });
+    jellyseerr.getTvMedia.mockResolvedValue({});
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "series", tmdbId: "1" }) })).json();
+    expect(body.runtime).toBe(45);
   });
 });
 
@@ -281,6 +322,21 @@ describe("a series that is only partly here", () => {
     expect(body.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)).toEqual([5]);
     expect(body.seasons[0].requestable).toBe(true);
     expect(body.seasons[0].episodes.map((e: { released: boolean }) => e.released)).toEqual([true, false]);
+  });
+
+  // Le « demandé » de cet écran ne durait que la séance : la file de Sonarr le rend durable.
+  it("dit où en est un épisode manquant qui se télécharge", async () => {
+    sonarr.getQueue.mockResolvedValueOnce({ records: [{ seriesId: 151, episodeId: 3, size: 400, sizeleft: 100 }] });
+    const { GET } = await import("@/app/api/player/series/[sonarrId]/missing/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ sonarrId: "151" }) })).json();
+    expect(body.seasons[0].episodes.map((e: { downloading: number | null }) => e.downloading)).toEqual([0.75, null]);
+  });
+
+  it("dit quand même ce qui manque si la file de Sonarr ne répond pas", async () => {
+    sonarr.getQueue.mockRejectedValueOnce(new Error("sonarr down"));
+    const { GET } = await import("@/app/api/player/series/[sonarrId]/missing/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ sonarrId: "151" }) })).json();
+    expect(body.seasons[0].episodes).toHaveLength(2);
   });
 
   // La demande n'est pas une demande Jellyseerr : la série est là, ce sont des fichiers qui

@@ -7,6 +7,7 @@ import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
 import type { MissingPayload, MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
+import { DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 
 /**
  * Ce qui manque à une série, et le geste pour le demander.
@@ -27,7 +28,12 @@ export function usePlayerSeriesRequests(sonarrId: number | null | undefined) {
   const { data, mutate } = useSWR<MissingPayload>(
     sonarrId ? `/api/player/series/${sonarrId}/missing` : null,
     fetcher,
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: false,
+      // Relue tant qu'un épisode arrive, pour que son pourcentage avance ; jamais sinon.
+      refreshInterval: (latest) =>
+        latest?.seasons.some((season) => season.episodes.some((ep) => ep.downloading != null)) ? DOWNLOAD_REFRESH_MS : 0,
+    }
   );
 
   const seasons = useMemo(() => data?.seasons ?? [], [data]);

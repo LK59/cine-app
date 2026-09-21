@@ -1427,7 +1427,9 @@
     "becauseWatched": "Porque viste {title}",
     "castTitle": "Reparto",
     "top10Theme": "Top 10 del día · {theme}",
-    "decade": "los {decade}"
+    "decade": "los {decade}",
+    "perEpisode": "{time}/ep.",
+    "downloading": "Llegando · {pct} %"
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

@@ -337,3 +337,24 @@ describe("la fiche découverte montre la même distribution que les autres", () 
     expect(src).not.toMatch(/function CastRow\(/);
   });
 });
+
+describe("l'accroche, la durée et l'arrivée : une écriture pour toutes les fiches", () => {
+  // Trois détails repris de la gestion le 21/09/2026 ; cinq mises en page les montrent.
+  const fiches = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ];
+  it("toutes les fiches passent par `CinemaTagline`", () => {
+    for (const f of fiches) expect([f, lire(f)]).toEqual([f, expect.stringContaining("<CinemaTagline text=")]);
+  });
+  it("la durée d'une série se dit par `useRuntimeLabel`, jamais à la main", () => {
+    for (const f of fiches.slice(1)) expect([f, lire(f)]).toEqual([f, expect.stringContaining("useRuntimeLabel()")]);
+  });
+  it("le pourcentage d'arrivée vient de `CinemaDownloading`", () => {
+    for (const f of ["src/components/player/PlayerDiscoverSheet.tsx", "src/components/cinema/CinemaMissingEpisodes.tsx"]) {
+      expect([f, lire(f)]).toEqual([f, expect.stringContaining("<CinemaDownloading progress=")]);
+    }
+  });
+});

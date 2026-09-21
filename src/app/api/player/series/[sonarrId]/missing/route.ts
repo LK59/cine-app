@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { sonarr } from "@/lib/clients/sonarr";
 import { withCache, TTL } from "@/lib/server-cache";
 import { withErrorHandling } from "@/lib/api-helpers";
+import { queueProgress, sonarrQueue } from "@/lib/downloadProgress";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,13 @@ export interface MissingEpisode {
   airDate: string | null;
   /** Diffusé : c'est ce qui décide si l'on peut demander ou non. */
   released: boolean;
+  /**
+   * La part déjà téléchargée (0 à 1) quand l'épisode est dans la file de Sonarr, `null` sinon.
+   *
+   * C'est ce qui rend durable le « demandé » de cet écran : il n'existait que le temps de la
+   * séance, et rien ne disait ensuite qu'un épisode était en train d'arriver.
+   */
+  downloading: number | null;
 }
 
 export interface MissingSeason {
@@ -56,9 +64,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ sonarrId:
     // Mise en cache : cette liste est demandée à chaque ouverture d'une fiche de série, et elle
     // ne bouge qu'au rythme des téléchargements. Quinze secondes suffisent à ce qu'un aller-retour
     // entre deux fiches ne réinterroge pas Sonarr.
-    const episodes = await withCache(`sonarr:episodes:${seriesId}`, TTL.SHORT, () =>
-      sonarr.getEpisodes(seriesId)
-    );
+    const [episodes, queue] = await Promise.all([
+      withCache(`sonarr:episodes:${seriesId}`, TTL.SHORT, () => sonarr.getEpisodes(seriesId)),
+      // Ne pas savoir ce qui se télécharge n'empêche pas de dire ce qui manque.
+      sonarrQueue().catch(() => []),
+    ]);
+    const inQueue = queue.filter((r) => r.seriesId === seriesId);
 
     const bySeason = new Map<number, MissingEpisode[]>();
     for (const ep of episodes) {
@@ -73,6 +84,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ sonarrId:
         // Une date absente veut dire « pas encore annoncé », donc pas encore diffusé. Une date
         // illisible ne doit rien bloquer : on la considère passée.
         released: airDate ? Date.parse(airDate) <= now || Number.isNaN(Date.parse(airDate)) : false,
+        downloading: queueProgress(inQueue.filter((r) => r.episodeId === ep.id)),
       });
     }
 

@@ -9,6 +9,7 @@ import { watchlistDb, type WatchlistStatus } from "@/lib/db";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { resolveRequestState, isReleased, type PlayerRequestState } from "@/lib/playerRequestState";
 import { config } from "@/lib/config";
+import { titleDownloadProgress } from "@/lib/downloadProgress";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,11 @@ export interface PlayerTitlePayload {
   libraryId: number | null;
   requestState: PlayerRequestState | null;
   watchlistStatus: WatchlistStatus | null;
+  /**
+   * La part déjà téléchargée (0 à 1) d'un titre demandé qui arrive, `null` sinon. Seulement pour
+   * un titre absent de la bibliothèque — voir `titleDownloadProgress`.
+   */
+  downloading: number | null;
 }
 
 /**
@@ -83,6 +89,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
       // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
       const libraryId = playableId(lib, "movie", tmdbId);
+      const downloading = libraryId === null ? await titleDownloadProgress("movie", tmdbId) : null;
       return build({
         tmdbId,
         type,
@@ -99,11 +106,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         libraryId,
         mediaStatus: media?.mediaInfo?.status ?? null,
         watchlistStatus: userId ? watchlistDb.get(userId, "movie", tmdbId)?.status ?? null : null,
+        downloading,
       });
     }
 
     const [detail, lib] = await Promise.all([tmdb.getTv(tmdbId), playableLibrary()]);
     const libraryId = playableId(lib, "series", tmdbId);
+    const downloading = libraryId === null ? await titleDownloadProgress("series", tmdbId) : null;
     return build({
       tmdbId,
       type,
@@ -114,12 +123,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       posterPath: detail.poster_path,
       backdropPath: detail.backdrop_path,
       genres: (detail.genres ?? []).map((g) => g.name),
-      runtime: null,
+      // La durée d'un épisode : c'est celle qu'on veut savoir d'une série. Elle était laissée vide.
+      runtime: detail.episode_run_time?.[0] ?? null,
       rating: detail.vote_average ?? 0,
       cast: detail.credits?.cast ?? [],
       libraryId,
       mediaStatus: media?.mediaInfo?.status ?? null,
       watchlistStatus: userId ? watchlistDb.get(userId, "series", tmdbId)?.status ?? null : null,
+      downloading,
     });
   }, "player-title");
 }
@@ -140,6 +151,7 @@ function build(input: {
   libraryId: number | null;
   mediaStatus: number | null;
   watchlistStatus: WatchlistStatus | null;
+  downloading: number | null;
 }): PlayerTitlePayload {
   return {
     tmdbId: input.tmdbId,
@@ -168,5 +180,6 @@ function build(input: {
         ? null
         : resolveRequestState({ mediaStatus: input.mediaStatus, released: isReleased(input.releaseDate) }),
     watchlistStatus: input.watchlistStatus,
+    downloading: input.downloading,
   };
 }
