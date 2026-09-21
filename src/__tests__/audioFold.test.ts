@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { fold, toCodecChannelOrder } from "@/lib/webcodecs/audioTranscode";
 
 /** Un plan constant, pour lire d'un coup d'œil où le contenu a atterri. */
@@ -117,6 +117,10 @@ describe("fold — une disposition qu'on ne sait pas nommer", () => {
  * exactement les mêmes niveaux que ffmpeg en ordre WAVE, à deux décimales, sur « Twilight » en
  * E-AC3 comme sur « Titanic » en AC-3. Le centre est au rang 2 de part et d'autre.
  */
+const IPHONE =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
+afterEach(() => vi.unstubAllGlobals());
+
 describe("toCodecChannelOrder", () => {
   /** Les plans dans l'ordre du décodeur : L R C LFE Ls Rs. C'est aussi celui de l'encodeur. */
   const surround = [plane(1), plane(2), plane(3), plane(4), plane(5), plane(6)];
@@ -136,6 +140,18 @@ describe("toCodecChannelOrder", () => {
     const out = channels(toCodecChannelOrder(surround, "mp4a.40.2"));
     expect(out[2]).toBe(3);
     expect(out[0]).toBe(1);
+  });
+
+  it("mais range le 5.1 dans l'ordre AAC pour l'encodeur d'Apple, qui ne convertit pas", () => {
+    // « Titanic » sur iPhone le 07/09, Braveheart en VO 7.1 sur iPhone le 21/09 : les voix à
+    // droite. WebKit ne transmet à l'encodeur d'Apple que le nombre de canaux ; celui-ci lit les
+    // plans dans l'ordre du format, centre d'abord. Chrome, lui, convertit — le test d'au-dessus.
+    vi.stubGlobal("navigator", { userAgent: IPHONE });
+    expect(channels(toCodecChannelOrder(surround, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 4]);
+    expect(channels(toCodecChannelOrder([plane(1), plane(2), plane(3)], "mp4a.40.2"))).toEqual([3, 1, 2]);
+    // La stéréo reste ce qu'elle est, partout.
+    const stereo = [plane(1), plane(2)];
+    expect(toCodecChannelOrder(stereo, "mp4a.40.2")).toBe(stereo);
   });
 
   it("ne touche pas à la stéréo, qui range pareil des deux côtés", () => {

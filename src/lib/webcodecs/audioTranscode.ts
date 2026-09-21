@@ -15,6 +15,7 @@ import type { ByteSource } from "./byteSource";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
 import { containerAccepts } from "./mseSource";
+import { isWebKit } from "../webkitEngine";
 import { extractAudioSpecificConfig, opusSampleEntry, parseAacConfig } from "./mp4SampleEntries";
 
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
@@ -347,6 +348,7 @@ export async function chooseTranscodePlan(sampleRate: number, channels: number):
   const wanted = [channels, ...[6, 2].filter((n) => n < channels)];
   for (const target of wanted) {
     for (const codec of [TARGET_CODEC, FALLBACK_CODEC]) {
+      if (target > appleAacCap()) continue;
       if (!containerAccepts(`audio/mp4; codecs="${codec}"`)) continue;
       if (await firstSupported(codec, sampleRate, target)) {
         chosenTarget = codec;
@@ -879,6 +881,47 @@ export function fold(planes: Float32Array[], to: number): Float32Array[] {
 const AAC_ORDER: Record<number, readonly number[]> = {};
 
 /**
+ * **Mais l'encodeur d'Apple, lui, ne convertit pas** — et les deux mesures étaient vraies, chacune
+ * sur son navigateur. Réconcilié le 21/09/2026.
+ *
+ * Le 07/09, « Titanic » sur **iPhone** (AC-3 et E-AC3 mêlés, donc ré-encodés) : les voix à droite,
+ * corrigé par la permutation vers l'ordre AAC. Le 19/09, un spectateur sur **Chrome/Windows** : le
+ * son d'un seul côté, corrigé en la retirant — le commit disait « un iPhone ne passe jamais par
+ * ici », ce qui est faux pour le DTS, le TrueHD, le FLAC et tout fichier mixte. Et la mesure qui
+ * le justifiait portait sur notre *décodeur*, pas sur les encodeurs. Le 21/09, Braveheart en VO
+ * TrueHD 7.1 sur iPhone : les voix plus fortes à droite.
+ *
+ * La raison est dans WebKit : son encodeur (`AudioEncoderCocoa`) ne transmet à celui d'Apple que
+ * le *nombre* de canaux, sans disposition. L'encodeur AAC d'Apple lit alors les plans dans l'ordre
+ * du format — centre d'abord, LFE à la fin. Chrome, lui, convertit depuis l'ordre standard.
+ *
+ * D'où cette table, pour le moteur WebKit seulement (sur iOS, tout navigateur l'est) : le 5.1 et le
+ * trois canaux dans l'ordre AAC. Pas de huit canaux : `chooseTranscodePlan` n'en demande jamais à
+ * cet encodeur (voir `appleAacCap`).
+ */
+const APPLE_AAC_ORDER: Record<number, readonly number[]> = {
+  // [L,R,C] → [C,L,R]
+  3: [2, 0, 1],
+  // [L,R,C,LFE,Ls,Rs] → [C,L,R,Ls,Rs,LFE]
+  6: [2, 0, 1, 4, 5, 3],
+};
+
+/**
+ * Au plus six canaux vers l'encodeur AAC d'Apple.
+ *
+ * L'AAC n'a pas de vrai 7.1 à enceintes arrière — sa configuration 7, celle que l'iPhone produit,
+ * est un « 7.1 larges avant » —, l'encodeur d'Apple ne dit pas où il range huit plans, et aucune
+ * mesure n'existe ici pour le savoir. Un 7.1 est donc replié en 5.1 avant lui (`fold`, les arrières
+ * mêlés aux ambiances), dans l'ordre qui, lui, a été entendu juste sur « Titanic ». Sur un iPhone —
+ * haut-parleurs, casque, audio spatial —, rien n'est perdu que deux canaux qu'aucune sortie n'a.
+ */
+function appleAacCap(): number {
+  // Tout encodeur, pas seulement l'AAC : WebKit refuse de toute façon l'Opus au-delà de deux
+  // canaux, et une règle sans exception ne laisse pas de huit canaux passer par un côté.
+  return isWebKit() ? 6 : Infinity;
+}
+
+/**
  * L'ordre d'Opus, qui est un troisième ordre — ni celui du décodeur, ni celui de l'AAC.
  *
  * Opus reprend la disposition Vorbis : L C R Ls Rs LFE. Elle ne diffère de celle de l'AAC que par
@@ -904,7 +947,7 @@ const OPUS_ORDER: Record<number, readonly number[]> = {
 
 /** La disposition attendue par le codec de destination, ou rien si on ne la connaît pas. */
 function orderFor(codec: string): Record<number, readonly number[]> | null {
-  if (codec.startsWith("mp4a.")) return AAC_ORDER;
+  if (codec.startsWith("mp4a.")) return isWebKit() ? APPLE_AAC_ORDER : AAC_ORDER;
   if (codec.startsWith("opus")) return OPUS_ORDER;
   return null;
 }

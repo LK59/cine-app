@@ -222,7 +222,15 @@ defects; probes are for capabilities.
 file, not a constant.** Chrome rejects a whole init segment over a FLAC sample size that disagrees
 with STREAMINFO; Safari does not check. The forgiving browser is not the specification.
 
-**A `AudioData` is in the standard channel order — the encoder converts, you do not.** L R C LFE
+**A `AudioData` is in the standard channel order — Chrome's encoder converts, Apple's does not.**
+WebKit's `AudioEncoderCocoa` hands Apple's AAC encoder a channel *count* and no layout, so on the
+WebKit engine (every iOS browser) the planes must already be in AAC order — centre first, LFE last
+(`APPLE_AAC_ORDER`) — and nothing above six channels is sent (a 7.1 is folded to 5.1; AAC has no
+true back-surround 7.1). Both halves were learned by ear: "Titanic" on an iPhone (07/09) and
+Braveheart's TrueHD 7.1 on an iPhone (21/09) had the voices on the right; a Chrome viewer (19/09)
+had them on one side once the permutation was applied everywhere. The 19/09 fix measured our
+*decoder* and concluded about the encoders — do not settle this again without an ear on each
+browser. L R C LFE
 Ls Rs Lrs Rrs, whatever the destination codec orders its own bitstream by. Permuting into AAC's
 order (centre first, LFE last) before `AudioEncoder` applies the mapping twice and sends the whole
 dialogue into one ear; it was written from the format's specification, held for nine days, and was
