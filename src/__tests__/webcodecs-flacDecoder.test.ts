@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AudioSample } from "mediabunny";
-import { __testing } from "@/lib/webcodecs/flacDecoder";
+import { __testing, streamInfoHeader } from "@/lib/webcodecs/flacDecoder";
 
 const hex = (s: string) => new Uint8Array(s.match(/../g)!.map((b) => parseInt(b, 16)));
 
@@ -52,5 +52,49 @@ describe("FlacDecoder", () => {
     for (const value of left) expect(value).toBeCloseTo(0.25, 4);
     for (const value of right) expect(value).toBeCloseTo(-0.5, 4);
     await instance.close();
+  });
+
+  it("is given STREAMINFO and nothing else of the header, and still decodes", async () => {
+    // *Le Retour de Martin Guerre* (21/09/2026): 8 KiB of PADDING after STREAMINFO in its
+    // CodecPrivate made libFLAC corrupt its heap 25 s in. A header carrying padding and tags must
+    // reach it as STREAMINFO alone — and the frame must still come out exact.
+    const tags = hex("0400000800000000" + "00000000"); // VORBIS_COMMENT, empty vendor, no field
+    const padding = new Uint8Array(4 + 8192);
+    padding[0] = 0x81; // PADDING, last block
+    padding.set([0x00, 0x20, 0x00], 1);
+    const streaminfo = STREAMINFO.slice();
+    streaminfo[4] &= 0x7f; // no longer the last block
+    const header = new Uint8Array([...streaminfo, ...tags, ...padding]);
+    const { instance, samples } = await decoder(header);
+    await instance.decode({ data: FRAME, timestamp: 0 } as never);
+    expect(samples).toHaveLength(1);
+    const left = new Float32Array(2048);
+    samples[0].copyTo(left, { planeIndex: 0, format: "f32-planar" });
+    for (const value of left) expect(value).toBeCloseTo(0.25, 4);
+    await instance.close();
+  });
+});
+
+describe("streamInfoHeader", () => {
+  it("keeps the magic and STREAMINFO, marked as the last block", () => {
+    const streaminfo = STREAMINFO.slice();
+    streaminfo[4] &= 0x7f;
+    const padding = new Uint8Array(4 + 16);
+    padding[0] = 0x81;
+    padding[3] = 16;
+    const out = streamInfoHeader(new Uint8Array([...streaminfo, ...padding]));
+    expect(out.length).toBe(4 + 4 + 34);
+    expect(Array.from(out)).toEqual(Array.from(STREAMINFO)); // STREAMINFO already carries the flag
+  });
+
+  it("adds the magic when Matroska left it out", () => {
+    expect(Array.from(streamInfoHeader(STREAMINFO.subarray(4)))).toEqual(Array.from(STREAMINFO));
+  });
+
+  it("passes a header that does not open on STREAMINFO as it came", () => {
+    const odd = hex("664c61430100000400000000");
+    expect(Array.from(streamInfoHeader(odd))).toEqual(Array.from(odd));
+    const cut = STREAMINFO.subarray(0, 20);
+    expect(Array.from(streamInfoHeader(cut))).toEqual(Array.from(cut));
   });
 });

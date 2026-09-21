@@ -1025,7 +1025,10 @@ export class Remuxer {
     this.encoderRestarts += 1;
 
     const at = this.segmentStartUs / TIMESCALE;
-    trace(`transcodage audio : encodeur en échec, reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
+    // The cause is written out: this path is taken for the decoder's failures too, and on
+    // 21/09/2026 three lines reading "encoder failed" hid a FLAC decoder crashing on every retry.
+    const why = cause instanceof Error ? cause.message : String(cause);
+    trace(`transcodage audio : chaîne en échec (${why}), reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
     const previous = this.transcoder;
     const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file) ?? undefined, this.file);
     assertContainerTakes(next);
