@@ -25,8 +25,8 @@ export async function checkWatchlistAvailability(): Promise<void> {
     const db = getDb();
     // Qui a rangé quoi : la liste est à chacun, l'annonce aussi.
     const rows = db.prepare(
-      "SELECT user_id, media_type, tmdb_id, title FROM watchlist WHERE status = 'to_watch'"
-    ).all() as { user_id: string; media_type: string; tmdb_id: number; title: string }[];
+      "SELECT user_id, media_type, tmdb_id, title, created_at FROM watchlist WHERE status = 'to_watch'"
+    ).all() as { user_id: string; media_type: string; tmdb_id: number; title: string; created_at: number }[];
 
     if (rows.length === 0) return;
 
@@ -36,20 +36,33 @@ export async function checkWatchlistAvailability(): Promise<void> {
       jellyfin.getUsers().catch(() => [] as { Id: string; Name: string }[]),
     ]);
 
-    const availableMovieTmdbIds = new Set(movies.filter((m) => m.hasFile && m.tmdbId).map((m) => m.tmdbId));
-    const availableSeriesTmdbIds = new Set(
-      series.filter((s) => s.tmdbId && (s.statistics?.episodeFileCount ?? 0) > 0).map((s) => s.tmdbId!)
-    );
+    /**
+     * Quand chaque titre est *arrivé* — et pas seulement s'il est là.
+     *
+     * « Disponible maintenant » annonçait tout titre de la liste qui avait un fichier, y compris
+     * ceux qui l'avaient déjà quand on les a rangés : 27 films sur 33 ici (mesuré le 21/09/2026),
+     * autant d'annonces qui n'annonçaient rien. On compare donc la date d'arrivée à celle de
+     * l'ajout : le fichier du film chez Radarr, l'entrée de la série chez Sonarr. Sans date, on se
+     * tait — une annonce manquée vaut mieux qu'une fausse.
+     */
+    const arrivedMovie = new Map<number, number>();
+    for (const m of movies) {
+      const at = m.hasFile && m.tmdbId ? Date.parse(m.movieFile?.dateAdded ?? "") : NaN;
+      if (Number.isFinite(at)) arrivedMovie.set(m.tmdbId, at);
+    }
+    const arrivedSeries = new Map<number, number>();
+    for (const sh of series) {
+      const at = sh.tmdbId && (sh.statistics?.episodeFileCount ?? 0) > 0 ? Date.parse(sh.added ?? "") : NaN;
+      if (Number.isFinite(at)) arrivedSeries.set(sh.tmdbId!, at);
+    }
     // La liste range un compte sous son identifiant Jellyfin, les abonnements sous son nom : le
     // passage de l'un à l'autre est ici. Un identifiant inconnu de Jellyfin (le compte local) est
     // déjà un nom.
     const nameOf = new Map(users.map((u) => [u.Id, u.Name]));
 
     for (const row of rows) {
-      const isAvailable =
-        (row.media_type === "movie" && availableMovieTmdbIds.has(row.tmdb_id)) ||
-        (row.media_type === "series" && availableSeriesTmdbIds.has(row.tmdb_id));
-      if (!isAvailable) continue;
+      const arrivedAt = (row.media_type === "movie" ? arrivedMovie : arrivedSeries).get(row.tmdb_id);
+      if (arrivedAt === undefined || arrivedAt <= row.created_at) continue;
 
       const userName = nameOf.get(row.user_id) ?? row.user_id;
       /**

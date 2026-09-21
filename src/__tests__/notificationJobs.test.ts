@@ -77,7 +77,10 @@ beforeEach(() => {
 describe("checkWatchlistAvailability", () => {
   // Jusqu'au 21/09/2026 l'annonce partait à *tous* les abonnés, pour un titre de n'importe quelle
   // liste. Elle va maintenant à la personne qui l'a rangé, et une fois par personne.
-  const dune = { user_id: "jf-louis", media_type: "movie", tmdb_id: 42, title: "Dune" };
+  // Rangé le 1er septembre ; les fichiers des doubles arrivent le 10, donc après.
+  const listedAt = Date.parse("2026-09-01T00:00:00Z");
+  const dune = { user_id: "jf-louis", media_type: "movie", tmdb_id: 42, title: "Dune", created_at: listedAt };
+  const arrived = { dateAdded: "2026-09-10T00:00:00Z" };
   beforeEach(() => {
     mockGetUsers.mockResolvedValue([
       { Id: "jf-louis", Name: "louis" },
@@ -95,7 +98,7 @@ describe("checkWatchlistAvailability", () => {
 
   it("prévient la personne dont c'est la liste, et elle seule", async () => {
     prepareReturning([dune]);
-    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true, movieFile: arrived }]);
     mockCachedSeries.mockResolvedValue([]);
     mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
 
@@ -113,7 +116,7 @@ describe("checkWatchlistAvailability", () => {
 
   it("prévient chacun de ceux qui l'ont rangé, une fois chacun", async () => {
     prepareReturning([dune, { ...dune, user_id: "jf-arthur" }]);
-    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true, movieFile: arrived }]);
     mockCachedSeries.mockResolvedValue([]);
     mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((key: string) => key === "watchlist:louis:movie");
 
@@ -125,9 +128,34 @@ describe("checkWatchlistAvailability", () => {
 
   it("ne répète pas ce que l'ancienne clé commune avait déjà annoncé", async () => {
     prepareReturning([dune]);
-    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true, movieFile: arrived }]);
     mockCachedSeries.mockResolvedValue([]);
     mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((key: string) => key === "movie");
+
+    const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
+    await checkWatchlistAvailability();
+
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
+  });
+
+  it("se tait sur un titre qui était déjà là quand on l'a rangé", async () => {
+    // 27 films sur 33 ici : autant d'annonces qui n'annonçaient rien.
+    prepareReturning([dune]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true, movieFile: { dateAdded: "2026-08-01T00:00:00Z" } }]);
+    mockCachedSeries.mockResolvedValue([]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
+
+    const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
+    await checkWatchlistAvailability();
+
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
+  });
+
+  it("se tait aussi quand la date d'arrivée est inconnue", async () => {
+    prepareReturning([dune]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, hasFile: true }]);
+    mockCachedSeries.mockResolvedValue([]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
 
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
     await checkWatchlistAvailability();
@@ -147,9 +175,9 @@ describe("checkWatchlistAvailability", () => {
   });
 
   it("checks series availability via episodeFileCount, and links to the player", async () => {
-    prepareReturning([{ user_id: "jf-louis", media_type: "series", tmdb_id: 7, title: "Severance" }]);
+    prepareReturning([{ user_id: "jf-louis", media_type: "series", tmdb_id: 7, title: "Severance", created_at: listedAt }]);
     mockCachedMovies.mockResolvedValue([]);
-    mockCachedSeries.mockResolvedValue([{ tmdbId: 7, statistics: { episodeFileCount: 3 } }]);
+    mockCachedSeries.mockResolvedValue([{ tmdbId: 7, added: "2026-09-10T00:00:00Z", statistics: { episodeFileCount: 3 } }]);
     mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
 
     const { checkWatchlistAvailability } = await import("@/lib/notificationJobs");
