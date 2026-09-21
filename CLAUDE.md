@@ -173,6 +173,10 @@ none.
 `mobile/CinemaMobileClient.tsx`, `CinemaMovieDetail` / `CinemaMobileDetail`. A fix on one side is
 half a fix — and a guard present on one side and missing on the other has cost five failed attempts
 at a single bug. Better than fixing both: give them one shared function so they cannot diverge again.
+**`DECISIONS.md` is the register of these decisions** — for each: the rule, the one function that
+carries it, its callers, its tests, and what differs *on purpose*. Look a decision up there before
+touching it; add one there when you find it. `decisions-partagees.test.ts` fails if a copy comes
+back.
 
 Having two interfaces is not the debt — desktop and mobile are genuinely different products here
 (focus-following hero and arrow-key grid on one side, flick rows and inline hero actions on the

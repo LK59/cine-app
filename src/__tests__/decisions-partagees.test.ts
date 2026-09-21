@@ -248,3 +248,57 @@ describe("le décodage anticipé suit la liste, pas son nombre", () => {
     expect(src).not.toMatch(/useDecodeAhead\([^)]*\.length\)/);
   });
 });
+
+describe("une seule règle de reprise, une seule d'épisode suivant, une seule conversion de piste", () => {
+  /**
+   * Ajoutés le 21/09/2026, après l'inventaire de `DECISIONS.md`. Chacune de ces règles vivait en
+   * plusieurs copies ; l'une avait déjà divergé (la fiche film lisait « réponse arrivée » là où il
+   * fallait « serveur a répondu »), les autres pas encore.
+   */
+  const codeOnly = (f: string) =>
+    lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+
+  it("la position de départ se calcule par `resumeAtFor`, pas à la main", () => {
+    for (const f of ["src/components/PlayButton.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
+      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("resumeAtFor(")]);
+      expect([f, /!resumeKnown \? undefined/.test(codeOnly(f))]).toEqual([f, false]);
+    }
+  });
+
+  it("« connu » veut dire que Jellyfin a répondu, pas que la requête est revenue", () => {
+    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
+      expect([f, /progress !== undefined/.test(codeOnly(f))]).toEqual([f, false]);
+      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("progress?.known === true")]);
+    }
+  });
+
+  it("le lecteur stable demande au serveur une position absente", () => {
+    expect(codeOnly("src/components/PlayerHost.tsx")).toContain("resolveResumeAt(itemId, initialResumeAt)");
+  });
+
+  it("l'épisode suivant du cinéma vient de `nextEpisodeIn`", () => {
+    for (const f of [
+      "src/components/cinema/CinemaSeriesDetail.tsx",
+      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+      "src/lib/playSeriesNextEpisode.ts",
+    ]) {
+      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("nextEpisodeIn(")]);
+      expect([f, /flat\.findIndex/.test(codeOnly(f))]).toEqual([f, false]);
+    }
+  });
+
+  it("une piste du conteneur devient une `EngineTrack` en un seul endroit", () => {
+    for (const f of ["src/lib/webcodecs/engine.ts", "src/lib/webcodecs/remuxPlayback.ts"]) {
+      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("fromMatroskaTrack")]);
+      expect([f, /isForced: (t|track)\.isForced/.test(codeOnly(f))]).toEqual([f, false]);
+    }
+  });
+
+  it("le canevas ouvre sur la piste que l'écran choisira, par la même règle", () => {
+    const host = codeOnly("src/components/ExperimentalPlayerHost.tsx");
+    expect(host).toMatch(/chooseAudioTrack: \(tracks\) => \{[\s\S]{0,300}chooseAudioTrack\(tracks, preferences\)/);
+  });
+});
