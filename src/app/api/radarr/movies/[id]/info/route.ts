@@ -52,6 +52,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       : null,
     logoUrl,
     trailerKey: trailer?.key ?? null,
+    // Pour les notes critiques de la fenêtre « Voir plus » (MDBList) — voir `CinemaRatingsLine`.
+    imdbId: movie.imdbId || null,
     imdbRating: rating && rating.Response === "True" ? rating.imdbRating : null,
     imdbVotes: rating && rating.Response === "True" ? rating.imdbVotes : null,
     subtitles: subtitles?.subtitles ?? [],

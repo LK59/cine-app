@@ -1,7 +1,10 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
-import { useT } from "@/components/TranslationProvider";
+import useSWR from "swr";
+import { fetcher } from "@/lib/swr";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import type { MdbRatings } from "@/app/api/mdblist/[imdbId]/route";
 import { formatMinutes } from "@/lib/format";
 
 /**
@@ -58,3 +61,34 @@ export function CinemaDownloading({ progress, className = "" }: { progress: numb
 
 /** Tant que quelque chose arrive, la fiche se relit toute seule ; sinon, jamais. */
 export const DOWNLOAD_REFRESH_MS = 15_000;
+
+/**
+ * Les notes critiques, en une ligne de texte — dans la fenêtre « Voir plus », sur grand écran.
+ *
+ * Le choix de Louis le 21/09/2026 : pas sur la fiche, où tout afficher ferait fouillis, et pas du
+ * tout sur téléphone. Ici, on ne la voit que si on la cherche. Du texte simple, sans logos de
+ * couleur : « IMDb 7,8 · Rotten Tomatoes 92 % (public 88 %) · Metacritic 81 · Letterboxd 4,1 ».
+ * Une source absente est tue, et rien du tout ne s'affiche quand aucune ne répond.
+ */
+export function CinemaRatingsLine({ imdbId }: { imdbId: string | null | undefined }) {
+  const t = useT();
+  const { locale } = useLocale();
+  const { data } = useSWR<{ ratings: MdbRatings | null }>(imdbId ? `/api/mdblist/${imdbId}` : null, fetcher, {
+    revalidateOnFocus: false,
+  });
+  const parts = ratingParts(data?.ratings ?? null, locale, (pct) => t("cinema.ratingsAudience", { pct }));
+  if (parts.length === 0) return null;
+  return <p className="mt-4 border-t border-white/10 pt-3 text-sm text-white/60">{parts.join(" · ")}</p>;
+}
+
+/** Les morceaux de la ligne, dans cet ordre — exportée pour être testée sans réseau. */
+export function ratingParts(r: MdbRatings | null, locale: string, audience: (pct: number) => string): string[] {
+  if (!r) return [];
+  const one = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const parts: string[] = [];
+  if (r.imdb) parts.push(`IMDb ${one.format(r.imdb / 10)}`);
+  if (r.tomatoes) parts.push(`Rotten Tomatoes ${r.tomatoes} %${r.tomatoesAudience ? ` (${audience(r.tomatoesAudience)})` : ""}`);
+  if (r.metacritic) parts.push(`Metacritic ${r.metacritic}`);
+  if (r.letterboxd) parts.push(`Letterboxd ${one.format(r.letterboxd / 20)}`);
+  return parts;
+}

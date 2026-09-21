@@ -5,6 +5,7 @@ import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { omdb } from "@/lib/clients/omdb";
 import { getTitleLogo } from "@/lib/title-logo";
+import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           overview: tmdbInfo.overview,
           tagline: tmdbInfo.tagline,
           genres: tmdbInfo.genres?.map((g) => g.name) ?? [],
-          runtime: tmdbInfo.episode_run_time?.[0] ?? null,
+          runtime: tvEpisodeRuntime(tmdbInfo, series.runtime),
           backdropUrl: tmdbInfo.backdrop_path ? `${TMDB_IMAGE_BASE}/w1280${tmdbInfo.backdrop_path}` : null,
           cast: (tmdbInfo.credits?.cast ?? []).slice(0, 12).map((c) => ({
             tmdbId: c.id,
@@ -52,6 +53,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           })),
         }
       : null,
+    // Pour les notes critiques de la fenêtre « Voir plus » (MDBList) — voir `CinemaRatingsLine`.
+    imdbId: series.imdbId || null,
     imdbRating: rating && rating.Response === "True" ? rating.imdbRating : null,
     imdbVotes: rating && rating.Response === "True" ? rating.imdbVotes : null,
     episodeSubtitles,

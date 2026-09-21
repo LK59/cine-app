@@ -8,7 +8,7 @@ vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (k: string, v?: Record<string, unknown>) => (v ? `${k}:${JSON.stringify(v)}` : k),
 }));
 
-import { CinemaTagline, CinemaDownloading, downloadPercent, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaTagline, CinemaDownloading, downloadPercent, useRuntimeLabel, ratingParts } from "@/components/cinema/CinemaDetailExtras";
 import { queueProgress } from "@/lib/downloadProgress";
 
 afterEach(cleanup);
@@ -52,5 +52,21 @@ describe("la progression d'un téléchargement", () => {
   it("s'affiche en pourcentage", () => {
     render(<CinemaDownloading progress={0.63} />);
     expect(screen.getByText('cinema.downloading:{"pct":63}')).toBeTruthy();
+  });
+});
+
+describe("la ligne des notes critiques", () => {
+  const none = { imdb: null, tomatoes: null, tomatoesAudience: null, metacritic: null, metacriticUser: null, letterboxd: null, trakt: null, tmdb: null };
+  const audience = (pct: number) => `public ${pct} %`;
+
+  it("dit chaque source dans son unité, séparées par des points", () => {
+    const parts = ratingParts({ ...none, imdb: 78, tomatoes: 92, tomatoesAudience: 88, metacritic: 81, letterboxd: 82 }, "fr", audience);
+    expect(parts).toEqual(["IMDb 7,8", "Rotten Tomatoes 92 % (public 88 %)", "Metacritic 81", "Letterboxd 4,1"]);
+  });
+
+  it("tait une source absente, et tout quand aucune ne répond", () => {
+    expect(ratingParts({ ...none, tomatoes: 60 }, "en", audience)).toEqual(["Rotten Tomatoes 60 %"]);
+    expect(ratingParts(none, "fr", audience)).toEqual([]);
+    expect(ratingParts(null, "fr", audience)).toEqual([]);
   });
 });

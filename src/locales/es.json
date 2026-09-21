@@ -1429,7 +1429,8 @@
     "top10Theme": "Top 10 del día · {theme}",
     "decade": "los {decade}",
     "perEpisode": "{time}/ep.",
-    "downloading": "Llegando · {pct} %"
+    "downloading": "Llegando · {pct} %",
+    "ratingsAudience": "público {pct} %"
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

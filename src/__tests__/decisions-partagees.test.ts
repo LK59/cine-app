@@ -358,3 +358,15 @@ describe("l'accroche, la durée et l'arrivée : une écriture pour toutes les fi
     }
   });
 });
+
+describe("les notes critiques : dans « Voir plus », sur grand écran seulement", () => {
+  // Le choix de Louis (21/09/2026) : pas sur la fiche, et pas du tout sur téléphone.
+  it("les deux fiches du bureau les mettent dans la fenêtre du synopsis", () => {
+    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
+      expect([f, lire(f)]).toEqual([f, expect.stringContaining("<CinemaRatingsLine imdbId={info?.imdbId} />")]);
+    }
+  });
+  it("le téléphone ne les montre pas", () => {
+    expect(lire("src/components/cinema/mobile/CinemaMobileDetail.tsx")).not.toContain("CinemaRatingsLine");
+  });
+});

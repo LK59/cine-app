@@ -117,7 +117,13 @@ export interface TmdbTv {
   genres: { id: number; name: string }[];
   backdrop_path: string | null;
   poster_path: string | null;
+  /**
+   * Abandonné par TMDB : vide pour les séries récentes (Mr Robot, Ted Lasso). Ne jamais le lire
+   * seul — voir `tvEpisodeRuntime`.
+   */
   episode_run_time?: number[];
+  last_episode_to_air?: { runtime?: number | null } | null;
+  next_episode_to_air?: { runtime?: number | null } | null;
   tagline?: string;
   created_by?: { id: number; name: string; profile_path: string | null }[];
   credits?: { cast: TmdbCastMember[]; crew?: TmdbCrewMember[] };

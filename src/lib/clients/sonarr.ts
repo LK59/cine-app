@@ -24,6 +24,8 @@ export interface SonarrSeries {
   seasonCount: number;
   seasons?: SonarrSeason[];
   statistics?: { episodeFileCount: number; episodeCount: number; sizeOnDisk: number };
+  /** La durée d'un épisode selon Sonarr, en minutes — 0 quand il ne la connaît pas. */
+  runtime?: number;
   tvdbId: number;
   tmdbId?: number;
   imdbId?: string;

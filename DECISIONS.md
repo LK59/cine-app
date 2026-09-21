@@ -203,7 +203,15 @@ film de la bibliothèque : il a déjà un fichier, un téléchargement n'y serai
 `queueProgress` / `titleDownloadProgress` (`src/lib/downloadProgress.ts`) côté serveur. Les fiches
 se relisent toutes seules toutes les 15 s tant que quelque chose arrive, jamais sinon.
 
-**Tests.** `CinemaDetailExtras.test.tsx`, `player-routes.test.ts`, `decisions-partagees.test.ts`.
+La durée d'un épisode vient de `tvEpisodeRuntime` (`src/lib/tvRuntime.ts`) : TMDB a abandonné
+`episode_run_time`, vide pour les séries récentes — on passe par Sonarr puis par le dernier épisode.
+
+Les notes critiques (`CinemaRatingsLine`) : une ligne de texte dans la fenêtre « Voir plus » des
+fiches du bureau, **jamais sur téléphone** — le choix de Louis. La fenêtre reste ouvrable quand il y
+a des notes, même si le synopsis tient en entier (`alwaysOpenable`).
+
+**Tests.** `CinemaDetailExtras.test.tsx`, `tvRuntime.test.ts`, `player-routes.test.ts`,
+`decisions-partagees.test.ts`.
 
 ## 8. Pastilles de qualité
 

@@ -105,10 +105,16 @@ export function CinemaOverview({
   text,
   readMore,
   onOpen,
+  alwaysOpenable = false,
 }: {
   text: string;
   readMore: string;
   onOpen: () => void;
+  /**
+   * La fenêtre a autre chose à montrer que le synopsis entier — les notes critiques. Elle ne
+   * s'ouvrait que sur un texte coupé : un synopsis court aurait caché les notes pour de bon.
+   */
+  alwaysOpenable?: boolean;
 }) {
   const [clamped, setClamped] = useState(false);
   const bodyRef = useRef<HTMLParagraphElement>(null);
@@ -129,9 +135,9 @@ export function CinemaOverview({
     <button
       type="button"
       data-detail-menu
-      onClick={() => clamped && onOpen()}
+      onClick={() => (clamped || alwaysOpenable) && onOpen()}
       className={`group -mx-2 rounded-lg px-2 py-1 text-left transition-colors focus-visible:outline-none focus-visible:bg-white/12 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/20 ${
-        clamped ? "cursor-pointer hover:bg-white/8" : "cursor-default"
+        clamped || alwaysOpenable ? "cursor-pointer hover:bg-white/8" : "cursor-default"
       }`}
     >
       <p
@@ -141,7 +147,7 @@ export function CinemaOverview({
       >
         {text}
       </p>
-      {clamped && (
+      {(clamped || alwaysOpenable) && (
         <span className="mt-0.5 inline-block text-xs font-medium text-white/60 group-hover:text-white/90">
           {readMore}
         </span>

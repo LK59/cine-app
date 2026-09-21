@@ -29,7 +29,7 @@ import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -42,6 +42,8 @@ interface RadarrCastMember {
 }
 
 interface RadarrInfo {
+  /** Pour les notes critiques de « Voir plus ». */
+  imdbId?: string | null;
   /** `runtime` est la durée du film en minutes : elle vient de TMDB, comme le synopsis. */
   tmdb: { overview: string; tagline?: string | null; cast: RadarrCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
@@ -336,6 +338,7 @@ export function CinemaMovieDetail({
           <CinemaOverview
             text={info?.tmdb?.overview || item.overview || ""}
             readMore={t("cinema.readMore")}
+            alwaysOpenable={!!info?.imdbId}
             onOpen={() => setShowSynopsis(true)}
           />
 
@@ -553,6 +556,7 @@ export function CinemaMovieDetail({
           }}
         >
           <p>{info?.tmdb?.overview || item.overview || ""}</p>
+          <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}
     </div>,

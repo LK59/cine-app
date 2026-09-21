@@ -29,7 +29,7 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstA
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
-import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -42,6 +42,8 @@ interface SonarrCastMember {
 }
 
 interface SonarrInfo {
+  /** Pour les notes critiques de « Voir plus ». */
+  imdbId?: string | null;
   /** `runtime` : la durée d'un épisode, en minutes (TMDB). */
   tmdb: { overview: string; tagline?: string | null; cast: SonarrCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
@@ -304,6 +306,7 @@ export function CinemaSeriesDetail({
           <CinemaOverview
             text={info?.tmdb?.overview || item.overview || ""}
             readMore={t("cinema.readMore")}
+            alwaysOpenable={!!info?.imdbId}
             onOpen={() => setShowSynopsis(true)}
           />
 
@@ -542,6 +545,7 @@ export function CinemaSeriesDetail({
           }}
         >
           <p>{info?.tmdb?.overview || item.overview || ""}</p>
+          <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}
     </div>,

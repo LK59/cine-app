@@ -10,6 +10,7 @@ import { withErrorHandling } from "@/lib/api-helpers";
 import { resolveRequestState, isReleased, type PlayerRequestState } from "@/lib/playerRequestState";
 import { config } from "@/lib/config";
 import { titleDownloadProgress } from "@/lib/downloadProgress";
+import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 
 export const dynamic = "force-dynamic";
 
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       backdropPath: detail.backdrop_path,
       genres: (detail.genres ?? []).map((g) => g.name),
       // La durée d'un épisode : c'est celle qu'on veut savoir d'une série. Elle était laissée vide.
-      runtime: detail.episode_run_time?.[0] ?? null,
+      runtime: tvEpisodeRuntime(detail),
       rating: detail.vote_average ?? 0,
       cast: detail.credits?.cast ?? [],
       libraryId,
