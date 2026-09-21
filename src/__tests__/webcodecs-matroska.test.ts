@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MemoryByteSource } from "@/lib/webcodecs/byteSource";
 import { parseMatroska, clusterOffsetForTime, parseBlock } from "@/lib/webcodecs/matroska";
+import { keptRangeAt } from "@/lib/webcodecs/matroska";
 import { SampleReader } from "@/lib/webcodecs/sampleReader";
 import { readElementId, readVarSize, readVarInt } from "@/lib/webcodecs/ebml";
 
@@ -324,3 +325,19 @@ describe("parseBlock lacing", () => {
   });
 });
 
+describe("keptRangeAt", () => {
+  const file = {
+    segmentEnd: 10_000,
+    cues: [0, 2, 4, 6, 8, 10].map((s, i) => ({ track: 1, timeUs: s * 1e6, clusterOffset: 1000 * i + 100 })),
+  } as never;
+
+  it("va de la grappe qui précède la tête (moins une seconde) à la première image clé quatre secondes plus loin", () => {
+    // À 5 s : amorçage dès 4 s, donc la grappe de 4 s ; fin à la première image clé ≥ 9 s, soit 10 s.
+    expect(keptRangeAt(file, 5, 1)).toEqual({ from: 2100, to: 5100 });
+  });
+
+  it("va jusqu'à la fin du fichier près de la fin, et ne dit rien sans index", () => {
+    expect(keptRangeAt(file, 9, 1)).toEqual({ from: 4100, to: 10_000 });
+    expect(keptRangeAt({ cues: [], segmentEnd: 1 } as never, 5)).toBeNull();
+  });
+});

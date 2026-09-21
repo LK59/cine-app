@@ -149,6 +149,13 @@ describe("toCodecChannelOrder", () => {
     vi.stubGlobal("navigator", { userAgent: IPHONE });
     expect(channels(toCodecChannelOrder(surround, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 4]);
     expect(channels(toCodecChannelOrder([plane(1), plane(2), plane(3)], "mp4a.40.2"))).toEqual([3, 1, 2]);
+    // Chrome sur macOS : le même encodeur d'Apple, lu dans son code — la même table.
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36" });
+    expect(channels(toCodecChannelOrder(surround, "mp4a.40.2"))).toEqual([3, 1, 2, 5, 6, 4]);
+    // Chrome sous Windows et sous Android : l'ordre standard.
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36" });
+    expect(toCodecChannelOrder(surround, "mp4a.40.2")).toBe(surround);
+    vi.stubGlobal("navigator", { userAgent: IPHONE });
     // La stéréo reste ce qu'elle est, partout.
     const stereo = [plane(1), plane(2)];
     expect(toCodecChannelOrder(stereo, "mp4a.40.2")).toBe(stereo);

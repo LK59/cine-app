@@ -23,6 +23,11 @@ export interface ByteSource {
    * link and one that begins with the link full.
    */
   warm?(offset: number): void;
+  /**
+   * Une plage à garder en mémoire de préférence — celle autour de la tête de lecture. Optionnel,
+   * et une préférence, pas une réservation : rien n'est téléchargé pour elle.
+   */
+  keep?(from: number, to: number): void;
   /** Releases any pending work. Safe to call twice. */
   close(): void;
 }
@@ -76,7 +81,22 @@ const CHUNK_SIZE = 1 << 20; // 1 MiB
  * How many chunks to keep. Enough to cover a seek's working set, and a ceiling on the memory a
  * long film can quietly accumulate.
  */
-const MAX_CACHED_CHUNKS = 48; // ~48 MiB
+const MAX_CACHED_CHUNKS = 64; // ~64 MiB
+
+/**
+ * **La zone autour de la tête de lecture, gardée — ajoutée le 21/09/2026.**
+ *
+ * Le cache évinçait le plus ancien morceau d'abord. Or le lecteur lit en avance, jusqu'à trente
+ * secondes : les 48 Mo gardés étaient surtout l'*avenir* du film, et l'endroit qu'on regarde avait
+ * été chassé depuis longtemps. Changer de piste audio, c'est justement relire cet endroit — le son
+ * y est entrelacé avec l'image —, donc tout retélécharger : 9 s mesurées sur iPhone ce jour-là, sur
+ * une connexion lente. Le lecteur désigne maintenant la zone à garder (`keep`), et l'éviction passe
+ * par-dessus ; le cache a grandi de seize mégaoctets pour que cette zone ne mange pas l'avance.
+ *
+ * Bornée : jamais plus de `MAX_KEPT_CHUNKS`, quoi que demande l'appelant — un fichier dont les
+ * images clés sont à vingt-cinq secondes d'intervalle ne doit pas figer tout le cache.
+ */
+const MAX_KEPT_CHUNKS = 24;
 
 /**
  * How far ahead to fetch, in chunks.
@@ -201,17 +221,18 @@ async function waitForNetwork(signal?: AbortSignal): Promise<void> {
  * et passé ce délai les quarante-huit mégaoctets sont rendus.
  */
 const HANDOVER_MS = 5_000;
-let handover: { url: string; size: number; chunks: Map<number, Uint8Array>; timer: ReturnType<typeof setTimeout> } | null = null;
+type Kept = { first: number; last: number } | null;
+let handover: { url: string; size: number; chunks: Map<number, Uint8Array>; kept: Kept; timer: ReturnType<typeof setTimeout> } | null = null;
 
-function takeHandover(url: string): { size: number; chunks: Map<number, Uint8Array> } | null {
+function takeHandover(url: string): { size: number; chunks: Map<number, Uint8Array>; kept: Kept } | null {
   if (!handover || handover.url !== url) return null;
   const taken = handover;
   clearTimeout(taken.timer);
   handover = null;
-  return { size: taken.size, chunks: taken.chunks };
+  return { size: taken.size, chunks: taken.chunks, kept: taken.kept };
 }
 
-function leaveHandover(url: string, size: number, chunks: Map<number, Uint8Array>): void {
+function leaveHandover(url: string, size: number, chunks: Map<number, Uint8Array>, kept: Kept): void {
   if (handover) clearTimeout(handover.timer);
   if (chunks.size === 0) {
     handover = null;
@@ -220,7 +241,7 @@ function leaveHandover(url: string, size: number, chunks: Map<number, Uint8Array
   const timer = setTimeout(() => {
     if (handover?.chunks === chunks) handover = null;
   }, HANDOVER_MS);
-  handover = { url, size, chunks, timer };
+  handover = { url, size, chunks, kept, timer };
 }
 
 /** Pour les tests : l'état d'une page neuve. */
@@ -233,6 +254,8 @@ export class HttpByteSource implements ByteSource {
   readonly size: number;
   private readonly url: string;
   private chunks = new Map<number, Uint8Array>();
+  /** Les morceaux à garder de préférence, bornes comprises — voir `keep`. */
+  private kept: Kept = null;
   private readonly inflight = new Map<number, Promise<Uint8Array>>();
   private readonly controller = new AbortController();
 
@@ -251,6 +274,9 @@ export class HttpByteSource implements ByteSource {
     if (inherited) {
       const source = new HttpByteSource(url, inherited.size);
       source.chunks = inherited.chunks;
+      // La zone autour de la tête aussi : c'est elle que la reconstruction relit d'abord, et ses
+      // premiers téléchargements l'auraient chassée avant que le lecteur ne la redésigne.
+      source.kept = inherited.kept;
       trace(`flux repris de la lecture précédente — ${inherited.chunks.size} Mo déjà là`);
       return source;
     }
@@ -353,13 +379,7 @@ export class HttpByteSource implements ByteSource {
     const promise = this.fetchWithRetries(start, end)
       .then((bytes) => {
         this.chunks.set(index, bytes);
-        // Oldest-first eviction: Map preserves insertion order, and a demuxer's access pattern is
-        // overwhelmingly forward, so the oldest chunk is reliably the least useful one.
-        while (this.chunks.size > MAX_CACHED_CHUNKS) {
-          const oldest = this.chunks.keys().next().value;
-          if (oldest === undefined) break;
-          this.chunks.delete(oldest);
-        }
+        this.evict();
         return bytes;
       })
       .finally(() => this.inflight.delete(index));
@@ -447,11 +467,41 @@ export class HttpByteSource implements ByteSource {
     return written === out.length ? out : out.subarray(0, written);
   }
 
+  keep(from: number, to: number): void {
+    if (!(to > from)) {
+      this.kept = null;
+      return;
+    }
+    const first = Math.max(0, Math.floor(from / CHUNK_SIZE));
+    const last = Math.min(Math.floor((to - 1) / CHUNK_SIZE), first + MAX_KEPT_CHUNKS - 1);
+    this.kept = { first, last };
+  }
+
+  /**
+   * Le plus ancien d'abord — un démultiplexeur lit presque toujours en avant, donc le plus ancien
+   * est d'ordinaire le moins utile —, sauf la zone gardée. Si tout ce qui reste est gardé, le plus
+   * ancien part quand même : la borne de mémoire passe avant la préférence.
+   */
+  private evict(): void {
+    while (this.chunks.size > MAX_CACHED_CHUNKS) {
+      let victim: number | undefined;
+      for (const index of this.chunks.keys()) {
+        if (!this.kept || index < this.kept.first || index > this.kept.last) {
+          victim = index;
+          break;
+        }
+      }
+      victim ??= this.chunks.keys().next().value;
+      if (victim === undefined) break;
+      this.chunks.delete(victim);
+    }
+  }
+
   close(): void {
     this.controller.abort();
     // Les morceaux arrivés entiers restent valables pour ce fichier : laissés à la source qui le
     // rouvrira, s'il y en a une bientôt. Les requêtes en cours, elles, meurent avec celle-ci.
-    leaveHandover(this.url, this.size, this.chunks);
+    leaveHandover(this.url, this.size, this.chunks, this.kept);
     this.chunks = new Map();
     this.inflight.clear();
   }

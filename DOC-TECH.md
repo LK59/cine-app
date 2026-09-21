@@ -296,17 +296,18 @@ AC-3/E-AC3/DTS (measured against ffmpeg, 19/09), libFLAC (the format defines it)
 | Encoder | Takes | Verified by |
 |---|---|---|
 | AAC, Chrome / Edge (desktop) | standard order, converts itself | a viewer's ears on Chrome/Windows (19/09) |
-| AAC, Apple — Safari and every iOS browser | **AAC order** (C L R Ls Rs LFE): WebKit's `AudioEncoderCocoa` passes a channel *count*, no layout | ears on iPhone: "Titanic" 5.1 (07/09), Braveheart 7.1 (21/09) |
+| AAC, Apple — Safari, every iOS browser, **and Chrome on macOS** | **AAC order** (C L R Ls Rs LFE): AudioToolbox is handed a channel *count*, no layout — by WebKit's `AudioEncoderCocoa`, and by Chromium's `AudioToolboxAudioEncoder` ("We don't setup the AudioConverter channel layout here") | ears on iPhone: "Titanic" 5.1 (07/09), Braveheart 7.1 (21/09); Chrome/macOS read in its source |
+| AAC, Chrome on Android | standard order, probably: MediaCodec without a channel mask; Android's software AAC encoder is set to WAVE order | read, not measured |
 | AAC, Apple, 8 channels | never asked: folded to 5.1 first (`appleAacCap`) — AAC has no true back-surround 7.1 | — |
 | Opus, Firefox | standard order, converts itself (libopus) | tagged tones per channel encoded in Firefox, decoded by ffmpeg (21/09) |
 | Opus, Chrome / Safari | stereo only | refused beyond two channels |
 
-The table lives in `APPLE_AAC_ORDER` / `orderFor` (`audioTranscode.ts`), keyed on `isWebKit()` —
-an engine defect, not a capability, which is what that check is for.
+The table lives in `APPLE_AAC_ORDER` / `orderFor` (`audioTranscode.ts`), keyed on
+`appleAudioToolbox()` — the *system*, not the engine: it is the platform encoder that decides, and
+Chrome on a Mac uses the same one as Safari.
 
 **Not measured, and where to look first if a viewer reports voices on one side:**
-- AAC from **Chrome on Android** (42 plays here) and **Chrome on macOS**: their encoders sit on
-  MediaCodec and AudioToolbox respectively; whether Chromium passes a layout there is unverified.
+- AAC from **Chrome on Android** (42 plays here): read in Chromium and Android, not heard.
 - The **canvas path** folds to stereo itself (`AudioOutput`), assuming the *platform* decoder
   (AAC, Opus through `AudioDecoder`) also hands back the standard order.
 - Multichannel **Opus decoded by Apple** — why only mono and stereo Opus are transcoded on Safari.
@@ -361,6 +362,12 @@ What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what n
   element and fades out once the new pipeline has its own; and the new `HttpByteSource` inherits
   the size and the chunks of the one just closed for the same URL (no HEAD, no re-download —
   `handover`, five seconds at most).
+- **The bytes around the playhead stay in memory** (`keep` in `byteSource.ts`, `keptRangeAt`): the
+  cache evicted oldest-first while the player reads up to thirty seconds ahead, so the region a
+  track change re-reads — sound is interleaved with the picture — was long gone and came back over
+  the network (9 s on a slow link, 21/09). The player now names that region every two seconds of
+  playback and on every seek; eviction passes over it (24 MiB at most; the cache grew from 48 to
+  64 MiB so it does not eat into the read-ahead), and it survives a rebuild with the handover.
 - **A pause stays a pause**: `startPaused` reaches `PlaybackGuard.opened`, which otherwise took a
   player opened standing still for a failed start and started it.
 

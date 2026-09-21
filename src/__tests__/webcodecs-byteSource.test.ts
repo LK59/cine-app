@@ -217,6 +217,65 @@ describe("HttpByteSource", () => {
  * en cours, elle les laisse pendre. Sans échéance, le `fetch` ne se résout jamais : pas d'erreur,
  * donc pas de nouvelle tentative, donc pas d'écran, donc une image figée pour toujours.
  */
+describe("HttpByteSource — la zone autour de la tête de lecture", () => {
+  // Le lecteur lit en avance, jusqu'à trente secondes : sans zone gardée, l'endroit qu'on regarde
+  // était chassé du cache par cette avance, et un changement de piste le retéléchargeait.
+  const readAhead = async (source: HttpByteSource) => {
+    for (let chunk = 0; chunk < 8; chunk++) await source.read(chunk * CHUNK, 16);
+    for (let chunk = 20; chunk < 110; chunk++) await source.read(chunk * CHUNK, 16);
+    await settle();
+  };
+  const refetched = async (source: HttpByteSource, chunk: number) => {
+    const before = asked.length;
+    await source.read(chunk * CHUNK, 16);
+    return asked.slice(before).some(([from]) => from === chunk * CHUNK);
+  };
+
+  it("garde la zone désignée quand la lecture en avance remplit le cache", async () => {
+    stubFetch({ contentLength: String(200 * CHUNK) });
+    const source = await HttpByteSource.open("/film.mkv");
+    source.keep(0, 8 * CHUNK);
+    await readAhead(source);
+    expect(await refetched(source, 3)).toBe(false);
+    source.close();
+  });
+
+  it("sans elle, la même zone était chassée — ce que le test d'au-dessus mesure vraiment", async () => {
+    stubFetch({ contentLength: String(200 * CHUNK) });
+    const source = await HttpByteSource.open("/film.mkv");
+    await readAhead(source);
+    expect(await refetched(source, 3)).toBe(true);
+    source.close();
+  });
+
+  it("passe la zone à la source qui rouvre le même fichier", async () => {
+    stubFetch({ contentLength: String(200 * CHUNK) });
+    const first = await HttpByteSource.open("/film.mkv");
+    first.keep(0, 8 * CHUNK);
+    for (let chunk = 0; chunk < 70; chunk++) await first.read(chunk * CHUNK, 16);
+    await settle();
+    first.close();
+    const second = await HttpByteSource.open("/film.mkv");
+    // La reconstruction lit en avance avant que le lecteur ne redésigne la zone.
+    for (let chunk = 70; chunk < 110; chunk++) await second.read(chunk * CHUNK, 16);
+    await settle();
+    expect(await refetched(second, 3)).toBe(false);
+    second.close();
+  });
+
+  it("ne laisse jamais la zone figer tout le cache", async () => {
+    // Des images clés à vingt-cinq secondes d'intervalle : l'appelant peut demander beaucoup.
+    stubFetch({ contentLength: String(200 * CHUNK) });
+    const source = await HttpByteSource.open("/film.mkv");
+    source.keep(0, 150 * CHUNK);
+    for (let chunk = 0; chunk < 150; chunk++) await source.read(chunk * CHUNK, 16);
+    await settle();
+    // Borné à 24 morceaux : le 30e, hors de la borne, a été évincé comme n'importe quel autre.
+    expect(await refetched(source, 30)).toBe(true);
+    source.close();
+  });
+});
+
 describe("HttpByteSource — le relais d'une reconstruction", () => {
   const heads = () => (fetch as unknown as { heads: number }).heads;
   const countingFetch = () => {

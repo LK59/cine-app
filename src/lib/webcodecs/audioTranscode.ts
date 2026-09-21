@@ -15,7 +15,6 @@ import type { ByteSource } from "./byteSource";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
 import { containerAccepts } from "./mseSource";
-import { isWebKit } from "../webkitEngine";
 import { extractAudioSpecificConfig, opusSampleEntry, parseAacConfig } from "./mp4SampleEntries";
 
 /** AAC-LC. The one encoder both an iPhone and a desktop browser were measured to offer. */
@@ -354,7 +353,7 @@ export async function chooseTranscodePlan(sampleRate: number, channels: number):
   const wanted = [channels, ...[6, 2].filter((n) => n < channels)];
   for (const target of wanted) {
     for (const codec of [TARGET_CODEC, FALLBACK_CODEC]) {
-      if (target > appleAacCap()) continue;
+      if (target > appleAacCap(codec)) continue;
       if (!containerAccepts(`audio/mp4; codecs="${codec}"`)) continue;
       if (await firstSupported(codec, sampleRate, target)) {
         chosenTarget = codec;
@@ -897,13 +896,18 @@ const AAC_ORDER: Record<number, readonly number[]> = {};
  * le justifiait portait sur notre *décodeur*, pas sur les encodeurs. Le 21/09, Braveheart en VO
  * TrueHD 7.1 sur iPhone : les voix plus fortes à droite.
  *
- * La raison est dans WebKit : son encodeur (`AudioEncoderCocoa`) ne transmet à celui d'Apple que
- * le *nombre* de canaux, sans disposition. L'encodeur AAC d'Apple lit alors les plans dans l'ordre
- * du format — centre d'abord, LFE à la fin. Chrome, lui, convertit depuis l'ordre standard.
+ * La raison : l'encodeur AAC d'Apple (AudioToolbox) lit les plans dans l'ordre du format —
+ * centre d'abord, LFE à la fin — quand on ne lui donne pas de disposition, et personne ne lui en
+ * donne. WebKit (`AudioEncoderCocoa`) ne lui transmet que le nombre de canaux ; **Chrome sur macOS
+ * non plus** — lu dans son code (`AudioToolboxAudioEncoder` : « We don't setup the AudioConverter
+ * channel layout here »), le 21/09/2026. Ailleurs, l'encodeur de la plateforme prend l'ordre
+ * standard : Media Foundation sous Windows (confirmé à l'oreille), l'AAC d'Android (Chrome passe
+ * par MediaCodec sans masque de canaux ; l'encodeur logiciel d'Android est réglé en ordre WAVE —
+ * lu, pas mesuré).
  *
- * D'où cette table, pour le moteur WebKit seulement (sur iOS, tout navigateur l'est) : le 5.1 et le
- * trois canaux dans l'ordre AAC. Pas de huit canaux : `chooseTranscodePlan` n'en demande jamais à
- * cet encodeur (voir `appleAacCap`).
+ * D'où cette table, pour tout navigateur sur un système Apple : le 5.1 et le trois canaux dans
+ * l'ordre AAC. Pas de huit canaux : `chooseTranscodePlan` n'en demande jamais à cet encodeur (voir
+ * `appleAacCap`).
  */
 const APPLE_AAC_ORDER: Record<number, readonly number[]> = {
   // [L,R,C] → [C,L,R]
@@ -921,10 +925,20 @@ const APPLE_AAC_ORDER: Record<number, readonly number[]> = {
  * mêlés aux ambiances), dans l'ordre qui, lui, a été entendu juste sur « Titanic ». Sur un iPhone —
  * haut-parleurs, casque, audio spatial —, rien n'est perdu que deux canaux qu'aucune sortie n'a.
  */
-function appleAacCap(): number {
-  // Tout encodeur, pas seulement l'AAC : WebKit refuse de toute façon l'Opus au-delà de deux
-  // canaux, et une règle sans exception ne laisse pas de huit canaux passer par un côté.
-  return isWebKit() ? 6 : Infinity;
+function appleAacCap(codec: string): number {
+  return codec === TARGET_CODEC && appleAudioToolbox() ? 6 : Infinity;
+}
+
+/**
+ * L'AAC sera-t-il encodé par AudioToolbox, l'encodeur d'Apple ? Oui sur tout système Apple, quel
+ * que soit le navigateur : Safari, tout navigateur iOS (WebKit), Chrome sur macOS. iPadOS se
+ * présente comme un Mac, ce qui tombe juste. Une question de système et non de moteur : c'est
+ * l'encodeur de la plateforme qui décide, et Chrome sur Mac utilise le même.
+ */
+export function appleAudioToolbox(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const agent = navigator.userAgent ?? "";
+  return /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(agent) && !/Android/.test(agent);
 }
 
 /**
@@ -940,7 +954,7 @@ function appleAacCap(): number {
  */
 /** La disposition attendue par le codec de destination, ou rien si on ne la connaît pas. */
 function orderFor(codec: string): Record<number, readonly number[]> | null {
-  if (codec.startsWith("mp4a.")) return isWebKit() ? APPLE_AAC_ORDER : AAC_ORDER;
+  if (codec.startsWith("mp4a.")) return appleAudioToolbox() ? APPLE_AAC_ORDER : AAC_ORDER;
   return null;
 }
 

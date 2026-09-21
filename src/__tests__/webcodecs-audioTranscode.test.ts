@@ -199,10 +199,17 @@ describe("chooseTranscodePlan chez Apple", () => {
     vi.stubGlobal("navigator", {
       userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
     });
-    vi.stubGlobal("AudioEncoder", { isConfigSupported: async () => ({ supported: true }) });
+    // Comme WebKit : l'Opus au-delà de deux canaux est refusé.
+    vi.stubGlobal("AudioEncoder", {
+      isConfigSupported: async (c: { codec: string; numberOfChannels: number }) => ({ supported: c.codec !== "opus" || c.numberOfChannels <= 2 }),
+    });
     const { chooseTranscodePlan } = await load();
     expect(await chooseTranscodePlan(48000, 8)).toEqual({ codec: "mp4a.40.2", channels: 6 });
     expect(await chooseTranscodePlan(48000, 6)).toEqual({ codec: "mp4a.40.2", channels: 6 });
+
+    // Chrome sur macOS passe par le même encodeur d'Apple, sans disposition non plus.
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36" });
+    expect(await chooseTranscodePlan(48000, 8)).toEqual({ codec: "mp4a.40.2", channels: 6 });
 
     // Ailleurs, le 7.1 reste un 7.1 si l'encodeur le prend.
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36" });

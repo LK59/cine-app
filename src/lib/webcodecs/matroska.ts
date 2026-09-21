@@ -509,6 +509,35 @@ export function clusterOffsetForTime(file: MatroskaFile, timeUs: number, trackNu
   return best.clusterOffset;
 }
 
+/**
+ * La plage d'octets à garder en mémoire autour d'un instant : depuis la grappe de l'image clé qui
+ * précède l'instant (moins une seconde — ce que relit un décodeur audio qui s'amorce, voir
+ * truehdAudio.ts), jusqu'à la première image clé passé l'instant plus `aheadSeconds`. C'est ce que
+ * relit un changement de piste. `null` sans index : rien à dire de précis.
+ */
+export function keptRangeAt(
+  file: MatroskaFile,
+  seconds: number,
+  trackNumber?: number,
+  aheadSeconds = 4
+): { from: number; to: number } | null {
+  const forTrack = trackNumber === undefined ? file.cues : file.cues.filter((cue) => cue.track === trackNumber);
+  const cues = forTrack.length > 0 ? forTrack : file.cues;
+  if (cues.length === 0) return null;
+  const startUs = Math.max(0, seconds - 1) * 1e6;
+  const endUs = (seconds + aheadSeconds) * 1e6;
+  let from = cues[0].clusterOffset;
+  let to: number | null = null;
+  for (const cue of cues) {
+    if (cue.timeUs <= startUs) from = cue.clusterOffset;
+    else if (cue.timeUs >= endUs) {
+      to = cue.clusterOffset;
+      break;
+    }
+  }
+  return { from, to: to ?? file.segmentEnd };
+}
+
 // Lacing packs several small frames into one block — common for audio, essentially never used
 // for video. Getting it wrong turns a valid audio track into noise, so all three schemes are
 // implemented rather than assuming the file won't use them.

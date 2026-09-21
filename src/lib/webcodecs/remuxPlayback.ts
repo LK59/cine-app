@@ -7,7 +7,7 @@
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
 import { fromMatroskaTrack } from "./engineTrack";
-import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
+import { keptRangeAt, parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
 import { Remuxer, audioSwitchNeedsRebuild, playableAudio, type TrackedCue } from "./remuxer";
@@ -114,6 +114,9 @@ function isoBaseMedia(head: Uint8Array): boolean {
  * that plays perfectly on the track next to it. The default still decides among the ones that
  * work, and if none do the default is returned anyway so the refusal names the real codec.
  */
+/** Tous les combien de secondes de lecture la zone gardée suit la tête. */
+const KEEP_EVERY_SECONDS = 2;
+
 export function preferredAudio(file: MatroskaFile, preferences?: TrackPreferences | null): MatroskaTrack | null {
   const audio = file.tracks.filter((t) => t.type === "audio");
   const playable = audio.filter(playableAudio);
@@ -294,6 +297,24 @@ export class RemuxPlayback {
     return playback;
   }
 
+  /** Où la zone gardée a été posée pour la dernière fois, en secondes du lecteur. */
+  private keptAt = -Infinity;
+
+  /**
+   * Garde en mémoire les octets autour de la tête de lecture — voir `MAX_KEPT_CHUNKS` dans
+   * byteSource.ts. C'est ce qu'un changement de piste relit, et ce que la lecture en avance
+   * chassait du cache. Toutes les deux secondes de lecture, et à chaque saut : un calcul sur
+   * l'index déjà en mémoire, rien de plus.
+   */
+  private readonly keepAroundHead = (event?: Event) => {
+    if (this.destroyed || !this.source.keep) return;
+    const now = this.video.currentTime;
+    if (event?.type === "timeupdate" && Math.abs(now - this.keptAt) < KEEP_EVERY_SECONDS) return;
+    this.keptAt = now;
+    const range = keptRangeAt(this.file, Math.max(0, now - (this.mse?.presentationDelay ?? 0)), this.videoTrack.number);
+    if (range) this.source.keep(range.from, range.to);
+  };
+
   private async attach(plan: Parameters<typeof MseSource.attach>[2], startSeconds: number): Promise<void> {
     trace(`attachement de MediaSource — ${plan.videoMimeType} + ${plan.audioMimeType ?? "aucun audio"}`);
     this.mse = await MseSource.attach(
@@ -311,6 +332,8 @@ export class RemuxPlayback {
       startSeconds,
       this.options.startPaused ?? false
     );
+    this.video.addEventListener("timeupdate", this.keepAroundHead);
+    this.video.addEventListener("seeked", this.keepAroundHead);
   }
 
   private collect(cues: TrackedCue[]): void {
@@ -511,6 +534,8 @@ export class RemuxPlayback {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.video.removeEventListener("timeupdate", this.keepAroundHead);
+    this.video.removeEventListener("seeked", this.keepAroundHead);
     this.mse?.destroy();
     this.mse = null;
     // Releases the software decoder and the encoder, when the sound was going through both.
