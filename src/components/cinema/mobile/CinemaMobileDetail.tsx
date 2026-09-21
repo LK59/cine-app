@@ -156,7 +156,7 @@ export function CinemaMobileDetail({
    * ses propres applications, et « à voir » dans la liste locale, qui est une intention que
    * Jellyfin ne connaît pas.
    */
-  const { watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId);
+  const { watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, isSeries ? "series" : "movie");
   const inList = addedStatus === "to_watch";
 
   const [logoErrored, setLogoErrored] = useState(false);
@@ -387,7 +387,8 @@ export function CinemaMobileDetail({
               resumeTicks,
               runtimeTicks,
               isSeries ? nextEpisode?.seasonNumber : null,
-              isSeries ? nextEpisode?.episodeNumber : null
+              isSeries ? nextEpisode?.episodeNumber : null,
+              isSeries ? nextEpisode?.rewatch : false
             )}
           </button>
         )}

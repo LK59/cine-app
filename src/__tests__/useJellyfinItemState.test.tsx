@@ -12,14 +12,15 @@ vi.mock("@/lib/swr", async (importOriginal) => ({
   fetcher: async () => payload,
 }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
-vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+const toastSuccess = vi.fn();
+vi.mock("@/components/Toast", () => ({ useToast: () => ({ success: toastSuccess, error: vi.fn() }) }));
 const mockAction = vi.fn(async () => ({}));
 vi.mock("@/lib/apiAction", () => ({ apiAction: (...a: unknown[]) => mockAction(...(a as [])) }));
 
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 
-function Probe({ itemId }: { itemId: string | null }) {
-  const { watched, known, busy, toggleWatched } = useJellyfinItemState(itemId);
+function Probe({ itemId, kind }: { itemId: string | null; kind?: "movie" | "series" }) {
+  const { watched, known, busy, toggleWatched } = useJellyfinItemState(itemId, kind);
   return (
     <SWRConfigless>
       <span data-testid="state">{`${known ? "connu" : "inconnu"}/${watched ? "vu" : "pas-vu"}/${busy ? "occupé" : "libre"}`}</span>
@@ -31,10 +32,10 @@ function SWRConfigless({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
 }
 
-function renderProbe(itemId: string | null = "jf1") {
+function renderProbe(itemId: string | null = "jf1", kind?: "movie" | "series") {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <Probe itemId={itemId} />
+      <Probe itemId={itemId} kind={kind} />
     </SWRConfig>
   );
 }
@@ -88,3 +89,34 @@ describe("useJellyfinItemState", () => {
     expect(state()).toBe("inconnu/pas-vu/occupé");
   });
 });
+
+describe("useJellyfinItemState — le geste se dit", () => {
+  // Comme l'ajout à « À voir » : marquer vu ou non vu change des rangées ailleurs, et sans un mot
+  // le bouton semblait n'avoir rien fait (22/09/2026).
+  it("dit « marqué comme vu » pour un film, et rien si le serveur refuse", async () => {
+    payload = { played: false, favorite: false, known: true, resumeTicks: null, runtimeTicks: null };
+    renderProbe("jf1", "movie");
+    await waitFor(() => expect(state()).toBe("connu/pas-vu/libre"));
+    fireEvent.click(screen.getByText("basculer"));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("cinema.markedWatched"));
+
+    toastSuccess.mockClear();
+    mockAction.mockRejectedValueOnce(new Error("refusé"));
+    payload = { played: false, favorite: false, known: true, resumeTicks: null, runtimeTicks: null };
+    cleanup();
+    renderProbe("jf2", "movie");
+    await waitFor(() => expect(state()).toBe("connu/pas-vu/libre"));
+    fireEvent.click(screen.getByText("basculer"));
+    await waitFor(() => expect(state()).toBe("connu/pas-vu/libre"));
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("dit « série marquée comme non vue » pour une série", async () => {
+    payload = { played: true, favorite: false, known: true, resumeTicks: null, runtimeTicks: null };
+    renderProbe("jf3", "series");
+    await waitFor(() => expect(state()).toBe("connu/vu/libre"));
+    fireEvent.click(screen.getByText("basculer"));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("cinema.seriesMarkedUnwatched"));
+  });
+});
+

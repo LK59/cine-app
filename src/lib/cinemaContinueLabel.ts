@@ -15,7 +15,9 @@ export function formatContinueLabel(
   resumeTicks: number | null | undefined,
   runtimeTicks: number | null | undefined,
   seasonNumber?: number | null,
-  episodeNumber?: number | null
+  episodeNumber?: number | null,
+  /** Une série vue en entier, relancée depuis le premier épisode : « Lire », pas « À suivre ». */
+  rewatch?: boolean
 ): string {
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const remaining = hasResume && runtimeTicks ? Math.max(runtimeTicks - resumeTicks!, 0) : null;
@@ -25,6 +27,7 @@ export function formatContinueLabel(
       ? t("cinema.episodeShort", { episode: episodeNumber, season: seasonNumber })
       : null;
 
+  if (episodeCode && rewatch) return `${t("common.play")} ${episodeCode}`;
   if (episodeCode) {
     // Un épisode jamais commencé n'est pas une lecture à reprendre : c'est la suite qui attend.
     // « À suivre » le dit, là où « Lire » ne disait rien de plus qu'un bouton.

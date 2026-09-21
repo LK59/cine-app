@@ -1,3 +1,4 @@
+import { firstEpisodeOf } from "@/lib/nextEpisode";
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -33,6 +34,8 @@ export interface CinemaEpisodesPayload {
     runtimeTicks?: number;
     seasonNumber: number;
     episodeNumber: number;
+    /** Tout a été vu : c'est un revisionnage depuis le premier épisode — « Lire », pas « À suivre ». */
+    rewatch?: boolean;
   } | null;
 }
 
@@ -84,6 +87,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
     .sort(([a], [b]) => (a === 0 ? 1 : b === 0 ? -1 : a - b))
     .map(([seasonNumber, episodes]) => ({ seasonNumber, episodes }));
 
+  // Rien « à suivre » et tout vu : on repart du premier épisode — voir `firstEpisodeOf`. Seulement
+  // si tout est vu : un « à suivre » absent parce que Jellyfin n'a pas répondu ne doit pas
+  // renvoyer au début quelqu'un qui en est à la saison 3.
+  const regular = seasons.filter((s) => s.seasonNumber !== 0).flatMap((s) => s.episodes);
+  const allWatched = regular.length > 0 && regular.every((episode) => episode.watched);
+  const first = !nextUp && allWatched ? firstEpisodeOf(seasons) : null;
+
   const payload: CinemaEpisodesPayload = {
     seasons,
     nextEpisode: nextUp
@@ -95,7 +105,18 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
           seasonNumber: nextUp.ParentIndexNumber ?? 0,
           episodeNumber: nextUp.IndexNumber ?? 0,
         }
-      : null,
+      : first
+        ? {
+            itemId: first.jellyfinItemId,
+            title: first.title,
+            // Depuis le début : marquer « vu » a effacé la position, et c'est un revisionnage.
+            resumeTicks: 0,
+            runtimeTicks: first.runtimeTicks ?? undefined,
+            seasonNumber: first.seasonNumber,
+            episodeNumber: first.episodeNumber,
+            rewatch: true,
+          }
+        : null,
   };
   return NextResponse.json(payload);
 }

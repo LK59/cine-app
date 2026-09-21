@@ -1487,7 +1487,11 @@
     "downloading": "Kommt · {pct} %",
     "ratingsAudience": "Publikum {pct} %",
     "releasesOn": "Erscheint am {date}",
-    "playSeriesFailed": "„{title}“ kann gerade nicht gestartet werden."
+    "playSeriesFailed": "„{title}“ kann gerade nicht gestartet werden.",
+    "markedWatched": "Als gesehen markiert",
+    "markedUnwatched": "Als ungesehen markiert",
+    "seriesMarkedWatched": "Serie als gesehen markiert",
+    "seriesMarkedUnwatched": "Serie als ungesehen markiert"
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",

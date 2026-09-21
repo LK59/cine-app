@@ -24,7 +24,7 @@ import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/r
  * si le serveur refuse, en le disant. Attendre un aller-retour pour cocher une case donne
  * l'impression que le bouton est mort.
  */
-export function useJellyfinItemState(itemId: string | null | undefined) {
+export function useJellyfinItemState(itemId: string | null | undefined, kind: "movie" | "series" = "movie") {
   const t = useT();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -58,6 +58,14 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
           body: JSON.stringify(field === "played" ? { itemId, played: next } : { itemId, favorite: next }),
         });
         void mutate();
+        // Dit, comme l'ajout à « À voir » : le geste change des rangées ailleurs dans l'app, et
+        // sans un mot il ressemblait à un bouton qui n'avait rien fait (22/09/2026).
+        if (field === "played") {
+          const series = kind === "series";
+          toast.success(
+            t(next ? (series ? "cinema.seriesMarkedWatched" : "cinema.markedWatched") : series ? "cinema.seriesMarkedUnwatched" : "cinema.markedUnwatched")
+          );
+        }
         // « Ma liste » lit ces deux états depuis sa propre vue agrégée : sans ça, on coche
         // « vu » sur une fiche et l'onglet d'à côté l'ignore jusqu'au prochain chargement.
         void globalMutate("/api/player/lists");
@@ -79,7 +87,7 @@ export function useJellyfinItemState(itemId: string | null | undefined) {
         setBusy(false);
       }
     },
-    [itemId, data, busy, mutate, toast, t]
+    [itemId, kind, data, busy, mutate, toast, t]
   );
 
   return {

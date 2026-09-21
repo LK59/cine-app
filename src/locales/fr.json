@@ -1487,7 +1487,11 @@
     "downloading": "Arrive · {pct} %",
     "ratingsAudience": "public {pct} %",
     "releasesOn": "Sortie le {date}",
-    "playSeriesFailed": "Impossible de lancer « {title} » pour le moment."
+    "playSeriesFailed": "Impossible de lancer « {title} » pour le moment.",
+    "markedWatched": "Marqué comme vu",
+    "markedUnwatched": "Marqué comme non vu",
+    "seriesMarkedWatched": "Série marquée comme vue",
+    "seriesMarkedUnwatched": "Série marquée comme non vue"
   },
   "services": {
     "notConfigured": "{name} n'est pas configuré.",
