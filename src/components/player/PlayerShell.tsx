@@ -5,8 +5,7 @@ import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind, personBehind } from "@/lib/cinemaRoute";
 import { SHEET_OUT_MS } from "@/lib/sheetMotion";
-import { preload } from "swr";
-import { fetcher } from "@/lib/swr";
+import { preloadQuietly } from "@/lib/prefetch";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
 import { PlayerBottomBar } from "./PlayerBottomBar";
@@ -20,6 +19,11 @@ const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
 // L'écran d'accueil — chargé à part : la plupart des lancements ne l'affichent pas.
 const PlayerOnboardingGate = dynamic(() => import("./PlayerOnboarding").then((m) => m.PlayerOnboardingGate), { ssr: false });
+// Les décodeurs du lecteur, une fois l'écran installé, à chaque démarrage : l'écran d'accueil seul
+// ne concerne qu'un premier lancement, et le 21/09/2026 le décodeur FLAC arrivait par un
+// déploiement que presque personne ne verrait passer par là. `ssr: false` n'est pas un détail :
+// voir decoderWarmup.ts.
+const DecoderWarmup = dynamic(() => import("./DecoderWarmup").then((m) => m.DecoderWarmup), { ssr: false });
 
 /**
  * La largeur que le rail replié occupe, réservée par le contenu.
@@ -60,6 +64,9 @@ function useLastValue(value: number | null): number | null {
  * page à mesurer, et où React avertit qu'on lui en demande une.
  */
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/** Après le catalogue et les affiches du premier écran, qui passent d'abord. */
+const DECODER_WARMUP_MS = 8000;
 
 export function PlayerShell() {
   const isMobile = useIsMobile();
@@ -157,7 +164,7 @@ export function PlayerShell() {
       // Et la charge utile de « Ma liste », pour que l'écran arrive rempli plutôt que vide puis
       // rempli. Elle est petite, et c'est la seule des quatre destinations qui attend une réponse
       // avant d'avoir quoi que ce soit à montrer.
-      void preload("/api/player/lists", fetcher);
+      void preloadQuietly("/api/player/lists");
     };
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
     if (idle) {
@@ -177,6 +184,7 @@ export function PlayerShell() {
           question. */}
       {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
       <PlayerOnboardingGate />
+      <DecoderWarmup delayMs={DECODER_WARMUP_MS} />
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
           glissant. Voir useExitDelay. */}

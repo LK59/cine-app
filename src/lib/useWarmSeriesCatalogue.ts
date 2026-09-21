@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { preload } from "swr";
-import { fetcher, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { preloadQuietly } from "@/lib/prefetch";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
 
@@ -51,11 +51,9 @@ export function useWarmSeriesCatalogue(ready: boolean): boolean {
       // que le composant lira ensuite. Avec le mauvais, la forme brute — des identifiants là où
       // l'écran attend des titres — y était déposée, et la grille tombait trois secondes après le
       // lancement, le temps que ce réchauffage se déclenche.
-      void preload(SERIES_CATALOGUE_KEY, cinemaFetcher)
-        .then(() => {
-          if (!cancelled) setWarmed(true);
-        })
-        .catch(() => {});
+      void preloadQuietly(SERIES_CATALOGUE_KEY, cinemaFetcher).then((data) => {
+        if (!cancelled && data !== undefined) setWarmed(true);
+      });
     };
     // `timeout` garantit que le réchauffage a bien lieu sur un onglet qui ne devient jamais
     // vraiment inactif ; le repli couvre les navigateurs sans temps mort déclaré.

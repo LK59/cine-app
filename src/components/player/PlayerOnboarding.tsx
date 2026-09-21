@@ -16,7 +16,8 @@ import type { PlayerPreferences } from "@/app/api/player/account/preferences/rou
 import { OPEN_ONBOARDING_EVENT } from "./onboardingEvents";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
-import { prefetchImages, warmUpUrls, warmPlayerDecoders } from "@/lib/cinemaWarmup";
+import { prefetchImages, warmUpUrls } from "@/lib/cinemaWarmup";
+import { scheduleDecoderWarmup } from "@/lib/webcodecs/decoderWarmup";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 
@@ -166,10 +167,7 @@ export function PlayerOnboarding({
     ];
     return prefetchImages(urls);
   }, [moviesCatalogue, seriesCatalogue]);
-  useEffect(() => {
-    const timer = setTimeout(warmPlayerDecoders, 2500);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => scheduleDecoderWarmup(2500), []);
 
   const [lang, setLang] = useState<Locale>(locale);
 
