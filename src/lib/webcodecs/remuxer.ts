@@ -8,6 +8,7 @@
 // pipeline: no canvas, no per-frame JavaScript, no colour conversion, HDR handled natively.
 
 import { deriveDurations, assignDecodeTimes, PresentationDeduper } from "./decodeOrder";
+import { withTrueParameterSets } from "./hvcc";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
 import { av1CodecString, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
@@ -134,6 +135,8 @@ export interface RemuxDiagnostics {
   clampedSamples: number;
   /** Pictures moved a millisecond because another already had their instant. See PresentationDeduper. */
   nudgedSamples: number;
+  /** The file's HEVC header disagreed with its pictures, and was rebuilt from them. */
+  correctedHeader: boolean;
   /** The sound is being decoded and encoded again on the way through, rather than copied. */
   transcodedAudio: boolean;
   /** What it was re-encoded as, when it was. Not always AAC — see chooseTranscodeCodec. */
@@ -495,6 +498,8 @@ export class Remuxer {
   private needKeyframe = false;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
+  /** L'en-tête HEVC a été reconstruit depuis les images — voir `withTrueParameterSets`. */
+  correctedHeader = false;
   /** Deux images au même instant : voir `PresentationDeduper`. */
   private readonly presentations = new PresentationDeduper();
   private sequence = 1;
@@ -543,6 +548,11 @@ export class Remuxer {
     dolbyVision: { type: string; record: Uint8Array } | null = null
   ): Promise<Remuxer> {
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
+    // L'en-tête que les images justifient, pas seulement celui que le fichier déclare : sous
+    // `hvc1`, Safari ne lit ses paramètres que là. Voir `withTrueParameterSets`.
+    const declaredVideo = videoTrack;
+    videoTrack = await withTrueParameterSets(source, file, videoTrack);
+    const correctedHeader = videoTrack !== declaredVideo;
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
     const start = file.firstClusterOffset ?? file.segmentDataStart;
@@ -576,7 +586,7 @@ export class Remuxer {
       language: videoTrack.language ?? "und",
     };
 
-    return new Remuxer(
+    const remuxer = new Remuxer(
       file,
       videoTrack,
       audioTrack,
@@ -587,6 +597,9 @@ export class Remuxer {
       transcoder,
       dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null
     );
+    remuxer.correctedHeader = correctedHeader;
+    if (correctedHeader) trace("vidéo : en-tête HEVC reconstruit avec les paramètres portés par la première image");
+    return remuxer;
   }
 
   plan(): RemuxPlan {
@@ -700,6 +713,7 @@ export class Remuxer {
       presentationDelaySeconds: (this.presentationDelayUs ?? 0) / TIMESCALE,
       clampedSamples: this.clampedSamples,
       nudgedSamples: this.presentations.nudged,
+      correctedHeader: this.correctedHeader,
       transcodedAudio: this.transcoder !== null,
       transcodedCodec: this.transcoder?.codecString ?? null,
       segmentStartSeconds: this.segmentStartUs / TIMESCALE,

@@ -444,6 +444,7 @@ export class RemuxPlayback {
       "Décalage de présentation": `${(remux.presentationDelaySeconds * 1000).toFixed(0)} ms`,
       "Images recalées": String(remux.clampedSamples),
       "Images en double décalées": String(remux.nudgedSamples),
+      "En-tête vidéo": remux.correctedHeader ? "reconstruit depuis les images" : "celui du fichier",
       Index: `${this.remuxer.videoCuePoints} points vidéo / ${this.file.cues.length}`,
       // The spans themselves, not one number derived from them. A single figure hid which range
       // it was measured against, and read as a large negative number while the player was in

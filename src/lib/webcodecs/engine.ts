@@ -23,6 +23,7 @@ import { AudioOutput, WallClock } from "./audioOutput";
 import { SoftwareAudioTrack } from "./softwareAudio";
 import { trace } from "./trace";
 import { fromMatroskaTrack } from "./engineTrack";
+import { withTrueParameterSets } from "./hvcc";
 
 export type EngineEventName =
   | "loadedmetadata"
@@ -402,6 +403,9 @@ export class PlaybackEngine {
 
     this.videoTrack = this.file.tracks.find((t) => t.type === "video" && t.isEnabled) ?? null;
     if (!this.videoTrack) throw new Error("Ce fichier n'a pas de piste vidéo lisible.");
+    // Le même en-tête que le remultiplexage : celui que les images justifient. `VideoDecoder`
+    // le reçoit comme `description`, et ne lit pas davantage les paramètres portés par les images.
+    this.videoTrack = await withTrueParameterSets(this.source, this.file, this.videoTrack);
 
     const audioCandidates = this.file.tracks.filter((t) => t.type === "audio" && t.isEnabled);
     // An explicit choice always wins. Otherwise the default track is preferred, but only if the
