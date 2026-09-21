@@ -69,7 +69,12 @@ describe.skipIf(!process.env.BENCH_FILE)("banc", () => {
     const file = await parseMatroska(source);
     const video = file.tracks.find((t) => t.type === "video")!;
     // A track that rides through untouched: no AudioEncoder exists here.
-    const audio = file.tracks.filter((t) => t.type === "audio").find((t) => t.codecId !== "A_DTS") ?? null;
+    // BENCH_AUDIO=none checks the picture alone — a file whose only copyable track is TrueHD,
+    // which the remuxer refuses by design, still has a video worth checking.
+    const audio =
+      process.env.BENCH_AUDIO === "none"
+        ? null
+        : (file.tracks.filter((t) => t.type === "audio").find((t) => t.codecId !== "A_DTS" && t.codecId !== "A_TRUEHD") ?? null);
     
     console.log(`pistes : ${file.tracks.map((t) => `${t.number}:${t.type}:${t.codecId}`).join(" ")}`);
     console.log(`vidéo ${video.codecId} ${video.video?.width}×${video.video?.height}, audio ${audio?.codecId ?? "aucune"}`);
