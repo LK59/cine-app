@@ -855,3 +855,63 @@ describe("le chemin canvas", () => {
     expect(onFallback).toHaveBeenCalledWith("décodage impossible");
   });
 });
+
+describe("la fin d'une séance, au journal", () => {
+  // Le type `stop` existait et rien ne l'envoyait : au 21/09, 444 `start` et pas un `stop`. Un
+  // film vu jusqu'au bout et un film abandonné laissaient la même trace — c'est-à-dire aucune.
+  const logged = (kind: string) =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === kind);
+
+  it("écrit une ligne quand le lecteur s'en va, avec le chemin et la position", async () => {
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(1200);
+    act(() => void element.dispatchEvent(new Event("timeupdate")));
+
+    unmount();
+
+    const stops = logged("stop");
+    expect(stops).toHaveLength(1);
+    expect(stops[0].fields).toMatchObject({ why: "unmount", path: "remux", ended: false, itemId: "item-1" });
+    expect(stops[0].fields.gaveUpAfterMs).toBeUndefined();
+  });
+
+  it("n'en écrit qu'une, quand la page s'en va avant le lecteur", async () => {
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    unmount();
+
+    const stops = logged("stop");
+    expect(stops).toHaveLength(1);
+    expect(stops[0].fields.why).toBe("page");
+  });
+
+  it("dit combien de temps on a attendu quand on renonce avant la première image", async () => {
+    nextProbe = () => new Promise(() => {}) as never; // n'aboutit jamais
+    const { unmount } = mount();
+    await settle();
+
+    unmount();
+
+    const stops = logged("stop");
+    expect(stops).toHaveLength(1);
+    expect(typeof stops[0].fields.gaveUpAfterMs).toBe("number");
+  });
+
+  it("se tait après un repli, que la ligne `fallback` a déjà raconté", async () => {
+    serverFallback = true;
+    swr = { data: info({ refusedReason: "conteneur avi" }), error: undefined };
+    const { unmount } = mount();
+    await waitFor(() => expect(onFallback).toHaveBeenCalledWith("conteneur avi"));
+
+    unmount();
+
+    expect(logged("fallback")).toHaveLength(1);
+    expect(logged("stop")).toHaveLength(0);
+  });
+});

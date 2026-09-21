@@ -749,6 +749,73 @@ export function ExperimentalPlayerHost({
   // nothing at all behind: a spinner that never stops, on a device with no console.
   const stuck = openingFor !== null && openingFor >= STUCK_AFTER_MS;
 
+  /**
+   * Comment la séance s'est terminée — la ligne `stop` du journal.
+   *
+   * Le type existait depuis le premier jour et rien ne l'envoyait : sur 503 lignes au 21/09, 444
+   * `start` et pas un seul `stop`. Un film vu jusqu'au bout et un film abandonné au bout de trente
+   * secondes laissaient donc exactement la même trace — et l'abandon silencieux, celui d'un
+   * spectateur qui ferme plutôt que de se plaindre, est précisément la panne qu'aucun autre
+   * enregistrement ne montre.
+   *
+   * Une seule fois par lecteur (il est remonté à chaque titre, voir la `key` de `PlayerHost`),
+   * par le premier qui arrive : la croix, l'épisode suivant, la page qui s'en va, et le démontage
+   * en dernier filet. Rien après un repli : la ligne `fallback` a déjà tout dit, et le lecteur
+   * stable prend la suite de la séance.
+   *
+   * Tout est lu par des refs : les appelants — un écouteur `pagehide`, un nettoyage d'effet —
+   * vivent plus longtemps que le rendu qui les a créés.
+   */
+  const stopReportedRef = useRef(false);
+  const mountedAtRef = useRef(0);
+  useEffect(() => {
+    mountedAtRef.current = Date.now();
+  }, []);
+  // Le temps passé à jouer, pas l'écart entre la position d'arrivée et celle de départ : un saut
+  // de quarante minutes n'est pas quarante minutes regardées.
+  const watchedRef = useRef<{ total: number; since: number | null }>({ total: 0, since: null });
+  useEffect(() => {
+    if (!playing) return;
+    const watched = watchedRef.current;
+    watched.since = Date.now();
+    return () => {
+      if (watched.since !== null) watched.total += Date.now() - watched.since;
+      watched.since = null;
+    };
+  }, [playing]);
+  const stopFactsRef = useRef({ ready: false, ended: false, error: null as string | null, audio: null as number | null, rebuilds: 0 });
+  useEffect(() => {
+    stopFactsRef.current = { ready, ended, error, audio: currentAudio, rebuilds: rebuildCount };
+  }, [ready, ended, error, currentAudio, rebuildCount]);
+  const reportStop = useCallback((why: "close" | "next" | "page" | "unmount") => {
+    if (stopReportedRef.current || steppedAside.current) return;
+    stopReportedRef.current = true;
+    const facts = stopFactsRef.current;
+    const watched = watchedRef.current;
+    const watchedMs = watched.total + (watched.since !== null ? Date.now() - watched.since : 0);
+    reportPlayback("stop", {
+      ...describeFileRef.current(),
+      path: pathRef.current ?? "non décidé",
+      why,
+      at: positionRef.current,
+      watched: Math.round(watchedMs / 1000),
+      ended: facts.ended,
+      rebuild: facts.rebuilds,
+      ...(facts.audio !== null ? { audio: facts.audio } : {}),
+      // Fermé avant la première image : combien de temps le spectateur a attendu avant de renoncer.
+      ...(facts.ready ? {} : { gaveUpAfterMs: Date.now() - mountedAtRef.current }),
+      ...(facts.error ? { error: facts.error } : {}),
+    });
+  }, []);
+  useEffect(() => {
+    const onPageHide = () => reportStop("page");
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      reportStop("unmount");
+    };
+  }, [reportStop]);
+
   const stopPlaybackNow = usePlaybackSession(
     useCallback(() => positionRef.current, []),
     // The engine talks to the file directly, so there is no Jellyfin transcode session — but
@@ -772,13 +839,14 @@ export function ExperimentalPlayerHost({
 
   const handleClose = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    reportStop("close");
     const reported = stopPlaybackNow();
     setClosing(true);
     setTimeout(() => playback.close(), 200);
     // Voir PlayerHost : la fiche et la rangée « Reprendre » sont fausses dès qu'on quitte le film,
     // et les deux lecteurs doivent les relire de la même façon.
     void refreshAfterPlayback(reported, itemId);
-  }, [playback, stopPlaybackNow, itemId]);
+  }, [playback, stopPlaybackNow, itemId, reportStop]);
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
@@ -787,9 +855,10 @@ export function ExperimentalPlayerHost({
   // episodes.
   const handleAdvance = useCallback(() => {
     if (!nextEpisode) return;
+    reportStop("next");
     stopPlaybackNow();
     playback.advance(nextEpisode);
-  }, [nextEpisode, playback, stopPlaybackNow]);
+  }, [nextEpisode, playback, stopPlaybackNow, reportStop]);
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
