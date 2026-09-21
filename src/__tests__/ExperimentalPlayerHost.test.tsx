@@ -21,7 +21,7 @@ vi.mock("@/components/TranslationProvider", () => ({
   useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }));
-vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn() }));
+vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn(), traceRecent: () => [] }));
 vi.mock("@/lib/webcodecs/pathSelector", () => ({ describePath: () => "raison du choix" }));
 vi.mock("@/lib/webcodecs/capabilities", () => ({
   probeCapabilities: async () => ({}),

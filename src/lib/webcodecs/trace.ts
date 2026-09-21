@@ -98,3 +98,21 @@ export function traceText(): string {
 export function traceElapsed(): number {
   return startedAt === 0 ? 0 : Date.now() - startedAt;
 }
+
+/**
+ * The steps of the last `ms` milliseconds, timed from the first of them, for a report line.
+ *
+ * Written for the `audio` line of player.log: a track change that took 4.7 s on an iPhone
+ * (21/09/2026) could not be broken down from the server, because the record that said where the
+ * time went never left the phone. Bounded both ways — the newest steps only, each one cut short —
+ * so that a busy change cannot turn one log line into a page.
+ */
+export function traceRecent(ms: number, limit = 40, width = 140): string[] {
+  try {
+    const from = traceElapsed() - ms;
+    const recent = steps.filter((s) => s.at >= from).slice(-limit);
+    return recent.map((s) => `+${Math.max(0, Math.round(s.at - from))} ms ${s.step.slice(0, width)}`);
+  } catch {
+    return [];
+  }
+}

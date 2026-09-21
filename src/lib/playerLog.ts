@@ -47,7 +47,9 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
     if (kept >= 24 || key.length > 40) continue;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
-    else if (typeof value === "string" && value) out[key] = value.slice(0, 500);
+    // `steps` is the one long field: the device's own timeline of a track change, which is the
+    // whole point of the line it rides on. Still bounded — by eight times the rest, not by trust.
+    else if (typeof value === "string" && value) out[key] = value.slice(0, key === "steps" ? 4000 : 500);
     else continue;
     kept += 1;
   }

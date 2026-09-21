@@ -44,6 +44,17 @@ describe("logPlaybackEvent", () => {
     expect(lines()).toHaveLength(1);
   });
 
+  it("laisse à la chronologie d'un changement de piste la place de se raconter, bornée quand même", async () => {
+    // 21/09/2026 : un changement de piste de 4,7 s sur un iPhone, impossible à décomposer depuis le
+    // serveur. Coupées à 500 caractères, ses étapes auraient perdu justement la fin.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "audio", { steps: "e".repeat(3000), reason: "r".repeat(3000) });
+    logPlaybackEvent("louis", "audio", { steps: "e".repeat(9000) });
+    expect(lines()[0].steps).toHaveLength(3000);
+    expect(lines()[0].reason).toHaveLength(500);
+    expect(lines()[1].steps).toHaveLength(4000);
+  });
+
   it("borne ce qu'un navigateur peut faire écrire", async () => {
     // Every field here is chosen by the client, so the client decides what this costs on disk.
     const { logPlaybackEvent } = await import("@/lib/playerLog");

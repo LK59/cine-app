@@ -17,7 +17,7 @@ import { PlaybackEngine } from "@/lib/webcodecs/engine";
 import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { describePath } from "@/lib/webcodecs/pathSelector";
-import { trace, traceKeepAcrossReset } from "@/lib/webcodecs/trace";
+import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
@@ -582,6 +582,9 @@ export function ExperimentalPlayerHost({
         // « copié tel quel » ou « décodé puis ré-encodé en AAC » : c'est toute la question du coût.
         processing: playback?.diagnostics["Traitement audio"] ?? "",
         at: Math.round(positionRef.current),
+        // Where the time went, step by step, measured on the device: without it a slow change
+        // can only be guessed at from the server, and on 21/09/2026 the guess was wrong twice.
+        steps: traceRecent(Date.now() - startedAt).join(" | "),
       });
     },
     []

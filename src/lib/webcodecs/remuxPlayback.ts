@@ -376,13 +376,18 @@ export class RemuxPlayback {
     // as a seek was settling.
     const before = this.remuxer.plan().audioMimeType;
     let codecChanged = false;
+    // Each phase named, so that the `audio` line in player.log can say where a slow change spent
+    // its time — asked on 21/09/2026 about a FLAC change that took 4.7 s, and unanswerable then.
+    trace(`changement de piste : ${previous?.codecId ?? "aucune"} → ${track.codecId} à ${at.toFixed(1)} s`);
     try {
       await mse.runExclusive(async () => {
         await this.remuxer.setAudioTrack(trackNumber);
+        trace("changement de piste : piste ouverte");
         this.audioTrack = track;
         const plan = this.remuxer.plan();
         codecChanged = plan.audioMimeType !== before;
         await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
+        trace("changement de piste : tampon audio remplacé");
       });
     } catch (error) {
       // Nothing was released that could not be replaced, so the previous track is still playable.
@@ -401,11 +406,13 @@ export class RemuxPlayback {
     // inter-codec change felt slower than any other.
     if (codecChanged && !mse.rebuildAudioAllowed) {
       await mse.seek(at);
+      trace("changement de piste : saut complet terminé");
     } else {
       // Only the sound is read again, and only from where the viewer is. A seek would clear the
       // picture too and send it back over what has already been played, which the browser
       // catches up on at speed.
       await mse.refillAudio(at);
+      trace("changement de piste : son rechargé depuis la tête");
     }
     // Now, and not before: armed any earlier it would find the old track still covering the
     // playhead and let the picture go while there is nothing to hear. Awaited, so that a caller
@@ -413,6 +420,7 @@ export class RemuxPlayback {
     // lifts on a held, paused element and the controls offer the play button, which then turns
     // into the pause button on its own a moment later.
     await mse.armAudioRelease();
+    trace("changement de piste : son disponible, image relâchée");
   }
 
   /** See MseSource.lost: the platform took the source, and only a rebuild brings it back. */

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { trace, traceReset, traceText } from "@/lib/webcodecs/trace";
+import { trace, traceRecent, traceReset, traceText } from "@/lib/webcodecs/trace";
 
 // The record a report is built from. What matters is that a fault two hours into a film still
 // has its own context — and that the opening, which is what says how the film was ever playing,
@@ -44,5 +44,36 @@ describe("la trace", () => {
     const at = Date.now();
     for (let i = 0; i < 20000; i++) trace(`étape ${i}`);
     expect(Date.now() - at).toBeLessThan(1000);
+  });
+});
+
+describe("traceRecent", () => {
+  it("rend les étapes d'une fenêtre récente, datées depuis son début, et seulement elles", async () => {
+    const { vi } = await import("vitest");
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000_000);
+      trace("avant le changement");
+      vi.setSystemTime(1_010_000);
+      trace("changement de piste : A_DTS → A_FLAC");
+      vi.setSystemTime(1_012_500);
+      trace("changement de piste : piste ouverte");
+      vi.setSystemTime(1_014_700);
+      // La fenêtre du changement : ses 4,7 dernières secondes.
+      expect(traceRecent(4700)).toEqual([
+        "+0 ms changement de piste : A_DTS → A_FLAC",
+        "+2500 ms changement de piste : piste ouverte",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("borne le nombre d'étapes et leur longueur", () => {
+    for (let i = 0; i < 100; i++) trace(`étape ${i} ${"x".repeat(500)}`);
+    const recent = traceRecent(60_000, 40, 140);
+    expect(recent).toHaveLength(40);
+    expect(recent[39]).toContain("étape 99");
+    for (const line of recent) expect(line.length).toBeLessThan(160);
   });
 });
