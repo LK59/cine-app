@@ -44,7 +44,10 @@ export function UpdateBanner() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-x-0 top-0 z-70 flex justify-center px-3 pointer-events-none" style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)" }}>
+    // Un vrai écart sous la zone sûre, pas la zone sûre seule : dans l'application installée, iOS
+    // voile et floute le haut de l'écran, et l'alerte s'y lisait mal (21/09/2026). Même remède
+    // que la progression de l'écran d'accueil.
+    <div className="fixed inset-x-0 top-0 z-70 flex justify-center px-3 pointer-events-none" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.75rem)" }}>
       <div className="glass-panel pointer-events-auto flex items-center gap-3 rounded-full px-4 py-2 shadow-glow">
         <span className="text-xs text-slate-200">{t("common.updateAvailable")}</span>
         <button
