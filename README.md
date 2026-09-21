@@ -204,7 +204,10 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
   tab, and hands it to a real `<video>` — hardware decoding, native HDR, no transcoding at all. On
   this library it plays 4K Dolby Vision HEVC with E-AC3 Atmos on an iPhone with nothing running on
   the server. Where the codecs make that impossible it decodes with WebCodecs onto a canvas
-  instead.
+  instead. Audio the device cannot play — TrueHD (FFmpeg's own decoder, compiled to
+  WebAssembly), DTS, FLAC — is decoded in the browser and re-encoded. Each audio track is delivered
+  in its best form, and switching to a track of another format rebuilds the player at the same
+  position.
 - **The server-side player** is the safety net underneath. A file neither browser path can carry is
   handed to Jellyfin, which negotiates DirectPlay / DirectStream / Transcode the way its own web
   client does; a "Playback info" panel says which of the three is running, why, and at what
@@ -214,7 +217,8 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
 
 **[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the three paths, how the remuxer
 reconstructs decode times, how random access points are verified, how audio is delivered or
-re-encoded, what the server is still told, and the file map.
+re-encoded, what the server is still told, and the file map. For a non-technical presentation
+of the player, in French: [PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md).
 
 <!-- CAPTURE : cinema-player.png
      The player with its controls visible: timeline with chapter marks, the track menus open or
@@ -430,8 +434,10 @@ All media grids (Watchlist, Discover, Recommendations) share the same card:
 ### Optional: the Clara Galle gallery page
 
 An enriched page for one actress — full-screen photo gallery, detailed biography, external links.
-Disabled by default; it needs `CLARA_GALLERY_ENABLED=true` and a photo folder mounted read-only,
-containing JPG/PNG/WebP files and a `clarabanner.jpg` used as the page banner. See
+Off by default; it needs `CLARA_GALLERY_ENABLED=true` (read at startup — a restart, no rebuild) and
+a photo folder mounted read-only at `/app/gallery/clara`, containing JPG/PNG/WebP files, a
+`clarabanner.jpg` used as the page banner and optionally a `favicon.jpeg`. It also opens a public
+slideshow at `/api/gallery/clara/random`, meant for sharing. See
 [DEPLOYMENT.md](DEPLOYMENT.md#12-optional-features).
 
 <!-- CAPTURE : clara-1.png … clara-4.png
@@ -506,10 +512,8 @@ administrators are administrators here; everyone else is a regular user.
 
 **The local admin account** (`APP_ADMIN_USER` / `APP_ADMIN_PASSWORD`) is independent from Jellyfin
 — for setup, and for the day Jellyfin is unreachable. It has no Jellyfin identity, so nothing
-depending on one works under it, and it lands on `/gestion` rather than on Cinema.
-
-**A guest account** can be enabled (`GUEST_USER` / `GUEST_PASSWORD`): read-only across the whole
-app, with a single permitted write — requesting a title.
+depending on one works under it, and it lands on `/gestion` rather than on Cinema. It is optional:
+leaving `APP_ADMIN_PASSWORD` empty disables it.
 
 Permissions are never enforced by the interface. `src/proxy.ts` refuses every write a `user`
 should not make, whatever the screen happens to show; hiding a button is presentation, not
@@ -545,8 +549,10 @@ can be revoked immediately rather than only on expiry. Three things are worth kn
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.
 
-`SESSION_SECRET` must be set. Left at its default, the server refuses to start rather than logging
-a line nobody reads.
+`SESSION_SECRET` must be set. The server refuses to start rather than logging a line nobody reads
+when it is empty or absent, shorter than 16 characters, or one of the published example values;
+generate one with `openssl rand -hex 32`. Likewise, `APP_ADMIN_PASSWORD` left at the old example
+value `change-me` stops the startup (empty is allowed: it disables the local admin account).
 
 ---
 
@@ -557,6 +563,12 @@ Only relevant if you are modifying the code — deploying needs none of this.
 **There is no Node or npm on the reference host.** Everything runs through Docker.
 
 ```sh
+# Once, and after every dependency change: install node_modules into the working tree.
+# Alpine, like every container below, so the native better-sqlite3 module matches; the build
+# tools are needed because npm rebuilds it from source (the Dockerfile's deps stage does the same).
+docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
+  'apk add --no-cache python3 make g++ && npm ci'
+
 # Iterate — hot reload against the working tree, on http://<server>:3001.
 # Runs alongside production; does not rebuild the image.
 docker compose -f docker-compose.dev.yml up
@@ -579,10 +591,21 @@ file with:
 build:
   context: .
   dockerfile: Dockerfile
+  args:
+    BUILD_REF: ${BUILD_REF:-}
 ```
 
-then `docker compose up -d --build`. The build runs the test suite first: it fails loudly instead
-of shipping a broken image.
+then:
+
+```sh
+BUILD_REF=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
+`BUILD_REF` names the build: it is shown next to the version in the settings page and names the
+service worker's cache generation. The published images carry their commit this way (the GHCR
+workflow passes it); without it (`.git` is not in the build context) the build names itself with
+its own date and time. The build runs the test suite first: it fails loudly instead of
+shipping a broken image.
 
 **Why the dev stack exists.** `docker compose build` re-runs the full production build and writes
 a new set of image layers every time — hundreds of megabytes per iteration, pure waste when a
@@ -598,8 +621,11 @@ transfers 61 kB of context instead of 676 MB, in about 35 seconds instead of a m
 The build cache does accumulate — `docker builder prune` reclaims it.
 
 One caveat: the development port is plain HTTP, and several browser APIs are restricted to secure
-contexts. The native WebCodecs player refuses to start there and says so. Testing that specific
-feature needs HTTPS — deploy it, or point a reverse-proxy host at port 3001.
+contexts. The ordinary path — remux into MediaSource, native `<video>` — works there. WebCodecs
+does not exist outside a secure context, so neither does what depends on it: the canvas fallback
+(which stops with a message saying HTTPS is required) and the in-browser re-encoding of DTS, TrueHD
+and FLAC, which needs `AudioEncoder`. Testing those needs HTTPS — deploy it, or point a
+reverse-proxy host at port 3001 (`localhost` also counts as secure).
 
 ## Debugging a running deployment
 
@@ -624,9 +650,21 @@ because `docker logs` dies with the container, and the container is recreated on
 | **README.md** *(this file)* | What the two interfaces are and what they do |
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | Installing and running it, step by step, from the published image |
 | **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the three playback paths, the remuxer, audio, diagnostics |
+| **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
+| **[DECISIONS.md](DECISIONS.md)** | Rules decided in one shared function, their callers and tests |
+| **[AUDIT.md](AUDIT.md)** | A past code audit, kept for history (French) |
+| **[`tools/truehd-wasm/`](tools/truehd-wasm/)** | Reproducible build of the committed TrueHD WebAssembly decoder: pinned FFmpeg, checked SHA-256 |
 | **`.env.example`** | Every configuration variable, annotated in place |
 | **`docker-compose.example.yml`** | The deployment template, annotated in place |
+
+## Third-party code
+
+- `src/lib/webcodecs/truehd/truehd-wasm.mjs`, committed, is FFmpeg's TrueHD/MLP decoder (FFmpeg
+  7.1.2, configured without `--enable-gpl`, so LGPL-2.1-or-later), compiled to WebAssembly.
+  `tools/truehd-wasm/build.sh` rebuilds it byte for byte from the checksummed FFmpeg release.
+- FLAC is decoded by `@wasm-audio-decoders/flac` (MIT); DTS and AC-3 by `@mediabunny/dts` and
+  `@mediabunny/ac3`, on top of `mediabunny` (all MPL-2.0).
 
 ## Screenshot conventions
 

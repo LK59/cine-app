@@ -136,13 +136,15 @@ tedious part, and having all of them in front of you makes the next step a singl
 You also need one secret of your own. Generate it now:
 
 ```bash
-openssl rand -base64 48
+openssl rand -hex 32
+# or, without openssl on the host:
+docker run --rm node:24-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 That string goes into `SESSION_SECRET`. It signs and encrypts sessions; **the server refuses to
-start if it is left at its default value**, deliberately — a forged admin session is not something
-to warn about in a log nobody reads. Changing it later signs everyone out, which is harmless but
-worth knowing.
+start while it is empty, shorter than 16 characters, or one of the published example values**,
+deliberately — a forged admin session is not something to warn about in a log nobody reads.
+Changing it later signs everyone out, which is harmless but worth knowing.
 
 ---
 
@@ -160,7 +162,7 @@ leave empty simply disables the feature that needed it.
 | Variable | Value |
 |---|---|
 | `SESSION_SECRET` | The random string you just generated. The app will not start without it. |
-| `APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` | Local admin account, independent from Jellyfin. Your way in during setup and the day Jellyfin is down. Change the password. |
+| `APP_ADMIN_USER` / `APP_ADMIN_PASSWORD` | Local admin account, independent from Jellyfin. Your way in during setup and the day Jellyfin is down. Set a strong password; leaving it empty disables the account. The old example value `change-me` stops the startup. |
 | `JELLYFIN_URL` | Internal URL, reachable **from inside the container** — e.g. `http://jellyfin:8096`. Not the address in your browser's bar. |
 | `JELLYFIN_API_KEY` | The key created in step 4. |
 | `TMDB_API_KEY` | Metadata, artwork, cast, Discover, recommendations. |
@@ -179,7 +181,7 @@ leave empty simply disables the feature that needed it.
 
 | Variable | What it adds |
 |---|---|
-| `JELLYSEERR_URL` / `JELLYSEERR_API_KEY` | Requests. Without it, the request buttons disappear from the interface. |
+| `JELLYSEERR_URL` / `JELLYSEERR_API_KEY` | Requests. Without it, the request buttons disappear from the interface. Each Jellyfin user must also be imported into Jellyseerr — see [step 11](#11-first-login). |
 | `QBITTORRENT_URL` / `QBITTORRENT_USERNAME` / `QBITTORRENT_PASSWORD` | Live torrent monitoring in the management interface. |
 | `BAZARR_URL` / `BAZARR_API_KEY` | Subtitle management. |
 | `JACKETT_URL` / `JACKETT_API_KEY` | Indexer status. |
@@ -188,8 +190,7 @@ leave empty simply disables the feature that needed it.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push notifications — see [step 12](#12-optional-features). |
 | `PLAYER_ENABLED` | In-app playback. Default `true` — see [step 12](#12-optional-features). |
 | `PLAYER_SERVER_FALLBACK` | Whether a file the browser cannot play is handed to Jellyfin. Default `true`; `false` guarantees no playback can start a transcode. |
-| `GUEST_USER` / `GUEST_PASSWORD` | A read-only shared account. Leaving `GUEST_PASSWORD` empty disables it entirely. |
-| `CLARA_GALLERY_ENABLED` | An optional enriched person page. Needs a photo folder mounted; off by default. |
+| `CLARA_GALLERY_ENABLED` | An optional enriched person page, with a public slideshow. Needs a photo folder mounted; off by default — see [step 12](#12-optional-features). |
 
 ### Storage paths
 
@@ -370,7 +371,8 @@ container keeps running.
 
 | What you see instead | What it means |
 |---|---|
-| `SESSION_SECRET must be set` and an immediate exit | Step 4 was skipped. This is intentional. |
+| `SESSION_SECRET est vide.` (or `…est la valeur d'exemple publiée.`, or `…fait N caractères — 16 au moins.`) followed by `Posez-en un dans .env (openssl rand -hex 32) — sans lui, une session administrateur peut être forgée.`, and an immediate exit | Step 4 was skipped, or the secret is too short. The message is in French. This is intentional. |
+| `APP_ADMIN_PASSWORD est la valeur d'exemple publiée.` and an immediate exit | The admin password was left at `change-me`. Choose one, or leave it empty to disable the local admin account. |
 | `SQLITE_CANTOPEN` / `EACCES` on `/app/data` | Step 7 was skipped, or the ownership does not match `user:`. |
 | `network media_net declared as external, but could not be found` | The network name in the compose file does not match `docker network ls`. |
 | The container restarts in a loop | `docker compose logs --tail=50 cine-app` has the reason; the loop itself is `restart: unless-stopped` doing its job. |
@@ -387,7 +389,9 @@ docker compose ps
 
 **Can it reach your services?** Open `http://<server>:3000/status` — this page is deliberately
 public, no login required, precisely so it can be read when logging in is what fails. Each service
-answers for itself: connected, not configured, or unreachable with the error it returned.
+answers for itself: connected, not configured, or unreachable with the error it returned. (Port
+3000 on the host only answers with the `ports:` line uncommented — otherwise use your proxy's
+address, or the shell check below.)
 
 <!-- CAPTURE : deploy-status-page.png
      The public /status page, right after a successful install: every configured service green,
@@ -401,6 +405,12 @@ The same information, from the shell:
 
 ```bash
 curl -s http://localhost:3000/api/status/public | head -c 400
+```
+
+That needs the `ports:` line uncommented. This one works either way, from inside the container:
+
+```bash
+docker exec cine-app wget -qO- http://127.0.0.1:3000/api/status/public | head -c 400
 ```
 
 **Can it reach a specific service?** Test from *inside* the container — that is the only vantage
@@ -442,8 +452,9 @@ Measured on this deployment, the limit is crossed somewhere between 8 KB and 10 
 traffic is nowhere near it — this is a safety margin, not a hard requirement. **Traefik and Caddy
 have far higher defaults and need nothing.**
 
-While you are there: allow WebSocket upgrades if your proxy does not by default (NPM's
-*Websockets Support* toggle). Server-sent events power the live status feeds.
+No WebSockets are used. The live download messages arrive as server-sent events on `/api/sse`,
+which must not be buffered: the app sends `X-Accel-Buffering: no`, which nginx (and so NPM)
+honours; any other proxy needs buffering disabled for that path.
 
 ---
 
@@ -469,6 +480,10 @@ it — starting a film, chapters, scrub previews, playback preferences. It there
 `/gestion` rather than on Cinema, which is what it is for.
 
 Nothing to create, invite or provision: every Jellyfin account on your server can already log in.
+
+**With Jellyseerr, one exception:** each Jellyfin user must be imported into Jellyseerr
+(**Users → Import Jellyfin Users**), including accounts created later. Otherwise that user's
+requests are made with the API key and attributed to its owner — silently, with no error anywhere.
 
 ---
 
@@ -531,20 +546,27 @@ file playable.
 The playback log (`data/logs/player.log`) records every handover with its reason, so you can see
 what your library actually needs before deciding. See [DOC-TECH.md](DOC-TECH.md).
 
+### The Clara Galle gallery
+
+```env
+CLARA_GALLERY_ENABLED=true
+```
+
+An enriched page for one actress, off by default. Mount the photos read-only at
+`/app/gallery/clara` (the commented line in the compose template): JPG/PNG/WebP files, a
+`clarabanner.jpg` used as the page banner, and optionally a `favicon.jpeg`. While it is off, every
+`/api/gallery/clara` address answers `404`.
+
+Enabling it makes two addresses public, with no login — a slideshow meant for sharing,
+`/api/gallery/clara/random`, and the photos it shows, `/api/gallery/clara/<file>`. The list of all
+files still needs a session. The slideshow writes absolute links (link previews require them),
+built from the `X-Forwarded-Proto` and `X-Forwarded-Host` headers (falling back to `Host`): your
+reverse proxy must forward them, or the links carry the wrong scheme or host.
+
 ### Media statistics
 
 Keep the read-only media mount from step 6 and make sure `MEDIA_ROOT` matches the container-side
 path. If sizes read as zero, it is almost always the uid: see [File permissions](#file-permissions).
-
-### Guest account
-
-```env
-GUEST_USER=guest
-GUEST_PASSWORD=some-shared-password
-```
-
-Read-only across the whole app, with exactly one permitted action: requesting a title. Leave the
-password empty to disable the account entirely — login then becomes impossible for it.
 
 ---
 

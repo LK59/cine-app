@@ -13,6 +13,10 @@
 #
 # It runs alongside production rather than replacing it: different container name, its own port,
 # and a separate build directory so the two never overwrite each other's compiled output.
+#
+# Install node_modules first (see README, Development): the working tree is mounted as it is.
+# The media and gallery paths and the `user:` below are the reference host's — adapt them to your
+# own machine, as in docker-compose.example.yml.
 
 networks:
   media_net:

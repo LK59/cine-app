@@ -331,7 +331,7 @@ may mirror its encoder's convention and hide it.
 
 ### Audio delivery: per track, and a rebuild when the format changes
 
-**Default since 2026-09-22 (`perTrack` in `remuxer.ts`).** Each track is delivered in its best
+**Default since 2026-09-21 (`perTrack` in `remuxer.ts`).** Each track is delivered in its best
 form — a Dolby track the browser takes is copied untouched, TrueHD, DTS and anything else it
 refuses is re-encoded. Changing to a track of the **same delivered format** keeps the fast path
 (the audio buffer's contents replaced: 0.1 to 0.8 s measured on iPhone). Changing to a track of

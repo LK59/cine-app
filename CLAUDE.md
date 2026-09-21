@@ -51,7 +51,8 @@ Tests default to the `node` environment; a component test opts into jsdom with a
 `vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
 test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
 
-**Three benches sit beside the suite, all skipped unless given a file.** `truehd-bench.spec.ts`
+**Six benches sit beside the suite, all skipped unless given a file or a library root.**
+`truehd-bench.spec.ts`
 decodes a real TrueHD track through the player's whole chain and prints each channel's level, to
 compare with `ffmpeg astats` — the only proof of that decoder, since no synthetic TrueHD can be
 made. `bench.spec.ts` checks
@@ -59,7 +60,9 @@ what the remuxer *produces* (bytes, to be decoded by ffmpeg and compared against
 `cout.spec.ts` measures what it *costs* — reads, bytes and milliseconds for the header, the open,
 the first segment and a seek. The second answers "why is it slow" without guessing: it established
 that launching is bound by bytes, not by CPU, and its header carries the numbers measured on this
-library.
+library. The other three survey rather than prove: `audit.spec.ts` asks every file in a
+library the player's questions, `subs.spec.ts` lists its subtitle codecs, and `raps.spec.ts`
+measures what a seek costs in one file.
 
 **Diagnose against the running container rather than reasoning in the dark.**
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
@@ -345,7 +348,7 @@ Four rules, each of which cost a real failure:
   works. Its guard, on the other hand, was wrong for years — see `isWebKitEngine`.
 - **No audio format change inside a live buffer** (`remuxer.ts`). Every attempt at surviving that
   transition turned out to be a guess about someone else's decoder. Two designs keep it from
-  happening, behind `perTrack`: per-track delivery (the default since 2026-09-22 — each track in
+  happening, behind `perTrack`: per-track delivery (the default since 2026-09-21 — each track in
   its best form, a change of *format* rebuilds the player on the new track, see DOC-TECH "Audio
   delivery") and per-file unification (`perTrack = false` — every track re-encoded to one codec
   when they cannot all pass as they are). `selectAudioTrack` refuses a format change outright
