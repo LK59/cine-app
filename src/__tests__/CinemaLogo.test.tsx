@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 
 afterEach(() => cleanup());
@@ -56,5 +56,26 @@ describe("le logo d'un titre", () => {
   it("s'aligne au bord de sa colonne, et non au centre d'une boîte étirée", () => {
     render(<CinemaLogo src="/b.png" alt="Bord" surface="hero" />);
     expect(logo("Bord").className).toContain("self-start");
+  });
+});
+
+describe("CinemaLogo — un logo qui ne vient pas", () => {
+  // *Dallas Buyers Club*, bannière du téléphone, 21/09/2026 : l'icône d'image cassée au milieu de
+  // l'affiche, et plus aucun nom. Le composant tient lui-même la solution de repli.
+  it("cède la place au titre écrit, et prévient l'appelant", () => {
+    const onError = vi.fn();
+    const { container } = render(
+      <CinemaLogo src="/logo-absent.png" alt="Dallas Buyers Club" surface="phone" onError={onError} fallback={<h1>Dallas Buyers Club</h1>} />
+    );
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText("Dallas Buyers Club")).toBeTruthy();
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne laisse jamais d'image cassée, même sans repli", () => {
+    const { container } = render(<CinemaLogo src="/logo-absent-2.png" alt="x" surface="hero" />);
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
   });
 });

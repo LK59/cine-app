@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
  * Le logo d'un titre, à une taille qui ne dépend pas de la forme du logo.
@@ -64,14 +64,27 @@ export function CinemaLogo({
   surface,
   className = "",
   onError,
+  fallback = null,
 }: {
   src: string;
   alt: string;
   surface: keyof typeof SURFACES;
   className?: string;
   onError?: () => void;
+  /**
+   * Ce qui nomme le titre quand le logo ne vient pas — en pratique, le titre écrit.
+   *
+   * Tenu ici plutôt que par chaque appelant : cinq endroits le faisaient chacun à sa façon, et le
+   * sixième, la bannière du téléphone, l'avait oublié. Une image refusée y laissait l'icône
+   * d'image cassée de Safari au milieu de l'affiche, et plus aucun nom (*Dallas Buyers Club*,
+   * 21/09/2026) — d'autant plus visible que la proportion déjà connue rendait l'image opaque.
+   */
+  fallback?: ReactNode;
 }) {
   const [ratio, setRatio] = useState<number | null>(() => KNOWN_RATIOS.get(src) ?? null);
+  // L'adresse refusée, et non un simple drapeau : un autre logo passé à la même instance a droit
+  // à sa chance.
+  const [failed, setFailed] = useState<string | null>(null);
   const [roomy, setRoomy] = useState(true);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -90,6 +103,8 @@ export function CinemaLogo({
     remember(src, img.naturalWidth / img.naturalHeight, setRatio);
   }, [src]);
 
+  if (failed === src) return <>{fallback}</>;
+
   const { compact, roomy: tall, maxWidth } = SURFACES[surface];
   const maxHeight = (roomy ? tall : compact) * heightFactor(ratio);
 
@@ -98,7 +113,10 @@ export function CinemaLogo({
     <img
       src={src}
       alt={alt}
-      onError={onError}
+      onError={() => {
+        setFailed(src);
+        onError?.();
+      }}
       ref={imgRef}
       onLoad={(e) => {
         const img = e.currentTarget;

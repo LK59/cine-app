@@ -2108,7 +2108,9 @@ export function ExperimentalPlayerHost({
         )
       )}
 
-      {openingSpinner && !error && !isMini && (
+      {/* Rien sous l'écran de coupure : « Analyse du fichier… » et son cercle transparaissaient à
+          travers son voile, deux messages contraires à la fois (vu sur iPhone le 21/09/2026). */}
+      {openingSpinner && !error && !networkLost && !isMini && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
@@ -2129,7 +2131,7 @@ export function ExperimentalPlayerHost({
 
       {/* A resume long enough to deserve a word gets the word only: the controls are already
           showing the spinner, and a second one beside it is what this looked like at first. */}
-      {!openingSpinner && resumeSpinner && waitingWord && !error && !isMini && (
+      {!openingSpinner && resumeSpinner && waitingWord && !error && !networkLost && !isMini && (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-10 flex justify-center">
           <p className="text-sm text-slate-400">{waitingWord}</p>
         </div>

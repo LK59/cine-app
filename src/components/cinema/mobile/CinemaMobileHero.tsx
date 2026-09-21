@@ -137,7 +137,13 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-center">
                     {item.logoUrl ? (
-                      <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mb-2 self-start" />
+                      <CinemaLogo
+                        src={item.logoUrl}
+                        alt={item.title}
+                        surface="phone"
+                        className="mb-2 self-start"
+                        fallback={<h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{item.title}</h1>}
+                      />
                     ) : (
                       <h1 className="mb-2 truncate text-xl font-bold text-white drop-shadow-lg">{item.title}</h1>
                     )}
@@ -162,7 +168,15 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (
-                      <CinemaLogo src={item.logoUrl} alt={item.title} surface="phone" className="mx-auto mb-2" />
+                      <CinemaLogo
+                        src={item.logoUrl}
+                        alt={item.title}
+                        surface="phone"
+                        className="mx-auto mb-2"
+                        fallback={
+                          <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
+                        }
+                      />
                     ) : (
                       <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
                     )}

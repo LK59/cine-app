@@ -378,6 +378,25 @@ sous les fiches et redessinait tout l'écran toutes les 8 s.
 
 ---
 
+## 11. Un logo qui ne vient pas
+
+**Règle.** Un logo refusé ne laisse jamais d'image cassée : il cède la place au titre écrit.
+
+**Fonction.** `CinemaLogo` (`src/components/cinema/CinemaLogo.tsx`) : il retient l'adresse
+refusée et rend son `fallback`, puis prévient l'appelant par `onError`.
+
+**Appelants.** Les deux bannières du bureau, les deux fiches du bureau, la fiche du téléphone
+(elles gèrent encore leur titre elles-mêmes par `onError`), et la bannière du téléphone, par
+`fallback`.
+
+**Tests.** `CinemaLogo.test.tsx`.
+
+**Corrigé le 21/09.** Cinq endroits le faisaient chacun à sa façon ; la bannière du téléphone,
+sixième, l'avait oublié : *Dallas Buyers Club* y montrait l'icône d'image cassée de Safari au
+milieu de l'affiche, et plus aucun nom.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits

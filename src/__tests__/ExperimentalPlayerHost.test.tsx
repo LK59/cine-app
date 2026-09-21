@@ -1183,4 +1183,23 @@ describe("relu le 22/09/2026", () => {
     expect(probes).toHaveLength(3);
     vi.useRealTimers();
   });
+
+  it("ne laisse pas « Analyse du fichier… » transparaître sous l'écran de coupure", async () => {
+    // Vu sur iPhone le 21/09/2026, en mode avion : le cercle et le mot de l'ouverture restaient
+    // dessinés sous le voile de « Connexion perdue ».
+    vi.useFakeTimers();
+    Object.defineProperty(navigator, "onLine", { value: false, writable: true, configurable: true });
+    const offline = Object.assign(new Error("Load failed"), { network: true });
+    nextProbe = () => {
+      throw offline;
+    };
+    mount();
+    await act(async () => {});
+    await act(async () => void vi.advanceTimersByTime(8000));
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+    expect(screen.queryByText("loading")).toBeNull();
+    expect(screen.queryByText("stillWorking")).toBeNull();
+    vi.useRealTimers();
+  });
 });
+
