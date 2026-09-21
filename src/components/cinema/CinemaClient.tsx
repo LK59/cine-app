@@ -41,7 +41,8 @@ import { CinemaSeriesDetail } from "@/components/cinema/CinemaSeriesDetail";
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
 import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
 import { CinemaDiscoveryRow } from "@/components/cinema/CinemaDiscoveryRow";
-import { useCinemaMyList } from "@/lib/useCinemaMyList";
+import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
+import { CinemaSkeletonCards, isRowPending } from "@/components/cinema/CinemaRowSkeleton";
 import { useRotatingIndex } from "@/lib/useRotatingIndex";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { useT } from "@/components/TranslationProvider";
@@ -49,6 +50,7 @@ import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/r
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
+import { prefetchImages, warmUpUrls } from "@/lib/cinemaWarmup";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
 // sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
@@ -91,60 +93,6 @@ const EDGE_FADE = {
 // and there's a label chip to fit beneath) — a distinct width from CARD_WIDTH, not a smaller
 // version of the same one.
 const CONTINUE_CARD_WIDTH = "w-32 sm:w-40 md:w-48 lg:w-56";
-
-// Backdrop/logo warm-up budget. This used to queue EVERY title in the library at once — on a
-// ~800-title library that's ~1600 image requests fired in one burst, which saturates the
-// browser's own per-host connection pool and makes the visible poster images (the ones actually
-// on screen) queue behind them. Only what's reachable within a few keypresses is worth
-// pre-warming; anything further out is a cold fetch that the backdrop's own 150ms debounce and
-// the browser cache already cover well enough.
-const PREFETCH_PER_ROW = 8;
-const PREFETCH_LIMIT = 120;
-const PREFETCH_CHUNK = 6;
-const PREFETCH_CHUNK_DELAY_MS = 300;
-
-// Fires the prefetches a few at a time instead of all at once, and hands back a cancel function
-// so a data refresh (or unmount) doesn't leave a queue running for a list that no longer applies.
-function prefetchImages(urls: string[]): () => void {
-  let cancelled = false;
-  let index = 0;
-  let timer: ReturnType<typeof setTimeout>;
-
-  function pump() {
-    if (cancelled) return;
-    for (let n = 0; n < PREFETCH_CHUNK && index < urls.length; n++, index++) {
-      Object.assign(new Image(), { src: urls[index] });
-    }
-    if (index < urls.length) timer = setTimeout(pump, PREFETCH_CHUNK_DELAY_MS);
-  }
-
-  // Deferred by a beat so it doesn't compete with the initial screen's own critical images.
-  timer = setTimeout(pump, 400);
-  return () => {
-    cancelled = true;
-    clearTimeout(timer);
-  };
-}
-
-// Spotlight first (that's what the hero opens on), then the head of each row — the cards you can
-// actually reach before scrolling. Deduped, capped, backdrop+logo per title.
-function warmUpUrls<T>(
-  spotlight: T[],
-  rows: Record<string, T[]>,
-  id: (item: T) => number,
-  urlsOf: (item: T) => (string | null)[]
-): string[] {
-  const seen = new Set<number>();
-  const urls: string[] = [];
-  const push = (item: T) => {
-    if (urls.length >= PREFETCH_LIMIT || seen.has(id(item))) return;
-    seen.add(id(item));
-    for (const url of urlsOf(item)) if (url) urls.push(url);
-  };
-  for (const item of spotlight) push(item);
-  for (const list of Object.values(rows)) for (const item of list.slice(0, PREFETCH_PER_ROW)) push(item);
-  return urls;
-}
 
 // Continue-watching items come from Jellyfin's own resume/next-up feeds (via the dashboard resume
 // payload for movies, and /api/cinema/next-up for series — see that route's own doc comment), not
@@ -298,7 +246,7 @@ export function CinemaClient() {
   /** Le catalogue de l'onglet affiché est-il arrivé ? Voir la remise à zéro du volet.*/
   const catalogueReady = mediaType === "series" ? series !== undefined : movies !== undefined;
 
-  const { data: resume } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
+  const { data: resume, error: resumeError } = useSWR<{ items: CinemaResumeItem[] }>(RESUME_KEY, fetcher, liveFeedOptions);
   // "Ma liste": the watchlist entries that are actually in the library, so every card on that
   // rail is playable (see the hook).
   const myListMovies = useCinemaMyList("movie", movies);
@@ -336,9 +284,12 @@ export function CinemaClient() {
   /**
    * « À suivre » ne dépend plus de l'onglet : sa rangée est commune aux deux (voir `continueRow`).
    */
-  const { data: nextUp } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
+  const { data: nextUp, error: nextUpError } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
   const continueSeries = nextUp?.items ?? [];
   const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
+  // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
+  const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
+  const myListPending = useCinemaMyListPending();
 
   // Warms the browser's own image cache for the backdrops/logos reachable within a few keypresses
   // (see warmUpUrls/prefetchImages above for the budget and why it's capped) — without it, the
@@ -772,6 +723,27 @@ export function CinemaClient() {
    * Les indices se suivent d'une liste à l'autre : c'est une rangée, donc un seul parcours aux
    * flèches.
    */
+  /**
+   * La place de « Reprendre » pendant qu'elle arrive. Hors du parcours des flèches (pas de
+   * `data-tv-rowroot`) : il n'y a encore rien à atteindre.
+   */
+  const continueSkeleton = continuePending && (
+    <div className="mb-6 snap-start">
+      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+      <div className="flex gap-3 overflow-hidden px-8 pb-4 pt-3 sm:px-12">
+        <CinemaSkeletonCards cardClassName={CONTINUE_CARD_WIDTH} shape="still" count={6} />
+      </div>
+    </div>
+  );
+  const myListSkeleton = myListPending && (
+    <div className="mb-6 snap-start">
+      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.myList")}</h2>
+      <div className="flex gap-3 overflow-hidden px-8 pb-4 pt-3 sm:px-12">
+        <CinemaSkeletonCards cardClassName={CARD_WIDTH} shape="poster" count={10} />
+      </div>
+    </div>
+  );
+
   const continueRow = hasContinue && (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
@@ -1021,6 +993,7 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
+              {continueSkeleton}
               {continueRow}
 
               {/* The curated rails, ahead of the alphabetical genre rows: what's best, what just
@@ -1052,6 +1025,7 @@ export function CinemaClient() {
                 />
               )}
 
+              {myListSkeleton}
               <CinemaRow
                 label={t("cinema.myList")}
                 rowKey="mylist-movies"
@@ -1132,6 +1106,7 @@ export function CinemaClient() {
                 ))}
               </CinemaSpotlight>
 
+              {continueSkeleton}
               {continueRow}
 
               {seriesLoading && (
@@ -1172,6 +1147,7 @@ export function CinemaClient() {
                 />
               )}
 
+              {myListSkeleton}
               <CinemaSeriesRow
                 label={t("cinema.myList")}
                 rowKey="mylist-series"

@@ -14,6 +14,11 @@ import { PushToggle } from "@/components/PushToggle";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import { OPEN_ONBOARDING_EVENT } from "./onboardingEvents";
+import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { prefetchImages, warmUpUrls, warmPlayerDecoders } from "@/lib/cinemaWarmup";
+import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
+import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 
 /**
  * L'écran d'accueil — trois réglages, puis le cinéma (21/09/2026).
@@ -124,6 +129,46 @@ export function PlayerOnboarding({
   // Après le rechargement d'une langue, on est revenu où il fallait : la reprise est consommée.
   useEffect(() => {
     writeSession(RESUME_KEY, null);
+  }, []);
+
+  /**
+   * Pendant qu'on règle, l'application se prépare (21/09/2026).
+   *
+   * Au premier lancement de l'application installée, le stockage part de zéro — sur iPhone, il
+   * est séparé de celui de Safari. L'accueil laisse une demi-minute où l'on ne regarde rien : on
+   * s'en sert pour les images du premier écran (bannières, logos, têtes de rangées) et pour les
+   * décodeurs du lecteur. Après un temps, pour ne rien disputer à l'affichage de l'accueil
+   * lui-même, et quelques requêtes à la fois.
+   */
+  const swrOptions = { revalidateOnMount: false, revalidateOnFocus: false, revalidateIfStale: false };
+  const { data: moviesCatalogue } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, swrOptions);
+  const { data: seriesCatalogue } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, swrOptions);
+  useEffect(() => {
+    /**
+     * Le budget d'un téléphone, pas celui du bureau : les bannières de la une (dix titres), puis
+     * les affiches des têtes de rangées — de l'ordre de 5 à 10 Mo. Les grandes images de toute la
+     * bibliothèque, ou ses 720 affiches, seraient trop sur des données mobiles, et Safari ne dit
+     * pas si l'on est en Wi-Fi.
+     */
+    const urls = [
+      ...(moviesCatalogue
+        ? [
+            ...warmUpUrls(moviesCatalogue.spotlight, {}, (m) => m.radarrId, (m) => [m.backdropUrl, m.logoUrl], 10),
+            ...warmUpUrls([], moviesCatalogue.rows, (m) => m.radarrId, (m) => [m.posterUrl], 60),
+          ]
+        : []),
+      ...(seriesCatalogue
+        ? [
+            ...warmUpUrls(seriesCatalogue.spotlight, {}, (s) => s.sonarrId, (s) => [s.backdropUrl, s.logoUrl], 5),
+            ...warmUpUrls([], seriesCatalogue.rows, (s) => s.sonarrId, (s) => [s.posterUrl], 40),
+          ]
+        : []),
+    ];
+    return prefetchImages(urls);
+  }, [moviesCatalogue, seriesCatalogue]);
+  useEffect(() => {
+    const timer = setTimeout(warmPlayerDecoders, 2500);
+    return () => clearTimeout(timer);
   }, []);
 
   const [lang, setLang] = useState<Locale>(locale);
