@@ -473,6 +473,14 @@ export function PlayerControls({
   // Only auto-hides while actually playing; paused stays visible indefinitely.
   // The hide also closes any open menu, so an expired timer can't leave an
   // invisible-but-clickable menu floating over the video.
+  // Lu par une référence : le raccourci clavier ne se réabonne pas à chaque lecture/pause, et sa
+  // fermeture gardait le `playing` du montage — en pause, puisque les contrôles arrivent avant
+  // la lecture. Une touche pendant le film montrait donc les contrôles pour de bon, sans jamais
+  // relancer leur disparition (relu le 22/09/2026).
+  const playingRef = useRef(playing);
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
   const showControls = useCallback(
     (delayMs: number = 3000) => {
       // Un geste vaut présence, et c'est ici qu'ils passent tous — un clic, une touche, un
@@ -481,14 +489,14 @@ export function PlayerControls({
       noteViewerPresent();
       setVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
-      if (playing) {
+      if (playingRef.current) {
         hideTimer.current = setTimeout(() => {
           setVisible(false);
           setMenu(null);
         }, delayMs);
       }
     },
-    [playing]
+    []
   );
 
   function hideControls() {

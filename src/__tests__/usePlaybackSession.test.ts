@@ -48,6 +48,18 @@ describe("usePlaybackSession", () => {
     expect(bodies("progress")[1].positionTicks).toBe(84 * TICKS);
   });
 
+  it("ne bat plus une fois l'arrêt rapporté, même si le lecteur reste monté", async () => {
+    // Relu le 22/09/2026 : le lecteur reste monté le temps de son animation de sortie, et un
+    // battement tombé là rouvrait chez Jellyfin la séance qu'on venait de clore.
+    const { result } = renderHook(() => usePlaybackSession(() => 42, session));
+    await act(async () => {
+      await result.current();
+    });
+    expect(bodies("stop")).toHaveLength(1);
+    act(() => void vi.advanceTimersByTime(30_000));
+    expect(bodies("progress")).toHaveLength(0);
+  });
+
   it("annonce le démarrage quand le lecteur n'a personne d'autre pour le faire", () => {
     // The stable player's start is announced by the negotiation of its stream; the experimental
     // one negotiates nothing, so without this it reported against a session Jellyfin never knew.

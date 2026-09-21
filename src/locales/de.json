@@ -1151,7 +1151,19 @@
       "badge": "Experimentell",
       "noAudio": "Wiedergabe ohne Ton: {reason}",
       "preparing": "Video wird vorbereitet…",
-      "stillWorking": "Läuft noch…"
+      "stillWorking": "Läuft noch…",
+      "externalSubtitlesUnavailable": "Externe Untertitel nicht verfügbar.",
+      "resumedAfterInterruption": "Wiedergabe nach einer Unterbrechung fortgesetzt.",
+      "audioTrackRefused": "Diese Tonspur konnte nicht geöffnet werden: die vorherige läuft weiter.",
+      "passageSkipped": "Ein Abschnitt dieser Datei konnte nicht dekodiert werden: die Wiedergabe geht direkt danach weiter.",
+      "browserCouldNotRead": "Dieser Browser konnte die Datei nicht abspielen ({detail}).",
+      "connectionBack": "Verbindung wiederhergestellt",
+      "connectionLost": "Verbindung unterbrochen",
+      "connectionBackBody": "Die Wiedergabe geht dort weiter, wo sie angehalten hat.",
+      "connectionLostBody": "Die Wiedergabe geht genau hier und in derselben Sprache weiter, sobald das Netz zurück ist.",
+      "resumeAt": "Fortsetzung bei {time}",
+      "chosenTrack": "gewählte Spur",
+      "retry": "Erneut versuchen"
     },
     "volume": "Lautstärke",
     "nav": {

@@ -7,7 +7,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, returningFor, type StableTakeover } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -152,9 +152,9 @@ export function PlayerHost() {
    */
   const handCastBack = useCallback(
     (resumeAt: number) => {
-      if (itemId) stepBack(itemId, resumeAt);
+      if (itemId) stepBack(itemId, resumeAt, session);
     },
-    [itemId, stepBack]
+    [itemId, session, stepBack]
   );
 
   if (!session) return null;
@@ -181,8 +181,8 @@ export function PlayerHost() {
    * règle sur la même question. `?? 0` n'a pas lieu d'être ici : `returning` porte toujours un
    * nombre.
    */
-  const playing =
-    returning && returning.itemId === session.itemId ? { ...session, resumeAt: returning.resumeAt } : session;
+  const back = returningFor(returning, session);
+  const playing = back !== null ? { ...session, resumeAt: back } : session;
 
   // Sans lecteur serveur, il n'y a pas d'aiguillage : le choix du compte comme le repli
   // automatique désignent tous deux un lecteur qui n'existe pas sur cette installation. Un

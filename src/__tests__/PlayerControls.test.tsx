@@ -670,3 +670,27 @@ describe("PlayerControls au clavier, sans focus dans le lecteur", () => {
     expect(video!.muted).toBe(true);
   });
 });
+
+describe("PlayerControls — une touche pendant le film", () => {
+  it("montre les contrôles puis les retire, comme un geste de la souris", async () => {
+    // Relu le 22/09/2026 : le raccourci gardait le `playing` du montage — en pause —, si bien
+    // qu'une touche pendant le film affichait les contrôles pour de bon.
+    stubMediaFetches();
+    vi.useFakeTimers();
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    act(() => void video.dispatchEvent(new Event("play")));
+    await act(async () => void vi.advanceTimersByTime(4000));
+    const overlay = () => container.querySelector(".absolute.inset-0.z-10 > div") as HTMLElement;
+    const shown = () => !overlay().className.includes("opacity-0");
+    expect(shown()).toBe(false);
+
+    act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight" })));
+    expect(shown()).toBe(true);
+    await act(async () => void vi.advanceTimersByTime(4000));
+    expect(shown()).toBe(false);
+  });
+});

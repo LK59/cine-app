@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import fs from "fs";
@@ -45,6 +45,9 @@ export default defineConfig({
      */
     clearMocks: false,
     env: { DATA_DIR: TEST_DATA_DIR },
+    // Les copies de travail d'agents (`.claude/worktrees/…`) vivent dans le dépôt : sans ceci,
+    // la vérification lançait aussi leurs tests, à moitié écrits, contre leurs propres sources.
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
   },
   resolve: {
     alias: {

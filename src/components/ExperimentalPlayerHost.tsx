@@ -239,6 +239,12 @@ export function ExperimentalPlayerHost({
   onFallback: (reason: string, takeover?: StableTakeover) => void;
 }) {
   const t = useT();
+  // Pour les phrases écrites depuis le pipeline : ses gestionnaires sont construits par un effet
+  // qu'il ne faut pas reconstruire au changement de langue — ils lisent la traduction par ici.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const playback = usePlayback();
   const { itemId, title: openedAs } = session;
 
@@ -253,8 +259,32 @@ export function ExperimentalPlayerHost({
   // reprendre. `?? 0` et non la position du serveur : laisser zéro est ce qui permet au calcul de
   // `startSeconds` plus bas de retomber sur `playbackState`, quand la séance ne portait rien.
   const positionRef = useRef(session.resumeAt ?? 0);
+  /**
+   * Si `positionRef` dit où en est cette lecture, ou seulement ce qu'on lui a demandé.
+   *
+   * Tant que la position de départ n'est pas résolue, elle peut valoir zéro pour « demander au
+   * serveur » — et la transmettre à un relais l'aurait changée en « depuis le début ».
+   */
+  const positionKnownRef = useRef(false);
+  /** `announced`, lisible depuis `fallToStable` qui ne doit dépendre de rien. */
+  const everReadyRef = useRef(false);
+  /** `takeoverNow`, pour `fallToStable` qui est déclaré avant lui et doit rester stable. */
+  const takeoverNowRef = useRef<() => StableTakeover | undefined>(() => undefined);
 
   const [ready, setReady] = useState(false);
+  /**
+   * Prêt au moins une fois : la séance Jellyfin commence là, et ne finit qu'avec le lecteur.
+   *
+   * Elle suivait `ready`, que chaque reconstruction rabaisse — et une reconstruction est devenue
+   * un geste ordinaire : changer pour une piste d'un autre format, revenir d'un iPhone verrouillé,
+   * se remettre d'une coupure. Chacune envoyait à Jellyfin un arrêt puis une nouvelle lecture :
+   * des séances fantômes dans son activité, et « en cours » qui clignotait (relu le 22/09/2026).
+   */
+  const [announced, setAnnounced] = useState(false);
+  /** Relances automatiques après une coupure depuis la dernière image — voir leur espacement. */
+  const networkRetriesRef = useRef(0);
+  /** L'état de pause du spectateur au début d'un changement de piste de même format. */
+  const pausedBeforeSwitchRef = useRef(false);
   // Only failures that happen *during* playback are state. The two that are already known from
   // the fetch — the server refusing the file, and the fetch itself failing — are derived below,
   // because pushing them into state from an effect is both a cascading render and a second
@@ -335,9 +365,17 @@ export function ExperimentalPlayerHost({
       setRuntimeError(reason);
       return;
     }
+    // Un renoncement en cours de film emporte où en est le film. Seuls deux appelants passaient
+    // un relais — la diffusion et la piste impossible — et tous les autres renoncements en cours
+    // de route (moteur à bout de reconstructions, source perdue, 35 s sans image après une
+    // reconstruction, bouton de l'écran d'erreur) rouvraient le lecteur stable à la position
+    // d'ouverture, sur la piste par défaut : une heure de film rembobinée, dans une autre langue
+    // (relu le 22/09/2026). Avant la première image, rien : la séance dit déjà tout — voir
+    // `StableTakeover`.
+    const handover = takeover ?? (everReadyRef.current ? takeoverNowRef.current() : undefined);
     trace(`repli : passage au lecteur stable — ${reason}`);
-    reportPlayback("fallback", { ...file, reason, path, ...(takeover ? { takeover } : {}) });
-    onFallbackRef.current(reason, takeover);
+    reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}) });
+    onFallbackRef.current(reason, handover);
   }, []);
   /**
    * A passing notice, with the moment it was raised.
@@ -533,7 +571,7 @@ export function ExperimentalPlayerHost({
         .catch(() => {
           // An abandoned fetch is not a failure to report: the viewer asked for something else,
           // or closed the film.
-          if (!fetching.signal.aborted) showWarning("Sous-titres externes indisponibles.");
+          if (!fetching.signal.aborted) showWarning(tRef.current("player.experimental.externalSubtitlesUnavailable"));
         });
     },
     [showWarning]
@@ -729,12 +767,18 @@ export function ExperimentalPlayerHost({
    */
   const takeoverNow = useCallback(
     (): StableTakeover => ({
-      // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`.
-      resumeAt: videoElRef.current?.currentTime ?? session.resumeAt ?? 0,
+      // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`. La position suivie sur
+      // tous les chemins, et non celle de l'élément : sur le chemin canevas l'élément est une
+      // coquille vide qui dit toujours zéro, et juste après une reconstruction il n'a pas encore
+      // été posé là où le film en était.
+      resumeAt: positionKnownRef.current ? positionRef.current : session.resumeAt ?? 0,
       audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, currentAudio ?? -1),
     }),
     [session.resumeAt, tracks.audio, info?.audio, currentAudio]
   );
+  useEffect(() => {
+    takeoverNowRef.current = takeoverNow;
+  }, [takeoverNow]);
   /**
    * Où en est ce spectateur, et dans quelles langues il regarde — relu à chaque ouverture.
    *
@@ -903,7 +947,7 @@ export function ExperimentalPlayerHost({
     // progress still has to be reported, or resume points would stop updating for this player.
     // It announces its own start for the same reason: nothing else tells the server this film is
     // being watched, so without it the reports described a session Jellyfin had never heard of.
-    ready
+    announced
       ? {
           itemId,
           playSessionId: `cine-engine-${itemId}`,
@@ -1090,6 +1134,9 @@ export function ExperimentalPlayerHost({
       // written afterwards can be undone by it.
       rebuildAtRef.current = null;
       setReady(true);
+      setAnnounced(true);
+      everReadyRef.current = true;
+      networkRetriesRef.current = 0;
     };
     // Where to open. A rebuild that asked for a position gets it; otherwise the film resumes
     // where it actually is, and only a player that has never played anything falls back to where
@@ -1102,6 +1149,7 @@ export function ExperimentalPlayerHost({
     // s'écoule le temps de télécharger un en-tête et un groupe d'images, et une fermeture dans
     // cette fenêtre rapportait zéro.
     positionRef.current = startSeconds;
+    positionKnownRef.current = true;
 
     // The file decides which pipeline runs, not a setting: repackaging it for the browser's own
     // decoder is better on every axis when the codecs allow it, and decoding it ourselves is the
@@ -1257,7 +1305,9 @@ export function ExperimentalPlayerHost({
         const failure = element.error;
         const said = `Ce navigateur n'a pas pu lire ce fichier${failure?.message ? ` : ${failure.message}` : ` (code ${failure?.code ?? "?"})`}.`;
         reportPlayback("error", { ...describeFileRef.current(), reason: said, at: positionRef.current });
-        setRuntimeError(said);
+        // Le journal garde sa phrase ; l'écran parle la langue du spectateur.
+        const detail = failure?.message || `code ${failure?.code ?? "?"}`;
+        setRuntimeError(tRef.current("player.experimental.browserCouldNotRead", { detail }));
       };
       // Set once the element knows how long the film is: asking earlier is ignored.
       const onMetadata = () => {
@@ -1333,7 +1383,7 @@ export function ExperimentalPlayerHost({
           // GPU context it reclaimed — neither of which says anything about the file.
           if (engineStarted && spendRebuild()) {
             reportPlayback("rebuild", { ...describeFileRef.current(), reason: message, at: positionRef.current });
-            showWarning("Reprise de la lecture après une interruption.");
+            showWarning(tRef.current("player.experimental.resumedAfterInterruption"));
             restart(positionRef.current, `le moteur s'est arrêté (${message})`);
             return;
           }
@@ -1382,12 +1432,22 @@ export function ExperimentalPlayerHost({
         // les deux répondent pareil — et elles lisent les mêmes pistes, par la même règle — il
         // n'y a plus de bascule. Rien quand le spectateur a déjà choisi : c'est son choix qui compte.
         chooseAudioTrack: (tracks) => {
+          // Le choix du spectateur d'abord : une reconstruction (moteur arrêté par la plateforme,
+          // coupure) rouvrait sur la piste du compte, menu resté sur la sienne. Le chemin
+          // remultiplexé le faisait déjà par `audioTrackNumber` (relu le 22/09/2026).
+          const wanted = wantedAudioRef.current;
+          if (wanted !== null) return tracks.some((track) => track.number === wanted) ? wanted : null;
           const preferences = playbackState?.preferences ?? null;
-          if (!preferences || wantedAudioRef.current !== null) return null;
+          if (!preferences) return null;
           return chooseAudioTrack(tracks, preferences)?.number ?? null;
         },
       });
       if (cancelled) return;
+      // Les sous-titres du conteneur choisis avant la reconstruction, redonnés au nouveau moteur
+      // comme `startRemux` le fait : sans cela le menu les disait choisis et l'écran n'en montrait
+      // aucun. Un fichier à côté du film n'a pas besoin de lui — il est affiché ici.
+      const keptSubtitle = wantedSubtitleRef.current;
+      if (keptSubtitle !== null && !isExternalTrack(keptSubtitle)) engine.setSubtitleTrack(keptSubtitle);
 
       const built = new MediaElementFacade(engine);
       facadeRef.current = built;
@@ -1427,7 +1487,7 @@ export function ExperimentalPlayerHost({
       });
       wantedAudioRef.current = pending.from;
       setCurrentAudio(pending.from);
-      showWarning("Cette piste audio n'a pas pu être ouverte : la précédente continue.");
+      showWarning(tRef.current("player.experimental.audioTrackRefused"));
       restart(startSeconds, "retour à la piste d'avant, que le lecteur natif sait ouvrir");
       return true;
     };
@@ -1485,7 +1545,7 @@ export function ExperimentalPlayerHost({
           // Only the first of these is the viewer's business: a passage of the film is being
           // skipped, and a jump nobody explained looks like a fault. Rebuilding in place and
           // carrying on is not something they need to be told about — it is in the record.
-          if (again) showWarning("Un passage de ce fichier n'a pas pu être décodé : la lecture reprend juste après.");
+          if (again) showWarning(tRef.current("player.experimental.passageSkipped"));
           return;
         }
         fallToStable(message);
@@ -1589,10 +1649,19 @@ export function ExperimentalPlayerHost({
   }, [networkLost]);
 
   // Back on its own, so the viewer does not have to notice before the film can.
+  //
+  // Espacé à chaque échec : « en ligne » dit que le téléphone a du réseau, pas que le serveur
+  // répond. Pendant un redéploiement — plusieurs par jour — le lecteur relançait toutes les
+  // 0,8 s, sans fin, une reconstruction vouée à échouer (relu le 22/09/2026). 0,8 s, puis 1,6,
+  // 3,2… jusqu'à 30 s ; le compte repart à zéro dès qu'une image est revenue.
   useEffect(() => {
     if (!networkLost || !online) return;
     const at = networkLost.at;
-    const id = setTimeout(() => restart(at, "le réseau est revenu"), 800);
+    const delay = Math.min(800 * 2 ** networkRetriesRef.current, 30_000);
+    const id = setTimeout(() => {
+      networkRetriesRef.current += 1;
+      restart(at, "le réseau est revenu");
+    }, delay);
     return () => clearTimeout(id);
   }, [networkLost, online, restart]);
 
@@ -1772,18 +1841,16 @@ export function ExperimentalPlayerHost({
           <WifiOff className={online ? "text-slate-500" : "text-amber-400"} size={32} />
           <div>
             <p className="text-base font-medium text-white">
-              {online ? "La connexion est revenue" : "Connexion perdue"}
+              {online ? t("player.experimental.connectionBack") : t("player.experimental.connectionLost")}
             </p>
             <p className="mt-1 max-w-md text-sm leading-6 text-slate-400">
-              {online
-                ? "La lecture reprend là où elle s'était arrêtée."
-                : "La lecture reprendra exactement ici, dans la même langue, dès que le réseau sera de retour."}
+              {online ? t("player.experimental.connectionBackBody") : t("player.experimental.connectionLostBody")}
             </p>
           </div>
           <p className="text-xs text-slate-500">
-            {`Reprise à ${formatClock(networkLost.at)}`}
+            {t("player.experimental.resumeAt", { time: formatClock(networkLost.at) })}
             {networkLost.audio !== null &&
-              ` · ${tracks.audio.find((a) => a.number === networkLost.audio)?.language ?? "piste choisie"}`}
+              ` · ${tracks.audio.find((a) => a.number === networkLost.audio)?.language ?? t("player.experimental.chosenTrack")}`}
           </p>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
             <button
@@ -1792,7 +1859,7 @@ export function ExperimentalPlayerHost({
               className="btn-primary inline-flex items-center gap-2"
             >
               <RotateCw size={16} />
-              Réessayer
+              {t("player.experimental.retry")}
             </button>
             <button
               type="button"
@@ -1812,10 +1879,12 @@ export function ExperimentalPlayerHost({
           itemId={itemId}
           title={info?.title ?? openedAs}
           onReplay={() => {
-            const element = videoElRef.current;
-            if (element) {
-              element.currentTime = 0;
-              void element.play().catch(() => {});
+            // Le moteur canevas quand c'est lui qui joue : l'élément vidéo n'y est qu'une coquille
+            // sans source, et « Revoir » ne faisait qu'effacer l'écran de fin (relu le 22/09/2026).
+            const media = facadeRef.current ?? videoElRef.current;
+            if (media) {
+              media.currentTime = 0;
+              void media.play().catch(() => {});
             }
             setEnded(false);
           }}
@@ -1842,7 +1911,7 @@ export function ExperimentalPlayerHost({
           <ExperimentalPlayerReport input={report} />
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             {serverFallback !== false && (
-              <button type="button" onClick={() => onFallback(error ?? "demandé par le spectateur")} className="btn-primary">
+              <button type="button" onClick={() => fallToStable(error ?? "demandé par le spectateur")} className="btn-primary">
                 {t("player.experimental.switchToStable")}
               </button>
             )}
@@ -1979,7 +2048,12 @@ export function ExperimentalPlayerHost({
                   to: id,
                   startedAt: Date.now(),
                 };
-                keepPausedRef.current = videoElRef.current?.paused ?? false;
+                // Pendant un changement de même format, WebKit met l'élément en pause lui-même le
+                // temps de remplir le son : ce `paused`-là n'est pas celui du spectateur. On lit
+                // alors celui d'avant ce changement, sans quoi le film reconstruit restait en pause.
+                keepPausedRef.current = switchingAudio
+                  ? pausedBeforeSwitchRef.current
+                  : videoElRef.current?.paused ?? false;
                 wantedAudioRef.current = id;
                 setCurrentAudio(id);
                 setFrozen(freezeFrame());
@@ -1991,6 +2065,7 @@ export function ExperimentalPlayerHost({
                 // The menu follows what actually happened rather than what was asked for: a track
                 // the browser turns out not to be able to open leaves the previous one playing.
                 wantedAudioRef.current = id;
+                pausedBeforeSwitchRef.current = videoElRef.current?.paused ?? false;
                 setSwitchingAudio(true);
                 const from = remuxRef.current?.currentAudioTrack ?? null;
                 const fromLabel = remuxRef.current?.diagnostics["Audio"] ?? "";
@@ -1998,12 +2073,17 @@ export function ExperimentalPlayerHost({
                 void remuxRef.current
                   ?.selectAudioTrack(id)
                   .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id))
+                  // Un pipeline détruit en plein changement (fermeture, reconstruction) rejette :
+                  // ce n'est pas une erreur à remonter au journal, le menu suit déjà l'état réel.
+                  .catch(() => {})
                   .finally(() => {
                     setSwitchingAudio(false);
                     reportAudioSwitch(from, fromLabel, id, startedAt, remuxRef.current);
                   });
               } else {
-                void engineRef.current?.setAudioTrack(id);
+                // Retenu comme sur l'autre chemin, pour qu'une reconstruction rouvre sur elle.
+                wantedAudioRef.current = id;
+                void engineRef.current?.setAudioTrack(id).catch(() => {});
               }
             }}
             subtitleTracks={subtitleChoices.map((track) => ({

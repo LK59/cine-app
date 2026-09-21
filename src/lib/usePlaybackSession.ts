@@ -102,7 +102,12 @@ export function usePlaybackSession(
       report("progress", session, ticks(), paused());
     };
 
-    const interval = setInterval(() => report("progress", session, ticks(), paused()), HEARTBEAT_MS);
+    // Rien après l'arrêt : le lecteur reste monté le temps de son animation de sortie, et un
+    // battement tombé dans cette fenêtre rouvrait chez Jellyfin la séance qu'on venait de clore.
+    const interval = setInterval(() => {
+      if (stoppedRef.current) return;
+      report("progress", session, ticks(), paused());
+    }, HEARTBEAT_MS);
 
     /**
      * Une page mise de côté n'est pas une page fermée.

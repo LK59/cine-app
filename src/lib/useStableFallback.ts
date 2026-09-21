@@ -86,9 +86,24 @@ export interface StableFallback {
    * La garde est dans la fonction et non chez l'appelant — c'est la règle, elle ne doit pas
    * dépendre de qui appelle.
    */
-  stepBack: (itemId: string, resumeAt: number) => void;
-  /** Où reprendre quand le lecteur natif est repris après une diffusion, et pour quel film. */
-  returning: { itemId: string; resumeAt: number } | null;
+  stepBack: (itemId: string, resumeAt: number, owner?: unknown) => void;
+  /** Où reprendre quand le lecteur natif est repris après une diffusion — lire par `returningFor`. */
+  returning: { itemId: string; resumeAt: number; owner?: unknown } | null;
+}
+
+/**
+ * La position de retour de diffusion, si elle appartient bien à cette lecture-ci — sinon rien.
+ *
+ * La même règle que `takeoverFor`, et pour la même raison. Comparée au seul film, la position
+ * rendue par une diffusion survivait à la lecture : rouvrir ce film plus tard, même par
+ * « Recommencer », le rouvrait là où la diffusion s'était arrêtée — `returning` ne se vide qu'à la
+ * bascule suivante (relu le 22/09/2026).
+ */
+export function returningFor(
+  returning: { itemId: string; resumeAt: number; owner?: unknown } | null,
+  session: { itemId: string }
+): number | null {
+  return returning && returning.itemId === session.itemId && returning.owner === session ? returning.resumeAt : null;
 }
 
 /**
@@ -107,7 +122,7 @@ export function useStableFallback(): StableFallback {
   const [negotiating, setNegotiating] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [takeover, setTakeover] = useState<StableTakeover | null>(null);
-  const [returning, setReturning] = useState<{ itemId: string; resumeAt: number } | null>(null);
+  const [returning, setReturning] = useState<{ itemId: string; resumeAt: number; owner?: unknown } | null>(null);
 
   const stepAside = useCallback((itemId: string, why: string, resumeInto?: StableTakeover) => {
     setHandedOver((ids) => {
@@ -125,13 +140,13 @@ export function useStableFallback(): StableFallback {
     });
   }, []);
 
-  const stepBack = useCallback((itemId: string, resumeAt: number) => {
+  const stepBack = useCallback((itemId: string, resumeAt: number, owner?: unknown) => {
     setTakeover((current) => {
       // Seule une bascule de diffusion revient. Vérifié ici plutôt que chez l'appelant : c'est la
       // règle elle-même, et une règle qui dépend de qui l'invoque n'en est pas une.
       if (!current?.cast) return current;
       setHandedOver((ids) => ids.filter((id) => id !== itemId));
-      setReturning({ itemId, resumeAt });
+      setReturning({ itemId, resumeAt, owner });
       return null;
     });
   }, []);

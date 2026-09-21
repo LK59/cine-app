@@ -34,15 +34,33 @@ vi.mock("@/components/MiniPlayer", () => ({
   MiniPlayerChrome: () => <div data-testid="mini" />,
   useMiniPlayerDrag: () => ({ pos: { x: 0, y: 0 }, size: { width: 1, height: 1 }, isDragging: false, handlers: {} }),
 }));
+const facadeSeeks: number[] = [];
 vi.mock("@/lib/webcodecs/mediaFacade", () => ({
   MediaElementFacade: class {
+    constructor(readonly engine: { seek?: (at: number) => void; play: () => Promise<void> }) {}
     destroy = vi.fn();
+    set currentTime(at: number) {
+      facadeSeeks.push(at);
+    }
+    play() {
+      return this.engine.play();
+    }
   },
   asVideoElement: (facade: unknown) => facade,
 }));
 
 const stopPlaybackNow = vi.fn();
-vi.mock("@/lib/usePlaybackSession", () => ({ usePlaybackSession: () => stopPlaybackNow }));
+/** Ce que le lecteur annonce à Jellyfin, rendu après rendu : `null` veut dire « pas de séance ». */
+const announcedSessions: unknown[] = [];
+vi.mock("@/lib/usePlaybackSession", () => ({
+  usePlaybackSession: (_position: unknown, session: unknown) => {
+    announcedSessions.push(session);
+    return stopPlaybackNow;
+  },
+}));
+vi.mock("@/components/player/PlayerEndScreen", () => ({
+  PlayerEndScreen: (props: { onReplay: () => void }) => <button onClick={props.onReplay}>revoir</button>,
+}));
 vi.mock("@/components/PlaybackProvider", () => ({
   usePlayback: () => ({ close: vi.fn(), minimize: vi.fn(), expand: vi.fn(), advance: vi.fn(), session: null }),
 }));
@@ -167,6 +185,10 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
   }),
 }));
 
+/** Les pistes du moteur canevas — une seule par défaut, les tests qui en veulent plus le disent. */
+const ONE_ENGINE_TRACK = [{ number: 1, codecId: "A_AAC", language: "fre", name: null, isDefault: true, isForced: false }];
+let engineAudio: unknown[] = ONE_ENGINE_TRACK;
+let engineSubtitles: unknown[] = [];
 const engineHandlers = new Map<string, ((payload?: unknown) => void)[]>();
 /** Les moteurs construits, pour lire ce qu'on a demandé à `load`. */
 const engineInstances: { load: ReturnType<typeof vi.fn> }[] = [];
@@ -178,8 +200,8 @@ vi.mock("@/lib/webcodecs/engine", () => ({
     constructor() {
       engineInstances.push(this as never);
     }
-    audioTracks = [{ number: 1, codecId: "A_AAC", language: "fre", name: null, isDefault: true, isForced: false }];
-    subtitleTracks = [];
+    audioTracks = engineAudio;
+    subtitleTracks = engineSubtitles;
     currentAudioTrack = 1;
     diagnostics = {};
     on(event: string, handler: (payload?: unknown) => void) {
@@ -240,6 +262,9 @@ beforeEach(() => {
   probes = [];
   engineHandlers.clear();
   engineInstances.length = 0;
+  engineAudio = ONE_ENGINE_TRACK;
+  engineSubtitles = [];
+  announcedSessions.length = 0;
   swr = { data: info(), error: undefined };
   viewerState = { resumeSeconds: 0, preferences: null };
   stubFetch();
@@ -293,7 +318,7 @@ describe("une piste que ce chemin ne portera jamais", () => {
     swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
-    videoElement(2400);
+    await act(async () => void fireEvent(videoElement(2400), new Event("timeupdate")));
 
     act(() => void screen.getByText(/^audio:Anglais/).click());
 
@@ -436,8 +461,10 @@ describe("une coupure réseau", () => {
     await act(async () => void fireEvent(element, new Event("timeupdate")));
     act(() => probes[0].onError("plus de réseau", "network"));
 
-    expect(screen.getByText("Connexion perdue")).toBeTruthy();
-    expect(screen.getByText(/Reprise à 1 h 02/)).toBeTruthy();
+    expect(screen.getByText("connectionLost")).toBeTruthy();
+    // La phrase est traduite (le double de `useT` rend la fin de la clé) ; la position, elle, est
+    // vérifiée par la reprise du test suivant.
+    expect(screen.getByText(/resumeAt/)).toBeTruthy();
     // Handing the file to a player that needs the very same network would give up hardware
     // decoding for a reason that has nothing to do with the file.
     expect(onFallback).not.toHaveBeenCalled();
@@ -450,7 +477,7 @@ describe("une coupure réseau", () => {
 
     await act(async () => void fireEvent(videoElement(3725), new Event("timeupdate")));
     act(() => probes[0].onError("plus de réseau", "network"));
-    await act(async () => void fireEvent.click(screen.getByRole("button", { name: /Réessayer/ })));
+    await act(async () => void fireEvent.click(screen.getByRole("button", { name: /retry/ })));
 
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1].startSeconds).toBeCloseTo(3725, 1);
@@ -470,7 +497,7 @@ describe("une coupure réseau", () => {
     mount();
     await act(async () => {});
 
-    expect(screen.getByText("Connexion perdue")).toBeTruthy();
+    expect(screen.getByText("connectionLost")).toBeTruthy();
     expect(onFallback).not.toHaveBeenCalled();
 
     // And it keeps waiting. The give-up timer had no idea the network was out, so an outage
@@ -478,7 +505,7 @@ describe("une coupure réseau", () => {
     // same network — silently, and against the whole point of this screen.
     await act(async () => void vi.advanceTimersByTime(60_000));
     expect(onFallback).not.toHaveBeenCalled();
-    expect(screen.getByText("Connexion perdue")).toBeTruthy();
+    expect(screen.getByText("connectionLost")).toBeTruthy();
     vi.useRealTimers();
   });
 
@@ -488,11 +515,11 @@ describe("une coupure réseau", () => {
     mount();
     await act(async () => {});
     act(() => probes[0].onError("plus de réseau", "network"));
-    expect(screen.getByText("Connexion perdue")).toBeTruthy();
+    expect(screen.getByText("connectionLost")).toBeTruthy();
 
     Object.defineProperty(navigator, "onLine", { value: true, writable: true, configurable: true });
     act(() => void window.dispatchEvent(new Event("online")));
-    expect(screen.getByText("La connexion est revenue")).toBeTruthy();
+    expect(screen.getByText("connectionBack")).toBeTruthy();
 
     await act(async () => void vi.advanceTimersByTime(1000));
     expect(probes.length).toBeGreaterThan(1);
@@ -558,7 +585,39 @@ describe("une source perdue", () => {
       act(() => probes[at - 1].onError("morte"));
       await act(async () => {});
     }
-    expect(onFallback).toHaveBeenCalledWith("morte");
+    expect(onFallback).toHaveBeenCalledWith("morte", expect.anything());
+  });
+
+  it("confie au lecteur stable l'endroit du film et la piste, pas la position d'ouverture", async () => {
+    // Relu le 22/09/2026 : seuls la diffusion et la piste impossible transmettaient un relais.
+    // Un renoncement en cours de film — ici, une source perdue quatre fois — rouvrait le lecteur
+    // stable au point d'ouverture de la séance : une heure de film rembobinée.
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    mount({ resumeAt: 600 });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(4200), new Event("timeupdate")));
+    remux.lost = true;
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const at = probes.length;
+      act(() => probes[at - 1].onError("morte"));
+      await act(async () => {});
+    }
+    const [reason, takeover] = onFallback.mock.calls[0];
+    expect(reason).toBe("morte");
+    // Là où le film en était — un peu au-delà, même : les reconstructions sautent le passage qui
+    // venait d'échouer —, et jamais les 600 s de l'ouverture. Sur la piste qui jouait.
+    expect(takeover.resumeAt).toBeGreaterThanOrEqual(4200);
+    expect(takeover.resumeAt).toBeLessThan(4300);
+    expect(takeover.audioStreamIndex).toBe(1);
+  });
+
+  it("ne transmet rien quand rien n'a encore joué : la séance dit déjà où ouvrir", async () => {
+    swr = { data: info({ refusedReason: "conteneur avi" }), error: undefined };
+    serverFallback = true;
+    mount({ resumeAt: 600 });
+    await waitFor(() => expect(onFallback).toHaveBeenCalled());
+    expect(onFallback.mock.calls[0]).toEqual(["conteneur avi"]);
   });
 });
 
@@ -681,7 +740,7 @@ describe("une piste d'un autre format", () => {
     // Ni moteur canevas, ni lecteur serveur : le film continue sur la piste qui jouait.
     expect(engineInstances).toHaveLength(0);
     expect(onFallback).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByText(/n'a pas pu être ouverte/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("audioTrackRefused")).toBeTruthy());
   });
 
   it("garde le changement rapide entre deux pistes du même format", async () => {
@@ -853,7 +912,7 @@ describe("les sous-titres posés à côté du film", () => {
     await waitFor(() => expect(screen.getByText(/^st:Français — full \(external\)/)).toBeTruthy());
     await act(async () => void fireEvent.click(screen.getByText(/^st:Français — full \(external\)/)));
 
-    await waitFor(() => expect(screen.getByText(/Sous-titres externes indisponibles/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("externalSubtitlesUnavailable")).toBeTruthy());
     // A subtitle that could not be fetched is not a reason to abandon the film.
     expect(onFallback).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
@@ -937,7 +996,7 @@ describe("le chemin canvas", () => {
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
 
     emit("error", "Aucun décodeur disponible pour l'audio DTS.");
-    await waitFor(() => expect(onFallback).toHaveBeenCalledWith("Aucun décodeur disponible pour l'audio DTS."));
+    await waitFor(() => expect(onFallback).toHaveBeenCalledWith("Aucun décodeur disponible pour l'audio DTS.", expect.anything()));
     expect(probes).toHaveLength(1);
   });
 
@@ -953,7 +1012,7 @@ describe("le chemin canvas", () => {
     // Nothing has played yet, so this one is answered by handing the file over rather than by
     // trying the same thing again.
     emit("error", "décodage impossible");
-    expect(onFallback).toHaveBeenCalledWith("décodage impossible");
+    expect(onFallback).toHaveBeenCalledWith("décodage impossible", expect.anything());
   });
 });
 
@@ -1048,5 +1107,80 @@ describe("le canevas ouvre sur la bonne piste", () => {
     mount();
     await waitFor(() => expect(engineInstances[0]?.load).toHaveBeenCalled());
     expect(chooser()(tracks)).toBeNull();
+  });
+});
+
+describe("relu le 22/09/2026", () => {
+  it("rouvre le moteur canevas reconstruit sur la piste et les sous-titres choisis", async () => {
+    // Le menu restait sur le choix du spectateur, le film revenait sur la piste du compte et sans
+    // ses sous-titres : le chemin canevas ne retenait pas le choix audio, et ne redonnait pas les
+    // sous-titres du conteneur au nouveau moteur.
+    engineAudio = [
+      { number: 1, codecId: "A_AAC", language: "fre", name: null, isDefault: true, isForced: false },
+      { number: 2, codecId: "A_AAC", language: "eng", name: null, isDefault: false, isForced: false },
+    ];
+    engineSubtitles = [{ number: 5, codecId: "S_TEXT/UTF8", language: "fre", name: null, isDefault: false, isForced: false }];
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    emit("playing");
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français/)));
+
+    emit("error", "Le contexte graphique a été perdu.");
+    await waitFor(() => expect(engineInstances[1]?.load).toHaveBeenCalled());
+    const options = engineInstances[1].load.mock.calls[0][1] as { chooseAudioTrack: (t: unknown[]) => number | null };
+    expect(options.chooseAudioTrack(engineAudio)).toBe(2);
+    await waitFor(() =>
+      expect((engineInstances[1] as unknown as { setSubtitleTrack: ReturnType<typeof vi.fn> }).setSubtitleTrack).toHaveBeenCalledWith(5)
+    );
+  });
+
+  it("garde la même séance Jellyfin à travers une reconstruction", async () => {
+    // Chaque reconstruction — un geste ordinaire depuis la livraison par piste — clôturait la
+    // séance chez Jellyfin puis en annonçait une nouvelle.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const before = announcedSessions.length;
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(announcedSessions.slice(before).every((session) => session !== null)).toBe(true);
+  });
+
+  it("« Revoir » rejoue le film sur le chemin canevas", async () => {
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    emit("playing");
+    emit("ended");
+    const engine = engineInstances[0] as unknown as { play: ReturnType<typeof vi.fn> };
+    engine.play.mockClear();
+    facadeSeeks.length = 0;
+
+    await act(async () => void fireEvent.click(screen.getByText("revoir")));
+
+    expect(facadeSeeks).toEqual([0]);
+    expect(engine.play).toHaveBeenCalled();
+  });
+
+  it("espace ses relances quand le réseau est là mais que le serveur ne répond pas", async () => {
+    // Pendant un redéploiement, « en ligne » était vrai et le lecteur relançait toutes les 0,8 s.
+    vi.useFakeTimers();
+    const unreachable = Object.assign(new Error("Load failed"), { network: true });
+    nextProbe = () => {
+      throw unreachable;
+    };
+    mount();
+    await act(async () => {});
+    expect(probes).toHaveLength(1);
+
+    await act(async () => void vi.advanceTimersByTime(900)); // 0,8 s
+    expect(probes).toHaveLength(2);
+    await act(async () => void vi.advanceTimersByTime(900)); // la suivante attend 1,6 s
+    expect(probes).toHaveLength(2);
+    await act(async () => void vi.advanceTimersByTime(800));
+    expect(probes).toHaveLength(3);
+    vi.useRealTimers();
   });
 });

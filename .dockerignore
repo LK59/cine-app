@@ -13,6 +13,9 @@ node_modules
 .env.local
 npm-debug.log*
 
+# Copies de travail d'agents : un dépôt entier chacune, avec des tests qui tourneraient au build.
+.claude
+
 # Runtime state, mounted as a volume — never part of an image.
 data
 

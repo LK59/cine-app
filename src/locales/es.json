@@ -1151,7 +1151,19 @@
       "badge": "Experimental",
       "noAudio": "Reproducción sin sonido: {reason}",
       "preparing": "Preparando el vídeo…",
-      "stillWorking": "Todavía en curso…"
+      "stillWorking": "Todavía en curso…",
+      "externalSubtitlesUnavailable": "Subtítulos externos no disponibles.",
+      "resumedAfterInterruption": "La reproducción se reanudó tras una interrupción.",
+      "audioTrackRefused": "No se pudo abrir esta pista de audio: sigue la anterior.",
+      "passageSkipped": "No se pudo decodificar un fragmento de este archivo: la reproducción sigue justo después.",
+      "browserCouldNotRead": "Este navegador no pudo reproducir este archivo ({detail}).",
+      "connectionBack": "La conexión ha vuelto",
+      "connectionLost": "Conexión perdida",
+      "connectionBackBody": "La reproducción sigue donde se detuvo.",
+      "connectionLostBody": "La reproducción seguirá exactamente aquí, en el mismo idioma, en cuanto vuelva la red.",
+      "resumeAt": "Reanudar en {time}",
+      "chosenTrack": "pista elegida",
+      "retry": "Reintentar"
     },
     "volume": "Volumen",
     "nav": {

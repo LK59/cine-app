@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useStableFallback, takeoverFor, NEGOTIATING_MS } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, returningFor, NEGOTIATING_MS } from "@/lib/useStableFallback";
 
 // The handover itself, apart from the two players it sits between. What matters is that it
 // happens without asking, says so once, and leaves an account of why.
@@ -162,5 +162,27 @@ describe("le retour après une diffusion", () => {
 
     expect(result.current.returning).toBeNull();
     expect(result.current.handedOver).toEqual(["film-1"]);
+  });
+});
+
+describe("returningFor", () => {
+  // Relu le 22/09/2026 : la position rendue par une diffusion était comparée au seul film. Rouvrir
+  // ce film plus tard — même par « Recommencer » — le rouvrait là où la diffusion s'était arrêtée.
+  const session = { itemId: "film-1" };
+
+  it("rend la position de retour à la lecture qui diffusait", () => {
+    expect(returningFor({ itemId: "film-1", resumeAt: 4200, owner: session }, session)).toBe(4200);
+  });
+
+  it("ne la rend pas à une lecture du même film ouverte plus tard", () => {
+    expect(returningFor({ itemId: "film-1", resumeAt: 4200, owner: session }, { itemId: "film-1" })).toBeNull();
+  });
+
+  it("passe par la séance, de bout en bout", () => {
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "diffusion demandée", { resumeAt: 100, cast: true, owner: session }));
+    act(() => result.current.stepBack("film-1", 4200, session));
+    expect(returningFor(result.current.returning, session)).toBe(4200);
+    expect(returningFor(result.current.returning, { itemId: "film-1" })).toBeNull();
   });
 });

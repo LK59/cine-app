@@ -1151,7 +1151,19 @@
       "badge": "Experimental",
       "noAudio": "Playing without sound: {reason}",
       "preparing": "Preparing the video…",
-      "stillWorking": "Still working…"
+      "stillWorking": "Still working…",
+      "externalSubtitlesUnavailable": "External subtitles unavailable.",
+      "resumedAfterInterruption": "Playback resumed after an interruption.",
+      "audioTrackRefused": "This audio track could not be opened: the previous one keeps playing.",
+      "passageSkipped": "A passage of this file could not be decoded: playback resumes just after it.",
+      "browserCouldNotRead": "This browser could not play this file ({detail}).",
+      "connectionBack": "Connection restored",
+      "connectionLost": "Connection lost",
+      "connectionBackBody": "Playback picks up where it stopped.",
+      "connectionLostBody": "Playback will resume exactly here, in the same language, as soon as the network is back.",
+      "resumeAt": "Resuming at {time}",
+      "chosenTrack": "chosen track",
+      "retry": "Try again"
     },
     "volume": "Volume",
     "nav": {
