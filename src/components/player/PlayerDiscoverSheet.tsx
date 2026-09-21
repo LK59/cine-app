@@ -9,8 +9,9 @@ import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
-import { SHEET_OUT_MS } from "@/lib/sheetMotion";
+import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
+import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
+import { useSheetExit } from "@/lib/useSheetExit";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
   HORIZONTAL_VEIL,
@@ -92,8 +93,14 @@ export function PlayerDiscoverSheet({
    * La fermeture est donc immédiate. La coquille, qui rend cette fiche d'après l'adresse, sait
    * seule combien de temps la garder ensuite — et elle sait aussi quand ce n'est pas la peine,
    * parce qu'une autre fiche attend derrière. Voir `sheetExitMs` dans PlayerShell.
+   *
+   * Et une fois la sortie commencée, plus rien ne la redemande : un second Échap ou un second
+   * appui sur la croix pendant ces 280 ms reculait d'un cran de plus et refermait l'écran du
+   * dessous. Voir `useSheetExit` — le même que la fiche personne, qui avait le même trou. Échap
+   * se tait aussi tant que le synopsis est ouvert : c'est lui qu'il referme alors.
    */
-  const requestClose = close;
+  const exit = useSheetExit(close, { leaving, listening: !showSynopsis });
+  const requestClose = exit.requestClose;
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
   const swipe = useSwipeToDismiss(requestClose);
@@ -114,18 +121,6 @@ export function PlayerDiscoverSheet({
     focusPlaced.current = true;
     focusFirstAction(containerRef.current);
   }, [data, isMobile]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape" && e.key !== "Backspace") return;
-      if (showSynopsis) return;
-      e.preventDefault();
-      e.stopPropagation();
-      requestClose();
-    }
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [showSynopsis, requestClose]);
 
   const inList = data?.watchlistStatus === "to_watch";
   const StateIcon = data?.requestState ? STATE_ICON[data.requestState] : Clock;
@@ -151,10 +146,11 @@ export function PlayerDiscoverSheet({
         // Exactement les classes des fiches de bibliothèque : dans une rangée de saga, un titre
         // sur trois ouvre celle-ci et les autres ouvrent l'autre, et rien dans le geste ne dit
         // laquelle — les deux doivent donc entrer et sortir de la même façon.
-        swipe.touched ? "" : leaving ? "sheet-out" : revealed ? "" : "sheet-in"
+        sheetMotionClass({ swipe, leaving, revealed })
       }`}
       style={{
         zIndex: 48,
+        ...exit.style,
         paddingTop: "env(safe-area-inset-top, 0px)",
         transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
@@ -192,6 +188,8 @@ export function PlayerDiscoverSheet({
         <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
           type="button"
+          // Dans la poignée, pas de la poignée — voir `NOT_THE_HANDLE`.
+          {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
@@ -296,6 +294,7 @@ export function PlayerDiscoverSheet({
       // bibliothèque. La variable vaut 0 hors du lecteur.
       style={{
         zIndex: 48,
+        ...exit.style,
         paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
         paddingRight: "env(safe-area-inset-right, 0px)",
       }}

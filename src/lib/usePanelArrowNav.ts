@@ -47,7 +47,20 @@ function typingIn(target: EventTarget | null): boolean {
  * focalisable : un panneau contient des boutons de fermeture, des onglets et des cartes, et les
  * mélanger dans une même grille donnerait des déplacements incompréhensibles.
  */
-export function usePanelArrowNav(container: RefObject<HTMLElement | null>, enabled = true): void {
+export function usePanelArrowNav(
+  container: RefObject<HTMLElement | null>,
+  enabled = true,
+  /**
+   * Ce qui change quand le nœud désigné par `container` est remplacé — la clé posée dessus.
+   *
+   * L'écouteur est posé sur *un* nœud, une fois. PlayerPanelFrame re-clé son corps à chaque
+   * retour sur un onglet qu'on venait de quitter (pour rejouer l'entrée) : React remonte un nœud
+   * neuf, la référence le suit, mais l'écouteur restait sur l'ancien, détaché. Après un aller-retour
+   * rapide entre deux onglets, les flèches ne faisaient plus rien dans le panneau. Le passer ici
+   * repose l'écouteur sur le nouveau nœud.
+   */
+  node?: unknown
+): void {
   useEffect(() => {
     const root = container.current;
     if (!root || !enabled) return;
@@ -79,5 +92,5 @@ export function usePanelArrowNav(container: RefObject<HTMLElement | null>, enabl
 
     root.addEventListener("keydown", onKeyDown);
     return () => root.removeEventListener("keydown", onKeyDown);
-  }, [container, enabled]);
+  }, [container, enabled, node]);
 }

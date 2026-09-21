@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "@/lib/signOut";
 import { Clapperboard, LogOut, MonitorPlay, Search } from "lucide-react";
 import { NAV_GROUPS } from "@/components/navItems";
 import { useRole } from "@/lib/useRole";
@@ -16,10 +17,8 @@ export function Sidebar() {
   const t = useT();
   const { isConfigured } = useConfiguredServices();
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-  }
+  // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
+  const logout = () => signOut((path) => router.replace(path));
 
   return (
     <aside className="glass-panel hidden h-full w-64 flex-col border-r border-l-0 border-y-0 px-3 py-4 md:flex">

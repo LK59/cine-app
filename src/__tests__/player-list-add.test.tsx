@@ -4,12 +4,16 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { SWRConfig } from "swr";
 
 let payload: Record<string, unknown> = { library: [], tmdb: [], persons: [] };
+let failing = false;
 // Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
 // (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
 // dont on se souvient les laisse valoir `undefined`.
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
-  fetcher: async () => payload,
+  fetcher: async () => {
+    if (failing) throw new Error("Load failed");
+    return payload;
+  },
 }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/PosterImage", () => ({
@@ -56,7 +60,12 @@ async function type(term: string) {
   await waitFor(() => expect(screen.queryByText("player.lists.addHint")).toBeNull(), { timeout: 2000 });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  failing = false;
+  // L'ajout réussit, sauf mention contraire — voir « ne coche pas un ajout refusé ».
+  mockSetStatus.mockResolvedValue(true);
+});
 afterEach(cleanup);
 
 describe("PlayerListAdd", () => {
@@ -76,8 +85,42 @@ describe("PlayerListAdd", () => {
     fireEvent.click(screen.getByLabelText("player.lists.addToWatch"));
 
     expect(mockSetStatus).toHaveBeenCalledWith("to_watch", expect.objectContaining({ tmdbId: 603, type: "movie" }));
-    // Et la ligne le dit tout de suite, sans attendre le serveur.
+    // Et la ligne le dit dès que c'est fait.
     expect(await screen.findByLabelText("player.lists.alreadyInList")).toBeTruthy();
+  });
+
+  /**
+   * Une coche ne se pose que sur ce qui est rangé.
+   *
+   * Elle se posait d'avance, quoi qu'il arrive : hors ligne ou session expirée, un message disait
+   * l'échec pendant que la ligne affichait une coche verte — jusqu'à la réouverture de l'écran.
+   */
+  it("ne coche pas un ajout refusé", async () => {
+    mockSetStatus.mockResolvedValue(false);
+    payload = { library: [MATRIX], tmdb: [], persons: [] };
+    renderAdd();
+    await type("matrix");
+
+    fireEvent.click(await screen.findByLabelText("player.lists.addToWatch"));
+    await waitFor(() => expect(mockSetStatus).toHaveBeenCalled());
+    // Laisser à la réponse le temps d'arriver, puis constater que rien n'a changé.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByLabelText("player.lists.alreadyInList")).toBeNull();
+    expect(screen.getByLabelText("player.lists.addToWatch")).toBeTruthy();
+  });
+
+  // Même crochet que la recherche générale — voir `useSearchResults`.
+  it("ne montre pas les résultats d'avant sous une recherche qui a échoué", async () => {
+    payload = { library: [MATRIX], tmdb: [], persons: [] };
+    renderAdd();
+    await type("matrix");
+    await screen.findByText("Matrix");
+
+    failing = true;
+    fireEvent.change(screen.getByPlaceholderText("player.lists.addPlaceholder"), { target: { value: "dune" } });
+    expect(await screen.findByText("player.search.failed")).toBeTruthy();
+    expect(screen.queryByText("Matrix")).toBeNull();
+    expect(screen.queryByText("player.lists.addNothing")).toBeNull();
   });
 
   // Ce qu'on possède d'abord, le reste du monde ensuite — c'est ce qu'on ajoute le plus souvent.

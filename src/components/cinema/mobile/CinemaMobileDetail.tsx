@@ -9,10 +9,11 @@ import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { arrivedByBack, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
-import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
-import { SHEET_OUT_MS } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -179,17 +180,21 @@ export function CinemaMobileDetail({
 
   // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and
   // desktop browsers emulating a phone viewport, both reach this screen.
+  // Et rien non plus tant que le lecteur occupe l'écran : cette fiche reste montée dessous, et
+  // Échap refermait le lecteur *et* elle — voir `playerHoldsKeyboard`, que les fiches du bureau
+  // partagent.
+  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
   useEffect(() => {
     // La fiche du dessous n'écoute rien : deux écouteurs pour la même touche fermeraient les
     // deux d'un coup, ce qui remonterait de deux crans dans l'historique.
-    if (inert) return;
+    if (inert || playerOwnsKeyboard) return;
     function onKey(e: KeyboardEvent) {
       if (showTrailer) return;
       if (e.key === "Escape") requestClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, inert]);
+  }, [requestClose, showTrailer, inert, playerOwnsKeyboard]);
 
   // Deliberately stays open underneath the player: dismissing the player should land back on
   // the sheet you started from, not on the browse grid behind it.
@@ -270,7 +275,7 @@ export function CinemaMobileDetail({
       // Une fiche recouverte ne peut de toute façon être ni tirée ni fermée — ses gestes sont
       // débranchés —, donc les deux autres branches restent fausses pour elle.
       className={`app-viewport safe-x fixed inset-x-0 top-0 overflow-y-auto overscroll-contain bg-ink ${
-        swipe.touched ? "" : closing ? (swapsInPlace ? "" : "sheet-out") : revealed ? "" : "sheet-in"
+        sheetMotionClass({ swipe, leaving: closing, revealed, out: swapsInPlace ? "" : "sheet-out" })
       }`}
       // Starts the artwork below the status bar rather than behind it: iOS dims and blurs that
       // strip in a standalone PWA, so a full-bleed image there just comes out muddy and the close
@@ -331,7 +336,7 @@ export function CinemaMobileDetail({
         <div className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
           type="button"
-          onPointerDown={(e) => e.stopPropagation()}
+          {...NOT_THE_HANDLE}
           onClick={requestClose}
           aria-label={t("cinema.back")}
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"

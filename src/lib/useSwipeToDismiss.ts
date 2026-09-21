@@ -47,6 +47,18 @@ export interface SwipeToDismiss {
    * so letting it back in after a spring-back replays the whole entrance.
    */
   touched: boolean;
+  /**
+   * Vrai une fois que c'est le geste lui-même qui a refermé la fiche.
+   *
+   * C'est la seule chose qui doive faire taire l'animation de sortie : la carte descend déjà par
+   * sa transition, dans le prolongement du doigt, et `sheet-out` la ferait remonter d'un coup pour
+   * la refaire descendre. Les fiches se servaient de `touched` pour ça, qui ne retombe jamais — si
+   * bien qu'après un simple appui sur la bannière, ou un geste revenu en place, chaque fermeture
+   * suivante (la croix, Échap, le retour) coupait net au lieu de glisser. Voir `sheetMotionClass`.
+   *
+   * `touched`, lui, reste tel quel : c'est l'*entrée* qu'il doit garder éteinte pour de bon.
+   */
+  dismissed: boolean;
   handlers: {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
@@ -55,10 +67,24 @@ export interface SwipeToDismiss {
   };
 }
 
+/**
+ * À poser sur ce qui vit *dans* la poignée sans en faire partie — la croix de la bannière.
+ *
+ * L'appui y remontait jusqu'à la poignée : le geste démarrait, et la poignée prenait la capture
+ * du pointeur — ce qui, sur Chrome pour Android, renvoie le `click` à l'élément qui capture : la
+ * croix ne fermait rien. La fiche de bibliothèque arrêtait l'appui à la main ; la fiche découverte
+ * l'avait oublié. Un seul objet, pour que la prochaine croix posée sur une bannière n'ait pas à
+ * s'en souvenir.
+ */
+export const NOT_THE_HANDLE = {
+  onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+} as const;
+
 export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const active = useRef(false);
   const startY = useRef(0);
   const startedAt = useRef(0);
@@ -111,6 +137,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
       // Carries on off the bottom instead of snapping back first — the close animation is the
       // continuation of the gesture, not a separate thing that happens after it.
       setOffset(window.innerHeight);
+      setDismissed(true);
       onDismiss();
     } else {
       setOffset(0);
@@ -121,6 +148,7 @@ export function useSwipeToDismiss(onDismiss: () => void): SwipeToDismiss {
     offset,
     dragging,
     touched,
+    dismissed,
     handlers: { onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: finish },
   };
 }

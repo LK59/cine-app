@@ -1190,7 +1190,8 @@
       "filterAll": "Todo",
       "personTitles": "{n} título(s) aquí",
       "recent": "Tus últimas búsquedas",
-      "forget": "Borrar"
+      "forget": "Borrar",
+      "failed": "La búsqueda no se ha completado. Comprueba la conexión e inténtalo de nuevo."
     },
     "lists": {
       "requests": "Peticiones",
@@ -1222,7 +1223,8 @@
       "addHint": "Escribe el nombre de una película o una serie.",
       "addNothing": "Nada encontrado.",
       "addToWatch": "Añadir a «Por ver»",
-      "alreadyInList": "Ya está en la lista"
+      "alreadyInList": "Ya está en la lista",
+      "failed": "No se puede cargar tu lista en este momento."
     },
     "requests": {
       "state": {
@@ -1476,7 +1478,8 @@
     "perEpisode": "{time}/ep.",
     "downloading": "Llegando · {pct} %",
     "ratingsAudience": "público {pct} %",
-    "releasesOn": "Estreno el {date}"
+    "releasesOn": "Estreno el {date}",
+    "playSeriesFailed": "No se puede iniciar «{title}» en este momento."
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

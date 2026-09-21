@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import useSWR from "swr";
 import { Plus, Check, X, Loader2 } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { useSearchResults } from "@/lib/useSearchResults";
 import { useT } from "@/components/TranslationProvider";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { PosterImage } from "@/components/PosterImage";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
-import type { SearchResponse, UnifiedSearchResult } from "@/app/api/search/route";
+import type { UnifiedSearchResult } from "@/app/api/search/route";
 
 const TMDB_POSTER = "https://image.tmdb.org/t/p/w154";
 
@@ -42,10 +41,10 @@ export function PlayerListAdd({ existing, onClose }: { existing: Set<string>; on
     return () => clearTimeout(id);
   }, [query]);
 
-  const { data, isLoading } = useSWR<SearchResponse>(
-    debounced.length >= MIN_QUERY ? `/api/search?q=${encodeURIComponent(debounced)}&type=all` : null,
-    fetcher,
-    { keepPreviousData: true, revalidateOnFocus: false }
+  // Le même crochet que la recherche générale : un échec n'y laisse pas passer les résultats de
+  // la frappe d'avant, et ne se lit pas « rien trouvé ». Voir `useSearchResults`.
+  const { data, isLoading, failed } = useSearchResults(
+    debounced.length >= MIN_QUERY ? `/api/search?q=${encodeURIComponent(debounced)}&type=all` : null
   );
 
   // La bibliothèque d'abord : ce qu'on possède est ce qu'on ajoutera le plus souvent, et le
@@ -75,6 +74,8 @@ export function PlayerListAdd({ existing, onClose }: { existing: Set<string>; on
 
       {debounced.length < MIN_QUERY ? (
         <p className="px-1 py-10 text-center text-sm text-slate-500">{t("player.lists.addHint")}</p>
+      ) : failed ? (
+        <p role="alert" className="px-1 py-10 text-center text-sm text-amber-300/90">{t("player.search.failed")}</p>
       ) : isLoading && results.length === 0 ? (
         <div className="flex justify-center py-10">
           <Loader2 size={20} className="animate-spin text-slate-500" />
@@ -155,12 +156,12 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
       <button
         type="button"
         disabled={done || busy}
-        onClick={() => {
-          void setStatus("to_watch");
-          // Optimiste, et sans risque : la seule façon d'échouer est un serveur qui refuse, et il
-          // le dit alors lui-même par un message. Attendre la réponse pour montrer la coche
-          // rendrait l'ajout de trois titres d'affilée poussif pour rien.
-          setAdded(true);
+        onClick={async () => {
+          // La coche attend la réponse. Elle était posée d'avance, « sans risque » : mais hors
+          // ligne ou session expirée, l'ajout échouait, le message le disait, et la coche restait
+          // — la ligne affirmait le contraire du message. La base locale répond en quelques
+          // millisecondes, et le bouton est de toute façon désactivé pendant l'envoi.
+          if (await setStatus("to_watch")) setAdded(true);
         }}
         data-nav-item
         aria-label={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}

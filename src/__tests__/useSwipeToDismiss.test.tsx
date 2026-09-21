@@ -2,6 +2,34 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { sheetMotionClass } from "@/lib/sheetMotion";
+
+describe("sheetMotionClass", () => {
+  const idle = { touched: false, dismissed: false };
+  const tapped = { touched: true, dismissed: false };
+  const swiped = { touched: true, dismissed: true };
+
+  it("entre, sauf après un retour ou un premier contact", () => {
+    expect(sheetMotionClass({ swipe: idle, leaving: false, revealed: false })).toBe("sheet-in");
+    expect(sheetMotionClass({ swipe: idle, leaving: false, revealed: true })).toBe("");
+    // Un contact éteint l'entrée pour de bon : la laisser revenir la rejouait en entier.
+    expect(sheetMotionClass({ swipe: tapped, leaving: false, revealed: false })).toBe("");
+  });
+
+  it("sort en glissant — même après un appui sur la poignée", () => {
+    expect(sheetMotionClass({ swipe: idle, leaving: true, revealed: false })).toBe("sheet-out");
+    expect(sheetMotionClass({ swipe: tapped, leaving: true, revealed: false })).toBe("sheet-out");
+  });
+
+  it("laisse le geste finir sa propre sortie", () => {
+    expect(sheetMotionClass({ swipe: swiped, leaving: true, revealed: false })).toBe("");
+  });
+
+  it("prend les classes propres à chaque fiche", () => {
+    expect(sheetMotionClass({ swipe: idle, leaving: true, revealed: false, out: "" })).toBe("");
+    expect(sheetMotionClass({ swipe: idle, leaving: false, revealed: false, into: "a b" })).toBe("a b");
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -102,6 +130,24 @@ describe("useSwipeToDismiss", () => {
     expect(onDismiss).not.toHaveBeenCalled();
     // Et elle revient exactement d'où elle vient.
     expect(result.current.offset).toBe(0);
+  });
+
+  /**
+   * `touched` reste vrai pour de bon — c'est l'entrée qu'il éteint. `dismissed` ne dit que « c'est
+   * le geste qui a refermé », seule raison de taire l'animation de sortie. Les fiches lisaient
+   * `touched` pour les deux, et après un appui sur la bannière chaque fermeture coupait net.
+   */
+  it("distingue un geste revenu en place d'un geste qui a refermé", () => {
+    const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
+    act(() => result.current.handlers.onPointerDown(pointer(0)));
+    act(() => result.current.handlers.onPointerUp(pointer(0)));
+    expect(result.current.touched).toBe(true);
+    expect(result.current.dismissed).toBe(false);
+
+    act(() => result.current.handlers.onPointerDown(pointer(0)));
+    act(() => result.current.handlers.onPointerMove(pointer(THRESHOLD + 20)));
+    act(() => result.current.handlers.onPointerUp(pointer(THRESHOLD + 20)));
+    expect(result.current.dismissed).toBe(true);
   });
 
   it("ignores a move that never started with a press", () => {

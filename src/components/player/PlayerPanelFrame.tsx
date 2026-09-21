@@ -86,7 +86,11 @@ export function PlayerPanelFrame({
   // Les flèches parcourent le contenu du panneau, comme elles parcourent déjà les rangées de
   // l'accueil. Sur le corps et non sur la fenêtre : un panneau ne prend les flèches que de ce
   // qu'il recouvre — et jamais quand on écrit. Voir `usePanelArrowNav`.
-  usePanelArrowNav(bodyRef);
+  //
+  // `entrance` est la clé du corps : chaque retour rapide sur l'onglet en monte un nouveau, et
+  // l'écouteur doit le suivre — posé une fois, il restait sur le premier, et les flèches
+  // mouraient au premier aller-retour.
+  usePanelArrowNav(bodyRef, true, entrance);
 
   // Une fiche ouverte par-dessus ce panneau écoute Échap elle aussi. `stopPropagation` n'y change
   // rien : deux écouteurs posés sur la même cible se déclenchent tous les deux, et une seule

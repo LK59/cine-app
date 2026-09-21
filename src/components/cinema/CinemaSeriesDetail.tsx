@@ -13,6 +13,7 @@ import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -157,7 +158,7 @@ export function CinemaSeriesDetail({
   // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
   // closing the player comes back here, and stands down from the keyboard while it's up there.
   const playback = usePlayback();
-  const playerOwnsKeyboard = playback.mode === "full";
+  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
     if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {

@@ -35,9 +35,16 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
   const [busy, setBusy] = useState(false);
 
 
+  /**
+   * Rend `true` si c'est fait, `false` sinon — l'échec étant déjà dit par un message.
+   *
+   * Il ne rendait rien : l'ajout depuis « Ma liste » cochait donc la ligne quoi qu'il arrive, et
+   * un ajout refusé (hors ligne, session expirée) restait affiché comme fait jusqu'à la
+   * réouverture de l'écran — un message d'erreur à côté d'une coche verte.
+   */
   const setStatus = useCallback(
-    async (status: WatchlistStatus | null) => {
-      if (!ref || busy) return;
+    async (status: WatchlistStatus | null): Promise<boolean> => {
+      if (!ref || busy) return false;
       setBusy(true);
       try {
         if (status === null) {
@@ -67,8 +74,10 @@ export function usePlayerTitleActions(ref: PlayerTitleRef | null) {
           { tmdbId: ref.tmdbId, mediaType: ref.type, title: ref.title, year: ref.year, posterPath: ref.poster, voteAverage: ref.rating },
           status
         );
+        return true;
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t("common.unknown"));
+        return false;
       } finally {
         setBusy(false);
       }

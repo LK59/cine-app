@@ -16,6 +16,7 @@ import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -184,7 +185,7 @@ export function CinemaMovieDetail({
   // Lecture. The handler now stands down while the player is full-screen instead, and takes the
   // keyboard back (and the focus with it) the moment the player is gone.
   const playback = usePlayback();
-  const playerOwnsKeyboard = playback.mode === "full";
+  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
   useEffect(() => {
     if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {

@@ -17,7 +17,7 @@ import { CinemaBrowseSheet } from "@/components/cinema/CinemaBrowseSheet";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { errorMessage } from "@/lib/upstreamError";
-import { playSeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
+import { usePlaySeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -123,6 +123,8 @@ function sheetTarget(
 export function CinemaMobileClient() {
   const t = useT();
   const playback = usePlayback();
+  // Qui dit, quand rien ne démarre, que rien n'a démarré — voir `usePlaySeriesNextEpisode`.
+  const playSeries = usePlaySeriesNextEpisode(playback);
   // Same URL-backed layers as the desktop client, which is what makes the phone's back-swipe
   // close a sheet instead of leaving Cinema Mode — see lib/cinemaRoute.
   const route = useCinemaRoute();
@@ -380,7 +382,10 @@ export function CinemaMobileClient() {
     (item: CinemaMovie | CinemaSeries) => {
       // Un identifiant de série ne se lit pas tel quel : il faut d'abord résoudre son prochain
       // épisode (voir playSeriesNextEpisode).
-      if ("sonarrId" in item) return playSeriesNextEpisode(playback, item);
+      if ("sonarrId" in item) {
+        void playSeries(item);
+        return;
+      }
       // La position vient de la liste de reprise, pas d'une supposition. Tant qu'elle n'est pas
       // arrivée on ne prétend rien : le champ reste absent, ce qui veut dire « prends ce dont le
       // serveur se souvient » — voir PlaybackSession.
@@ -391,7 +396,7 @@ export function CinemaMobileClient() {
         resumeAt: resume === undefined ? undefined : entry ? entry.positionTicks / 10_000_000 : 0,
       });
     },
-    [playback, resume, resumeByItemId]
+    [playback, playSeries, resume, resumeByItemId]
   );
 
   const openHero = useCallback(

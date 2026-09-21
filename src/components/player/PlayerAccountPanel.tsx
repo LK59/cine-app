@@ -7,6 +7,7 @@ import Link from "next/link";
 import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
+import { signOut } from "@/lib/signOut";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
@@ -50,10 +51,8 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
   // que trois listes déroulantes grisées sans explication.
   const hasJellyfin = me?.jfUser != null;
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-  }
+  // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
+  const logout = () => signOut((path) => router.replace(path));
 
   return (
     <PlayerPanelFrame

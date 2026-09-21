@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Search as SearchIcon, X } from "lucide-react";
-import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { useSearchResults } from "@/lib/useSearchResults";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useLocale, useT } from "@/components/TranslationProvider";
@@ -15,7 +16,7 @@ import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
-import type { SearchResponse, PersonResult } from "@/app/api/search/route";
+import type { PersonResult } from "@/app/api/search/route";
 
 type Filter = "all" | "movie" | "series" | "person";
 
@@ -175,10 +176,10 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data, isLoading } = useSWR<SearchResponse>(
-    debounced ? `/api/search?q=${encodeURIComponent(debounced)}` : null,
-    fetcher,
-    { keepPreviousData: true, revalidateOnFocus: false }
+  // Une erreur efface les résultats d'une frappe précédente au lieu de les laisser passer pour
+  // ceux de celle-ci — voir `useSearchResults`.
+  const { data, isLoading, failed } = useSearchResults(
+    debounced ? `/api/search?q=${encodeURIComponent(debounced)}` : null
   );
 
   /**
@@ -289,8 +290,13 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
    * La bibliothèque répond à la lettre, le serveur cent cinquante millisecondes plus tard : entre
    * les deux, une recherche sans résultat local aurait affiché « aucun résultat » puis les
    * résultats. La condition attend donc que le serveur ait répondu pour *cette* frappe-là.
+   *
+   * Et jamais sur un échec : « rien trouvé » affirme quelque chose qu'on ne sait pas. Un échec
+   * dit qu'il en est un (`failed`), même quand la bibliothèque, elle, a trouvé de quoi remplir
+   * la grille — la moitié qui manque doit se voir.
    */
-  const empty = searching && debounced === typed && !isLoading && counts.all === 0;
+  const empty = searching && debounced === typed && !isLoading && !failed && counts.all === 0;
+  const unreachable = searching && debounced === typed && failed;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
   // ramène sur les résultats, avec la requête tapée et le filtre choisi — au lieu de renvoyer à
@@ -396,6 +402,10 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
 
         {empty && (
           <p className="mt-10 text-sm text-slate-400">{t("player.search.noResults", { query: typed })}</p>
+        )}
+
+        {unreachable && (
+          <p role="alert" className="mt-6 text-sm text-amber-300/90">{t("player.search.failed")}</p>
         )}
 
         {(shownTitles.length > 0 || shownPersons.length > 0) && (

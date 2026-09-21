@@ -5,12 +5,17 @@ import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 
 let payload: Record<string, unknown> = { library: [], tmdb: [], persons: [] };
+// Une requête de recherche qui échoue — hors ligne, serveur qui redémarre.
+let failing = false;
 // Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
 // (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
 // dont on se souvient les laisse valoir `undefined`.
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
-  fetcher: async () => payload,
+  fetcher: async () => {
+    if (failing) throw new Error("Load failed");
+    return payload;
+  },
 }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
@@ -76,6 +81,7 @@ async function type(term: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   forgetSearchQuery();
+  failing = false;
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <PlayerSearchPanel />
@@ -295,5 +301,32 @@ describe("PlayerSearchPanel — du champ aux résultats", () => {
     box.focus();
     fireEvent.keyDown(box, { key: "Enter" });
     expect(document.activeElement).not.toBe(box);
+  });
+});
+
+/**
+ * Une recherche qui échoue le dit — et ne montre pas celle d'avant.
+ *
+ * `keepPreviousData` garde les résultats de la frappe précédente pendant que la suivante part, et
+ * SWR les garde aussi quand elle échoue : hors ligne, on lisait sous « dune » les résultats de
+ * « matrix », sans rien pour dire que la recherche n'avait pas abouti.
+ */
+describe("PlayerSearchPanel — une recherche qui échoue", () => {
+  it("efface les résultats de la frappe d'avant et dit l'échec", async () => {
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+    await screen.findByText("Matrix");
+
+    failing = true;
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "dune" } });
+    expect(await screen.findByText("player.search.failed")).toBeTruthy();
+    expect(screen.queryByText("Matrix")).toBeNull();
+  });
+
+  it("ne dit pas « rien trouvé » quand on n'en sait rien", async () => {
+    failing = true;
+    await type("dune");
+    expect(await screen.findByText("player.search.failed")).toBeTruthy();
+    expect(screen.queryByText("player.search.noResults")).toBeNull();
   });
 });

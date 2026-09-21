@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 
 /**
  * Les décisions qui ont déjà dérivé, et qu'on empêche de dériver à nouveau.
@@ -90,6 +90,14 @@ describe("un seul mécanisme de sortie par fiche", () => {
   it.each(FICHES)("%s laisse le sursis à la coquille", (fiche) => {
     const src = lire(fiche);
     expect(src).not.toMatch(/useDelayedClose\(/);
+  });
+
+  // Et pendant ce sursis, elles n'ont plus d'avis — la règle 2, tenue par une seule fonction.
+  // Chacune avait son écouteur d'Échap, et aucun ne regardait `leaving`.
+  it.each(FICHES)("%s se tait pendant sa sortie par `useSheetExit`", (fiche) => {
+    const src = lire(fiche);
+    expect(src).toMatch(/useSheetExit\(close, \{ leaving/);
+    expect(src).not.toMatch(/if \(e\.key !== "Escape" && e\.key !== "Backspace"\) return;\s*\n\s*(if \(showSynopsis\) return;\s*\n\s*)?e\.preventDefault\(\);\s*\n\s*e\.stopPropagation\(\);\s*\n\s*requestClose\(\)/);
   });
 
   // Et les fiches de bibliothèque gardent le leur, qui est l'autre moitié de la règle : elles ne
@@ -368,6 +376,68 @@ describe("les notes critiques : dans « Voir plus », sur grand écran seulement
   });
   it("le téléphone ne les montre pas", () => {
     expect(lire("src/components/cinema/mobile/CinemaMobileDetail.tsx")).not.toContain("CinemaRatingsLine");
+  });
+});
+
+describe("une seule animation de fiche qu'on tire", () => {
+  /**
+   * `swipe.touched ? "" : closing ? "sheet-out" : …`, écrit trois fois : après un simple appui sur
+   * la bannière, chaque fermeture suivante disparaissait d'un coup. Voir `sheetMotionClass`.
+   */
+  it.each([
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/player/PlayerPersonSheet.tsx",
+  ])("%s", (f) => {
+    const src = lire(f);
+    expect(src).toContain("sheetMotionClass(");
+    expect(src).not.toMatch(/swipe\.touched \? "" :/);
+  });
+
+  // La croix posée dans la poignée arrête l'appui par le même objet partout.
+  it.each(["src/components/cinema/mobile/CinemaMobileDetail.tsx", "src/components/player/PlayerDiscoverSheet.tsx"])(
+    "%s : la croix n'est pas la poignée",
+    (f) => {
+      expect(lire(f)).toContain("{...NOT_THE_HANDLE}");
+    }
+  );
+});
+
+describe("une seule façon de savoir que le lecteur tient le clavier", () => {
+  // La fiche du téléphone l'avait oublié : Échap refermait le lecteur *et* elle.
+  it.each([
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+  ])("%s", (f) => {
+    const src = lire(f);
+    expect(src).toContain("playerHoldsKeyboard(playback)");
+    expect(src).not.toMatch(/playerOwnsKeyboard = playback\.mode === "full"/);
+  });
+});
+
+describe("une seule prise de pointeur", () => {
+  // Règle 3 de « The sheet lifecycle » : la capture passe par `usePointerCapture`, qui la rend au
+  // démontage et ne lève pas sur un pointeur déjà parti. Le carrousel de la bannière la prenait
+  // à la main.
+  it("personne d'autre n'appelle setPointerCapture", () => {
+    const hits = (readdirSync("src", { recursive: true }) as string[])
+      .map((f) => `src/${f}`)
+      .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"))
+      .filter((f) => /\.(set|release)PointerCapture\??\.?\(/.test(lire(f)));
+    expect(hits).toEqual(["src/lib/usePointerCapture.ts"]);
+  });
+});
+
+describe("une seule recherche du lecteur", () => {
+  // `keepPreviousData` gardait les résultats d'avant sous une recherche qui avait échoué, sur les
+  // deux écrans à la fois. Voir `useSearchResults`.
+  it.each(["src/components/player/PlayerSearchPanel.tsx", "src/components/player/PlayerListAdd.tsx"])("%s", (f) => {
+    const src = lire(f);
+    expect(src).toContain("useSearchResults(");
+    // L'option, pas le mot : les commentaires l'expliquent, et c'est bien leur rôle.
+    expect(src).not.toMatch(/keepPreviousData:/);
   });
 });
 

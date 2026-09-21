@@ -208,3 +208,32 @@ describe("la traînée du carrousel", () => {
     expect(onDragStateChange).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * La capture passe par `usePointerCapture`, comme celle des autres gestes (règle 3).
+ *
+ * Prise et rendue à la main, elle n'était pas rendue quand la bannière se démontait en plein
+ * glissement — ouvrir une fiche, changer d'onglet —, ce qui laisse WebKit sans plus rien acheminer
+ * vers la page ; et une prise refusée (pointeur déjà relâché) levait depuis le gestionnaire.
+ */
+describe("la capture du carrousel", () => {
+  it("est rendue au démontage, doigt encore posé", () => {
+    const { unmount } = render(<Harness index={1} count={5} onIndexChange={vi.fn()} />);
+    down();
+    move(150);
+    expect(HTMLElement.prototype.setPointerCapture).toHaveBeenCalledWith(1);
+    unmount();
+    expect(HTMLElement.prototype.releasePointerCapture).toHaveBeenCalledWith(1);
+  });
+
+  it("survit à une prise refusée", () => {
+    HTMLElement.prototype.setPointerCapture = vi.fn(() => {
+      throw new DOMException("InvalidPointerId");
+    });
+    render(<Harness index={1} count={5} onIndexChange={vi.fn()} />);
+    down();
+    expect(() => move(150)).not.toThrow();
+    // Le geste continue sans capture : la piste suit toujours le doigt.
+    expect(track().style.transform).toBe(carouselTransform(1, -50));
+  });
+});

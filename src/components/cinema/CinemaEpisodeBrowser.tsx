@@ -12,6 +12,7 @@ import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 
 // "Plus d'épisodes" — Netflix's own TV-app episode browser: seasons as a vertical list on the
@@ -98,7 +99,7 @@ export function CinemaEpisodeBrowser({
   // season you launched it from — and stands down from the keyboard while it's up there, or both
   // handlers would run on every arrow press (see CinemaMovieDetail's own note).
   const playback = usePlayback();
-  const playerOwnsKeyboard = playback.mode === "full";
+  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
 
   // Left/Right move between the season list and the episode list; Up/Down cycle within
   // whichever one currently has focus — same roving-focus convention as the player's own

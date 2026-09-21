@@ -65,8 +65,12 @@ describe("les fiches TMDB s'animent comme les fiches de bibliothèque", () => {
     "src/components/player/PlayerPersonSheet.tsx",
   ])("%s utilise sheet-in / sheet-out", (file) => {
     const src = readFileSync(file, "utf8");
-    expect(src).toMatch(/"sheet-in/);
-    expect(src).toMatch(/"sheet-out/);
+    // Par la fonction que partagent toutes les fiches qu'on tire (voir `sheetMotionClass`), dont
+    // ce sont les classes par défaut — ou écrites en toutes lettres quand la fiche en ajoute.
+    expect(src).toContain("sheetMotionClass(");
+    const shared = readFileSync("src/lib/sheetMotion.ts", "utf8");
+    expect(shared).toMatch(/out = "sheet-out"/);
+    expect(shared).toMatch(/into = "sheet-in"/);
     // Les anciennes classes, qui ne ressemblaient à aucune fiche de bibliothèque.
     expect(src).not.toMatch(/"animate-slide-up/);
     expect(src).not.toMatch(/"animate-fade-out-down/);

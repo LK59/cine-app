@@ -60,7 +60,9 @@ export function TranslationProvider({
       if (l === "fr") {
         setT(() => defaultT);
       } else {
-        loadLocaleDict(l).then((dict) => setT(() => createT(dict, fr)));
+        // Même filet que `setLocale` : un dictionnaire introuvable laisse le français, pas un
+        // rejet non géré.
+        loadLocaleDict(l).then((dict) => setT(() => createT(dict, fr)), () => {});
       }
     }
 
@@ -118,8 +120,17 @@ export function TranslationProvider({
     if (l === "fr") {
       setT(() => createT(fr, fr));
     } else {
-      const dict = await loadLocaleDict(l);
-      setT(() => createT(dict, fr));
+      // Sans filet, un dictionnaire qui ne se charge pas — hors ligne, ou un morceau d'une version
+      // précédente que le déploiement a retiré — faisait rejeter tout l'appel. L'accueil l'attend
+      // avant de recharger la page : il restait figé sur « occupé », bouton grisé, sans issue.
+      // Le cookie et la préférence sont déjà écrits, et c'est ce qui compte : le rechargement
+      // suivant sert la page dans la bonne langue, dictionnaire compris, depuis le serveur.
+      try {
+        const dict = await loadLocaleDict(l);
+        setT(() => createT(dict, fr));
+      } catch {
+        // Les textes restent dans la langue d'avant jusqu'au prochain chargement de page.
+      }
     }
   }, []);
 

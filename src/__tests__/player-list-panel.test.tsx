@@ -7,12 +7,16 @@ import { SWRConfig } from "swr";
 // Le composant passe explicitement son propre fetcher à useSWR : celui de SWRConfig ne serait
 // jamais appelé. C'est donc lui qu'on remplace.
 let payload: Record<string, unknown> = {};
+let failing = false;
 // Le module réel, dont on ne remplace que le `fetcher` : il porte aussi les clés de cache
 // (`MOVIES_CATALOGUE_KEY`…) et les options que ces écrans lisent. Un mock qui n'expose que ce
 // dont on se souvient les laisse valoir `undefined`.
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
-  fetcher: async () => payload,
+  fetcher: async () => {
+    if (failing) throw new Error("Load failed");
+    return payload;
+  },
 }));
 
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
@@ -51,7 +55,10 @@ function renderWith(lists: Record<string, unknown>) {
   );
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  failing = false;
+});
 afterEach(cleanup);
 
 describe("PlayerListPanel", () => {
@@ -264,5 +271,31 @@ describe("PlayerListPanel", () => {
 
     fireEvent.click(await screen.findByText("Dune"));
     expect(mockNavigate).toHaveBeenCalledWith({ discover: 693134, discoverType: "movie" });
+  });
+});
+
+/**
+ * Une liste qu'on n'a pas pu lire n'est pas une liste vide.
+ *
+ * L'erreur était ignorée : hors ligne, l'écran annonçait « Rien à voir pour l'instant » à qui y
+ * avait rangé trente titres, et lui proposait d'en ajouter.
+ */
+describe("PlayerListPanel — une liste illisible", () => {
+  it("dit qu'elle n'a pas pu être lue, et propose de réessayer", async () => {
+    failing = true;
+    renderWith(EMPTY_LISTS);
+
+    expect(await screen.findByText("player.lists.failed")).toBeTruthy();
+    expect(screen.queryByText("player.lists.empty.toWatch")).toBeNull();
+
+    // Et réessayer relit bel et bien la liste.
+    failing = false;
+    payload = {
+      ...EMPTY_LISTS,
+      toWatch: [{ tmdbId: 603, type: "movie", title: "Matrix", year: 1999, poster: null, libraryId: 42, jellyfinId: null }],
+    };
+    fireEvent.click(screen.getByText("common.retry"));
+    expect(await screen.findByText("Matrix")).toBeTruthy();
+    expect(screen.queryByText("player.lists.failed")).toBeNull();
   });
 });

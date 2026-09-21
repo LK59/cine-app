@@ -190,6 +190,94 @@ lifecycle ».
 **Voulu.** Le mobile n'a pas de champ `episodes` dans l'adresse : ses épisodes vivent dans la
 fiche, pas dans un panneau.
 
+### 7.1 Une fiche qui s'en va n'a plus d'avis
+
+**Règle.** Pendant sa sortie, une fiche n'écoute plus Échap, ne reçoit plus le doigt, et sa
+fermeture ne fait plus rien (règle 2 de « The sheet lifecycle »).
+
+**Porteurs.** `useSheetExit(close, { leaving, listening })` (`src/lib/useSheetExit.ts`) pour les
+fiches dont la coquille tient la sortie : `PlayerPersonSheet`, `PlayerDiscoverSheet`.
+`PlayerPanelFrame` tient la même règle pour les panneaux. Les fiches de bibliothèque passent par
+`useDelayedClose`, qui absorbe déjà une seconde demande.
+
+**Corrigé le 21/09.** Aucune des deux fiches ne regardait `leaving` : la garde de `cinemaClose` ne
+tient que jusqu'au `popstate`, donc un second Échap ou un second appui sur le voile ou la croix
+pendant les 280 ms de sortie reculait d'un cran de plus et refermait l'écran du dessous.
+
+**Tests.** `sheet-exit.test.tsx`, `decisions-partagees.test.ts`.
+
+### 7.2 L'animation d'une fiche qu'on tire
+
+**Règle.** L'entrée s'éteint pour de bon au premier contact avec la poignée (elle anime la même
+transformation que le doigt) ; la sortie ne se tait **que** si c'est le geste qui a refermé la
+fiche. Une croix posée dans la poignée n'en fait pas partie.
+
+**Porteurs.** `sheetMotionClass` (`src/lib/sheetMotion.ts`), `dismissed` et `NOT_THE_HANDLE`
+(`src/lib/useSwipeToDismiss.ts`). Appelants : `CinemaMobileDetail`, `PlayerDiscoverSheet`,
+`PlayerPersonSheet`.
+
+**Corrigé le 21/09.** Les trois écrivaient `swipe.touched ? "" : closing ? "sheet-out" : …` :
+après un simple appui sur la bannière, toutes les fermetures suivantes disparaissaient d'un coup.
+Et la croix de la fiche découverte, sans `NOT_THE_HANDLE`, démarrait le geste — la poignée prenait
+la capture, ce qui sur Chrome pour Android renvoie le clic ailleurs que sur la croix.
+
+**Voulu.** `out` et `into` changent d'une fiche à l'autre : la fiche personne se pose au centre sur
+grand écran (`md:animate-fade-*`), la fiche de bibliothèque sort sans animation quand rien n'est
+dessiné derrière elle (`swapsInPlace`).
+
+**Tests.** `useSwipeToDismiss.test.tsx`, `sheet-exit.test.tsx`, `cinema-mobile-detail-keys.test.tsx`,
+`decisions-partagees.test.ts`.
+
+### 7.3 Le lecteur tient le clavier
+
+**Règle.** Une fiche restée montée sous le lecteur n'écoute aucune touche tant que le film est en
+plein écran.
+
+**Porteur.** `playerHoldsKeyboard(playback)` (`src/lib/playerKeyboard.ts`). Appelants :
+`CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`.
+
+**Corrigé le 21/09.** Les fiches du bureau le savaient, chacune avec son `playback.mode === "full"` ;
+la fiche du téléphone non — Échap sur une tablette à clavier refermait le lecteur *et* la fiche.
+
+**Reste connu.** Le raccourci « / » de `CinemaClient` lit encore `playback.mode === "full"` en
+direct : même fait, dans un fichier qu'un autre chantier touchait ce jour-là.
+
+**Tests.** `cinema-mobile-detail-keys.test.tsx`, `decisions-partagees.test.ts`.
+
+### 7.4 Une prise de pointeur
+
+**Règle.** Toute capture de pointeur passe par `usePointerCapture` (rendue au démontage, jamais
+levée sur un pointeur déjà parti). Appelants : `useSwipeToDismiss`, `useCarouselDrag`, la feuille
+d'action et le mini-lecteur.
+
+**Corrigé le 21/09.** Le carrousel de la bannière capturait à la main, sans rien rendre si la
+bannière se démontait en plein glissement.
+
+**Tests.** `usePointerCapture.test.tsx`, `useCarouselDrag.test.tsx`, `decisions-partagees.test.ts`
+(aucun autre fichier n'appelle `setPointerCapture`).
+
+## 7 cinquies. Une recherche qui échoue
+
+**Règle.** Une recherche qui échoue efface les résultats d'une frappe précédente et dit qu'elle a
+échoué — jamais « rien trouvé », qui affirme ce qu'on ne sait pas.
+
+**Porteur.** `useSearchResults(url)` (`src/lib/useSearchResults.ts`). Appelants :
+`PlayerSearchPanel`, `PlayerListAdd`.
+
+**Corrigé le 21/09.** Les deux posaient leur propre `useSWR` avec `keepPreviousData` : hors ligne,
+on lisait sous « dune » les résultats de « matrix ».
+
+**Voulu.** Les résultats de la bibliothèque, cherchés sur place, restent affichés dans la recherche
+générale : ils ne dépendent pas du réseau. La ligne d'échec s'affiche à côté d'eux.
+
+**Tests.** `player-search-panel.test.tsx`, `player-list-add.test.tsx`, `decisions-partagees.test.ts`.
+
+## 7 sexies. Se déconnecter
+
+**Porteur.** `signOut(go)` (`src/lib/signOut.ts`) : prévient le serveur, puis va à `/login` quoi
+qu'il arrive. Appelants : `PlayerAccountPanel`, `Sidebar`, `MobileNav`. Les trois attendaient
+`fetch` sans garde : hors ligne, rien ne se passait. Tests : `signOut.test.ts`.
+
 ## 7 bis. La distribution et la fiche personne
 
 **Règle.** Un titre montre sa distribution en visages ; chaque visage ouvre la fiche de la personne,

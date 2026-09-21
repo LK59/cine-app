@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, type CSSProperties, type RefObject } from "react";
+import { usePointerCapture } from "@/lib/usePointerCapture";
 
 /**
  * Un carrousel qui suit le doigt, sans redessiner l'écran à chaque pixel.
@@ -82,6 +83,9 @@ export function useCarouselDrag({
   const width = useRef(1);
   const frame = useRef<number | null>(null);
   const pending = useRef(0);
+  // Déstructurée : les deux fonctions sont stables, l'objet qui les porte ne l'est pas — et les
+  // gestionnaires, mémoïsés pour la bannière, ne doivent pas changer à chaque rendu.
+  const { take: takeCapture, release: releaseCapture } = usePointerCapture();
 
   /** Une écriture par image d'écran, quel que soit le nombre d'événements reçus entre-temps. */
   const paint = useCallback(
@@ -121,7 +125,12 @@ export function useCarouselDrag({
         if (axis.current === "vertical") return;
         // La capture ne vient qu'ici : la prendre au premier contact volerait à la page les
         // gestes verticaux qui commencent sur l'affiche.
-        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        //
+        // Par `usePointerCapture`, comme les trois autres gestes (règle 3 de « The sheet
+        // lifecycle ») : prise à la main, elle levait sur un pointeur déjà relâché, et n'était
+        // pas rendue si la bannière se démontait en plein glissement — ouvrir une fiche, changer
+        // d'onglet — ce qui laisse WebKit sans plus rien acheminer vers la page.
+        takeCapture(e);
         onDragStateChange?.(true);
       }
 
@@ -130,11 +139,13 @@ export function useCarouselDrag({
       const atEdge = (moveX > 0 && index === 0) || (moveX < 0 && index === count - 1);
       paint(atEdge ? moveX * 0.35 : moveX);
     },
-    [count, index, paint, onDragStateChange]
+    [count, index, paint, onDragStateChange, takeCapture]
   );
 
   const finish = useCallback(
     (e: React.PointerEvent) => {
+      // Rendue d'abord, quoi qu'il arrive ensuite — sans effet s'il n'y a rien à rendre.
+      releaseCapture();
       const start = from.current;
       from.current = null;
       if (frame.current !== null) {
@@ -147,7 +158,6 @@ export function useCarouselDrag({
       }
       axis.current = "undecided";
       onDragStateChange?.(false);
-      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 
       const moved = e.clientX - start.x;
       const elapsed = Math.max(performance.now() - start.at, 1);
@@ -181,7 +191,7 @@ export function useCarouselDrag({
         if (next !== index) requestAnimationFrame(() => onIndexChange(next));
       });
     },
-    [count, index, onIndexChange, trackRef, onDragStateChange]
+    [count, index, onIndexChange, trackRef, onDragStateChange, releaseCapture]
   );
 
   return {

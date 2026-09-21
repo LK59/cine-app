@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
-import { Search, Plus, Bookmark, Inbox, Eye } from "lucide-react";
+import { Search, Plus, Bookmark, Inbox, Eye, CloudOff } from "lucide-react";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { filterByTitle, sortList, LIST_SORTS, type ListSort } from "@/lib/playerListSort";
 import { PlayerEmptyState } from "./PlayerEmptyState";
@@ -49,9 +49,18 @@ const EMPTY_ICON: Record<Segment, React.ElementType> = {
  */
 export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
   const t = useT();
-  const { data, isLoading } = useSWR<PlayerListsPayload>("/api/player/lists", fetcher, {
+  const { data, isLoading, error, mutate } = useSWR<PlayerListsPayload>("/api/player/lists", fetcher, {
     revalidateOnFocus: false,
   });
+  /**
+   * Une liste qu'on n'a pas pu lire n'est pas une liste vide.
+   *
+   * L'erreur était ignorée : hors ligne, ou le serveur qui redémarre après un déploiement, l'écran
+   * annonçait « Rien à voir pour l'instant » à quelqu'un qui y avait rangé trente titres — et lui
+   * proposait d'en ajouter. Seulement quand il n'y a rien à montrer : une relecture ratée sous une
+   * liste déjà là laisse la liste.
+   */
+  const unreadable = error !== undefined && data === undefined;
   const { busy, cancelRequest } = usePlayerTitleActions(null);
   // Aucun onglet n'est choisi d'avance : on ouvre sur le premier qui a quelque chose à montrer,
   // en commençant par « À voir ». Atterrir sur un écran vide alors que trois onglets plus loin il
@@ -272,7 +281,15 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
           </div>
         )}
 
-        {!isLoading && counts[segment] === 0 && (
+        {unreadable && !isLoading && (
+          <PlayerEmptyState
+            icon={CloudOff}
+            message={t("player.lists.failed")}
+            action={{ label: t("common.retry"), onClick: () => void mutate() }}
+          />
+        )}
+
+        {!isLoading && !unreadable && counts[segment] === 0 && (
           <PlayerEmptyState
             icon={EMPTY_ICON[segment]}
             message={t(`player.lists.empty.${segment}`)}

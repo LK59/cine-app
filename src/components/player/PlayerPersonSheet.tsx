@@ -15,7 +15,8 @@ import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
-import { SHEET_OUT_MS } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
+import { useSheetExit } from "@/lib/useSheetExit";
 
 interface PersonCredit {
   tmdbId: number;
@@ -257,29 +258,20 @@ export function PlayerPersonSheet({
    * La fermeture est donc immédiate. La coquille, qui rend cette fiche d'après l'adresse, sait
    * seule combien de temps la garder ensuite — et elle sait aussi quand ce n'est pas la peine,
    * parce qu'une autre fiche attend derrière. Voir `sheetExitMs` dans PlayerShell.
+   *
+   * Et une fois la sortie commencée, plus rien ne la redemande — voir `useSheetExit`. Échap y est
+   * écouté, sauf tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
+   * écouteurs posés sur la même cible se déclenchent tous les deux — une seule touche aurait fermé
+   * la photo *et* la fiche derrière.
    */
-  const requestClose = close;
+  const exit = useSheetExit(close, { leaving, listening: photoIndex === null && !underneath });
+  const requestClose = exit.requestClose;
   // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
   // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
   const swipe = useSwipeToDismiss(requestClose);
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
-
-  useEffect(() => {
-    // Silencieux tant que la visionneuse est ouverte : elle écoute Échap elle aussi, et deux
-    // écouteurs posés sur la même cible se déclenchent tous les deux — une seule touche aurait
-    // fermé la photo *et* la fiche derrière.
-    if (photoIndex !== null || underneath) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape" && e.key !== "Backspace") return;
-      e.preventDefault();
-      e.stopPropagation();
-      requestClose();
-    }
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [photoIndex, underneath, requestClose]);
 
   // Ce qu'on possède d'abord : c'est ce qui se regarde ce soir. Le serveur trie déjà ainsi, on
   // garde son ordre et on se contente de retirer les entrées sans titre.
@@ -390,6 +382,8 @@ export function PlayerPersonSheet({
         // Le même couple que la pile des fiches de titre : 47 dessous, 48 dessus.
         zIndex: underneath ? 47 : 48,
         paddingLeft: isMobile ? undefined : "calc(1.5rem + var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
+        // Inerte pendant sa sortie : voile, croix et poignée restent sous le doigt 280 ms.
+        ...exit.style,
       }}
     >
       {/* Le voile : il laisse voir le film qu'on regardait, et le toucher referme la carte. */}
@@ -421,9 +415,13 @@ export function PlayerPersonSheet({
          */
         className={`scrollbar-thin relative w-full overflow-y-auto overscroll-contain bg-ink shadow-2xl ring-1 ring-white/10 ${
           isMobile ? "max-h-[92dvh] rounded-t-3xl" : "max-h-[88vh] max-w-4xl rounded-2xl"
-        } ${
-          swipe.touched ? "" : leaving ? "sheet-out md:animate-fade-out" : revealed ? "" : "sheet-in md:animate-fade-in"
-        }`}
+        } ${sheetMotionClass({
+          swipe,
+          leaving,
+          revealed,
+          out: "sheet-out md:animate-fade-out",
+          into: "sheet-in md:animate-fade-in",
+        })}`}
         style={{
           transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
           // Pas de transition pendant que le doigt est posé : la carte *est* où il est. C'est le
