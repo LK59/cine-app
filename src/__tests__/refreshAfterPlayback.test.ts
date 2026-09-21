@@ -42,6 +42,21 @@ describe("refreshAfterPlayback", () => {
     expect(filtre("/api/cinema/movies")).toBe(false);
   });
 
+  // Le symptôme (21/09/2026) : après le dernier épisode, Jellyfin marquait la série vue, et sa
+  // fiche proposait encore « Marquer comme vu ». Elle lit « vu » sur la clé de la *série*, et la
+  // fermeture ne connaît que l'épisode.
+  it("relit aussi la progression de la série, dont la fermeture ne connaît pas l'identifiant", async () => {
+    await refreshAfterPlayback(Promise.resolve(), "episode-7");
+    const filtres = mutate.mock.calls.map((c) => c[0]).filter((k) => typeof k === "function");
+    const relit = (key: string) => filtres.some((f) => f(key));
+    expect(relit(progressKey("serie-3"))).toBe(true);
+    // L'épisode lui-même est déjà nommé : le filtre ne le redemande pas une seconde fois.
+    expect(relit(progressKey("episode-7"))).toBe(false);
+    // Et rien d'autre ne passe par là.
+    expect(relit("/api/cinema/progress")).toBe(false);
+    expect(relit("/api/cinema/movies")).toBe(false);
+  });
+
   it("se limite aux vues d'ensemble quand aucun titre n'est nommé", async () => {
     await refreshAfterPlayback(Promise.resolve(), null);
     expect(namedKeys().sort()).toEqual([NEXT_UP_KEY, RESUME_KEY].sort());

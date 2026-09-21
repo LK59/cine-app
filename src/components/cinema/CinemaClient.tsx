@@ -10,8 +10,9 @@ import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { leaveCinema } from "@/lib/leaveCinema";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
-import { useCinemaRoute, useRouteBehind, sheetIsBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
-import { openDiscoveryItem, openResumeTarget, openTitle } from "@/lib/cinemaOpen";
+import { useCinemaRoute, useRouteBehind, sheetIsBehind, readCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
+import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
+import { closeUncoversGrid, coversGrid, gridCardInFocus, gridIsTop } from "@/lib/cinemaGridTop";
 import { uniqueById } from "@/lib/cinemaRails";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
@@ -206,6 +207,22 @@ export function CinemaClient() {
   // leaving Cinema Mode — see lib/cinemaRoute for why the hash and not query params.
   const route = useCinemaRoute();
   const mediaType = route.tab;
+
+  // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu (see the
+  // hook's own doc comment) AND while the player is open. The player closes CinemaMovieDetail
+  // the moment Lecture actually starts (see CinemaMovieDetail's own note), which flips
+  // selectedItem back to null — without this second condition that alone was enough to
+  // re-arm this hook's own global arrow-key listener underneath the player: pressing Right on a
+  // player control it didn't recognize hit useTvGridNav's "nothing focused yet" branch, which
+  // jumps straight to the first poster card in the (still fully mounted, just hidden) browse
+  // grid — then Enter on THAT opened a completely different title's detail sheet.
+  const playback = usePlayback();
+  /**
+   * La grille est-elle l'écran du dessus ? Une seule réponse pour tout ce qui en dépend ici — les
+   * flèches, la carte centrée, « / », `inert`, la rotation des bannières, le focus rendu en
+   * refermant. Voir `gridIsTop` pour les conditions qui divergeaient avant elle.
+   */
+  const gridOnTop = gridIsTop(route, playback.mode);
   // "replace": the tab is a filter on the screen you're already on, not a screen of its own —
   // Back from a title should return to the grid, not undo a tab switch.
   /**
@@ -355,7 +372,14 @@ export function CinemaClient() {
   // Le « spotlight » plutôt que « récemment ajouté » : ce dernier a sa propre rangée plus bas, et
   // les mêmes huit titres deux fois de suite ne font pas deux sections.
   const movieCarousel = (movies?.spotlight?.length ? movies.spotlight : movies?.recentlyAdded ?? []).slice(0, 8);
-  const [movieCarouselIndex, setMovieCarouselIndex] = useRotatingIndex(movieCarousel.length, focusedItem !== null);
+  // Arrêtée aussi tant que la grille est recouverte. La bannière tournait sous les fiches et les
+  // panneaux, invisible, et chaque tour redessinait tout cet écran — fiches ouvertes comprises,
+  // dont la fenêtre du synopsis reprenait alors le focus toutes les huit secondes (voir
+  // `CinemaDetailModal`).
+  const [movieCarouselIndex, setMovieCarouselIndex] = useRotatingIndex(
+    movieCarousel.length,
+    focusedItem !== null || !gridOnTop
+  );
   const heroItem = focusedItem ?? movieCarousel[movieCarouselIndex] ?? null;
   /**
    * La barre allumée est celle du titre que la bannière montre — pas celle de la rotation.
@@ -390,7 +414,10 @@ export function CinemaClient() {
     route.film !== null ? moviesById.size > 0 : seriesById.size > 0
   );
   const seriesCarousel = (series?.spotlight?.length ? series.spotlight : series?.recentlyAdded ?? []).slice(0, 8);
-  const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(seriesCarousel.length, seriesFocusedItem !== null);
+  const [seriesCarouselIndex, setSeriesCarouselIndex] = useRotatingIndex(
+    seriesCarousel.length,
+    seriesFocusedItem !== null || !gridOnTop
+  );
   const seriesHeroItem = seriesFocusedItem ?? seriesCarousel[seriesCarouselIndex] ?? null;
   const seriesSpotlightIndex = seriesHeroItem
     ? seriesCarousel.findIndex((sh) => sh.sonarrId === seriesHeroItem.sonarrId)
@@ -456,18 +483,7 @@ export function CinemaClient() {
   const lastFocusedCard = useRef<HTMLElement | null>(null);
   const rowsPaneRef = useRef<HTMLDivElement>(null);
 
-  // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu (see the
-  // hook's own doc comment) AND while the player is open. The player closes CinemaMovieDetail
-  // the moment Lecture actually starts (see CinemaMovieDetail's own note), which flips
-  // selectedItem back to null — without this second condition that alone was enough to
-  // re-arm this hook's own global arrow-key listener underneath the player: pressing Right on a
-  // player control it didn't recognize hit useTvGridNav's "nothing focused yet" branch, which
-  // jumps straight to the first poster card in the (still fully mounted, just hidden) browse
-  // grid — then Enter on THAT opened a completely different title's detail sheet.
-  const playback = usePlayback();
-
   const router = useRouter();
-  const searchOpen = route.search;
   const setSearchOpen = useCallback(
     (open: boolean) => (open ? cinemaNavigate({ search: true }) : cinemaClose({ search: false })),
     []
@@ -479,11 +495,11 @@ export function CinemaClient() {
   // seriesSelectedItem gate this now — either detail sheet owns the keyboard the same way.
   // Les flèches ne pilotent la grille que lorsqu'elle est l'écran du dessus : un panneau du rail
   // (recherche, Ma liste, compte) la recouvre, et sans cette garde on déplaçait le focus dans des
-  // affiches invisibles pendant qu'on lisait autre chose.
-  const panelOpen = searchOpen || route.list || route.account;
+  // affiches invisibles pendant qu'on lisait autre chose. La garde oubliait la grille complète et
+  // les fiches TMDB — le même défaut, deux fois de plus. Voir `gridIsTop`.
   /** Une fiche TMDB ou une fiche personne est ouverte par-dessus celles de la bibliothèque. */
   const sheetAbove = route.discover !== null || route.person !== null;
-  useTvGridNav(selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen);
+  useTvGridNav(gridOnTop);
 
   /**
    * Au doigt, la carte arrêtée au centre prend la bannière — l'équivalent du survol.
@@ -493,34 +509,52 @@ export function CinemaClient() {
    * parce qu'une souris a déjà son propre chemin vers la bannière.
    */
   const touch = useIsTouch();
-  useCentredCard(
-    rowsPaneRef,
-    touch && selectedItem === null && seriesSelectedItem === null && playback.mode !== "full" && !panelOpen && !sheetAbove
-  );
+  useCentredCard(rowsPaneRef, touch && gridOnTop);
 
   // "/" opens the search from anywhere on the browse screen — the shortcut every media UI has,
   // and the reason the button itself can stay a small icon rather than a full-width field.
   useEffect(() => {
+    // Même garde que les flèches : sous une fiche TMDB ou dans la grille complète, « / » ouvrait
+    // la recherche *par-dessus*, et son retour ramenait à un écran qu'on n'avait pas quitté.
+    if (!gridOnTop) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key !== "/" || panelOpen) return;
+      if (e.key !== "/") return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName ?? "";
       if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
-      if (selectedItem || seriesSelectedItem || playback.mode === "full") return;
       e.preventDefault();
       setSearchOpen(true);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panelOpen, selectedItem, seriesSelectedItem, playback.mode, setSearchOpen]);
+  }, [gridOnTop, setSearchOpen]);
 
   // All four are useCallback'd for one specific reason: the row components below are memo'd, and
   // a fresh function identity on every render would defeat that entirely — the rows (and every
   // card in them, which on a large library is thousands of nodes) would re-render on every single
   // arrow keypress, since focus changes re-render this component by design.
-  const openDetail = useCallback((item: CinemaMovie) => {
-    lastFocusedCard.current = document.activeElement as HTMLElement;
-    openTitle("movies", item.radarrId);
+  const rememberGridCard = useCallback(() => {
+    // Seulement une carte de la grille — voir `gridCardInFocus`. Et rien plutôt qu'une ancienne :
+    // Safari ne donne pas le focus à un bouton cliqué, et garder la carte d'un parcours au clavier
+    // précédent ferait sauter la grille vers elle au retour.
+    lastFocusedCard.current = gridCardInFocus(rowsPaneRef.current);
   }, []);
+
+  const openDetail = useCallback(
+    (item: CinemaMovie) => {
+      rememberGridCard();
+      openTitle("movies", item.radarrId);
+    },
+    [rememberGridCard]
+  );
+
+  /**
+   * Un titre similaire ou de la même saga, ouvert depuis une fiche.
+   *
+   * Pas `openDetail` : il n'y a aucune carte de la grille à retenir — le focus est dans la fiche —
+   * et l'onglet ne doit pas bouger, sinon la fiche du dessous se démonte. Voir `openSimilarTitle`.
+   */
+  const openSimilarMovie = useCallback((item: CinemaMovie) => openSimilarTitle("movies", item.radarrId), []);
+  const openSimilarSeries = useCallback((item: CinemaSeries) => openSimilarTitle("series", item.sonarrId), []);
 
   /**
    * Ouvrir la fiche depuis une carte de reprise.
@@ -561,38 +595,54 @@ export function CinemaClient() {
     [moviesById]
   );
 
-  const openResume = useCallback((href: string | null, play: () => void) => {
-    // La carte d'où l'on part, retenue avant de partir : c'est ce qui rend le focus au bon
-    // endroit en revenant, et c'est la seule chose que cet écran ajoute au geste commun.
-    lastFocusedCard.current = document.activeElement as HTMLElement;
-    openResumeTarget(href, play);
-  }, []);
+  const openResume = useCallback(
+    (href: string | null, play: () => void) => {
+      // La carte d'où l'on part, retenue avant de partir : c'est ce qui rend le focus au bon
+      // endroit en revenant, et c'est la seule chose que cet écran ajoute au geste commun.
+      rememberGridCard();
+      openResumeTarget(href, play);
+    },
+    [rememberGridCard]
+  );
+
+  /**
+   * Le focus ne revient à la grille que si l'on y revient — et seulement *une fois* revenu.
+   *
+   * Fermer une fiche ouverte par-dessus une autre découvre la précédente, pas l'accueil : y
+   * renvoyer le focus faisait défiler la grille *derrière* la fiche restée à l'écran, et le
+   * mouvement se voyait à travers. Même chose pour une fiche ouverte depuis la recherche, « Ma
+   * liste » ou la grille complète : c'est eux qu'on retrouve (voir `closeUncoversGrid`).
+   *
+   * Et la demande attend que la grille soit de nouveau l'écran du dessus, plutôt qu'une image :
+   * refermer est une demande, pas un fait (`cinemaClose` passe par `history.back()`, l'adresse
+   * change un tour plus tard), et tant qu'elle n'a pas changé la grille est `inert` — un
+   * `focus()` y est ignoré sans bruit.
+   */
+  const restoreFocusOnReturn = useRef(false);
+  useEffect(() => {
+    if (!gridOnTop || !restoreFocusOnReturn.current) return;
+    restoreFocusOnReturn.current = false;
+    const card = lastFocusedCard.current;
+    if (card?.isConnected) card.focus();
+  }, [gridOnTop]);
 
   const closeDetail = useCallback(() => {
-    // Le focus ne revient à la grille que si l'on y revient.
-    //
-    // Fermer une fiche ouverte par-dessus une autre découvre la précédente, pas l'accueil : y
-    // renvoyer le focus faisait défiler la grille *derrière* la fiche restée à l'écran, et le
-    // mouvement se voyait à travers. La carte mémorisée est celle qui a ouvert la *première*
-    // fiche, et elle n'a rien à voir avec celle-ci.
-    const returningToBrowse = !sheetIsBehind();
+    restoreFocusOnReturn.current = closeUncoversGrid(readCinemaRoute(), sheetIsBehind());
     cinemaClose({ film: null, episodes: false });
-    // The card is still in the DOM (the browse screen never unmounts under the overlay) but
-    // isn't focused yet the instant this runs — the overlay's own focused button is still
-    // mid-unmount. One frame later it's safe to move focus back.
-    if (returningToBrowse) requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
-  const openSeriesDetail = useCallback((item: CinemaSeries) => {
-    lastFocusedCard.current = document.activeElement as HTMLElement;
-    openTitle("series", item.sonarrId);
-  }, []);
+  const openSeriesDetail = useCallback(
+    (item: CinemaSeries) => {
+      rememberGridCard();
+      openTitle("series", item.sonarrId);
+    },
+    [rememberGridCard]
+  );
 
   const closeSeriesDetail = useCallback(() => {
     // Voir `closeDetail` : la grille ne récupère le focus que si c'est elle qu'on découvre.
-    const returningToBrowse = !sheetIsBehind();
+    restoreFocusOnReturn.current = closeUncoversGrid(readCinemaRoute(), sheetIsBehind());
     cinemaClose({ serie: null, episodes: false });
-    if (returningToBrowse) requestAnimationFrame(() => lastFocusedCard.current?.focus());
   }, []);
 
   /**
@@ -618,8 +668,11 @@ export function CinemaClient() {
   const behind = useRouteBehind();
   const movieStack = useMemo(() => {
     if (!selectedItem) return [];
+    // Sans condition sur l'onglet de l'entrée recouverte : un film ouvert depuis « Reprendre »
+    // sur l'onglet Séries porte `tab=series`, et la fiche du dessous n'était alors jamais
+    // redessinée — le retour la remontait de zéro. Le bureau résout par champ, pas par onglet.
     const under =
-      behind && behind.tab === "movies" && behind.film !== null && behind.film !== route.film
+      behind && behind.film !== null && behind.film !== route.film
         ? moviesById.get(behind.film) ?? null
         : null;
     return under ? [under, selectedItem] : [selectedItem];
@@ -627,7 +680,7 @@ export function CinemaClient() {
   const seriesStack = useMemo(() => {
     if (!seriesSelectedItem) return [];
     const under =
-      behind && behind.tab === "series" && behind.serie !== null && behind.serie !== route.serie
+      behind && behind.serie !== null && behind.serie !== route.serie
         ? seriesById.get(behind.serie) ?? null
         : null;
     return under ? [under, seriesSelectedItem] : [seriesSelectedItem];
@@ -823,8 +876,8 @@ export function CinemaClient() {
       {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
           même moteur que la recherche globale, elle trouve aussi les personnes et les titres
           qu'on ne possède pas encore, et elle doit donc exister partout, pas seulement sur la
-          grille. `searchOpen` reste lu plus haut pour suspendre la navigation aux flèches et la
-          bande-annonce pendant qu'elle est ouverte. */}
+          grille. Ouverte, elle recouvre la grille et suspend tout ce qui en dépend ici — voir
+          `gridIsTop`. */}
 
       {/* One continuous ambient background for the WHOLE screen, not scoped to the hero pane —
           a sharp copy of the focused item's backdrop (masked, fading out by ~72% of the full
@@ -890,6 +943,10 @@ export function CinemaClient() {
           buttons at all. */}
       <div
         className="relative flex h-full flex-col"
+        // Tout ce qui recouvre la grille la rend inerte : ni Tab, ni un clic égaré, ni un focus
+        // programmé ne peuvent plus atteindre une affiche cachée. Pas sous le lecteur plein écran
+        // — voir `gridIsTop` : la carte qui l'a lancé doit garder le focus pour le retour.
+        inert={coversGrid(route)}
         /**
          * La molette agit partout, même sur l'aperçu du haut.
          *
@@ -1208,6 +1265,10 @@ export function CinemaClient() {
           rail : le retour ramène aux rangées, à l'endroit où on les avait laissées. */}
       {browseExit.render && lastBrowse !== null && catalogue.length > 0 && (
         <CinemaBrowseSheet
+          // Une autre grille est un autre écran (règle 1 du cycle de vie des fiches) : sans clé,
+          // rouvrir « Voir tout » sur un autre genre pendant la sortie de la précédente gardait
+          // son filtre, son tri et sa décennie.
+          key={`${mediaType}:${lastBrowse}`}
           leaving={browseExit.leaving}
           genre={lastBrowse}
           mediaType={mediaType}
@@ -1228,7 +1289,7 @@ export function CinemaClient() {
               item={film}
               underneath={!top}
               onClose={top ? closeDetail : noop}
-              onSelectSimilar={openDetail}
+              onSelectSimilar={openSimilarMovie}
             />
           );
         })}
@@ -1240,7 +1301,7 @@ export function CinemaClient() {
               item={serie}
               underneath={!top}
               onClose={top ? closeSeriesDetail : noop}
-              onSelectSimilar={openSeriesDetail}
+              onSelectSimilar={openSimilarSeries}
             />
           );
         })}

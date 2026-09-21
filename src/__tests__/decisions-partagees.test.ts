@@ -384,3 +384,30 @@ describe("« Reprendre » et « Ma liste » tiennent leur place, sur les deux in
     }
   );
 });
+
+describe("« Ma liste » ne se propose qu'à un titre qui a un identifiant TMDB", () => {
+  /**
+   * Sonarr ne résout pas toujours d'identifiant TMDB pour une série. Les deux fiches envoyaient
+   * alors `tmdbId ?? 0` : la route répondait 400, et la fiche en affichait l'erreur brute — en
+   * français quelle que soit la langue du compte. Relevé le 21/09/2026.
+   */
+  it("la règle est une fonction, et elle refuse l'absence comme le zéro", async () => {
+    const { canJoinWatchlist } = await import("@/lib/useAddToWatchlist");
+    expect(canJoinWatchlist(null)).toBe(false);
+    expect(canJoinWatchlist(undefined)).toBe(false);
+    expect(canJoinWatchlist(0)).toBe(false);
+    expect(canJoinWatchlist(1396)).toBe(true);
+  });
+
+  // Le bouton lui-même n'est rendu que si la règle l'accepte — une garde dans le seul geste
+  // laisserait un bouton qui ne fait rien.
+  it.each([
+    ["src/components/cinema/CinemaSeriesDetail.tsx", /\{listable && \(\s*<button\s+data-detail-menu\s+onClick=\{toggleAddToList\}/],
+    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\{canJoinWatchlist\(tmdbId\) && \(\s*<button type="button" onClick=\{toggleInList\}/],
+  ])("%s la demande avant de dessiner le bouton", (f, guarded) => {
+    const src = lire(f);
+    expect(src).toMatch(guarded);
+    // La forme exacte qui portait la faute sur la fiche du bureau.
+    expect(src).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
+  });
+});

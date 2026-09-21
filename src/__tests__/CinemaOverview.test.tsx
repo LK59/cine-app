@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
@@ -100,6 +100,54 @@ describe("la fenêtre du synopsis", () => {
     expect(onClose).toHaveBeenCalled();
     expect(behind).not.toHaveBeenCalled();
     window.removeEventListener("keydown", behind);
+  });
+
+  /**
+   * Le symptôme du 21/09/2026 : une flèche dans la fenêtre de la distribution atteignait le menu
+   * de la fiche, derrière elle — le film se gardait du synopsis mais pas de la distribution, la
+   * série d'aucun des deux. Le focus partait sur « Lecture » sous la fenêtre, et Entrée lançait le
+   * film. La fenêtre garde maintenant les flèches, pour toutes les fiches à la fois.
+   */
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])("garde %s pour elle", async (key) => {
+    const behind = vi.fn();
+    window.addEventListener("keydown", behind);
+    try {
+      open();
+      await userEvent.keyboard(`{${key}}`);
+      expect(behind).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", behind);
+    }
+  });
+
+  /**
+   * Les fiches lui passent `onClose` en fonction fléchée, neuve à chaque rendu, et l'écran du
+   * dessous se redessine tout seul (la bannière, toutes les huit secondes). L'effet qui en
+   * dépendait reprenait le focus à chaque fois : on parcourait la distribution au clavier, et le
+   * focus revenait sur la croix — Entrée refermait alors la fenêtre au lieu d'ouvrir l'acteur.
+   */
+  it("ne reprend pas le focus quand la fiche se redessine", () => {
+    const { rerender } = render(
+      <CinemaDetailModal title="Distribution" closeLabel="Fermer" onClose={() => {}}>
+        <button type="button">Cillian Murphy</button>
+      </CinemaDetailModal>
+    );
+    const actor = screen.getByText("Cillian Murphy");
+    actor.focus();
+
+    const onClose = vi.fn();
+    rerender(
+      <CinemaDetailModal title="Distribution" closeLabel="Fermer" onClose={onClose}>
+        <button type="button">Cillian Murphy</button>
+      </CinemaDetailModal>
+    );
+    expect(document.activeElement).toBe(actor);
+
+    // Et c'est bien le dernier `onClose` reçu qu'Échap appelle, pas celui du premier rendu.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("se ferme aussi d'un clic à côté, mais pas d'un clic dedans", async () => {

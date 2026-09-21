@@ -233,6 +233,17 @@ export function useCinemaRoute(): CinemaRoute {
   return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY);
 }
 
+/**
+ * L'adresse lue au moment où on la demande — la version geste de `useCinemaRoute`.
+ *
+ * Même raison que `sheetIsBehind` : un rappel déclenché par un clic doit lire l'état du clic, et
+ * le faire dépendre d'une valeur de rendu le recréerait à chaque navigation — ce qui redessinerait
+ * les mille cartes mémoïsées qui le reçoivent.
+ */
+export function readCinemaRoute(): CinemaRoute {
+  return typeof window === "undefined" ? EMPTY : getSnapshot();
+}
+
 function readBehind(): SheetRef | boolean {
   const value = (window.history.state as Record<string, unknown> | null)?.[BEHIND_KEY];
   return (value as SheetRef | boolean) ?? false;

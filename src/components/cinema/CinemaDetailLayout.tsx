@@ -185,19 +185,52 @@ export function CinemaDetailModal({
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
+  /**
+   * Le dernier `onClose` reçu, lu au moment de la touche.
+   *
+   * Les deux fiches le passent en fonction fléchée, donc neuve à chaque rendu — et l'effet qui en
+   * dépendait se rejouait avec lui, focus compris. Or l'écran du dessous se redessine tout seul
+   * (la bannière tournait toutes les huit secondes) : le focus revenait sur la croix pendant qu'on
+   * parcourait la distribution au clavier, et Entrée refermait la fenêtre au lieu d'ouvrir l'acteur.
+   */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Le focus une fois, à l'ouverture — et plus jamais ensuite. Voir `onCloseRef`.
   useEffect(() => {
     closeRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     // Écoutée en capture : la fiche écoute Échap sur `window` elle aussi, et sans cela la même
     // touche fermait la fenêtre *et* la fiche derrière elle.
     function onKey(e: KeyboardEvent) {
+      /**
+       * Les flèches restent dans la fenêtre.
+       *
+       * La fiche parcourt son menu aux flèches, sur `window` elle aussi : chaque fiche devait donc
+       * se taire tant qu'une fenêtre était ouverte, et chacune tenait sa propre liste. Le film
+       * pensait au synopsis mais pas à la distribution, la série à aucun des deux — une flèche
+       * dans la distribution envoyait le focus sur « Lecture », *derrière* la fenêtre, et Entrée
+       * lançait le film. Arrêtées ici, une fois, pour toutes les fenêtres et toutes les fiches.
+       *
+       * Arrêtées et non annulées : le défilement du texte par les flèches reste celui du
+       * navigateur.
+       */
+      if (e.key.startsWith("Arrow")) {
+        e.stopPropagation();
+        return;
+      }
       if (e.key !== "Escape" && e.key !== "Backspace") return;
       e.preventDefault();
       e.stopPropagation();
-      onClose();
+      onCloseRef.current();
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, []);
 
   return createPortal(
     <div

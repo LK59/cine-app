@@ -14,7 +14,7 @@ import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, arrivedByB
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
@@ -196,11 +196,16 @@ export function CinemaSeriesDetail({
 
   // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
   // local : c'est une intention, et rien d'autre ne la connaît.
+  // Sans identifiant TMDB, la ligne n'est pas rendue — voir `canJoinWatchlist`. Ce `?? 0` envoyait
+  // un 400 à la route, et la fiche en affichait l'erreur brute.
+  const listable = canJoinWatchlist(item.tmdbId);
   function toggleAddToList() {
-    if (inList) removeFromWatchlist({ tmdbId: item.tmdbId ?? 0, mediaType: "series" });
+    if (!canJoinWatchlist(item.tmdbId)) return;
+    const tmdbId = item.tmdbId;
+    if (inList) removeFromWatchlist({ tmdbId, mediaType: "series" });
     else
       addToWatchlist(
-        { tmdbId: item.tmdbId ?? 0, mediaType: "series", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
+        { tmdbId, mediaType: "series", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
         "to_watch"
       );
   }
@@ -445,20 +450,22 @@ export function CinemaSeriesDetail({
                 l'air d'être celle qu'on venait de désigner. La pastille change de forme (un plus
                 devient un marque-page coché) et de couleur ; la ligne, elle, reste disponible
                 pour dire ce qu'elle a toujours dit : où l'on se trouve. */}
-            <button
-              data-detail-menu
-              onClick={toggleAddToList}
-              aria-pressed={inList}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-            >
-              <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                {inList ? <BookmarkCheck size={16} /> : <Plus size={14} />}
-              </span>
-              {/* Le libellé dit l'état, pas le geste. */}
-              <span className="text-sm font-medium">
-                {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-              </span>
-            </button>
+            {listable && (
+              <button
+                data-detail-menu
+                onClick={toggleAddToList}
+                aria-pressed={inList}
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              >
+                <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                  {inList ? <BookmarkCheck size={16} /> : <Plus size={14} />}
+                </span>
+                {/* Le libellé dit l'état, pas le geste. */}
+                <span className="text-sm font-medium">
+                  {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
+                </span>
+              </button>
+            )}
           </div>
 
         </div>

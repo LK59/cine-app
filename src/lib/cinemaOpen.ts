@@ -27,6 +27,26 @@ export function openTitle(type: "movies" | "series", libraryId: number): void {
 }
 
 /**
+ * Un titre ouvert depuis *l'intérieur* d'une fiche — titres similaires, saga — sur le bureau.
+ *
+ * **Sans toucher à l'onglet**, pour la raison même d'`openResumeTarget` : un film ouvert depuis
+ * « Reprendre » sur l'onglet Séries laisse l'adresse sur `tab=series`. `openTitle` y réécrivait
+ * `tab=movies` en ouvrant le titre similaire, et la pile du bureau, qui ne redessinait la fiche
+ * du dessous que si l'onglet de l'entrée recouverte était le bon, la démontait : le retour la
+ * remontait de zéro, et la grille derrière changeait d'onglet sous la fiche. Relevé le 21/09/2026.
+ *
+ * Sûr pour la même raison qu'`openResumeTarget` : le bureau résout les fiches par champ, sans
+ * regarder l'onglet, et l'autre champ est effacé. Le téléphone garde son propre chemin
+ * (`openLibraryTitle` avec l'onglet), que sa pile lit autrement.
+ */
+export function openSimilarTitle(type: "movies" | "series", libraryId: number): void {
+  const replaced = { person: null, discover: null };
+  cinemaNavigate(
+    type === "series" ? { ...replaced, serie: libraryId, film: null } : { ...replaced, film: libraryId, serie: null }
+  );
+}
+
+/**
  * Une suggestion : sa fiche de bibliothèque si on la possède, sa fiche TMDB sinon.
  *
  * C'est la distinction qui fait que « Lire » ne devient « Demander » qu'au bon moment.

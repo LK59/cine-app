@@ -8,6 +8,7 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { HeroOverview } from "@/components/cinema/CinemaHero";
 
 interface SonarrCastMember {
   tmdbId: number;
@@ -67,10 +68,8 @@ export function CinemaSeriesHero({
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
       </div>
 
-      <p /* Voir CinemaHero : la même coupure, au même endroit de l'écran, pour l'autre onglet. */
-          className="clamp-fade-2 max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
-        {info?.tmdb?.overview || item.overview}
-      </p>
+      {/* Le même synopsis que la bannière des films, par le même composant — voir HeroOverview. */}
+      <HeroOverview info={info} fallback={item.overview} />
 
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
         <p className="max-w-xl truncate text-xs text-white/60">

@@ -171,6 +171,12 @@ ni statut ni note.
 dans la rangée « Ma liste » du cinéma, qui ne lisait que `to_watch`. La page de gestion qui
 maintenait cinq statuts et des notes (0 note sur 47 titres) est supprimée.
 
+**Qui peut y entrer.** Un titre qui a un identifiant TMDB — la liste est indexée dessus :
+`canJoinWatchlist` (`useAddToWatchlist.ts`). Sans lui, le bouton n'est pas rendu. Appelants : la
+fiche série du bureau, la fiche du téléphone (la fiche film du bureau a toujours un identifiant
+Radarr → TMDB). Corrigé le 21/09 : les deux envoyaient `tmdbId ?? 0`, la route répondait 400 et la
+fiche en affichait l'erreur brute, en français. Tests : `decisions-partagees.test.ts`.
+
 ## 7. Refermer une fiche, et ce qu'on relit après une lecture
 
 **Porteurs.** `cinemaClose` (seule sortie), `useDelayedClose` / `useExitDelay` (l'un ou l'autre,
@@ -250,6 +256,37 @@ filtre d'administration, pas une pastille.
 **Reste connu.** `app/layout.tsx` et `api/search/route.ts` relisent le cookie à la main, sans le
 `decodeURIComponent` de `localeOf`. Sans effet aujourd'hui : les quatre valeurs possibles n'ont
 rien à décoder.
+
+## 10. La grille du bureau est-elle l'écran du dessus ?
+
+**Règle.** Rien ne la recouvre dans l'adresse — ni fiche (`film`, `serie`), ni fiche TMDB ou
+personne, ni la grille complète (`browse`), ni un panneau du rail (recherche, Ma liste, compte) —
+et le lecteur n'est pas en plein écran. Refermer une fiche ne rend le focus à la grille que si
+c'est elle qu'on découvre, et une fois qu'elle l'est redevenue (l'adresse change un tour plus
+tard).
+
+**Porteur.** `src/lib/cinemaGridTop.ts` — `coversGrid(route)`, `gridIsTop(route, playerMode)`,
+`closeUncoversGrid(route, sheetBehind)`, `gridCardInFocus(pane)` (seule une carte de la grille
+est retenue comme point de retour, jamais un bouton de fiche).
+
+**Appelants.** `CinemaClient`, six fois : `useTvGridNav`, `useCentredCard`, le raccourci « / »,
+`inert` sur la grille, la pause des deux rotations de bannière, le focus rendu par
+`closeDetail` / `closeSeriesDetail`.
+
+**Tests.** `CinemaClient-grid-top.test.tsx` (l'écran entier monté, fiches en doublures).
+
+**Corrigé le 21/09.** Six conditions recopiées, aucune identique : les flèches et « / » ignoraient
+la grille complète ou les fiches TMDB (une flèche envoyait le focus sur une affiche cachée,
+Entrée ouvrait un film invisible) ; le focus rendu ignorait les panneaux ; la bannière tournait
+sous les fiches et redessinait tout l'écran toutes les 8 s.
+
+**Voulu.**
+- `inert` suit `coversGrid` et non `gridIsTop` : sous le lecteur plein écran, la carte qui l'a
+  lancé doit garder le focus pour le retour.
+- Les titres similaires et les sagas passent par `openSimilarTitle` (`cinemaOpen.ts`), qui ne
+  touche pas à l'onglet — comme `openResumeTarget`. Le bureau seulement : la pile du téléphone
+  lit l'onglet autrement et garde `openLibraryTitle`.
+- Le téléphone n'a ni flèches ni bannière tournante sous ses fiches : pas d'appelant là-bas.
 
 ---
 

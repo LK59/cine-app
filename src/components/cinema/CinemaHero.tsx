@@ -23,6 +23,39 @@ interface RadarrInfo {
   trailerKey: string | null;
 }
 
+/**
+ * Le synopsis d'une bannière — film ou série, écrit une fois.
+ *
+ * Rien plutôt que de l'anglais. Le synopsis traduit vient de TMDB et met un instant à arriver ;
+ * celui qui sert de repli vient de Radarr ou de Sonarr, qui ne traduisent pas — alors sous une
+ * interface en français, l'accueil affichait un texte en anglais le temps que le bon arrive, puis
+ * le remplaçait. Une ligne vide un court instant se remarque moins qu'une langue qui change sous
+ * les yeux. Le repli ne sert qu'une fois la réponse arrivée *sans* texte traduit.
+ *
+ * La bannière des films avait appris tout cela ; celle des séries, sa copie, non — elle montrait
+ * l'anglais de Sonarr puis sautait au français, et sans hauteur réservée toute la bannière
+ * sautait avec. Relevé le 21/09/2026 : d'où ce composant, pour que les deux ne puissent plus
+ * diverger.
+ */
+export function HeroOverview({
+  info,
+  fallback,
+}: {
+  /** La réponse de la route `info` — `undefined` tant qu'elle n'est pas arrivée. */
+  info: { tmdb: { overview: string } | null } | undefined;
+  fallback: string | null | undefined;
+}) {
+  return (
+    <p /* Estompé et non tronqué par des points, comme la fiche : deux façons de couper le même
+           texte dans la même application, c'était une de trop. Le minimum de hauteur reste —
+           c'est lui qui empêche la mise en page de sauter quand le survol change de titre, et la
+           classe ne fixe qu'un maximum. */
+        className="clamp-fade-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+      {info ? info.tmdb?.overview || fallback || "" : ""}
+    </p>
+  );
+}
+
 // Text only — the backdrop image/gradients (and, once focus dwells long enough, the trailer
 // video that takes over from them — see CinemaTrailerBackdrop) live in CinemaClient now, as one
 // continuous full-screen background layer shared with the rows pane beneath (see its own doc
@@ -95,18 +128,7 @@ export function CinemaHero({
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
       </div>
 
-      {/* Rien plutôt que de l'anglais. Le synopsis traduit vient de TMDB et met un instant à
-          arriver ; celui qui servait de repli vient de Radarr, qui ne traduit pas — alors sous
-          une interface en français, l'accueil affichait un texte en anglais le temps que le bon
-          arrive, puis le remplaçait. Une ligne vide un court instant se remarque moins qu'une
-          langue qui change sous les yeux. */}
-      <p /* Estompé et non tronqué par des points, comme la fiche depuis cet après-midi : deux
-             façons de couper le même texte dans la même application, c'était une de trop. Le
-             minimum de hauteur reste — c'est lui qui empêche la mise en page de sauter quand le
-             survol change de titre, et la classe ne fixe qu'un maximum. */
-          className="clamp-fade-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
-        {info?.tmdb?.overview ?? (info ? item.overview : "")}
-      </p>
+      <HeroOverview info={info} fallback={item.overview} />
 
       {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
         <p className="max-w-xl truncate text-xs text-white/60">

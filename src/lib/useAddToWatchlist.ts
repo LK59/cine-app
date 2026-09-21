@@ -17,6 +17,22 @@ interface WatchlistPayload {
 }
 
 /**
+ * Ce titre peut-il aller dans « Ma liste » ?
+ *
+ * La liste est indexée par l'identifiant TMDB (`watchlistDb`, `POST /api/watchlist`), et Sonarr
+ * n'en résout pas toujours un pour une série. Les fiches envoyaient alors `tmdbId ?? 0` : la route
+ * répondait 400, et la fiche affichait sa phrase d'erreur brute — en français quelle que soit la
+ * langue du compte. Relevé le 21/09/2026. Sans identifiant, pas de bouton : proposer un geste
+ * qui ne peut qu'échouer, c'est mentir sur ce qu'il fait.
+ *
+ * Un prédicat, et non une garde par fiche : le bureau et le téléphone le demandent au même
+ * endroit, et une fiche qui l'oublierait retrouverait le 400.
+ */
+export function canJoinWatchlist(tmdbId: number | null | undefined): tmdbId is number {
+  return typeof tmdbId === "number" && tmdbId > 0;
+}
+
+/**
  * Optimistically marks an item as added, then rolls back and toasts on
  * failure — the fetch here previously ran fire-and-forget with no
  * res.ok check, so a failed request left the button stuck showing

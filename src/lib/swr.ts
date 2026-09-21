@@ -78,7 +78,8 @@ export { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys"
 export const TO_WATCH_KEY = "/api/watchlist?status=to_watch";
 
 /** La clé qui porte « vu », « favori » et le point de reprise d'un titre. */
-export const progressKey = (itemId: string) => `/api/cinema/progress/${itemId}`;
+const PROGRESS_PREFIX = "/api/cinema/progress/";
+export const progressKey = (itemId: string) => `${PROGRESS_PREFIX}${itemId}`;
 
 /**
  * Combien de temps attendre que l'écran se libère avant d'abandonner la remise en cause.
@@ -148,6 +149,24 @@ export async function revalidateWatchState(itemId: string | null): Promise<void>
      * 1,4 Mo qu'on ne veut surtout pas redemander pour une case cochée.
      */
     globalMutate((key) => typeof key === "string" && key.startsWith("/api/cinema/series/")),
+    /**
+     * Et la progression des *autres* titres montés — celle de la série avant tout.
+     *
+     * La fiche série lit « vu » sur sa propre clé (`progressKey` de la série, via
+     * `useJellyfinItemState`), et la fermeture ne connaît que l'épisode : après le dernier
+     * épisode, Jellyfin marquait la série vue et la fiche proposait encore « Marquer comme vu ».
+     * Même raison que le filtre ci-dessus — l'identifiant de la série n'est pas connu ici. Une
+     * clé qu'aucune fiche n'affiche n'est pas redemandée : SWR ne relit que ce qui est monté.
+     *
+     * Le titre nommé est écarté, puisqu'il est déjà dans la liste : le relire deux fois, c'était
+     * deux requêtes.
+     */
+    globalMutate(
+      (key) =>
+        typeof key === "string" &&
+        key.startsWith(PROGRESS_PREFIX) &&
+        (itemId === null || key !== progressKey(itemId))
+    ),
   ]);
 }
 

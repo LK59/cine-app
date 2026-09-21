@@ -10,7 +10,7 @@ import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { arrivedByBack, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
-import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { SHEET_OUT_MS } from "@/lib/sheetMotion";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
@@ -239,6 +239,9 @@ export function CinemaMobileDetail({
   }
 
   function toggleInList() {
+    // Le bouton n'est pas rendu sans identifiant TMDB (voir `canJoinWatchlist`) ; la garde reste,
+    // pour qu'aucun chemin ne renvoie le `0` que la route refusait d'un 400.
+    if (!canJoinWatchlist(tmdbId)) return;
     if (inList) removeFromWatchlist({ tmdbId, mediaType: isSeries ? "series" : "movie" });
     else
       addToWatchlist(
@@ -417,12 +420,14 @@ export function CinemaMobileDetail({
           {/* Deux coches identiques côte à côte, dont l'une servait à la fois d'« ajouter » et
               d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. Un plus qui
               devient un marque-page coché se lit d'un coup d'œil, et le libellé dit l'état. */}
-          <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
-            {inList ? <BookmarkCheck size={22} className="text-accent-400" /> : <Plus size={22} className="text-white" />}
-            <span className="text-center text-xs leading-tight text-white/70">
-              {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-            </span>
-          </button>
+          {canJoinWatchlist(tmdbId) && (
+            <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
+              {inList ? <BookmarkCheck size={22} className="text-accent-400" /> : <Plus size={22} className="text-white" />}
+              <span className="text-center text-xs leading-tight text-white/70">
+                {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
+              </span>
+            </button>
+          )}
           {/* Estompé tant qu'on ignore l'état : proposer « marquer comme vu » sans l'avoir lu,
               c'est proposer d'écrire une valeur qu'on a devinée. */}
           <button
