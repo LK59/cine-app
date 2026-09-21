@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Star, BookCheck, CirclePlus, ExternalLink, Loader2, Clock,
-  Eye, Heart, X, CircleCheck, Telescope, Film, Tv, Plus, EllipsisVertical,
+  Eye, Telescope, Film, Tv, Plus, EllipsisVertical,
 } from "lucide-react";
 import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 import { ReleaseSearchModal } from "@/components/ReleaseSearchModal";
@@ -31,8 +31,6 @@ export interface PosterCardItem {
   watchlistStatus?: WatchlistStatus | null;
 }
 
-const ALL_STATUSES: WatchlistStatus[] = ["to_watch", "favorite", "watched", "to_request", "abandoned"];
-
 interface Props {
   item: PosterCardItem;
   mediaType: "movie" | "series";
@@ -51,19 +49,20 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requested, setRequested] = useState(false);
-  const { addedStatus, addToWatchlist: addToWatchlistBase } = useAddToWatchlist(item.watchlistStatus ?? null);
+  const { addedStatus, addToWatchlist: addToWatchlistBase, removeFromWatchlist } = useAddToWatchlist(item.watchlistStatus ?? null);
   const [addingSearch, setAddingSearch] = useState(false);
   const [releaseModal, setReleaseModal] = useState<{ searchEndpoint: string; grabEndpoint: string; mediaId?: number } | null>(null);
 
-  const STATUS_META: Record<WatchlistStatus, { label: string; icon: React.ElementType; textColor: string; bgSolid: string }> = {
-    to_watch:   { label: t("watchlist.statuses.toWatch"),   icon: Eye,          textColor: "text-sky-400",     bgSolid: "bg-sky-500" },
-    to_request: { label: t("watchlist.statuses.toRequest"), icon: Clock,        textColor: "text-amber-400",   bgSolid: "bg-amber-500" },
-    favorite:   { label: t("watchlist.statuses.favorites"), icon: Heart,        textColor: "text-rose-400",    bgSolid: "bg-rose-500" },
-    watched:    { label: t("watchlist.statuses.watched"),   icon: CircleCheck, textColor: "text-emerald-400", bgSolid: "bg-emerald-500" },
-    abandoned:  { label: t("watchlist.statuses.abandoned"), icon: X,            textColor: "text-slate-400",   bgSolid: "bg-slate-500" },
-  };
+  // Une seule liste depuis le 21/09/2026 — « À voir ». Favoris et « vu » sont à Jellyfin, les
+  // demandes à Jellyseerr ; les cinq statuts d'ici en faisaient des copies qui divergeaient.
+  const LIST_META = { icon: Eye, textColor: "text-sky-400", bgSolid: "bg-sky-500" };
 
-  function addToWatchlist(status: WatchlistStatus) {
+
+  function toggleWatchlist() {
+    if (addedStatus) {
+      removeFromWatchlist({ tmdbId: item.tmdbId, mediaType });
+      return;
+    }
     addToWatchlistBase(
       {
         tmdbId: item.tmdbId,
@@ -73,7 +72,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
         posterPath: item.posterUrl,
         voteAverage: item.rating,
       },
-      status
+      "to_watch"
     );
   }
 
@@ -172,21 +171,16 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
       onClick: () => addSeriesToLibrary(),
       disabled: addingSearch,
     }] : []),
-    ...ALL_STATUSES.map((s) => {
-      const meta = STATUS_META[s];
-      const Icon = meta.icon;
-      return {
-        label: meta.label,
-        icon: <Icon size={16} />,
-        onClick: () => addToWatchlist(s),
-        variant: (addedStatus === s ? "accent" : "default") as "accent" | "default",
-        disabled: addedStatus === s,
-        section: t("watchlist.pageTitle"),
-      };
-    }),
+    {
+      label: addedStatus ? t("search.removeFromList") : t("search.addToList"),
+      icon: <Eye size={16} />,
+      onClick: toggleWatchlist,
+      variant: (addedStatus ? "accent" : "default") as "accent" | "default",
+      section: t("watchlist.pageTitle"),
+    },
   ];
 
-  const AddedIcon = addedStatus ? STATUS_META[addedStatus].icon : null;
+  const AddedIcon = addedStatus ? LIST_META.icon : null;
   const carousel = size === "carousel";
   const btnSize = carousel ? 20 : 22;
   const iconSize = carousel ? 8 : 9;
@@ -234,7 +228,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
           )}
 
           {AddedIcon && (
-            <div className={`pointer-events-none absolute bottom-1.5 right-1.5 rounded-full bg-black/70 p-1 ${STATUS_META[addedStatus!].textColor}`}>
+            <div className={`pointer-events-none absolute bottom-1.5 right-1.5 rounded-full bg-black/70 p-1 ${LIST_META.textColor}`}>
               <AddedIcon size={8} />
             </div>
           )}
@@ -253,14 +247,11 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
               title={t("common.moreOptions")}
               style={{ height: btnSize, width: btnSize }}
               className={`btn btn-icon p-0 ${
-                addedStatus ? `${STATUS_META[addedStatus].bgSolid} text-white` : "bg-white/15 text-white/80 hover:bg-white/25"
+                addedStatus ? `${LIST_META.bgSolid} text-white` : "bg-white/15 text-white/80 hover:bg-white/25"
               }`}
             >
               {addedStatus ? (
-                (() => {
-                  const Icon = STATUS_META[addedStatus].icon;
-                  return <Icon size={iconSize} />;
-                })()
+                <LIST_META.icon size={iconSize} />
               ) : (
                 <EllipsisVertical size={iconSize} />
               )}

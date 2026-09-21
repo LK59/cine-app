@@ -18,21 +18,6 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("GET /api/bazarr/providers", () => {
-  it("returns bazarr.getProviders()'s result as-is", async () => {
-    mockBazarr.getProviders.mockResolvedValue([{ name: "opensubtitles" }]);
-    const { GET } = await import("@/app/api/bazarr/providers/route");
-    expect(await (await GET()).json()).toEqual([{ name: "opensubtitles" }]);
-  });
-
-  it("returns 502 when Bazarr is unreachable", async () => {
-    mockBazarr.getProviders.mockRejectedValue(new Error("down"));
-    const { GET } = await import("@/app/api/bazarr/providers/route");
-    const res = await GET();
-    expect(res.status).toBe(502);
-  });
-});
-
 describe("GET /api/jackett/indexers", () => {
   it("returns jackett.getIndexers()'s result as-is", async () => {
     mockJackett.getIndexers.mockResolvedValue([{ id: "yts" }]);

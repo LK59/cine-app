@@ -48,30 +48,21 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist (user_id);
     CREATE INDEX IF NOT EXISTS idx_watchlist_status ON watchlist (user_id, status);
 
-    CREATE TABLE IF NOT EXISTS timeline_events (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      media_type   TEXT    NOT NULL,
-      tmdb_id      INTEGER NOT NULL,
-      tvdb_id      INTEGER,
-      title        TEXT    NOT NULL,
-      event_type   TEXT    NOT NULL,
-      event_date   INTEGER NOT NULL,
-      source       TEXT    NOT NULL,
-      detail       TEXT,
-      user_id      TEXT,
-      created_at   INTEGER NOT NULL
-    );
+    -- Deux tables que rien n'écrivait plus : timeline_events (lue par la notification
+    -- « nouvel épisode », qui n'est donc jamais partie — elle lit l'historique de Sonarr depuis)
+    -- et recommendations_hidden (la page Recommandations, supprimée). Vides en production au
+    -- 21/09/2026 ; les laisser, c'est laisser croire qu'elles servent.
+    DROP TABLE IF EXISTS timeline_events;
+    DROP TABLE IF EXISTS recommendations_hidden;
 
-    CREATE INDEX IF NOT EXISTS idx_timeline_media ON timeline_events (media_type, tmdb_id);
-    CREATE INDEX IF NOT EXISTS idx_timeline_date  ON timeline_events (event_date DESC);
-
-    CREATE TABLE IF NOT EXISTS recommendations_hidden (
-      user_id    TEXT    NOT NULL,
-      tmdb_id    INTEGER NOT NULL,
-      media_type TEXT    NOT NULL,
-      hidden_at  INTEGER NOT NULL,
-      PRIMARY KEY (user_id, tmdb_id, media_type)
-    );
+    -- Une seule liste : « À voir ». favorite / watched vivent chez Jellyfin (« une place par
+    -- fait »), to_request doublait les demandes Jellyseerr, abandoned n'a jamais servi. Les
+    -- titres « à demander » et « favoris » restent dans la liste — ils y étaient déjà pour le
+    -- panneau du lecteur, pas pour la rangée « Ma liste » : les deux écrans se contredisaient.
+    -- Ce qui était « vu » ou « abandonné » n'est justement plus à voir. Idempotent et bon marché
+    -- (l'index porte sur le statut), donc rejoué à chaque démarrage plutôt que noté une fois.
+    UPDATE watchlist SET status = 'to_watch' WHERE status IN ('to_request', 'favorite');
+    DELETE FROM watchlist WHERE status IN ('watched', 'abandoned');
 
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -295,7 +286,12 @@ export interface WatchlistItem {
   updatedAt: number;
 }
 
-export type WatchlistStatus = "to_watch" | "to_request" | "favorite" | "watched" | "abandoned";
+/**
+ * Une seule liste depuis le 21/09/2026. Le type reste, et la colonne aussi : la contrainte
+ * `CHECK` de la table accepte encore les cinq anciennes valeurs, et la réécrire imposerait de
+ * reconstruire la table pour rien — `migrate()` ramène tout à « to_watch » à chaque démarrage.
+ */
+export type WatchlistStatus = "to_watch";
 
 const SELECT_WATCHLIST = `
   SELECT
@@ -347,19 +343,6 @@ export const watchlistDb = {
     return this.get(item.userId, item.mediaType, item.tmdbId)!;
   },
 
-  updateStatus(userId: string, id: number, status: WatchlistStatus, note?: string): boolean {
-    const db = getDb();
-    let r;
-    if (note === undefined) {
-      r = db.prepare("UPDATE watchlist SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-        .run(status, Date.now(), id, userId);
-    } else {
-      r = db.prepare("UPDATE watchlist SET status = ?, note = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-        .run(status, note || null, Date.now(), id, userId);
-    }
-    return r.changes > 0;
-  },
-
   remove(userId: string, id: number): boolean {
     const db = getDb();
     const r = db.prepare("DELETE FROM watchlist WHERE id = ? AND user_id = ?").run(id, userId);
@@ -390,59 +373,6 @@ export const watchlistDb = {
   },
 };
 
-// ─── Timeline helpers ─────────────────────────────────────────────────────────
-
-export interface TimelineEvent {
-  id: number;
-  mediaType: string;
-  tmdbId: number;
-  tvdbId: number | null;
-  title: string;
-  eventType: string;
-  eventDate: number;
-  source: string;
-  detail: string | null;
-  userId: string | null;
-  createdAt: number;
-}
-
-export const timelineDb = {
-  insertEvent(event: Omit<TimelineEvent, "id" | "createdAt">): void {
-    const db = getDb();
-    db.prepare(`
-      INSERT OR IGNORE INTO timeline_events
-        (media_type, tmdb_id, tvdb_id, title, event_type, event_date, source, detail, user_id, created_at)
-      VALUES (@mediaType, @tmdbId, @tvdbId, @title, @eventType, @eventDate, @source, @detail, @userId, @now)
-    `).run({ ...event, now: Date.now() });
-  },
-
-  getForMedia(mediaType: string, tmdbId: number, limit = 50): TimelineEvent[] {
-    const db = getDb();
-    return db.prepare("SELECT * FROM timeline_events WHERE media_type = ? AND tmdb_id = ? ORDER BY event_date DESC LIMIT ?")
-      .all(mediaType, tmdbId, limit) as TimelineEvent[];
-  },
-
-  getGlobal(limit = 50): TimelineEvent[] {
-    const db = getDb();
-    return db.prepare("SELECT * FROM timeline_events ORDER BY event_date DESC LIMIT ?").all(limit) as TimelineEvent[];
-  },
-};
-
-// ─── Recommendations hidden ───────────────────────────────────────────────────
-
-export const recommendationsDb = {
-  hide(userId: string, tmdbId: number, mediaType: string): void {
-    const db = getDb();
-    db.prepare("INSERT OR IGNORE INTO recommendations_hidden (user_id, tmdb_id, media_type, hidden_at) VALUES (?,?,?,?)")
-      .run(userId, tmdbId, mediaType, Date.now());
-  },
-
-  getHidden(userId: string): Set<string> {
-    const db = getDb();
-    const rows = db.prepare("SELECT tmdb_id, media_type FROM recommendations_hidden WHERE user_id = ?").all(userId) as { tmdb_id: number; media_type: string }[];
-    return new Set(rows.map((r) => `${r.media_type}:${r.tmdb_id}`));
-  },
-};
 
 // ─── Push subscriptions ───────────────────────────────────────────────────────
 

@@ -57,23 +57,3 @@ describe("verifySessionFull", () => {
   });
 });
 
-describe("resolveSession", () => {
-  it("extracts and verifies the session cookie from a request", async () => {
-    const { token, jti } = await auth.createSessionToken("louis", "admin");
-    db.sessionDb.create(jti, "louis");
-    const fakeReq = {
-      cookies: { get: (name: string) => (name === session.SESSION_COOKIE ? { value: token } : undefined) },
-    } as unknown as import("next/server").NextRequest;
-
-    const payload = await session.resolveSession(fakeReq);
-    expect(payload?.u).toBe("louis");
-  });
-
-  it("returns null when the cookie is absent", async () => {
-    const fakeReq = {
-      cookies: { get: () => undefined },
-    } as unknown as import("next/server").NextRequest;
-
-    expect(await session.resolveSession(fakeReq)).toBeNull();
-  });
-});

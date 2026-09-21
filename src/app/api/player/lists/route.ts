@@ -178,11 +178,10 @@ export async function GET(req: NextRequest) {
 
     return {
       requests,
-      // « À demander » n'existe plus dans le lecteur, mais la colonne reste et le tableau de bord
-      // s'en sert encore. Ces lignes sont des intentions comme les autres : les cacher aurait fait
-      // disparaître une quarantaine de titres que Louis avait rangés là. Elles rejoignent « À
-      // voir », qui dit exactement la même chose de ce côté-ci.
-      toWatch: fromWatchlist(["to_watch", "to_request", "favorite"]),
+      // Une seule liste depuis le 21/09/2026 : les anciens « à demander » et « favoris » ont été
+      // ramenés à « À voir » par `migrate()`, où ils apparaissaient déjà ici — mais pas dans la
+      // rangée « Ma liste » du cinéma, qui ne lisait que to_watch.
+      toWatch: fromWatchlist(["to_watch"]),
       watched: fromJellyfin(played).sort(byTitle),
     } satisfies PlayerListsPayload;
   }, "player-lists");

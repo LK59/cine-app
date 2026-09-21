@@ -62,9 +62,12 @@ export function MobileNav() {
   // Les entrées viennent de navItems : la barre du bas garde ses libellés courts, tout le reste
   // suit les groupes partagés avec la barre latérale, dans le même ordre.
   const MOBILE_LABELS: Record<string, string> = {
-    "/": t('nav.mobile.home'),
+    // « / » tant que la vue d'ensemble y vivait ; elle est à /gestion depuis que le cinéma a pris
+    // la racine, et la clé ne correspondait plus à rien — la barre affichait le libellé long.
+    "/gestion": t('nav.mobile.home'),
     "/radarr": t('nav.mobile.movies'),
     "/sonarr": t('nav.mobile.series'),
+    "/qbittorrent": t('nav.mobile.downloads'),
   };
 
   const PINNED = NAV_BAR_HREFS.map((href) => {
@@ -187,7 +190,6 @@ export function MobileNav() {
   }
 
   function isActive(href: string) {
-    if (href === "/") return pathname === "/";
     return pathname === href || pathname.startsWith(href + "/");
   }
 

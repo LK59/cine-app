@@ -55,7 +55,6 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Watchlist is per-user: guests can manage their own list
   "POST /api/watchlist",
   "DELETE /api/watchlist",
-  "PATCH /api/watchlist/item",
   // Le lecteur : ce que chacun fait sur son propre compte et sur ses propres listes.
   //
   // Ces routes ont été écrites après cette liste et n'y avaient pas été ajoutées : côté

@@ -70,15 +70,6 @@ export function getDateLocale(locale: string | undefined | null): string {
   }
 }
 
-export function getVideoLangs(locale: string | undefined | null): string {
-  switch (locale) {
-    case "en": return "en,null";
-    case "es": return "es,en,null";
-    case "de": return "de,en,null";
-    default:   return "fr,en,null";
-  }
-}
-
 /**
  * La langue d'une requête, lue sur son cookie.
  *

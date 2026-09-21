@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, within, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
@@ -92,16 +92,31 @@ describe("carte d'affiche", () => {
     expect(already.closest("button")).toBeDisabled();
   });
 
-  it("ouvre sur les actions, les statuts de liste venant après sous leur intitulé", async () => {
+  it("ouvre sur les actions, la liste venant après sous son intitulé", async () => {
     renderCard({ inLibrary: true, libraryHref: "/radarr/7" });
     await openSheet();
 
     const labels = sheetLabels();
     const fiche = labels.findIndex((l) => l.includes("recommendations.viewSheet"));
-    const premierStatut = labels.findIndex((l) => l.includes("watchlist.statuses.toWatch"));
+    // Une seule liste depuis le 21/09/2026 : une entrée qui ajoute ou retire, plus cinq statuts.
+    const premierStatut = labels.findIndex((l) => l.includes("search.addToList"));
     expect(fiche).toBeGreaterThanOrEqual(0);
     expect(premierStatut).toBeGreaterThan(fiche);
     expect(sheet().getByText("watchlist.pageTitle")).toBeInTheDocument();
+    expect(labels.filter((l) => /watchlist\.statuses/.test(l))).toEqual([]);
+  });
+
+  it("retire de la liste un titre qui y est déjà, au lieu de griser l'entrée", async () => {
+    // Avec cinq statuts, l'entrée du statut courant était désactivée ; avec un seul, c'est le
+    // même geste qui ajoute et qui retire — sinon rien sur cette carte ne permettait de retirer.
+    renderCard({ watchlistStatus: "to_watch" });
+    await openSheet();
+    const retirer = sheet().getByText("search.removeFromList").closest("button")!;
+    expect(retirer).not.toBeDisabled();
+    fireEvent.click(retirer);
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith("/api/watchlist", expect.objectContaining({ method: "DELETE" }))
+    );
   });
 
   it("ne propose la recherche interactive qu'à un admin, et seulement hors bibliothèque", async () => {

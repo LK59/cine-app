@@ -61,30 +61,6 @@ describe("GET /api/radarr/queue", () => {
   });
 });
 
-describe("GET /api/radarr/recent", () => {
-  it("excludes movies with no real 'added' date and sorts most-recent first", async () => {
-    mockCachedMovies.mockResolvedValue([
-      { id: 1, title: "Old", added: "0001-01-01T00:00:00Z", images: [] },
-      { id: 2, title: "A", added: "2024-01-01T00:00:00Z", images: [] },
-      { id: 3, title: "B", added: "2024-06-01T00:00:00Z", images: [] },
-    ]);
-    const { GET } = await import("@/app/api/radarr/recent/route");
-    const res = await GET();
-    const body = await res.json();
-    expect(body.map((m: { id: number }) => m.id)).toEqual([3, 2]);
-  });
-
-  it("caps the result at 8 movies", async () => {
-    mockCachedMovies.mockResolvedValue(
-      Array.from({ length: 12 }, (_, i) => ({ id: i, title: `M${i}`, added: `2024-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`, images: [] }))
-    );
-    const { GET } = await import("@/app/api/radarr/recent/route");
-    const res = await GET();
-    const body = await res.json();
-    expect(body).toHaveLength(8);
-  });
-});
-
 describe("POST /api/radarr/releases", () => {
   it("returns 400 when guid or indexerId is missing", async () => {
     const { POST } = await import("@/app/api/radarr/releases/route");

@@ -64,10 +64,10 @@ describe("watchlistDb", () => {
       year: 2014,
       posterPath: null,
       voteAverage: null,
-      status: "favorite",
+      status: "to_watch",
       note: "great movie",
     });
-    expect(updated.status).toBe("favorite");
+    expect(updated.status).toBe("to_watch");
     expect(updated.note).toBe("great movie");
   });
 
@@ -93,13 +93,13 @@ describe("watchlistDb", () => {
       year: 2021,
       posterPath: null,
       voteAverage: null,
-      status: "watched",
+      status: "to_watch",
       note: null,
     });
     expect(updated.voteAverage).toBe(7.9);
   });
 
-  it("getAll filters by status", () => {
+  it("getAll lists one user's titles, filtered or not", () => {
     db.watchlistDb.upsert({
       userId: "u2",
       mediaType: "series",
@@ -109,7 +109,7 @@ describe("watchlistDb", () => {
       year: 2008,
       posterPath: null,
       voteAverage: null,
-      status: "watched",
+      status: "to_watch",
       note: null,
     });
     db.watchlistDb.upsert({
@@ -124,9 +124,7 @@ describe("watchlistDb", () => {
       status: "to_watch",
       note: null,
     });
-    const watched = db.watchlistDb.getAll("u2", "watched");
-    expect(watched).toHaveLength(1);
-    expect(watched[0].title).toBe("Breaking Bad");
+    expect(db.watchlistDb.getAll("u2", "to_watch")).toHaveLength(2);
 
     const all = db.watchlistDb.getAll("u2");
     expect(all).toHaveLength(2);
@@ -149,16 +147,6 @@ describe("watchlistDb", () => {
 
   it("getBulkStatus returns empty map for empty input", () => {
     expect(db.watchlistDb.getBulkStatus("u1", [])).toEqual(new Map());
-  });
-
-  it("updateStatus scopes by userId — no cross-user writes", () => {
-    const item = db.watchlistDb.get("u1", "movie", 100)!;
-    const changedByWrongUser = db.watchlistDb.updateStatus("someone-else", item.id, "favorite");
-    expect(changedByWrongUser).toBe(false);
-
-    const changed = db.watchlistDb.updateStatus("u1", item.id, "favorite");
-    expect(changed).toBe(true);
-    expect(db.watchlistDb.get("u1", "movie", 100)?.status).toBe("favorite");
   });
 
   it("remove scopes by userId and reports whether a row was deleted", () => {
@@ -286,37 +274,7 @@ describe("availabilityNotifDb", () => {
   });
 });
 
-describe("timelineDb", () => {
-  it("inserts and retrieves events for a specific media", () => {
-    db.timelineDb.insertEvent({
-      mediaType: "movie",
-      tmdbId: 700,
-      tvdbId: null,
-      title: "Oppenheimer",
-      eventType: "downloaded",
-      eventDate: Date.now(),
-      source: "radarr",
-      detail: null,
-      userId: null,
-    });
-    const events = db.timelineDb.getForMedia("movie", 700);
-    expect(events).toHaveLength(1);
-    expect(events[0].title).toBe("Oppenheimer");
-  });
 
-  it("getGlobal returns events across all media ordered by date desc", () => {
-    const events = db.timelineDb.getGlobal(10);
-    expect(events.length).toBeGreaterThan(0);
-  });
-});
-
-describe("recommendationsDb", () => {
-  it("hides and lists hidden recommendations per user", () => {
-    db.recommendationsDb.hide("rec-user", 900, "movie");
-    const hidden = db.recommendationsDb.getHidden("rec-user");
-    expect(hidden.has("movie:900")).toBe(true);
-  });
-});
 
 describe("statusHistoryDb — l'historique des services", () => {
   it("agrège la latence et les échecs de chaque service sur une fenêtre", () => {

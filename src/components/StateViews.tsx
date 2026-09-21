@@ -55,20 +55,3 @@ export function EmptyState({
     </div>
   );
 }
-
-/**
- * ServiceDownBanner — inline non-blocking notice when a service is unreachable.
- * Does not prevent the rest of the page from rendering.
- */
-export function ServiceDownBanner({ service, error }: { service: string; error?: string | null }) {
-  const t = useT();
-  return (
-    <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-400">
-      <WifiOff size={14} className="shrink-0" />
-      <span>
-        {t('common.serviceDown', { service })}
-        {error ? ` — ${error}` : ""}
-      </span>
-    </div>
-  );
-}

@@ -3,7 +3,6 @@ import {
   createT,
   getLocaleFromCookie,
   getTmdbLocale,
-  getVideoLangs,
 } from "@/lib/i18n";
 
 describe("createT", () => {
@@ -65,15 +64,3 @@ describe("getTmdbLocale", () => {
   });
 });
 
-describe("getVideoLangs", () => {
-  it("maps known locales", () => {
-    expect(getVideoLangs("en")).toBe("en,null");
-    expect(getVideoLangs("es")).toBe("es,en,null");
-    expect(getVideoLangs("de")).toBe("de,en,null");
-  });
-
-  it("defaults to fr priority list", () => {
-    expect(getVideoLangs("fr")).toBe("fr,en,null");
-    expect(getVideoLangs(undefined)).toBe("fr,en,null");
-  });
-});

@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   const body = await req.json();
-  const { mediaType, tmdbId, tvdbId, title, year, posterPath, voteAverage, status, note } = body;
+  // `status` et `note` ne sont plus lus : une seule liste depuis le 21/09/2026, et les notes n'ont
+  // jamais été saisies (0 sur 47). Un client ancien qui en envoie encore n'y change rien.
+  const { mediaType, tmdbId, tvdbId, title, year, posterPath, voteAverage } = body;
 
   if (!mediaType || !tmdbId || !title) {
     return NextResponse.json({ error: "mediaType, tmdbId et title sont requis" }, { status: 400 });
@@ -40,8 +42,8 @@ export async function POST(req: NextRequest) {
     year: year ?? null,
     posterPath: posterPath ?? null,
     voteAverage: voteAverage ?? null,
-    status: status ?? "to_watch",
-    note: note ?? null,
+    status: "to_watch",
+    note: null,
   });
 
   return NextResponse.json({ item });

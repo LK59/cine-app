@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { HttpError } from "@/lib/http";
 
 // ─── Error kind taxonomy ──────────────────────────────────────────────────────
@@ -58,41 +57,4 @@ export function classifyError(err: unknown): AppError {
   }
 
   return { kind: "unknown", message: "Erreur inconnue", detail: String(err) };
-}
-
-// ─── HTTP response helpers ────────────────────────────────────────────────────
-
-export function errorResponse(err: unknown, status = 502): NextResponse {
-  const appErr = classifyError(err);
-  return NextResponse.json(
-    { error: appErr.message, kind: appErr.kind, detail: appErr.detail },
-    { status }
-  );
-}
-
-export function serviceUnavailable(serviceName: string): NextResponse {
-  return NextResponse.json(
-    {
-      error: `${serviceName} est temporairement indisponible`,
-      kind: "unreachable" as ErrorKind,
-    },
-    { status: 503 }
-  );
-}
-
-// ─── User-facing label ────────────────────────────────────────────────────────
-
-export function errorLabel(kind: ErrorKind): string {
-  const labels: Record<ErrorKind, string> = {
-    timeout:              "Service trop lent",
-    unauthorized:         "Clé API invalide",
-    forbidden:            "Accès refusé",
-    unreachable:          "Service inaccessible",
-    missing_api_key:      "Configuration manquante",
-    invalid_api_key:      "Clé API invalide",
-    not_found:            "Introuvable",
-    unexpected_response:  "Réponse inattendue",
-    unknown:              "Erreur",
-  };
-  return labels[kind] ?? "Erreur";
 }

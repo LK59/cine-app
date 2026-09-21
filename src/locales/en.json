@@ -28,11 +28,8 @@
   },
   "nav": {
     "overview": "Overview",
-    "watchlist": "My list",
     "timeline": "Recent activity",
     "calendar": "Calendar",
-    "recommendations": "Recommendations",
-    "discover": "Discover",
     "radarr": "Movies · Radarr",
     "sonarr": "Series · Sonarr",
     "qbittorrent": "Downloads",
@@ -51,7 +48,8 @@
       "series": "Series",
       "more": "More",
       "search": "Search",
-      "searchHint": "Movie, series, actor…"
+      "searchHint": "Movie, series, actor…",
+      "downloads": "Downloads"
     },
     "cinemaMode": "Cinema mode",
     "sections": {
@@ -168,22 +166,6 @@
     "unavailableWord": "unavailable",
     "servicesAllUp": "{n} services · all online",
     "servicesSomeDown": "{n} of {total} offline"
-  },
-  "serviceStats": {
-    "movies": "Movies",
-    "missing": "Missing",
-    "downloading": "Downloading",
-    "series": "Series",
-    "missingEpisodes": "Missing episodes",
-    "missingMovieSubtitles": "Movies without subtitles",
-    "missingEpisodeSubtitles": "Episodes without subtitles",
-    "indexers": "Indexers",
-    "activePlays": "Active plays",
-    "pendingRequests": "Pending requests",
-    "apiKeyValid": "API key valid",
-    "apiKeyMissing": "API key not configured (TMDB_API_KEY)",
-    "apiKeyInvalid": "Invalid API key",
-    "torrents": "Torrents"
   },
   "activity": {
     "grabbed": "Grabbed",
@@ -670,7 +652,6 @@
   },
   "notifications": {
     "pageTitle": "Notifications",
-    "subtitle": "Manage PWA push alerts per device and category",
     "thisDevice": "This device",
     "deviceNotice": "Activation is specific to each browser or installed PWA.",
     "pushNotifications": "Push notifications",
@@ -705,12 +686,6 @@
         "label": "Your request is available",
         "description": "When a movie or series you requested via Jellyseerr becomes available."
       }
-    },
-    "push": {
-      "newEpisodeTitle": "📺 New episode",
-      "newEpisodeBody": "{title} is available",
-      "availableTitle": "🎬 Available",
-      "availableBody": "{title} is available in your library"
     },
     "pushToggle": {
       "unsupported": "Notifications not supported on this browser",
@@ -795,52 +770,18 @@
     "serviceDown": "Could not reach Jellyseerr."
   },
   "recommendations": {
-    "pageTitle": "Recommendations",
-    "subtitle": "Based on your Jellyfin history",
-    "becauseYouWatched": "Because you watched",
-    "empty": "No recommendations — watch some movies on Jellyfin to generate some.",
     "viewSheet": "View details",
     "request": "Request",
     "requestSent": "Request sent ✓",
-    "requesting": "Sending…",
     "requested": "Requested ✓",
     "interactiveSearch": "Interactive search",
-    "available": "Available",
-    "error": "Error",
-    "statuses": {
-      "toWatch": "To watch",
-      "toRequest": "To request",
-      "favorites": "Favorites",
-      "watched": "Watched",
-      "abandoned": "Abandoned"
-    }
+    "available": "Available"
   },
   "similar": {
     "title": "More like this"
   },
   "discover": {
-    "pageTitle": "Discover",
-    "subtitle": "TMDB trends this week — request or search directly",
-    "searchPlaceholder": "Search the TMDB database…",
-    "tabForYou": "For you",
-    "tabMovies": "Movies",
-    "tabSeries": "Series",
-    "genreAll": "All",
-    "noResultsGenre": "No results for this genre.",
-    "libraryComplete": "Everything you might like is already in your library!",
-    "searchMinChars": "Type at least 2 characters to search",
-    "noSearchResults": "No results for \"{query}\".",
-    "apiKeyMissing": "TMDB_API_KEY not configured — add it to your environment variables.",
-    "requestSuccess": "Request sent for \"{title}\"",
-    "requestError": "Request failed",
-    "requestFailure": "Could not add",
-    "available": "Available",
-    "pending": "Pending",
-    "viewSheet": "View details",
-    "request": "Request",
-    "requested": "Requested ✓",
-    "interactiveSearch": "Interactive search",
-    "noResultsGenreHint": "No title of that genre in this selection. Try another genre or another source."
+    "pending": "Pending"
   },
   "settings": {
     "pageTitle": "Settings",
@@ -895,53 +836,11 @@
   },
   "watchlist": {
     "pageTitle": "My List",
-    "subtitle": "Movies and series to follow, watch or request",
     "addFailed": "Couldn't add to the list, try again.",
-    "stats": {
-      "total": "titles in list",
-      "available": "available",
-      "watched": "watched"
-    },
-    "searchPlaceholder": "Search in list…",
-    "sortDate": "Date added",
-    "sortRating": "TMDB rating",
-    "addTitle": "Add a title",
-    "tabAll": "All",
-    "removeFromList": "Remove from list",
-    "editNote": "Edit note",
-    "addNote": "Add note",
     "addToLibrary": "Add",
     "addedToLibrary": "Added to the library",
-    "empty": "Your list is empty.",
-    "emptyFilter": "No results for this search or filter.",
     "statuses": {
-      "toWatch": "To watch",
-      "favorites": "Favorites",
-      "watched": "Watched",
-      "toRequest": "To request",
-      "abandoned": "Abandoned"
-    },
-    "noteModal": {
-      "title": "Personal note · ⌘ + Enter to save",
-      "placeholder": "Add a note…",
-      "cancel": "Cancel",
-      "save": "Save"
-    },
-    "confirmDelete": {
-      "title": "Remove from list?",
-      "body": "This action cannot be undone.",
-      "cancel": "Cancel",
-      "confirm": "Delete"
-    },
-    "addModal": {
-      "searchPlaceholder": "Movie or series title…",
-      "tabMovies": "Movies",
-      "tabSeries": "Series",
-      "minChars": "Type at least 2 characters to search",
-      "noResults": "No results for \"{q}\"",
-      "available": "Available",
-      "alreadyInList": "Already in list",
-      "addLabel": "Add:"
+      "toWatch": "To watch"
     },
     "addedToast": "Added to my list",
     "removedToast": "Removed from my list"
@@ -1319,11 +1218,7 @@
     "actions": {
       "removedFromList": "Removed from My list",
       "addedTo": {
-        "to_watch": "Added to My list",
-        "watched": "Marked as watched",
-        "abandoned": "Marked as abandoned",
-        "favorite": "Added to My list",
-        "to_request": "Added to My list"
+        "to_watch": "Added to My list"
       },
       "requested": "{title} has been requested",
       "requestCancelled": "Request cancelled"

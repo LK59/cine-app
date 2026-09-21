@@ -176,12 +176,9 @@ describe("GET /api/player/lists", () => {
   it("reads each list from the source that owns it", async () => {
     watchlistDb.getAll.mockReturnValue([
       { tmdbId: 603, mediaType: "movie", title: "À voir", year: 1999, posterPath: null, status: "to_watch" },
-      // Un ancien favori local rejoint « À voir » : la liste a disparu, ce qu'on y avait rangé
-      // ne doit pas disparaître avec elle.
-      { tmdbId: 111, mediaType: "movie", title: "Ancien favori", year: 2005, posterPath: null, status: "favorite" },
-      // « Abandonné » n'a plus d'onglet et plus rien pour l'alimenter : ces lignes ne remontent
-      // dans aucune des trois listes.
-      { tmdbId: 222, mediaType: "movie", title: "Laissé tomber", year: 2005, posterPath: null, status: "abandoned" },
+      // Les anciens favoris sont ramenés à « À voir » par `migrate()` — voir
+      // watchlist-single-list.test.ts. Ce qui arrive ici est donc déjà « to_watch ».
+      { tmdbId: 111, mediaType: "movie", title: "Ancien favori", year: 2005, posterPath: null, status: "to_watch" },
     ]);
     jellyseerr.getMe.mockResolvedValue({ id: 5 });
     jellyseerr.getRequestsByUser.mockResolvedValue({ results: [] });
@@ -231,20 +228,6 @@ describe("GET /api/player/lists — posters", () => {
     expect(byTitle["Sans affiche"]).toBeNull();
   });
 
-  // « À demander » a disparu du lecteur mais la colonne reste, et le tableau de bord s'en sert :
-  // ces lignes rejoignent « À voir » plutôt que de devenir invisibles.
-  it("folds the legacy to_request rows into À voir", async () => {
-    watchlistDb.getAll.mockReturnValue([
-      { tmdbId: 1, mediaType: "movie", title: "Rangé à voir", year: 2020, posterPath: null, status: "to_watch" },
-      { tmdbId: 2, mediaType: "movie", title: "Rangé à demander", year: 2021, posterPath: null, status: "to_request" },
-    ]);
-    jellyseerr.getMe.mockResolvedValue({ id: 5 });
-    jellyseerr.getRequestsByUser.mockResolvedValue({ results: [] });
-
-    const { GET } = await import("@/app/api/player/lists/route");
-    const body = await (await GET(req())).json();
-    expect(body.toWatch.map((i: { title: string }) => i.title).sort()).toEqual(["Rangé à demander", "Rangé à voir"]);
-  });
 });
 
 describe("what counts as being in the library", () => {

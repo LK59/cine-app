@@ -150,30 +150,3 @@ export function PosterImage({
     </div>
   );
 }
-
-interface BackdropImageProps {
-  src: string | null | undefined;
-  alt?: string;
-  className?: string;
-}
-
-export function BackdropImage({ src, alt = "", className = "" }: BackdropImageProps) {
-  const [loaded, setLoaded] = useState(false);
-
-  return (
-    <div className={`relative overflow-hidden ${className}`}>
-      {!loaded && src && <div className="absolute inset-0 skeleton" />}
-      {src && (
-        // eslint-disable-next-line @next/next/no-img-element -- deliberate: this component is the app's poster primitive and is used at high density (Cinema Mode rows put dozens on screen). Routing every one through next/image made this server transcode hundreds of TMDB images on demand while scrolling, which was the phone's scroll lag. The URLs are already CDN images requested at the right width.
-        <img
-          src={src}
-          alt={alt}
-          {...({ fetchpriority: "high" } as Record<string, string>)}
-          className={`h-full w-full object-cover object-top transition-opacity duration-700 ${loaded ? "opacity-100" : "opacity-0"}`}
-          onLoad={() => setLoaded(true)}
-          loading="eager"
-        />
-      )}
-    </div>
-  );
-}

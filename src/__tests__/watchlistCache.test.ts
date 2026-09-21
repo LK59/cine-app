@@ -50,12 +50,6 @@ describe("noteWatchlistChange", () => {
     expect(appliquer(avant).items.map((i) => i.tmdbId)).toEqual([7]);
   });
 
-  it("le retire aussi quand il passe à un autre statut", () => {
-    // « Vu » n'est pas « à voir » : la rangée ne montre qu'une intention, pas un historique.
-    noteWatchlistChange({ tmdbId: 42, mediaType: "movie" }, "watched");
-    expect(appliquer({ items: [{ tmdbId: 42, mediaType: "movie" }] }).items).toEqual([]);
-  });
-
   it("ne confond pas un film et une série de même identifiant", () => {
     noteWatchlistChange({ tmdbId: 42, mediaType: "series" }, null);
     const avant = { items: [{ tmdbId: 42, mediaType: "movie" }, { tmdbId: 42, mediaType: "series" }] };

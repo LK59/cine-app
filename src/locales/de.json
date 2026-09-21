@@ -28,11 +28,8 @@
   },
   "nav": {
     "overview": "Übersicht",
-    "watchlist": "Meine Liste",
     "timeline": "Letzte Aktivität",
     "calendar": "Kalender",
-    "recommendations": "Empfehlungen",
-    "discover": "Entdecken",
     "radarr": "Filme · Radarr",
     "sonarr": "Serien · Sonarr",
     "qbittorrent": "Downloads",
@@ -51,7 +48,8 @@
       "series": "Serien",
       "more": "Mehr",
       "search": "Suche",
-      "searchHint": "Film, Serie, Schauspieler…"
+      "searchHint": "Film, Serie, Schauspieler…",
+      "downloads": "Downloads"
     },
     "cinemaMode": "Kinomodus",
     "sections": {
@@ -168,22 +166,6 @@
     "unavailableWord": "nicht verfügbar",
     "servicesAllUp": "{n} Dienste · alle online",
     "servicesSomeDown": "{n} von {total} offline"
-  },
-  "serviceStats": {
-    "movies": "Filme",
-    "missing": "Fehlend",
-    "downloading": "Wird heruntergeladen",
-    "series": "Serien",
-    "missingEpisodes": "Fehlende Episoden",
-    "missingMovieSubtitles": "Filme ohne Untertitel",
-    "missingEpisodeSubtitles": "Episoden ohne Untertitel",
-    "indexers": "Indexer",
-    "activePlays": "Aktive Wiedergaben",
-    "pendingRequests": "Ausstehende Anfragen",
-    "apiKeyValid": "API-Key gültig",
-    "apiKeyMissing": "API-Key nicht konfiguriert (TMDB_API_KEY)",
-    "apiKeyInvalid": "API-Key ungültig",
-    "torrents": "Torrents"
   },
   "activity": {
     "grabbed": "Abgerufen",
@@ -670,7 +652,6 @@
   },
   "notifications": {
     "pageTitle": "Benachrichtigungen",
-    "subtitle": "Push-Benachrichtigungen der PWA pro Gerät und Kategorie verwalten",
     "thisDevice": "Dieses Gerät",
     "deviceNotice": "Die Aktivierung gilt pro Browser oder installierter PWA.",
     "pushNotifications": "Push-Benachrichtigungen",
@@ -705,12 +686,6 @@
         "label": "Deine Anfrage ist verfügbar",
         "description": "Wenn ein Film oder eine Serie, die du über Jellyseerr angefragt hast, verfügbar wird."
       }
-    },
-    "push": {
-      "newEpisodeTitle": "📺 Neue Episode",
-      "newEpisodeBody": "{title} ist verfügbar",
-      "availableTitle": "🎬 Verfügbar",
-      "availableBody": "{title} ist in deiner Bibliothek verfügbar"
     },
     "pushToggle": {
       "unsupported": "Benachrichtigungen werden von diesem Browser nicht unterstützt",
@@ -795,52 +770,18 @@
     "serviceDown": "Jellyseerr nicht erreichbar."
   },
   "recommendations": {
-    "pageTitle": "Empfehlungen",
-    "subtitle": "Basierend auf deinem Jellyfin-Verlauf",
-    "becauseYouWatched": "Weil du geschaut hast",
-    "empty": "Keine Empfehlungen — schau einige Filme auf Jellyfin, um welche zu erhalten.",
     "viewSheet": "Details ansehen",
     "request": "Anfragen",
     "requestSent": "Anfrage gesendet ✓",
-    "requesting": "Senden…",
     "requested": "Angefragt ✓",
     "interactiveSearch": "Interaktive Suche",
-    "available": "Verfügbar",
-    "error": "Fehler",
-    "statuses": {
-      "toWatch": "Zu sehen",
-      "toRequest": "Anfragen",
-      "favorites": "Favoriten",
-      "watched": "Gesehen",
-      "abandoned": "Abgebrochen"
-    }
+    "available": "Verfügbar"
   },
   "similar": {
     "title": "Im gleichen Genre"
   },
   "discover": {
-    "pageTitle": "Entdecken",
-    "subtitle": "TMDB-Trends dieser Woche — direkt anfragen oder suchen",
-    "searchPlaceholder": "In der TMDB-Datenbank suchen…",
-    "tabForYou": "Für dich",
-    "tabMovies": "Filme",
-    "tabSeries": "Serien",
-    "genreAll": "Alle",
-    "noResultsGenre": "Keine Ergebnisse für dieses Genre.",
-    "libraryComplete": "Alles, was du mögen könntest, ist bereits in deiner Bibliothek!",
-    "searchMinChars": "Mindestens 2 Zeichen eingeben, um zu suchen",
-    "noSearchResults": "Keine Ergebnisse für »{query}«.",
-    "apiKeyMissing": "TMDB_API_KEY nicht konfiguriert — in den Umgebungsvariablen hinzufügen.",
-    "requestSuccess": "Anfrage für »{title}« gesendet",
-    "requestError": "Anfrage fehlgeschlagen",
-    "requestFailure": "Hinzufügen nicht möglich",
-    "available": "Verfügbar",
-    "pending": "Ausstehend",
-    "viewSheet": "Details ansehen",
-    "request": "Anfragen",
-    "requested": "Angefragt ✓",
-    "interactiveSearch": "Interaktive Suche",
-    "noResultsGenreHint": "Kein Titel dieses Genres in dieser Auswahl. Probieren Sie ein anderes Genre oder eine andere Quelle."
+    "pending": "Ausstehend"
   },
   "settings": {
     "pageTitle": "Einstellungen",
@@ -895,53 +836,11 @@
   },
   "watchlist": {
     "pageTitle": "Meine Liste",
-    "subtitle": "Filme und Serien zum Verfolgen, Ansehen oder Anfragen",
     "addFailed": "Hinzufügen zur Liste fehlgeschlagen, versuch's erneut.",
-    "stats": {
-      "total": "Titel in der Liste",
-      "available": "verfügbar",
-      "watched": "gesehen"
-    },
-    "searchPlaceholder": "In der Liste suchen…",
-    "sortDate": "Hinzufügungsdatum",
-    "sortRating": "TMDB-Bewertung",
-    "addTitle": "Titel hinzufügen",
-    "tabAll": "Alle",
-    "removeFromList": "Aus der Liste entfernen",
-    "editNote": "Notiz bearbeiten",
-    "addNote": "Notiz hinzufügen",
     "addToLibrary": "Hinzufügen",
     "addedToLibrary": "Zur Bibliothek hinzugefügt",
-    "empty": "Deine Liste ist leer.",
-    "emptyFilter": "Keine Ergebnisse für diese Suche oder diesen Filter.",
     "statuses": {
-      "toWatch": "Zu sehen",
-      "favorites": "Favoriten",
-      "watched": "Gesehen",
-      "toRequest": "Anfragen",
-      "abandoned": "Abgebrochen"
-    },
-    "noteModal": {
-      "title": "Persönliche Notiz · ⌘ + Enter zum Speichern",
-      "placeholder": "Notiz hinzufügen…",
-      "cancel": "Abbrechen",
-      "save": "Speichern"
-    },
-    "confirmDelete": {
-      "title": "Aus der Liste entfernen?",
-      "body": "Diese Aktion kann nicht rückgängig gemacht werden.",
-      "cancel": "Abbrechen",
-      "confirm": "Entfernen"
-    },
-    "addModal": {
-      "searchPlaceholder": "Film- oder Serientitel…",
-      "tabMovies": "Filme",
-      "tabSeries": "Serien",
-      "minChars": "Mindestens 2 Zeichen eingeben, um zu suchen",
-      "noResults": "Keine Ergebnisse für »{q}«",
-      "available": "Verfügbar",
-      "alreadyInList": "Bereits in der Liste",
-      "addLabel": "Hinzufügen:"
+      "toWatch": "Zu sehen"
     },
     "addedToast": "Zu meiner Liste hinzugefügt",
     "removedToast": "Aus meiner Liste entfernt"
@@ -1319,11 +1218,7 @@
     "actions": {
       "removedFromList": "Aus „Meine Liste“ entfernt",
       "addedTo": {
-        "to_watch": "Zu „Meine Liste“ hinzugefügt",
-        "watched": "Als gesehen markiert",
-        "abandoned": "Als abgebrochen markiert",
-        "favorite": "Zu „Meine Liste“ hinzugefügt",
-        "to_request": "Zu „Meine Liste“ hinzugefügt"
+        "to_watch": "Zu „Meine Liste“ hinzugefügt"
       },
       "requested": "{title} wurde angefragt",
       "requestCancelled": "Anfrage zurückgezogen"

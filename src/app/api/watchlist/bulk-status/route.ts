@@ -4,7 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { watchlistDb } from "@/lib/db";
 
 // GET /api/watchlist/bulk-status?items=movie:123,series:456,...
-// Returns { "movie:123": "favorite", "series:456": null, ... } — lets browsing surfaces
+// Returns { "movie:123": "to_watch", "series:456": null, ... } — lets browsing surfaces
 // (Discover, Recommendations, similar titles, collections, global search) show whether an
 // item is already on the watchlist and under which status, instead of always looking
 // "not yet added" until it's touched in the current page session.

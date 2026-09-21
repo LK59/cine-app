@@ -41,8 +41,6 @@ export function logError(scope: string, err: unknown, context?: Record<string, u
   });
 }
 
-/** Où il est, pour que la documentation et l'écran d'état le disent sans le deviner. */
-export const SERVER_LOG_PATH = SERVER_LOG_FILE;
 
 /**
  * Une erreur née dans un navigateur, au même journal que celles du serveur.

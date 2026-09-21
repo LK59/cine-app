@@ -11,7 +11,6 @@ const mockWatchlistDb = {
   get: vi.fn(),
   upsert: vi.fn(),
   remove: vi.fn(),
-  updateStatus: vi.fn(),
 };
 vi.mock("@/lib/db", () => ({
   watchlistDb: mockWatchlistDb,
@@ -94,6 +93,15 @@ describe("POST /api/watchlist", () => {
       expect.objectContaining({ userId: "louis", mediaType: "movie", tmdbId: 42, title: "Dune", status: "to_watch", note: null })
     );
   });
+
+  it("range tout dans « À voir », quoi qu'envoie un client ancien", async () => {
+    // Une seule liste depuis le 21/09/2026 : un statut ou une note venus du corps ne passent plus.
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
+    mockWatchlistDb.upsert.mockReturnValue({ id: 1, title: "Dune" });
+    const { POST } = await import("@/app/api/watchlist/route");
+    await POST(fakeReq({ cookie: "t", body: { mediaType: "movie", tmdbId: 42, title: "Dune", status: "favorite", note: "x" } }));
+    expect(mockWatchlistDb.upsert).toHaveBeenCalledWith(expect.objectContaining({ status: "to_watch", note: null }));
+  });
 });
 
 describe("DELETE /api/watchlist", () => {
@@ -128,33 +136,6 @@ describe("DELETE /api/watchlist", () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(mockWatchlistDb.remove).toHaveBeenCalledWith("louis", 7);
-  });
-});
-
-describe("PATCH /api/watchlist/item", () => {
-  it("returns 401 when not authenticated", async () => {
-    mockVerifySessionFull.mockResolvedValue(null);
-    const { PATCH } = await import("@/app/api/watchlist/item/route");
-    const res = await PATCH(fakeReq({ body: {} }));
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 404 when update finds no matching row", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
-    mockWatchlistDb.updateStatus.mockReturnValue(false);
-    const { PATCH } = await import("@/app/api/watchlist/item/route");
-    const res = await PATCH(fakeReq({ cookie: "t", body: { id: 1, status: "watched" } }));
-    expect(res.status).toBe(404);
-  });
-
-  it("updates status and note", async () => {
-    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin" });
-    mockWatchlistDb.updateStatus.mockReturnValue(true);
-    const { PATCH } = await import("@/app/api/watchlist/item/route");
-    const res = await PATCH(fakeReq({ cookie: "t", body: { id: 1, status: "watched", note: "great" } }));
-    const body = await res.json();
-    expect(body.ok).toBe(true);
-    expect(mockWatchlistDb.updateStatus).toHaveBeenCalledWith("louis", 1, "watched", "great");
   });
 });
 

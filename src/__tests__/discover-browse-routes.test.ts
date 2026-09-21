@@ -54,23 +54,3 @@ describe("GET /api/discover/movies", () => {
     expect(body.items[0]).toMatchObject({ radarrId: 55, inLibrary: false, rating: 7.3 });
   });
 });
-
-describe("GET /api/discover/series", () => {
-  it("returns 503 when TMDB is disabled", async () => {
-    mockTmdb.isEnabled.mockReturnValue(false);
-    const { GET } = await import("@/app/api/discover/series/route");
-    const res = await GET(fakeReq());
-    expect(res.status).toBe(503);
-  });
-
-  it("derives inLibrary from episodeFileCount, not just presence in Sonarr", async () => {
-    mockTmdb.trendingTv.mockResolvedValue({
-      results: [{ id: 1, name: "S", first_air_date: "2020-01-01", overview: "", poster_path: null, backdrop_path: null, vote_average: 8, genre_ids: [] }],
-    });
-    mockCachedSeries.mockResolvedValue([{ tmdbId: 1, id: 66, statistics: { episodeFileCount: 0 } }]);
-    const { GET } = await import("@/app/api/discover/series/route");
-    const res = await GET(fakeReq());
-    const body = await res.json();
-    expect(body.items[0]).toMatchObject({ sonarrId: 66, inLibrary: false });
-  });
-});

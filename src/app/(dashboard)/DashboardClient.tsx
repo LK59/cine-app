@@ -385,9 +385,9 @@ function WatchlistTeaserCard({ item, href, index, imdbRating }: { item: Watchlis
   );
 }
 
-// Home teaser for the watchlist — deliberately only the "to_watch" status (not favorites/
-// watched/etc.), matching what Louis actually asked for: a quick-glance row of what's queued
-// up next, not the whole watchlist (that's what the dedicated /watchlist page is for).
+// Home teaser for the watchlist: a quick-glance row of what's queued up next. « À voir » is the
+// only list left since 2026-09-21, and the page that listed it all went with the others — the
+// cinema's own « Ma liste » is where it lives in full, so there is no « see all » to point at.
 function WatchlistSection() {
   const t = useT();
   const { data } = useSWR<{ items: WatchlistItem[] }>(TO_WATCH_KEY, fetcher);
@@ -408,9 +408,6 @@ function WatchlistSection() {
     <>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-white">{t('dashboard.myList')}</h2>
-        <Link href="/watchlist" className="flex items-center gap-0.5 text-xs text-slate-500 hover:text-slate-300">
-          {t('dashboard.seeAll')} <ChevronRight size={13} />
-        </Link>
       </div>
       <Rail className="mb-8">
         {items.slice(0, 20).map((item, i) => {

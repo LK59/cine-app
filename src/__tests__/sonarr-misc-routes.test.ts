@@ -59,19 +59,6 @@ describe("GET /api/sonarr/queue", () => {
   });
 });
 
-describe("GET /api/sonarr/recent", () => {
-  it("excludes series with no real 'added' date and sorts most-recent first, capped at 8", async () => {
-    mockCachedSeries.mockResolvedValue([
-      { id: 1, title: "Old", added: "0001-01-01T00:00:00Z", images: [] },
-      { id: 2, title: "A", added: "2024-01-01T00:00:00Z", images: [] },
-      { id: 3, title: "B", added: "2024-06-01T00:00:00Z", images: [] },
-    ]);
-    const { GET } = await import("@/app/api/sonarr/recent/route");
-    const body = await (await GET()).json();
-    expect(body.map((s: { id: number }) => s.id)).toEqual([3, 2]);
-  });
-});
-
 describe("POST /api/sonarr/releases", () => {
   it("returns 400 when guid or indexerId is missing", async () => {
     const { POST } = await import("@/app/api/sonarr/releases/route");

@@ -8,11 +8,8 @@ import {
   PlayCircle,
   ListChecks,
   CalendarDays,
-  Telescope,
   BarChart2,
-  Bookmark,
   Clock,
-  Sparkles,
   Activity,
   Settings,
 } from "lucide-react";
@@ -47,14 +44,11 @@ export const NAV_GROUPS: { titleKey: string; items: NavItem[] }[] = [
       { href: "/gestion", navKey: "nav.overview", icon: LayoutDashboard },
       { href: "/radarr", navKey: "nav.radarr", icon: Film, service: "radarr" },
       { href: "/sonarr", navKey: "nav.sonarr", icon: Tv, service: "sonarr" },
-      { href: "/watchlist", navKey: "nav.watchlist", icon: Bookmark },
     ],
   },
   {
     titleKey: "nav.sections.content",
     items: [
-      { href: "/discover", navKey: "nav.discover", icon: Telescope, service: "tmdb" },
-      { href: "/recommendations", navKey: "nav.recommendations", icon: Sparkles, service: "tmdb" },
       { href: "/calendar", navKey: "nav.calendar", icon: CalendarDays },
       { href: "/timeline", navKey: "nav.timeline", icon: Clock },
       { href: "/stats", navKey: "nav.stats", icon: BarChart2 },
@@ -76,6 +70,8 @@ export const NAV_GROUPS: { titleKey: string; items: NavItem[] }[] = [
 ];
 
 /** La barre du bas sur téléphone — les quatre destinations qui portent tout le reste. */
-export const NAV_BAR_HREFS = ["/gestion", "/radarr", "/sonarr", "/watchlist"];
+// La quatrième place était « À voir », partie au cinéma le 21/09/2026 avec la page qui la
+// portait : les téléchargements sont ce qu'on vient le plus souvent regarder d'ici.
+export const NAV_BAR_HREFS = ["/gestion", "/radarr", "/sonarr", "/qbittorrent"];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);

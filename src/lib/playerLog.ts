@@ -73,5 +73,3 @@ export function logPlaybackEvent(
   });
 }
 
-/** Where it is, so the settings page and the documentation can say so without guessing. */
-export const PLAYER_LOG_PATH = LOG_FILE;

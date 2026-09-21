@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
-import { watchlistDb, type WatchlistStatus } from "@/lib/db";
+import { watchlistDb } from "@/lib/db";
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -23,12 +23,3 @@ export async function GET(req: NextRequest) {
 }
 
 // PATCH /api/watchlist/item — update status of an existing item
-export async function PATCH(req: NextRequest) {
-  const userId = await resolveUserId(req);
-  if (!userId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-
-  const { id, status, note } = await req.json();
-  const ok = watchlistDb.updateStatus(userId, id, status as WatchlistStatus, note);
-  if (!ok) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
-  return NextResponse.json({ ok });
-}
