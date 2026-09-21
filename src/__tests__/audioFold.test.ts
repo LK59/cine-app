@@ -160,13 +160,13 @@ describe("toCodecChannelOrder", () => {
   });
 
   /**
-   * Opus garde la sienne, et l'asymétrie est volontaire.
-   *
-   * Le même raisonnement s'y applique, mais l'AAC a contre elle une mesure *et* deux rapports
-   * d'usage quand Opus n'a ni l'une ni les autres — personne ici ne regarde depuis Firefox.
-   * Retirer les deux sur la foi d'une seule mesure serait refaire l'erreur qu'on corrige.
+   * Opus : rien non plus, mesuré le 21/09/2026. Firefox a encodé un 5.1 et un 7.1 dont chaque
+   * canal portait sa fréquence, ffmpeg les a décodés : avec la table Vorbis, le centre ressortait
+   * à droite ; sans elle, tout revenait en place. libopus convertit depuis l'ordre standard.
    */
-  it("garde la convention Vorbis pour Opus, faute de mesure de ce côté", () => {
-    expect(channels(toCodecChannelOrder(surround, "opus"))).toEqual([1, 3, 2, 5, 6, 4]);
+  it("laisse l'Opus dans l'ordre standard : l'encodeur convertit", () => {
+    expect(toCodecChannelOrder(surround, "opus")).toBe(surround);
+    const eight = [...surround, plane(7), plane(8)];
+    expect(toCodecChannelOrder(eight, "opus")).toBe(eight);
   });
 });

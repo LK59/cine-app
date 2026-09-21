@@ -287,28 +287,38 @@ MediaSource. AAC first, Opus second.
   10-bit HEVC in WebCodecs either, it loses playback altogether.
 - **iOS does not accept Opus** in MediaSource, but encodes AAC in 5.1.
 
-### Channel order is codec-dependent
+### Channel order: who converts, measured (2026-09-21)
 
-Three conventions meet here:
+Every decoder here hands back the **standard (WAVE) order** — L R C LFE Ls Rs (Lrs Rrs): mediabunny's
+AC-3/E-AC3/DTS (measured against ffmpeg, 19/09), libFLAC (the format defines it), FFmpeg's TrueHD
+(layout masks 0x60f / 0x63f). `fold` reads that order. What differs is the **encoder**:
 
-| | 5.1 layout |
-|---|---|
-| What the decoder returns (WAVE order) | `L R C LFE Ls Rs` |
-| What **AAC** expects | `C L R Ls Rs LFE` |
-| What **Opus** expects (Vorbis order) | `L C R Ls Rs LFE` |
+| Encoder | Takes | Verified by |
+|---|---|---|
+| AAC, Chrome / Edge (desktop) | standard order, converts itself | a viewer's ears on Chrome/Windows (19/09) |
+| AAC, Apple — Safari and every iOS browser | **AAC order** (C L R Ls Rs LFE): WebKit's `AudioEncoderCocoa` passes a channel *count*, no layout | ears on iPhone: "Titanic" 5.1 (07/09), Braveheart 7.1 (21/09) |
+| AAC, Apple, 8 channels | never asked: folded to 5.1 first (`appleAacCap`) — AAC has no true back-surround 7.1 | — |
+| Opus, Firefox | standard order, converts itself (libopus) | tagged tones per channel encoded in Firefox, decoded by ffmpeg (21/09) |
+| Opus, Chrome / Safari | stereo only | refused beyond two channels |
 
-Interleaved without permutation, planes keep their index and change meaning: centre — dialogue —
-arrives at the index AAC reads as right. Folded to stereo by the browser, that is voices on the
-right and music on the left.
+The table lives in `APPLE_AAC_ORDER` / `orderFor` (`audioTranscode.ts`), keyed on `isWebKit()` —
+an engine defect, not a capability, which is what that check is for.
 
-`toCodecChannelOrder` permutes according to the **destination codec**. Three rules:
+**Not measured, and where to look first if a viewer reports voices on one side:**
+- AAC from **Chrome on Android** (42 plays here) and **Chrome on macOS**: their encoders sit on
+  MediaCodec and AudioToolbox respectively; whether Chromium passes a layout there is unverified.
+- The **canvas path** folds to stereo itself (`AudioOutput`), assuming the *platform* decoder
+  (AAC, Opus through `AudioDecoder`) also hands back the standard order.
+- Multichannel **Opus decoded by Apple** — why only mono and stereo Opus are transcoded on Safari.
 
-- **After the fold, never before** — `fold` reasons in decoder order.
-- **Stereo and mono are untouched**, L and R being at the same index everywhere.
-- **What cannot be described is not permuted** — quadraphonic, 5.0, an unknown codec. An unknown
-  order left alone is a bet; an invented one is a mistake.
+Library census (30 110 audio tracks, 21/09): 99.5 % mono, stereo, 5.1 or 7.1. The rest — Opus 3.0
+(76, series), AC-3 3.0 (8), DTS 6.1 (5), E-AC3 5.0 (2), AC-3 4.1 (2) — go through `fold`'s rule
+for layouts it cannot name: keep L R C, drop the rest, rather than guess.
 
-Verified by ear on AC-3, E-AC3, DTS and DTS-HD MA, in 5.1 and 7.1.
+How it was measured, to do it again: encode one sine per channel at distinct frequencies with the
+browser's own `AudioEncoder`, wrap the packets in a container ffmpeg reads, decode with ffmpeg, and
+read the dominant frequency of each output channel. A browser's own decoder cannot settle it — it
+may mirror its encoder's convention and hide it.
 
 > Expected side effect: once the LFE is correctly labelled, the standard stereo fold **excludes**
 > it. Before the fix it was taken for a surround channel and mixed in, so the sound is quieter

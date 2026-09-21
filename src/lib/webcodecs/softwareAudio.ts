@@ -97,6 +97,9 @@ export class SoftwareAudioTrack {
         (await import("@mediabunny/dts")).registerDtsDecoder();
       } else if (codecId === "A_FLAC") {
         (await import("./flacDecoder")).registerFlacDecoder();
+      } else if (codecId === "A_OPUS") {
+        // Rien à charger : mediabunny décode l'Opus par l'AudioDecoder du navigateur. Charger ici
+        // le décodeur AC-3, c'était un mégaoctet pour rien.
       } else {
         (await import("@mediabunny/ac3")).registerAc3Decoder();
       }

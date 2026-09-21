@@ -230,7 +230,9 @@ true back-surround 7.1). Both halves were learned by ear: "Titanic" on an iPhone
 Braveheart's TrueHD 7.1 on an iPhone (21/09) had the voices on the right; a Chrome viewer (19/09)
 had them on one side once the permutation was applied everywhere. The 19/09 fix measured our
 *decoder* and concluded about the encoders — do not settle this again without an ear on each
-browser. L R C LFE
+browser. Firefox's Opus encoder converts too (measured 21/09 with tagged tones decoded by ffmpeg);
+the Vorbis permutation it was given put the centre on the right. DOC-TECH "Channel order" has the
+table, what is still unmeasured, and the method. L R C LFE
 Ls Rs Lrs Rrs, whatever the destination codec orders its own bitstream by. Permuting into AAC's
 order (centre first, LFE last) before `AudioEncoder` applies the mapping twice and sends the whole
 dialogue into one ear; it was written from the format's specification, held for nine days, and was

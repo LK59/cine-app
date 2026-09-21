@@ -131,6 +131,10 @@ describe("transcodableAudio", () => {
     for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_AC3", "A_EAC3", "A_FLAC", "A_TRUEHD", "A_MLP"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(true);
     }
+    // Opus in mono and stereo, which Safari decodes and will not take in a MediaSource; not
+    // beyond, where the order Apple's decoder hands back has never been measured.
+    expect(transcodableAudio({ codecId: "A_OPUS", audio: { channels: 2, sampleRate: 48000 } } as never)).toBe(true);
+    expect(transcodableAudio({ codecId: "A_OPUS", audio: { channels: 3, sampleRate: 48000 } } as never)).toBe(false);
     // AAC every browser takes, and RealAudio has no decoder here at all.
     for (const codecId of ["A_AAC", "A_REAL/COOK", "A_MPEG/L2"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(false);

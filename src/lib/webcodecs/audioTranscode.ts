@@ -112,9 +112,15 @@ const DECODABLE_HERE = new Set([
   // 21/09/2026 — see truehd/truehdAudio.ts.
   "A_TRUEHD",
   "A_MLP",
+  // A_OPUS aussi, en mono et en stéréo seulement — voir transcodableAudio. Safari décode l'Opus
+  // mais ne le prend pas dans MediaSource : 608 pistes de séries ici. Décodé par le navigateur
+  // lui-même (mediabunny passe par son AudioDecoder), ré-encodé en AAC. Au-delà de deux canaux,
+  // l'ordre dans lequel le décodeur d'Apple rend un Opus multicanal n'a jamais été mesuré : ces
+  // pistes (76, en 3.0) gardent leur chemin d'avant plutôt qu'un pari sur la place des voix.
 ]);
 
 export function transcodableAudio(track: MatroskaTrack): boolean {
+  if (track.codecId === "A_OPUS") return (track.audio?.channels ?? 2) <= 2;
   return DECODABLE_HERE.has(track.codecId);
 }
 
@@ -922,33 +928,19 @@ function appleAacCap(): number {
 }
 
 /**
- * L'ordre d'Opus, qui est un troisième ordre — ni celui du décodeur, ni celui de l'AAC.
+ * **Opus : rien à permuter non plus — mesuré le 21/09/2026.**
  *
- * Opus reprend la disposition Vorbis : L C R Ls Rs LFE. Elle ne diffère de celle de l'AAC que par
- * les deux premiers rangs, ce qui est exactement le genre d'écart qu'on ne remarque pas en lisant
- * et qu'on entend tout de suite.
- *
- * Ce codec n'est pas théorique : c'est le repli pour un navigateur sans encodeur AAC — Firefox,
- * qui encode Opus en 5.1 et l'accepte en MediaSource.
- *
- * **Laissée en place alors que celle de l'AAC est partie, et l'asymétrie est volontaire.** Le même
- * raisonnement s'y applique — un `AudioData` est déjà dans l'ordre standard, et c'est l'encodeur
- * qui convertit — mais l'AAC a contre elle une mesure *et* deux rapports d'usage, quand Opus n'a
- * ni l'une ni les autres : personne ici ne regarde depuis Firefox. Retirer les deux sur la foi
- * d'une seule mesure serait refaire l'erreur qu'on corrige. Au premier « son d'un seul côté »
- * rapporté depuis Firefox, la réponse est écrite ci-dessus.
+ * Une table rangeait les plans dans l'ordre Vorbis (L C R Ls Rs LFE), le même raisonnement que
+ * celui qui avait trompé pour l'AAC, gardé faute de mesure. La mesure est faite : Firefox — le
+ * seul navigateur ici qui encode de l'Opus multicanal — a encodé un 5.1 et un 7.1 dont chaque
+ * canal portait sa fréquence, et ffmpeg, décodeur de référence, les a rendus. Avec la table, le
+ * centre ressortait à droite et le LFE dans une ambiance ; sans elle, chaque fréquence revient à
+ * sa place. L'encodeur de Firefox (libopus) convertit lui-même depuis l'ordre standard, comme
+ * celui de Chrome pour l'AAC. Seul celui d'Apple ne convertit pas (voir `APPLE_AAC_ORDER`).
  */
-const OPUS_ORDER: Record<number, readonly number[]> = {
-  // [L,R,C,LFE,Ls,Rs] → [L,C,R,Ls,Rs,LFE]
-  6: [0, 2, 1, 4, 5, 3],
-  // [L,R,C,LFE,Ls,Rs,Lrs,Rrs] → [L,C,R,Ls,Rs,Lrs,Rrs,LFE]
-  8: [0, 2, 1, 4, 5, 6, 7, 3],
-};
-
 /** La disposition attendue par le codec de destination, ou rien si on ne la connaît pas. */
 function orderFor(codec: string): Record<number, readonly number[]> | null {
   if (codec.startsWith("mp4a.")) return isWebKit() ? APPLE_AAC_ORDER : AAC_ORDER;
-  if (codec.startsWith("opus")) return OPUS_ORDER;
   return null;
 }
 
