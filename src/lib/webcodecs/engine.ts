@@ -22,6 +22,7 @@ import type { AudioConfig } from "./codecConfig";
 import { AudioOutput, WallClock } from "./audioOutput";
 import { SoftwareAudioTrack } from "./softwareAudio";
 import { trace } from "./trace";
+import { fromMatroskaTrack } from "./engineTrack";
 
 export type EngineEventName =
   | "loadedmetadata"
@@ -57,6 +58,14 @@ export interface EngineTrack {
    * noms. Voir `rank` dans `trackPreferences`.
    */
   channels?: number | null;
+  /**
+   * Sous-titres pour malentendants, lu du drapeau du conteneur — voir `MatroskaTrack`.
+   *
+   * Absent de cette interface jusqu'au 21/09/2026 : le lecteur natif étiquetait donc « SDH »
+   * seulement les pistes dont le *titre* le disait (85 ici), quand le lecteur stable, nourri par
+   * Jellyfin, en reconnaissait 112. Les deux lecteurs doivent dire la même chose d'une même piste.
+   */
+  isHearingImpaired?: boolean;
 }
 
 /** A subtitle line, already decoded to text and timed in seconds. */
@@ -108,6 +117,16 @@ export interface EngineOptions {
   peakNits?: number;
   startSeconds?: number;
   audioTrackNumber?: number;
+  /**
+   * Quelle piste ouvrir, demandé une fois les pistes connues — avant que rien ne soit décodé.
+   *
+   * Ce chemin ouvrait toujours sur la piste par défaut du fichier, et l'écran changeait ensuite
+   * pour celle que le compte demande : la bascule que le chemin remultiplexé a supprimée le 20/09
+   * (429 ms à 7,9 s selon l'appareil) survivait ici. L'hôte passe la même règle que celle de son
+   * écran, `chooseAudioTrack`, pour que les deux tombent d'accord et que la bascule n'ait plus
+   * lieu. Une réponse que ce navigateur ne décode pas est ignorée : on retombe sur la règle d'avant.
+   */
+  chooseAudioTrack?: (tracks: EngineTrack[]) => number | null;
 }
 
 /**
@@ -390,6 +409,11 @@ export class PlaybackEngine {
     // silently picking one this browser cannot decode when a playable track sits right beside it
     // would be a worse answer than switching language.
     this.audioTrack = audioCandidates.find((t) => t.number === options.audioTrackNumber) ?? null;
+    if (!this.audioTrack && options.chooseAudioTrack) {
+      const wanted = options.chooseAudioTrack(audioCandidates.map(fromMatroskaTrack));
+      const track = audioCandidates.find((t) => t.number === wanted) ?? null;
+      if (track && (await this.firstDecodable([track]))) this.audioTrack = track;
+    }
     if (!this.audioTrack) {
       const preferred = audioCandidates.find((t) => t.isDefault) ?? audioCandidates[0] ?? null;
       this.audioTrack = (await this.firstDecodable(preferred ? [preferred, ...audioCandidates] : audioCandidates)) ?? preferred;
@@ -509,13 +533,13 @@ export class PlaybackEngine {
   get audioTracks(): EngineTrack[] {
     return (this.file?.tracks ?? [])
       .filter((t) => t.type === "audio" && t.isEnabled)
-      .map((t) => ({ number: t.number, codecId: t.codecId, language: t.language, name: t.name, isDefault: t.isDefault, isForced: t.isForced }));
+      .map(fromMatroskaTrack);
   }
 
   get subtitleTracks(): EngineTrack[] {
     return (this.file?.tracks ?? [])
       .filter((t) => t.type === "subtitle" && t.isEnabled && TEXT_SUBTITLE_CODECS.has(t.codecId))
-      .map((t) => ({ number: t.number, codecId: t.codecId, language: t.language, name: t.name, isDefault: t.isDefault, isForced: t.isForced }));
+      .map(fromMatroskaTrack);
   }
 
   get currentAudioTrack(): number | null {

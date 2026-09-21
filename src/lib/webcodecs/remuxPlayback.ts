@@ -6,6 +6,7 @@
 
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
+import { fromMatroskaTrack } from "./engineTrack";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
@@ -87,17 +88,6 @@ function isoBaseMedia(head: Uint8Array): boolean {
   return head.length >= 8 && head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
 }
 
-function toEngineTrack(track: MatroskaTrack): EngineTrack {
-  return {
-    number: track.number,
-    codecId: track.codecId,
-    language: track.language,
-    name: track.name,
-    isDefault: track.isDefault,
-    isForced: track.isForced,
-    channels: track.audio?.channels ?? null,
-  };
-}
 
 /**
  * The audio track to open on.
@@ -126,11 +116,10 @@ export function preferredAudio(file: MatroskaFile, preferences?: TrackPreference
    * n'est pas la sienne. Ouvrir sur un autre choix — fût-il meilleur — ne supprimerait pas le
    * changement qu'on cherche à éviter, il le rendrait seulement invisible dans le code.
    *
-   * En particulier, `rank` ne regarde pas le nombre de canaux : entre deux pistes anglaises, une
-   * stéréo et une 5.1, il prend la première du fichier. C'est déjà ce qui se passe aujourd'hui,
-   * une seconde après le démarrage — ici on arrive au même endroit sans le détour. La règle « la
-   * plus riche de la langue », elle, garde tout son sens juste en dessous, là où aucune
-   * préférence n'est exprimée.
+   * `rank` départage depuis le 20/09 les pistes d'une même langue par le nombre de canaux, avant
+   * le drapeau du fichier : entre une stéréo et une 5.1 anglaises, c'est la 5.1 — ici comme à
+   * l'écran, puisque c'est la même fonction. (Ce paragraphe disait l'inverse, écrit avant ce
+   * changement ; la règle « la plus riche » vaut aussi juste en dessous, sans préférence.)
    */
   if (preferences && playable.length > 0) {
     /**
@@ -301,11 +290,11 @@ export class RemuxPlayback {
   }
 
   get audioTracks(): EngineTrack[] {
-    return this.remuxer.audioTracks().map(toEngineTrack);
+    return this.remuxer.audioTracks().map(fromMatroskaTrack);
   }
 
   get subtitleTracks(): EngineTrack[] {
-    return this.remuxer.subtitleTracks().map(toEngineTrack);
+    return this.remuxer.subtitleTracks().map(fromMatroskaTrack);
   }
 
   get currentAudioTrack(): number | null {

@@ -98,7 +98,25 @@ const NAMED_IN_TITLE: [RegExp, string][] = [
 const DIT_FORCE = /(^|[^\p{L}])forc(é|ée|és|ées|ed)([^\p{L}]|$)/iu;
 
 export function isForcedTrack(track: NamedTrack): boolean {
-  return track.isForced || DIT_FORCE.test(track.name ?? "");
+  return track.isForced || titleSaysForced(track.name);
+}
+
+/**
+ * Ce que le *titre* d'une piste dit d'elle — pour qui n'a que le texte, faute de drapeau.
+ *
+ * Exportés parce que l'écran de gestion (`fileTracks.ts`) avait ses propres motifs, faux des deux
+ * façons décrites plus haut : « Forces spéciales » y était une piste forcée, « Forcé » ne l'était
+ * pas. Un même fichier se lisait donc autrement selon l'écran.
+ */
+export function titleSaysForced(text: string | null | undefined): boolean {
+  return DIT_FORCE.test(text ?? "");
+}
+
+/** `hoh` (hard of hearing) et `cc` (closed captions) viennent chacun d'une des deux anciennes copies. */
+const DIT_MALENTENDANTS = /\b(sdh|hi|hoh|cc)\b|malentendant|hearing/i;
+
+export function titleSaysHearingImpaired(text: string | null | undefined): boolean {
+  return DIT_MALENTENDANTS.test(text ?? "");
 }
 
 /**

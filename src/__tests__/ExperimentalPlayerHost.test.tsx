@@ -165,11 +165,16 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
 }));
 
 const engineHandlers = new Map<string, ((payload?: unknown) => void)[]>();
+/** Les moteurs construits, pour lire ce qu'on a demandé à `load`. */
+const engineInstances: { load: ReturnType<typeof vi.fn> }[] = [];
 const emit = (event: string, payload?: unknown) =>
   act(() => void (engineHandlers.get(event) ?? []).forEach((handler) => handler(payload)));
 
 vi.mock("@/lib/webcodecs/engine", () => ({
   PlaybackEngine: class {
+    constructor() {
+      engineInstances.push(this as never);
+    }
     audioTracks = [{ number: 1, codecId: "A_AAC", language: "fre", name: null, isDefault: true, isForced: false }];
     subtitleTracks = [];
     currentAudioTrack = 1;
@@ -231,6 +236,7 @@ beforeEach(() => {
   serverFallback = undefined;
   probes = [];
   engineHandlers.clear();
+  engineInstances.length = 0;
   swr = { data: info(), error: undefined };
   viewerState = { resumeSeconds: 0, preferences: null };
   stubFetch();
@@ -913,5 +919,39 @@ describe("la fin d'une séance, au journal", () => {
 
     expect(logged("fallback")).toHaveLength(1);
     expect(logged("stop")).toHaveLength(0);
+  });
+});
+
+describe("le canevas ouvre sur la bonne piste", () => {
+  // Il ouvrait toujours sur la piste par défaut du fichier, et l'écran basculait ensuite vers celle
+  // du compte — la bascule que le chemin remultiplexé avait supprimée le 20/09. L'hôte lui passe
+  // maintenant la même règle que son écran.
+  const tracks = [
+    { number: 1, codecId: "A_AAC", language: "eng", name: null, isDefault: true, isForced: false, channels: 2 },
+    { number: 2, codecId: "A_AAC", language: "fre", name: null, isDefault: false, isForced: false, channels: 2 },
+    { number: 3, codecId: "A_AC3", language: "fre", name: null, isDefault: false, isForced: false, channels: 6 },
+  ];
+  const chooser = () =>
+    (engineInstances[0].load.mock.calls[0][1] as { chooseAudioTrack: (t: typeof tracks) => number | null }).chooseAudioTrack;
+
+  beforeEach(() => {
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+  });
+
+  it("choisit la langue du compte, et la plus riche des pistes de cette langue", async () => {
+    viewerState = {
+      resumeSeconds: 0,
+      preferences: { audioLanguage: "fra", subtitleLanguage: null, subtitleMode: "Default", playDefaultAudioTrack: false },
+    };
+    mount();
+    await waitFor(() => expect(engineInstances[0]?.load).toHaveBeenCalled());
+    expect(chooser()(tracks)).toBe(3);
+  });
+
+  it("laisse la règle du fichier sans préférence", async () => {
+    viewerState = { resumeSeconds: 0, preferences: null };
+    mount();
+    await waitFor(() => expect(engineInstances[0]?.load).toHaveBeenCalled());
+    expect(chooser()(tracks)).toBeNull();
   });
 });

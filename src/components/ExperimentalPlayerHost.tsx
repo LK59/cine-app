@@ -1248,7 +1248,18 @@ export function ExperimentalPlayerHost({
         }),
       ];
 
-      await engine.load(info.streamUrl, { hdr: info.video?.isHdr ?? false, startSeconds });
+      await engine.load(info.streamUrl, {
+        hdr: info.video?.isHdr ?? false,
+        startSeconds,
+        // La même question que `applyPreferences` pose juste après, posée avant d'ouvrir : si
+        // les deux répondent pareil — et elles lisent les mêmes pistes, par la même règle — il
+        // n'y a plus de bascule. Rien quand le spectateur a déjà choisi : c'est son choix qui compte.
+        chooseAudioTrack: (tracks) => {
+          const preferences = playbackState?.preferences ?? null;
+          if (!preferences || wantedAudioRef.current !== null) return null;
+          return chooseAudioTrack(tracks, preferences)?.number ?? null;
+        },
+      });
       if (cancelled) return;
 
       const built = new MediaElementFacade(engine);

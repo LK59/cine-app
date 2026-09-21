@@ -1,4 +1,4 @@
-import { normaliseLanguage } from "@/lib/trackPreferences";
+import { normaliseLanguage, titleSaysForced, titleSaysHearingImpaired } from "@/lib/trackPreferences";
 
 /**
  * Ce qu'un fichier contient vraiment, dit avec les mots de Jellyfin.
@@ -46,8 +46,6 @@ export interface RawStream {
   IsHearingImpaired?: boolean;
 }
 
-const HEARING_IMPAIRED = /\b(sdh|hi|hoh|malentendant|hearing)\b/i;
-const FORCED = /\bforc(e|é|ed)s?\b/i;
 
 /**
  * Les noms de codecs, dits d'une seule façon.
@@ -113,8 +111,10 @@ function toTrack(stream: RawStream): FileTrack {
     channels: stream.Channels ?? null,
     // Le drapeau du conteneur d'abord ; à défaut ce que la piste dit d'elle-même, parce que
     // beaucoup de fichiers ne posent pas le drapeau et écrivent « forced » dans le nom.
-    forced: stream.IsForced === true || FORCED.test(said),
-    hearingImpaired: stream.IsHearingImpaired === true || HEARING_IMPAIRED.test(said),
+    // La même lecture du titre que le lecteur — voir `titleSaysForced` : ce fichier avait ses
+    // propres motifs, qui prenaient « Forces spéciales » pour une piste forcée et pas « Forcé ».
+    forced: stream.IsForced === true || titleSaysForced(said),
+    hearingImpaired: stream.IsHearingImpaired === true || titleSaysHearingImpaired(said),
     atmos: /\batmos\b/i.test(said),
     isDefault: stream.IsDefault === true,
     external: stream.IsExternal === true,

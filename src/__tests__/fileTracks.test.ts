@@ -125,3 +125,22 @@ describe("describeFileTracks", () => {
     expect(audio[0].codec).toBe("AAC");
   });
 });
+
+describe("le titre d'une piste, lu comme le lecteur le lit", () => {
+  // L'écran de gestion avait ses propres motifs : « Forces spéciales » y était une piste forcée
+  // et « Forcé » ne l'était pas (`\b` ne délimite pas après un « é »).
+  const sub = (Title: string) => describeFileTracks([{ Type: "Subtitle", Language: "fre", Title } as never]).subtitles[0];
+
+  it("reconnaît « Forcé », et pas « Forces spéciales »", () => {
+    expect(sub("Forcé").forced).toBe(true);
+    expect(sub("VFF Forced").forced).toBe(true);
+    expect(sub("Forces spéciales").forced).toBe(false);
+  });
+
+  it("reconnaît les malentendants sous toutes les formes des deux anciennes copies", () => {
+    for (const title of ["SDH", "English HI", "HoH", "CC", "Malentendants"]) {
+      expect([title, sub(title).hearingImpaired]).toEqual([title, true]);
+    }
+    expect(sub("Complets").hearingImpaired).toBe(false);
+  });
+});

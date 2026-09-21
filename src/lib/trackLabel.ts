@@ -1,4 +1,4 @@
-import { normaliseLanguage, isAudioDescription, isForcedTrack, type NamedTrack } from "@/lib/trackPreferences";
+import { normaliseLanguage, isAudioDescription, isForcedTrack, titleSaysHearingImpaired, type NamedTrack } from "@/lib/trackPreferences";
 
 /**
  * L'étiquette d'une piste, écrite **une seule fois** pour toute l'application.
@@ -257,7 +257,6 @@ export function labelAudioTracks(tracks: AudioTrackFacts[], options: LabelOption
  * des drapeaux du conteneur, et le titre ne sert que de repli — Jellyfin marque 112 pistes pour
  * malentendants là où le titre ne le dit que sur 85.
  */
-const DIT_MALENTENDANTS = /\b(sdh|hi|cc)\b|malentendant|hearing/i;
 
 export interface SubtitleTrackFacts extends NamedTrack {
   number: number;
@@ -278,7 +277,7 @@ export interface SubtitleLabelOptions {
 function typeSousTitre(track: SubtitleTrackFacts, options: SubtitleLabelOptions): string {
   // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
   // description des sons qui change le plus ce qu'on voit à l'écran.
-  if (track.isHearingImpaired || DIT_MALENTENDANTS.test(track.name ?? "")) return options.malentendants;
+  if (track.isHearingImpaired || titleSaysHearingImpaired(track.name)) return options.malentendants;
   if (isForcedTrack(track)) return options.forces;
   return options.complets;
 }
