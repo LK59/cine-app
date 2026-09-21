@@ -28,6 +28,7 @@ vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => true, useIsShortViewpor
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => true }));
 vi.mock("@/lib/useWatchlistStatusMap", () => ({ useWatchlistStatusMap: () => ({}) }));
 vi.mock("@/lib/useAddToWatchlist", () => ({
+  canJoinWatchlist: (tmdbId: number | null | undefined) => !!tmdbId,
   useAddToWatchlist: () => ({ addedStatus: null, addToWatchlist: vi.fn(), removeFromWatchlist: vi.fn() }),
 }));
 vi.mock("@/lib/useJellyfinItemState", () => ({
