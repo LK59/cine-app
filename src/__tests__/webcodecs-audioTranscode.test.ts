@@ -114,7 +114,8 @@ describe("transcodableAudio", () => {
     // Being on this list does not mean a track will be re-encoded — only that it could be, if
     // the browser turns out not to take it. Dolby is here because Chrome ships no decoder for it
     // and would otherwise lose the hardware path over most of a library.
-    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_AC3", "A_EAC3"]) {
+    // FLAC since 21/09/2026: Safari refuses it in a MediaSource, where Chrome and Firefox take it.
+    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_AC3", "A_EAC3", "A_FLAC"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(true);
     }
     // AAC every browser takes, and TrueHD has no decoder here at all.

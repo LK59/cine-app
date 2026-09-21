@@ -70,6 +70,9 @@ const DECODABLE_HERE = new Set([
   "A_DTS/LOSSLESS",
   "A_AC3",
   "A_EAC3",
+  // Carried untouched wherever the browser takes it (Chrome, Firefox); decoded here, by
+  // libFLAC, only where it does not — Safari. See flacDecoder.ts.
+  "A_FLAC",
 ]);
 
 export function transcodableAudio(track: MatroskaTrack): boolean {

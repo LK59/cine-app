@@ -176,6 +176,19 @@ describe("Remuxer track selection", () => {
     expect(plannedMimeTypes(VIDEO, eac3).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
+  it("carries FLAC untouched where the player takes it, and re-encodes it on Safari", () => {
+    // *Stand by Me*, 21/09/2026: its FLAC track, chosen on an iPhone, sent the film to the server
+    // player — "la piste A_FLAC ne peut pas être portée ici". Chrome and Firefox take FLAC in a
+    // MediaSource and must go on doing so.
+    const flac = track({ number: 3, type: "audio", codecId: "A_FLAC", audio: { sampleRate: 48000, channels: 2 } });
+    expect(audioDelivery(flac)).toBe("copy");
+
+    vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => !t.includes("flac") } });
+    expect(audioDelivery(flac)).toBe("transcode");
+    expect(playableAudio(flac)).toBe(true);
+    expect(plannedMimeTypes(VIDEO, flac).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
   it("delivers every track in one codec when they cannot all keep their own", () => {
     // Utopia: DTS beside AC-3, on a player that takes AC-3 natively. Left alone, choosing the
     // other language changes what the audio buffer decodes by mid-playback — which this device

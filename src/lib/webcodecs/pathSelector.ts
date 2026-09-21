@@ -219,8 +219,8 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
      * fichier au serveur dans ce cas serait une régression franche.
      *
      * Ce qui ferme réellement toutes les portes, c'est **l'absence de décodeur, où que ce soit** :
-     * le navigateur en a pour l'AAC, le FLAC, l'Opus, le Vorbis ; nous embarquons ceux de l'AC-3
-     * et du DTS. Personne n'a celui du TrueHD — ni Dolby, ni les nôtres — et c'est la seule
+     * le navigateur en a pour l'AAC, l'Opus, le Vorbis ; nous embarquons ceux de l'AC-3, du DTS
+     * et du FLAC (que Safari refuse dans MediaSource). Personne n'a celui du TrueHD — ni Dolby, ni les nôtres — et c'est la seule
      * famille dans ce cas sur cette bibliothèque.
      *
      * D'où une liste explicite et courte, comme celle du Dolby Vision plus haut, plutôt qu'une

@@ -576,6 +576,7 @@ original defects lived.
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
 | **Bitmap subtitles not rendered** | PGS and VobSub, covered by external `.srt` in every affected file here |
+| **FLAC is carried where it is taken, decoded here where it is not** | Chrome and Firefox accept FLAC in a MediaSource and get it untouched. Safari refuses it, and since 2026-09-21 it is decoded by libFLAC compiled to WebAssembly (`@wasm-audio-decoders/flac`, `flacDecoder.ts`) and re-encoded like DTS. Verified against `ffmpeg astats` on 24-bit stereo, 16-bit mono and 24-bit 5.1 library tracks: every channel within 0.05 dB, dialogue in the centre |
 | **A pathological file is the normal case** | Six-audio-track files mixing FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K. Test player changes against a file like that before believing them |
 
 ---

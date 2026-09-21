@@ -42,6 +42,8 @@ export class SoftwareAudioTrack {
       core = await import("mediabunny");
       if (codecId === "A_DTS" || codecId?.startsWith("A_DTS/")) {
         (await import("@mediabunny/dts")).registerDtsDecoder();
+      } else if (codecId === "A_FLAC") {
+        (await import("./flacDecoder")).registerFlacDecoder();
       } else {
         (await import("@mediabunny/ac3")).registerAc3Decoder();
       }

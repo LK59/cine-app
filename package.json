@@ -14,6 +14,7 @@
   "dependencies": {
     "@mediabunny/ac3": "1.58.1",
     "@mediabunny/dts": "1.58.1",
+    "@wasm-audio-decoders/flac": "0.2.11",
     "better-sqlite3": "13.0.3",
     "hls.js": "1.5.17",
     "lucide-react": "1.24.0",
