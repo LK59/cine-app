@@ -177,24 +177,28 @@ export default function SonarrSeriesDetailPage() {
     return map;
   }, [jfEpisodesData]);
 
-  const jfEpisodeById = useMemo(() => {
-    const map = new Map<string, JellyfinItem>();
-    for (const e of jfEpisodesData?.episodes ?? []) map.set(e.Id, e);
-    return map;
-  }, [jfEpisodesData]);
-
-  // Powers the credits-time "next up" prompt: same season, next episode
-  // number. Doesn't roll over into the next season — a reasonable first cut,
-  // the prompt just won't appear on a season finale.
+  // L'enchaînement de fin de générique, dans le même ordre que le cinéma (`nextEpisodeIn`) :
+  // saisons puis épisodes, les spéciaux en dernier. Cette copie cherchait « même saison, numéro
+  // + 1 » : elle s'arrêtait à chaque fin de saison, et sur le premier trou de numérotation.
+  const jfEpisodesInOrder = useMemo(
+    () =>
+      (jfEpisodesData?.episodes ?? [])
+        .filter((e) => e.ParentIndexNumber != null && e.IndexNumber != null)
+        .sort((a, b) => {
+          const sa = a.ParentIndexNumber!, sb = b.ParentIndexNumber!;
+          if (sa !== sb) return sa === 0 ? 1 : sb === 0 ? -1 : sa - sb;
+          return a.IndexNumber! - b.IndexNumber!;
+        }),
+    [jfEpisodesData]
+  );
   const getNextEpisode = useCallback(
     (currentItemId: string): { itemId: string; title: string } | null => {
-      const current = jfEpisodeById.get(currentItemId);
-      if (!current || current.IndexNumber == null || current.ParentIndexNumber == null || !series) return null;
-      const next = jfEpisodeByKey.get(`${current.ParentIndexNumber}-${current.IndexNumber + 1}`);
-      if (!next) return null;
+      const index = jfEpisodesInOrder.findIndex((e) => e.Id === currentItemId);
+      const next = index === -1 ? undefined : jfEpisodesInOrder[index + 1];
+      if (!next || !series) return null;
       return { itemId: next.Id, title: `${series.title} · EP${next.IndexNumber} S${next.ParentIndexNumber}` };
     },
-    [jfEpisodeById, jfEpisodeByKey, series]
+    [jfEpisodesInOrder, series]
   );
 
   // Netflix-style series play button: resume the in-progress/next-unwatched

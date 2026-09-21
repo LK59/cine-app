@@ -27,6 +27,7 @@ import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/seri
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { nextEpisodeIn } from "@/lib/nextEpisode";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -199,12 +200,7 @@ export function CinemaSeriesDetail({
   // The episode right after `currentItemId` in flat (season, episode) order — same "next up"
   // semantics PlayButton's getNextEpisode already expects (see PlayerHost's own credits-time
   // auto-advance), powered here by the same season/episode list "Plus d'épisodes" already needs.
-  function getNextEpisode(currentItemId: string) {
-    const flat = (episodesData?.seasons ?? []).flatMap((s) => s.episodes);
-    const idx = flat.findIndex((e) => e.jellyfinItemId === currentItemId);
-    if (idx === -1 || idx === flat.length - 1) return null;
-    return { itemId: flat[idx + 1].jellyfinItemId, title: flat[idx + 1].title };
-  }
+  const getNextEpisode = nextEpisodeIn(episodesData?.seasons ?? []);
 
   function playEpisode(ep: CinemaEpisode) {
     playback.play({

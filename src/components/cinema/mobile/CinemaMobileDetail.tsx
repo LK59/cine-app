@@ -33,6 +33,8 @@ import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { resumeAtFor } from "@/lib/resumePosition";
+import { nextEpisodeIn } from "@/lib/nextEpisode";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -198,7 +200,10 @@ export function CinemaMobileDetail({
    * film vu à moitié quand on cliquait sur une page fraîchement chargée. Voir `resumeKnown` dans
    * PlayButton — c'est le même jumeau, il doit dire la même chose.
    */
-  const resumeKnown = isSeries ? episodesData !== undefined : progress !== undefined;
+  // Pour un film, « la réponse est arrivée » ne suffit pas : la route revient avec `known: false`
+  // quand Jellyfin n'a pas répondu, et ce silence se lisait « aucune reprise » — voir
+  // `resumeAtFor`.
+  const resumeKnown = isSeries ? episodesData !== undefined : progress?.known === true;
   const runtimeTicks = isSeries ? nextEpisode?.runtimeTicks ?? null : progress?.runtimeTicks ?? null;
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const playTargetId = isSeries ? nextEpisode?.itemId : item.jellyfinItemId;
@@ -206,12 +211,7 @@ export function CinemaMobileDetail({
 
   // Flat (season, episode) order — powers the player's own credits-time auto-advance, same
   // contract PlayButton/PlayerHost already expect on desktop.
-  function getNextEpisode(currentItemId: string) {
-    const flat = seasons.flatMap((s) => s.episodes);
-    const idx = flat.findIndex((e) => e.jellyfinItemId === currentItemId);
-    if (idx === -1 || idx === flat.length - 1) return null;
-    return { itemId: flat[idx + 1].jellyfinItemId, title: flat[idx + 1].title };
-  }
+  const getNextEpisode = nextEpisodeIn(seasons);
 
   function play(fromStart = false) {
     if (!playTargetId) return;
@@ -221,7 +221,7 @@ export function CinemaMobileDetail({
       // « Recommencer » dit toujours zéro. Sinon : la position si on la connaît, zéro si on sait
       // qu'il n'y en a pas, et rien du tout tant qu'on l'ignore — auquel cas c'est le serveur qui
       // tranche, ce qui vaut mieux qu'une affirmation fausse. Voir PlaybackSession.
-      resumeAt: fromStart ? 0 : !resumeKnown ? undefined : resumeTicks ? resumeTicks / 10_000_000 : 0,
+      resumeAt: resumeAtFor({ fromStart, known: resumeKnown, resumeTicks }),
       ...(isSeries ? { getNextEpisode } : {}),
     });
   }

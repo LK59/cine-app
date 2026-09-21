@@ -1,6 +1,7 @@
 "use client";
 
 import type { CinemaEpisodesPayload } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import { nextEpisodeIn } from "@/lib/nextEpisode";
 
 interface PlaybackLike {
   play: (session: {
@@ -30,16 +31,11 @@ export async function playSeriesNextEpisode(
 
   // Same flat (season, episode) order the detail sheet hands the player, so the credits-time
   // auto-advance works identically whether playback started from here or from the sheet.
-  const flat = data.seasons.flatMap((s) => s.episodes);
   playback.play({
     itemId: next.itemId,
     title: next.title,
     resumeAt: next.resumeTicks ? next.resumeTicks / 10_000_000 : 0,
-    getNextEpisode: (currentItemId: string) => {
-      const idx = flat.findIndex((e) => e.jellyfinItemId === currentItemId);
-      if (idx === -1 || idx === flat.length - 1) return null;
-      return { itemId: flat[idx + 1].jellyfinItemId, title: flat[idx + 1].title };
-    },
+    getNextEpisode: nextEpisodeIn(data.seasons),
   });
   return true;
 }

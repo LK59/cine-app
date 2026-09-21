@@ -24,6 +24,7 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
+import { resolveResumeAt } from "@/lib/resumePosition";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
 
@@ -940,10 +941,19 @@ function ActivePlayer({
     }
 
     const graceMs = fromReload ? 3000 : 0;
+    // Une position absente veut dire « demande au serveur », pas « du début » — voir
+    // `resolveResumeAt`. Ce lecteur la lisait comme un zéro, et c'est lui qui s'ouvre quand le
+    // compte a choisi le lecteur stable : sa séance repartait du début, puis ses rapports de
+    // progression effaçaient la position chez Jellyfin.
+    let abandoned = false;
     const graceTimer = setTimeout(() => {
-      startPlayback({ resumeAt: initialResumeAt, audioStreamIndex: initialAudioStreamIndex });
+      void resolveResumeAt(itemId, initialResumeAt).then((resumeAt) => {
+        if (abandoned) return;
+        startPlayback({ resumeAt, audioStreamIndex: initialAudioStreamIndex });
+      });
     }, graceMs);
     return () => {
+      abandoned = true;
       clearTimeout(graceTimer);
       // Un startPlayback encore en vol au démontage revient et construit son Hls quand même :
       // même fuite que F-013, autre déclencheur. Le compteur périme cette exécution-là.

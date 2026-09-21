@@ -5,6 +5,7 @@ import { formatResumeTicks } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
+import { resumeAtFor } from "@/lib/resumePosition";
 
 interface PlayButtonProps {
   itemId: string;
@@ -83,7 +84,7 @@ export function PlayButton({
   );
   // Un nombre dès qu'on sait, et rien du tout quand on ne sait pas. Zéro veut dire « depuis le
   // début » et ne doit être dit que par quelqu'un qui en est sûr — voir `resumeKnown`.
-  const initialResumeAt = restart ? 0 : !resumeKnown ? undefined : hasResume ? resumeTicks! / 10_000_000 : 0;
+  const initialResumeAt = resumeAtFor({ fromStart: restart, known: resumeKnown, resumeTicks });
   const progressPct =
     !restart && hasResume && runtimeTicks && runtimeTicks > 0 ? Math.min(100, (resumeTicks! / runtimeTicks) * 100) : null;
   const Icon = restart ? RotateCcw : PlayCircle;
