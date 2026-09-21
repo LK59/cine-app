@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { isChunkLoadError, recoverFromChunkError } from "@/lib/chunkError";
+import { reportClientError } from "@/lib/reportClientError";
 
 export default function DashboardError({
   error,
@@ -24,6 +25,9 @@ export default function DashboardError({
   const stale = isChunkLoadError(error);
   useEffect(() => {
     console.error("[dashboard error]", error);
+    // Avant le rechargement : c'est la dernière chance d'en garder une trace. Un morceau manquant
+    // aussi — il dit qu'une page est restée ouverte pendant un déploiement, et combien de fois.
+    reportClientError(error, "boundary:gestion");
     if (stale) recoverFromChunkError();
   }, [error, stale]);
 

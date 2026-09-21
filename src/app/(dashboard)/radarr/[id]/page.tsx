@@ -502,7 +502,7 @@ export default function RadarrMovieDetailPage() {
         <p className="mb-2 text-sm italic text-slate-500">{info.tmdb.tagline}</p>
       )}
       {overview && <p className="mb-4 max-w-2xl text-sm text-slate-400">{overview}</p>}
-      <ErrorBoundary><MediaRatings imdbId={movie.imdbId} /></ErrorBoundary>
+      <ErrorBoundary name="notes"><MediaRatings imdbId={movie.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
       {isReadOnly ? (
@@ -563,7 +563,7 @@ export default function RadarrMovieDetailPage() {
           </div>
         </div>
       )}
-      <ErrorBoundary><SimilarMedia apiUrl={`/api/radarr/movies/${movie.id}/similar`} type="movie" /></ErrorBoundary>
+      <ErrorBoundary name="similaires"><SimilarMedia apiUrl={`/api/radarr/movies/${movie.id}/similar`} type="movie" /></ErrorBoundary>
       </div>{/* end infos tab */}
 
       {/* ── File + Subtitles ────────────────────────────────────── */}

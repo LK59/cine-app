@@ -594,7 +594,7 @@ export default function SonarrSeriesDetailPage() {
         <p className="mb-2 text-sm italic text-slate-500">{info.tmdb.tagline}</p>
       )}
       {overview && <p className="mb-4 max-w-2xl text-sm text-slate-400">{overview}</p>}
-      <ErrorBoundary><MediaRatings imdbId={series.imdbId} /></ErrorBoundary>
+      <ErrorBoundary name="notes"><MediaRatings imdbId={series.imdbId} /></ErrorBoundary>
 
       {/* ── Settings card ──────────────────────────────────────── */}
       {isReadOnly ? (
@@ -640,7 +640,7 @@ export default function SonarrSeriesDetailPage() {
         </div>
       )}
 
-      <ErrorBoundary><SimilarMedia apiUrl={`/api/sonarr/series/${series.id}/similar`} type="series" /></ErrorBoundary>
+      <ErrorBoundary name="similaires"><SimilarMedia apiUrl={`/api/sonarr/series/${series.id}/similar`} type="series" /></ErrorBoundary>
       </div>{/* end infos tab */}
 
       {/* ── Cast ────────────────────────────────────────────────── */}

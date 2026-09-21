@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { isChunkLoadError, recoverFromChunkError } from "@/lib/chunkError";
+import { reportClientError } from "@/lib/reportClientError";
 
 export default function RootError({
   error,
@@ -22,12 +23,19 @@ export default function RootError({
   const stale = isChunkLoadError(error);
   useEffect(() => {
     console.error("[root error]", error);
+    // Avant le rechargement : c'est la dernière chance d'en garder une trace.
+    reportClientError(error, "boundary:racine");
     if (stale) recoverFromChunkError();
   }, [error, stale]);
 
+  /**
+   * Un `<div>`, pas un `<html>` : cet écran est rendu *dans* le layout racine, qui a déjà posé
+   * `<html>` et `<body>`. Il en dessinait un second à l'intérieur du premier — un document
+   * invalide que React signale à l'hydratation. Le cas où le layout lui-même tombe, et où il
+   * faut bien fournir le document, est celui de `global-error.tsx`.
+   */
   return (
-    <html lang="fr" className="dark">
-      <body className="flex min-h-screen items-center justify-center bg-ink text-white">
+    <div className="flex min-h-screen items-center justify-center bg-ink text-white">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="rounded-full bg-red-500/10 p-5">
             <AlertTriangle size={40} className="text-red-400" />
@@ -44,7 +52,6 @@ export default function RootError({
             Réessayer
           </button>
         </div>
-      </body>
-    </html>
+    </div>
   );
 }

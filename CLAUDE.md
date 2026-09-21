@@ -39,6 +39,10 @@ docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests
 docker compose build && docker compose up -d
 ```
 
+The suite writes into a throwaway `DATA_DIR` (`vitest.config.ts`): the gate mounts the whole
+repository, `data/` included, and tests calling `logError` used to append Vitest mock errors to
+the production `server.log`. A test fails if that isolation disappears.
+
 `set -e` and no pipes: `npm test | grep` swallows the exit code, and a red test has been pushed
 that way before. Read the gate's exit status before committing.
 
@@ -66,7 +70,13 @@ the browser refuses leaves the previous one playing, and without that field a re
 slowness.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
-day — so an error a viewer hit in the evening was gone before anyone went looking. Both are one
+day — so an error a viewer hit in the evening was gone before anyone went looking. Since
+2026-09-21 it also receives the **browser's** errors (`scope: "client"`, sent by
+`reportClientError` from every error screen, every `ErrorBoundary`, `window.onerror` and unhandled
+rejections; signed-in accounts only). Before that, a crash on a phone left nothing anywhere, and
+the boundary around the root player made a film vanish without a word. The same day `stop` began
+to be sent — declared from the start, emitted by nothing: 444 `start` and not one `stop`, so a
+film watched to the end and one abandoned after thirty seconds read the same. Both files are one
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`), and read with `tail`/`jq`.
 
 ## Architecture

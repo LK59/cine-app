@@ -43,3 +43,38 @@ export function logError(scope: string, err: unknown, context?: Record<string, u
 
 /** Où il est, pour que la documentation et l'écran d'état le disent sans le deviner. */
 export const SERVER_LOG_PATH = SERVER_LOG_FILE;
+
+/**
+ * Une erreur née dans un navigateur, au même journal que celles du serveur.
+ *
+ * Le même fichier et non un troisième : une panne se lit le plus souvent des deux côtés à la fois
+ * — une route qui répond mal, un écran qui en meurt — et les deux lignes côte à côte, à la même
+ * minute, racontent ce qu'aucune ne dit seule. `scope: "client"` suffit à les séparer avec `jq`.
+ *
+ * Tout ici vient du navigateur, donc c'est lui qui déciderait de la place prise sur disque : les
+ * chaînes sont coupées, et seuls les champs connus passent. `user` vient de la session, jamais du
+ * corps de la requête.
+ */
+const CLIENT_FIELDS = ["source", "name", "url", "digest", "agent"] as const;
+
+export function logClientError(user: string, report: Record<string, unknown>): void {
+  const text = (value: unknown, max: number) => (typeof value === "string" && value ? value.slice(0, max) : undefined);
+  const entry: Record<string, unknown> = {
+    timestamp: new Date().toISOString(),
+    level: "error",
+    scope: "client",
+    user,
+    message: text(report.message, 500) ?? "(sans message)",
+  };
+  for (const field of CLIENT_FIELDS) {
+    const value = text(report[field], 300);
+    if (value) entry[field] = value;
+  }
+  console.error(JSON.stringify(entry));
+  const stack = text(report.stack, 4000);
+  appendJsonLine(SERVER_LOG_FILE, {
+    ...entry,
+    // Même forme que la pile d'une erreur serveur : six lignes, sur une seule.
+    stack: stack ? stack.split("\n").slice(0, 6).map((line) => line.trim()).join(" | ") : undefined,
+  });
+}

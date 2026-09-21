@@ -31,6 +31,7 @@ import { InstallPrompt } from "@/components/InstallPrompt";
 import { PlayerHostLazy } from "@/components/PlayerHostLazy";
 import { MaintenanceNotices } from "@/components/MaintenanceNotices";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ClientErrorListener } from "@/components/ClientErrorListener";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
@@ -178,13 +179,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       erreur de rendu de l'un d'eux remontait donc jusqu'à la racine et laissait un
                       écran blanc, sans rien à quoi revenir. Isolés, le pire qu'ils puissent faire
                       est de disparaître : le catalogue, lui, reste debout. */}
-                  <ErrorBoundary>
+                  <ErrorBoundary name="lecteur">
                     <PlayerHostLazy />
                   </ErrorBoundary>
                   {/* Sous `SWRProvider` — d'où il lit l'état — et sous `PlaybackProvider`, d'où
                       il apprend qu'un film joue. Les deux lui sont nécessaires, et c'est le seul
                       point de l'arbre qui les a tous les deux. */}
-                  <ErrorBoundary>
+                  <ErrorBoundary name="notices-maintenance">
                     <MaintenanceNotices />
                   </ErrorBoundary>
                 </PlaybackProvider>
@@ -195,6 +196,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <InstallPrompt />
         </TranslationProvider>
         <ServiceWorkerRegistration />
+        <ClientErrorListener />
       </body>
     </html>
   );

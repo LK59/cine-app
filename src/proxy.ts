@@ -45,6 +45,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/jellyfin/played",
   "POST /api/jellyfin/playback/start",
   "POST /api/player/log",
+  // Une erreur du navigateur, remontée au journal du serveur : la route n'écrit que sur l'appelant
+  // (son compte vient de la session) et ne lit rien en retour.
+  "POST /api/client-error",
   "POST /api/jellyfin/playback/playing",
   "POST /api/jellyfin/playback/progress",
   "POST /api/jellyfin/playback/stop",
