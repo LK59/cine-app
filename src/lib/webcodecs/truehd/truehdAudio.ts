@@ -75,7 +75,10 @@ export function contiguousAudio(
       close();
       continue;
     }
-    const start = timestampsUs[i] / 1e6;
+    // Un bloc « laçé » donne à chacune de ses unités l'instant du bloc : la deuxième n'est pas un
+    // retour en arrière, c'est la suite de la première.
+    const laced: boolean = i > 0 && timestampsUs[i] === timestampsUs[i - 1] && group !== null;
+    const start: number = laced ? group!.next : timestampsUs[i] / 1e6;
     const end = start + frames / rate;
     if (end <= fromSeconds) {
       offset += frames;
@@ -129,7 +132,12 @@ export async function openTrueHdTrack(source: ByteSource, trackNumber: number, p
     let blocks: Uint8Array[] = [];
     let times: number[] = [];
 
-    const decodeBatch = async (): Promise<DecodedAudio[]> => {
+    const decodeBatch = async (): Promise<DecodedAudio[] | null> => {
+      // Revérifié ici, juste avant de toucher au décodeur : entre la dernière vérification et ce
+      // point il y a eu une lecture, et pendant ce temps le lecteur a pu être détruit ou avoir
+      // ouvert un autre flux. Décoder quand même, c'était écrire dans un décodeur libéré — sur une
+      // instance WebAssembly partagée par toute la page (relu le 22/09/2026).
+      if (closed || mine !== generation) return null;
       const batch = await decoder.decode(blocks);
       const pieces = contiguousAudio(times, batch, fromSeconds, format.numberOfChannels);
       blocks = [];
@@ -142,17 +150,21 @@ export async function openTrueHdTrack(source: ByteSource, trackNumber: number, p
       const sample = await reader.next();
       if (!sample) break;
       if (sample.trackNumber !== track.number) continue;
-      // Les blocs d'avant l'amorçage utile ne sont pas jetés : le décodeur a besoin d'eux pour
+      // L'index pointe sur les images clés de la vidéo, parfois vingt-cinq secondes avant : tout
+      // décoder depuis là, c'était jusqu'à vingt-cinq secondes de TrueHD jetées à chaque saut. Une
+      // seconde d'avance suffit à trouver une synchronisation majeure (1/8 s au plus).
+      if (sample.timestampUs < fromUs - PREROLL_US) continue;
+      // Les blocs d'avant l'instant voulu ne sont pas jetés : le décodeur a besoin d'eux pour
       // trouver sa synchronisation. C'est contiguousAudio qui ne garde que ce qui compte.
       blocks.push(sample.data);
       times.push(sample.timestampUs);
       if (times[times.length - 1] - times[0] < BATCH_US) continue;
       const pieces = await decodeBatch();
-      if (closed || mine !== generation) return;
+      if (!pieces || closed || mine !== generation) return;
       for (const piece of pieces) yield piece;
     }
     if (blocks.length > 0 && !closed && mine === generation) {
-      for (const piece of await decodeBatch()) yield piece;
+      for (const piece of (await decodeBatch()) ?? []) yield piece;
     }
   }
 

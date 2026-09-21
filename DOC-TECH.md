@@ -337,6 +337,23 @@ one on the element, rather than swapping a MediaSource under a running one — w
 expected to hold, and why it has to be heard before being believed. Setting `perTrack = false`
 restores the per-file unification below, unchanged.
 
+What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what now holds it:
+
+- **Apple's AAC encoder must not be reused through `reset()`.** Every fresh encoder primed; every
+  `InternalAudioEncoderCocoa encoding failed` followed a `reset()` + `configure()` — which is what
+  a seek did, and a rebuild does twice. A seek now builds a **fresh** encoder with the exact
+  configuration (`renew` in `audioTranscode.ts`), and only the current encoder is listened to.
+- **An encoder that fails in use lowers the rate for the session**, never below the last rung of
+  the ladder (without an imposed rate Safari answers with HE-AAC, another object type).
+- **A switch that cannot open reverts to the previous track** instead of falling to the canvas or
+  the server player (`revertFailedSwitch`).
+- **The rebuild keeps the picture**: the frame on screen is copied into a canvas above the
+  element and fades out once the new pipeline has its own; and the new `HttpByteSource` inherits
+  the size and the chunks of the one just closed for the same URL (no HEAD, no re-download —
+  `handover`, five seconds at most).
+- **A pause stays a pause**: `startPaused` reaches `PlaybackGuard.opened`, which otherwise took a
+  player opened standing still for a failed start and started it.
+
 ### One codec per file (the fallback)
 
 **Mid-buffer codec transitions do not exist here.** If a file's tracks cannot all be delivered

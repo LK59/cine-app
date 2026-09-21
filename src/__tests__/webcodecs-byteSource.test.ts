@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { HttpByteSource } from "@/lib/webcodecs/byteSource";
+import { HttpByteSource, forgetHandover } from "@/lib/webcodecs/byteSource";
 
 // The transport under a demuxer that asks for four bytes at a time. What matters here is not what
 // comes back — it is how many round trips it took and whether they overlapped, because on a real
@@ -40,6 +40,7 @@ function stubFetch(options: { rangeStatus?: number; contentLength?: string | nul
 }
 
 beforeEach(() => {
+  forgetHandover();
   asked = [];
   hold = null;
   inFlight = 0;
@@ -216,6 +217,69 @@ describe("HttpByteSource", () => {
  * en cours, elle les laisse pendre. Sans échéance, le `fetch` ne se résout jamais : pas d'erreur,
  * donc pas de nouvelle tentative, donc pas d'écran, donc une image figée pour toujours.
  */
+describe("HttpByteSource — le relais d'une reconstruction", () => {
+  const heads = () => (fetch as unknown as { heads: number }).heads;
+  const countingFetch = () => {
+    stubFetch();
+    const inner = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    const counted = Object.assign(
+      async (url: string, init?: RequestInit) => {
+        if (init?.method === "HEAD") counted.heads++;
+        return inner(url, init);
+      },
+      { heads: 0 }
+    );
+    vi.stubGlobal("fetch", counted);
+  };
+
+  it("rouvre le même fichier sans demander sa taille, avec ce qui était déjà téléchargé", async () => {
+    // 21/09/2026, iPhone : une reconstruction pour changement de piste rouvrait tout — une seconde
+    // de HEAD pour une taille connue, puis les octets autour de la tête retéléchargés.
+    countingFetch();
+    const first = await HttpByteSource.open("/film.mkv");
+    await first.read(3 * CHUNK, 16);
+    await settle();
+    first.close();
+    const before = asked.length;
+    const headsBefore = heads();
+
+    const second = await HttpByteSource.open("/film.mkv");
+    expect(heads()).toBe(headsBefore);
+    expect(second.size).toBe(SIZE);
+    await second.read(3 * CHUNK, 16);
+    expect(asked.slice(before).some(([from]) => from === 3 * CHUNK)).toBe(false);
+    second.close();
+  });
+
+  it("ne transmet rien à un autre fichier, ni au-delà de quelques secondes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      countingFetch();
+      const first = await HttpByteSource.open("/film.mkv");
+      await first.read(0, 16);
+      first.close();
+      // Un autre fichier : sa taille est demandée, rien n'est hérité du premier.
+      const other = await HttpByteSource.open("/autre.mkv");
+      expect(heads()).toBe(2);
+      await other.read(0, 16);
+      other.close();
+
+      // Le même, rouvert tout de suite : hérité, sans HEAD.
+      const again = await HttpByteSource.open("/autre.mkv");
+      expect(heads()).toBe(2);
+      await again.read(0, 16);
+      again.close();
+
+      // Rouvert six secondes plus tard : le relais est rendu, on redemande.
+      vi.advanceTimersByTime(6000);
+      await HttpByteSource.open("/autre.mkv");
+      expect(heads()).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("HttpByteSource — une requête qui ne revient pas", () => {
   /**
    * Ce que ce test prouve, et ce qu'il ne prouve pas.

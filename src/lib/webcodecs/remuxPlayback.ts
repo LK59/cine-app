@@ -65,6 +65,12 @@ export interface RemuxPlaybackOptions {
    * l'autre, et basculer ensuite serait refaire la transition qu'elle évite. On ouvre donc dessus.
    */
   audioTrackNumber?: number | null;
+  /**
+   * Ouvrir sans lancer la lecture : un pipeline reconstruit pour un changement de piste pendant
+   * une pause. Sans cela, la garde de démarrage prenait l'élément resté à l'arrêt pour un
+   * démarrage raté et le relançait d'elle-même — relevé sur iPhone le 21/09/2026.
+   */
+  startPaused?: boolean;
 }
 
 export type PathProbe = { discard: () => void } & (
@@ -221,6 +227,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
     audioTrack,
     dimensions: { width: videoTrack.video?.width ?? 1920, height: videoTrack.video?.height ?? 1080 },
     videoRangeType: options.videoRangeType,
+    startSeconds: options.startSeconds,
   });
 
   trace(`chemin choisi : ${describePath(chosen)}`);
@@ -301,7 +308,8 @@ export class RemuxPlayback {
       },
       // Handed in rather than seeked to afterwards, so the first read happens where the viewer
       // is resuming instead of at the beginning of the file.
-      startSeconds
+      startSeconds,
+      this.options.startPaused ?? false
     );
   }
 

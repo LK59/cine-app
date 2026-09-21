@@ -180,6 +180,10 @@ describe("sample entries", () => {
 describe("parseAacConfig", () => {
   it("reads plain AAC-LC", () => {
     expect(parseAacConfig(new Uint8Array([0x11, 0x90]))).toEqual({ objectType: 2, sampleRate: 48000, channels: 2 });
+    // The iPhone's 7.1 encoder describes itself as 11 b8: channelConfiguration 7, which is eight
+    // channels. Read as "7", the mp4a entry declared seven for a stream carrying eight.
+    expect(parseAacConfig(new Uint8Array([0x11, 0xb8]))).toEqual({ objectType: 2, sampleRate: 48000, channels: 8 });
+    expect(parseAacConfig(new Uint8Array([0x11, 0xb0]))?.channels).toBe(6);
   });
 
   it("reports the extension's rate for HE-AAC, not the core's", () => {

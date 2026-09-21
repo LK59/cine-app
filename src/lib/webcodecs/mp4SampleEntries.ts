@@ -304,6 +304,12 @@ export interface AacConfig {
  * Returns null for anything it cannot read, so a description it does not understand is passed
  * through untouched rather than replaced with a guess.
  */
+/**
+ * Canaux par `channelConfiguration` (ISO/IEC 14496-3, 1.6.3.5, et 23003-3 pour 11 à 14). Zéro
+ * veut dire « décrit ailleurs », et reste zéro.
+ */
+const AAC_CHANNEL_CONFIGURATIONS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 8, 11: 7, 12: 8, 13: 24, 14: 8 };
+
 export function parseAacConfig(config: Uint8Array): AacConfig | null {
   if (config.length < 2) return null;
   const reader = new BitReader(config);
@@ -321,7 +327,11 @@ export function parseAacConfig(config: Uint8Array): AacConfig | null {
 
   let objectType = readObjectType();
   let sampleRate = readRate();
-  let channels = reader.read(4);
+  // Le champ nomme une *configuration*, pas un nombre de canaux : 7 est le 7.1, huit canaux. Lu
+  // tel quel, l'encodeur 7.1 de l'iPhone (config 11 b8) était déclaré « 7 canaux » dans l'entrée
+  // mp4a d'un flux qui en porte huit — relevé le 21/09/2026.
+  const configuration = reader.read(4);
+  let channels = AAC_CHANNEL_CONFIGURATIONS[configuration] ?? configuration;
   // Zero is "null object type" — not a profile a browser could ever have produced, and the sign
   // that these bytes are something other than the configuration they were taken for.
   if (objectType === 0 || sampleRate === 0) return null;

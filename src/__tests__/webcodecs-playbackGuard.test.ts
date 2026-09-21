@@ -224,6 +224,17 @@ describe("PlaybackGuard", () => {
     expect(video.play).toHaveBeenCalled();
   });
 
+  it("does not start a film opened to stay paused", async () => {
+    // 21/09/2026, iPhone: a change of track during a pause rebuilds the player, and the new one
+    // opens standing still — which this took for a start the element had given up on, and
+    // started the film under the viewer. An opening that owes no start is left where it is.
+    const { guard, video } = build({ at: 336, playable: ranges([336, 360]) });
+    guard.opened(336, false);
+    (video as unknown as { paused: boolean }).paused = true;
+    guard.mediaArrived();
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
   it("does not start a film that played and was then stopped", async () => {
     // The film got as far as moving, so whoever stopped it meant to. Starting it again under
     // them would be the player arguing.

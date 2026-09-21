@@ -647,6 +647,9 @@ describe("une piste d'un autre format", () => {
       nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
       await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
       await waitFor(() => expect(probes).toHaveLength(2));
+      // Et la source l'apprend aussi : sans cela, sa garde de démarrage prenait l'élément à
+      // l'arrêt pour un démarrage raté et relançait le film elle-même (iPhone, 21/09/2026).
+      expect(probes[1]).toMatchObject({ startPaused: true, audioTrackNumber: 2 });
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
@@ -654,6 +657,31 @@ describe("une piste d'un autre format", () => {
     } finally {
       delete (HTMLMediaElement.prototype as unknown as Record<string, unknown>).paused;
     }
+  });
+
+  it("revient à la piste d'avant quand la nouvelle n'ouvre pas par le lecteur natif", async () => {
+    // Relu le 22/09/2026 : module TrueHD injoignable, encodeur qui refuse — la reconstruction
+    // tombait sur le canevas ou le lecteur serveur, et un film qui jouait était perdu pour un
+    // choix de langue. Avant la livraison par piste, un changement raté laissait l'ancienne jouer.
+    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+
+    const back = fakeRemux({ currentAudioTrack: 1 });
+    let attempt = 0;
+    nextProbe = () =>
+      ++attempt === 1
+        ? { path: "webcodecs", chosen: { path: "webcodecs", attempts: [] }, discard: vi.fn() }
+        : { path: "remux", start: async () => back, discard: vi.fn() };
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+
+    await waitFor(() => expect(probes).toHaveLength(3));
+    expect(probes[1]).toMatchObject({ audioTrackNumber: 2 });
+    expect(probes[2]).toMatchObject({ audioTrackNumber: 1 });
+    // Ni moteur canevas, ni lecteur serveur : le film continue sur la piste qui jouait.
+    expect(engineInstances).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText(/n'a pas pu être ouverte/)).toBeTruthy());
   });
 
   it("garde le changement rapide entre deux pistes du même format", async () => {

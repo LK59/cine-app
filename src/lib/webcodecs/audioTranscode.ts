@@ -61,9 +61,32 @@ const PRIMING_TIMEOUT_MS = 8000;
  */
 const KBITS_PER_CHANNEL = [96, 64, 40];
 
+/**
+ * Le plafond appris pendant la session, par nombre de canaux : un débit sous lequel l'encodeur a
+ * tenu, faute d'avoir tenu au-dessus.
+ *
+ * Mesuré sur iPhone le 21/09/2026 : l'encodeur AAC d'Apple, « InternalAudioEncoderCocoa »,
+ * accepte 768 kbit/s en 7.1, s'amorce, puis échoue parfois en cours de route — et les
+ * reconstructions qui suivaient demandaient à nouveau 768, échouaient pareil, jusqu'à céder le
+ * film au lecteur serveur. Un échec *en cours de route* fait donc descendre d'un barreau, pour le
+ * reste de la page : le transcodeur suivant commence directement au débit qui a une chance de
+ * tenir. Rien n'est écrit nulle part — un autre appareil, ou demain, recommence en haut.
+ */
+const ceilings = new Map<number, number>();
+
 function bitrateLadder(channels: number): number[] {
-  const rates = KBITS_PER_CHANNEL.map((k) => Math.max(128_000, k * 1000 * channels));
-  return [...new Set(rates)];
+  const ceiling = ceilings.get(channels) ?? Infinity;
+  const all = [...new Set(KBITS_PER_CHANNEL.map((k) => Math.max(128_000, k * 1000 * channels)))];
+  const below = all.filter((rate) => rate < ceiling);
+  // Jamais vide : le dernier barreau reste, quoi qu'il arrive. Sans débit imposé, Safari répond
+  // en HE-AAC (SBR), un autre type d'objet que celui déjà décrit au tampon — et c'est précisément
+  // le changement qu'un tampon vivant ne survit pas.
+  return below.length > 0 ? below : all.slice(-1);
+}
+
+/** Pour les tests : l'état d'une page neuve. */
+export function forgetBitrateCeilings(): void {
+  ceilings.clear();
 }
 
 /**
@@ -153,12 +176,27 @@ function describeRate(config: AudioEncoderConfig): string {
   return config.bitrate ? `${Math.round(config.bitrate / 1000)} kbit/s` : "débit laissé au navigateur";
 }
 
+/**
+ * La sortie des encodeurs, et celui qui a le droit d'y écrire.
+ *
+ * Un saut remplace l'encodeur par un neuf (voir `seekTo`). Le remplacé est fermé, mais une image
+ * ou une erreur déjà en file chez lui peut encore arriver — et elle arrivait au transcodeur : une
+ * image d'avant le saut mêlée aux nouvelles, ou un échec qui n'était plus le sien et qui faisait
+ * reconstruire un encodeur sain et baisser le débit pour toute la page (relu le 22/09/2026). Seul
+ * l'encodeur courant est écouté.
+ */
+interface EncoderSink {
+  frame: (frame: TranscodedFrame) => void;
+  failed: (message: string) => void;
+  current: AudioEncoder | null;
+}
+
 interface Primed {
   encoder: AudioEncoder;
   description: Uint8Array;
   config: AudioEncoderConfig;
   /** Où vont les images de l'encodeur ; redirigé vers le transcodeur une fois qu'il existe. */
-  sink: { frame: (frame: TranscodedFrame) => void; failed: (message: string) => void };
+  sink: EncoderSink;
 }
 
 /**
@@ -178,21 +216,26 @@ async function primeEncoder(
   // for the rest of the session — so where they go is a reference, redirected at the instance
   // as soon as there is one. Left pointing at a local array, everything after the priming would
   // be encoded and quietly dropped.
-  const sink = {
+  const sink: EncoderSink = {
     frame: (_frame: TranscodedFrame) => {},
     failed: (message: string) => {
       encoderError = message;
     },
+    current: null,
   };
 
-  const encoder = new Encoder({
+  const encoder: AudioEncoder = new Encoder({
     output: (chunk, metadata) => {
+      if (sink.current !== encoder) return;
       const carried = metadata?.decoderConfig?.description;
       if (carried && !description) description = new Uint8Array(toBytes(carried));
       sink.frame(toFrame(chunk));
     },
-    error: (error) => sink.failed(error.message),
+    error: (error) => {
+      if (sink.current === encoder) sink.failed(error.message);
+    },
   });
+  sink.current = encoder;
   const close = () => {
     try {
       encoder.close();
@@ -341,7 +384,7 @@ export class AudioTranscoder {
 
   private constructor(
     private readonly decoder: SoftwareAudioTrack,
-    private readonly encoder: AudioEncoder,
+    private encoder: AudioEncoder,
     readonly sampleEntry: Uint8Array,
     readonly sampleRate: number,
     readonly channels: number,
@@ -355,7 +398,12 @@ export class AudioTranscoder {
      * servait donc qu'à l'amorçage, toute la lecture tournait au débit par défaut du navigateur,
      * et les images n'étaient plus produites par la configuration que leur en-tête décrivait.
      */
-    private readonly config: AudioEncoderConfig = { codec: actualCodec, sampleRate, numberOfChannels: channels }
+    private readonly config: AudioEncoderConfig = { codec: actualCodec, sampleRate, numberOfChannels: channels },
+    /**
+     * Un encodeur neuf, configuré comme celui-ci et branché au même endroit — voir seekTo. Absent
+     * dans les tests qui construisent un transcodeur à la main : on retombe alors sur reset().
+     */
+    private readonly renew: (() => AudioEncoder) | null = null
   ) {}
 
   /** What the encoder actually produced, not what it was asked for. */
@@ -466,7 +514,8 @@ export class AudioTranscoder {
 
     const entryRate = actual?.sampleRate ?? sampleRate;
     // Ce que l'encodeur produit réellement, qui peut être moins que la source — voir la descente.
-    const entryChannels = actual?.channels ?? outChannels;
+    // `||` et non `??` : une configuration 0 veut dire « décrite ailleurs », pas « zéro canal ».
+    const entryChannels = actual?.channels || outChannels;
     const codecString = target === TARGET_CODEC ? (actual ? `mp4a.40.${actual.objectType}` : TARGET_CODEC) : target;
 
     const sampleEntry =
@@ -482,6 +531,30 @@ export class AudioTranscoder {
           // box an MP4 wants — see dOps.
           opusSampleEntry(asc, entryChannels, entryRate);
 
+    const renew = () => {
+      const fresh: AudioEncoder = new Encoder({
+        // Même sortie que le premier, et le même droit d'y écrire : être l'encodeur courant.
+        output: (chunk) => {
+          if (sink.current === fresh) sink.frame(toFrame(chunk));
+        },
+        error: (error) => {
+          if (sink.current === fresh) sink.failed(error.message);
+        },
+      });
+      try {
+        fresh.configure(config);
+      } catch (error) {
+        // Refusé dès la configuration : fermé ici, sinon il ne le serait jamais.
+        try {
+          fresh.close();
+        } catch {
+          // Déjà fermé par ce qui a échoué.
+        }
+        throw error;
+      }
+      sink.current = fresh;
+      return fresh;
+    };
     const transcoder = new AudioTranscoder(
       decoder,
       encoder,
@@ -489,7 +562,8 @@ export class AudioTranscoder {
       sampleRate,
       outChannels,
       codecString,
-      config
+      config,
+      renew
     );
     sink.frame = (frame) => transcoder.collect(frame);
     sink.failed = (message) => transcoder.fail(message);
@@ -507,11 +581,28 @@ export class AudioTranscoder {
     // roughly half of one, always — and a flush after the jump would either emit that with its
     // old timestamp or, worse, weld it to the first samples from the new position and hand back
     // one frame made of two places in the film.
+    //
+    // Et c'est un encodeur **neuf** qui repart, plus le même remis à zéro. Sur iPhone, l'encodeur
+    // AAC d'Apple échouait « parfois, toujours après un changement de piste, jamais au départ » —
+    // la note était dans ce dépôt depuis des semaines, et le journal du 21/09/2026 l'a précisée :
+    // chaque encodeur neuf s'amorçait, chaque échec suivait un reset() puis un configure(). Un
+    // encodeur neuf, c'est le chemin qui n'a jamais échoué.
     try {
-      this.encoder.reset();
-      this.encoder.configure(this.config);
-    } catch {
-      // An encoder that has already failed; framesUpTo reports it.
+      if (this.renew) {
+        const previous = this.encoder;
+        this.encoder = this.renew();
+        try {
+          previous.close();
+        } catch {
+          // Already closed by an error it reported earlier.
+        }
+      } else {
+        this.encoder.reset();
+        this.encoder.configure(this.config);
+      }
+    } catch (error) {
+      // An encoder that cannot even be made again: framesUpTo reports it.
+      this.failure ??= `Encodage audio interrompu : ${error instanceof Error ? error.message : String(error)}`;
     }
 
     this.generator = this.decoder.samples(Math.max(0, seconds));
@@ -574,6 +665,9 @@ export class AudioTranscoder {
 
   private fail(message: string): void {
     this.failure = `Encodage audio interrompu : ${message}`;
+    // Un échec en cours de route au débit demandé : le suivant partira d'un barreau plus bas.
+    // Sans débit imposé, il n'y a rien sous lequel descendre.
+    if (this.config.bitrate) ceilings.set(this.channels, Math.min(ceilings.get(this.channels) ?? Infinity, this.config.bitrate));
   }
 
   /**

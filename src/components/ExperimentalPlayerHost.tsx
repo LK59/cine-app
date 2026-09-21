@@ -226,6 +226,9 @@ const TRANSITION =
  *    files this pipeline actually cannot handle, which is the whole reason it exists.
  *  * The controls are the stable player's, unmodified — see mediaFacade.ts.
  */
+/** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
+const FREEZE_MAX_MS = 4000;
+
 export function ExperimentalPlayerHost({
   session,
   mode,
@@ -472,6 +475,13 @@ export function ExperimentalPlayerHost({
    */
   const pendingSwitchRef = useRef<{ from: number | null; fromLabel: string; to: number; startedAt: number } | null>(null);
   const keepPausedRef = useRef(false);
+  /**
+   * L'image figée d'une reconstruction pour changement de piste — voir `freezeFrame`. Sans elle,
+   * l'image passait au noir le temps que le nouveau lecteur s'ouvre, puis revenait en fondu :
+   * « une impression trop brutale de refresh complet », pour ce qui n'est qu'un changement de son.
+   */
+  const freezeRef = useRef<HTMLCanvasElement>(null);
+  const [frozen, setFrozen] = useState(false);
   const wantedSubtitleRef = useRef<number | null>(null);
   /**
    * The subtitle file being shown, when it is one that came from beside the film rather than
@@ -603,6 +613,60 @@ export function ExperimentalPlayerHost({
     },
     []
   );
+
+  /**
+   * Recopie l'image à l'écran dans un calque, avant que le lecteur ne soit démonté.
+   *
+   * Réduite à la largeur d'un écran : une image 4K dessinée d'un coup sur le fil principal, c'est
+   * du temps pour rien, à l'instant où le spectateur attend. Un échec — une image pas encore là, un
+   * navigateur qui refuse de dessiner la vidéo — n'est rien : on retombe sur le fondu d'avant.
+   */
+  const freezeFrame = useCallback((): boolean => {
+    const video = videoElRef.current;
+    const canvas = freezeRef.current;
+    if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
+    try {
+      const scale = Math.min(1, 1920 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      const context = canvas.getContext("2d");
+      if (!context) return false;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  /**
+   * L'image figée s'efface quand le nouveau lecteur a la sienne : `ready` ne suffit pas, il dit que
+   * le pipeline est monté, pas que la première image est peinte. Au plus quelques secondes quoi
+   * qu'il arrive — une image figée qui resterait serait pire que le noir.
+   */
+  useEffect(() => {
+    if (!frozen) return;
+    // Le calque garde ses pixels jusqu'à la prochaine image figée, qui le redimensionne : les
+    // rendre après le fondu, par un minuteur, pouvait effacer une seconde image figée prise dans
+    // l'intervalle — quelques mégaoctets ne valent pas ce risque.
+    const release = () => setFrozen(false);
+    const deadline = setTimeout(release, FREEZE_MAX_MS);
+    if (!ready) return () => clearTimeout(deadline);
+    const video = videoElRef.current;
+    if (!video || video.readyState >= 2) {
+      const soon = setTimeout(release, 0);
+      return () => {
+        clearTimeout(soon);
+        clearTimeout(deadline);
+      };
+    }
+    video.addEventListener("loadeddata", release, { once: true });
+    video.addEventListener("seeked", release, { once: true });
+    return () => {
+      clearTimeout(deadline);
+      video.removeEventListener("loadeddata", release);
+      video.removeEventListener("seeked", release);
+    };
+  }, [frozen, ready]);
 
   const restart = useCallback((at: number, why: string) => {
     trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
@@ -1155,9 +1219,13 @@ export function ExperimentalPlayerHost({
      */
     const startDirect = async (element: HTMLVideoElement) => {
       // Un changement de piste qui attendait une reconstruction native n'a plus d'objet ici : ce
-      // chemin choisit sa piste lui-même, et ne doit pas hériter d'une pause ou d'un compte rendu.
+      // chemin choisit sa piste lui-même, et n'hérite pas du compte rendu. La pause, elle, est
+      // gardée — un film à l'arrêt ne repart pas parce qu'il a changé de chemin —, et l'image
+      // figée s'efface : ce chemin ne dessine pas sur l'élément qu'elle attendait.
       pendingSwitchRef.current = null;
+      const stayPaused = keepPausedRef.current;
       keepPausedRef.current = false;
+      setFrozen(false);
       pathRef.current = "direct";
       setPath("direct");
       setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
@@ -1214,7 +1282,7 @@ export function ExperimentalPlayerHost({
       });
 
       element.src = info.streamUrl;
-      await element.play().catch(() => {});
+      if (!stayPaused) await element.play().catch(() => {});
     };
 
     /**
@@ -1228,9 +1296,13 @@ export function ExperimentalPlayerHost({
 
     const startEngine = async (reason: string | null) => {
       // Un changement de piste qui attendait une reconstruction native n'a plus d'objet ici : ce
-      // chemin choisit sa piste lui-même, et ne doit pas hériter d'une pause ou d'un compte rendu.
+      // chemin choisit sa piste lui-même, et n'hérite pas du compte rendu. La pause, elle, est
+      // gardée — un film à l'arrêt ne repart pas parce qu'il a changé de chemin —, et l'image
+      // figée s'efface : ce chemin ne dessine pas sur l'élément qu'elle attendait.
       pendingSwitchRef.current = null;
+      const stayPaused = keepPausedRef.current;
       keepPausedRef.current = false;
+      setFrozen(false);
       setPathReason(reason);
       // Only now is this refusal real. The native path would have shown this file's HDR without
       // converting anything; it is landing on the canvas that makes tone mapping — and therefore
@@ -1328,7 +1400,36 @@ export function ExperimentalPlayerHost({
       }
       setCurrentAudio(engine.currentAudioTrack);
       declareReady();
-      await engine.play().catch(() => {});
+      if (!stayPaused) await engine.play().catch(() => {});
+    };
+
+    /**
+     * Un changement de piste qui a demandé cette reconstruction et qui n'aboutit pas : on rouvre
+     * sur la piste d'avant, avec un mot, au lieu de laisser le film glisser vers un autre lecteur.
+     * Une seule fois — la réouverture n'a plus de changement en attente, donc un second échec
+     * suit le chemin ordinaire. Relevé par la relecture du 22/09/2026 : avant la livraison par
+     * piste, un changement raté laissait la piste d'avant jouer ; il ne faut pas perdre ça.
+     */
+    const revertFailedSwitch = (why: string): boolean => {
+      const pending = pendingSwitchRef.current;
+      if (!pending || pending.from === null) return false;
+      pendingSwitchRef.current = null;
+      trace(`changement de piste impossible par ce lecteur (${why}) — retour à la piste ${pending.from}`);
+      reportPlayback("audio", {
+        ...describeFileRef.current(),
+        from: pending.from,
+        to: pending.to,
+        via: "reconstruction",
+        applied: false,
+        tookMs: Date.now() - pending.startedAt,
+        reason: why,
+        at: Math.round(positionRef.current),
+      });
+      wantedAudioRef.current = pending.from;
+      setCurrentAudio(pending.from);
+      showWarning("Cette piste audio n'a pas pu être ouverte : la précédente continue.");
+      restart(startSeconds, "retour à la piste d'avant, que le lecteur natif sait ouvrir");
+      return true;
     };
 
     const element = videoElRef.current;
@@ -1345,6 +1446,9 @@ export function ExperimentalPlayerHost({
       // Ce que le spectateur a choisi, si ce pipeline en remplace un : on ouvre dessus, au lieu
       // d'ouvrir ailleurs puis d'y basculer. Voir `openingAudio`.
       audioTrackNumber: wantedAudioRef.current,
+      // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
+      // ce composant (voir startRemux) ni la garde de démarrage de la source.
+      startPaused: keepPausedRef.current,
       onError: (message, kind) => {
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
@@ -1404,6 +1508,13 @@ export function ExperimentalPlayerHost({
         // l'inverse de ce qu'on attend d'un rapport, et de quoi faire croire à une panne du
         // lecteur natif alors qu'il jouait le film. Posé au point de branchement, il ne peut plus
         // manquer à une branche qu'on ajouterait plus tard.
+        // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module
+        // TrueHD injoignable, encodeur qui refuse : le canevas ou le lecteur serveur coûteraient
+        // un film qui jouait très bien, pour un choix de langue. On revient à la piste d'avant.
+        if (probe.path !== "remux" && revertFailedSwitch(`chemin ${probe.path}`)) {
+          probe.discard();
+          return;
+        }
         if (probe.path === "remux") {
           setPathReason(describePath(probe.chosen));
           return startRemux(element, probe.start);
@@ -1424,6 +1535,7 @@ export function ExperimentalPlayerHost({
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           return;
         }
+        if (revertFailedSwitch(message)) return;
         fallToStable(message);
       });
 
@@ -1624,6 +1736,17 @@ export function ExperimentalPlayerHost({
         hidden={onElement}
         className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
           ready ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      {/* L'image d'avant, le temps d'une reconstruction pour changement de piste : posée par-dessus,
+          elle s'efface en fondu pendant que la nouvelle apparaît dessous. Voir `freezeFrame`. */}
+      <canvas
+        ref={freezeRef}
+        aria-hidden
+        // Là d'un coup, partie en fondu : apparue en fondu, elle laissait voir le noir de l'élément
+        // qu'on démonte pendant ses premières centaines de millisecondes.
+        className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity ease-out ${
+          frozen ? "opacity-100 duration-0" : "opacity-0 duration-300"
         }`}
       />
 
@@ -1859,6 +1982,7 @@ export function ExperimentalPlayerHost({
                 keepPausedRef.current = videoElRef.current?.paused ?? false;
                 wantedAudioRef.current = id;
                 setCurrentAudio(id);
+                setFrozen(freezeFrame());
                 restart(positionRef.current, `piste ${id} dans un autre format audio — reconstruction sur elle`);
                 return;
               }

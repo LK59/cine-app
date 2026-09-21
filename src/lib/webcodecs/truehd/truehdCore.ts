@@ -38,6 +38,8 @@ function instance(): Promise<TrueHdModule> {
 export class TrueHdCore {
   private input = 0;
   private inputSize = 0;
+  /** Libéré : plus rien ne doit toucher à son contexte, sur une instance partagée par la page. */
+  private closed = false;
 
   private constructor(
     private readonly wasm: TrueHdModule,
@@ -52,6 +54,7 @@ export class TrueHdCore {
   }
 
   decode(blocks: Uint8Array[]): DecodedBatch {
+    if (this.closed) throw new Error("décodeur TrueHD fermé");
     const m = this.wasm;
     const frames = new Int32Array(blocks.length);
     const parts: Float32Array[] = [];
@@ -89,12 +92,17 @@ export class TrueHdCore {
 
   /** Après un saut : le décodeur se resynchronise seul sur la synchronisation majeure suivante. */
   reset(): void {
+    if (this.closed) return;
     this.wasm._thd_reset(this.decoder);
   }
 
   close(): void {
+    // Une seule fois : fermer deux fois, c'est libérer deux fois la même mémoire.
+    if (this.closed) return;
+    this.closed = true;
     if (this.input) this.wasm._free(this.input);
     this.input = 0;
+    this.inputSize = 0;
     this.wasm._thd_close(this.decoder);
   }
 }

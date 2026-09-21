@@ -186,10 +186,53 @@ async function waitForNetwork(signal?: AbortSignal): Promise<void> {
   trace("réseau : de retour");
 }
 
+/**
+ * Ce qu'une source fermée laisse à la suivante, pour le même fichier.
+ *
+ * Un changement de piste d'un format à un autre reconstruit le lecteur (voir `perTrack` dans
+ * remuxer.ts), et la reconstruction rouvrait tout à zéro : une requête HEAD pour une taille déjà
+ * connue — une seconde entière, relevée sur iPhone le 21/09/2026 —, puis tous les octets autour de
+ * la tête retéléchargés alors que la source d'avant venait de les avoir. Un fichier ne change pas
+ * sous un film qu'on regarde ; sa taille et ses morceaux passent donc de l'une à l'autre.
+ *
+ * Une seule entrée, et pour quelques secondes : c'est le relais d'une reconstruction — qui rouvre
+ * quelques dizaines de millisecondes après avoir fermé —, pas un cache de plus. Court exprès : un
+ * fichier que Radarr remplacerait entre deux lectures ne doit pas hériter de la taille de l'ancien,
+ * et passé ce délai les quarante-huit mégaoctets sont rendus.
+ */
+const HANDOVER_MS = 5_000;
+let handover: { url: string; size: number; chunks: Map<number, Uint8Array>; timer: ReturnType<typeof setTimeout> } | null = null;
+
+function takeHandover(url: string): { size: number; chunks: Map<number, Uint8Array> } | null {
+  if (!handover || handover.url !== url) return null;
+  const taken = handover;
+  clearTimeout(taken.timer);
+  handover = null;
+  return { size: taken.size, chunks: taken.chunks };
+}
+
+function leaveHandover(url: string, size: number, chunks: Map<number, Uint8Array>): void {
+  if (handover) clearTimeout(handover.timer);
+  if (chunks.size === 0) {
+    handover = null;
+    return;
+  }
+  const timer = setTimeout(() => {
+    if (handover?.chunks === chunks) handover = null;
+  }, HANDOVER_MS);
+  handover = { url, size, chunks, timer };
+}
+
+/** Pour les tests : l'état d'une page neuve. */
+export function forgetHandover(): void {
+  if (handover) clearTimeout(handover.timer);
+  handover = null;
+}
+
 export class HttpByteSource implements ByteSource {
   readonly size: number;
   private readonly url: string;
-  private readonly chunks = new Map<number, Uint8Array>();
+  private chunks = new Map<number, Uint8Array>();
   private readonly inflight = new Map<number, Promise<Uint8Array>>();
   private readonly controller = new AbortController();
 
@@ -202,6 +245,15 @@ export class HttpByteSource implements ByteSource {
   // first because it costs nothing; some proxies answer it without Content-Length, in which case
   // a one-byte ranged GET gets the total out of Content-Range instead.
   static async open(url: string): Promise<HttpByteSource> {
+    // Le même fichier que la source qu'on vient de fermer : sa taille et ses morceaux sont déjà
+    // là, sans aller-retour — voir `handover`.
+    const inherited = takeHandover(url);
+    if (inherited) {
+      const source = new HttpByteSource(url, inherited.size);
+      source.chunks = inherited.chunks;
+      trace(`flux repris de la lecture précédente — ${inherited.chunks.size} Mo déjà là`);
+      return source;
+    }
     // Named for what it is. A file that cannot be opened because there is no network is not a
     // file this player cannot play, and handing it to a player needing the same network is the
     // one answer that helps nobody.
@@ -397,7 +449,10 @@ export class HttpByteSource implements ByteSource {
 
   close(): void {
     this.controller.abort();
-    this.chunks.clear();
+    // Les morceaux arrivés entiers restent valables pour ce fichier : laissés à la source qui le
+    // rouvrira, s'il y en a une bientôt. Les requêtes en cours, elles, meurent avec celle-ci.
+    leaveHandover(this.url, this.size, this.chunks);
+    this.chunks = new Map();
     this.inflight.clear();
   }
 }

@@ -125,6 +125,8 @@ export class MseSource {
   private readonly guard: PlaybackGuard;
   /** Answered by the probe above, before the file was opened. */
   rebuildAudioAllowed = false;
+  /** Pas de démarrage dû à l'ouverture : la garde ne relance pas un élément laissé à l'arrêt. */
+  private startPaused = false;
   private objectUrl: string | null = null;
   /** The read loop in flight, if any. A seek has to let it finish before moving the reader. */
   private fillTask: Promise<void> | null = null;
@@ -206,12 +208,15 @@ export class MseSource {
     remuxer: Remuxer,
     plan: RemuxPlan,
     callbacks: MseCallbacks,
-    startSeconds = 0
+    startSeconds = 0,
+    /** Ouvrir sans qu'un démarrage soit dû — voir `RemuxPlaybackOptions.startPaused`. */
+    startPaused = false
   ): Promise<MseSource> {
     const Source = sourceConstructor();
     if (!Source) throw new Error("Ce navigateur ne propose pas MediaSource.");
 
     const instance = new MseSource(video, remuxer, plan, callbacks, Source);
+    instance.startPaused = startPaused;
     instance.rebuildAudioAllowed = audioBufferRebuildable();
     await instance.open(startSeconds);
     return instance;
@@ -295,7 +300,7 @@ export class MseSource {
       // Pour une ouverture différée, la même déclaration est refaite au moment où la tête est
       // posée : c'est là que le film s'ouvre vraiment, et l'annoncer ici la placerait à un endroit
       // où la tête n'ira pas.
-      if (this.pendingStart === null) this.guard.opened(this.video.currentTime);
+      if (this.pendingStart === null) this.guard.opened(this.video.currentTime, !this.startPaused);
 
       // The element's own verdict, recorded when it is delivered. Everything so far learned of it
       // second-hand, when some later operation tripped over the wreckage — so the report showed the
@@ -968,7 +973,7 @@ export class MseSource {
       this.pendingStart = null;
       trace(`ouverture : le média couvre ${landing.toFixed(1)} s, la tête y est posée`);
       this.video.currentTime = landing;
-      this.guard.opened(landing);
+      this.guard.opened(landing, !this.startPaused);
       return;
     }
   }

@@ -84,6 +84,8 @@ export interface PathInput {
   dimensions: { width: number; height: number };
   /** Ce que le serveur sait de la plage dynamique — voir `RemuxPlaybackOptions.videoRangeType`. */
   videoRangeType?: string | null;
+  /** Où la lecture commencera — pour y amorcer un encodeur audio, voir `Remuxer.open`. */
+  startSeconds?: number;
 }
 
 /**
@@ -274,7 +276,15 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   if (dv.kind === "server") return { reason: dv.reason, server: true };
 
   try {
-    const remuxer = await Remuxer.open(source, file, videoTrack, audioTrack, dimensions, dv.kind === "dolby" ? dv.box : null);
+    const remuxer = await Remuxer.open(
+      source,
+      file,
+      videoTrack,
+      audioTrack,
+      dimensions,
+      dv.kind === "dolby" ? dv.box : null,
+      input.startSeconds ?? 0
+    );
     trace("chemin : remultiplexeur ouvert");
     return { remuxer, plan: remuxer.plan() };
   } catch (error) {

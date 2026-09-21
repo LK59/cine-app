@@ -18,6 +18,21 @@ describe("le décodeur TrueHD de FFmpeg, compilé en WebAssembly", () => {
     core.close();
   });
 
+  it("ne touche plus à rien une fois fermé, et ne se ferme qu'une fois", async () => {
+    // Relu le 22/09/2026 : un lot pouvait encore être décodé après la fermeture — dans un
+    // contexte libéré, sur une instance WebAssembly partagée par toute la page. Et fermer deux
+    // fois, c'était libérer deux fois.
+    const core = await TrueHdCore.create(false);
+    core.close();
+    expect(() => core.decode([new Uint8Array(16)])).toThrow(/fermé/);
+    expect(() => core.close()).not.toThrow();
+    expect(() => core.reset()).not.toThrow();
+    // Et l'instance partagée sert encore au suivant.
+    const next = await TrueHdCore.create(false);
+    expect(next.decode([new Uint8Array(16)]).frames[0]).toBe(0);
+    next.close();
+  });
+
   it("s'ouvre aussi en MLP", async () => {
     const core = await TrueHdCore.create(true);
     expect(core.decode([new Uint8Array(16)]).frames[0]).toBe(0);
@@ -52,6 +67,14 @@ describe("contiguousAudio", () => {
     const out = contiguousAudio([0, 10_000, 20_000, 30_000], batch([10, 0, 10, 10]), 0, 2);
     expect(out.map((piece) => piece.timestampSeconds)).toEqual([0, 0.02]);
     expect(out[1].planes[1][0]).toBeCloseTo(10.1);
+  });
+
+  it("lit les unités d'un bloc laçé comme une suite, pas comme un retour en arrière", () => {
+    // Matroska donne à chaque unité d'un bloc laçé l'instant du bloc : trois unités à 0, puis un
+    // bloc à 30 ms. Lues telles quelles, trois morceaux au même instant, qui se chevauchaient.
+    const out = contiguousAudio([0, 0, 0, 30_000], batch([10, 10, 10, 10]), 0, 2);
+    expect(out).toHaveLength(1);
+    expect(out[0].planes[0]).toHaveLength(40);
   });
 
   it("ramène les canaux à ceux que l'en-tête annonce", () => {

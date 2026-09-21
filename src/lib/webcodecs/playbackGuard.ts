@@ -577,7 +577,14 @@ export class PlaybackGuard {
    * opening deadlocks — the element is paused because there is nothing under the playhead, and
    * the playhead is not moved onto the media because the element is paused.
    */
-  opened(playerSeconds: number): void {
+  opened(
+    playerSeconds: number,
+    /**
+     * Faux pour une ouverture qui doit rester à l'arrêt — un changement de piste pendant une
+     * pause, qui reconstruit le lecteur. Rien n'est alors dû, et `mediaArrived` ne relance rien.
+     */
+    startOwed = true
+  ): void {
     this.seekLanding = playerSeconds;
     // A start is owed from here. Not conditional on having seen the element refuse one: when the
     // refusal is immediate — the promise rejected before the element ever announced it was
@@ -585,7 +592,7 @@ export class PlaybackGuard {
     // that pair to arrive is waiting for something that already did not happen. Measured: the
     // first fix caught the episodes where the element announced the start and gave up, and left
     // the ones where it never announced anything sitting at 0:00.
-    this.startAborted = true;
+    this.startAborted = startOwed;
     this.startRetries = 0;
     this.openedFrom = playerSeconds;
     this.openedAt = Date.now();

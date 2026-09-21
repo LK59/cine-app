@@ -571,7 +571,13 @@ export class Remuxer {
   /** Where the segment being built actually starts, on the file's clock. */
   private segmentStartUs = 0;
   /** A seek the transcoder still owes, deferred until that start is known. */
-  private transcoderSeekPending = false;
+  /**
+   * Vrai d'emblée depuis le 22/09/2026 : le transcodeur est amorcé là où la lecture doit commencer
+   * (voir `Remuxer.open`), mais la vidéo, elle, part du début quand le fichier n'a pas d'index —
+   * aucun saut n'est alors demandé, et le son restait une heure en avance sur l'image, muet. Le
+   * premier segment recale donc toujours le son sur son propre début.
+   */
+  private transcoderSeekPending = true;
   private videoCuePointsCache: number | null = null;
   private needKeyframe = false;
   private pendingSubtitles: MediaSample[] = [];
@@ -619,7 +625,13 @@ export class Remuxer {
      * Décidé par le sélecteur de chemin, qui est le seul à pouvoir demander au navigateur s'il en
      * veut — voir `planDolbyVision`. Absent, la sortie est à l'octet près celle d'avant.
      */
-    dolbyVision: { type: string; record: Uint8Array } | null = null
+    dolbyVision: { type: string; record: Uint8Array } | null = null,
+    /**
+     * Où la lecture va commencer, pour y amorcer l'encodeur audio. Il s'amorçait au début du
+     * film, puis sautait : une reconstruction à une heure lisait d'abord les premières secondes
+     * du fichier — 0,7 s de plus, relevées sur iPhone le 21/09/2026, pour rien.
+     */
+    startSeconds = 0
   ): Promise<Remuxer> {
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
@@ -629,7 +641,7 @@ export class Remuxer {
     // and the encoder — not the file — is then what describes it.
     const transcoder =
       audioTrack && audioDelivery(audioTrack, file) === "transcode"
-        ? await AudioTranscoder.open(source, audioTrack, 0, unifiedAudioChannels(file) ?? undefined, file)
+        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file) ?? undefined, file)
         : null;
     if (transcoder) assertContainerTakes(transcoder);
     const audioInfo = audioTrack

@@ -47,6 +47,8 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; 
     static supportedCalls: unknown[] = [];
     /** Every configuration handed to configure(), across every instance. */
     static configured: { bitrate?: number }[] = [];
+    static instances = 0;
+    static resets = 0;
     static async isConfigSupported(config: unknown) {
       this.supportedCalls.push(config);
       return { supported: true, config };
@@ -57,6 +59,7 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; 
     private heldFrom = 0;
     private emitted = 0;
     constructor(private readonly init: { output: (c: unknown, m?: unknown) => void; error: (e: unknown) => void }) {
+      (this.constructor as unknown as { instances: number }).instances++;
       if (options.failWith) queueMicrotask(() => init.error({ message: options.failWith } as never));
     }
     configure(config: { bitrate?: number }) {
@@ -96,6 +99,7 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; 
       }
     }
     reset() {
+      (this.constructor as unknown as { resets: number }).resets++;
       this.held = 0;
       this.state = "unconfigured";
     }
@@ -218,6 +222,88 @@ describe("AudioTranscoder", () => {
     transcoder.seekTo(3600);
     expect(Encoder.configured.length).toBeGreaterThanOrEqual(3);
     expect(new Set(Encoder.configured.map((c) => c.bitrate))).toEqual(new Set([576_000]));
+  });
+
+  it("starts a fresh encoder at every seek rather than resetting the one it has", async () => {
+    // 21/09/2026, iPhone: every fresh encoder primed; every "InternalAudioEncoderCocoa encoding
+    // failed" followed a reset() and a configure() — the note in remuxer.ts had said "always
+    // after a change of track, never at the start" for weeks. A fresh one is the path that held.
+    const Encoder = fakeEncoderClass();
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation(() => decoded(400));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    const before = Encoder.instances;
+    transcoder.seekTo(120);
+    transcoder.seekTo(3600);
+    expect(Encoder.resets).toBe(0);
+    expect(Encoder.instances).toBe(before + 2);
+    expect((await transcoder.framesUpTo(3601)).length).toBeGreaterThan(0);
+  });
+
+  it("starts lower after an encoder failed in use at the rate it was given", async () => {
+    // The same evening: 768 kbit/s in 7.1 accepted, primed, then failing on the way — and every
+    // rebuild asked for 768 again until the film went to the server player.
+    const { AudioTranscoder, forgetBitrateCeilings } = await load();
+    forgetBitrateCeilings();
+    const Encoder = fakeEncoderClass();
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation(() => decoded(400));
+    const first = await AudioTranscoder.open(source as never, track as never);
+    (first as unknown as { fail(message: string): void }).fail("InternalAudioEncoderCocoa encoding failed");
+    await expect(first.framesUpTo(1)).rejects.toThrow(/Cocoa/);
+
+    Encoder.configured.length = 0;
+    await AudioTranscoder.open(source as never, track as never);
+    expect(Encoder.configured[0].bitrate).toBe(384_000);
+    forgetBitrateCeilings();
+  });
+
+  it("never goes below the last rate of the ladder, however many failures", async () => {
+    // Without a rate, Safari answers with HE-AAC — another object type than the one already
+    // described to the buffer. Three failures used to empty the ladder and get exactly that.
+    const { AudioTranscoder, forgetBitrateCeilings } = await load();
+    forgetBitrateCeilings();
+    const Encoder = fakeEncoderClass();
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation(() => decoded(400));
+    for (let i = 0; i < 4; i++) {
+      const t = await AudioTranscoder.open(source as never, track as never);
+      (t as unknown as { fail(message: string): void }).fail("InternalAudioEncoderCocoa encoding failed");
+    }
+    Encoder.configured.length = 0;
+    await AudioTranscoder.open(source as never, track as never);
+    expect(Encoder.configured[0].bitrate).toBe(240_000);
+    forgetBitrateCeilings();
+  });
+
+  it("does not listen to an encoder it has replaced", async () => {
+    // After a seek the old encoder is closed, but a frame or an error already queued on it can
+    // still arrive. A late frame was mixed with the new ones; a late error rebuilt a healthy
+    // encoder and lowered the rate for the whole page.
+    const { AudioTranscoder, forgetBitrateCeilings } = await load();
+    forgetBitrateCeilings();
+    const made: { init: { output: (c: unknown) => void; error: (e: unknown) => void } }[] = [];
+    const Base = fakeEncoderClass();
+    vi.stubGlobal(
+      "AudioEncoder",
+      class extends Base {
+        constructor(init: { output: (c: unknown) => void; error: (e: unknown) => void }) {
+          super(init as never);
+          made.push({ init });
+        }
+      }
+    );
+    samples.mockImplementation(() => decoded(400));
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    const old = made[made.length - 1];
+    transcoder.seekTo(10);
+    old.init.error({ message: "InternalAudioEncoderCocoa encoding failed" });
+    old.init.output({ timestamp: 99_000_000, duration: 21_333, byteLength: 8, copyTo: (d: Uint8Array) => d.fill(1) });
+    const frames = await transcoder.framesUpTo(11);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.every((f) => f.timestampUs < 99_000_000)).toBe(true);
+    forgetBitrateCeilings();
   });
 
   it("goes down the ladder when a rate fails in use, and keeps the one that worked", async () => {
