@@ -1,6 +1,7 @@
 import { availabilityNotifDb, pendingRequestDb, kvCacheDb, getDb } from "@/lib/db";
 import { cachedMovies, cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
 import { jellyfin } from "@/lib/clients/jellyfin";
+import { sonarr } from "@/lib/clients/sonarr";
 import { logError } from "@/lib/logger";
 import { sendPushToAll, sendPushToUser } from "@/lib/push";
 
@@ -79,13 +80,45 @@ export async function checkWatchlistAvailability(): Promise<void> {
  * Le dédoublonnage devient donc par personne : le même épisode peut légitimement être annoncé à
  * trois comptes, et à chacun une seule fois.
  */
+/**
+ * Les épisodes importés depuis `since`, lus dans l'historique de Sonarr — la source de la page
+ * Timeline.
+ *
+ * Ce job lisait la table `timeline_events`, que rien n'a jamais remplie en production (0 ligne au
+ * 21/09/2026 ; seuls les tests y écrivaient). La notification « Nouvel épisode » n'est donc jamais
+ * partie, sans une erreur nulle part : une requête sur une table vide réussit toujours.
+ *
+ * L'identifiant de l'enregistrement Sonarr sert de clé de dédoublonnage : il est unique et stable.
+ * Cent entrées couvrent largement deux heures — l'historique mêle recherches, imports et
+ * suppressions, mais pas à ce rythme ici.
+ */
+export async function recentEpisodeImports(
+  since: number
+): Promise<{ id: number; tmdb_id: number; title: string; detail: string | null }[]> {
+  const history = await sonarr.getHistory(100);
+  const imports: { id: number; tmdb_id: number; title: string; detail: string | null }[] = [];
+  for (const record of history.records ?? []) {
+    if (record?.eventType !== "downloadFolderImported") continue;
+    const at = Date.parse(record.date);
+    if (!Number.isFinite(at) || at <= since) continue;
+    const tmdbId = record.series?.tmdbId;
+    if (typeof record.id !== "number" || typeof tmdbId !== "number" || !tmdbId) continue;
+    const episode = record.episode;
+    imports.push({
+      id: record.id,
+      tmdb_id: tmdbId,
+      title: record.series?.title ?? record.sourceTitle ?? "",
+      detail: episode
+        ? `S${String(episode.seasonNumber).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}`
+        : null,
+    });
+  }
+  return imports;
+}
+
 export async function checkNewEpisodes(): Promise<void> {
   try {
-    const db = getDb();
-    const cutoff = Date.now() - 2 * 3600_000;
-    const recentImports = db.prepare(
-      "SELECT id, tmdb_id, title, detail FROM timeline_events WHERE source = 'sonarr' AND event_type = 'import' AND event_date > ? AND tmdb_id IS NOT NULL"
-    ).all(cutoff) as { id: number; tmdb_id: number; title: string; detail: string | null }[];
+    const recentImports = await recentEpisodeImports(Date.now() - 2 * 3600_000);
     if (recentImports.length === 0) return;
 
     const [sonarrSeries, jellyfinSeries, users] = await Promise.all([

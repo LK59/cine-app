@@ -42,6 +42,30 @@ vi.mock("@/lib/push", () => ({
 
 vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 
+const mockSonarrHistory = vi.fn();
+vi.mock("@/lib/clients/sonarr", () => ({
+  sonarr: { getHistory: (...a: unknown[]) => mockSonarrHistory(...a) },
+}));
+
+/**
+ * L'historique de Sonarr, source des imports récents.
+ *
+ * Ces tests fournissaient autrefois des lignes à la table `timeline_events` — que rien ne remplit
+ * en production. C'est exactement pourquoi la notification pouvait passer tous ses tests et ne
+ * jamais partir : le double disait ce que la vraie source ne disait pas.
+ */
+function importsInSonarr(records: unknown[]) {
+  mockSonarrHistory.mockResolvedValue({ records });
+}
+const severanceImport = (over: Record<string, unknown> = {}) => ({
+  id: 101,
+  eventType: "downloadFolderImported",
+  date: new Date(Date.now() - 10 * 60_000).toISOString(),
+  series: { tmdbId: 7, title: "Severance" },
+  episode: { seasonNumber: 2, episodeNumber: 1 },
+  ...over,
+});
+
 function prepareReturning<T>(rows: T) {
   mockDb.prepare.mockReturnValue({ all: vi.fn().mockReturnValue(rows) });
 }
@@ -134,7 +158,7 @@ describe("checkNewEpisodes", () => {
   // notification qu'on n'attendait pas est une notification qu'on finit par couper, emportant
   // avec elle celles qui comptaient.
   it("tells only the people who were waiting for that episode", async () => {
-    prepareReturning([{ id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" }]);
+    importsInSonarr([severanceImport()]);
     aSeriesEveryoneCouldFollow();
     mockGetUsers.mockResolvedValue([
       { Id: "u1", Name: "louis" },
@@ -157,7 +181,7 @@ describe("checkNewEpisodes", () => {
   // Le dédoublonnage est devenu par personne : le même épisode s'annonce à plusieurs comptes, et
   // une seule fois à chacun. Une clé globale faisait taire tous les autres dès le premier averti.
   it("dedupes per person rather than per episode", async () => {
-    prepareReturning([{ id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" }]);
+    importsInSonarr([severanceImport()]);
     aSeriesEveryoneCouldFollow();
     mockGetUsers.mockResolvedValue([
       { Id: "u1", Name: "louis" },
@@ -175,7 +199,7 @@ describe("checkNewEpisodes", () => {
   });
 
   it("says nothing about a series nobody has started", async () => {
-    prepareReturning([{ id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" }]);
+    importsInSonarr([severanceImport()]);
     aSeriesEveryoneCouldFollow();
     mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
     mockNextUp.mockResolvedValue([]);
@@ -187,11 +211,43 @@ describe("checkNewEpisodes", () => {
   });
 
   it("does nothing when there are no recent imports", async () => {
-    prepareReturning([]);
+    importsInSonarr([]);
     const { checkNewEpisodes } = await import("@/lib/notificationJobs");
     await checkNewEpisodes();
     expect(mockSendPushToUser).not.toHaveBeenCalled();
     // Et n'interroge même pas Jellyfin : rien n'est arrivé, il n'y a rien à demander.
     expect(mockGetUsers).not.toHaveBeenCalled();
+  });
+
+  it("n'annonce que les imports récents, et pas les recherches", async () => {
+    importsInSonarr([
+      severanceImport({ id: 1, eventType: "grabbed" }),
+      severanceImport({ id: 2, date: new Date(Date.now() - 5 * 3600_000).toISOString() }),
+      severanceImport({ id: 3, series: { title: "Sans TMDB" } }),
+    ]);
+    const { recentEpisodeImports } = await import("@/lib/notificationJobs");
+    expect(await recentEpisodeImports(Date.now() - 2 * 3600_000)).toEqual([]);
+  });
+
+  it("décrit l'épisode importé, clé de dédoublonnage comprise", async () => {
+    importsInSonarr([severanceImport()]);
+    const { recentEpisodeImports } = await import("@/lib/notificationJobs");
+    expect(await recentEpisodeImports(Date.now() - 2 * 3600_000)).toEqual([
+      { id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" },
+    ]);
+  });
+
+  it("dit l'épisode dans la notification", async () => {
+    importsInSonarr([severanceImport()]);
+    aSeriesEveryoneCouldFollow();
+    mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
+    mockNextUp.mockResolvedValue([{ SeriesId: "jf-severance" }]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+    expect(mockSendPushToUser).toHaveBeenCalledWith(
+      "louis",
+      expect.objectContaining({ body: "Severance — S02E01 est disponible" })
+    );
   });
 });
