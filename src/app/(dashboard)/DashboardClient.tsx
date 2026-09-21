@@ -28,7 +28,8 @@ import type { DiskStats } from "@/lib/disk-stats";
 import type { WatchlistItem } from "@/lib/db";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 
-import { fmtSize, relativeTime, relativeTimeAbs, formatResumeTicks } from "@/lib/format";
+import { fmtSize, formatResumeTicks } from "@/lib/format";
+import { RelativeTime } from "@/components/RelativeTime";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ function StaleIndicator({ updatedAt }: { updatedAt: number | null }) {
   if (!updatedAt) return null;
   return (
     <span className="ml-2 text-[11px] text-slate-600" title={t('common.cachedData')}>
-      · {t('common.updatedAt')} {relativeTimeAbs(updatedAt, t)}
+      · {t('common.updatedAt')} <RelativeTime date={updatedAt} />
     </span>
   );
 }
@@ -185,7 +186,7 @@ function RecentMovieCard({ m, index }: { m: RecentItem; index: number }) {
         posterUrl={m.posterUrl}
         alt={m.title}
         title={m.title}
-        subtitle={<span className="flex items-center gap-1"><Clock size={9} />{relativeTime(m.added!, t)}</span>}
+        subtitle={<span className="flex items-center gap-1"><Clock size={9} /><RelativeTime date={m.added!} /></span>}
         width={CARD_WIDTH.md}
         anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "recent-movies", "data-tv-col": index }}
         overlay={
@@ -220,7 +221,7 @@ function RecentSeriesCard({ s, index }: { s: RecentItem; index: number }) {
         posterUrl={s.posterUrl}
         alt={s.title}
         title={s.title}
-        subtitle={<span className="flex items-center gap-1"><Clock size={9} />{relativeTime(s.added!, t)}</span>}
+        subtitle={<span className="flex items-center gap-1"><Clock size={9} /><RelativeTime date={s.added!} /></span>}
         width={CARD_WIDTH.md}
         anchorProps={{ ...lp, "data-tv-card": true, "data-tv-row": "recent-series", "data-tv-col": index }}
         overlay={s.imdbRating ? <ImdbBadge rating={s.imdbRating} className="absolute left-1.5 top-1.5 shadow" /> : null}
@@ -635,7 +636,7 @@ function ActivitySection({ items }: { items: ActivityItem[] }) {
                   <p className="truncate text-sm text-white">
                     {item.title}{item.detail && <span className="text-slate-500"> · {item.detail}</span>}
                   </p>
-                  <p className="text-xs text-slate-500">{relativeTime(item.date, t)}</p>
+                  <p className="text-xs text-slate-500"><RelativeTime date={item.date} /></p>
                 </div>
                 <span className={`badge ${SOURCE_COLOR[item.source]}`}>{ACTIVITY_KINDS.has(item.type) ? t(`activity.${item.type}`) : item.type}</span>
               </div>
