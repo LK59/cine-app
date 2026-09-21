@@ -25,7 +25,7 @@ async function accountNames(): Promise<string[]> {
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin(req))) return NextResponse.json({ error: "Réservé à l'administrateur" }, { status: 403 });
   const flags = onboardingDb.all();
-  const accounts = (await accountNames()).map((name) => ({ name, pending: flags.get(name) === true }));
+  const accounts = (await accountNames()).map((name) => ({ name, pending: flags.get(name) ?? true }));
   return NextResponse.json({ accounts });
 }
 
@@ -42,5 +42,5 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Compte inconnu" }, { status: 400 });
   }
   const flags = onboardingDb.all();
-  return NextResponse.json({ accounts: names.map((name) => ({ name, pending: flags.get(name) === true })) });
+  return NextResponse.json({ accounts: names.map((name) => ({ name, pending: flags.get(name) ?? true })) });
 }

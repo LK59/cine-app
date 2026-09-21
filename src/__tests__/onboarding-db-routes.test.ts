@@ -25,10 +25,16 @@ const req = (body?: unknown) =>
 beforeEach(() => verify.mockReset());
 
 describe("onboardingDb", () => {
-  it("ne propose l'accueil qu'au compte de Louis au départ", async () => {
+  it("propose l'accueil à tout compte qui ne l'a pas encore fait, nouveaux comptes compris", async () => {
+    // Ouvert à tous le 21/09/2026. Un compte absent de la table — tous sauf celui de Louis, et
+    // tout compte Jellyfin créé plus tard — le voit ; celui qui l'a fini ne le revoit plus.
     const { onboardingDb } = await import("@/lib/db");
     expect(onboardingDb.isPending("louis")).toBe(true);
+    expect(onboardingDb.isPending("mathis")).toBe(true);
+    expect(onboardingDb.isPending("un-compte-cree-demain")).toBe(true);
+    onboardingDb.setPending("mathis", false);
     expect(onboardingDb.isPending("mathis")).toBe(false);
+    onboardingDb.setPending("mathis", true);
   });
 });
 
@@ -67,6 +73,10 @@ describe("/api/admin/onboarding", () => {
 
     const all = await (await PUT(req({ all: true, pending: true }))).json();
     expect(all.accounts.every((a: { pending: boolean }) => a.pending)).toBe(true);
+
+    // Et l'inverse : éteint pour tous, plus personne — la gestion dit la même chose que la table.
+    const none = await (await PUT(req({ all: true, pending: false }))).json();
+    expect(none.accounts.every((a: { pending: boolean }) => !a.pending)).toBe(true);
   });
 
   it("refuse un compte inconnu et une requête sans état", async () => {

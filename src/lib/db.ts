@@ -238,7 +238,9 @@ function migrate(db: Database.Database): void {
    * jusqu'au prochain lancement, et une déconnexion en cours de route le laisse allumé.
    * L'administrateur le rallume depuis la gestion. Un compte sans ligne n'a rien à voir.
    *
-   * Au départ, le seul compte de Louis : il valide l'accueil avant de le proposer à tous.
+   * Au départ, le seul compte de Louis : il a validé l'accueil avant de le proposer à tous. Depuis
+   * le 21/09/2026, un compte absent de la table le voit (voir `onboardingDb.isPending`) ; une ligne
+   * ne sert plus qu'à dire « fait » ou « à refaire ».
    */
   db.exec(`
     CREATE TABLE IF NOT EXISTS onboarding (
@@ -657,7 +659,10 @@ export interface StoredSession {
 export const onboardingDb = {
   isPending(userName: string): boolean {
     const row = getDb().prepare("SELECT pending FROM onboarding WHERE user_name = ?").get(userName) as { pending: number } | undefined;
-    return row?.pending === 1;
+    // Un compte sans ligne ne l'a jamais fait : il le voit. Depuis le 21/09/2026, où Louis l'a
+    // ouvert à tous après l'avoir validé sur son compte — l'inverse ne le montrait qu'aux comptes
+    // qu'on avait pensé à cocher, et à aucun compte Jellyfin créé ensuite.
+    return row ? row.pending === 1 : true;
   },
   setPending(userName: string, pending: boolean): void {
     getDb()
@@ -667,7 +672,7 @@ export const onboardingDb = {
       `)
       .run(userName, pending ? 1 : 0, Date.now());
   },
-  /** Le marqueur de chaque compte connu de la table. */
+  /** Le marqueur de chaque compte connu de la table. Un compte absent vaut « à faire » (voir isPending). */
   all(): Map<string, boolean> {
     const rows = getDb().prepare("SELECT user_name, pending FROM onboarding").all() as { user_name: string; pending: number }[];
     return new Map(rows.map((r) => [r.user_name, r.pending === 1]));
