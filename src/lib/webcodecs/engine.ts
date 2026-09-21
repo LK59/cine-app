@@ -203,6 +203,12 @@ export class PlaybackEngine {
   /** Encoded blocks fed IN. The gap between the two is what exposes a decoder that lies. */
   private audioFed = 0;
   private demotingAudio = false;
+  /**
+   * Les codecs dont le décodeur de la plateforme a échoué pendant cette lecture — écartés par
+   * `supportedAudioConfig` dès l'échec, avant même que la bascule ait réussi et soit retenue pour
+   * de bon (`rememberAudioLiar`).
+   */
+  private readonly failedAudioCodecs = new Set<string>();
   private seekInFlight = false;
   private requestedSeek: number | null = null;
   /** Bumped for every decoder built, so frames from a retired one can be recognised and dropped. */
@@ -320,6 +326,12 @@ export class PlaybackEngine {
       this.audioDiagnostic = error instanceof Error ? error.message : "ouverture du décodeur logiciel échouée";
       return false;
     }
+    // Détruit pendant l'ouverture : ce décodeur (pour le TrueHD, un contexte WebAssembly) n'a plus
+    // de propriétaire, et une sortie audio créée maintenant ne serait jamais fermée.
+    if (this.destroyed) {
+      software.close();
+      return false;
+    }
 
     this.audioPath = "software";
     this.audioFed = 0;
@@ -370,8 +382,8 @@ export class PlaybackEngine {
   private async supportedAudioConfig(track: MatroskaTrack) {
     const liars = readAudioLiars();
     for (const config of audioConfigCandidates(track)) {
-      // Already caught claiming this one on this device.
-      if (liars.includes(config.codec)) continue;
+      // Already caught claiming this one on this device — or failing, during this playback.
+      if (liars.includes(config.codec) || this.failedAudioCodecs.has(config.codec)) continue;
       const support = await AudioDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
       if (support.supported) return config;
     }
@@ -398,8 +410,19 @@ export class PlaybackEngine {
       );
     }
 
+    // `destroy()` peut arriver pendant n'importe laquelle des attentes qui suivent — l'hôte démonte,
+    // ou passe à un autre lecteur. Chacune est donc suivie de `abandoned()`, qui ferme ce qui a
+    // été ouvert entre-temps : sans cela, le chargement continuait après la destruction et
+    // créait un contexte WebGL, un VideoDecoder, un AudioContext, une boucle de décodage logiciel
+    // et une source HTTP que plus rien ne fermerait.
     this.source = await HttpByteSource.open(streamUrl);
+    // La zone gardée héritée d'une source précédente sur le même fichier (voir `handover` dans
+    // byteSource.ts) n'a plus de gardien ici : ce chemin n'appelle jamais `keep`, et jusqu'à
+    // 24 Mo du cache restaient réservés à un endroit du film que plus personne ne relira.
+    this.source.keep?.(0, 0);
+    if (this.abandoned()) return;
     this.file = await parseMatroska(this.source);
+    if (this.abandoned()) return;
     this.duration = this.file.durationSeconds ?? 0;
 
     this.videoTrack = this.file.tracks.find((t) => t.type === "video" && t.isEnabled) ?? null;
@@ -415,10 +438,12 @@ export class PlaybackEngine {
       const wanted = options.chooseAudioTrack(audioCandidates.map(fromMatroskaTrack));
       const track = audioCandidates.find((t) => t.number === wanted) ?? null;
       if (track && (await this.firstDecodable([track]))) this.audioTrack = track;
+      if (this.abandoned()) return;
     }
     if (!this.audioTrack) {
       const preferred = audioCandidates.find((t) => t.isDefault) ?? audioCandidates[0] ?? null;
       this.audioTrack = (await this.firstDecodable(preferred ? [preferred, ...audioCandidates] : audioCandidates)) ?? preferred;
+      if (this.abandoned()) return;
     }
 
     const videoConfig = videoConfigFor(this.videoTrack);
@@ -427,6 +452,7 @@ export class PlaybackEngine {
     // Asked before configuring, so an unsupported profile is reported as such instead of
     // surfacing later as an opaque decoder error.
     const support = await VideoDecoder.isConfigSupported(videoConfig);
+    if (this.abandoned()) return;
     if (!support.supported) {
       throw new Error(`Ce navigateur ne sait pas décoder ${videoConfig.codec} (${this.videoTrack.codecId}).`);
     }
@@ -453,11 +479,13 @@ export class PlaybackEngine {
 
     if (this.audioTrack) {
       const audioConfig = await this.supportedAudioConfig(this.audioTrack);
+      if (this.abandoned()) return;
       if (!audioConfig) {
         // The platform can't decode this one. Before giving up on sound, try the software
         // decoder — which is where most of this library ends up, since AC3 and E-AC3 are not
         // part of the web baseline and iOS doesn't expose them either.
         const started = await this.startSoftwareAudio(this.audioTrack, options.startSeconds ?? 0);
+        if (this.abandoned()) return;
         if (!started) {
           // Reported, not fatal: a silent picture is still worth showing, and naming the codec
           // is what tells us which files this pipeline genuinely cannot handle.
@@ -470,11 +498,7 @@ export class PlaybackEngine {
       } else {
         this.audioConfig = audioConfig;
         this.audio = new AudioOutput({ sampleRate: audioConfig.sampleRate, numberOfChannels: audioConfig.numberOfChannels });
-        this.audioDecoder = new AudioDecoder({
-          output: (data) => this.onAudioData(data),
-          error: (error) => this.fail(`Décodage audio interrompu : ${error.message}`),
-        });
-        this.audioDecoder.configure(audioConfig);
+        this.audioDecoder = this.nativeAudioDecoder(audioConfig);
       }
     }
 
@@ -487,6 +511,7 @@ export class PlaybackEngine {
     // Fill the pipeline before reporting readiness, so pressing play starts on a picture rather
     // than on a blank canvas.
     await this.pump();
+    if (this.abandoned()) return;
     this.startPresenting();
   }
 
@@ -494,16 +519,96 @@ export class PlaybackEngine {
     this.destroyed = true;
     this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
     this.playing = false;
+    this.release();
+  }
+
+  /**
+   * Détruit pendant une attente de `load` : ce qui a été ouvert depuis est fermé, et le chargement
+   * s'arrête là. L'hôte, qui a demandé la destruction, ne regarde plus le résultat.
+   */
+  private abandoned(): boolean {
+    if (!this.destroyed) return false;
+    this.release();
+    return true;
+  }
+
+  /**
+   * Ferme et lâche tout ce que le moteur tient. Rejouable : chaque ressource est remise à `null`
+   * une fois fermée, si bien qu'un second appel ne ferme que ce qui a été ouvert entre les deux —
+   * et ne ferme pas deux fois la source HTTP, dont la seconde fermeture effacerait le relais laissé
+   * par la première (voir `handover`).
+   */
+  private release(): void {
     if (this.rafHandle !== null) cancelAnimationFrame(this.rafHandle);
+    this.rafHandle = null;
     for (const frame of this.frames) frame.close();
     this.frames.length = 0;
     try { this.videoDecoder?.close(); } catch { /* already closed */ }
+    this.videoDecoder = null;
     try { this.audioDecoder?.close(); } catch { /* already closed */ }
+    this.audioDecoder = null;
     this.softwareAudioGeneration += 1;
-    this.softwareAudio?.close();
+    try { this.softwareAudio?.close(); } catch { /* already closed */ }
+    this.softwareAudio = null;
     this.renderer?.destroy();
+    this.renderer = null;
     void this.audio?.close();
+    this.audio = null;
     this.source?.close();
+    this.source = null;
+  }
+
+  /**
+   * Le décodeur audio de la plateforme, et ce qu'on fait quand il lâche.
+   *
+   * Son échec était fatal — `fail()`, le film rendu au lecteur serveur — alors qu'un décodeur
+   * logiciel existe juste à côté. Relevé en production sur un iPhone : « Décodage audio
+   * interrompu : InternalAudioDecoderCocoa decoding failed », une piste FLAC que libFLAC lit
+   * très bien. Voir `nativeAudioFailed`.
+   */
+  private nativeAudioDecoder(config: AudioConfig): AudioDecoder {
+    const decoder: AudioDecoder = new AudioDecoder({
+      output: (data) => this.onAudioData(data),
+      error: (error) => this.nativeAudioFailed(error, decoder),
+    });
+    decoder.configure(config);
+    return decoder;
+  }
+
+  /**
+   * Le décodeur de la plateforme a échoué en cours de route : on passe au décodeur logiciel, à la
+   * position courante, comme `maybeDemoteNativeAudio` le fait pour un décodeur qui se tait. Fatal
+   * seulement si rien d'autre ne sait lire la piste.
+   */
+  private nativeAudioFailed(error: DOMException, decoder: AudioDecoder): void {
+    // Un décodeur déjà remplacé — par un changement de piste, par une bascule — n'a plus voix.
+    if (this.destroyed || decoder !== this.audioDecoder) return;
+    const fatal = `Décodage audio interrompu : ${error.message}`;
+    const track = this.audioTrack;
+    const codec = this.audioConfig?.codec;
+    if (!track || !codec) return this.fail(fatal);
+    // Une bascule est déjà en cours : elle remplace ce décodeur de toute façon.
+    if (this.demotingAudio) return;
+
+    this.demotingAudio = true;
+    this.failedAudioCodecs.add(codec);
+    this.audioDiagnostic = `${fatal} — bascule sur le décodeur logiciel`;
+    trace(`décodeur audio ${codec} en échec (${error.message}) — bascule sur le décodeur logiciel`);
+    const resumeAt = this.currentTime;
+    void this.configureAudioFor(track, resumeAt)
+      .then(async (ok) => {
+        if (this.destroyed) return;
+        if (!ok) return this.fail(fatal);
+        // Retenu pour cet appareil, comme un décodeur qui se tait : la prochaine lecture ouvre
+        // directement sur ce qui marche au lieu de refaire l'échec.
+        rememberAudioLiar(codec);
+        trace(`son rétabli après l'échec de ${codec}`);
+        await this.seek(resumeAt);
+      })
+      .catch(() => this.fail(fatal))
+      .finally(() => {
+        this.demotingAudio = false;
+      });
   }
 
   /**
@@ -578,8 +683,11 @@ export class PlaybackEngine {
     await this.audio?.close();
     this.audio = null;
     this.audioConfig = null;
+    // Détruit entre-temps : rien de ce qui suit n'aurait de propriétaire.
+    if (this.destroyed) return false;
 
     const config = await this.supportedAudioConfig(track);
+    if (this.destroyed) return false;
     if (config) {
       this.audioConfig = config;
       this.audioPath = "native";
@@ -594,11 +702,7 @@ export class PlaybackEngine {
         }
       };
       this.audio.setVolume(this.volume, this.muted);
-      this.audioDecoder = new AudioDecoder({
-        output: (data) => this.onAudioData(data),
-        error: (error) => this.fail(`Décodage audio interrompu : ${error.message}`),
-      });
-      this.audioDecoder.configure(config);
+      this.audioDecoder = this.nativeAudioDecoder(config);
       return true;
     }
 
@@ -757,8 +861,17 @@ export class PlaybackEngine {
       });
       this.videoDecoder.configure(videoConfig);
     }
-    this.audioDecoder?.reset();
-    if (this.audioConfig) this.audioDecoder?.configure(this.audioConfig);
+    // Un décodeur que sa propre erreur a fermé lève sur reset() : le saut entier échouait, alors
+    // que la bascule vers le décodeur logiciel (voir `nativeAudioFailed`) est justement en train
+    // de le remplacer.
+    if (this.audioDecoder && this.audioDecoder.state !== "closed") {
+      try {
+        this.audioDecoder.reset();
+        if (this.audioConfig) this.audioDecoder.configure(this.audioConfig);
+      } catch {
+        // Fermé entre la question et le geste ; son remplaçant arrive par le même chemin.
+      }
+    }
     this.needsKeyframe = true;
 
     for (const frame of this.frames) frame.close();
@@ -966,6 +1079,7 @@ export class PlaybackEngine {
     const resumeAt = this.currentTime;
     void this.configureAudioFor(track, resumeAt)
       .then(async (ok) => {
+        if (this.destroyed) return;
         if (!ok) {
           this.emit("warning", `Pas de son : ${this.audioDiagnostic}.`);
           this.audioTrack = null;

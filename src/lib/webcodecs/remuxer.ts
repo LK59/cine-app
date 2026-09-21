@@ -35,6 +35,17 @@ const SEGMENT_US = 2_000_000;
 const MAX_ENCODER_RESTARTS = 3;
 
 /**
+ * Combien de segments sains effacent les reconstructions de l'encodeur.
+ *
+ * Le compteur ci-dessus ne redescendait jamais : trois reconstructions pour tout le film. Or
+ * l'encodeur AAC d'Apple échoue *de loin en loin*, si bien qu'un long film épuisait son crédit par
+ * accident et partait au lecteur serveur au quatrième hoquet. Trente segments, c'est une minute de
+ * son produite sans incident : un encodeur qui échoue à chaque fois n'y arrive jamais et garde sa
+ * borne ; un hoquet isolé est oublié, comme le budget de reconstruction du lecteur, qui décroît.
+ */
+const GOOD_SEGMENTS_TO_FORGIVE = 30;
+
+/**
  * How far back to read from when the index points at a picture a decoder cannot start on.
  *
  * More than the widest gap between genuine random access points measured across this library —
@@ -377,7 +388,14 @@ export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile): AudioD
 export function deliveredAudio(track: MatroskaTrack, file: MatroskaFile): string | null {
   const delivery = audioDelivery(track, file);
   if (delivery === "none") return null;
-  return delivery === "copy" ? audioCodecString(track) : "ré-encodé";
+  if (delivery === "copy") return audioCodecString(track);
+  // La fréquence fait partie du format livré, au même titre que le codec : l'encodeur est
+  // configuré à celle du décodeur (voir `AudioTranscoder.open`), et elle est écrite dans la
+  // configuration du segment d'initialisation. Un FLAC à 44,1 kHz et un DTS à 48 kHz, tous deux
+  // « ré-encodés », changeaient donc la configuration d'un tampon vivant — exactement ce qu'aucun
+  // tampon de Safari ne survit (03/09/2026). Les canaux, eux, sont déjà unifiés entre pistes
+  // ré-encodées (`unifiedAudioChannels`).
+  return `ré-encodé ${Math.round(track.audio?.sampleRate ?? 48000)} Hz`;
 }
 
 /**
@@ -497,6 +515,11 @@ function planFragments(count: number, byteLengthOf: (index: number) => number): 
   return fragments;
 }
 
+/** Deux transcodeurs qui décrivent le tampon audio de la même façon : fréquence et canaux. */
+function sameShape(a: AudioTranscoder, b: AudioTranscoder): boolean {
+  return a.sampleRate === b.sampleRate && a.channels === b.channels;
+}
+
 function transcodedAudioInfo(transcoder: AudioTranscoder, track: MatroskaTrack): MuxTrackInfo {
   return {
     id: 2,
@@ -520,6 +543,19 @@ export class Remuxer {
    */
   private videoDecodeTime = 0;
   private encoderRestarts = 0;
+  /** Segments de son produits sans échec depuis la dernière reconstruction — voir GOOD_SEGMENTS_TO_FORGIVE. */
+  private goodSegments = 0;
+  /**
+   * Fermé : plus rien ne s'ouvre au nom de cet objet.
+   *
+   * Un segment en cours pendant `close()` échouait sur l'encodeur fermé, et `retryTranscoder`
+   * ouvrait alors un transcodeur **neuf** — un décodeur (pour le TrueHD, un contexte WebAssembly)
+   * et un AudioEncoder, dont le navigateur n'accorde qu'un nombre fixe —, installé sur un
+   * remultiplexeur que plus personne ne fermerait.
+   */
+  private closed = false;
+  /** La fin du son ré-encodé a été demandée, à la fin du fichier — voir nextSegment. */
+  private tailDone = false;
   /** How many of the current group's pictures have already been handed over. */
   private emitted = 0;
   /** The picture that closes the current group and opens the next one. */
@@ -717,6 +753,8 @@ export class Remuxer {
     const previous = this.transcoder;
     const at = this.videoDecodeTime / TIMESCALE;
 
+    if (this.closed) throw new Error("Le remultiplexeur est fermé.");
+
     if (audioDelivery(track, this.file) === "transcode") {
       // Primed where the viewer is, not at the beginning of the film: two hours in, the opening
       // is long out of the byte source's cache, and fetching it back to read one header is
@@ -726,7 +764,19 @@ export class Remuxer {
       // has to hand back the decoder and the encoder the refused track had already opened, which
       // nothing else will ever come back for.
       try {
+        if (this.closed) throw new Error("Le remultiplexeur a été fermé pendant l'ouverture de la piste.");
         assertContainerTakes(next);
+        // Le filet de `deliveredAudio`, qui décide sur l'en-tête du fichier avant qu'aucun
+        // encodeur n'existe. Si ce qui sort réellement ne décrit pas le tampon comme la piste
+        // qu'il remplace — une autre fréquence, un autre nombre de canaux —, le changement est
+        // refusé et l'ancienne piste continue de jouer, plutôt que de changer la configuration
+        // d'un tampon vivant. Vaut aussi pour l'unification par fichier, où rien ne reconstruit.
+        if (previous && !rebuildable && !sameShape(previous, next)) {
+          throw new Error(
+            `la piste ré-encodée sortirait en ${next.sampleRate} Hz / ${next.channels} canaux, ` +
+              `le tampon est en ${previous.sampleRate} Hz / ${previous.channels} canaux`
+          );
+        }
       } catch (refusal) {
         next.close();
         throw refusal;
@@ -743,6 +793,7 @@ export class Remuxer {
         (here !== null && here !== start
           ? await describeAudio(this.source, this.file, here, track).catch(() => null)
           : null) ?? (await describeAudio(this.source, this.file, start, track));
+      if (this.closed) throw new Error("Le remultiplexeur a été fermé pendant l'ouverture de la piste.");
       previous?.close();
       this.transcoder = null;
       this.audioInfo = info;
@@ -752,6 +803,7 @@ export class Remuxer {
     this.pendingAudio = [];
     this.audioFrameUs = null;
     this.transcoderSeekPending = this.transcoder !== null;
+    this.tailDone = false;
   }
 
   /** Whether the file carries an index. Without one there is no way to reach a time directly. */
@@ -782,6 +834,7 @@ export class Remuxer {
 
   /** Releases the decoder and encoder a transcoded track holds. */
   close(): void {
+    this.closed = true;
     this.transcoder?.close();
     this.transcoder = null;
   }
@@ -830,6 +883,7 @@ export class Remuxer {
     this.seekTargetUs = Math.round(seconds * 1e6);
     this.backupsLeft = MAX_INDEX_BACKUPS;
     this.done = false;
+    this.tailDone = false;
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
     this.videoDecodeTime = Math.round(seconds * TIMESCALE);
@@ -849,6 +903,17 @@ export class Remuxer {
    */
   async nextSegment(): Promise<RemuxSegment | null> {
     if (!(await this.readUntilSettled())) return null;
+
+    // Le fichier est lu jusqu'au bout et chaque image est partie : il ne reste que la fin du son
+    // ré-encodé, ce qui suit la dernière image. Demandée une fois, puis `null` — c'est ce `null`
+    // qui fait déclarer la fin du flux (`endOfStream`) et lever `ended`.
+    if (this.done && this.transcoder && this.emitted >= this.pendingVideo.length) {
+      this.tailDone = true;
+      const audio = await this.buildTranscodedAudio(Infinity);
+      const subtitles = this.buildSubtitles();
+      this.pendingSubtitles = [];
+      return { video: [], audio, subtitles, endSeconds: this.videoDecodeTime / TIMESCALE };
+    }
 
     const video = this.buildVideo();
     // Built after the video, because the stretch it has to cover is what the video just settled.
@@ -919,8 +984,16 @@ export class Remuxer {
       }
     }
 
-    const spent = this.emitted >= this.pendingVideo.length && this.pendingAudio.length === 0 && !this.transcoder;
-    return !(this.done && spent);
+    // Le son ré-encodé compte aussi, mais comme une chose qui *finit*. Écrit `&& !this.transcoder`
+    // jusqu'au 22/09/2026 : avec un transcodeur, le fichier n'était jamais épuisé. Chaque appel
+    // rendait un segment vide, `endOfStream` n'était jamais appelé ni `ended` levé, et au bout de
+    // huit segments sans effet la source concluait que le navigateur ne retenait rien — reprise,
+    // relecture des trente dernières secondes, et ainsi de suite jusqu'à l'erreur, dans le
+    // générique de chaque film au son ré-encodé (DTS et AC-3 sur Chrome ; DTS, TrueHD, FLAC et
+    // Opus sur iPhone).
+    const spent = this.emitted >= this.pendingVideo.length && this.pendingAudio.length === 0;
+    const soundSpent = !this.transcoder || this.tailDone || this.transcoder.drained === true;
+    return !(this.done && spent && soundSpent);
   }
 
   /**
@@ -978,7 +1051,7 @@ export class Remuxer {
    * own end is what keeps the two tracks tiling together — each segment holds exactly the sound
    * belonging to the pictures beside it.
    */
-  private async buildTranscodedAudio(): Promise<Uint8Array | null> {
+  private async buildTranscodedAudio(untilSeconds = this.videoDecodeTime / TIMESCALE): Promise<Uint8Array | null> {
     if (!this.transcoder || !this.audioInfo) return null;
 
     if (this.transcoderSeekPending) {
@@ -988,8 +1061,15 @@ export class Remuxer {
 
     let frames: TranscodedFrame[];
     try {
-      frames = await this.transcoder.framesUpTo(this.videoDecodeTime / TIMESCALE);
+      frames = await this.transcoder.framesUpTo(untilSeconds);
     } catch (error) {
+      // La fin du son, derrière la dernière image : rien qui vaille une reconstruction, qui
+      // repartirait du début du segment et renverrait un son déjà livré. Et un échec à cet
+      // endroit ne doit pas devenir celui du film, qui se termine.
+      if (untilSeconds === Infinity) {
+        trace(`transcodage audio : fin du son perdue (${error instanceof Error ? error.message : String(error)})`);
+        return null;
+      }
       // Safari's own AAC encoder gives up from time to time — "InternalAudioEncoderCocoa encoding
       // failed" — always after a change of track, never at the start, and not reproducibly: the
       // same change succeeds on the next attempt. Nothing about the file or the configuration is
@@ -997,10 +1077,17 @@ export class Remuxer {
       // encoder is a service; it is closed and opened again where the reader stands.
       frames = await this.retryTranscoder(error);
     }
+    // Fermé pendant l'attente : plus personne ne recevra ce segment.
+    const transcoder = this.transcoder;
+    if (!transcoder) return null;
+    if (++this.goodSegments >= GOOD_SEGMENTS_TO_FORGIVE && this.encoderRestarts > 0) {
+      trace(`transcodage audio : ${this.goodSegments} segments sans échec, reconstructions oubliées`);
+      this.encoderRestarts = 0;
+    }
     if (frames.length === 0) return null;
 
     const delay = this.presentationDelayUs ?? 0;
-    const fallback = Math.round((1024 / this.transcoder.sampleRate) * TIMESCALE);
+    const fallback = Math.round((1024 / transcoder.sampleRate) * TIMESCALE);
     const samples: MuxSample[] = frames.map((frame) => ({
       data: frame.data,
       decodeTime: frame.timestampUs + delay,
@@ -1021,8 +1108,10 @@ export class Remuxer {
    */
   private async retryTranscoder(cause: unknown): Promise<TranscodedFrame[]> {
     const track = this.audioTrack;
-    if (!track || this.encoderRestarts >= MAX_ENCODER_RESTARTS) throw cause;
+    // Fermé : l'échec est celui de l'encodeur qu'on vient de fermer, pas une panne à réparer.
+    if (!track || this.closed || this.encoderRestarts >= MAX_ENCODER_RESTARTS) throw cause;
     this.encoderRestarts += 1;
+    this.goodSegments = 0;
 
     const at = this.segmentStartUs / TIMESCALE;
     // The cause is written out: this path is taken for the decoder's failures too, and on
@@ -1031,8 +1120,13 @@ export class Remuxer {
     trace(`transcodage audio : chaîne en échec (${why}), reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
     const previous = this.transcoder;
     const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file) ?? undefined, this.file);
+    // Fermé pendant l'ouverture : ce transcodeur n'aurait plus aucun propriétaire.
+    if (this.closed) {
+      next.close();
+      throw cause;
+    }
     assertContainerTakes(next);
-    if (previous && next.codecString !== previous.codecString) {
+    if (previous && (next.codecString !== previous.codecString || !sameShape(previous, next))) {
       // The buffer decodes by an initialisation segment already sent; a replacement that
       // describes itself differently cannot take over behind its back.
       next.close();

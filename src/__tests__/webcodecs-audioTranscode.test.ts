@@ -374,6 +374,77 @@ describe("AudioTranscoder", () => {
     expect(new Set(times).size).toBe(times.length);
   });
 
+  it("ferme l'encodeur et le décodeur quand le décodeur lâche pendant l'amorçage", async () => {
+    // L'erreur de l'amorçage remontait telle quelle : l'encodeur de la tentative, que rien
+    // d'autre ne connaissait, restait ouvert — le navigateur n'en accorde qu'un nombre fixe —, et
+    // le décodeur (pour le TrueHD, un contexte WebAssembly) avec lui.
+    let made = 0;
+    let closed = 0;
+    const Base = fakeEncoderClass();
+    vi.stubGlobal(
+      "AudioEncoder",
+      class extends Base {
+        constructor(init: { output: (c: unknown) => void; error: (e: unknown) => void }) {
+          super(init as never);
+          made += 1;
+        }
+        close() {
+          closed += 1;
+        }
+      }
+    );
+    samples.mockImplementation(() => ({
+      next: async () => {
+        throw new Error("libFLAC : trame illisible");
+      },
+      return: async () => ({ done: true, value: undefined }),
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    }));
+    const { AudioTranscoder } = await load();
+    await expect(AudioTranscoder.open(source as never, track as never)).rejects.toThrow(/libFLAC/);
+    expect(made).toBeGreaterThan(0);
+    expect(closed).toBe(made);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("ferme aussi l'encodeur amorcé quand la suite de l'ouverture échoue", async () => {
+    // Un Opus dont l'en-tête est trop court pour être relu : l'encodeur a réussi, la description
+    // ne se lit pas, et l'exception partait avec l'encodeur encore ouvert.
+    let closed = 0;
+    const Base = fakeEncoderClass();
+    vi.stubGlobal(
+      "AudioEncoder",
+      class extends Base {
+        static async isConfigSupported(config: { codec: string }) {
+          return { supported: config.codec === "opus", config };
+        }
+        close() {
+          closed += 1;
+        }
+      }
+    );
+    samples.mockImplementation(() => decoded(8));
+    const { AudioTranscoder } = await load();
+    await expect(AudioTranscoder.open(source as never, track as never)).rejects.toThrow();
+    expect(closed).toBe(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("se dit vidé une fois toute la piste rendue, et pas avant", async () => {
+    // Ce que le remultiplexeur interroge pour dire que le fichier est fini.
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    samples.mockImplementation(() => decoded(40));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    expect(transcoder.drained).toBe(false);
+    await transcoder.framesUpTo(0.1);
+    expect(transcoder.drained).toBe(false);
+    expect((await transcoder.framesUpTo(Infinity)).length).toBeGreaterThan(0);
+    expect(transcoder.drained).toBe(true);
+  });
+
   it("restarts decoding where a seek asks, not where it had got to", async () => {
     vi.stubGlobal("AudioEncoder", fakeEncoderClass());
     samples.mockImplementation((from: number) => decoded(200, from));

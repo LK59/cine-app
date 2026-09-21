@@ -137,6 +137,19 @@ export class MseSource {
   private pending: Promise<void> = Promise.resolve();
   /** The most recent seek asked for. Dragging a scrub bar asks for dozens; only the last matters. */
   private requestedSeek: number | null = null;
+  /**
+   * Le lecteur est à quelqu'un d'autre : une action exclusive, ou un rechargement du son, qui a
+   * arrêté la boucle de lecture et n'a pas encore repositionné le remultiplexeur.
+   *
+   * Seul un saut arrêtait la boucle pour de bon — par `requestedSeek`. `refillAudio` et
+   * `runExclusive` changeaient de génération et attendaient la boucle en cours, mais rien
+   * n'empêchait la suivante de partir aussitôt, sur un `timeupdate` ou un `waiting`, avant que le
+   * remultiplexeur ne soit replacé : la lecture reprenait à l'ancienne position, un `seekTo` du
+   * lecteur d'échantillons était écrasé par la grappe qu'on finissait de lire, et le transcodeur
+   * en cours de remplacement était interrogé en même temps. Un compteur, pas un booléen : les deux
+   * peuvent se chevaucher.
+   */
+  private fenced = 0;
   private delaySeconds = 0;
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
@@ -519,6 +532,9 @@ export class MseSource {
         // A seek is waiting. Reading thirty more seconds of a place the viewer has already left
         // is what makes a second seek feel like it does nothing for several seconds.
         if (this.requestedSeek !== null) break;
+        // Pareil pour un changement de piste en cours : c'est lui qui relancera la lecture, une
+        // fois le remultiplexeur replacé — voir `fenced`.
+        if (this.fenced > 0) break;
 
         // Nothing asks for the pictures of a stretch the browser already holds — which is every
         // language change. The file still has to be read for them (Matroska interleaves the sound
@@ -848,8 +864,22 @@ export class MseSource {
    */
   async refillAudio(playerSeconds: number): Promise<void> {
     if (this.destroyed || !this.audioOps) return;
+    this.fenced += 1;
+    try {
+      await this.refillAudioFenced(playerSeconds, this.audioOps);
+    } finally {
+      this.fenced -= 1;
+    }
+    void this.fill();
+  }
+
+  private async refillAudioFenced(playerSeconds: number, audioOps: BufferQueue): Promise<void> {
     this.generation += 1;
     await this.fillTask?.catch(() => {});
+    // Le flux avait peut-être déjà été déclaré fini : un changement de langue dans les trente
+    // dernières secondes du film. `runFill` ne relit rien une fois `ended` levé, et le film
+    // finissait muet sur un tampon audio qu'on venait de vider. Un saut le rabaisse ; ceci aussi.
+    this.ended = false;
 
     // Measured on the video buffer alone, and this matters: `bufferedEnd` reads the element's
     // ranges, which are the *intersection* of the two buffers — and the audio one was just
@@ -860,9 +890,8 @@ export class MseSource {
     // and a seek — which re-primes the decoder — showed the right frame again.
     this.skipVideoUntil = this.videoBufferedEnd();
     this.readUpTo = playerSeconds;
-    await this.clear(this.audioOps);
+    await this.clear(audioOps);
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
-    void this.fill();
   }
 
   /**
@@ -874,9 +903,14 @@ export class MseSource {
    */
   async runExclusive<T>(action: () => Promise<T>): Promise<T> {
     const task = this.pending.then(async () => {
-      this.generation += 1;
-      await this.fillTask?.catch(() => {});
-      return action();
+      this.fenced += 1;
+      try {
+        this.generation += 1;
+        await this.fillTask?.catch(() => {});
+        return await action();
+      } finally {
+        this.fenced -= 1;
+      }
     });
     this.pending = task.then(
       () => {},
@@ -979,7 +1013,10 @@ export class MseSource {
   }
 
   private async clear(queue: BufferQueue): Promise<void> {
-    if (queue.buffer.buffered.length === 0 || this.source.readyState !== "open") return;
+    // « ended » n'empêche pas de retirer : la spécification rouvre la source d'elle-même. Refusé
+    // jusqu'au 22/09/2026, ce qui laissait l'ancienne piste dans le tampon quand on changeait de
+    // langue une fois la fin du flux déclarée. Seule une source fermée n'a plus rien à vider.
+    if (queue.buffer.buffered.length === 0 || this.source.readyState === "closed") return;
     // A finite end rather than Infinity: it is what the specification's examples use and what
     // every implementation is exercised against.
     const end = Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9;
@@ -1024,6 +1061,9 @@ export class MseSource {
     // guessing how long a segment takes to arrive — and guessing short, as a 4K file over a slow
     // link showed, means seeking again to the very place already being fetched.
     if (this.fillTask) return;
+    // Un changement de piste tient le lecteur et relancera la lecture lui-même ; se replacer
+    // maintenant, ce serait sauter à travers lui — voir `fenced`.
+    if (this.fenced > 0) return;
 
     // Nothing is being read and the playhead is on nothing: whatever failed to say so, the
     // viewer is somewhere this player is not serving.

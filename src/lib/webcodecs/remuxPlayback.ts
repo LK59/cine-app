@@ -373,8 +373,25 @@ export class RemuxPlayback {
    * lecteur dessus plutôt que d'appeler `selectAudioTrack` — voir `audioSwitchNeedsRebuild`.
    */
   needsRebuildForAudio(trackNumber: number): boolean {
+    // Sans index, une reconstruction ne sait pas rouvrir ailleurs qu'au début : le film
+    // repartirait de zéro. Le changement est alors confié à `selectAudioTrack`, qui le refuse.
+    if (this.switchNeedsIndex) return false;
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     return track ? audioSwitchNeedsRebuild(this.file, this.audioTrack, track) : false;
+  }
+
+  /**
+   * Un changement de piste ici relirait le fichier depuis son début.
+   *
+   * Les deux façons de changer de piste repartent de la position courante *par l'index* : le
+   * rechargement du son pointe le remultiplexeur sur la grappe de la tête, la reconstruction
+   * rouvre à la même position. Un fichier sans index n'a pas de grappe à désigner —
+   * `clusterOffsetForTime` retombe sur la première —, et l'un relisait tout le film depuis le
+   * premier octet pour retrouver la tête, l'autre le reprenait à zéro. Au tout début du film, en
+   * revanche, lire depuis le début *est* la bonne réponse : même seuil qu'un saut refusé.
+   */
+  private get switchNeedsIndex(): boolean {
+    return !this.remuxer.seekable && this.video.currentTime > 1;
   }
 
   canCarryAudio(trackNumber: number): boolean {
@@ -427,6 +444,14 @@ export class RemuxPlayback {
   async selectAudioTrack(trackNumber: number): Promise<void> {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     if (!track || this.destroyed || track.number === this.audioTrack?.number || !this.mse) return;
+    // Refusé comme un saut l'est sur ce fichier, et pour la même raison : la piste d'avant
+    // continue de jouer, et le spectateur sait pourquoi. Voir `switchNeedsIndex`.
+    if (this.switchNeedsIndex) {
+      this.options.onWarning?.(
+        "Ce fichier n'a pas d'index de recherche : la piste audio ne peut pas être changée en cours de lecture."
+      );
+      return;
+    }
     // Refusé net plutôt que tenté : changer de format dans un tampon vivant est précisément ce
     // que Safari ne survit pas (03/09/2026). L'appelant reconstruit le lecteur — voir
     // needsRebuildForAudio.

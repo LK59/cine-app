@@ -250,6 +250,10 @@ reads and two verbs.
   further on. Three nudges of 0.08 s at most.
 - **Source loss**: iOS reclaims media resources in the background and closes the MediaSource. This
   is a pipeline to rebuild at the current position, not a failure to report — up to three times.
+- **A platform audio decoder that fails on the canvas path is not fatal**: the codec is set aside
+  and the software decoder takes over at the current position (`nativeAudioFailed`, as
+  `maybeDemoteNativeAudio` does for one that stays silent). Only if nothing else can read the
+  track does playback stop.
 - **The canvas path rebuilds too**, with the same machinery and budget, but only for a failure that
   occurs **after** the picture started moving. A file the device cannot decode fails before
   starting; retrying it is three spinners for the same answer.
@@ -356,6 +360,16 @@ What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what n
   configuration (`renew` in `audioTranscode.ts`), and only the current encoder is listened to.
 - **An encoder that fails in use lowers the rate for the session**, never below the last rung of
   the ladder (without an imposed rate Safari answers with HE-AAC, another object type).
+- **The encoder's rebuild budget decays** like the player's: three rebuilds, forgotten after thirty
+  clean segments (`GOOD_SEGMENTS_TO_FORGIVE`) — otherwise a long film spent its budget on
+  hiccups twenty minutes apart and went to the server player at the fourth.
+- **"Same delivered format" includes the sample rate** of a re-encoded track (`deliveredAudio`):
+  the encoder runs at the decoder's rate, and a 44.1 kHz FLAC after a 48 kHz DTS rebuilds rather
+  than changing a live buffer's configuration. `setAudioTrack` and `retryTranscoder` also refuse a
+  replacement whose actual rate or channel count differs from the buffer's.
+- **The end of the file is declared with a transcoder too**: once the last picture is out, the
+  rest of the re-encoded sound is asked for once, then `nextSegment()` answers `null` and the
+  stream is ended. Until 22/09/2026 it never did, and every re-encoded film looped in its credits.
 - **A switch that cannot open reverts to the previous track** instead of falling to the canvas or
   the server player (`revertFailedSwitch`).
 - **The rebuild keeps the picture**: the frame on screen is copied into a canvas above the
@@ -511,6 +525,7 @@ Shown:
 | `This audio track could not be opened: …` | Track change refused; **the previous one keeps playing** |
 | `External subtitles unavailable.` | The requested `.srt` did not come back from the server |
 | `This file has no seek index: seeking is not possible.` | Matroska without Cues |
+| `This file has no seek index: the audio track cannot be changed during playback.` | Track change past the first second of a file without Cues — both ways of changing track reposition through the index (`RemuxPlayback.switchNeedsIndex`); the previous track keeps playing |
 | `Part of this file could not be decoded: playback resumes just after.` | Second source loss at the same place — a piece of film was skipped |
 
 Sent to the trace instead, because the viewer saw nothing and has nothing to do: refused segment

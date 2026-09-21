@@ -3,7 +3,7 @@ import {
   Remuxer, unifiedAudioCodec, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio,
   setPerTrackAudioDelivery, deliveredAudio, audioSwitchNeedsRebuild, setAudioBufferRebuildable, unifiedAudioChannels,
 } from "@/lib/webcodecs/remuxer";
-import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
+import type { MatroskaFile, MatroskaTrack, MediaSample } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
 // A stand-in transcoder, so the one property that matters here can be checked: what is released,
@@ -11,7 +11,12 @@ import type { ByteSource } from "@/lib/webcodecs/byteSource";
 const opened: { closed: boolean }[] = [];
 let openFails = false;
 let transcoderCodec = "mp4a.40.2";
+let transcoderRate = 48000;
 let failNextFrames = false;
+/** Ce que rend `framesUpTo`, et où on le lui a demandé — par défaut, rien. */
+let framesHook: ((endSeconds: number) => Promise<{ data: Uint8Array; timestampUs: number; durationUs: number }[]>) | null = null;
+/** Retardé à volonté, pour fermer le remultiplexeur pendant une ouverture. */
+let openGate: Promise<void> | null = null;
 vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
   return {
@@ -19,19 +24,20 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
     AudioTranscoder: {
       open: async () => {
         if (openFails) throw new Error("l'encodeur a refusé");
+        if (openGate) await openGate;
         const instance = {
           closed: false,
           codecString: transcoderCodec,
           sampleEntry: new Uint8Array([0, 0, 0, 8, 0x6d, 0x70, 0x34, 0x61]),
-          sampleRate: 48000,
+          sampleRate: transcoderRate,
           channels: 6,
           seekTo: () => {},
-          framesUpTo: async () => {
+          framesUpTo: async (endSeconds: number) => {
             if (failNextFrames) {
               failNextFrames = false;
               throw new Error("InternalAudioEncoderCocoa encoding failed");
             }
-            return [];
+            return framesHook ? framesHook(endSeconds) : [];
           },
           close() {
             this.closed = true;
@@ -43,6 +49,25 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
     },
   };
 });
+
+// Le lecteur d'échantillons, remplacé pour pouvoir donner au remultiplexeur de vraies images à
+// lire. Vide par défaut — le comportement d'avant pour tous les tests qui ne s'en servent pas :
+// le fichier est fini dès la première lecture.
+let readerSamples: MediaSample[] = [];
+vi.mock("@/lib/webcodecs/sampleReader", () => ({
+  SampleReader: class {
+    private queue = [...readerSamples];
+    async next() {
+      return this.queue.shift() ?? null;
+    }
+    seekTo() {}
+  },
+}));
+
+/** Une image HEVC IDR, longueur sur quatre octets comme le dit HVCC ci-dessous. */
+function idr(timestampUs: number): MediaSample {
+  return { trackNumber: 1, timestampUs, durationUs: 40_000, isKey: true, data: new Uint8Array([0, 0, 0, 3, 0x26, 0x01, 0xaf]) };
+}
 
 const HVCC = new Uint8Array([1, 1, 0x60, 0, 0, 0, 0x90, 0, 0, 0, 0, 0x78, 0xf0, 0, 0xfc, 0xfd, 0xf8, 0xf8, 0, 0, 0x0f, 0]);
 const AVCC = new Uint8Array([1, 0x64, 0, 0x28, 0xff, 0xe1, 0, 4, 0x67, 0x64, 0, 0x28, 1, 0, 4, 0x68, 0xee, 0x3c, 0xb0]);
@@ -236,7 +261,7 @@ describe("Remuxer track selection", () => {
     expect(audioDelivery(eac3, file)).toBe("copy");
     expect(plannedMimeTypes(VIDEO, eac3, file).audio).toBe('audio/mp4; codecs="ec-3"');
     expect(deliveredAudio(eac3, file)).toBe("ec-3");
-    expect(deliveredAudio(trueHd, file)).toBe("ré-encodé");
+    expect(deliveredAudio(trueHd, file)).toBe("ré-encodé 48000 Hz");
 
     // A change of delivered format rebuilds; the same format keeps the fast buffer change —
     // including two re-encoded tracks (one codec, one layout) and two E-AC3 of different layouts,
@@ -363,6 +388,9 @@ describe("Remuxer encoder recovery", () => {
     const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
     FILE.tracks.push(dts);
     opened.length = 0;
+    // Une image à lire : sans elle, le premier segment serait déjà la fin du son, qui ne se
+    // reconstruit pas (voir « la fin du son » plus bas).
+    readerSamples = [idr(0)];
     failNextFrames = true;
 
     try {
@@ -374,6 +402,200 @@ describe("Remuxer encoder recovery", () => {
     } finally {
       FILE.tracks.pop();
       failNextFrames = false;
+      readerSamples = [];
+    }
+  });
+
+  it("oublie les reconstructions après une minute de son sans échec, mais garde sa borne", async () => {
+    // Trois reconstructions pour tout le film : un encodeur qui hoquette de loin en loin
+    // épuisait ce crédit sur un long film, et le quatrième hoquet rendait le film au serveur.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    opened.length = 0;
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const build = () => (remuxer as unknown as { buildTranscodedAudio(): Promise<unknown> }).buildTranscodedAudio();
+      for (let hiccup = 0; hiccup < 5; hiccup++) {
+        failNextFrames = true;
+        await expect(build()).resolves.not.toThrow();
+        for (let good = 0; good < 30; good++) await build();
+      }
+      expect(opened.length).toBe(6);
+
+      // Un encodeur qui échoue à chaque segment n'a jamais ses trente segments sains : la borne
+      // tient, et c'est l'échec d'origine qui remonte.
+      const always = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const buildAlways = () => (always as unknown as { buildTranscodedAudio(): Promise<unknown> }).buildTranscodedAudio();
+      for (let i = 0; i < 3; i++) {
+        failNextFrames = true;
+        await buildAlways();
+      }
+      failNextFrames = true;
+      await expect(buildAlways()).rejects.toThrow(/Cocoa/);
+    } finally {
+      FILE.tracks.pop();
+      failNextFrames = false;
+    }
+  });
+
+  it("n'ouvre rien pour un remultiplexeur fermé pendant un segment", async () => {
+    // Un segment en cours pendant close() échouait sur l'encodeur fermé ; la reconstruction
+    // ouvrait alors un transcodeur neuf — un décodeur, un AudioEncoder — que plus personne ne
+    // fermerait.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    opened.length = 0;
+    readerSamples = [idr(0)];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    framesHook = async () => {
+      await held;
+      throw new Error("InvalidStateError: encoder closed");
+    };
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const segment = remuxer.nextSegment();
+      await new Promise((r) => setTimeout(r, 0));
+      remuxer.close();
+      release();
+      await segment.catch(() => {});
+      expect(opened.every((t) => t.closed)).toBe(true);
+      expect(opened.length).toBe(1);
+
+      // Et une piste qui finit de s'ouvrir après la fermeture est refermée aussitôt.
+      framesHook = null;
+      const other = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const otherDts = track({ ...dts, number: 8, language: "eng" });
+      FILE.tracks.push(otherDts);
+      let open!: () => void;
+      openGate = new Promise<void>((resolve) => (open = resolve));
+      const switching = other.setAudioTrack(otherDts.number);
+      await new Promise((r) => setTimeout(r, 0));
+      other.close();
+      open();
+      await expect(switching).rejects.toThrow();
+      expect(opened.every((t) => t.closed)).toBe(true);
+      FILE.tracks.pop();
+    } finally {
+      FILE.tracks.pop();
+      framesHook = null;
+      openGate = null;
+      readerSamples = [];
+    }
+  });
+});
+
+describe("la fin du fichier, son ré-encodé", () => {
+  it("rend le reste du son une fois, puis dit que c'est fini", async () => {
+    // `&& !this.transcoder` : avec un transcodeur, le fichier n'était jamais épuisé. Chaque appel
+    // rendait un segment vide, endOfStream n'était jamais appelé, et au bout de huit segments
+    // sans effet la source reprenait les trente dernières secondes — en boucle, dans le générique
+    // de chaque film au son ré-encodé.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    readerSamples = [idr(0), idr(40_000)];
+    const asked: number[] = [];
+    framesHook = async (end) => {
+      asked.push(end);
+      // Une trame avant la fin de l'image, puis une après : la seconde n'appartient qu'à la fin.
+      return end === Infinity
+        ? [{ data: new Uint8Array([2]), timestampUs: 90_000, durationUs: 21_333 }]
+        : [{ data: new Uint8Array([1]), timestampUs: 0, durationUs: 21_333 }];
+    };
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const results = [];
+      for (let i = 0; i < 6; i++) {
+        const segment = await remuxer.nextSegment();
+        results.push(segment);
+        if (!segment) break;
+      }
+      // Les images et leur son, puis la fin du son seule, puis rien.
+      expect(results).toHaveLength(3);
+      expect(results[0]!.video.length).toBeGreaterThan(0);
+      expect(results[0]!.audio).not.toBeNull();
+      expect(results[1]!.video).toEqual([]);
+      expect(results[1]!.audio).not.toBeNull();
+      expect(results[2]).toBeNull();
+      // Le son de la fin reprend là où celui des images s'arrête : même coupe, jusqu'au bout.
+      expect(asked[0]).toBeCloseTo(results[0]!.endSeconds);
+      expect(asked[1]).toBe(Infinity);
+      expect(results[1]!.endSeconds).toBe(results[0]!.endSeconds);
+    } finally {
+      FILE.tracks.pop();
+      framesHook = null;
+      readerSamples = [];
+    }
+  });
+
+  it("finit aussi quand la fin du son échoue, sans reconstruire l'encodeur", async () => {
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    opened.length = 0;
+    framesHook = async (end) => {
+      if (end === Infinity) throw new Error("InternalAudioEncoderCocoa encoding failed");
+      return [];
+    };
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      expect(await remuxer.nextSegment()).not.toBeNull();
+      expect(await remuxer.nextSegment()).toBeNull();
+      expect(opened).toHaveLength(1);
+    } finally {
+      FILE.tracks.pop();
+      framesHook = null;
+    }
+  });
+
+  it("recommence à lire après un saut, même une fois la fin atteinte", async () => {
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      // Borné : sans le correctif, le fichier ne finit jamais.
+      for (let i = 0; i < 6 && (await remuxer.nextSegment()); i++);
+      remuxer.seekTo(10);
+      // La fin du son est redemandée depuis la nouvelle position, puis la fin est redite.
+      expect(await remuxer.nextSegment()).not.toBeNull();
+      expect(await remuxer.nextSegment()).toBeNull();
+    } finally {
+      FILE.tracks.pop();
+    }
+  });
+});
+
+describe("pistes ré-encodées de fréquences différentes", () => {
+  it("demande une reconstruction plutôt que de changer la fréquence d'un tampon vivant", () => {
+    // Deux pistes « ré-encodées » : l'encodeur prend la fréquence du décodeur, et elle est écrite
+    // dans le segment d'initialisation. Un FLAC à 44,1 kHz après un DTS à 48 kHz, c'était une
+    // autre configuration dans le même tampon.
+    vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => t.includes("mp4a") } });
+    const flac = track({ number: 2, type: "audio", codecId: "A_FLAC", audio: { sampleRate: 44100, channels: 2 } });
+    const dts = track({ number: 3, type: "audio", codecId: "A_DTS", language: "eng", audio: { sampleRate: 48000, channels: 2 } });
+    const dts2 = track({ number: 4, type: "audio", codecId: "A_DTS", language: "spa", audio: { sampleRate: 48000, channels: 2 } });
+    const file = { ...FILE, tracks: [VIDEO, flac, dts, dts2] } as never;
+
+    expect(audioSwitchNeedsRebuild(file, dts, flac)).toBe(true);
+    expect(audioSwitchNeedsRebuild(file, flac, dts)).toBe(true);
+    expect(audioSwitchNeedsRebuild(file, dts, dts2)).toBe(false);
+  });
+
+  it("refuse un changement dont l'encodeur sort à une autre fréquence, et garde la piste d'avant", async () => {
+    // Le filet, pour ce que l'en-tête du fichier n'a pas su dire — et pour l'unification par
+    // fichier, où rien ne reconstruit.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
+    const other = track({ ...dts, number: 8, language: "eng" });
+    FILE.tracks.push(dts, other);
+    opened.length = 0;
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      transcoderRate = 44100;
+      await expect(remuxer.setAudioTrack(other.number)).rejects.toThrow(/44100 Hz/);
+      expect(opened[0].closed).toBe(false);
+      expect(opened[1].closed).toBe(true);
+    } finally {
+      FILE.tracks.splice(-2, 2);
+      transcoderRate = 48000;
     }
   });
 });

@@ -298,6 +298,12 @@ async function primeEncoder(
         }, PRIMING_TIMEOUT_MS);
       }),
     ]);
+  } catch (error) {
+    // Le décodeur qui lâche pendant l'amorçage — un FLAC que libFLAC refuse, un bloc TrueHD
+    // illisible. L'erreur remontait telle quelle, et l'encodeur de cette tentative, que rien
+    // d'autre ne connaît, restait ouvert : le navigateur n'en accorde qu'un nombre fixe.
+    close();
+    throw error;
   } finally {
     clearTimeout(timer);
     void primer.return?.(undefined);
@@ -419,6 +425,16 @@ export class AudioTranscoder {
   }
 
   /**
+   * Toute la piste a été décodée, encodée et rendue : il n'y a plus rien à demander.
+   *
+   * C'est ce qui permet au remultiplexeur de dire que le fichier est fini — voir
+   * `Remuxer.readUntilSettled`, qui ne le disait jamais tant qu'un transcodeur existait.
+   */
+  get drained(): boolean {
+    return this.exhausted && this.pending.length === 0;
+  }
+
+  /**
    * Opens the track and gets far enough to describe it.
    *
    * The description an MP4 needs is not in the file — it is produced by the encoder, and only
@@ -448,6 +464,37 @@ export class AudioTranscoder {
 
     trace(`transcodage audio : chargement du décodeur ${track.codecId}`);
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId, file);
+    // Tout ce qui suit peut lever — l'amorçage qui échoue sur le décodeur, une description que
+    // l'on ne sait pas relire —, et le décodeur (pour le TrueHD, un contexte WebAssembly) comme
+    // l'encodeur amorcé n'ont encore aucun propriétaire : fermés ici, sur chaque sortie en erreur.
+    let primedEncoder: AudioEncoder | null = null;
+    try {
+      return await AudioTranscoder.build(Encoder, decoder, fromSeconds, unifiedChannels, (encoder) => {
+        primedEncoder = encoder;
+      });
+    } catch (error) {
+      try {
+        (primedEncoder as AudioEncoder | null)?.close();
+      } catch {
+        // Déjà fermé par ce qui a échoué.
+      }
+      try {
+        decoder.close();
+      } catch {
+        // Likewise.
+      }
+      throw error;
+    }
+  }
+
+  /** La suite de `open`, une fois le décodeur ouvert — séparée pour que `open` ferme tout en cas d'échec. */
+  private static async build(
+    Encoder: typeof AudioEncoder,
+    decoder: SoftwareAudioTrack,
+    fromSeconds: number,
+    unifiedChannels: number | undefined,
+    onPrimed: (encoder: AudioEncoder) => void
+  ): Promise<AudioTranscoder> {
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
     const wanted = unifiedChannels ?? numberOfChannels;
@@ -455,10 +502,8 @@ export class AudioTranscoder {
       trace(`transcodage audio : disposition unifiée du fichier — ${numberOfChannels} canaux portés à ${wanted}`);
     }
     const plan = await chooseTranscodePlan(sampleRate, wanted);
-    if (!plan) {
-      decoder.close();
-      throw new Error(`Ce navigateur ne sait produire aucun codec audio en ${wanted} canaux.`);
-    }
+    // Le décodeur est fermé par `open`, qui attrape tout ce qui sort d'ici en erreur.
+    if (!plan) throw new Error(`Ce navigateur ne sait produire aucun codec audio en ${wanted} canaux.`);
     const target = plan.codec;
     const outChannels = plan.channels;
     // Comparé à ce qui a été *demandé*, pas à ce que la source portait : depuis que la
@@ -488,11 +533,9 @@ export class AudioTranscoder {
       // d'attente par barreau, ce serait une minute de film figé.
       if (attempt.timedOut) break;
     }
-    if (!primed) {
-      decoder.close();
-      throw new Error(failure || "L'encodeur audio n'a pas décrit le flux qu'il produit.");
-    }
+    if (!primed) throw new Error(failure || "L'encodeur audio n'a pas décrit le flux qu'il produit.");
     const { encoder, description, sink, config } = primed;
+    onPrimed(encoder);
 
     // Asking for a profile is not the same as being given it. The description is the only
     // statement of what came out, and everything written beside it in the container — the codec

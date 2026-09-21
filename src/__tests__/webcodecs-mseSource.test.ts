@@ -1557,3 +1557,81 @@ describe("MseSource sur un élément qui refuse srcObject", () => {
     expect((video as unknown as { src: string }).src).toBe("");
   });
 });
+
+describe("MseSource pendant un changement de piste", () => {
+  it("ne relit rien entre l'arrêt de la lecture et le replacement du lecteur", async () => {
+    // refillAudio changeait de génération et attendait la boucle en cours, mais un `timeupdate`
+    // en relançait une aussitôt, avant `remuxer.seekTo` : la lecture reprenait à l'ancienne
+    // position, et le placement du lecteur d'échantillons était écrasé par la grappe en cours.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2, true, 2);
+    const log: string[] = [];
+    const read = remuxer.nextSegment;
+    remuxer.nextSegment = async () => {
+      log.push("lecture");
+      return read();
+    };
+    const place = remuxer.seekTo;
+    remuxer.seekTo = (seconds: number) => {
+      log.push("placement");
+      place(seconds);
+    };
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await until(() => mse.debug["Lecture en cours"] === "non", "le premier remplissage est fini");
+    const audioBuffer = FakeSource.instances[0].buffers[1];
+    audioBuffer.busyMs = 30;
+    log.length = 0;
+
+    const refill = mse.refillAudio(10);
+    await new Promise((r) => setTimeout(r, 5));
+    // L'horloge avance pendant que le tampon audio se vide.
+    video.dispatchEvent(new Event("timeupdate"));
+    await refill;
+
+    expect(log[0]).toBe("placement");
+    await until(() => log.includes("lecture"), "la lecture reprend, après");
+  });
+
+  it("ne relit rien non plus pendant une action exclusive", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2, true, 2);
+    const log: string[] = [];
+    const read = remuxer.nextSegment;
+    remuxer.nextSegment = async () => {
+      log.push("lecture");
+      return read();
+    };
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await until(() => mse.debug["Lecture en cours"] === "non", "le premier remplissage est fini");
+    log.length = 0;
+
+    await mse.runExclusive(async () => {
+      // Ce que fait un changement de piste : le son d'avant n'est plus là, rien n'est replacé.
+      FakeSource.instances[0].buffers[1].setBuffered(0, 0);
+      video.dispatchEvent(new Event("timeupdate"));
+      video.dispatchEvent(new Event("waiting"));
+      await new Promise((r) => setTimeout(r, 20));
+      log.push("fin de l'action");
+    });
+
+    expect(log[0]).toBe("fin de l'action");
+  });
+
+  it("recharge le son d'un changement de langue fait après la fin du flux", async () => {
+    // Dans les trente dernières secondes : le flux était déjà déclaré fini, `runFill` ne relisait
+    // plus rien, et le film se terminait muet sur un tampon audio qu'on venait de vider.
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(2), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await flush();
+    const source = FakeSource.instances[0];
+    expect(source.endedTimes).toBe(1);
+    const audioBuffer = source.buffers[1];
+    const appended = audioBuffer.appended.length;
+
+    await mse.refillAudio(1);
+    await until(() => audioBuffer.appended.length > appended, "le son de la nouvelle piste est relu");
+    // Et l'ancienne piste est bien retirée, même la fin du flux déclarée : la spécification
+    // rouvre la source d'elle-même.
+    expect(audioBuffer.removed.length).toBeGreaterThan(0);
+  });
+});
