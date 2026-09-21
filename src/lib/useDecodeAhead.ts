@@ -22,48 +22,90 @@ import { useEffect, type RefObject } from "react";
  * molette lancée, et contre le fait de tout décoder d'avance, qui reviendrait à charger six cent
  * soixante-dix affiches pour trois rangées regardées.
  *
- * L'image de chauffe est jetée aussitôt : ce n'est pas elle qui s'affiche, c'est le cache de
- * décodage du navigateur qu'on remplit, et la carte y puisera quand son tour viendra.
+ * Ce n'est pas l'image de chauffe qui s'affiche : c'est le cache de décodage du navigateur qu'on
+ * remplit, et la carte y puisera quand son tour viendra. Elle est tenue un moment — voir `KEPT`.
  */
 const AHEAD_PX = 3000;
+
+/**
+ * Combien d'affiches chauffées restent tenues, au plus — deux fois ce que couvrent les 3 000 px
+ * de part et d'autre de l'écran sur un téléphone (trois colonnes, ≈ 45 cartes).
+ *
+ * Tenues, parce qu'une image jetée aussitôt laisse le navigateur libre d'oublier son décodage : sur
+ * un iPhone, six cent quatre-vingts affiches décodées pèsent près d'un demi-gigaoctet, et il les
+ * oublie. En remontant, elles étaient alors redécodées au moment d'entrer dans le champ — l'à-coup
+ * dans les deux sens que Louis décrivait le 21/09/2026, sur « Tous les films » (702 titres) et
+ * jamais sur les séries (137, qui tiennent en mémoire). Bornées, pour ne pas remplacer un
+ * demi-gigaoctet oublié par un demi-gigaoctet retenu : les plus anciennes sont lâchées.
+ */
+const KEPT = 90;
+
+/**
+ * Le conteneur qui défile vraiment — celui qui doit servir de racine à l'observateur.
+ *
+ * La grille défile dans le corps de son panneau, pas dans la page. Un observateur sans racine
+ * mesure contre la fenêtre, et le navigateur rogne d'abord chaque carte par ce conteneur : une
+ * carte à 1 000 px sous le bord n'y a plus aucune surface, quelle que soit la marge. L'avance de
+ * 3 000 px valait donc **zéro** depuis le 20/09 — mesuré le 21/09 dans Chromium et WebKit : douze
+ * affiches chauffées au repos (l'écran), quarante-cinq avec cette racine. Le banc du 20/09 faisait
+ * défiler la page elle-même, et ne pouvait pas le voir.
+ */
+function scrollingAncestor(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const overflow = getComputedStyle(node).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return node;
+  }
+  return null;
+}
 
 export function useDecodeAhead(grid: RefObject<HTMLElement | null>, items: unknown): void {
   useEffect(() => {
     const root = grid.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
 
-    // Une affiche décodée deux fois ne coûte rien de plus au navigateur, mais deux requêtes
-    // partiraient si le cache HTTP l'avait laissée filer : la même adresse ne se chauffe qu'une.
-    const chauffees = new Set<string>();
+    // Adresse → image de chauffe, dans l'ordre d'usage : la plus ancienne est la première lâchée.
+    const kept = new Map<string, HTMLImageElement>();
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
-          observer.unobserve(entry.target);
           const img = entry.target.querySelector("img");
           const src = img?.getAttribute("src");
-          if (!src || chauffees.has(src)) continue;
-          chauffees.add(src);
+          if (!src) continue;
+          // Déjà tenue : elle redevient la plus récente, et rien n'est redemandé.
+          const held = kept.get(src);
+          if (held) {
+            kept.delete(src);
+            kept.set(src, held);
+            continue;
+          }
           const chauffe = new Image();
           chauffe.src = src;
           // `decode` n'existe pas partout, et rejette pour une image absente — deux raisons de
           // ne jamais laisser cet appel remonter : c'est du confort, sur le chemin de personne.
           chauffe.decode?.().catch(() => {});
+          kept.set(src, chauffe);
+          if (kept.size > KEPT) kept.delete(kept.keys().next().value!);
         }
       },
-      { rootMargin: `${AHEAD_PX}px 0px` }
+      // Chaque carte reste suivie : elle se rechauffe à chaque fois qu'elle rentre dans la marge,
+      // en descendant comme en remontant.
+      { root: scrollingAncestor(root), rootMargin: `${AHEAD_PX}px 0px` }
     );
 
     for (const card of root.children) observer.observe(card);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      kept.clear();
+    };
     /**
      * **La liste elle-même, et non son nombre d'éléments.**
      *
      * Première version : `items.length`. Elle a l'air prudente et elle est fausse — changer le
      * tri garde exactement le même nombre de cartes, donc l'effet ne repartait pas. Or
-     * l'observateur cesse de suivre chaque carte dès qu'il l'a chauffée (`unobserve`) : après un
-     * changement de tri, le premier écran n'était plus anticipé du tout, précisément là où
-     * quelqu'un se remet à faire défiler.
+     * l'observateur ne suivait que les cartes présentes à son montage : après un changement de
+     * tri, le premier écran n'était plus anticipé du tout, précisément là où quelqu'un se remet à
+     * faire défiler.
      *
      * La liste est mémoïsée par l'appelant sur ses filtres, donc son identité ne change que
      * lorsque son contenu change : c'est exactement la dépendance qu'il fallait.
