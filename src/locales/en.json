@@ -1436,7 +1436,8 @@
     "decade": "the {decade}s",
     "perEpisode": "{time}/ep",
     "downloading": "Arriving · {pct}%",
-    "ratingsAudience": "audience {pct}%"
+    "ratingsAudience": "audience {pct}%",
+    "releasesOn": "Out {date}"
   },
   "services": {
     "notConfigured": "{name} is not configured.",

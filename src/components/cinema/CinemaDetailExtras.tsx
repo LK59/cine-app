@@ -92,3 +92,25 @@ export function ratingParts(r: MdbRatings | null, locale: string, audience: (pct
   if (r.letterboxd) parts.push(`Letterboxd ${one.format(r.letterboxd / 20)}`);
   return parts;
 }
+
+/**
+ * L'année — ou, pour un titre pas encore sorti, sa date : « Sortie le 12 mars 2026 ».
+ *
+ * À la place de l'année, pas à côté : la même ligne, le même poids, une information plus précise
+ * là où elle compte. « Pas encore sorti » ne disait pas la moitié de ce qu'on voulait savoir.
+ * Une date qui n'a que l'année (TMDB en donne parfois) reste une année.
+ */
+export function useReleaseLabel() {
+  const t = useT();
+  const { locale } = useLocale();
+  return (releaseDate: string | null | undefined, year: number | null | undefined, now = Date.now()): string | null => {
+    if (releaseDate && /^\d{4}-\d{2}-\d{2}/.test(releaseDate)) {
+      const at = Date.parse(`${releaseDate.slice(0, 10)}T00:00:00`);
+      if (Number.isFinite(at) && at > now) {
+        const date = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(at);
+        return t("cinema.releasesOn", { date });
+      }
+    }
+    return year ? String(year) : null;
+  };
+}

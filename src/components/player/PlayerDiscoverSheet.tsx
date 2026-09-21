@@ -26,7 +26,7 @@ import {
 import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
-import { CinemaTagline, CinemaDownloading, useRuntimeLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
@@ -71,6 +71,7 @@ export function PlayerDiscoverSheet({
     { revalidateOnFocus: false, refreshInterval: (latest) => (latest?.downloading != null ? DOWNLOAD_REFRESH_MS : 0) }
   );
   const runtimeLabel = useRuntimeLabel();
+  const releaseLabel = useReleaseLabel();
 
   const { busy, setStatus, request } = usePlayerTitleActions(
     data ? { tmdbId, type: mediaType, title: data.title, year: data.year, poster: data.poster, rating: data.rating } : null
@@ -222,7 +223,7 @@ export function PlayerDiscoverSheet({
           <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{data.title}</h1>
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
-            {data.year && <span>{data.year}</span>}
+            {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}
             {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
             {runtimeLabel(data.runtime, data.type === "series") && <span>{runtimeLabel(data.runtime, data.type === "series")}</span>}
             {data.genres.length > 0 && <span className="truncate">{data.genres.slice(0, 3).join(" · ")}</span>}
@@ -356,7 +357,7 @@ export function PlayerDiscoverSheet({
               </h1>
 
               <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
-                {data.year && <span>{data.year}</span>}
+                {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}
                 {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
                 {runtimeLabel(data.runtime, data.type === "series") && <span>{runtimeLabel(data.runtime, data.type === "series")}</span>}
                 {data.genres.length > 0 && <span>{data.genres.slice(0, 3).join(" · ")}</span>}

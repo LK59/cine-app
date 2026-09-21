@@ -6,9 +6,10 @@ import { render, screen, cleanup, renderHook } from "@testing-library/react";
 
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (k: string, v?: Record<string, unknown>) => (v ? `${k}:${JSON.stringify(v)}` : k),
+  useLocale: () => ({ locale: "fr" }),
 }));
 
-import { CinemaTagline, CinemaDownloading, downloadPercent, useRuntimeLabel, ratingParts } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaTagline, CinemaDownloading, downloadPercent, useRuntimeLabel, useReleaseLabel, ratingParts } from "@/components/cinema/CinemaDetailExtras";
 import { queueProgress } from "@/lib/downloadProgress";
 
 afterEach(cleanup);
@@ -68,5 +69,19 @@ describe("la ligne des notes critiques", () => {
     expect(ratingParts({ ...none, tomatoes: 60 }, "en", audience)).toEqual(["Rotten Tomatoes 60 %"]);
     expect(ratingParts(none, "fr", audience)).toEqual([]);
     expect(ratingParts(null, "fr", audience)).toEqual([]);
+  });
+});
+
+describe("useReleaseLabel", () => {
+  const now = Date.parse("2026-09-21T12:00:00");
+  it("dit la date d'un titre pas encore sorti, à la place de l'année", () => {
+    const { result } = renderHook(() => useReleaseLabel());
+    expect(result.current("2027-03-12", 2027, now)).toBe('cinema.releasesOn:{"date":"12 mars 2027"}');
+  });
+  it("garde l'année pour un titre sorti, ou sans date précise", () => {
+    const { result } = renderHook(() => useReleaseLabel());
+    expect(result.current("1999-03-31", 1999, now)).toBe("1999");
+    expect(result.current("2027", 2027, now)).toBe("2027");
+    expect(result.current(null, null, now)).toBeNull();
   });
 });
