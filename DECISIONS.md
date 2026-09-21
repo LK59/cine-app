@@ -309,7 +309,7 @@ La durée d'un épisode vient de `tvEpisodeRuntime` (`src/lib/tvRuntime.ts`) : T
 `episode_run_time`, vide pour les séries récentes — on passe par Sonarr puis par le dernier épisode.
 
 Les notes critiques (`CinemaRatingsLine`) : une ligne de texte dans la fenêtre « Voir plus » des
-fiches du bureau, **jamais sur téléphone** — le choix de Louis. La fenêtre reste ouvrable quand il y
+fiches du bureau, **jamais sur téléphone**, par choix. La fenêtre reste ouvrable quand il y
 a des notes, même si le synopsis tient en entier (`alwaysOpenable`).
 
 **Tests.** `CinemaDetailExtras.test.tsx`, `tvRuntime.test.ts`, `player-routes.test.ts`,

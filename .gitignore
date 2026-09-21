@@ -40,3 +40,4 @@ tsconfig.tsbuildinfo
 # Personal deploy runbook — not for the public repo
 RUNBOOK.private.md
 AUDIT_Prompt.md
+AUDIT.md

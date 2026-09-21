@@ -42,10 +42,11 @@ services:
 
       # Same read-only media mounts as production, so the app sees the same library.
       - /mnt/media/video:/mnt/media/video:ro
-      - /mnt/media/cloud/louis/clara:/app/gallery/clara:ro
+      # Optional Clara gallery photos; set CLARA_GALLERY_DIR in .env to your folder.
+      - ${CLARA_GALLERY_DIR:-./gallery}:/app/gallery/clara:ro
     ports:
       # Reachable on the LAN at http://<server>:3001 — enough to test from a phone without
-      # touching the reverse proxy, which fronts about twenty other sites.
+      # touching the reverse proxy, which may serve other sites.
       - "3001:3000"
     # Same identity as production so the SQLite database and its WAL stay writable by both.
     user: "1001:1000"

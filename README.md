@@ -201,9 +201,9 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
 
 - **The native player** is the ordinary path. It asks the server for nothing beyond the file
   itself: the browser fetches the `.mkv` by byte ranges, repackages it into fragmented MP4 in the
-  tab, and hands it to a real `<video>` — hardware decoding, native HDR, no transcoding at all. On
-  this library it plays 4K Dolby Vision HEVC with E-AC3 Atmos on an iPhone with nothing running on
-  the server. Where the codecs make that impossible it decodes with WebCodecs onto a canvas
+  tab, and hands it to a real `<video>` — hardware decoding, native HDR, no transcoding at all: a
+  4K Dolby Vision HEVC film with E-AC3 Atmos plays on an iPhone with nothing running on the
+  server. Where the codecs make that impossible it decodes with WebCodecs onto a canvas
   instead. Audio the device cannot play — TrueHD (FFmpeg's own decoder, compiled to
   WebAssembly), DTS, FLAC — is decoded in the browser and re-encoded. Each audio track is delivered
   in its best form, and switching to a track of another format rebuilds the player at the same
@@ -560,7 +560,7 @@ value `change-me` stops the startup (empty is allowed: it disables the local adm
 
 Only relevant if you are modifying the code — deploying needs none of this.
 
-**There is no Node or npm on the reference host.** Everything runs through Docker.
+**No Node or npm is needed on the host.** Everything runs through Docker.
 
 ```sh
 # Once, and after every dependency change: install node_modules into the working tree.
@@ -653,7 +653,6 @@ because `docker logs` dies with the container, and the container is recreated on
 | **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
 | **[CLAUDE.md](CLAUDE.md)** | Architecture and conventions, for anyone working on the code |
 | **[DECISIONS.md](DECISIONS.md)** | Rules decided in one shared function, their callers and tests |
-| **[AUDIT.md](AUDIT.md)** | A past code audit, kept for history (French) |
 | **[`tools/truehd-wasm/`](tools/truehd-wasm/)** | Reproducible build of the committed TrueHD WebAssembly decoder: pinned FFmpeg, checked SHA-256 |
 | **`.env.example`** | Every configuration variable, annotated in place |
 | **`docker-compose.example.yml`** | The deployment template, annotated in place |

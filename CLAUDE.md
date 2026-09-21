@@ -12,7 +12,7 @@ SQLite. One container, deployed by `docker compose`, image published to GHCR.
 
 | | Address | Audience |
 |---|---|---|
-| Cinema | `/` — route group `(player)` | Everyone (~19 Jellyfin accounts) |
+| Cinema | `/` — route group `(player)` | Every Jellyfin account |
 | Management | `/gestion` — route group `(dashboard)` | Admin only |
 
 There are exactly **two roles**, `admin` and `user`. Permissions are never enforced by the
@@ -162,7 +162,7 @@ which is what per-track delivery (below) undoes.
 out is as deliberate as what it keeps: ordinary codecs are silent (AAC, Dolby Digital, Dolby
 Digital+ are 949 of 1 097 tracks here — naming them lengthened the label until it was cut on
 screen and departed nothing); channel counts are only named where unambiguous (1.0, 2.0, 5.1,
-7.1 — 99.7 % of this library); regional variants join the language (`VFQ` → "Français
+7.1 — 99.7 % of the library measured); regional variants join the language (`VFQ` → "Français
 (Canadien)") rather than trailing in a bracket. A bracket appears **only** when two tracks would
 read identically, and then it carries the raw title — *2001* has two English 5.1 E-AC3 tracks
 that are two different masters. `Intl.DisplayNames` gives the language names in all four
@@ -336,7 +336,7 @@ Four rules, each of which cost a real failure:
 
 ## Do not change these without a reason
 
-- **The reverse proxy.** It fronts about twenty other sites on this machine. The dev stack exists
+- **The reverse proxy.** It is shared with other sites on the same host. The dev stack exists
   on its own port precisely so it never has to be touched.
 - **Media files.** `/mnt/media/video` is mounted read-only and belongs to Radarr/Sonarr. Anything
   writing there goes through them.

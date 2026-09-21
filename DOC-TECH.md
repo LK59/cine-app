@@ -428,7 +428,7 @@ appearing there inert. The affected files all have a `.srt` alongside, which is 
 ### External `.srt` files
 
 Nothing in a Matroska file names the `.srt` files in its folder; the server, which sees the folder,
-is the only one that knows they exist. Measured on this library (672 films): 272 carry at least one
+is the only one that knows they exist. Measured on a 672-film library: 272 carry at least one
 external text subtitle, and 95 have no text subtitle in the container at all — 88 of those are
 covered by a file alongside.
 
@@ -463,8 +463,8 @@ Rules:
   out of 1425 here).
 - A track is **never** selected on the grounds that it is the only one left. Without the requested
   language, nothing is touched.
-- **Audio descriptions and commentaries are excluded** — `French (France) AD` is a real track in
-  this library.
+- **Audio descriptions and commentaries are excluded** — `French (France) AD` is a real-world
+  track name.
 - `VO` does not mean English. It means the track is not dubbed, which says nothing about its
   language, as `Espagnol [VO]` shows.
 
@@ -620,7 +620,7 @@ docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
 ```
 
 It reports reads, bytes and milliseconds for four moments: reading the header, opening the
-remuxer, producing the first segment, and seeking. Measured on this library on 2026-09-20:
+remuxer, producing the first segment, and seeking. Measured on a real library on 2026-09-20:
 
 | | header | before the first frame | seek |
 |---|---|---|---|
