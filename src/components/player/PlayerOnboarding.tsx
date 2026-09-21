@@ -196,7 +196,10 @@ export function PlayerOnboarding({
 
   if (typeof document === "undefined") return null;
 
-  const name = me?.jfUser || me?.username || "";
+  // La majuscule, pour l'affichage seulement : les noms de compte sont souvent tout en minuscules
+  // (« louis »), et « Bienvenue, louis » a l'air d'une erreur. Le nom lui-même ne change pas.
+  const rawName = me?.jfUser || me?.username || "";
+  const name = rawName ? rawName.charAt(0).toLocaleUpperCase(locale) + rawName.slice(1) : "";
   const position = Math.min(index, steps.length - 1);
 
   return createPortal(
@@ -220,7 +223,10 @@ export function PlayerOnboarding({
       <div
         className="relative flex w-full max-w-md flex-col px-6 sm:my-10 sm:rounded-3xl sm:border sm:border-white/10 sm:bg-white/[0.03] sm:px-8 sm:py-8 sm:shadow-2xl"
         style={{
-          paddingTop: "max(1.5rem, env(safe-area-inset-top))",
+          // Un vrai écart sous la zone sûre, et non la zone sûre seule : dans l'application installée,
+          // iOS voile et floute le haut de l'écran sous la barre d'état, et la progression comme
+          // « Passer » s'y lisaient à moitié (vu le 21/09/2026). Même remède que la barre du cinéma.
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.75rem)",
           paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
         }}
       >

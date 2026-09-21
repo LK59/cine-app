@@ -59,9 +59,11 @@ afterEach(() => {
 });
 
 describe("l'écran d'accueil", () => {
+  // « louis » s'écrit en minuscules ; l'accueil le dit « Louis », sans toucher au nom lui-même.
+
   it("se propose quand le marqueur du compte est allumé, et pas sinon", async () => {
     draw();
-    expect(await screen.findByText("player.onboarding.welcomeTitle:louis")).toBeTruthy();
+    expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
     cleanup();
     pending = false;
     draw();
@@ -84,12 +86,12 @@ describe("l'écran d'accueil", () => {
     cleanup();
     sessionStorage.clear();
     draw();
-    expect(await screen.findByText("player.onboarding.welcomeTitle:louis")).toBeTruthy();
+    expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
   });
 
   it("préremplit le français là où rien n'est réglé, et l'enregistre", async () => {
     draw();
-    await screen.findByText("player.onboarding.welcomeTitle:louis");
+    await screen.findByText("player.onboarding.welcomeTitle:Louis");
     next();
     await screen.findByText("player.onboarding.playbackTitle");
     const selects = await waitFor(() => {
@@ -112,7 +114,7 @@ describe("l'écran d'accueil", () => {
   it("n'écrase jamais un choix déjà fait chez Jellyfin", async () => {
     prefs = { audioLanguage: "eng", subtitleLanguage: "fra", subtitleMode: "OnlyForced" };
     draw();
-    await screen.findByText("player.onboarding.welcomeTitle:louis");
+    await screen.findByText("player.onboarding.welcomeTitle:Louis");
     next();
     await screen.findByText("player.onboarding.playbackTitle");
     await waitFor(() => expect((screen.getAllByRole("combobox")[0] as HTMLSelectElement).value).toBe("eng"));
@@ -125,7 +127,7 @@ describe("l'écran d'accueil", () => {
 
   it("seule la fin éteint le marqueur", async () => {
     draw();
-    await screen.findByText("player.onboarding.welcomeTitle:louis");
+    await screen.findByText("player.onboarding.welcomeTitle:Louis");
     next();
     await screen.findByText("player.onboarding.playbackTitle");
     await waitFor(() => expect((screen.getAllByRole("combobox")[0] as HTMLSelectElement).value).toBe("fra"));
@@ -142,7 +144,7 @@ describe("l'écran d'accueil", () => {
   it("saute les réglages de lecture pour un compte sans Jellyfin", async () => {
     me = { username: "admin", jfUser: null };
     draw();
-    await screen.findByText("player.onboarding.welcomeTitle:admin");
+    await screen.findByText("player.onboarding.welcomeTitle:Admin");
     await waitFor(() => expect(called("/api/auth/me")).toBe(true));
     next();
     expect(await screen.findByText("player.onboarding.notifTitle")).toBeTruthy();
@@ -153,6 +155,6 @@ describe("l'écran d'accueil", () => {
     draw();
     await waitFor(() => expect(called("/api/onboarding")).toBe(true));
     act(() => openOnboarding());
-    expect(await screen.findByText("player.onboarding.welcomeTitle:louis")).toBeTruthy();
+    expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
   });
 });
