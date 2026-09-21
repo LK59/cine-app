@@ -42,6 +42,7 @@ export interface ActivityItem {
   id: string;
   date: string;
   source: "radarr" | "sonarr" | "jellyseerr";
+  /** Un `ActivityKind` — ou, pour un événement que personne n'a prévu, le nom brut de Sonarr/Radarr. */
   type: string;
   title: string;
   detail?: string;
@@ -208,13 +209,20 @@ async function probe(
 
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
-const RADARR_LABELS: Record<string, string> = {
-  grabbed: "Récupéré", downloadFolderImported: "Importé",
-  movieFileDeleted: "Supprimé", movieFolderImported: "Importé", downloadFailed: "Téléchargement échoué",
+/**
+ * Le *genre* d'événement, pas son libellé : l'écran le traduit (`activity.*`). Ces libellés étaient
+ * écrits ici en français, et la vue d'ensemble les montrait tels quels dans les quatre langues —
+ * alors que le groupe `activity` des dictionnaires existait exactement pour eux, sans servir.
+ */
+export type ActivityKind = "grabbed" | "imported" | "deleted" | "downloadFailed" | "request";
+
+const RADARR_KINDS: Record<string, ActivityKind> = {
+  grabbed: "grabbed", downloadFolderImported: "imported",
+  movieFileDeleted: "deleted", movieFolderImported: "imported", downloadFailed: "downloadFailed",
 };
-const SONARR_LABELS: Record<string, string> = {
-  grabbed: "Récupéré", downloadFolderImported: "Importé",
-  episodeFileDeleted: "Supprimé", downloadFailed: "Téléchargement échoué",
+const SONARR_KINDS: Record<string, ActivityKind> = {
+  grabbed: "grabbed", downloadFolderImported: "imported",
+  episodeFileDeleted: "deleted", downloadFailed: "downloadFailed",
 };
 
 async function fetchActivity(session: SessionPayload | null): Promise<ActivityItem[]> {
@@ -227,13 +235,13 @@ async function fetchActivity(session: SessionPayload | null): Promise<ActivityIt
   ]);
   const items: ActivityItem[] = [];
   for (const r of rH.records) {
-    items.push({ id: `radarr-${r.id}`, date: r.date, source: "radarr", type: RADARR_LABELS[r.eventType] ?? r.eventType, title: r.movie?.title ?? r.sourceTitle, detail: r.eventType === "grabbed" ? r.data?.indexer : undefined, href: r.movie?.id ? `/radarr/${r.movie.id}` : undefined });
+    items.push({ id: `radarr-${r.id}`, date: r.date, source: "radarr", type: RADARR_KINDS[r.eventType] ?? r.eventType, title: r.movie?.title ?? r.sourceTitle, detail: r.eventType === "grabbed" ? r.data?.indexer : undefined, href: r.movie?.id ? `/radarr/${r.movie.id}` : undefined });
   }
   for (const r of sH.records) {
-    items.push({ id: `sonarr-${r.id}`, date: r.date, source: "sonarr", type: SONARR_LABELS[r.eventType] ?? r.eventType, title: r.series?.title ?? r.sourceTitle, detail: r.episode ? `S${String(r.episode.seasonNumber).padStart(2,"0")}E${String(r.episode.episodeNumber).padStart(2,"0")}` : undefined, href: r.series?.id ? `/sonarr/${r.series.id}` : undefined });
+    items.push({ id: `sonarr-${r.id}`, date: r.date, source: "sonarr", type: SONARR_KINDS[r.eventType] ?? r.eventType, title: r.series?.title ?? r.sourceTitle, detail: r.episode ? `S${String(r.episode.seasonNumber).padStart(2,"0")}E${String(r.episode.episodeNumber).padStart(2,"0")}` : undefined, href: r.series?.id ? `/sonarr/${r.series.id}` : undefined });
   }
   for (const req of jsRequests) {
-    items.push({ id: `jellyseerr-${req.id}`, date: req.createdAt, source: "jellyseerr", type: "Demande", title: req.media.title ?? "Demande média", detail: req.requestedBy?.displayName ?? req.requestedBy?.username, href: "/jellyseerr" });
+    items.push({ id: `jellyseerr-${req.id}`, date: req.createdAt, source: "jellyseerr", type: "request", title: req.media.title ?? "—", detail: req.requestedBy?.displayName ?? req.requestedBy?.username, href: "/jellyseerr" });
   }
   items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   return items.slice(0, 25);

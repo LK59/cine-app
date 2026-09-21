@@ -23,6 +23,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { MediaCard } from "@/components/MediaCard";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
+import { apiAction } from "@/lib/apiAction";
 
 function poster(movie: RadarrMovie) {
   return posterUrl(movie.images);
@@ -301,7 +302,7 @@ export default function RadarrPage() {
               </div>
               <div ref={sentinelRef} className="h-1" />
               {visibleCount < filtered.length && (
-                <p className="py-4 text-center text-xs text-slate-600">{filtered.length - visibleCount} films restants…</p>
+                <p className="py-4 text-center text-xs text-slate-600">{t('radarr.remainingMovies', { n: filtered.length - visibleCount })}</p>
               )}
             </>
           ) : (
@@ -324,7 +325,7 @@ export default function RadarrPage() {
                     <div className="hidden items-center gap-3 sm:flex">
                       <ImdbBadge rating={movie.ratings?.imdb?.value} />
                       <span className={`badge ${movie.hasFile ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"}`}>
-                        {movie.hasFile ? "Téléchargé" : "Manquant"}
+                        {movie.hasFile ? t('radarr.downloaded') : t('radarr.missing')}
                       </span>
                       {movie.sizeOnDisk > 0 && (
                         <span className="text-xs text-slate-500">{fmtSize(movie.sizeOnDisk)}</span>
@@ -336,7 +337,7 @@ export default function RadarrPage() {
               </div>
               <div ref={sentinelRef} className="h-1" />
               {visibleCount < filtered.length && (
-                <p className="py-4 text-center text-xs text-slate-600">{filtered.length - visibleCount} films restants…</p>
+                <p className="py-4 text-center text-xs text-slate-600">{t('radarr.remainingMovies', { n: filtered.length - visibleCount })}</p>
               )}
             </>
           )}
@@ -349,6 +350,7 @@ export default function RadarrPage() {
 }
 
 function AddMovieModal({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const { mutate } = useSWRConfig();
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<RadarrMovie[]>([]);
@@ -377,14 +379,15 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
   async function add(movie: RadarrMovie) {
     if (!meta?.qualityProfiles?.length || !meta?.rootFolders?.length) return;
     if (movie.id) {
-      toast.error("Ce film est déjà dans Radarr");
+      toast.error(t('radarr.alreadyInRadarr'));
       return;
     }
     setAdding(movie.tmdbId);
     try {
-      await fetch("/api/radarr/movies", {
+      // `apiAction` et non `fetch` : un refus de Radarr (4xx/5xx) ne lève pas avec `fetch`, et la
+      // fenêtre annonçait « ajouté » pour un film que Radarr venait de refuser.
+      await apiAction("/api/radarr/movies", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...movie,
           qualityProfileId: meta.qualityProfiles[0].id,
@@ -395,20 +398,20 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
       });
       mutate("/api/radarr/movies");
       setAdded((prev) => new Set(prev).add(movie.tmdbId));
-      toast.success(`« ${movie.title} » ajouté à Radarr`);
-    } catch {
-      toast.error("Échec de l'ajout");
+      toast.success(t('radarr.addedToRadarr', { title: movie.title }));
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('radarr.addFailed'));
     } finally {
       setAdding(null);
     }
   }
 
   return (
-    <Modal title="Ajouter un film" onClose={onClose}>
+    <Modal title={t('radarr.addMovie')} onClose={onClose}>
       <form onSubmit={handleSearch} className="mb-4 flex gap-2">
         <input
           className="input"
-          placeholder="Titre du film..."
+          placeholder={t('radarr.addMoviePlaceholder')}
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           autoFocus
@@ -443,7 +446,7 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
                   )}
                   {inLibrary && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <span className="text-xs font-semibold text-emerald-400">Déjà ajouté</span>
+                      <span className="text-xs font-semibold text-emerald-400">{t('radarr.alreadyAdded')}</span>
                     </div>
                   )}
                 </div>
@@ -456,10 +459,10 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
                     onClick={() => add(movie)}
                   >
                     {adding === movie.tmdbId
-                      ? "Ajout…"
+                      ? t('common.adding')
                       : inLibrary || isAdded
-                        ? "Déjà ajouté"
-                        : "Ajouter"}
+                        ? t('radarr.alreadyAdded')
+                        : t('common.add')}
                   </button>
                 </div>
               </div>

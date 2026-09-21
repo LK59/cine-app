@@ -11,9 +11,7 @@ import { DashboardClient } from "./DashboardClient";
 // underlying services. Client-side polling (refreshInterval) is untouched —
 // this only seeds SWR's initial value via `fallbackData`.
 //
-// Rendu par deux routes : `/` et `/gestion`. La seconde est l'adresse définitive
-// du tableau de bord — elle existe déjà pour que le jour où `/` mènera au
-// lecteur, il n'y ait qu'une redirection à écrire et aucun lien à réécrire.
+// Rendu à `/gestion` seulement : `/` appartient au cinéma depuis la bascule.
 export async function Overview() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionFull(token);

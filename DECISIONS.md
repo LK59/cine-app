@@ -148,6 +148,22 @@ ratée ne doit pas devenir une écriture.
 **Reste connu.** Les pages de gestion Radarr/Sonarr basculent directement depuis
 `UserData.Played`, sans la garde `known`. Réservées à l'administrateur.
 
+## 6 bis. « Ma liste »
+
+**Règle.** Une seule liste locale, « À voir » (`to_watch`). « Vu » et « Favori » sont à Jellyfin,
+les demandes à Jellyseerr : les garder aussi ici, c'était deux vérités.
+
+**Porteurs.** `watchlistDb` (`db.ts`) ; `migrate()` ramène à chaque démarrage tout ancien statut à
+« À voir » (à demander, favori) ou le retire (vu, abandonné). `POST /api/watchlist` n'écoute plus
+ni statut ni note.
+
+**Tests.** `watchlist-single-list.test.ts` (la migration, sur une vraie base), `watchlist-route.test.ts`,
+`PosterCard.test.tsx`, `gestion-coherence.test.ts`.
+
+**Corrigé le 21/09.** Onze titres « à demander » apparaissaient dans le panneau du lecteur et pas
+dans la rangée « Ma liste » du cinéma, qui ne lisait que `to_watch`. La page de gestion qui
+maintenait cinq statuts et des notes (0 note sur 47 titres) est supprimée.
+
 ## 7. Refermer une fiche, et ce qu'on relit après une lecture
 
 **Porteurs.** `cinemaClose` (seule sortie), `useDelayedClose` / `useExitDelay` (l'un ou l'autre,

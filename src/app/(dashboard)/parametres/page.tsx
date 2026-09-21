@@ -24,6 +24,7 @@ export default function ParametresPage() {
   const { accent, setAccent } = useTheme();
   const { role } = useRole();
   const t = useT();
+  const toast = useToast();
 
   // Notification state
   const [preferences, setPreferences] = useState<Record<NotificationCategory, boolean>>(getDefaultNotificationPreferences);
@@ -56,21 +57,24 @@ export default function ParametresPage() {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
+  // L'interrupteur bascule tout de suite ; si le serveur refuse, il revient et le dit. Il restait
+  // basculé sans rien dire : on croyait avoir coupé une notification qui continuait d'arriver.
   const savePreference = useCallback(async (category: NotificationCategory, enabled: boolean) => {
     setPreferences((prev) => ({ ...prev, [category]: enabled }));
     setSaving(category);
     try {
-      const res = await fetch("/api/notifications/settings", {
+      const json = (await apiAction("/api/notifications/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preferences: { [category]: enabled } }),
-      });
-      const json = await res.json().catch(() => null);
-      if (res.ok && json?.preferences) setPreferences(json.preferences);
+      })) as { preferences?: Record<NotificationCategory, boolean> } | null;
+      if (json?.preferences) setPreferences(json.preferences);
+    } catch (error) {
+      setPreferences((prev) => ({ ...prev, [category]: !enabled }));
+      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
     } finally {
       setSaving(null);
     }
-  }, []);
+  }, [toast, t]);
 
   const startTest = useCallback(() => {
     if (countdown !== null) return;
@@ -476,6 +480,7 @@ function PwaUpdateCard() {
 // hiding it here is presentation, not enforcement.
 function LegacyPlayerSection() {
   const t = useT();
+  const toast = useToast();
   const serverFallback = usePlayerServerFallback();
   const { data, mutate } = useSWR<{ legacyPlayer?: { enabled: boolean } }>("/api/user/preferences", fetcher);
   const enabled = data?.legacyPlayer?.enabled ?? false;
@@ -489,7 +494,10 @@ function LegacyPlayerSection() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ legacyPlayer: next }),
         });
-        return res.ok ? { legacyPlayer: (await res.json()).legacyPlayer } : { legacyPlayer: { enabled } };
+        if (res.ok) return { legacyPlayer: (await res.json()).legacyPlayer };
+        // Revenir en arrière, et le dire : l'interrupteur retombait sans un mot.
+        toast.error(t("common.error"));
+        return { legacyPlayer: { enabled } };
       },
       { optimisticData: { legacyPlayer: { enabled: next } }, revalidate: false }
     );

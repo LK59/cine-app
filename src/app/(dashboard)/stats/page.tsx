@@ -373,7 +373,8 @@ export default function StatsPage() {
   );
 
   async function handleStorageRefresh() {
-    await fetch("/api/stats/storage?refresh=1");
+    // Un échec n'a rien à dire de plus que la relecture qui suit : elle montrera l'état réel.
+    await fetch("/api/stats/storage?refresh=1").catch(() => {});
     refreshStorage();
   }
 

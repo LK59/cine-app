@@ -146,7 +146,7 @@ export default function SonarrSeriesDetailPage() {
       const tag = (document.activeElement as HTMLElement)?.tagName ?? "";
       if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
       if (e.key === "f") {
-        (document.querySelector('button[title="Ajouter à la liste"],button[title="Retirer de la liste"]') as HTMLButtonElement)?.click();
+        document.querySelector<HTMLButtonElement>("button[data-watchlist-toggle]")?.click();
       }
       if (e.key === "1") setActiveTab("infos");
       if (e.key === "2") setActiveTab("casting");

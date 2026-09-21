@@ -99,4 +99,19 @@ describe("GET /api/dashboard", () => {
     const body = await res.json();
     expect(body.disk.data).toMatchObject({ computedAt: 1 });
   });
+
+  it("envoie le genre d'un événement, pas un libellé français", async () => {
+    // L'écran le traduit (`activity.*`) ; « Importé » s'affichait tel quel dans les quatre langues.
+    mockVerifySessionFull.mockResolvedValue({ u: "louis" });
+    mockRadarr.getHistory.mockResolvedValue({
+      records: [
+        { id: 1, date: "2026-09-21T10:00:00Z", eventType: "downloadFolderImported", movie: { id: 3, title: "Dune" } },
+        { id: 2, date: "2026-09-21T09:00:00Z", eventType: "grabbed", movie: { id: 3, title: "Dune" }, data: { indexer: "x" } },
+        { id: 3, date: "2026-09-21T08:00:00Z", eventType: "unknownThing", movie: { id: 3, title: "Dune" } },
+      ],
+    });
+    const { GET } = await import("@/app/api/dashboard/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.activity.data.map((i: { type: string }) => i.type)).toEqual(["imported", "grabbed", "unknownThing"]);
+  });
 });

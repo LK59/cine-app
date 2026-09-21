@@ -1027,7 +1027,8 @@
     "appCrashed": "The application encountered a problem.",
     "pageCrashed": "An error occurred",
     "pageError": "Something went wrong on this page.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "loadFailed": "Couldn't load this data."
   },
   "sse": {
     "downloadStartedTitle": "Download started",

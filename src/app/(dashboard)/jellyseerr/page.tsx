@@ -112,7 +112,7 @@ export default function JellyseerrPage() {
     { refreshInterval: INTERVALS.FAST }
   );
 
-  const { data: myData, isLoading: myLoading } = useSWR<{ results: EnrichedRequest[] }>(
+  const { data: myData, error: myError, isLoading: myLoading } = useSWR<{ results: EnrichedRequest[] }>(
     tab === "mine" ? "/api/jellyseerr/my-requests" : null,
     fetcher,
     { refreshInterval: INTERVALS.MEDIUM }
@@ -184,7 +184,8 @@ export default function JellyseerrPage() {
       {tab === "mine" && (
         <>
           {myLoading && <LoadingState />}
-          {!myLoading && myRequests.length === 0 && (
+          {myError && <ErrorState message={t('jellyseerr.serviceDown')} />}
+          {!myLoading && !myError && myRequests.length === 0 && (
             <EmptyState label={t('jellyseerr.emptyMine')} />
           )}
           {myRequests.length > 0 && (

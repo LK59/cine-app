@@ -72,6 +72,9 @@ export function WatchlistButton({
       disabled={busy}
       title={label}
       aria-pressed={inList}
+      // Ce que le raccourci « f » des fiches cherche. Il visait le `title`, c'est-à-dire la phrase
+      // française : dans les trois autres langues, la touche ne faisait rien.
+      data-watchlist-toggle
       // Ce bouton était resté en dehors du système : `rounded` au lieu de `rounded-lg`, un fond
       // deux fois plus discret et un texte deux tons plus sombre que ses voisins. Posé entre
       // « Marquer vu » et « Bande-annonce », il avait l'air désactivé. `btn-on` est la façon dont

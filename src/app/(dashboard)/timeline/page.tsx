@@ -4,7 +4,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
-import { LoadingState, EmptyState } from "@/components/StateViews";
+import { LoadingState, EmptyState, ErrorState } from "@/components/StateViews";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { Film, Tv, Download, PackageCheck, Clock } from "lucide-react";
 import { useLocalState } from "@/hooks/useLocalState";
@@ -84,7 +84,8 @@ export default function TimelinePage() {
   const { locale } = useLocale();
   const dateLocale = getDateLocale(locale);
 
-  const { data, isLoading } = useSWR<ImportsResponse>(
+  // `error` lu : un échec affichait « rien pour l'instant », ce qui se lit comme une réponse.
+  const { data, error, isLoading, mutate } = useSWR<ImportsResponse>(
     "/api/timeline/imports",
     fetcher,
     { refreshInterval: INTERVALS.MEDIUM }
@@ -132,7 +133,8 @@ export default function TimelinePage() {
       </div>
 
       {isLoading && <LoadingState label={t('timeline.loading')} />}
-      {!isLoading && filtered.length === 0 && <EmptyState label={t('timeline.empty')} />}
+      {error && !data && <ErrorState message={t('errors.loadFailed')} onRetry={() => mutate()} />}
+      {!isLoading && !error && filtered.length === 0 && <EmptyState label={t('timeline.empty')} />}
 
       {groups.length > 0 && (
         <div className="space-y-6">

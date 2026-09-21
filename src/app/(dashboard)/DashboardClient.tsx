@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher, TO_WATCH_KEY } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
-import { LoadingState, EmptyState } from "@/components/StateViews";
+import { LoadingState, EmptyState, ErrorState } from "@/components/StateViews";
 import { Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, Inbox, Image, Star, HardDrive, Clock, Zap, RefreshCw, AlertTriangle, ExternalLink, Play, ChevronRight, CirclePlus } from "lucide-react";
 import { useRole } from "@/lib/useRole";
 import { useT } from "@/components/TranslationProvider";
@@ -33,6 +33,9 @@ import { fmtSize, relativeTime, relativeTimeAbs, formatResumeTicks } from "@/lib
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+// Les genres que le serveur envoie (`ActivityKind`) ; un événement imprévu garde son nom brut.
+const ACTIVITY_KINDS = new Set(["grabbed", "imported", "deleted", "downloadFailed", "request"]);
 
 const SOURCE_COLOR: Record<string, string> = {
   radarr: "bg-accent-600/15 text-accent-400",
@@ -634,7 +637,7 @@ function ActivitySection({ items }: { items: ActivityItem[] }) {
                   </p>
                   <p className="text-xs text-slate-500">{relativeTime(item.date, t)}</p>
                 </div>
-                <span className={`badge ${SOURCE_COLOR[item.source]}`}>{item.type}</span>
+                <span className={`badge ${SOURCE_COLOR[item.source]}`}>{ACTIVITY_KINDS.has(item.type) ? t(`activity.${item.type}`) : item.type}</span>
               </div>
             );
             return item.href ? (
@@ -651,7 +654,7 @@ function ActivitySection({ items }: { items: ActivityItem[] }) {
 
 export function DashboardClient({ initialData }: { initialData?: DashboardPayload }) {
   const t = useT();
-  const { data, isLoading } = useSWR<DashboardPayload>("/api/dashboard", fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<DashboardPayload>("/api/dashboard", fetcher, {
     refreshInterval: INTERVALS.FAST,
     fallbackData: initialData,
   });
@@ -664,6 +667,8 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
       )}
 
       {isLoading && !data && <SkeletonSection />}
+      {/* Sans données du serveur, un échec laissait une page vide sous le squelette. */}
+      {error && !data && <ErrorState message={t('errors.loadFailed')} onRetry={() => mutate()} />}
 
       {data && (
         <>
@@ -672,7 +677,7 @@ export function DashboardClient({ initialData }: { initialData?: DashboardPayloa
             <ResumeSection items={data.resume.data.items} />
           )}
 
-          {/* Ma liste (statut "à voir" uniquement) */}
+          {/* Ma liste (« À voir », la seule liste) */}
           <WatchlistSection />
 
           {/* Récemment ajouté */}

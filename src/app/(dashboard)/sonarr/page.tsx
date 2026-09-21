@@ -23,6 +23,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { MediaCard } from "@/components/MediaCard";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
+import { apiAction } from "@/lib/apiAction";
 
 function poster(series: SonarrSeries) {
   return posterUrl(series.images);
@@ -392,9 +393,10 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
     }
     setAdding(show.tvdbId);
     try {
-      await fetch("/api/sonarr/series", {
+      // `apiAction` et non `fetch` : un refus de Sonarr ne lève pas avec `fetch`, et la fenêtre
+      // annonçait « ajoutée » pour une série que Sonarr venait de refuser.
+      await apiAction("/api/sonarr/series", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...show,
           qualityProfileId: meta.qualityProfiles[0].id,
@@ -406,8 +408,8 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
       mutate("/api/sonarr/series");
       setAdded((prev) => new Set(prev).add(show.tvdbId));
       toast.success(t('sonarr.addedToSonarr', { title: show.title }));
-    } catch {
-      toast.error(t('sonarr.addFailed'));
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('sonarr.addFailed'));
     } finally {
       setAdding(null);
     }

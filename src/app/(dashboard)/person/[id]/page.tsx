@@ -25,7 +25,8 @@ import { MediaCard } from "@/components/MediaCard";
 import { DetailSkeleton } from "@/components/DetailSkeleton";
 import { RatingBadge } from "@/components/RatingBadge";
 import { apiAction } from "@/lib/apiAction";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import { getDateLocale } from "@/lib/i18n";
 import { useToast } from "@/components/Toast";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -755,6 +756,7 @@ function TmdbPhotoLightbox({ photos, startIndex, onClose }: { photos: PersonPhot
 }
 
 function ExpandableBio({ text, source }: { text: string; source: "wikipedia" | "tmdb" }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const limit = 500;
   const truncated = text.length > limit && !expanded;
@@ -766,10 +768,10 @@ function ExpandableBio({ text, source }: { text: string; source: "wikipedia" | "
       <div className="mt-1.5 flex items-center gap-3">
         {text.length > limit && (
           <button onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm mt-1 text-accent-300">
-            {expanded ? "Réduire" : "Lire la suite"}
+            {expanded ? t("person.collapse") : t("person.readMore")}
           </button>
         )}
-        <span className="text-[10px] text-slate-600">Source : {source === "wikipedia" ? "Wikipédia" : "TMDb"}</span>
+        <span className="text-[10px] text-slate-600">{source === "wikipedia" ? t("person.sourceWikipedia") : t("person.sourceTmdb")}</span>
       </div>
     </div>
   );
@@ -777,6 +779,7 @@ function ExpandableBio({ text, source }: { text: string; source: "wikipedia" | "
 
 function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
   const t = useT();
+  const { locale } = useLocale();
   const router = useRouter();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { data: enriched } = useSWR<EnrichedPersonData>(
@@ -795,7 +798,7 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 
   function formatDate(d: string | null) {
     if (!d) return null;
-    return new Date(d).toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
+    return new Date(d).toLocaleDateString(getDateLocale(locale), { year: "numeric", month: "long", day: "numeric" });
   }
 
   return (
@@ -945,10 +948,11 @@ function GenericPersonPage({ id, data }: { id: string; data: PersonData }) {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export default function PersonPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useSWR<PersonData>(`/api/tmdb/person/${id}`, fetcher);
   if (isLoading) return <DetailSkeleton />;
-  if (error || !data) return <ErrorState message="Impossible de charger cette fiche." />;
+  if (error || !data) return <ErrorState message={t("errors.loadFailed")} />;
 
   const numId = Number(id);
   if (isVip(numId) && isClaraGalleryEnabled()) {

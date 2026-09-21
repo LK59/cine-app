@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState, LoadingState } from "@/components/StateViews";
+import { EmptyState, LoadingState, ErrorState } from "@/components/StateViews";
 import { WatchlistButton } from "@/components/WatchlistButton";
 import type { CalendarEvent } from "@/app/api/calendar/route";
 import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Clapperboard, Film, Tv, CirclePlus, X } from "lucide-react";
@@ -313,7 +313,8 @@ export default function CalendarPage() {
   const fetchStart = useMemo(() => isoDate(new Date(navYear, navMonth - 1, 1)), [navYear, navMonth]);
   const fetchEnd   = useMemo(() => isoDate(new Date(navYear, navMonth + 2, 0)), [navYear, navMonth]);
 
-  const { data, isLoading } = useSWR<{ events: CalendarEvent[] }>(
+  // `error` lu : un échec affichait un mois vide, ce qui se lit comme « rien ne sort ».
+  const { data, error, isLoading, mutate } = useSWR<{ events: CalendarEvent[] }>(
     `/api/calendar?start=${fetchStart}&end=${fetchEnd}`,
     fetcher,
     { keepPreviousData: true }
@@ -412,6 +413,7 @@ export default function CalendarPage() {
       </div>
 
       {isLoading && <LoadingState label={t('calendar.loading')} />}
+      {error && !data && <ErrorState message={t('errors.loadFailed')} onRetry={() => mutate()} />}
 
       {!isLoading && view === "month" && (
         <MonthGrid
@@ -421,7 +423,7 @@ export default function CalendarPage() {
           detailRef={detailRef}
         />
       )}
-      {!isLoading && view === "list" && (
+      {!isLoading && !(error && !data) && view === "list" && (
         monthEvents.length === 0
           ? <EmptyState icon={<CalendarDays size={24} />} label={t('calendar.empty')} hint={t('calendar.emptyHint')} />
           : <ListView events={monthEvents} today={today} dateLocale={dateLocale} />
