@@ -161,3 +161,24 @@ export async function withTrueParameterSets(
   }
   return track;
 }
+
+/**
+ * Une image porte-t-elle une image ? Un NAL de type 0 à 31 est une tranche de picture ; au-delà,
+ * ce sont des paramètres, des messages SEI, des délimiteurs.
+ *
+ * *Dirty Dancing* glisse avant certaines images clés des paquets de 441 octets qui ne contiennent
+ * **que** des jeux de paramètres, datés comme une autre image. Transmis tels quels, c'étaient des
+ * « images » vides que le décodeur de Safari refusait.
+ */
+export function carriesPicture(sample: Uint8Array, nalLength: number): boolean {
+  let at = 0;
+  while (at + nalLength <= sample.length) {
+    let length = 0;
+    for (let i = 0; i < nalLength; i++) length = length * 256 + sample[at + i];
+    at += nalLength;
+    if (length <= 0 || at + length > sample.length) return true;
+    if (((sample[at] >> 1) & 0x3f) < 32) return true;
+    at += length;
+  }
+  return false;
+}

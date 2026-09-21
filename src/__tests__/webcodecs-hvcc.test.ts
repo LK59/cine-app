@@ -81,3 +81,24 @@ describe("reconcileHvcc", () => {
     expect([...fixed].join(",")).toContain([...PPS_REAL].join(","));
   });
 });
+
+describe("carriesPicture", () => {
+  // Dirty Dancing glisse avant certaines images clés des paquets qui ne portent que des
+  // paramètres : ce ne sont pas des images, et le décodeur de Safari refusait de les « décoder ».
+  it("reconnaît un paquet de paramètres seuls", async () => {
+    const { carriesPicture } = await import("@/lib/webcodecs/hvcc");
+    expect(carriesPicture(sample(VPS, SPS, PPS_REAL), 4)).toBe(false);
+    expect(carriesPicture(sample(nal(39, 1)), 4)).toBe(false);
+  });
+
+  it("reconnaît une image, paramètres devant ou non", async () => {
+    const { carriesPicture } = await import("@/lib/webcodecs/hvcc");
+    expect(carriesPicture(sample(PPS_REAL, SLICE), 4)).toBe(true);
+    expect(carriesPicture(sample(nal(1, 9)), 4)).toBe(true);
+  });
+
+  it("tient pour une image ce qu'il ne sait pas lire, plutôt que de la jeter", async () => {
+    const { carriesPicture } = await import("@/lib/webcodecs/hvcc");
+    expect(carriesPicture(new Uint8Array([0, 0, 9, 0, 1]), 4)).toBe(true);
+  });
+});

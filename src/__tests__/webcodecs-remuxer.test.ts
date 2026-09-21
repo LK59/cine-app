@@ -142,6 +142,7 @@ describe("Remuxer track selection", () => {
       clampedSamples: 0,
       nudgedSamples: 0,
       correctedHeader: false,
+      headerChanges: 0,
       transcodedAudio: false,
       transcodedCodec: null,
       segmentStartSeconds: 0,
