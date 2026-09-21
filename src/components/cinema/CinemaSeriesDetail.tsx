@@ -8,6 +8,7 @@ import { ArrowLeft, BookmarkCheck, Check, CircleCheck, ListVideo, Plus, RotateCc
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
+import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
@@ -124,6 +125,8 @@ export function CinemaSeriesDetail({
   // the library there's no second screen, so neither should exist.
   const similar = useCinemaSimilar(item, "series");
   const hasSimilar = !!onSelectSimilar && similar.length > 0;
+  const cast = info?.tmdb?.cast ?? [];
+  const hasBelow = hasSimilar || cast.length > 0;
 
   // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
   // drapeau doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc
@@ -450,15 +453,16 @@ export function CinemaSeriesDetail({
           </div>
 
         </div>
-        {hasSimilar && <CinemaScrollHint />}
+        {hasBelow && <CinemaScrollHint />}
         </div>
 
         {/* Its own full-height snap position — centred rather than pinned to the top, so landing
             on it reads as a deliberate second screen instead of one row stranded above a lot of
             empty backdrop. */}
-        {hasSimilar && (
-          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center px-8 sm:px-16">
-            <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaSeries)} />
+        {hasBelow && (
+          <div data-snap-section className="flex min-h-full snap-start flex-col justify-center gap-6 px-8 sm:px-16">
+            <CinemaCastRow cast={cast} />
+            {hasSimilar && <CinemaSimilarRow items={similar} onSelect={(next) => onSelectSimilar?.(next as CinemaSeries)} />}
           </div>
         )}
       </div>

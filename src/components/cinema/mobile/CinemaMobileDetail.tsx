@@ -26,6 +26,7 @@ import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
+import { CinemaCastRow, type CinemaCastMember } from "@/components/cinema/CinemaCastRow";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -40,7 +41,7 @@ const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) 
 
 interface DetailInfo {
   /** `runtime` est la durée du film en minutes : elle vient de TMDB, comme le synopsis. */
-  tmdb: { overview: string; cast: { tmdbId: number; name: string }[]; runtime?: number | null } | null;
+  tmdb: { overview: string; cast: CinemaCastMember[]; runtime?: number | null } | null;
   trailerKey: string | null;
 }
 
@@ -405,11 +406,6 @@ export function CinemaMobileDetail({
 
         <p className="mb-3 text-sm leading-6 text-white/90">{info?.tmdb?.overview || item.overview}</p>
 
-        {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-          <p className="mb-5 text-xs leading-5 text-white/50">
-            {t("cinema.cast")} {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
-          </p>
-        )}
 
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing
             with the primary white one above. */}
@@ -438,6 +434,15 @@ export function CinemaMobileDetail({
             </span>
           </button>
         </div>
+
+        {/* Des visages plutôt qu'une ligne de noms : chacun ouvre la fiche de la personne, posée
+            par-dessus ce titre. Juste après les actions — plus bas, sous la liste des épisodes
+            d'une série, personne ne l'aurait trouvé. Voir `CinemaCastRow`. */}
+        {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
+          <div className="-mx-4 mb-4 px-4">
+            <CinemaCastRow cast={info.tmdb.cast} />
+          </div>
+        )}
 
         {isSeries && seasonNumbers.length > 0 && (
           <>

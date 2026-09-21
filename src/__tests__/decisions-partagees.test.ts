@@ -302,3 +302,17 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
     expect(host).toMatch(/chooseAudioTrack: \(tracks\) => \{[\s\S]{0,300}chooseAudioTrack\(tracks, preferences\)/);
   });
 });
+
+describe("une seule rangée de casting pour les trois fiches", () => {
+  // Revenue le 21/09/2026. Trois fiches la montrent — film, série, téléphone — et c'est l'axe
+  // « film contre série » qui a déjà coûté un correctif manqué : une seule rangée, appelée trois fois.
+  it("film, série et téléphone passent par `CinemaCastRow`", () => {
+    for (const f of [
+      "src/components/cinema/CinemaMovieDetail.tsx",
+      "src/components/cinema/CinemaSeriesDetail.tsx",
+      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    ]) {
+      expect([f, lire(f)]).toEqual([f, expect.stringContaining("<CinemaCastRow cast=")]);
+    }
+  });
+});

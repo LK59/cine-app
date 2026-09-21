@@ -177,6 +177,21 @@ lifecycle ».
 **Voulu.** Le mobile n'a pas de champ `episodes` dans l'adresse : ses épisodes vivent dans la
 fiche, pas dans un panneau.
 
+## 7 bis. La distribution et la fiche personne
+
+**Règle.** Un titre montre sa distribution en visages ; chaque visage ouvre la fiche de la personne,
+posée **par-dessus** le titre (carte au centre sur grand écran, panneau qui monte du bas sur
+téléphone), qu'on referme d'un geste vers le bas ou en touchant le voile.
+
+**Porteurs.** `CinemaCastRow` pour les trois fiches ; `PlayerPersonSheet` pour la personne — la
+forme de la fiche acteur de la gestion (`ActorModal`), sur la mécanique du cinéma (adresse, pile,
+`underneath`, sortie tenue par la coquille).
+
+**Tests.** `CinemaCastRow.test.tsx`, `player-person-sheet.test.tsx`, `decisions-partagees.test.ts`.
+
+**Voulu.** La gestion garde `ActorModal` : elle y ajoute un titre à Radarr, ce que le cinéma fait
+autrement (la fiche découverte, puis « Demander »).
+
 ## 8. Pastilles de qualité
 
 **Porteur.** `qualityBadges` (`videoQuality.ts`) et `QualityBadges.tsx`, pour les deux bannières et

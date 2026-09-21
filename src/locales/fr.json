@@ -1235,7 +1235,8 @@
       "less": "Réduire",
       "filmography": "Filmographie",
       "ownedCount": "{owned} sur {total} disponibles",
-      "photos": "Photos"
+      "photos": "Photos",
+      "elsewhere": "À découvrir"
     },
     "account": {
       "language": "Langue",

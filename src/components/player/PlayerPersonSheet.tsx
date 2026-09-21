@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, ChevronLeft, ChevronRight, User, X } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Globe, MapPin, Star, User, X } from "lucide-react";
+import { InstagramIcon } from "@/components/BrandIcons";
+import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
+import { selectBio } from "@/lib/format";
+import { getDateLocale } from "@/lib/i18n";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
@@ -37,6 +41,18 @@ interface PersonPayload {
 }
 
 const TMDB_PROFILE = "https://image.tmdb.org/t/p/w300";
+
+function formatDate(iso: string, dateLocale: string): string {
+  return new Date(iso).toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** L'âge, ou l'âge au décès. Calculé sur la date de fin plutôt que sur « maintenant » quand il y en a une. */
+function ageAt(birthday: string, deathday: string | null, now: number): number | null {
+  const born = new Date(birthday).getTime();
+  const end = deathday ? new Date(deathday).getTime() : now;
+  if (!Number.isFinite(born) || !Number.isFinite(end)) return null;
+  return Math.floor((end - born) / (365.25 * 24 * 3600 * 1000));
+}
 
 /**
  * Les photos de la personne, en une rangée qu'on fait défiler.
@@ -212,6 +228,15 @@ export function PlayerPersonSheet({
     revalidateOnFocus: false,
   });
   const photos = photoData?.photos ?? [];
+  // Les liens et la biographie de Wikipédia — la partie de la fiche de gestion qui manquait ici.
+  // À part, et en différé comme les photos : la fiche s'affiche sans attendre Wikipédia.
+  const { data: enriched } = useSWR<EnrichedPersonData>(`/api/tmdb/person/${tmdbId}/enriched`, fetcher, {
+    revalidateOnFocus: false,
+  });
+  const { locale } = useLocale();
+  const dateLocale = getDateLocale(locale);
+  // Lu une fois : l'horloge n'a pas sa place dans un rendu (règle du compilateur React).
+  const [now] = useState(() => Date.now());
 
   const close = () => cinemaClose({ person: null });
   /**
@@ -255,7 +280,7 @@ export function PlayerPersonSheet({
   // Ce qu'on possède d'abord : c'est ce qui se regarde ce soir. Le serveur trie déjà ainsi, on
   // garde son ordre et on se contente de retirer les entrées sans titre.
   const credits = useMemo(() => (data?.credits ?? []).filter((c) => c.title), [data]);
-  const owned = credits.filter((c) => c.inLibrary).length;
+  const ownedTotal = credits.filter((c) => c.inLibrary).length;
 
   /**
    * La filmographie entière, une image après la première.
@@ -291,210 +316,228 @@ export function PlayerPersonSheet({
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
   if (typeof document === "undefined") return null;
 
+  const bio = selectBio(data?.biography, enriched?.wikiBio);
+  const age = data?.birthday ? ageAt(data.birthday, data.deathday, now) : null;
+  const owned = shownCredits.filter((c) => c.inLibrary);
+  const elsewhere = shownCredits.filter((c) => !c.inLibrary);
+  const openCredit = (c: PersonCredit) => {
+    const type = c.mediaType === "movie" ? "movie" : "series";
+    /* La fiche prend la place de celle-ci, et le retour y ramène — voir `openLibraryTitle`, qui
+       referme ce qui la couvre ; la fiche découverte ne passe pas par elle, d'où `person: null`.
+       L'onglet suit le type, sans quoi une série ouverte depuis un acteur ne se résout pas. */
+    if (c.libraryId !== null) openLibraryTitle(type, c.libraryId);
+    else cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null });
+  };
+  const creditCard = (c: PersonCredit) => (
+    <PlayerResultCard
+      key={`${c.mediaType}-${c.tmdbId}`}
+      kind={c.mediaType === "movie" ? "movie" : "series"}
+      title={c.title}
+      subtitle={c.character || (c.year ? String(c.year) : null)}
+      poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
+      missing={!c.inLibrary}
+      onOpen={() => openCredit(c)}
+    />
+  );
+
   return createPortal(
+    /**
+     * Une carte posée sur ce qu'on regardait, et non plus une page qui le remplace.
+     *
+     * C'est la fiche acteur de la gestion (`ActorModal`), transposée le 21/09/2026 à la demande de
+     * Louis : le film reste visible derrière un voile, on lit la personne, on la referme d'un geste
+     * vers le bas et l'on est exactement où l'on était. Sur téléphone elle monte du bas, sur grand
+     * écran elle se pose au centre. Tout le reste — l'adresse, la pile, `underneath`, la sortie
+     * tenue par la coquille, la filmographie étalée sur deux images — n'a pas bougé : seul le
+     * dessin a changé.
+     */
     <div
-      // L'animation d'entrée pilote la même propriété que le geste : la laisser tourner
-      // pendant qu'on tire empêcherait la fiche de suivre le doigt, et la laisser revenir après
-      // un retour en place rejouerait toute l'entrée.
-      /**
-       * Sur téléphone, l'élément animé **est** le conteneur de défilement — comme les fiches de
-       * titre, et c'est exactement le traitement qui leur donne une sortie nette.
-       *
-       * Avec `overflow-hidden` ici et le défilement dans un enfant, WebKit devait déplacer un
-       * calque contenant un défilement imbriqué : le compositeur ne peut plus se contenter de
-       * bouger la couche, et la sortie saccadait. Sur grand écran la question ne se pose pas —
-       * l'animation y est un fondu, pas un déplacement.
-       */
-      className={`fixed inset-0 bg-ink ${isMobile ? "overflow-y-auto overscroll-contain" : "overflow-hidden"} ${
-        swipe.touched
-          ? ""
-          : leaving
-            ? "sheet-out md:animate-fade-out"
-            : revealed
-              ? ""
-              : "sheet-in md:animate-fade-in"
-      }`}
+      className={`fixed inset-0 flex justify-center ${isMobile ? "items-end" : "items-center p-6"}`}
       style={{
-        // Le même couple que la pile des fiches de titre sur téléphone : 47 dessous, 48 dessus.
-        // Ils ne se disputent jamais le 47 — une entrée recouvre une fiche de titre *ou* une fiche
-        // personne, et c'est précisément ce que `SheetRef` sait dire.
+        // Le même couple que la pile des fiches de titre : 47 dessous, 48 dessus.
         zIndex: underneath ? 47 : 48,
-        paddingLeft: "calc(var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
-        paddingRight: "env(safe-area-inset-right, 0px)",
-        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
-        // Pas de transition pendant que le doigt est posé : la fiche n'anime pas vers le doigt,
-        // elle *est* où il est. C'est le relâchement qu'on adoucit — le retour en place comme le
-        // reste du chemin vers le bas.
-        transition: swipe.dragging
-          ? "none"
-          : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 200ms ease-out",
-        // Opaque jusqu'au bout : la faire disparaître en fondu transformait le geste en effet
-        // d'écran à travers lequel on voit la grille. C'est un panneau plein qu'on écarte, donc il
-        // reçoit ce que reçoit un panneau qui décolle du bord — des coins et une ombre, l'un comme
-        // l'autre proportionnels au chemin parcouru.
-        borderTopLeftRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
-        borderTopRightRadius: swipe.offset > 0 ? Math.min(28, swipe.offset * 0.5) : undefined,
-        boxShadow: swipe.offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55)" : undefined,
+        paddingLeft: isMobile ? undefined : "calc(1.5rem + var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
       }}
     >
-      {/* `absolute`, pas `fixed` : sur téléphone la racine s'anime en translation, et un enfant
-          `fixed` se positionnerait alors par rapport à la fenêtre plutôt qu'à elle.
+      {/* Le voile : il laisse voir le film qu'on regardait, et le toucher referme la carte. */}
+      <div
+        aria-hidden
+        onClick={underneath ? undefined : requestClose}
+        className={`absolute inset-0 bg-black/70 backdrop-blur-sm ${
+          leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
+        }`}
+        style={{ opacity: swipe.offset > 0 ? Math.max(0.2, 1 - swipe.offset / 400) : undefined }}
+      />
 
-          Mais un enfant absolu se cale sur la boîte de *bordure*, pas sur la boîte de contenu : il
-          ignore le `padding-left` qui réserve le rail. Le bouton Retour passait donc dessous sur
-          grand écran. Le retrait est donc écrit dans sa position, comme le fait déjà le navigateur
-          d'épisodes — c'est le même calcul, au même endroit.
-
-          Deux formes pour un même geste, chacune là où on la cherche : sur téléphone, la croix en
-          haut à droite, comme sur toutes les autres fiches ; sur grand écran, le bouton Retour à
-          gauche, comme sur celles de la bibliothèque. */}
-      {isMobile ? (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={data?.name ?? undefined}
+        /**
+         * Sur téléphone, la carte **est** le conteneur de défilement, et c'est elle qu'on anime :
+         * un calque qui contient un défilement imbriqué ne se déplace pas proprement dans WebKit,
+         * et la sortie saccadait. Même raison, même traitement que sur les fiches de titre.
+         */
+        className={`scrollbar-thin relative w-full overflow-y-auto overscroll-contain bg-ink shadow-2xl ring-1 ring-white/10 ${
+          isMobile ? "max-h-[92dvh] rounded-t-3xl" : "max-h-[88vh] max-w-4xl rounded-2xl"
+        } ${
+          swipe.touched ? "" : leaving ? "sheet-out md:animate-fade-out" : revealed ? "" : "sheet-in md:animate-fade-in"
+        }`}
+        style={{
+          transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+          // Pas de transition pendant que le doigt est posé : la carte *est* où il est. C'est le
+          // relâchement qu'on adoucit — le retour en place comme le reste du chemin vers le bas.
+          transition: swipe.dragging ? "none" : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
         <button
           type="button"
           onClick={requestClose}
-          aria-label={t("cinema.back")}
-          className="absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
-          style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
+          aria-label={t("common.close")}
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-black/70 active:scale-95"
         >
           <X size={18} />
         </button>
-      ) : (
-        <button
-          onClick={requestClose}
-          className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2"
-          style={{
-            top: "max(1rem, env(safe-area-inset-top))",
-            left: "calc(1rem + var(--player-rail, 0px))",
-          }}
-        >
-          <ArrowLeft size={16} /> {t("cinema.back")}
-        </button>
-      )}
 
-      <div
-        // Le défilement a remonté sur la racine animée quand on est sur téléphone : le laisser ici
-        // aussi ferait deux zones de défilement imbriquées, dont une qui ne défilerait jamais.
-        className={`scrollbar-thin px-5 pb-16 sm:px-10 ${isMobile ? "" : "h-full overflow-y-auto"}`}
-        // Sur téléphone, la croix flotte au-dessus du contenu et n'a pas besoin qu'on lui
-        // réserve toute une bande : le portrait commence plus haut, ce qui compte sur les
-        // ~390 px d'un écran couché.
-        style={{ paddingTop: `calc(${isMobile ? "1rem" : "4.5rem"} + env(safe-area-inset-top))` }}
-      >
-        <div className="mx-auto w-full max-w-6xl">
+        {/* La poignée du geste : la barre et tout l'en-tête. `touch-action: none` pour que le
+            navigateur ne réclame pas ce mouvement pour son propre défilement — sinon il vole le
+            flux de pointeurs au milieu du glissement. Le reste de la carte défile normalement. */}
+        <div
+          {...(isMobile && !underneath ? swipe.handlers : {})}
+          style={isMobile ? { touchAction: "none" } : undefined}
+          className="px-5 pt-3 sm:px-8 sm:pt-8"
+        >
+          {isMobile && <div aria-hidden className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/25" />}
+
           {isLoading && (
-            <div className="flex justify-center pt-16">
+            <div className="flex justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             </div>
           )}
 
           {data && (
-            <>
-              {/* `pr-12` sur téléphone : la croix flotte dans ce coin, et le nom passait dessous
-                  dès qu'il tenait sur la même ligne que le portrait — c'est-à-dire couché. */}
-              {/* La poignée du geste : `touch-action: none` pour que le navigateur ne réclame
-                  pas ce mouvement pour son propre défilement, sinon il vole le flux de pointeurs
-                  au milieu du glissement. Le reste de la fiche défile normalement. */}
+            <div className="flex items-start gap-4 pr-10 sm:gap-6">
               <div
-                {...(isMobile && !underneath ? swipe.handlers : {})}
-                style={isMobile ? { touchAction: "none" } : undefined}
-                className={`flex gap-6 ${short ? "flex-row items-start" : "flex-col sm:flex-row sm:items-start"} ${isMobile ? "pr-12" : ""}`}
+                className={`shrink-0 overflow-hidden rounded-full bg-white/5 ring-2 ring-white/10 ${
+                  short ? "h-20 w-20" : "h-24 w-24 sm:h-32 sm:w-32"
+                }`}
               >
-                <div
-                  className={`shrink-0 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 ${
-                    short ? "h-28 w-28" : "h-36 w-36 sm:h-44 sm:w-44"
-                  }`}
-                >
-                  {data.profilePath ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`${TMDB_PROFILE}${data.profilePath}`} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-slate-600">
-                      <User size={32} />
-                    </div>
+                {data.profilePath ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`${TMDB_PROFILE}${data.profilePath}`} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-slate-600">
+                    <User size={32} />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h1 className="font-display text-2xl font-semibold text-white sm:text-3xl">{data.name}</h1>
+                {data.knownFor && <p className="mt-0.5 text-xs text-slate-500">{data.knownFor}</p>}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                  {data.birthday && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar size={12} className="shrink-0 text-slate-500" />
+                      {formatDate(data.birthday, dateLocale)}
+                      {age !== null && (
+                        <span className="text-slate-500">
+                          {data.deathday
+                            ? `— ${t("modals.actor.died", { date: formatDate(data.deathday, dateLocale), n: age })}`
+                            : `(${t("modals.actor.age", { n: age })})`}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {data.placeOfBirth && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin size={12} className="shrink-0 text-slate-500" />
+                      {data.placeOfBirth}
+                    </span>
                   )}
                 </div>
-
-                <div className="min-w-0 flex-1">
-                  <h1 className={`font-display font-semibold text-white ${short ? "text-2xl" : "text-3xl sm:text-4xl"}`}>
-                    {data.name}
-                  </h1>
-                  <p className="mt-1.5 text-sm text-slate-400">
-                    {[
-                      data.knownFor,
-                      data.birthday ? new Date(data.birthday).getFullYear() : null,
-                      data.placeOfBirth,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                {credits.length > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t("modals.actor.works", { n: credits.length })} · {t("player.person.ownedCount", { owned: ownedTotal, total: credits.length })}
                   </p>
-
-                  {data.biography && (
-                    <>
-                      <p
-                        className={`mt-4 max-w-3xl select-text text-sm leading-7 text-slate-300 ${
-                          expanded ? "" : short ? "line-clamp-2" : "line-clamp-4"
-                        }`}
-                      >
-                        {data.biography}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setExpanded((v) => !v)}
-                        className="mt-1.5 text-xs font-medium text-slate-400 hover:text-white"
-                      >
-                        {expanded ? t("player.person.less") : t("cinema.readMore")}
-                      </button>
-                    </>
-                  )}
-                </div>
+                )}
               </div>
-
-              {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
-                  à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
-              {!underneath && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
-
-              <div className={short ? "mt-6" : "mt-10"}>
-                <h2 className="font-display text-lg font-semibold text-white">
-                  {t("player.person.filmography")}
-                  <span className="ml-2 text-sm font-normal text-slate-500">
-                    {t("player.person.ownedCount", { owned, total: credits.length })}
-                  </span>
-                </h2>
-
-                <div className="player-grid mt-5 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                  {shownCredits.map((c) => {
-                    const type = c.mediaType === "movie" ? "movie" : "series";
-                    return (
-                      <PlayerResultCard
-                        key={`${c.mediaType}-${c.tmdbId}`}
-                        kind={type}
-                        title={c.title}
-                        subtitle={c.year ? String(c.year) : c.character || null}
-                        poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
-                        missing={!c.inLibrary}
-                        /* La fiche prend la place de celle-ci, et le retour y ramène.
-                           Elle passait « par-dessus », ce qui ne peut pas s'afficher : les plans
-                           sont une échelle fixe et une fiche de titre (47) ne monte pas au-dessus
-                           d'une fiche personne (48). Rien ne s'ouvrait donc, et la barre du bas —
-                           qui s'efface tant qu'une fiche est adressée — laissait l'écran sans
-                           navigation. Voir `openLibraryTitle`, qui referme désormais ce qui la
-                           couvre ; ici il reste à en faire autant pour la fiche découverte, qui
-                           ne passe pas par elle.
-                           L'onglet suit le type, sans quoi une série ouverte depuis un acteur ne
-                           se résout pas. */
-                        onOpen={() =>
-                          c.libraryId !== null
-                            ? openLibraryTitle(type, c.libraryId)
-                            : cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null })
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </>
+            </div>
           )}
         </div>
+
+        {data && (
+          <div className="px-5 pb-8 sm:px-8">
+            {(enriched?.instagram || enriched?.imdb || enriched?.wikipedia) && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {enriched.instagram && (
+                  <a href={enriched.instagram} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-pink-500/10 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition hover:bg-pink-500/20">
+                    <InstagramIcon size={12} /> Instagram
+                  </a>
+                )}
+                {enriched.imdb && (
+                  <a href={enriched.imdb} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20">
+                    <Star size={12} /> IMDb
+                  </a>
+                )}
+                {enriched.wikipedia && (
+                  <a href={enriched.wikipedia} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20">
+                    <Globe size={12} /> Wikipédia
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
+                à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
+            {!underneath && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
+
+            {/* La biographie de Wikipédia quand elle existe, dans la langue du compte — plus
+                complète que celle de TMDB, souvent vide ou en anglais. Voir `selectBio`. */}
+            {bio && (
+              <div className="mt-5 rounded-xl bg-white/5 p-4">
+                <p className={`select-text text-sm leading-7 text-slate-300 ${expanded ? "" : short ? "line-clamp-3" : "line-clamp-5"}`}>
+                  {bio.text}
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    className="text-xs font-medium text-slate-400 hover:text-white"
+                  >
+                    {expanded ? t("player.person.less") : t("cinema.readMore")}
+                  </button>
+                  <span className="text-[10px] text-slate-600">
+                    {bio.source === "wikipedia" ? t("modals.actor.sourceWikipedia") : t("modals.actor.sourceTmdb")}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* La filmographie en deux temps : ce qui se regarde ce soir, puis le reste — qui
+                ouvre sa fiche découverte, d'où l'on peut le demander. */}
+            {owned.length > 0 && (
+              <section className="mt-8">
+                <h2 className="mb-4 font-display text-lg font-semibold text-white">{t("modals.actor.inLibrary")}</h2>
+                <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
+                  {owned.map(creditCard)}
+                </div>
+              </section>
+            )}
+            {elsewhere.length > 0 && (
+              <section className="mt-8">
+                <h2 className="mb-4 font-display text-lg font-semibold text-white">{t("player.person.elsewhere")}</h2>
+                <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
+                  {elsewhere.map(creditCard)}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
       </div>
 
       {photoIndex !== null && photos.length > 0 && (

@@ -33,7 +33,17 @@ const credits = Array.from({ length: 60 }, (_, i) => ({
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: async (url: string) =>
-    url.includes("/photos") ? { photos: [] } : { name: "Acteur", biography: "", credits },
+    url.includes("/photos")
+      ? { photos: [] }
+      : url.includes("/enriched")
+        ? { photos: [], instagram: null, imdb: "https://www.imdb.com/name/nm1", wikipedia: null, wikiBio: "Bio Wikipédia." }
+        : { name: "Acteur", biography: "", credits },
+}));
+
+const cinemaClose = vi.fn();
+vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/cinemaRoute")>()),
+  cinemaClose: (...a: unknown[]) => cinemaClose(...a),
 }));
 
 import { PlayerPersonSheet } from "@/components/player/PlayerPersonSheet";
@@ -101,5 +111,40 @@ describe("PlayerPersonSheet — la filmographie", () => {
     draw({ tmdbId: 3, underneath: true });
     await screen.findByText("Film 0");
     expect(screen.queryByText("player.person.photos")).toBeNull();
+  });
+});
+
+describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
+  // Le 21/09/2026 : la fiche acteur de la gestion (résumé, liens, photos, bio Wikipédia,
+  // filmographie en deux temps, posée sur le titre) remplace la page plein écran du cinéma.
+  it("donne les liens et la biographie de Wikipédia, avec sa source", async () => {
+    draw({ tmdbId: 5 });
+    expect(await screen.findByText("Bio Wikipédia.")).toBeTruthy();
+    expect(screen.getByText("modals.actor.sourceWikipedia")).toBeTruthy();
+    expect(screen.getByText("IMDb").closest("a")?.getAttribute("href")).toBe("https://www.imdb.com/name/nm1");
+  });
+
+  it("sépare ce qui se regarde ce soir de ce qui reste à découvrir", async () => {
+    draw({ tmdbId: 6 });
+    await screen.findByText("Film 0");
+    // Aucune des soixante n'est dans la bibliothèque : un seul groupe, celui du reste.
+    expect(screen.queryByText("modals.actor.inLibrary")).toBeNull();
+    expect(screen.getByText("player.person.elsewhere")).toBeTruthy();
+  });
+
+  it("se referme en touchant le voile, sauf quand elle est dessous", async () => {
+    cinemaClose.mockClear();
+    const { unmount } = draw({ tmdbId: 7 });
+    await screen.findByText("Film 0");
+    const voile = () => document.body.querySelector("[aria-hidden].backdrop-blur-sm") as HTMLElement;
+    act(() => voile().click());
+    expect(cinemaClose).toHaveBeenCalledWith({ person: null });
+    unmount();
+
+    cinemaClose.mockClear();
+    draw({ tmdbId: 8, underneath: true });
+    await screen.findByText("Film 0");
+    act(() => voile().click());
+    expect(cinemaClose).not.toHaveBeenCalled();
   });
 });
