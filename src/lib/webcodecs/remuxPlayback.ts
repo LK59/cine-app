@@ -10,7 +10,7 @@ import { fromMatroskaTrack } from "./engineTrack";
 import { parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, audioSwitchNeedsRebuild, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 
@@ -56,6 +56,15 @@ export interface RemuxPlaybackOptions {
    * chargée, et c'est aussi ce que voit le chemin WebCodecs, qui choisit sa piste autrement.
    */
   audioPreferences?: TrackPreferences | null;
+  /**
+   * La piste que le spectateur a choisie, quand ce pipeline en remplace un autre.
+   *
+   * Un pipeline reconstruit ouvrait sur la préférence du compte puis basculait vers le choix du
+   * spectateur — une seconde attente après la première. Depuis la livraison par piste, c'est pire
+   * qu'une attente : la reconstruction a lieu *parce que* la piste choisie n'a pas le format de
+   * l'autre, et basculer ensuite serait refaire la transition qu'elle évite. On ouvre donc dessus.
+   */
+  audioTrackNumber?: number | null;
 }
 
 export type PathProbe = { discard: () => void } & (
@@ -153,6 +162,22 @@ export function preferredAudio(file: MatroskaFile, preferences?: TrackPreference
 }
 
 /**
+ * La piste sur laquelle ouvrir : celle que le spectateur a choisie si ce pipeline en remplace un
+ * autre et qu'elle joue par ce chemin, sinon celle que le compte préfère (`preferredAudio`).
+ */
+export function openingAudio(
+  file: MatroskaFile,
+  preferences?: TrackPreferences | null,
+  chosen?: number | null
+): MatroskaTrack | null {
+  if (chosen !== null && chosen !== undefined) {
+    const track = file.tracks.find((t) => t.type === "audio" && t.number === chosen);
+    if (track && playableAudio(track)) return track;
+  }
+  return preferredAudio(file, preferences);
+}
+
+/**
  * Works out how this file should be played, without committing to it.
  *
  * The header is read here and, on the WebCodecs path, read again by the engine. That is a handful
@@ -186,7 +211,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
 
   const videoTrack = file.tracks.find((t) => t.type === "video");
   if (!videoTrack) throw new Error("Ce fichier ne contient aucune piste vidéo.");
-  const audioTrack = preferredAudio(file, options.audioPreferences);
+  const audioTrack = openingAudio(file, options.audioPreferences, options.audioTrackNumber);
   trace(`piste audio retenue : ${audioTrack ? `${audioTrack.codecId} ${audioTrack.audio?.channels ?? "?"}ch ${audioTrack.language ?? "?"}` : "aucune"}`);
 
   const chosen = await choosePlaybackPath({
@@ -312,6 +337,15 @@ export class RemuxPlayback {
    * Asked here, the caller can step aside to a player that *can* carry it instead of telling the
    * viewer their language is unavailable.
    */
+  /**
+   * Passer à cette piste change-t-il le format du son livré ? Si oui, l'appelant reconstruit le
+   * lecteur dessus plutôt que d'appeler `selectAudioTrack` — voir `audioSwitchNeedsRebuild`.
+   */
+  needsRebuildForAudio(trackNumber: number): boolean {
+    const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
+    return track ? audioSwitchNeedsRebuild(this.file, this.audioTrack, track) : false;
+  }
+
   canCarryAudio(trackNumber: number): boolean {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     // An unknown number is not a codec refusal: let the usual path answer it.
@@ -362,6 +396,12 @@ export class RemuxPlayback {
   async selectAudioTrack(trackNumber: number): Promise<void> {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     if (!track || this.destroyed || track.number === this.audioTrack?.number || !this.mse) return;
+    // Refusé net plutôt que tenté : changer de format dans un tampon vivant est précisément ce
+    // que Safari ne survit pas (03/09/2026). L'appelant reconstruit le lecteur — voir
+    // needsRebuildForAudio.
+    if (this.needsRebuildForAudio(trackNumber)) {
+      throw new Error(`la piste ${trackNumber} change le format du son : reconstruire le lecteur`);
+    }
 
     const at = this.video.currentTime;
     const mse = this.mse;

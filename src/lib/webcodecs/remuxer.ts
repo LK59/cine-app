@@ -226,6 +226,39 @@ export function audioBufferRebuildable(): boolean {
   return rebuildable;
 }
 
+/**
+ * **La livraison par piste** — l'interrupteur de ce qui suit, comme `TRUST_BUFFER_REBUILD` l'est
+ * du remplacement de tampon.
+ *
+ * À `false`, c'est l'unification par fichier, décrite plus bas et stable depuis le 03/09/2026 :
+ * si les pistes d'un fichier ne peuvent pas toutes passer telles quelles, toutes sont
+ * ré-encodées, et le codec ne change jamais pendant la vie de la MediaSource.
+ *
+ * À `true`, chaque piste est livrée dans sa meilleure forme — le Dolby tel quel, le TrueHD et le
+ * DTS ré-encodés —, et un changement de piste qui change le **format** livré reconstruit le
+ * lecteur à la même position, directement sur la nouvelle piste, par le mécanisme qui relève
+ * déjà le lecteur d'une coupure (voir `audioSwitchNeedsRebuild` et `ExperimentalPlayerHost`).
+ *
+ * Pourquoi, mesuré le 21/09/2026 : depuis que le TrueHD se décode ici, 19 films qui mêlent TrueHD
+ * et Dolby voyaient leur VF Dolby ré-encodée — une seconde génération avec perte, du travail pour
+ * le téléphone, pour une piste qui passait intacte la veille. Et un changement de piste ré-encodé
+ * coûtait 2 à 15 s sur iPhone, quand une reconstruction du lecteur en prenait 0,3 à 0,5
+ * (« Dirty Dancing », trois reconstructions ce jour-là).
+ *
+ * Les trois échecs du 03/09/2026 restent vrais et ne sont pas contournés : aucune de ces voies ne
+ * change le codec d'un tampon vivant, ni ne remplace une MediaSource saine en cours de lecture
+ * sur place ; c'est le lecteur entier qui est reconstruit, comme après une coupure.
+ */
+let perTrack = true;
+
+export function setPerTrackAudioDelivery(value: boolean): void {
+  perTrack = value;
+}
+
+export function perTrackAudioDelivery(): boolean {
+  return perTrack;
+}
+
 /** What a re-encoded track is delivered as, and therefore what every track is unified to. */
 const TRANSCODED_CODEC = () => transcodeTargetCodec();
 
@@ -251,8 +284,9 @@ const TRANSCODED_CODEC = () => transcodeTargetCodec();
  */
 export function unifiedAudioCodec(file: MatroskaFile): string | null {
   // Not needed where the audio buffer can simply be replaced when the codec changes: there, a
-  // track that can ride through untouched does, and only what has to be re-encoded is.
-  if (rebuildable) return null;
+  // track that can ride through untouched does, and only what has to be re-encoded is. Nor where
+  // each track is delivered on its own and a change of format rebuilds the player — see perTrack.
+  if (rebuildable || perTrack) return null;
 
   const audio = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
   if (audio.length < 2) return null;
@@ -297,7 +331,12 @@ export function unifiedAudioCodec(file: MatroskaFile): string | null {
 export function unifiedAudioChannels(file: MatroskaFile): number | null {
   if (rebuildable) return null;
 
-  const carried = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
+  // Livrées piste par piste, seules les pistes ré-encodées partagent un tampon sans reconstruction
+  // — elles sortent toutes dans le même codec — et c'est entre elles seulement que le nombre de
+  // canaux doit être le même. Une piste copiée garde évidemment les siens.
+  const carried = file.tracks.filter(
+    (t) => t.type === "audio" && (perTrack ? naturalDelivery(t) === "transcode" : naturalDelivery(t) !== "none")
+  );
   if (carried.length < 2) return null;
 
   // Le repli est celui de la spécification Matroska — un canal —, et non un deux inventé ici.
@@ -328,6 +367,34 @@ export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile): AudioD
   if (!unified) return natural;
   if (natural === "copy" && audioCodecString(track) === unified) return "copy";
   return "transcode";
+}
+
+/**
+ * Ce qu'une piste devient dans le tampon audio : son propre codec quand elle passe telle quelle,
+ * « ré-encodée » sinon — toutes les pistes ré-encodées d'un fichier sortent dans le même codec et
+ * la même disposition. `null` pour une piste que ce chemin ne porte pas.
+ */
+export function deliveredAudio(track: MatroskaTrack, file: MatroskaFile): string | null {
+  const delivery = audioDelivery(track, file);
+  if (delivery === "none") return null;
+  return delivery === "copy" ? audioCodecString(track) : "ré-encodé";
+}
+
+/**
+ * Passer de `from` à `to` exige-t-il de reconstruire le lecteur ?
+ *
+ * Oui quand le format livré change — d'un E-AC3 copié à un TrueHD ré-encodé, ou d'un AC-3 à un
+ * E-AC3, tous deux copiés : c'est exactement la transition qu'aucun tampon vivant de Safari ne
+ * survit (03/09/2026). Non entre deux pistes du même format, qui gardent le changement rapide
+ * par remplacement du contenu du tampon — 0,1 à 0,8 s mesurées sur iPhone. Jamais hors de la
+ * livraison par piste : l'unification rend tout format identique, et un navigateur qui sait
+ * remplacer son tampon n'a rien à reconstruire.
+ */
+export function audioSwitchNeedsRebuild(file: MatroskaFile, from: MatroskaTrack | null, to: MatroskaTrack): boolean {
+  if (!perTrack || rebuildable || !from) return false;
+  const before = deliveredAudio(from, file);
+  const after = deliveredAudio(to, file);
+  return before !== null && after !== null && before !== after;
 }
 
 /** Carried through at all — either untouched, or by being decoded and encoded again. */

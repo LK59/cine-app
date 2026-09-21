@@ -150,8 +150,8 @@ breaks Next's browser build, so the module is built for web and worker only (Nod
 and **Turbopack does not compile `new Worker(new URL("./x.worker.ts", import.meta.url))`** — it
 copied the TypeScript source into `static/media` as-is, a worker that would never have started.
 The gate and the build both pass on that; only reading what the build emitted shows it. Once TrueHD
-became playable, the per-file audio unification applies to it like DTS: in a file mixing TrueHD
-and Dolby, the Dolby track is re-encoded too.
+became playable, per-file audio unification made the Dolby track of 19 mixed films re-encoded too —
+which is what per-track delivery (below) undoes.
 
 **Track names are written once, in `src/lib/trackLabel.ts`** — by both players, and by the
 `<track>` elements the browser and the Apple TV display in their own pickers. The form is fixed:
@@ -332,9 +332,13 @@ Four rules, each of which cost a real failure:
 - **The WebKit reload in `changeAudio`** (`PlayerHost.tsx`). WebKit cannot open a second HLS session
   in one page; every other angle was tested and ruled out, and a full reload is the only thing that
   works. Its guard, on the other hand, was wrong for years — see `isWebKitEngine`.
-- **The per-file audio codec/channel unification** (`remuxer.ts`). It removes the mid-buffer
-  transition rather than trying to survive it, after every attempt at surviving it turned out to be
-  a guess about someone else's decoder.
+- **No audio format change inside a live buffer** (`remuxer.ts`). Every attempt at surviving that
+  transition turned out to be a guess about someone else's decoder. Two designs keep it from
+  happening, behind `perTrack`: per-track delivery (the default since 2026-09-22 — each track in
+  its best form, a change of *format* rebuilds the player on the new track, see DOC-TECH "Audio
+  delivery") and per-file unification (`perTrack = false` — every track re-encoded to one codec
+  when they cannot all pass as they are). `selectAudioTrack` refuses a format change outright
+  rather than attempt it.
 - **`CACHE_NAME` in `public/sw.js`.** Bumping it evicts every cached asset for every installed PWA;
   the version history in that file's header says why each bump happened. Since v12 the app's code lives in
   per-build caches (`cine-static-<build>`, the build number rides on `/sw.js?v=`): the current

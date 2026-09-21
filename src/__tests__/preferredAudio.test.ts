@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { preferredAudio } from "@/lib/webcodecs/remuxPlayback";
+import { openingAudio, preferredAudio } from "@/lib/webcodecs/remuxPlayback";
 import { chooseAudioTrack, isForcedTrack } from "@/lib/trackPreferences";
 import { playableAudio } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
@@ -207,5 +207,25 @@ describe("isForcedTrack", () => {
     for (const titre of ["Renforcement", "Forces spéciales : commentaire", "La force tranquille", "SDH", "Complet", null]) {
       expect(isForcedTrack(st(titre)), String(titre)).toBe(false);
     }
+  });
+});
+
+/**
+ * Un pipeline reconstruit ouvre sur la piste que le spectateur avait choisie — la livraison par
+ * piste reconstruit précisément *pour* passer à une piste d'un autre format, et ouvrir ailleurs
+ * puis y basculer referait la transition qu'on évite.
+ */
+describe("openingAudio", () => {
+  const f = () => fichier([piste(1, "A_EAC3", "fra", 6, true), piste(2, "A_TRUEHD", "eng", 8), piste(3, "A_REAL/COOK", "eng", 2)]);
+
+  it("ouvre sur la piste choisie quand elle joue ici", () => {
+    expect(openingAudio(f(), veut("fra"), 2)?.number).toBe(2);
+  });
+
+  it("retombe sur la préférence du compte sans choix, ou pour un choix injouable ou inconnu", () => {
+    expect(openingAudio(f(), veut("fra"))?.number).toBe(1);
+    expect(openingAudio(f(), veut("fra"), null)?.number).toBe(1);
+    expect(openingAudio(f(), veut("fra"), 3)?.number).toBe(1);
+    expect(openingAudio(f(), veut("fra"), 42)?.number).toBe(1);
   });
 });

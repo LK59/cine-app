@@ -314,7 +314,30 @@ Verified by ear on AC-3, E-AC3, DTS and DTS-HD MA, in 5.1 and 7.1.
 > it. Before the fix it was taken for a surround channel and mixed in, so the sound is quieter
 > afterwards. That is the correct behaviour, not a regression.
 
-### One codec per file
+### Audio delivery: per track, and a rebuild when the format changes
+
+**Default since 2026-09-22 (`perTrack` in `remuxer.ts`).** Each track is delivered in its best
+form — a Dolby track the browser takes is copied untouched, TrueHD, DTS and anything else it
+refuses is re-encoded. Changing to a track of the **same delivered format** keeps the fast path
+(the audio buffer's contents replaced: 0.1 to 0.8 s measured on iPhone). Changing to a track of
+**another format** — an E-AC3 VF copied, a TrueHD VO re-encoded — **rebuilds the player** at the
+same position, opening directly on the new track (`audioSwitchNeedsRebuild`,
+`RemuxPlayback.needsRebuildForAudio`, `openingAudio`, `ExperimentalPlayerHost`). It is the
+machinery that already brings the player back after a lost source; a film paused stays paused.
+
+Why: once TrueHD became decodable, 19 films mixing TrueHD and Dolby had their Dolby VF re-encoded
+— a second lossy generation, and work for the phone — and a re-encoded language change cost 2 to
+15 s on iPhone, where a recovery rebuild took 0.3 to 0.5 s.
+
+**What is not yet proven, and must be on a device before this ships**: every rebuild measured so
+far started from a source Safari had already lost, or from a minimised player. This one tears down
+a *healthy* MediaSource mid-playback. The 2026-09-03 attempt below, "rebuild the MediaSource",
+failed; the difference is that the recovery rebuild tears the whole pipeline down and builds a new
+one on the element, rather than swapping a MediaSource under a running one — which is why it is
+expected to hold, and why it has to be heard before being believed. Setting `perTrack = false`
+restores the per-file unification below, unchanged.
+
+### One codec per file (the fallback)
 
 **Mid-buffer codec transitions do not exist here.** If a file's tracks cannot all be delivered
 as-is, **they are all re-encoded** — decided at open, and frozen for the life of the MediaSource.

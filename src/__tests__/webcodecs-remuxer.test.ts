@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Remuxer, unifiedAudioCodec, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio } from "@/lib/webcodecs/remuxer";
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from "vitest";
+import {
+  Remuxer, unifiedAudioCodec, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio,
+  setPerTrackAudioDelivery, deliveredAudio, audioSwitchNeedsRebuild, setAudioBufferRebuildable, unifiedAudioChannels,
+} from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
@@ -198,11 +201,14 @@ describe("Remuxer track selection", () => {
     expect(plannedMimeTypes(VIDEO, flac).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
-  it("delivers every track in one codec when they cannot all keep their own", () => {
+  it("delivers every track in one codec when they cannot all keep their own — per-file unification", () => {
     // Utopia: DTS beside AC-3, on a player that takes AC-3 natively. Left alone, choosing the
     // other language changes what the audio buffer decodes by mid-playback — which this device
     // answers with "media failed to decode", closing the MediaSource and taking the picture with
-    // it. So both are delivered re-encoded and the codec never changes.
+    // it. So both are delivered re-encoded and the codec never changes. This is the mode kept
+    // behind setPerTrackAudioDelivery(false) since per-track delivery became the default.
+    setPerTrackAudioDelivery(false);
+    onTestFinished(() => setPerTrackAudioDelivery(true));
     const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
     const ac3 = track({ number: 8, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 2 } });
     const file = { ...FILE, tracks: [VIDEO, dts, ac3] } as never;
@@ -213,6 +219,44 @@ describe("Remuxer track selection", () => {
     expect(plannedMimeTypes(VIDEO, ac3, file).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
     // And the track that was already going to be re-encoded is unaffected.
     expect(audioDelivery(dts, file)).toBe("transcode");
+  });
+
+  it("delivers each track in its best form, and says which changes need a rebuild — per-track delivery", () => {
+    // Braveheart, 21/09/2026: E-AC3 VF beside a TrueHD VO. Unified, the VF was re-encoded — a
+    // second lossy generation of a track that played untouched the day before. Per track, the VF
+    // is copied, the VO re-encoded, and switching between them rebuilds the player.
+    const eac3 = track({ number: 2, type: "audio", codecId: "A_EAC3", audio: { sampleRate: 48000, channels: 6 } });
+    const trueHd = track({ number: 3, type: "audio", codecId: "A_TRUEHD", language: "eng", audio: { sampleRate: 48000, channels: 8 } });
+    const dts = track({ number: 4, type: "audio", codecId: "A_DTS", language: "eng", audio: { sampleRate: 48000, channels: 6 } });
+    const eac3Eng = track({ number: 5, type: "audio", codecId: "A_EAC3", language: "eng", audio: { sampleRate: 48000, channels: 2 } });
+    const ac3 = track({ number: 6, type: "audio", codecId: "A_AC3", language: "eng", audio: { sampleRate: 48000, channels: 6 } });
+    const file = { ...FILE, tracks: [VIDEO, eac3, trueHd, dts, eac3Eng, ac3] } as never;
+
+    expect(unifiedAudioCodec(file)).toBeNull();
+    expect(audioDelivery(eac3, file)).toBe("copy");
+    expect(plannedMimeTypes(VIDEO, eac3, file).audio).toBe('audio/mp4; codecs="ec-3"');
+    expect(deliveredAudio(eac3, file)).toBe("ec-3");
+    expect(deliveredAudio(trueHd, file)).toBe("ré-encodé");
+
+    // A change of delivered format rebuilds; the same format keeps the fast buffer change —
+    // including two re-encoded tracks (one codec, one layout) and two E-AC3 of different layouts,
+    // measured fine on an iPhone ("2001", 6 → 2 channels, 0.1 to 0.8 s).
+    expect(audioSwitchNeedsRebuild(file, eac3, trueHd)).toBe(true);
+    expect(audioSwitchNeedsRebuild(file, trueHd, eac3)).toBe(true);
+    expect(audioSwitchNeedsRebuild(file, eac3, ac3)).toBe(true);
+    expect(audioSwitchNeedsRebuild(file, trueHd, dts)).toBe(false);
+    expect(audioSwitchNeedsRebuild(file, eac3, eac3Eng)).toBe(false);
+
+    // The re-encoded tracks share a layout between them; the copied ones keep their own.
+    expect(unifiedAudioChannels(file)).toBe(8);
+
+    // Neither mode that makes formats agree ever asks for a rebuild.
+    setPerTrackAudioDelivery(false);
+    expect(audioSwitchNeedsRebuild(file, eac3, trueHd)).toBe(false);
+    setPerTrackAudioDelivery(true);
+    setAudioBufferRebuildable(true);
+    expect(audioSwitchNeedsRebuild(file, eac3, trueHd)).toBe(false);
+    setAudioBufferRebuildable(false);
   });
 
   it("leaves a file whose tracks already agree completely alone", () => {

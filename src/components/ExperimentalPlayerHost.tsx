@@ -465,6 +465,13 @@ export function ExperimentalPlayerHost({
    * language. These outlive the pipeline because they belong to the viewer, not to it.
    */
   const wantedAudioRef = useRef<number | null>(null);
+  /**
+   * Un changement de piste qui passe par une reconstruction du lecteur : ce qu'il faut pour en
+   * rendre compte une fois le nouveau pipeline prêt, et s'il faut le laisser en pause — un
+   * spectateur qui change de langue sur un film arrêté ne veut pas qu'il reparte tout seul.
+   */
+  const pendingSwitchRef = useRef<{ from: number | null; fromLabel: string; to: number; startedAt: number } | null>(null);
+  const keepPausedRef = useRef(false);
   const wantedSubtitleRef = useRef<number | null>(null);
   /**
    * The subtitle file being shown, when it is one that came from beside the film rather than
@@ -561,12 +568,19 @@ export function ExperimentalPlayerHost({
       fromLabel: string,
       to: number,
       startedAt: number,
-      playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined
+      playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined,
+      /**
+       * « tampon » : le contenu du tampon audio remplacé, le lecteur continue. « reconstruction » :
+       * le format livré changeait, le lecteur a été reconstruit sur la nouvelle piste — voir
+       * `audioSwitchNeedsRebuild`. Les deux coûtent différemment, et c'est ce qu'on veut lire.
+       */
+      via: "tampon" | "reconstruction" = "tampon"
     ) => {
       reportPlayback("audio", {
         ...describeFileRef.current(),
         from: from ?? -1,
         to,
+        via,
         /**
          * Les deux pistes décrites, et pas seulement numérotées.
          *
@@ -1054,6 +1068,31 @@ export function ExperimentalPlayerHost({
       setCurrentSubtitle(wantedSubtitle);
       setCurrentAudio(playback.currentAudioTrack);
       declareReady();
+      // Un changement de piste qui a demandé cette reconstruction : il se termine ici, sur la
+      // piste voulue, et c'est ici qu'on sait combien il a coûté.
+      const pendingSwitch = pendingSwitchRef.current;
+      if (pendingSwitch) {
+        pendingSwitchRef.current = null;
+        reportAudioSwitch(pendingSwitch.from, pendingSwitch.fromLabel, pendingSwitch.to, pendingSwitch.startedAt, playback, "reconstruction");
+      }
+      if (
+        wantedAudio !== null &&
+        wantedAudio !== playback.currentAudioTrack &&
+        playback.needsRebuildForAudio(wantedAudio)
+      ) {
+        // La piste voulue n'a pas le format de celle sur laquelle on a ouvert : on reconstruit
+        // dessus, jamais de changement de format dans ce tampon. Rare — l'ouverture et l'écran
+        // choisissent avec la même fonction —, mais un tampon qui meurt ne l'est jamais assez.
+        pendingSwitchRef.current = {
+          from: playback.currentAudioTrack,
+          fromLabel: playback.diagnostics["Audio"] ?? "",
+          to: wantedAudio,
+          startedAt: Date.now(),
+        };
+        wantedAudioRef.current = wantedAudio;
+        restart(startSeconds, `piste ${wantedAudio} dans un autre format audio que celle ouverte — reconstruction sur elle`);
+        return;
+      }
       if (wantedAudio !== null && wantedAudio !== playback.currentAudioTrack) {
         wantedAudioRef.current = wantedAudio;
         setSwitchingAudio(true);
@@ -1097,6 +1136,11 @@ export function ExperimentalPlayerHost({
         element.removeEventListener("ended", onEnded);
       });
 
+      // Reconstruit pour un changement de piste pendant une pause : il reste en pause.
+      if (keepPausedRef.current) {
+        keepPausedRef.current = false;
+        return;
+      }
       await element.play().catch(() => {});
     };
 
@@ -1110,6 +1154,10 @@ export function ExperimentalPlayerHost({
      * Matroska container this player never opens here; those files carry one audio track.
      */
     const startDirect = async (element: HTMLVideoElement) => {
+      // Un changement de piste qui attendait une reconstruction native n'a plus d'objet ici : ce
+      // chemin choisit sa piste lui-même, et ne doit pas hériter d'une pause ou d'un compte rendu.
+      pendingSwitchRef.current = null;
+      keepPausedRef.current = false;
       pathRef.current = "direct";
       setPath("direct");
       setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
@@ -1179,6 +1227,10 @@ export function ExperimentalPlayerHost({
     let engineStarted = false;
 
     const startEngine = async (reason: string | null) => {
+      // Un changement de piste qui attendait une reconstruction native n'a plus d'objet ici : ce
+      // chemin choisit sa piste lui-même, et ne doit pas hériter d'une pause ou d'un compte rendu.
+      pendingSwitchRef.current = null;
+      keepPausedRef.current = false;
       setPathReason(reason);
       // Only now is this refusal real. The native path would have shown this file's HDR without
       // converting anything; it is landing on the canvas that makes tone mapping — and therefore
@@ -1290,6 +1342,9 @@ export function ExperimentalPlayerHost({
       // position de reprise. La donner ici évite le changement de piste immédiat qui suivait le
       // démarrage, et qui était le plus cher de tous ceux qu'on a mesurés.
       audioPreferences: playbackState?.preferences ?? null,
+      // Ce que le spectateur a choisi, si ce pipeline en remplace un : on ouvre dessus, au lieu
+      // d'ouvrir ailleurs puis d'y basculer. Voir `openingAudio`.
+      audioTrackNumber: wantedAudioRef.current,
       onError: (message, kind) => {
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
@@ -1788,6 +1843,23 @@ export function ExperimentalPlayerHost({
                   // La piste *demandée*, et non celle qui joue : c'est elle qu'on va chercher.
                   audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, id),
                 });
+                return;
+              }
+              // Une piste d'un autre format que celle qui joue — un TrueHD ré-encodé après une VF
+              // Dolby copiée, par exemple : aucun tampon vivant ne survit à ce changement sur
+              // WebKit, alors le lecteur est reconstruit à la même position, directement sur elle.
+              // C'est le mécanisme qui le relève déjà d'une coupure. Voir `audioSwitchNeedsRebuild`.
+              if (path === "remux" && remuxRef.current?.needsRebuildForAudio(id)) {
+                pendingSwitchRef.current = {
+                  from: remuxRef.current.currentAudioTrack ?? null,
+                  fromLabel: remuxRef.current.diagnostics["Audio"] ?? "",
+                  to: id,
+                  startedAt: Date.now(),
+                };
+                keepPausedRef.current = videoElRef.current?.paused ?? false;
+                wantedAudioRef.current = id;
+                setCurrentAudio(id);
+                restart(positionRef.current, `piste ${id} dans un autre format audio — reconstruction sur elle`);
                 return;
               }
               setCurrentAudio(id);
