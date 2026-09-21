@@ -1,6 +1,7 @@
 "use client";
 
 import type { CinemaRoute } from "@/lib/cinemaRoute";
+import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 
 /**
  * La grille du bureau est-elle l'écran du dessus ?
@@ -40,7 +41,8 @@ export function coversGrid(route: CinemaRoute): boolean {
  * repartirait de la première affiche. Voir `CinemaClient`.
  */
 export function gridIsTop(route: CinemaRoute, playerMode: string): boolean {
-  return !coversGrid(route) && playerMode !== "full";
+  // Le même fait que les fiches, par la même fonction — voir DECISIONS.md § 7.3.
+  return !coversGrid(route) && !playerHoldsKeyboard({ mode: playerMode });
 }
 
 /**

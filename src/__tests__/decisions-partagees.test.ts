@@ -417,6 +417,23 @@ describe("une seule façon de savoir que le lecteur tient le clavier", () => {
   });
 });
 
+describe("le lecteur plein écran, une seule façon de le demander", () => {
+  // Le dernier à le lire en direct était la grille du bureau (« / », les flèches), par
+  // `gridIsTop`. Aucun écran du cinéma ne compare plus `mode` à "full" lui-même.
+  it("personne dans le cinéma ne compare `mode` à \"full\" à la main", () => {
+    const hits = (readdirSync("src", { recursive: true }) as string[])
+      .map((f) => `src/${f}`)
+      .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"))
+      .filter((f) => f.startsWith("src/components/cinema/") || f.startsWith("src/lib/cinema"))
+      .filter((f) => /[mM]ode\s*[!=]==\s*"full"/.test(lire(f)));
+    expect(hits).toEqual([]);
+  });
+
+  it("gridIsTop passe par playerHoldsKeyboard", () => {
+    expect(lire("src/lib/cinemaGridTop.ts")).toContain("playerHoldsKeyboard(");
+  });
+});
+
 describe("une seule prise de pointeur", () => {
   // Règle 3 de « The sheet lifecycle » : la capture passe par `usePointerCapture`, qui la rend au
   // démontage et ne lève pas sur un pointeur déjà parti. Le carrousel de la bannière la prenait

@@ -234,13 +234,14 @@ dessiné derrière elle (`swapsInPlace`).
 plein écran.
 
 **Porteur.** `playerHoldsKeyboard(playback)` (`src/lib/playerKeyboard.ts`). Appelants :
-`CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`.
+`CinemaMobileDetail`, `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`, et
+`gridIsTop` (`src/lib/cinemaGridTop.ts`) pour la grille du bureau — flèches, « / », carte centrée.
 
 **Corrigé le 21/09.** Les fiches du bureau le savaient, chacune avec son `playback.mode === "full"` ;
 la fiche du téléphone non — Échap sur une tablette à clavier refermait le lecteur *et* la fiche.
 
-**Reste connu.** Le raccourci « / » de `CinemaClient` lit encore `playback.mode === "full"` en
-direct : même fait, dans un fichier qu'un autre chantier touchait ce jour-là.
+Le raccourci « / » de `CinemaClient`, dernier à lire `mode === "full"` en direct, passe depuis le
+21/09 au soir par `gridIsTop`, qui passe par elle.
 
 **Tests.** `cinema-mobile-detail-keys.test.tsx`, `decisions-partagees.test.ts`.
 
