@@ -92,7 +92,7 @@ describe("changer de piste sur un fichier sans index", () => {
     expect(playback.needsRebuildForAudio(EAC3.number)).toBe(false);
     // Ni de rechargement du son : il relirait le fichier depuis son premier octet.
     await playback.selectAudioTrack(AAC_ENG.number);
-    expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("index"));
+    expect(onWarning).toHaveBeenCalledWith({ code: "noIndexAudio" });
     expect(remuxer.setAudioTrack).not.toHaveBeenCalled();
     expect(mse.refillAudio).not.toHaveBeenCalled();
     expect(playback.currentAudioTrack).toBe(AAC.number);

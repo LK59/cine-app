@@ -9,6 +9,7 @@ import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
+import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -393,6 +394,18 @@ export function ExperimentalPlayerHost({
   const showWarning = useCallback((text: string | null) => {
     setWarning(text ? { text, at: Date.now() } : null);
   }, []);
+  /**
+   * Un avertissement du pipeline : un code, dit dans la langue du spectateur ; le détail
+   * technique au journal. Voir `PlayerWarning`.
+   */
+  const showPipelineWarning = useCallback(
+    (warning: unknown) => {
+      if (!isPlayerWarning(warning)) return;
+      trace(`avertissement : ${warning.code}${warning.detail ? ` — ${warning.detail}` : ""}`);
+      showWarning(tRef.current(`player.warnings.${warning.code}`));
+    },
+    [showWarning]
+  );
   const [closing, setClosing] = useState(false);
   /**
    * L'arrivée du lecteur.
@@ -1389,7 +1402,7 @@ export function ExperimentalPlayerHost({
           }
           fallToStable(message);
         }),
-        engine.on("warning", (payload) => showWarning(typeof payload === "string" ? payload : null)),
+        engine.on("warning", showPipelineWarning),
         // Une image HDR sans conversion tonale est délavée et fausse sur un écran standard, et
         // aucun bandeau ne rattrape ça. Le lecteur du serveur, lui, sait convertir : on lui rend
         // la main plutôt que de laisser regarder un film aux mauvaises couleurs.
@@ -1550,7 +1563,7 @@ export function ExperimentalPlayerHost({
         }
         fallToStable(message);
       },
-      onWarning: (message) => showWarning(message),
+      onWarning: showPipelineWarning,
       onStarting: (at) => setStartingAt(at),
     })
       .then((probe) => {
@@ -1612,8 +1625,9 @@ export function ExperimentalPlayerHost({
     };
   // `reportAudioSwitch` est un `useCallback` à dépendances vides : son identité ne change jamais,
   // donc l'ajouter ici ne peut pas relancer la construction du pipeline. C'est la seule raison
-  // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, chooseSubtitle, spendRebuild, reportAudioSwitch]);
+  // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`. Même
+  // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi.
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure

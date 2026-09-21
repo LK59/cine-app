@@ -1413,6 +1413,14 @@
       "notifInstall": "Sur iPhone, ajoutez d'abord l'application à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis activez les notifications depuis Compte.",
       "doneTitle": "C'est prêt",
       "doneText": "Vous retrouverez tous ces réglages dans Compte, quand vous voulez."
+    },
+    "warnings": {
+      "noIndexSeek": "Ce fichier ne permet pas d'avancer ou de reculer : il n'a pas d'index.",
+      "noIndexAudio": "Ce fichier ne permet pas de changer de piste audio en cours de lecture : il n'a pas d'index.",
+      "audioTrackRefused": "Cette piste audio n'a pas pu être ouverte : la précédente continue.",
+      "noSound": "Pas de son sur cette piste.",
+      "audioInterrupted": "Le son s'est interrompu.",
+      "noAudioDecoder": "Cette piste audio ne peut pas être lue ici."
     }
   },
   "cinema": {

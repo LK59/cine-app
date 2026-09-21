@@ -1413,6 +1413,14 @@
       "notifInstall": "En iPhone, añade primero la aplicación a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) y activa las notificaciones desde Cuenta.",
       "doneTitle": "Todo listo",
       "doneText": "Encontrarás todos estos ajustes en Cuenta, cuando quieras."
+    },
+    "warnings": {
+      "noIndexSeek": "Este archivo no permite avanzar ni retroceder: no tiene índice.",
+      "noIndexAudio": "Este archivo no permite cambiar de pista de audio durante la reproducción: no tiene índice.",
+      "audioTrackRefused": "No se pudo abrir esta pista de audio: sigue la anterior.",
+      "noSound": "Sin sonido en esta pista.",
+      "audioInterrupted": "El sonido se ha interrumpido.",
+      "noAudioDecoder": "Esta pista de audio no se puede reproducir aquí."
     }
   },
   "cinema": {

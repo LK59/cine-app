@@ -7,6 +7,7 @@
 // Anything that goes wrong is reported, never worked around silently. A player that quietly falls
 // back leaves you unable to tell a path that works from a path that was never used.
 
+import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { audioBufferRebuildable } from "./remuxer";
 import { trace } from "./trace";
@@ -94,7 +95,7 @@ export interface MseCallbacks {
   /** Subtitle lines found in the stretch of file just read, already timed on the player's clock. */
   onSubtitles?: (cues: TrackedCue[]) => void;
   /** Something was refused but playback continues — a seek the file cannot serve, typically. */
-  onWarning?: (message: string) => void;
+  onWarning?: (warning: PlayerWarning) => void;
   /**
    * Play has been pressed and the clock has not moved yet, or null once it has.
    *
@@ -937,7 +938,7 @@ export class MseSource {
     // reading forward would look like the player thinking very hard and then, minutes later,
     // arriving — so it is refused, and playback carries on where it was.
     if (!this.remuxer.seekable && playerSeconds > 1) {
-      this.callbacks.onWarning?.("Ce fichier n'a pas d'index de recherche : la navigation n'est pas possible.");
+      this.callbacks.onWarning?.(playerWarning("noIndexSeek"));
       if (this.lastSeekTarget >= 0) this.video.currentTime = this.lastSeekTarget;
       return;
     }

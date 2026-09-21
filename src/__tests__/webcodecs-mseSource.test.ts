@@ -666,7 +666,7 @@ describe("MseSource", () => {
     // Starting over from the beginning and reading forward — which is what the fallback did —
     // looks like the player thinking very hard and arriving minutes later.
     expect(remuxer.seeks).toEqual([]);
-    expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("index"));
+    expect(onWarning).toHaveBeenCalledWith({ code: "noIndexSeek" });
     expect(onError).not.toHaveBeenCalled();
   });
 

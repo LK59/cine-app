@@ -145,7 +145,7 @@ function info(over: Info = {}): Info {
 
 type Callbacks = {
   onError: (message: string, kind?: "network" | "playback") => void;
-  onWarning: (message: string) => void;
+  onWarning: (warning: { code: string; detail?: string }) => void;
   onStarting: (at: number | null) => void;
   startSeconds: number;
 };
@@ -952,11 +952,11 @@ describe("le chemin canvas", () => {
     vi.useFakeTimers();
     mount();
     await act(async () => {});
-    act(() => probes[0].onWarning("Impossible d'atteindre cette position dans le fichier."));
-    expect(screen.getByText(/Impossible d'atteindre/)).toBeTruthy();
+    act(() => probes[0].onWarning({ code: "noIndexSeek" }));
+    expect(screen.getByText("noIndexSeek")).toBeTruthy();
 
     await act(async () => void vi.advanceTimersByTime(6100));
-    expect(screen.queryByText(/Impossible d'atteindre/)).toBeNull();
+    expect(screen.queryByText("noIndexSeek")).toBeNull();
     vi.useRealTimers();
   });
 
@@ -966,12 +966,12 @@ describe("le chemin canvas", () => {
     vi.useFakeTimers();
     mount();
     await act(async () => {});
-    act(() => probes[0].onWarning("Reprise après un segment refusé."));
+    act(() => probes[0].onWarning({ code: "audioInterrupted" }));
     await act(async () => void vi.advanceTimersByTime(6100));
-    expect(screen.queryByText(/segment refusé/)).toBeNull();
+    expect(screen.queryByText("audioInterrupted")).toBeNull();
 
-    act(() => probes[0].onWarning("Reprise après un segment refusé."));
-    expect(screen.getByText(/segment refusé/)).toBeTruthy();
+    act(() => probes[0].onWarning({ code: "audioInterrupted" }));
+    expect(screen.getByText("audioInterrupted")).toBeTruthy();
     vi.useRealTimers();
   });
 
@@ -1005,8 +1005,8 @@ describe("le chemin canvas", () => {
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
 
-    emit("warning", "son dégradé");
-    expect(screen.getByText("son dégradé")).toBeTruthy();
+    emit("warning", { code: "noSound", detail: "0 bloc décodé" });
+    expect(screen.getByText("noSound")).toBeTruthy();
     expect(onFallback).not.toHaveBeenCalled();
 
     // Nothing has played yet, so this one is answered by handing the file over rather than by
@@ -1200,6 +1200,24 @@ describe("relu le 22/09/2026", () => {
     expect(screen.queryByText("loading")).toBeNull();
     expect(screen.queryByText("stillWorking")).toBeNull();
     vi.useRealTimers();
+  });
+
+  it("dit un avertissement du pipeline dans la langue du spectateur, sans son détail technique", async () => {
+    // Relevé le 21/09/2026 : le pipeline écrivait ses avertissements en français, et un compte
+    // en anglais les lisait tels quels. Il envoie maintenant un code ; le détail part au journal.
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    act(() => probes[0].onWarning({ code: "audioTrackRefused", detail: "InternalAudioEncoderCocoa encoding failed" }));
+    expect(screen.getByText("audioTrackRefused")).toBeTruthy();
+    expect(screen.queryByText(/InternalAudioEncoderCocoa/)).toBeNull();
+  });
+
+  it("ignore ce qui n'est pas un avertissement connu", async () => {
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    emit("warning", "une phrase nue d'une ancienne version");
+    expect(screen.queryByText(/phrase nue/)).toBeNull();
   });
 });
 

@@ -1413,6 +1413,14 @@
       "notifInstall": "Füge die App auf dem iPhone zuerst zum Home-Bildschirm hinzu (Teilen → Zum Home-Bildschirm) und aktiviere dann die Benachrichtigungen unter Konto.",
       "doneTitle": "Alles bereit",
       "doneText": "Alle diese Einstellungen findest du jederzeit unter Konto."
+    },
+    "warnings": {
+      "noIndexSeek": "In dieser Datei kann nicht gespult werden: sie hat keinen Index.",
+      "noIndexAudio": "Bei dieser Datei kann die Tonspur während der Wiedergabe nicht gewechselt werden: sie hat keinen Index.",
+      "audioTrackRefused": "Diese Tonspur konnte nicht geöffnet werden: die vorherige läuft weiter.",
+      "noSound": "Kein Ton auf dieser Spur.",
+      "audioInterrupted": "Der Ton wurde unterbrochen.",
+      "noAudioDecoder": "Diese Tonspur kann hier nicht abgespielt werden."
     }
   },
   "cinema": {

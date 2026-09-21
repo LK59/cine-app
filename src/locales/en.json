@@ -1413,6 +1413,14 @@
       "notifInstall": "On iPhone, first add the app to your Home Screen (Share → Add to Home Screen), then turn notifications on from Account.",
       "doneTitle": "You're all set",
       "doneText": "All of these settings are in Account, whenever you want."
+    },
+    "warnings": {
+      "noIndexSeek": "This file can't be skipped through: it has no index.",
+      "noIndexAudio": "This file can't switch audio tracks during playback: it has no index.",
+      "audioTrackRefused": "This audio track couldn't be opened: the previous one keeps playing.",
+      "noSound": "No sound on this track.",
+      "audioInterrupted": "The sound was interrupted.",
+      "noAudioDecoder": "This audio track can't be played here."
     }
   },
   "cinema": {

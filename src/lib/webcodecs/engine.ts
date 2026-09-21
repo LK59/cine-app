@@ -12,6 +12,7 @@
 // Failures are surfaced, never worked around: this player exists to find out whether a file can
 // be decoded directly, so a silent fallback to another pipeline would defeat the purpose.
 
+import { playerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import { stripSubtitleMarkup } from "./subtitleMarkup";
 import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
@@ -341,7 +342,7 @@ export class PlaybackEngine {
       this.audioDiagnostic = reason;
       if (!this.silenceReported) {
         this.silenceReported = true;
-        this.emit("warning", `Pas de son : ${reason}.`);
+        this.emit("warning", playerWarning("noSound", reason));
       }
     };
     this.audio.setVolume(this.volume, this.muted);
@@ -374,7 +375,7 @@ export class PlaybackEngine {
       // The iterator throwing because we disposed its Input on purpose is a shutdown, not a
       // failure — and it must never replace the picture with an error panel.
       if (generation !== this.softwareAudioGeneration || /disposed/i.test(message)) return;
-      this.emit("warning", `Décodage audio logiciel interrompu : ${message}`);
+      this.emit("warning", playerWarning("audioInterrupted", message));
     }
   }
 
@@ -698,7 +699,7 @@ export class PlaybackEngine {
         this.audioDiagnostic = reason;
         if (!this.silenceReported) {
           this.silenceReported = true;
-          this.emit("warning", `Pas de son : ${reason}.`);
+          this.emit("warning", playerWarning("noSound", reason));
         }
       };
       this.audio.setVolume(this.volume, this.muted);
@@ -728,7 +729,10 @@ export class PlaybackEngine {
     // same codec plays fine at startup would be incoherent.
     const configured = await this.configureAudioFor(track, resumeAt);
     if (!configured) {
-      this.emit("warning", unsupportedReason(track) ?? `Aucun décodeur disponible pour l'audio ${track.codecId.replace("A_", "")}.`);
+      this.emit(
+        "warning",
+        playerWarning("noAudioDecoder", unsupportedReason(track) ?? `aucun décodeur pour ${track.codecId}`)
+      );
       return;
     }
     await this.seek(resumeAt);
@@ -1055,13 +1059,16 @@ export class PlaybackEngine {
     if (performance.now() - this.playStartedAt < 5000) return;
     this.silenceReported = true;
     if (!this.audio) {
-      this.emit("warning", `Pas de son : aucune sortie audio créée${this.audioDiagnostic ? ` (${this.audioDiagnostic})` : ""}.`);
+      this.emit(
+        "warning",
+        playerWarning("noSound", `aucune sortie audio créée${this.audioDiagnostic ? ` (${this.audioDiagnostic})` : ""}`)
+      );
       return;
     }
     if (this.audioChunks === 0) {
       this.emit(
         "warning",
-        `Pas de son : ${this.audioFed} blocs fournis, 0 décodé (${this.audioPath}, ${this.audio.state}).`
+        playerWarning("noSound", `${this.audioFed} blocs fournis, 0 décodé (${this.audioPath}, ${this.audio.state})`)
       );
     }
   }
@@ -1081,7 +1088,7 @@ export class PlaybackEngine {
       .then(async (ok) => {
         if (this.destroyed) return;
         if (!ok) {
-          this.emit("warning", `Pas de son : ${this.audioDiagnostic}.`);
+          this.emit("warning", playerWarning("noSound", this.audioDiagnostic ?? undefined));
           this.audioTrack = null;
           return;
         }

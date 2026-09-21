@@ -4,6 +4,7 @@
 // selection, same subtitle lookup — so the player component branches once on which path was
 // chosen and not again on every operation.
 
+import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
 import { fromMatroskaTrack } from "./engineTrack";
@@ -30,7 +31,7 @@ export interface RemuxPlaybackOptions {
   streamUrl: string;
   startSeconds: number;
   onError: (message: string, kind?: "network" | "playback") => void;
-  onWarning?: (message: string) => void;
+  onWarning?: (warning: PlayerWarning) => void;
   /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
   onStarting?: (startedAt: number | null) => void;
   /**
@@ -447,9 +448,7 @@ export class RemuxPlayback {
     // Refusé comme un saut l'est sur ce fichier, et pour la même raison : la piste d'avant
     // continue de jouer, et le spectateur sait pourquoi. Voir `switchNeedsIndex`.
     if (this.switchNeedsIndex) {
-      this.options.onWarning?.(
-        "Ce fichier n'a pas d'index de recherche : la piste audio ne peut pas être changée en cours de lecture."
-      );
+      this.options.onWarning?.(playerWarning("noIndexAudio"));
       return;
     }
     // Refusé net plutôt que tenté : changer de format dans un tampon vivant est précisément ce
@@ -490,7 +489,7 @@ export class RemuxPlayback {
       // Saying so beats a player that quietly stops producing sound and loads for ever.
       this.audioTrack = previous;
       this.options.onWarning?.(
-        `Cette piste audio n'a pas pu être ouverte : ${error instanceof Error ? error.message : "raison inconnue"}`
+        playerWarning("audioTrackRefused", error instanceof Error ? error.message : "raison inconnue")
       );
       // The old track never stopped working, so the picture has no reason to stay still.
       mse.releaseAudioHold();
