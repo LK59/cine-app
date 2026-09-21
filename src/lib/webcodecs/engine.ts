@@ -16,14 +16,13 @@ import { HttpByteSource, type ByteSource } from "./byteSource";
 import { stripSubtitleMarkup } from "./subtitleMarkup";
 import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
 import { SampleReader } from "./sampleReader";
-import { audioConfigCandidates, audioConfigFor, videoConfigFor, unsupportedReason } from "./codecConfig";
+import { audioConfigCandidates, audioConfigFor, joinBytes, nalLengthSize, strayUnits, videoConfigFor, unsupportedReason } from "./codecConfig";
 import { createRenderer, type FrameRenderer } from "./renderer";
 import type { AudioConfig } from "./codecConfig";
 import { AudioOutput, WallClock } from "./audioOutput";
 import { SoftwareAudioTrack } from "./softwareAudio";
 import { trace } from "./trace";
 import { fromMatroskaTrack } from "./engineTrack";
-import { withTrueParameterSets } from "./hvcc";
 
 export type EngineEventName =
   | "loadedmetadata"
@@ -222,6 +221,8 @@ export class PlaybackEngine {
    * are a few megabytes, against a hundred for the same number of decoded 4K frames.
    */
   private pendingVideo: MediaSample[] = [];
+  /** Units of a block with no picture, waiting to open the next picture. See strayUnits. */
+  private strayAhead: Uint8Array[] = [];
   /**
    * Subtitle lines per track, read ahead of the playhead and dropped as they expire.
    *
@@ -403,9 +404,6 @@ export class PlaybackEngine {
 
     this.videoTrack = this.file.tracks.find((t) => t.type === "video" && t.isEnabled) ?? null;
     if (!this.videoTrack) throw new Error("Ce fichier n'a pas de piste vidéo lisible.");
-    // Le même en-tête que le remultiplexage : celui que les images justifient. `VideoDecoder`
-    // le reçoit comme `description`, et ne lit pas davantage les paramètres portés par les images.
-    this.videoTrack = await withTrueParameterSets(this.source, this.file, this.videoTrack);
 
     const audioCandidates = this.file.tracks.filter((t) => t.type === "audio" && t.isEnabled);
     // An explicit choice always wins. Otherwise the default track is preferred, but only if the
@@ -766,6 +764,7 @@ export class PlaybackEngine {
     for (const frame of this.frames) frame.close();
     this.frames.length = 0;
     this.pendingVideo = [];
+    this.strayAhead = [];
     this.pendingCues.clear();
     this.activeCue = null;
     this.emit("subtitle", null);
@@ -865,7 +864,7 @@ export class PlaybackEngine {
         // decoder and waiting is the right answer.
         if (!this.videoHasRoom && this.pendingVideo.length >= 120) return;
 
-        const sample = await this.reader.next();
+        let sample = await this.reader.next();
         if (!sample) {
           this.endOfFile = true;
           await this.videoDecoder?.flush().catch(() => {});
@@ -874,6 +873,19 @@ export class PlaybackEngine {
         }
 
         if (this.videoTrack && sample.trackNumber === this.videoTrack.number) {
+          // A block with no picture in it is not a sample (see strayUnits). What opens the next
+          // picture travels with it; what closes the previous one is dropped, since that picture
+          // may already be decoding and the decoder ignores Dolby Vision metadata anyway.
+          const track = this.videoTrack;
+          const stray = strayUnits(sample.data, track.codecId, nalLengthSize(track.codecId, track.codecPrivate));
+          if (stray) {
+            this.strayAhead.push(...stray.after);
+            continue;
+          }
+          if (this.strayAhead.length > 0) {
+            sample = { ...sample, data: joinBytes([...this.strayAhead, sample.data]) };
+            this.strayAhead = [];
+          }
           if (this.videoHasRoom) this.decodeVideoSample(sample);
           else this.pendingVideo.push(sample);
         } else if (this.subtitleTracksByNumber.has(sample.trackNumber)) {

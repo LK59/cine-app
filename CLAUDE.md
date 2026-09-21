@@ -257,21 +257,19 @@ dictionaries' values.
   in the address.
 - **Sheets and panels leave through `useDelayedClose`**, which holds the address for the length of
   the animation. Anything closing by changing the route directly cuts its own animation short.
-- **The HEVC header the browser holds is always the one the next pictures need.** Under `hvc1`,
-  Safari reads parameter sets from the init segment **only**, never in-band. *Dirty Dancing*
-  (2026-09-21) broke that three ways: its Matroska `hvcC` disagrees with its first picture; it
-  brings a new PPS version (same id) at several keyframes (2.5 s, 7.6 s, 9.7 s, 20.1 s); and it
-  carries 441-byte packets holding **only** parameter sets, stamped with another picture's instant.
-  ffmpeg reads everything in-band and plays it; Safari failed a few seconds in — four rebuilds,
-  then the server player. Now: `withTrueParameterSets` builds the first header from the first
-  picture; parameter-set-only packets are folded into the picture that follows (`carriesPicture`);
-  and when a picture brings different parameters, `withHeaderChanges` cuts the fragment there and
-  sends a new init segment first, which MediaSource accepts mid-stream without a type change.
-  53 of 563 HEVC films here disagree with their header; most played anyway (*1917*) — only a
-  difference that matters to the decoder breaks. Two fixes shipped before this one targeted
-  symptoms (duplicate instants, then the first header only) and the film kept breaking: when a
-  fix does not hold, the diagnosis was incomplete — look at what the packets *are* before
-  reasoning about their timestamps. The technical panel shows "En-tête vidéo".
+- **A Matroska block is not always a picture.** *Dirty Dancing* (2026-09-21) slips, before three
+  of its CRA keyframes, a block holding VPS/SPS/PPS and a Dolby Vision RPU and **no slice** —
+  timed as a picture, at the instant of a real one — and the picture just before it is the only
+  one with no RPU: the muxer cut the access unit in the wrong place. Handed to Safari as a
+  sample, it closed the MediaSource at each of those keyframes; a rebuild *starting* on the
+  keyframe never saw the block, so each one played until the next. `strayUnits` puts the units
+  back (RPU and other suffix units onto the picture before, parameter sets onto the one after),
+  in the remuxer and the canvas engine alike. Three fixes shipped before it chased what the block
+  *caused* — duplicate instants, a "wrong" header, a mid-stream init segment — and were reverted
+  once the cause was found; Safari reads HEVC parameter sets in-band perfectly well (the film
+  played its first 2.5 s on a header that disagreed with its pictures). When a fix does not hold,
+  the diagnosis was incomplete: list the NAL units of every block around the failure, and check
+  each picture has exactly one of everything it should.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.

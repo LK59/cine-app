@@ -309,6 +309,69 @@ export function isRandomAccessPoint(data: Uint8Array, codecId: string, lengthSiz
 }
 
 /**
+ * A block with no picture in it, split into the units that belong to the picture before it and
+ * those that belong to the one after — or `null` when the block does carry a picture, or cannot
+ * be read (the container's word stands when there is nothing to check it against).
+ *
+ * Matroska means one block per picture, and *Dirty Dancing* (21/09/2026) breaks that: before
+ * three of its CRA keyframes sits a block holding VPS, SPS, PPS and a Dolby Vision RPU (NAL 62)
+ * and no slice, timed as though it were a picture — at the same instant as a real one. The
+ * picture just before it is the only one in the stream without an RPU: the muxer cut the access
+ * unit boundary in the wrong place, and that RPU is its. Handed to Safari as a sample of its own,
+ * the block closed the MediaSource at every keyframe it preceded, and a pipeline *starting* on
+ * the keyframe never saw it — which is why each rebuild played until the next one. Glued whole
+ * onto the next picture it is still wrong: an RPU is a suffix unit, and one ahead of a slice is
+ * illegal.
+ *
+ * So the access units are put back together by the rule HEVC itself states (7.4.2.4.4): suffix
+ * units — the RPU, suffix SEI, end of sequence — close the picture before; parameter sets and
+ * prefix SEI open the picture after. H.264 has no suffix units that matter here, so everything
+ * goes forward.
+ */
+export function strayUnits(
+  data: Uint8Array,
+  codecId: string,
+  lengthSize: number
+): { before: Uint8Array[]; after: Uint8Array[] } | null {
+  const hevc = codecId === "V_MPEGH/ISO/HEVC";
+  if (!hevc && codecId !== "V_MPEG4/ISO/AVC") return null;
+
+  const before: Uint8Array[] = [];
+  const after: Uint8Array[] = [];
+  for (let at = 0; at + lengthSize + 1 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) return null;
+    const header = data[at + lengthSize];
+    // Kept with its length prefix, so a unit is moved as the bytes a sample already holds.
+    const unit = data.subarray(at, at + lengthSize + length);
+    if (hevc) {
+      const type = (header >> 1) & 0x3f;
+      if (type <= 31) return null; // a slice: this block is a picture
+      const suffix = type === 36 || type === 37 || type === 38 || type === 40 || (type >= 45 && type <= 47) || type >= 56;
+      (suffix ? before : after).push(unit);
+    } else {
+      const type = header & 0x1f;
+      if (type >= 1 && type <= 5) return null;
+      after.push(unit);
+    }
+    at += lengthSize + length;
+  }
+  return before.length + after.length > 0 ? { before, after } : null;
+}
+
+/** Joins byte runs into one. */
+export function joinBytes(parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, part) => n + part.byteLength, 0));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.byteLength;
+  }
+  return out;
+}
+
+/**
  * The codec string for an AV1 track, from the configuration record Matroska already holds.
  *
  * `av01.P.LLT.DD` — profile, level, tier and bit depth. The specification allows a longer form

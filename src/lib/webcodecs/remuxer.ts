@@ -7,10 +7,9 @@
 // nothing and, unlike the WebCodecs path, hands the decoding back to the browser's own hardware
 // pipeline: no canvas, no per-frame JavaScript, no colour conversion, HDR handled natively.
 
-import { deriveDurations, assignDecodeTimes, PresentationDeduper } from "./decodeOrder";
-import { withTrueParameterSets, reconcileHvcc, carriesPicture } from "./hvcc";
+import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
-import { av1CodecString, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
+import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
@@ -133,12 +132,6 @@ export interface RemuxDiagnostics {
   presentationDelaySeconds: number;
   /** Pictures whose offset had to be clamped because the fixed delay was too small. Should be 0. */
   clampedSamples: number;
-  /** Pictures moved a millisecond because another already had their instant. See PresentationDeduper. */
-  nudgedSamples: number;
-  /** The file's HEVC header disagreed with its pictures, and was rebuilt from them. */
-  correctedHeader: boolean;
-  /** How many times the pictures brought new parameter sets mid-stream, each sent as a new init segment. */
-  headerChanges: number;
   /** The sound is being decoded and encoded again on the way through, rather than copied. */
   transcodedAudio: boolean;
   /** What it was re-encoded as, when it was. Not always AAC — see chooseTranscodeCodec. */
@@ -452,6 +445,8 @@ function transcodedAudioInfo(transcoder: AudioTranscoder, track: MatroskaTrack):
 export class Remuxer {
   private pendingVideo: MediaSample[] = [];
   private pendingAudio: MediaSample[] = [];
+  /** Units of a block with no picture, waiting to open the next picture. See strayUnits. */
+  private strayAhead: Uint8Array[] = [];
   /**
    * Where the last segment's decode timeline ended. Reporting only: decode times are absolute,
    * anchored per segment on its own earliest picture, so nothing is chained off this.
@@ -486,6 +481,20 @@ export class Remuxer {
    * Whether a decoder may start on this picture — which is not the same question as whether the
    * container called it a keyframe. See isRandomAccessPoint.
    */
+  /**
+   * A block that is not a picture, returned to the pictures it was cut from: its suffix units
+   * close the last picture read, provided it has not been handed over yet — it virtually never
+   * has, since the last few always wait on the reordering depth — and the rest opens the next.
+   */
+  private putBack(stray: { before: Uint8Array[]; after: Uint8Array[] }): void {
+    const last = this.pendingVideo.length - 1;
+    if (stray.before.length > 0 && last >= this.emitted) {
+      const previous = this.pendingVideo[last];
+      this.pendingVideo[last] = { ...previous, data: joinBytes([previous.data, ...stray.before]) };
+    }
+    this.strayAhead.push(...stray.after);
+  }
+
   private startsHere(sample: MediaSample): boolean {
     return sample.isKey && isRandomAccessPoint(sample.data, this.videoTrack.codecId, this.nalLength);
   }
@@ -500,22 +509,6 @@ export class Remuxer {
   private needKeyframe = false;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
-  /** L'en-tête HEVC a été reconstruit depuis les images — voir `withTrueParameterSets`. */
-  correctedHeader = false;
-  /**
-   * L'en-tête HEVC que le navigateur tient en ce moment — celui du dernier segment
-   * d'initialisation envoyé. Une image qui apporte d'autres paramètres en fait envoyer un
-   * nouveau : sous `hvc1`, Safari ne lit ses paramètres que là. Voir `buildVideo`.
-   */
-  private headerPrivate: Uint8Array | null = null;
-  /** Ce qu'il faut pour reconstruire l'entrée d'échantillon quand l'en-tête change. */
-  private sampleEntryInputs: { width: number; height: number; dolbyVision: { type: string; record: Uint8Array } | null } | null = null;
-  /** Combien de fois l'en-tête a changé en cours de lecture — pour le panneau technique. */
-  private headerChanges = 0;
-  /** Les paramètres d'un paquet qui ne portait qu'eux, en attente de l'image qui les suit. */
-  private carriedParameterSets: Uint8Array | null = null;
-  /** Deux images au même instant : voir `PresentationDeduper`. */
-  private readonly presentations = new PresentationDeduper();
   private sequence = 1;
   private done = false;
 
@@ -523,7 +516,7 @@ export class Remuxer {
     private readonly file: MatroskaFile,
     private readonly videoTrack: MatroskaTrack,
     private audioTrack: MatroskaTrack | null,
-    private videoInfo: MuxTrackInfo,
+    private readonly videoInfo: MuxTrackInfo,
     private audioInfo: MuxTrackInfo | null,
     /**
      * The same reader the audio probe used, not a fresh one. A second reader would restart at
@@ -562,11 +555,6 @@ export class Remuxer {
     dolbyVision: { type: string; record: Uint8Array } | null = null
   ): Promise<Remuxer> {
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
-    // L'en-tête que les images justifient, pas seulement celui que le fichier déclare : sous
-    // `hvc1`, Safari ne lit ses paramètres que là. Voir `withTrueParameterSets`.
-    const declaredVideo = videoTrack;
-    videoTrack = await withTrueParameterSets(source, file, videoTrack);
-    const correctedHeader = videoTrack !== declaredVideo;
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
     const start = file.firstClusterOffset ?? file.segmentDataStart;
@@ -600,7 +588,7 @@ export class Remuxer {
       language: videoTrack.language ?? "und",
     };
 
-    const remuxer = new Remuxer(
+    return new Remuxer(
       file,
       videoTrack,
       audioTrack,
@@ -611,11 +599,6 @@ export class Remuxer {
       transcoder,
       dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null
     );
-    remuxer.correctedHeader = correctedHeader;
-    remuxer.headerPrivate = videoTrack.codecId === "V_MPEGH/ISO/HEVC" ? videoTrack.codecPrivate : null;
-    remuxer.sampleEntryInputs = { width: dimensions.width, height: dimensions.height, dolbyVision };
-    if (correctedHeader) trace("vidéo : en-tête HEVC reconstruit avec les paramètres portés par la première image");
-    return remuxer;
   }
 
   plan(): RemuxPlan {
@@ -728,9 +711,6 @@ export class Remuxer {
     return {
       presentationDelaySeconds: (this.presentationDelayUs ?? 0) / TIMESCALE,
       clampedSamples: this.clampedSamples,
-      nudgedSamples: this.presentations.nudged,
-      correctedHeader: this.correctedHeader,
-      headerChanges: this.headerChanges,
       transcodedAudio: this.transcoder !== null,
       transcodedCodec: this.transcoder?.codecString ?? null,
       segmentStartSeconds: this.segmentStartUs / TIMESCALE,
@@ -761,8 +741,7 @@ export class Remuxer {
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
-    this.presentations.reset();
-    this.carriedParameterSets = null;
+    this.strayAhead = [];
     // The group being handed over piece by piece is abandoned with everything else.
     this.emitted = 0;
     this.boundary = null;
@@ -822,6 +801,15 @@ export class Remuxer {
         break;
       }
       if (sample.trackNumber === this.videoTrack.number) {
+        const stray = strayUnits(sample.data, this.videoTrack.codecId, this.nalLength);
+        if (stray) {
+          this.putBack(stray);
+          continue;
+        }
+        if (this.strayAhead.length > 0) {
+          sample = { ...sample, data: joinBytes([...this.strayAhead, sample.data]) };
+          this.strayAhead = [];
+        }
         // A cluster does not have to begin on a picture a decoder can start on, and handing over
         // the ones that precede it produces a segment the browser holds but can never show —
         // which looks exactly like a seek that froze.
@@ -838,21 +826,6 @@ export class Remuxer {
           this.needKeyframe = false;
           this.seekTargetUs = null;
         }
-        // Un paquet qui ne porte que des paramètres n'est pas une image : ses paramètres partent
-        // avec l'image qui le suit, au lieu d'être transmis comme une image vide — voir
-        // `carriesPicture`.
-        if (this.headerPrivate && !carriesPicture(sample.data, this.nalLength)) {
-          this.carriedParameterSets = this.carriedParameterSets ? concatBytes(this.carriedParameterSets, sample.data) : sample.data;
-          continue;
-        }
-        if (this.carriedParameterSets) {
-          sample = { ...sample, data: concatBytes(this.carriedParameterSets, sample.data) };
-          this.carriedParameterSets = null;
-        }
-        // Un instant déjà pris par une autre image la ferait retirer par le navigateur — voir
-        // `PresentationDeduper`. Une copie : l'échantillon appartient au lecteur de fichier.
-        const at = this.presentations.take(sample.timestampUs);
-        if (at !== sample.timestampUs) sample = { ...sample, timestampUs: at };
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (this.startsHere(sample) && span >= SEGMENT_US) {
           this.boundary = sample;
@@ -1012,8 +985,7 @@ export class Remuxer {
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
-    this.presentations.reset();
-    this.carriedParameterSets = null;
+    this.strayAhead = [];
     trace(
       `index : rien où démarrer avant ${(this.seekTargetUs / 1e6).toFixed(1)} s, ` +
         `relecture depuis ${(earlier / 1e6).toFixed(1)} s`
@@ -1094,37 +1066,7 @@ export class Remuxer {
     // of them would put the next real segment in the wrong place. Only the copying is skipped —
     // which is all of the cost.
     if (!this.videoWanted) return [];
-    return this.withHeaderChanges(samples);
-  }
-
-  /**
-   * Les fragments, avec un nouveau segment d'initialisation là où les images changent de paramètres.
-   *
-   * *Dirty Dancing* (21/09/2026) apporte une nouvelle version de son jeu de paramètres d'image à
-   * plusieurs images clés — 2,5 s, 7,6 s, 9,7 s, 20,1 s. Sous `hvc1`, Safari ne lit ses paramètres
-   * que dans l'en-tête : il décodait ces images avec les anciens, et « Media failed to decode »
-   * suivait. MediaSource accepte un nouveau segment d'initialisation entre deux fragments, sans
-   * changer de type ; on le glisse donc juste avant l'image qui en a besoin. Un fichier qui garde
-   * ses paramètres — presque tous — ne voit jamais passer que ses fragments, comme avant.
-   */
-  private withHeaderChanges(samples: MuxSample[]): Uint8Array[] {
-    if (!this.headerPrivate || !this.sampleEntryInputs) return this.fragmentise(samples);
-    const out: Uint8Array[] = [];
-    let runStart = 0;
-    for (let i = 0; i < samples.length; i++) {
-      const next = reconcileHvcc(this.headerPrivate, samples[i].data, this.nalLength);
-      if (!next) continue;
-      if (i > runStart) out.push(...this.fragmentise(samples.slice(runStart, i), samples[i].decodeTime));
-      this.headerPrivate = next;
-      const { width, height, dolbyVision } = this.sampleEntryInputs;
-      this.videoInfo = { ...this.videoInfo, sampleEntry: videoSampleEntry(this.videoTrack.codecId, next, width, height, dolbyVision) };
-      out.push(initSegment(this.videoInfo, this.file.durationSeconds ?? 0));
-      this.headerChanges += 1;
-      trace(`vidéo : nouveaux paramètres à ${(samples[i].decodeTime / TIMESCALE).toFixed(2)} s — nouvel en-tête envoyé`);
-      runStart = i;
-    }
-    out.push(...this.fragmentise(samples.slice(runStart)));
-    return out;
+    return this.fragmentise(samples);
   }
 
   /**
@@ -1141,7 +1083,7 @@ export class Remuxer {
    * — nine seconds, 228 samples, 5.5 MB, at 1951 s of a real file — by closing the MediaSource
    * with "media failed to decode", the same bytes every time.
    */
-  private fragmentise(samples: MuxSample[], decodeTimeAfter?: number): Uint8Array[] {
+  private fragmentise(samples: MuxSample[]): Uint8Array[] {
     return planFragments(samples.length, (i) => samples[i].data.byteLength).map((indices) => {
       const from = indices[0];
       const to = indices[indices.length - 1] + 1;
@@ -1149,9 +1091,7 @@ export class Remuxer {
       // boundary that sample lives in the next fragment. Reading its own duration there instead
       // leaves the buffered range short of where the next fragment begins — invisible at a
       // constant frame rate, which is exactly how the same mistake hid for a day last time.
-      // Et après le dernier : l'image qui suit vit parfois dans un autre lot — celui qu'un nouvel
-      // en-tête sépare de celui-ci (voir `withHeaderChanges`).
-      const next = to < samples.length ? samples[to].decodeTime : decodeTimeAfter;
+      const next = to < samples.length ? samples[to].decodeTime : undefined;
       const segment = mediaSegment(this.videoInfo, this.sequence, samples.slice(from, to), next);
       this.sequence += 1;
       return segment;
@@ -1210,10 +1150,3 @@ export const __testing = {
   settledAfter: (delayUs: number | null, frameUs: number | null) =>
     FRAGMENT_SAMPLES + reorderLookahead(delayUs, frameUs) + 1,
 };
-
-function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
-}

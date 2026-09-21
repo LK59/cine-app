@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isRandomAccessPoint, nalLengthSize,
+import { strayUnits, isRandomAccessPoint, nalLengthSize,
   hevcCodecString,
   avcCodecString,
   av1CodecString,
@@ -291,5 +291,55 @@ describe("av1CodecString", () => {
     expect(av1CodecString(new Uint8Array([0x81, 0x08, 0x40]))).toBe("av01.0.08M.10");
     // A record whose version byte is not the one the specification defines.
     expect(av1CodecString(new Uint8Array([0x00, 0x00, 0x00, 0x00]))).toBeNull();
+  });
+});
+
+describe("strayUnits", () => {
+  const unit = (...nal: number[]) => [0, 0, 0, nal.length, ...nal];
+  const sample = (...nals: number[][]) => new Uint8Array(nals.flatMap((nal) => unit(...nal)));
+  const hevcNal = (type: number, ...rest: number[]) => [(type << 1) & 0xfe, 1, ...rest];
+  const HEVC = "V_MPEGH/ISO/HEVC";
+
+  it("returns Dirty Dancing's picture-less block to the pictures it was cut from", () => {
+    // Block 60 of the real file, NAL types [32, 33, 34, 62], timed as a picture; block 59, the
+    // picture before it, is the only one with no RPU. As a sample of its own it closed Safari's
+    // MediaSource at every CRA it preceded.
+    const vps = hevcNal(32, 1), sps = hevcNal(33, 2), pps = hevcNal(34, 3), rpu = hevcNal(62, 4);
+    const stray = strayUnits(sample(vps, sps, pps, rpu), HEVC, 4);
+    // The RPU closes the picture before; the parameter sets open the one after, ahead of its slice.
+    expect(stray?.before.map((u) => [...u])).toEqual([unit(...rpu)]);
+    expect(stray?.after.map((u) => [...u])).toEqual([unit(...vps), unit(...sps), unit(...pps)]);
+  });
+
+  it("leaves every block with a slice alone, leading pictures included", () => {
+    for (const type of [0, 1, 8, 9, 19, 20, 21]) {
+      expect(strayUnits(sample(hevcNal(32, 0), hevcNal(39, 0), hevcNal(type, 0x80), hevcNal(62, 0)), HEVC, 4)).toBeNull();
+    }
+  });
+
+  it("sends suffix SEI and end of sequence back, prefix SEI forward", () => {
+    const stray = strayUnits(sample(hevcNal(40, 0), hevcNal(36), hevcNal(39, 0)), HEVC, 4);
+    expect(stray?.before.length).toBe(2);
+    expect(stray?.after.length).toBe(1);
+  });
+
+  it("reads H.264, where everything outside a slice goes forward", () => {
+    expect(strayUnits(sample([0x67, 0], [0x68, 0]), "V_MPEG4/ISO/AVC", 4)?.after.length).toBe(2);
+    expect(strayUnits(sample([0x06, 0], [0x65, 0x88]), "V_MPEG4/ISO/AVC", 4)).toBeNull();
+  });
+
+  it("trusts the container when there is nothing legible, or nothing to read", () => {
+    expect(strayUnits(new Uint8Array([0, 0, 0, 99, 0x40]), HEVC, 4)).toBeNull();
+    expect(strayUnits(new Uint8Array(0), HEVC, 4)).toBeNull();
+    expect(strayUnits(new Uint8Array([1, 2, 3]), "V_AV1", 4)).toBeNull();
+  });
+
+  it("is applied by both paths that read video blocks", async () => {
+    // One decision, two readers: the remuxer and the canvas engine. A block repaired by one and
+    // decoded as a picture by the other would move the failure rather than end it.
+    const { readFileSync } = await import("node:fs");
+    for (const file of ["src/lib/webcodecs/remuxer.ts", "src/lib/webcodecs/engine.ts"]) {
+      expect(readFileSync(file, "utf8")).toMatch(/const stray = strayUnits\(sample\.data,/);
+    }
   });
 });
