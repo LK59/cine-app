@@ -313,7 +313,7 @@ export class PlaybackEngine {
     if (!this.source) return false;
     let software: SoftwareAudioTrack;
     try {
-      software = await SoftwareAudioTrack.open(this.source, track.number, track.codecId);
+      software = await SoftwareAudioTrack.open(this.source, track.number, track.codecId, this.file ?? undefined);
     } catch (error) {
       // Surfaced, not swallowed: "no sound" with no reason is the single most expensive kind of
       // bug to chase, and the reason is right here.

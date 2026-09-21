@@ -10,7 +10,7 @@
 // mediabunny n'est pas en jeu ici : son lecteur Matroska ne connaît pas A_TRUEHD. Les blocs sont
 // lus par le nôtre, au travers du même cache d'octets que le reste du lecteur.
 import type { ByteSource } from "../byteSource";
-import { parseMatroska, clusterOffsetForTime, type MatroskaTrack } from "../matroska";
+import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "../matroska";
 import { SampleReader } from "../sampleReader";
 import type { DecodedAudio } from "../softwareAudio";
 import { openTrueHdDecoder, type DecodedBatch } from "./truehdDecoder";
@@ -97,8 +97,10 @@ export interface TrueHdTrack {
   close(): void;
 }
 
-export async function openTrueHdTrack(source: ByteSource, trackNumber: number): Promise<TrueHdTrack> {
-  const file = await parseMatroska(source);
+export async function openTrueHdTrack(source: ByteSource, trackNumber: number, parsed?: MatroskaFile): Promise<TrueHdTrack> {
+  // Le fichier que le lecteur a déjà lu, de préférence : le relire coûtait 4 à 5 s sur un iPhone,
+  // à chaque changement de piste, pour l'en-tête et l'index d'un 4K de soixante gigaoctets.
+  const file = parsed ?? (await parseMatroska(source));
   const found: MatroskaTrack | undefined = file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
   if (!found || !TRUEHD_CODECS.has(found.codecId)) throw new Error("piste TrueHD introuvable");
   const track: MatroskaTrack = found;

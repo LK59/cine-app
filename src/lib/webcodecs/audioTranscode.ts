@@ -12,7 +12,7 @@
 import { audioSampleEntryFor } from "./mp4SampleEntries";
 import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
-import type { MatroskaTrack } from "./matroska";
+import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
 import { containerAccepts } from "./mseSource";
 import { extractAudioSpecificConfig, opusSampleEntry, parseAacConfig } from "./mp4SampleEntries";
@@ -44,15 +44,26 @@ const ENCODER_LOOKAHEAD_SECONDS = 0.3;
 const PRIMING_TIMEOUT_MS = 8000;
 
 /**
- * A bitrate generous enough that an encoder has no reason to reach for HE-AAC.
+ * The bitrates asked for, best first — per channel, because that is what hearing depends on.
  *
- * Left to choose, Safari answers a low default with SBR — a different object type, twice the
- * sample rate, and a description that contradicts the `mp4a.40.2` written beside it. Asking for
- * enough bits is the polite way to get the plain profile; reading back what actually came out,
- * below, is the way that does not depend on being obeyed.
+ * Generous on purpose, for two reasons. Left to choose, Safari answers a low default with SBR — a
+ * different object type, twice the sample rate, and a description that contradicts the
+ * `mp4a.40.2` written beside it; asking for enough bits is the polite way to get the plain
+ * profile, and reading back what actually came out, below, is the way that does not depend on
+ * being obeyed. And quality: until 22/09/2026 this was a single 320 kbit/s for any layout — 40
+ * per channel on a 7.1, a second lossy generation of a 640 kbit/s E-AC3, or of a lossless TrueHD,
+ * that a good pair of headphones could tell apart. AAC-LC stops being distinguishable from its
+ * source at 80 to 96 per channel. The bits cost nothing on the network — the encoder runs here,
+ * and its output only ever reaches this browser's own buffer.
+ *
+ * A ladder rather than one figure: an encoder may decline a rate and accept a lower one, and the
+ * first it accepts is the one kept. Stereo never goes below 128.
  */
-function preferredBitrate(channels: number): number {
-  return Math.min(320_000, Math.max(128_000, 64_000 * channels));
+const KBITS_PER_CHANNEL = [96, 64, 40];
+
+function bitrateLadder(channels: number): number[] {
+  const rates = KBITS_PER_CHANNEL.map((k) => Math.max(128_000, k * 1000 * channels));
+  return [...new Set(rates)];
 }
 
 /**
@@ -98,15 +109,15 @@ export interface TranscodedFrame {
  */
 /** Every shape worth asking about for one codec, best first. */
 function candidateConfigs(codec: string, sampleRate: number, numberOfChannels: number): AudioEncoderConfig[] {
-  const bitrate = preferredBitrate(numberOfChannels);
+  const rates = bitrateLadder(numberOfChannels);
   return codec === TARGET_CODEC
     ? [
-        { codec, sampleRate, numberOfChannels, bitrate, aac: { format: "aac" } },
+        ...rates.map((bitrate) => ({ codec, sampleRate, numberOfChannels, bitrate, aac: { format: "aac" as const } })),
         { codec, sampleRate, numberOfChannels, aac: { format: "aac" } },
         { codec, sampleRate, numberOfChannels },
       ]
     : [
-        { codec, sampleRate, numberOfChannels, bitrate },
+        ...rates.map((bitrate) => ({ codec, sampleRate, numberOfChannels, bitrate })),
         { codec, sampleRate, numberOfChannels },
       ];
 }
@@ -122,6 +133,141 @@ async function firstSupported(codec: string, sampleRate: number, channels: numbe
     }
   }
   return null;
+}
+
+/** Toutes les formes que le navigateur dit accepter, dans l'ordre de l'échelle ; au pire, la plus nue. */
+async function supportedConfigs(codec: string, sampleRate: number, channels: number): Promise<AudioEncoderConfig[]> {
+  const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
+  const accepted: AudioEncoderConfig[] = [];
+  for (const config of candidateConfigs(codec, sampleRate, channels)) {
+    try {
+      if ((await Encoder?.isConfigSupported(config))?.supported) accepted.push(config);
+    } catch {
+      // A configuration the browser considers malformed rather than unsupported.
+    }
+  }
+  return accepted.length > 0 ? accepted : [{ codec, sampleRate, numberOfChannels: channels }];
+}
+
+function describeRate(config: AudioEncoderConfig): string {
+  return config.bitrate ? `${Math.round(config.bitrate / 1000)} kbit/s` : "débit laissé au navigateur";
+}
+
+interface Primed {
+  encoder: AudioEncoder;
+  description: Uint8Array;
+  config: AudioEncoderConfig;
+  /** Où vont les images de l'encodeur ; redirigé vers le transcodeur une fois qu'il existe. */
+  sink: { frame: (frame: TranscodedFrame) => void; failed: (message: string) => void };
+}
+
+/**
+ * Configure un encodeur et lui fait encoder assez de son pour qu'il se décrive — ou dit pourquoi
+ * il ne l'a pas fait. L'encodeur d'une tentative ratée est fermé ici.
+ */
+async function primeEncoder(
+  Encoder: typeof AudioEncoder,
+  config: AudioEncoderConfig,
+  decoder: SoftwareAudioTrack,
+  fromSeconds: number,
+  outChannels: number
+): Promise<Primed | { error: string; timedOut: boolean }> {
+  let description: Uint8Array | null = null;
+  let encoderError: string | null = null;
+  // The encoder has to exist before the object that owns it, and it keeps handing frames back
+  // for the rest of the session — so where they go is a reference, redirected at the instance
+  // as soon as there is one. Left pointing at a local array, everything after the priming would
+  // be encoded and quietly dropped.
+  const sink = {
+    frame: (_frame: TranscodedFrame) => {},
+    failed: (message: string) => {
+      encoderError = message;
+    },
+  };
+
+  const encoder = new Encoder({
+    output: (chunk, metadata) => {
+      const carried = metadata?.decoderConfig?.description;
+      if (carried && !description) description = new Uint8Array(toBytes(carried));
+      sink.frame(toFrame(chunk));
+    },
+    error: (error) => sink.failed(error.message),
+  });
+  const close = () => {
+    try {
+      encoder.close();
+    } catch {
+      // Already closed by whatever went wrong.
+    }
+  };
+  try {
+    encoder.configure(config);
+  } catch (error) {
+    close();
+    return { error: error instanceof Error ? error.message : String(error), timedOut: false };
+  }
+  trace(`transcodage audio : encodeur configuré (${config.codec}, ${describeRate(config)}), amorçage à ${fromSeconds.toFixed(1)} s`);
+
+  // Enough to make the encoder describe itself, and no more: this runs before the first frame
+  // of video is shown, so it is time the viewer is waiting through. Bounded, because an
+  // encoder that accepts a configuration and then never answers is a real possibility — and a
+  // player that waits for ever on it is worse than one that says what went wrong.
+  // Primed where playback is, not at the start of the film: this also runs on a language
+  // change, and reading the opening back two hours in is network traffic spent on nothing.
+  const primer = decoder.samples(Math.max(0, fromSeconds));
+  const prime = async () => {
+    // Fed, then waited on — never flushed. A flush asks a frame-based encoder to produce a
+    // frame from whatever it happens to hold, and doing that after a single 512-sample block,
+    // over and over, is what a desktop Chrome answered with "Flushing error". Enough blocks to
+    // fill several frames come first, and the description arrives with the first of them.
+    while (!description && !encoderError) {
+      for (let i = 0; i < 8; i++) {
+        const next = await primer.next();
+        if (next.done) return;
+        encode(encoder, next.value, outChannels, config.codec);
+      }
+      for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      // One turn of the event loop for the outputs the encoder has finished to be delivered.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  };
+
+  // Raced, not merely bounded by a loop condition. The wait that has to be survived is one
+  // *inside* a call — a decoder that never yields, an encoder that never answers a flush — and
+  // a deadline checked between iterations never gets its turn to look.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  try {
+    await Promise.race([
+      prime(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, PRIMING_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    void primer.return?.(undefined);
+  }
+
+  if (encoderError) {
+    close();
+    return { error: `Encodage audio refusé : ${encoderError}`, timedOut: false };
+  }
+  if (!description) {
+    close();
+    return {
+      error: timedOut
+        ? `L'encodeur audio n'a pas répondu en ${PRIMING_TIMEOUT_MS / 1000} s.`
+        : "L'encodeur audio n'a pas décrit le flux qu'il produit.",
+      timedOut,
+    };
+  }
+  return { encoder, description, config, sink };
 }
 
 /**
@@ -199,12 +345,18 @@ export class AudioTranscoder {
     readonly sampleEntry: Uint8Array,
     readonly sampleRate: number,
     readonly channels: number,
-    private readonly actualCodec: string = "mp4a.40.2"
+    private readonly actualCodec: string = "mp4a.40.2",
+    /**
+     * La configuration exacte qui a produit la description écrite dans le conteneur — débit
+     * compris —, remise telle quelle à chaque saut.
+     *
+     * Jusqu'au 22/09/2026, un saut reconfigurait l'encodeur avec le codec, la fréquence et les
+     * canaux seulement : sans débit. Et l'ouverture se termine par un saut. Le débit demandé ne
+     * servait donc qu'à l'amorçage, toute la lecture tournait au débit par défaut du navigateur,
+     * et les images n'étaient plus produites par la configuration que leur en-tête décrivait.
+     */
+    private readonly config: AudioEncoderConfig = { codec: actualCodec, sampleRate, numberOfChannels: channels }
   ) {}
-
-  private get config(): AudioEncoderConfig {
-    return { codec: this.actualCodec, sampleRate: this.sampleRate, numberOfChannels: this.channels };
-  }
 
   /** What the encoder actually produced, not what it was asked for. */
   get codecString(): string {
@@ -228,13 +380,19 @@ export class AudioTranscoder {
      * le nombre de canaux change au milieu d'un tampon audio qui, sur certains navigateurs, n'en
      * accepte qu'un.
      */
-    unifiedChannels?: number
+    unifiedChannels?: number,
+    /**
+     * Le fichier déjà lu par l'appelant. Sans lui, le décodeur TrueHD relisait l'en-tête et
+     * l'index d'un 4K de soixante gigaoctets à chaque changement de piste : 4,4 et 5,3 s mesurées
+     * sur un iPhone le 21/09/2026, l'essentiel de l'attente.
+     */
+    file?: MatroskaFile
   ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
 
     trace(`transcodage audio : chargement du décodeur ${track.codecId}`);
-    const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId);
+    const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId, file);
     const { sampleRate, numberOfChannels } = decoder.format;
     trace(`transcodage audio : décodeur prêt — ${sampleRate} Hz, ${numberOfChannels} canaux`);
     const wanted = unifiedChannels ?? numberOfChannels;
@@ -256,98 +414,30 @@ export class AudioTranscoder {
       trace(`transcodage audio : ${wanted} canaux non encodables ici, descente à ${outChannels}`);
     }
 
-    let description: Uint8Array | null = null;
-    let encoderError: string | null = null;
-    // The encoder has to exist before the object that owns it, and it keeps handing frames back
-    // for the rest of the session — so where they go is a reference, redirected at the instance
-    // as soon as there is one. Left pointing at a local array, everything after the priming would
-    // be encoded and quietly dropped.
-    const sink = {
-      frame: (_frame: TranscodedFrame) => {},
-      failed: (message: string) => {
-        encoderError = message;
-      },
-    };
-
-    const encoder = new Encoder({
-      output: (chunk, metadata) => {
-        const carried = metadata?.decoderConfig?.description;
-        if (carried && !description) description = new Uint8Array(toBytes(carried));
-        sink.frame(toFrame(chunk));
-      },
-      error: (error) => sink.failed(error.message),
-    });
-    // The shape this browser accepted when it was asked, a moment ago.
-    const config =
-      (await firstSupported(target, sampleRate, outChannels)) ??
-      { codec: target, sampleRate, numberOfChannels: outChannels };
-    encoder.configure(config);
-    trace(`transcodage audio : encodeur configuré (${target}), amorçage à ${fromSeconds.toFixed(1)} s`);
-
-    // Enough to make the encoder describe itself, and no more: this runs before the first frame
-    // of video is shown, so it is time the viewer is waiting through. Bounded, because an
-    // encoder that accepts a configuration and then never answers is a real possibility — and a
-    // player that waits for ever on it is worse than one that says what went wrong.
-    // Primed where playback is, not at the start of the film: this also runs on a language
-    // change, and reading the opening back two hours in is network traffic spent on nothing.
-    const primer = decoder.samples(Math.max(0, fromSeconds));
-    const prime = async () => {
-      // Fed, then waited on — never flushed. A flush asks a frame-based encoder to produce a
-      // frame from whatever it happens to hold, and doing that after a single 512-sample block,
-      // over and over, is what a desktop Chrome answered with "Flushing error". Enough blocks to
-      // fill several frames come first, and the description arrives with the first of them.
-      while (!description && !encoderError) {
-        for (let i = 0; i < 8; i++) {
-          const next = await primer.next();
-          if (next.done) return;
-          encode(encoder, next.value, outChannels, target);
-        }
-        for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-        }
-        // One turn of the event loop for the outputs the encoder has finished to be delivered.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+    // Les débits de l'échelle que le navigateur dit accepter, du meilleur au plus sobre — puis
+    // rien d'imposé. Chacun est essayé *pour de vrai* : `isConfigSupported` peut dire oui à un
+    // débit que l'encodeur refuse ensuite, et ce refus ne doit pas coûter le son quand un débit
+    // plus bas, ou celui du navigateur, aurait marché.
+    const configs = await supportedConfigs(target, sampleRate, outChannels);
+    let primed: Primed | null = null;
+    let failure = "";
+    for (const config of configs) {
+      const attempt = await primeEncoder(Encoder, config, decoder, fromSeconds, outChannels);
+      if ("encoder" in attempt) {
+        primed = attempt;
+        break;
       }
-    };
-
-    // Raced, not merely bounded by a loop condition. The wait that has to be survived is one
-    // *inside* a call — a decoder that never yields, an encoder that never answers a flush — and
-    // a deadline checked between iterations never gets its turn to look.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let timedOut = false;
-    try {
-      await Promise.race([
-        prime(),
-        new Promise<void>((resolve) => {
-          timer = setTimeout(() => {
-            timedOut = true;
-            resolve();
-          }, PRIMING_TIMEOUT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-      void primer.return?.(undefined);
+      failure = attempt.error;
+      trace(`transcodage audio : ${describeRate(config)} refusé à l'usage (${attempt.error})`);
+      // Un encodeur qui ne répond pas ne répondra pas mieux à un autre débit : huit secondes
+      // d'attente par barreau, ce serait une minute de film figé.
+      if (attempt.timedOut) break;
     }
-
-    if (encoderError) {
-      encoder.close();
+    if (!primed) {
       decoder.close();
-      throw new Error(`Encodage audio refusé : ${encoderError}`);
+      throw new Error(failure || "L'encodeur audio n'a pas décrit le flux qu'il produit.");
     }
-    if (!description) {
-      try {
-        encoder.close();
-      } catch {
-        // Already closed by whatever went wrong.
-      }
-      decoder.close();
-      throw new Error(
-        timedOut
-          ? `L'encodeur audio n'a pas répondu en ${PRIMING_TIMEOUT_MS / 1000} s.`
-          : "L'encodeur audio n'a pas décrit le flux qu'il produit."
-      );
-    }
+    const { encoder, description, sink, config } = primed;
 
     // Asking for a profile is not the same as being given it. The description is the only
     // statement of what came out, and everything written beside it in the container — the codec
@@ -398,7 +488,8 @@ export class AudioTranscoder {
       sampleEntry,
       sampleRate,
       outChannels,
-      codecString
+      codecString,
+      config
     );
     sink.frame = (frame) => transcoder.collect(frame);
     sink.failed = (message) => transcoder.fail(message);

@@ -18,6 +18,23 @@ export interface DecodedBatch {
   errors: number;
 }
 
+/**
+ * Le module, instancié une fois et gardé : chaque décodeur y ouvre son propre contexte. Instancier
+ * 466 Ko de WebAssembly à chaque changement de piste, c'était une attente de plus pour rien. Une
+ * instanciation qui échoue n'est pas gardée.
+ */
+let loaded: Promise<TrueHdModule> | null = null;
+
+function instance(): Promise<TrueHdModule> {
+  if (!loaded) {
+    loaded = import("./truehd-wasm.mjs").then(({ default: createTrueHd }) => createTrueHd());
+    loaded.catch(() => {
+      loaded = null;
+    });
+  }
+  return loaded;
+}
+
 export class TrueHdCore {
   private input = 0;
   private inputSize = 0;
@@ -28,8 +45,7 @@ export class TrueHdCore {
   ) {}
 
   static async create(mlp: boolean): Promise<TrueHdCore> {
-    const { default: createTrueHd } = await import("./truehd-wasm.mjs");
-    const wasm = await createTrueHd();
+    const wasm = await instance();
     const decoder = wasm._thd_open(mlp ? 1 : 0);
     if (!decoder) throw new Error("le décodeur TrueHD n'a pas pu s'ouvrir");
     return new TrueHdCore(wasm, decoder);

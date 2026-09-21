@@ -13,10 +13,45 @@
 // second demux costs CPU only.
 
 import type { ByteSource } from "./byteSource";
+import type { MatroskaFile } from "./matroska";
 
 export interface SoftwareAudioFormat {
   sampleRate: number;
   numberOfChannels: number;
+}
+
+type Mediabunny = typeof import("mediabunny");
+type MediabunnyInput = InstanceType<Mediabunny["Input"]>;
+
+/**
+ * Un lecteur de conteneur mediabunny par fichier, partagé par toutes ses pistes.
+ *
+ * Il en était créé un par ouverture de piste, et chacun relisait l'en-tête et l'index du fichier :
+ * 1,6 s sur un iPhone pour ouvrir l'E-AC3 de Braveheart, à chaque changement de langue
+ * (21/09/2026). Ce qui a été lu une fois pour une piste vaut pour les autres. La clé est la
+ * source d'octets de la lecture — une par film ouvert — et l'entrée disparaît avec elle ; un
+ * lecteur dont l'ouverture a échoué n'est pas gardé, pour que la piste suivante réessaie.
+ */
+const inputs = new WeakMap<ByteSource, Promise<MediabunnyInput>>();
+
+function sharedInput(source: ByteSource, core: Mediabunny): Promise<MediabunnyInput> {
+  let input = inputs.get(source);
+  if (!input) {
+    const created = new core.Input({
+      // The class is the format; mediabunny wants an instance.
+      formats: [new core.MatroskaInputFormat()],
+      source: new core.CustomSource({
+        getSize: () => source.size,
+        // end is exclusive, and the engine's source clamps at EOF on its own.
+        read: (start, end) => source.read(start, end - start),
+      }),
+    });
+    // Lire les pistes tout de suite : c'est ce qui coûte, et c'est ce qui échoue s'il doit échouer.
+    input = created.getAudioTracks().then(() => created);
+    inputs.set(source, input);
+    input.catch(() => inputs.delete(source));
+  }
+  return input;
 }
 
 export class SoftwareAudioTrack {
@@ -35,13 +70,19 @@ export class SoftwareAudioTrack {
    * for a different reason — the module not loading, the worker not starting, the track not being
    * found, the decoder declining it.
    */
-  static async open(source: ByteSource, trackNumber: number, codecId?: string): Promise<SoftwareAudioTrack> {
+  static async open(
+    source: ByteSource,
+    trackNumber: number,
+    codecId?: string,
+    /** Le fichier déjà lu par l'appelant, pour ne pas relire son en-tête — voir le TrueHD. */
+    file?: MatroskaFile
+  ): Promise<SoftwareAudioTrack> {
     // Le TrueHD ne passe pas par mediabunny, qui ne le connaît pas : notre propre décodeur, et
     // la même forme de sortie — voir truehd/truehdAudio.ts.
     if (codecId === "A_TRUEHD" || codecId === "A_MLP") {
       let track;
       try {
-        track = await (await import("./truehd/truehdAudio")).openTrueHdTrack(source, trackNumber);
+        track = await (await import("./truehd/truehdAudio")).openTrueHdTrack(source, trackNumber, file);
       } catch (error) {
         throw new Error(`décodeur TrueHD non chargé (${error instanceof Error ? error.message : "import échoué"})`);
       }
@@ -62,17 +103,8 @@ export class SoftwareAudioTrack {
     } catch (error) {
       throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
     }
-    const { Input, CustomSource, MatroskaInputFormat, AudioSampleSink } = core;
-
-    const input = new Input({
-      // The class is the format; mediabunny wants an instance.
-      formats: [new MatroskaInputFormat()],
-      source: new CustomSource({
-        getSize: () => source.size,
-        // end is exclusive, and the engine's source clamps at EOF on its own.
-        read: (start, end) => source.read(start, end - start),
-      }),
-    });
+    const { AudioSampleSink } = core;
+    const input = await sharedInput(source, core);
 
     const tracks = await input.getAudioTracks();
     const track = tracks.find((t) => t.id === trackNumber) ?? tracks[0];
@@ -83,7 +115,9 @@ export class SoftwareAudioTrack {
     return new SoftwareAudioTrack(
       (fromSeconds) => planesFrom(sink, fromSeconds),
       { sampleRate: track.sampleRate, numberOfChannels: track.numberOfChannels },
-      () => void input.dispose?.()
+      // Rien à libérer ici : le lecteur de conteneur est partagé par les pistes du fichier, et
+      // part avec la source quand la lecture s'arrête (voir sharedInput).
+      () => {}
     );
   }
 

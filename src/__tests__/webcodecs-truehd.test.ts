@@ -113,3 +113,62 @@ describe("ce que le build de production sait faire", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("ouvrir une piste sans relire le fichier", () => {
+  it("le TrueHD se contente du fichier déjà lu par le lecteur", async () => {
+    // 21/09/2026 : 4,4 et 5,3 s par changement de piste sur un iPhone, passées à relire l'en-tête
+    // et l'index d'un 4K de soixante gigaoctets que le lecteur avait déjà.
+    const { openTrueHdTrack } = await import("@/lib/webcodecs/truehd/truehdAudio");
+    const source = {
+      size: 60e9,
+      read: async () => {
+        throw new Error("relu alors qu'il était déjà lu");
+      },
+      close: () => {},
+    };
+    const file = {
+      timestampScaleNs: 1_000_000, durationSeconds: 7800, cues: [], segmentDataStart: 0, segmentEnd: 60e9, firstClusterOffset: 0,
+      tracks: [{ number: 3, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 8 } }],
+    } as never;
+    const track = await openTrueHdTrack(source, 3, file);
+    expect(track.format).toEqual({ sampleRate: 48000, numberOfChannels: 8 });
+    track.close();
+  });
+
+  it("mediabunny lit un fichier une fois pour toutes ses pistes", async () => {
+    // 1,6 s pour ouvrir l'E-AC3 de Braveheart, à chaque changement de langue : un lecteur de
+    // conteneur neuf par piste, qui relisait tout.
+    vi.resetModules();
+    let created = 0;
+    vi.doMock("mediabunny", () => {
+      class Input {
+        constructor() {
+          created++;
+        }
+        async getAudioTracks() {
+          return [2, 3].map((id) => ({ id, codec: "eac3", sampleRate: 48000, numberOfChannels: 6, canDecode: async () => true }));
+        }
+      }
+      class AudioSampleSink {}
+      class CustomSource {}
+      class MatroskaInputFormat {}
+      return { Input, AudioSampleSink, CustomSource, MatroskaInputFormat };
+    });
+    vi.doMock("@mediabunny/ac3", () => ({ registerAc3Decoder: () => {} }));
+    try {
+      const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
+      const film = { size: 1, read: async () => new Uint8Array(0), close: () => {} };
+      const autre = { size: 1, read: async () => new Uint8Array(0), close: () => {} };
+      (await SoftwareAudioTrack.open(film, 2, "A_EAC3")).close();
+      (await SoftwareAudioTrack.open(film, 3, "A_EAC3")).close();
+      (await SoftwareAudioTrack.open(film, 2, "A_EAC3")).close();
+      expect(created).toBe(1);
+      // Un autre film, un autre lecteur : rien ne se mélange entre deux lectures.
+      (await SoftwareAudioTrack.open(autre, 2, "A_EAC3")).close();
+      expect(created).toBe(2);
+    } finally {
+      vi.doUnmock("mediabunny");
+      vi.doUnmock("@mediabunny/ac3");
+    }
+  });
+});

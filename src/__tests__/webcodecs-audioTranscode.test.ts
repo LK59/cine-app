@@ -42,9 +42,11 @@ class FakeAudioData {
 }
 
 /** Emits fixed 1024-frame chunks and buffers the remainder, as a real AAC encoder does. */
-function fakeEncoderClass(options: { describeAfter?: number; failWith?: string } = {}) {
+function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; refuseAbove?: number } = {}) {
   return class {
     static supportedCalls: unknown[] = [];
+    /** Every configuration handed to configure(), across every instance. */
+    static configured: { bitrate?: number }[] = [];
     static async isConfigSupported(config: unknown) {
       this.supportedCalls.push(config);
       return { supported: true, config };
@@ -57,7 +59,13 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string }
     constructor(private readonly init: { output: (c: unknown, m?: unknown) => void; error: (e: unknown) => void }) {
       if (options.failWith) queueMicrotask(() => init.error({ message: options.failWith } as never));
     }
-    configure() {
+    configure(config: { bitrate?: number }) {
+      (this.constructor as unknown as { configured: unknown[] }).configured.push(config);
+      // An encoder that said yes to isConfigSupported and fails in use — the case the ladder is
+      // tried against for real.
+      if (options.refuseAbove !== undefined && (config.bitrate ?? 0) > options.refuseAbove) {
+        throw new Error(`bitrate ${config.bitrate} not supported`);
+      }
       this.state = "configured";
     }
     encode(data: FakeAudioData) {
@@ -142,9 +150,31 @@ describe("canEncodeAac", () => {
     // for first all the same: an encoder left to choose reaches for HE-AAC, whose description
     // does not match the profile written beside it.
     expect(await canEncodeAac(48000, 6)).toBe(true);
-    expect(asked).toHaveLength(2);
-    expect(asked[0].bitrate).toBe(320_000);
-    expect(asked[1].bitrate).toBeUndefined();
+    // The ladder, best first, then nothing imposed: 96, 64 and 40 kbit/s per channel on a 5.1.
+    expect(asked.map((c) => c.bitrate)).toEqual([576_000, 384_000, 240_000, undefined]);
+  });
+
+  it("asks for enough bits per channel, and keeps the first rate the encoder accepts", async () => {
+    // Until 22/09/2026, a single 320 kbit/s whatever the layout: 40 per channel on a 7.1, a second
+    // lossy generation a good pair of headphones could tell from its source.
+    const asked: { bitrate?: number; numberOfChannels: number }[] = [];
+    vi.stubGlobal("AudioEncoder", {
+      isConfigSupported: async (c: { bitrate?: number; numberOfChannels: number }) => {
+        asked.push(c);
+        return { supported: (c.bitrate ?? 0) <= 512_000 };
+      },
+    });
+    const { canEncodeAac } = await load();
+    expect(await canEncodeAac(48000, 8)).toBe(true);
+    expect(asked.map((c) => c.bitrate)).toEqual([768_000, 512_000]);
+
+    // Stereo never drops below 128 kbit/s, and the ladder never asks the same rate twice.
+    const aac: { bitrate?: number; codec: string }[] = [];
+    vi.stubGlobal("AudioEncoder", {
+      isConfigSupported: async (c: { bitrate?: number; codec: string }) => (c.codec === "mp4a.40.2" && aac.push(c), { supported: false }),
+    });
+    expect(await canEncodeAac(48000, 1)).toBe(false);
+    expect(aac.map((c) => c.bitrate)).toEqual([128_000, undefined, undefined]);
   });
 
   it("is false where there is no encoder at all", async () => {
@@ -173,6 +203,33 @@ describe("AudioTranscoder", () => {
     expect(new TextDecoder().decode(transcoder.sampleEntry.subarray(4, 8))).toBe("mp4a");
     expect(transcoder.codecString).toBe("mp4a.40.2");
     expect(transcoder.channels).toBe(6);
+  });
+
+  it("keeps the exact configuration that described the track, bitrate included, across seeks", async () => {
+    // Until 22/09/2026 a seek reconfigured the encoder without a bitrate — and opening ends with
+    // one. The rate asked for served only the priming; the whole film ran at the browser's default,
+    // from an encoder configured unlike the one whose description the container carries.
+    const Encoder = fakeEncoderClass();
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation(() => decoded(400));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    transcoder.seekTo(120);
+    transcoder.seekTo(3600);
+    expect(Encoder.configured.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(Encoder.configured.map((c) => c.bitrate))).toEqual(new Set([576_000]));
+  });
+
+  it("goes down the ladder when a rate fails in use, and keeps the one that worked", async () => {
+    const Encoder = fakeEncoderClass({ refuseAbove: 400_000 });
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation(() => decoded(400));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    expect(transcoder.sampleEntry.length).toBeGreaterThan(20);
+    // 576 refused at configure, 384 accepted — and every later configure is 384.
+    expect(Encoder.configured[0].bitrate).toBe(576_000);
+    expect(new Set(Encoder.configured.slice(1).map((c) => c.bitrate))).toEqual(new Set([384_000]));
   });
 
   it("says so rather than producing a track nothing describes", async () => {

@@ -46,7 +46,9 @@ it.skipIf(!process.env.THD_FILE)("TrueHD, d'un bout à l'autre de la chaîne", {
   const file = await parseMatroska(source);
   const track = file.tracks.find((t) => t.codecId === "A_TRUEHD" || t.codecId === "A_MLP")!;
   const began = performance.now();
-  const audio = await SoftwareAudioTrack.open(source, track.number, track.codecId);
+  // Comme le lecteur : avec le fichier déjà lu, que le décodeur ne relit pas.
+  const audio = await SoftwareAudioTrack.open(source, track.number, track.codecId, file);
+  const openedMs = Math.round(performance.now() - began);
   const sums: number[] = [];
   let frames = 0;
   let peak = 0;
@@ -81,6 +83,7 @@ it.skipIf(!process.env.THD_FILE)("TrueHD, d'un bout à l'autre de la chaîne", {
       secondes: frames / rate,
       crete: +peak.toFixed(4),
       rmsDb: sums.map((sum) => +(10 * Math.log10(sum / frames)).toFixed(2)),
+      ouvertureMs: openedMs,
       tempsMs: Math.round(ms),
     })
   );
