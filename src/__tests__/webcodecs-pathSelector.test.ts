@@ -140,33 +140,28 @@ describe("choosePlaybackPath", () => {
 });
 
 /**
- * Un son qu'aucun décodeur local ne sait produire arrête la chaîne.
+ * Un fichier tout en TrueHD — Top Gun Maverick, Sinners, American Sniper.
  *
- * Relevé dans le journal le 20/09/2026 sur « American Sniper » : le remultiplexage refuse le
- * TrueHD, le chemin canevas est essayé quand même, ouvre un décodeur vidéo 4K, puis échoue sur
- * ce qu'on savait déjà — trois lancements, 250 à 700 ms perdues chaque fois avant le repli
- * serveur qui était acquis d'avance.
- *
- * La garde compte autant que le refus, et c'est le second test qui la tient : la plupart des
- * fichiers TrueHD portent une piste AC-3 à côté, et là une piste injouable est un choix à
- * corriger, pas un fichier à céder au lecteur serveur.
+ * Jusqu'au 21/09/2026, aucun décodeur n'existait nulle part : un tel fichier était cédé d'office au
+ * lecteur serveur, sans essayer le canevas qui aurait échoué sur la même chose (« American
+ * Sniper », 20/09/2026, 250 à 700 ms perdues par tentative). Le décodeur de FFmpeg, compilé en
+ * WebAssembly, en fait maintenant un fichier comme un autre : son ré-encodé comme le DTS.
  */
-describe("un son qu'aucun décodeur local ne porte", () => {
+describe("un fichier tout en TrueHD", () => {
   const TRUEHD = track({ number: 2, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 8 } });
-  const AC3 = track({ number: 3, type: "audio", codecId: "A_AC3", isDefault: false, audio: { sampleRate: 48000, channels: 6 } });
 
-  it("ne laisse pas essayer le canevas quand aucune piste du fichier n'est livrable", async () => {
-    supported = new Set([mimeFor(VIDEO, null).video]);
-    await expect(choosePlaybackPath(input(VIDEO, TRUEHD))).rejects.toThrow(/Aucun chemin de lecture/);
+  it("prend le chemin natif, le son ré-encodé", async () => {
+    supported = new Set([mimeFor(VIDEO, null).video, 'audio/mp4; codecs="mp4a.40.2"']);
+    vi.stubGlobal("AudioEncoder", { isConfigSupported: async () => ({ supported: true }) });
+    const chosen = await choosePlaybackPath(input(VIDEO, TRUEHD));
+    expect(chosen.path).toBe("remux");
+    expect(chosen.plan?.audioMimeType).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
-  it("reste un simple refus de chemin quand une autre piste du fichier est livrable", async () => {
+  it("et, sans encodeur, laisse sa chance au canevas au lieu de le céder au serveur", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
-    const entree = input(VIDEO, TRUEHD);
-    entree.file.tracks.push(AC3);
-    // Le canevas garde sa chance : le fichier a de quoi sonner, c'est la piste retenue qui est
-    // mauvaise, et ça se corrige sans changer de lecteur.
-    const chosen = await choosePlaybackPath(entree);
+    vi.stubGlobal("AudioEncoder", undefined);
+    const chosen = await choosePlaybackPath(input(VIDEO, TRUEHD));
     expect(chosen.path).toBe("webcodecs");
   });
 });

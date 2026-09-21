@@ -12,7 +12,7 @@
 
 /**
  * Les décodeurs du lecteur, avant le premier film : mediabunny et ses extensions AC-3 et DTS,
- * et libFLAC depuis le 21/09/2026 — ~900 Ko compressés, que le premier « Lire » d'un fichier au
+ * libFLAC et le TrueHD de FFmpeg depuis le 21/09/2026 — ~900 Ko compressés, que le premier « Lire » d'un fichier au
  * son exotique téléchargeait sinon, pendant que le spectateur attendait.
  *
  * Tous les trois, sur tous les appareils, même l'iPhone qui lit l'AC-3 tel quel : un fichier qui
@@ -33,6 +33,8 @@ export function warmPlayerDecoders(): void {
     void import("@mediabunny/dts").catch(() => {});
     void import("@/lib/webcodecs/flacDecoder").catch(() => {});
     void import("@wasm-audio-decoders/flac").catch(() => {});
+    // Le module TrueHD, téléchargé et non instancié : le premier film en TrueHD le trouve en cache.
+    void import("@/lib/webcodecs/truehd/truehdDecoder").then((m) => m.warmTrueHd()).catch(() => {});
   } catch {
     // Un préchauffage n'a jamais le droit de devenir une panne.
   }

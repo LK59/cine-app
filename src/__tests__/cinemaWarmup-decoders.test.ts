@@ -9,6 +9,7 @@ vi.mock("@mediabunny/ac3", () => (imported.push("ac3"), {}));
 vi.mock("@mediabunny/dts", () => (imported.push("dts"), {}));
 vi.mock("@/lib/webcodecs/flacDecoder", () => (imported.push("flacDecoder"), {}));
 vi.mock("@wasm-audio-decoders/flac", () => (imported.push("libflac"), {}));
+vi.mock("@/lib/webcodecs/truehd/truehdDecoder", () => ({ warmTrueHd: async () => void imported.push("truehd") }));
 
 beforeEach(() => {
   imported.length = 0;
@@ -37,7 +38,7 @@ describe("scheduleDecoderWarmup", () => {
     await settle();
     // FLAC since 21/09/2026: shipped by a deploy that the onboarding screen — the only caller
     // until then — would have warmed for almost nobody.
-    expect(new Set(imported)).toEqual(new Set(["mediabunny", "ac3", "dts", "flacDecoder", "libflac"]));
+    expect(new Set(imported)).toEqual(new Set(["mediabunny", "ac3", "dts", "flacDecoder", "libflac", "truehd"]));
   });
 
   it("stays quiet on a device asking to save data", async () => {

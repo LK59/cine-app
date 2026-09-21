@@ -51,7 +51,10 @@ Tests default to the `node` environment; a component test opts into jsdom with a
 `vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
 test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
 
-**Two benches sit beside the suite, both skipped unless given a file.** `bench.spec.ts` checks
+**Three benches sit beside the suite, all skipped unless given a file.** `truehd-bench.spec.ts`
+decodes a real TrueHD track through the player's whole chain and prints each channel's level, to
+compare with `ffmpeg astats` — the only proof of that decoder, since no synthetic TrueHD can be
+made. `bench.spec.ts` checks
 what the remuxer *produces* (bytes, to be decoded by ffmpeg and compared against ffprobe);
 `cout.spec.ts` measures what it *costs* — reads, bytes and milliseconds for the header, the open,
 the first segment and a seek. The second answers "why is it slow" without guessing: it established
@@ -126,13 +129,29 @@ is no server-side player to hand to and the same call surfaces a clean playback 
 
 **A refusal that names the player, not the path, must stop the chain.** `tryRemux` returns either
 a plain string — "not by this route, try the next" — or `{ reason, server: true }`, which means no
-local path can carry this file at all and the server player is the answer. Two cases reach it:
-Dolby Vision with no HDR10 base layer, and audio no decoder anywhere can produce (TrueHD, the only
-such family here — `@mediabunny/truehd` does not exist). Both were found the same way: the log
-showed the canvas path being opened, failing on something already known, and only then falling
-back. Use the **same predicate** that refuses at runtime, never a neighbouring one —
+local path can carry this file at all and the server player is the answer. One case reaches it
+now: Dolby Vision with no HDR10 base layer. The second, audio no decoder anywhere could produce —
+TrueHD —, ended on 2026-09-21 when FFmpeg's decoder was compiled to WebAssembly
+(`tools/truehd-wasm`, `src/lib/webcodecs/truehd/`). Both were found the same way: the log showed
+the canvas path being opened, failing on something already known, and only then falling back. Use the **same predicate** that refuses at runtime, never a neighbouring one —
 `playableAudio` means "cannot cross MediaSource", which is true of an AAC in a browser that
 cannot encode, and that shortcut would have handed working files to the server.
+
+**TrueHD is decoded by FFmpeg's own decoder, compiled to WebAssembly and committed**
+(`src/lib/webcodecs/truehd/truehd-wasm.mjs`, 466 KB). `tools/truehd-wasm/build.sh` rebuilds it
+reproducibly — pinned FFmpeg, checked SHA-256, pinned emscripten — and exists so nobody has to take
+the file on trust. It runs on the main thread, a quarter-second batch at a time with a real yield
+to the browser between batches — and in Node, where `truehd-bench.spec.ts` compares it with ffmpeg
+channel by channel. Four things it cost to learn: FFmpeg's `mlp_parser` loses sync when started
+mid-stream — no sound after every seek — so each Matroska block goes to the decoder whole;
+FFmpeg's TrueHD *encoder* (6.1 to 8.1) writes streams its own decoder rejects, so there is no
+synthetic fixture and the proof is the bench; emscripten's Node variant imports `module`, which
+breaks Next's browser build, so the module is built for web and worker only (Node runs it anyway);
+and **Turbopack does not compile `new Worker(new URL("./x.worker.ts", import.meta.url))`** — it
+copied the TypeScript source into `static/media` as-is, a worker that would never have started.
+The gate and the build both pass on that; only reading what the build emitted shows it. Once TrueHD
+became playable, the per-file audio unification applies to it like DTS: in a file mixing TrueHD
+and Dolby, the Dolby track is re-encoded too.
 
 **Track names are written once, in `src/lib/trackLabel.ts`** — by both players, and by the
 `<track>` elements the browser and the Apple TV display in their own pickers. The form is fixed:

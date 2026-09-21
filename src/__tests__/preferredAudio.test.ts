@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { preferredAudio } from "@/lib/webcodecs/remuxPlayback";
 import { chooseAudioTrack, isForcedTrack } from "@/lib/trackPreferences";
+import { playableAudio } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 
 /**
@@ -49,9 +50,10 @@ describe("preferredAudio", () => {
   });
 
   it("n'ouvre jamais sur une piste que ce chemin ne sait pas porter", () => {
-    // Le TrueHD dans la langue voulue ne doit pas faire refuser un fichier qui joue très bien sur
-    // la piste d'à côté : c'est tout le sens de « parmi les jouables ».
-    const f = fichier([piste(1, "A_AC3", "fra", 6, true), piste(2, "A_TRUEHD", "eng", 8)]);
+    // Une piste injouable dans la langue voulue ne doit pas faire refuser un fichier qui joue très
+    // bien sur la piste d'à côté : c'est tout le sens de « parmi les jouables ». (Le TrueHD servait
+    // d'exemple jusqu'au 21/09/2026, où il est devenu jouable ; le RealAudio ne l'est toujours pas.)
+    const f = fichier([piste(1, "A_AC3", "fra", 6, true), piste(2, "A_REAL/COOK", "eng", 8)]);
     expect(preferredAudio(f, veut("eng"))?.number).toBe(1);
   });
 
@@ -92,9 +94,13 @@ describe("preferredAudio", () => {
  * **joue ici**.
  *
  * Le fichier porte trois pistes — DTS 5.1 française par défaut, TrueHD 7.1 anglaise, AC-3 5.1
- * anglaise. Le spectateur demandait la VO ; il recevait la TrueHD, que rien ne décode, et le
- * lecteur lui cédait la place au lecteur serveur. Six fois, relevé dans le journal. Il obtient
- * maintenant la VO sans quitter le lecteur natif, en 5.1 au lieu de 7.1.
+ * anglaise. Le spectateur demandait la VO ; il recevait la TrueHD, que rien ne décodait alors, et
+ * le lecteur cédait la place au lecteur serveur — six fois, relevé dans le journal. La règle lui a
+ * donné l'AC-3 5.1.
+ *
+ * Le 21/09/2026, le TrueHD est devenu jouable ici : la règle n'a pas changé, mais les deux pistes
+ * anglaises jouent désormais, et c'est la plus riche — la 7.1 — qui gagne. Les règles elles-mêmes
+ * restent vérifiées ci-dessous avec une piste qui, elle, ne joue toujours pas : du RealAudio.
  */
 describe("à langue égale, la meilleure piste jouable", () => {
   const leMans = () =>
@@ -104,8 +110,13 @@ describe("à langue égale, la meilleure piste jouable", () => {
       piste(3, "A_AC3", "eng", 6),
     ]);
 
-  it("préfère l'AC-3 anglaise à la TrueHD anglaise", () => {
-    expect(preferredAudio(leMans(), veut("eng"))?.number).toBe(3);
+  it("prend la TrueHD 7.1 anglaise, maintenant qu'elle joue ici", () => {
+    expect(preferredAudio(leMans(), veut("eng"))?.number).toBe(2);
+  });
+
+  it("préfère une piste jouable à une injouable plus riche de la même langue", () => {
+    const f = fichier([piste(1, "A_DTS", "fra", 6, true), piste(2, "A_REAL/COOK", "eng", 8), piste(3, "A_AC3", "eng", 6)]);
+    expect(preferredAudio(f, veut("eng"))?.number).toBe(3);
   });
 
   it("ouvre sur ce qui joue quand la langue demandée n'existe qu'en injouable", () => {
@@ -115,7 +126,7 @@ describe("à langue égale, la meilleure piste jouable", () => {
      * serveur — parce que le spectateur qui demande la VO doit obtenir la VO. Sans cela, on
      * paierait une tentative de plus pour arriver au même endroit.
      */
-    const f = fichier([piste(1, "A_AC3", "fra", 6, true), piste(2, "A_TRUEHD", "eng", 8)]);
+    const f = fichier([piste(1, "A_AC3", "fra", 6, true), piste(2, "A_REAL/COOK", "eng", 8)]);
     expect(preferredAudio(f, veut("eng"))?.number).toBe(1);
   });
 
@@ -126,11 +137,11 @@ describe("à langue égale, la meilleure piste jouable", () => {
 
   it("l'écran et l'ouverture répondent la même chose", () => {
     // Le contrat de tout le dispositif : si les deux divergent, on ouvre sur l'une et on bascule
-    // aussitôt vers l'autre — c'est le geste qu'on cherche à supprimer.
-    const pistes = leMans().tracks;
+    // aussitôt vers l'autre — c'est le geste qu'on cherche à supprimer. Le même prédicat des deux
+    // côtés, celui du lecteur, et une piste injouable dans le lot pour qu'il ait à trancher.
+    const pistes = [...leMans().tracks, piste(4, "A_REAL/COOK", "eng", 8)];
     const prefs = veut("eng");
-    const jouable = (t: (typeof pistes)[number]) => !/TRUEHD|MLP/.test(t.codecId);
-    expect(preferredAudio(fichier(pistes), prefs)?.number).toBe(chooseAudioTrack(pistes, prefs, jouable)?.number);
+    expect(preferredAudio(fichier(pistes), prefs)?.number).toBe(chooseAudioTrack(pistes, prefs, playableAudio)?.number);
   });
 });
 
@@ -160,9 +171,9 @@ describe("la plus riche passe avant le drapeau « par défaut »", () => {
   });
 
   it("et ce qui joue ici passe toujours avant la richesse", () => {
-    // Une TrueHD 7.1 reste refusée devant une AC-3 5.1 : 20 points dans le score battent un
-    // départage, quel que soit le nombre de canaux.
-    const f = fichier([piste(1, "A_TRUEHD", "eng", 8), piste(2, "A_AC3", "eng", 6)]);
+    // Une piste injouable 7.1 reste refusée devant une AC-3 5.1 : 20 points dans le score battent
+    // un départage, quel que soit le nombre de canaux.
+    const f = fichier([piste(1, "A_REAL/COOK", "eng", 8), piste(2, "A_AC3", "eng", 6)]);
     expect(preferredAudio(f, veut("eng"))?.number).toBe(2);
   });
 });

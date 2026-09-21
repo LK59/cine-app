@@ -21,7 +21,8 @@ export interface SoftwareAudioFormat {
 
 export class SoftwareAudioTrack {
   private constructor(
-    private readonly sink: { samples(from: number): AsyncIterable<SoftwareSample> },
+    /** Le décodé à partir d'un instant — par mediabunny, ou par notre décodeur TrueHD. */
+    private readonly produce: (fromSeconds: number) => AsyncGenerator<DecodedAudio>,
     readonly format: SoftwareAudioFormat,
     private readonly dispose: () => void
   ) {}
@@ -35,6 +36,17 @@ export class SoftwareAudioTrack {
    * found, the decoder declining it.
    */
   static async open(source: ByteSource, trackNumber: number, codecId?: string): Promise<SoftwareAudioTrack> {
+    // Le TrueHD ne passe pas par mediabunny, qui ne le connaît pas : notre propre décodeur, et
+    // la même forme de sortie — voir truehd/truehdAudio.ts.
+    if (codecId === "A_TRUEHD" || codecId === "A_MLP") {
+      let track;
+      try {
+        track = await (await import("./truehd/truehdAudio")).openTrueHdTrack(source, trackNumber);
+      } catch (error) {
+        throw new Error(`décodeur TrueHD non chargé (${error instanceof Error ? error.message : "import échoué"})`);
+      }
+      return new SoftwareAudioTrack(track.samples, track.format, () => track.close());
+    }
     // Dynamic, and only the extension this file actually needs: the two are a megabyte and a
     // half each, and a file whose audio the browser already decodes never pays for either.
     let core;
@@ -67,39 +79,48 @@ export class SoftwareAudioTrack {
     if (!track) throw new Error("aucune piste audio trouvée par le décodeur logiciel");
     if (!(await track.canDecode())) throw new Error(`le décodeur logiciel refuse ${track.codec ?? "cette piste"}`);
 
+    const sink = new AudioSampleSink(track) as unknown as { samples(from: number): AsyncIterable<SoftwareSample> };
     return new SoftwareAudioTrack(
-      new AudioSampleSink(track) as unknown as { samples(from: number): AsyncIterable<SoftwareSample> },
+      (fromSeconds) => planesFrom(sink, fromSeconds),
       { sampleRate: track.sampleRate, numberOfChannels: track.numberOfChannels },
       () => void input.dispose?.()
     );
   }
 
-  /**
-   * Decoded audio from `fromSeconds` onwards, as plain float planes.
-   *
-   * Deliberately NOT via AudioSample.toAudioData(). That step was the one part of this chain
-   * never verified anywhere: reading the PCM straight off the sample is what was measured
-   * against real library files (6-channel E-AC3, peak 0.145, ten times real time), while
-   * toAudioData() constructs a WebCodecs object whose relationship to the sample's memory is an
-   * assumption. Handing back the floats keeps the proven path and removes a conversion nobody
-   * needs.
-   */
-  async *samples(fromSeconds: number): AsyncGenerator<DecodedAudio> {
-    for await (const sample of this.sink.samples(fromSeconds)) {
-      const planes: Float32Array[] = [];
-      for (let channel = 0; channel < sample.numberOfChannels; channel++) {
-        const plane = new Float32Array(sample.numberOfFrames);
-        sample.copyTo(plane, { planeIndex: channel, format: "f32-planar" });
-        planes.push(plane);
-      }
-      const decoded = { planes, sampleRate: sample.sampleRate, timestampSeconds: sample.timestamp };
-      sample.close();
-      yield decoded;
-    }
+  /** Decoded audio from `fromSeconds` onwards, as plain float planes. See planesFrom. */
+  samples(fromSeconds: number): AsyncGenerator<DecodedAudio> {
+    return this.produce(fromSeconds);
   }
 
   close(): void {
     this.dispose();
+  }
+}
+
+/**
+ * Decoded audio from `fromSeconds` onwards, as plain float planes.
+ *
+ * Deliberately NOT via AudioSample.toAudioData(). That step was the one part of this chain
+ * never verified anywhere: reading the PCM straight off the sample is what was measured
+ * against real library files (6-channel E-AC3, peak 0.145, ten times real time), while
+ * toAudioData() constructs a WebCodecs object whose relationship to the sample's memory is an
+ * assumption. Handing back the floats keeps the proven path and removes a conversion nobody
+ * needs.
+ */
+async function* planesFrom(
+  sink: { samples(from: number): AsyncIterable<SoftwareSample> },
+  fromSeconds: number
+): AsyncGenerator<DecodedAudio> {
+  for await (const sample of sink.samples(fromSeconds)) {
+    const planes: Float32Array[] = [];
+    for (let channel = 0; channel < sample.numberOfChannels; channel++) {
+      const plane = new Float32Array(sample.numberOfFrames);
+      sample.copyTo(plane, { planeIndex: channel, format: "f32-planar" });
+      planes.push(plane);
+    }
+    const decoded = { planes, sampleRate: sample.sampleRate, timestampSeconds: sample.timestamp };
+    sample.close();
+    yield decoded;
   }
 }
 

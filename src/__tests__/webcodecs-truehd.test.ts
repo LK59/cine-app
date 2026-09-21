@@ -1,0 +1,115 @@
+import { describe, it, expect, vi } from "vitest";
+import { TrueHdCore } from "@/lib/webcodecs/truehd/truehdCore";
+import { contiguousAudio } from "@/lib/webcodecs/truehd/truehdAudio";
+
+/**
+ * Le décodeur lui-même, sans flux réel : l'encodeur TrueHD de FFmpeg — 6.1, 7.1 et 8.1, essayés le
+ * 21/09/2026 — produit des flux que son propre décodeur refuse, quelle que soit la configuration,
+ * et le dépôt est public, donc pas d'extrait de film ici. Ce que le décodage donne sur de vrais
+ * fichiers est vérifié par truehd-bench.spec.ts, contre ffmpeg, canal par canal.
+ */
+describe("le décodeur TrueHD de FFmpeg, compilé en WebAssembly", () => {
+  it("se charge dans Node et refuse proprement ce qui n'est pas du TrueHD", async () => {
+    const core = await TrueHdCore.create(false);
+    const batch = core.decode([new Uint8Array(64).fill(7), new Uint8Array(3000).fill(0x55)]);
+    expect([...batch.frames]).toEqual([0, 0]);
+    expect(batch.pcm).toHaveLength(0);
+    core.reset();
+    core.close();
+  });
+
+  it("s'ouvre aussi en MLP", async () => {
+    const core = await TrueHdCore.create(true);
+    expect(core.decode([new Uint8Array(16)]).frames[0]).toBe(0);
+    core.close();
+  });
+});
+
+describe("contiguousAudio", () => {
+  const batch = (frames: number[], channels = 2) => {
+    const total = frames.reduce((n, f) => n + f, 0);
+    const pcm = new Float32Array(total * channels);
+    // Chaque image porte son propre numéro, pour vérifier ce qui est gardé et où.
+    for (let i = 0; i < total; i++) for (let c = 0; c < channels; c++) pcm[i * channels + c] = i + c / 10;
+    return { pcm, frames: Int32Array.from(frames), channels, sampleRate: 1000, errors: 0 };
+  };
+
+  it("garde un seul morceau quand les blocs se suivent", () => {
+    const out = contiguousAudio([0, 10_000, 20_000], batch([10, 10, 10]), 0, 2);
+    expect(out).toHaveLength(1);
+    expect(out[0].timestampSeconds).toBe(0);
+    expect(out[0].planes[0]).toHaveLength(30);
+  });
+
+  it("commence au bloc qui contient l'instant demandé, pas avant", () => {
+    // Le son d'avant, rendu à l'encodeur, aurait débordé sur le segment précédent.
+    const out = contiguousAudio([0, 10_000, 20_000], batch([10, 10, 10]), 0.015, 2);
+    expect(out[0].timestampSeconds).toBeCloseTo(0.01);
+    expect(out[0].planes[0][0]).toBe(10);
+  });
+
+  it("coupe là où un bloc n'a rien rendu, pour que chaque morceau garde son instant", () => {
+    const out = contiguousAudio([0, 10_000, 20_000, 30_000], batch([10, 0, 10, 10]), 0, 2);
+    expect(out.map((piece) => piece.timestampSeconds)).toEqual([0, 0.02]);
+    expect(out[1].planes[1][0]).toBeCloseTo(10.1);
+  });
+
+  it("ramène les canaux à ceux que l'en-tête annonce", () => {
+    const out = contiguousAudio([0], batch([4], 2), 0, 3);
+    expect(out[0].planes).toHaveLength(3);
+    expect([...out[0].planes[2]]).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe("le décodeur logiciel", () => {
+  it("confie le TrueHD et le MLP à notre décodeur, pas à mediabunny qui ne les connaît pas", async () => {
+    vi.resetModules();
+    const opened: number[] = [];
+    vi.doMock("@/lib/webcodecs/truehd/truehdAudio", () => ({
+      openTrueHdTrack: async (_source: unknown, trackNumber: number) => {
+        opened.push(trackNumber);
+        return { format: { sampleRate: 48000, numberOfChannels: 8 }, samples: async function* () {}, close: () => {} };
+      },
+    }));
+    try {
+      const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
+      const source = { size: 0, read: async () => new Uint8Array(0), close: () => {} };
+      const track = await SoftwareAudioTrack.open(source, 3, "A_TRUEHD");
+      expect(track.format).toEqual({ sampleRate: 48000, numberOfChannels: 8 });
+      await SoftwareAudioTrack.open(source, 4, "A_MLP");
+      expect(opened).toEqual([3, 4]);
+    } finally {
+      vi.doUnmock("@/lib/webcodecs/truehd/truehdAudio");
+    }
+  });
+});
+
+describe("ce que le build de production sait faire", () => {
+  it("n'a aucun worker écrit en TypeScript derrière new URL", async () => {
+    // 21/09/2026 : Turbopack (Next 16) a copié truehd.worker.ts tel quel dans static/media au lieu
+    // de le compiler — un worker qui n'aurait jamais démarré, et chaque TrueHD serait reparti au
+    // lecteur serveur. Le portail et le build passaient tous deux ; seul l'examen de ce que le build
+    // avait produit l'a montré.
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const path = await import("node:path");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = path.join(dir, name);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (/\.(ts|tsx)$/.test(name)) {
+          // Le code seulement : un commentaire qui raconte l'erreur a le droit de la citer.
+          const code = readFileSync(full, "utf8")
+            .split("\n")
+            .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+            .join("\n");
+          if (!/new Worker\(\s*new URL\(\s*["'][^"']+\.tsx?["']/.test(code)) continue;
+          offenders.push(full);
+        }
+      }
+    };
+    walk("src/lib");
+    walk("src/components");
+    expect(offenders).toEqual([]);
+  });
+});

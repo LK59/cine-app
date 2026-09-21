@@ -115,11 +115,12 @@ describe("transcodableAudio", () => {
     // the browser turns out not to take it. Dolby is here because Chrome ships no decoder for it
     // and would otherwise lose the hardware path over most of a library.
     // FLAC since 21/09/2026: Safari refuses it in a MediaSource, where Chrome and Firefox take it.
-    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_AC3", "A_EAC3", "A_FLAC"]) {
+    // TrueHD and MLP since 21/09/2026: FFmpeg's decoder, compiled to WebAssembly.
+    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_AC3", "A_EAC3", "A_FLAC", "A_TRUEHD", "A_MLP"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(true);
     }
-    // AAC every browser takes, and TrueHD has no decoder here at all.
-    for (const codecId of ["A_AAC", "A_TRUEHD", "A_MPEG/L2"]) {
+    // AAC every browser takes, and RealAudio has no decoder here at all.
+    for (const codecId of ["A_AAC", "A_REAL/COOK", "A_MPEG/L2"]) {
       expect(transcodableAudio({ codecId } as never)).toBe(false);
     }
   });

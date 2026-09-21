@@ -73,6 +73,10 @@ const DECODABLE_HERE = new Set([
   // Carried untouched wherever the browser takes it (Chrome, Firefox); decoded here, by
   // libFLAC, only where it does not — Safari. See flacDecoder.ts.
   "A_FLAC",
+  // No browser takes these anywhere. FFmpeg's own decoder, compiled to WebAssembly since
+  // 21/09/2026 — see truehd/truehdAudio.ts.
+  "A_TRUEHD",
+  "A_MLP",
 ]);
 
 export function transcodableAudio(track: MatroskaTrack): boolean {

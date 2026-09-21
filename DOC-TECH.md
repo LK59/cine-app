@@ -572,7 +572,7 @@ original defects lived.
 | Limitation | Detail |
 |---|---|
 | **No adaptive quality** | The file is read as it is — for a local network |
-| **TrueHD is not supported and will not be** | No browser decodes it, and nothing in this ecosystem does either. Of 2000 audited files, 35 carry TrueHD and 33 of those carry a Dolby or DTS track alongside, which is the one that plays. 3 files out of 2000 have no track this player can deliver |
+| **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
 | **Bitmap subtitles not rendered** | PGS and VobSub, covered by external `.srt` in every affected file here |

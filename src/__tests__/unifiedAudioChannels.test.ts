@@ -42,7 +42,9 @@ describe("unifiedAudioChannels", () => {
   });
 
   it("ignores tracks that cannot be carried at all", () => {
-    const undeliverable = { number: 4, type: "audio", codecId: "A_TRUEHD", audio: { channels: 8 } } as unknown as MatroskaTrack;
+    // RealAudio: no decoder here, none in any browser. (TrueHD was the example until 21/09/2026,
+    // when it gained one.)
+    const undeliverable = { number: 4, type: "audio", codecId: "A_REAL/COOK", audio: { channels: 8 } } as unknown as MatroskaTrack;
     expect(unifiedAudioChannels(file([video(), audio(2, "A_EAC3", 6), undeliverable]))).toBeNull();
   });
 });

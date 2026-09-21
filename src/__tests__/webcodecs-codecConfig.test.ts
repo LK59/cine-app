@@ -117,14 +117,13 @@ describe("track configuration", () => {
     }
   });
 
-  it("does not pretend a decoder exists for TrueHD", () => {
-    // Saying "it would need the software decoder" implies one could be reached for. There is
-    // none — not in this ecosystem and not in any that ships to a browser.
+  it("points TrueHD at the software decoder, which exists since 21/09/2026", () => {
+    // Until then the message said "no decoder anywhere, choose another track" — true, and the
+    // reason TrueHD had its own list. FFmpeg's decoder, compiled to WebAssembly, ended it.
     for (const codecId of ["A_TRUEHD", "A_MLP"]) {
       const t = track({ type: "audio", codecId, audio: { sampleRate: 48000, channels: 8 } });
       expect(audioConfigFor(t)).toBeNull();
-      expect(unsupportedReason(t)).toContain("nulle part");
-      expect(unsupportedReason(t)).toContain("autre piste");
+      expect(unsupportedReason(t)).toContain("décodeur logiciel");
     }
   });
 

@@ -194,8 +194,9 @@ export interface TrackPreferences {
 /**
  * Ce que ce chemin de lecture sait porter — une question, pas une propriété de la piste.
  *
- * La réponse dépend du lecteur et du navigateur : le TrueHD n'a de décodeur nulle part, le DTS en
- * a un chez nous, l'AAC en a un partout. L'appelant la pose donc lui-même.
+ * La réponse dépend du lecteur et du navigateur : le DTS et le TrueHD ont un décodeur chez nous
+ * (le TrueHD depuis le 21/09/2026), l'AAC en a un partout, le lecteur serveur les porte tous.
+ * L'appelant la pose donc lui-même.
  */
 export type Carriable<T> = (track: T) => boolean;
 
@@ -216,6 +217,10 @@ function rank<T extends NamedTrack>(tracks: T[], wanted: string | null, carriabl
        * lecteur cédait donc la place au lecteur serveur — six fois pour le même spectateur, qui
        * ne demandait que la VO. Il l'obtient maintenant sans quitter le lecteur natif, en 5.1 au
        * lieu de 7.1.
+       *
+       * Depuis le 21/09/2026, le TrueHD joue aussi dans le lecteur natif : les deux pistes du
+       * « Mans 66 » sont portables, et c'est la plus riche — la 7.1 — qui gagne de nouveau. La
+       * règle n'a pas changé ; c'est ce qu'elle voit qui a changé.
        *
        * Vingt points : assez pour départager deux pistes de la même langue, jamais assez pour
        * passer devant la langue demandée (cent). Une piste injouable dans la bonne langue reste

@@ -147,12 +147,21 @@ describe("Remuxer track selection", () => {
   });
 
   it("refuses a codec it can neither repackage nor re-encode", async () => {
-    // TrueHD has no decoder here at all, so there is nothing to turn it into.
-    const trueHd = track({ number: 2, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 6 } });
-    await expect(Remuxer.open(SOURCE, FILE, VIDEO, trueHd, { width: 1920, height: 1080 })).rejects.toThrow(/A_TRUEHD/);
+    // RealAudio has no decoder here at all, so there is nothing to turn it into.
+    const cook = track({ number: 2, type: "audio", codecId: "A_REAL/COOK", audio: { sampleRate: 48000, channels: 6 } });
+    await expect(Remuxer.open(SOURCE, FILE, VIDEO, cook, { width: 1920, height: 1080 })).rejects.toThrow(/A_REAL\/COOK/);
 
     const vp9 = track({ number: 1, type: "video", codecId: "V_VP9" });
     await expect(Remuxer.open(SOURCE, FILE, vp9, null, { width: 1920, height: 1080 })).rejects.toThrow(/V_VP9/);
+  });
+
+  it("carries TrueHD by re-encoding it, like DTS", () => {
+    // 21/09/2026. Until then no decoder existed here and a TrueHD-only VO went to the server.
+    const trueHd = track({ number: 2, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 8 } });
+    expect(playableAudio(trueHd)).toBe(true);
+    expect(remuxableAudio(trueHd)).toBe(false);
+    expect(audioDelivery(trueHd)).toBe("transcode");
+    expect(plannedMimeTypes(VIDEO, trueHd).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
   it("counts a track that has to be re-encoded as playable, and says what will arrive", () => {
@@ -298,7 +307,7 @@ describe("plannedMimeTypes", () => {
 
   it("returns nothing for a codec it cannot describe, rather than an invalid string", () => {
     expect(plannedMimeTypes(track({ number: 1, type: "video", codecId: "V_VP9" }), null).video).toBeNull();
-    expect(plannedMimeTypes(VIDEO, track({ number: 2, type: "audio", codecId: "A_TRUEHD" })).audio).toBeNull();
+    expect(plannedMimeTypes(VIDEO, track({ number: 2, type: "audio", codecId: "A_REAL/COOK" })).audio).toBeNull();
   });
 });
 

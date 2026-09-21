@@ -94,8 +94,10 @@ le départage « le plus riche » y était inerte.
 
 **Voulu.**
 - À l'ouverture du remux, on ne classe que les pistes **jouables** ; l'écran classe tout. Quand la
-  langue demandée n'existe qu'en TrueHD, les deux diffèrent exprès : on ouvre sur ce qui joue, et
-  choisir la VO à l'écran passe la main au lecteur serveur (test dédié dans `preferredAudio.test.ts`).
+  langue demandée n'existe qu'en piste injouable, les deux diffèrent exprès : on ouvre sur ce qui
+  joue, et choisir cette piste à l'écran passe la main au lecteur serveur (test dédié dans
+  `preferredAudio.test.ts`). Le TrueHD était ce cas jusqu'au 21/09/2026 ; il est décodé ici depuis,
+  et il n'en reste plus dans la bibliothèque — le test garde la règle avec du RealAudio.
 - Sans préférence, `preferredAudio` prend la plus riche des pistes jouables, et l'écran ne touche
   à rien (`chooseAudioTrack` rend `null`) : pas de désaccord possible, donc pas de bascule.
 
@@ -104,8 +106,9 @@ le départage « le plus riche » y était inerte.
 **Règle.** Un refus qui vise le *lecteur* (aucun chemin local ne portera ce fichier) arrête la
 chaîne et passe au serveur ; un refus qui vise le *chemin* essaie le suivant. Voir `CLAUDE.md`.
 
-**Porteur.** `choosePlaybackPath` (`pathSelector.ts`) à l'ouverture : TrueHD/MLP partout
-(`SANS_DECODEUR`), Dolby Vision sans couche HDR10.
+**Porteur.** `choosePlaybackPath` (`pathSelector.ts`) à l'ouverture : Dolby Vision sans couche
+HDR10. (Le TrueHD/MLP partout, `SANS_DECODEUR`, était le second cas jusqu'au 21/09/2026 : son
+décodeur existe maintenant ici — `truehd/`, FFmpeg compilé en WebAssembly.)
 
 **Voulu.** En plein film, choisir une piste que le remux ne porte pas (`canCarryAudio`, c'est-à-dire
 `playableAudio`) passe la main au serveur **plutôt qu'au canevas**, même si le canevas saurait la
