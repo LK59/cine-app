@@ -1,0 +1,355 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import useSWR from "swr";
+import { Check } from "lucide-react";
+import { fetcher } from "@/lib/swr";
+import { apiAction } from "@/lib/apiAction";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { toJellyfinLanguage } from "@/lib/trackPreferences";
+import { useLocale, useT } from "@/components/TranslationProvider";
+import { useToast } from "@/components/Toast";
+import { PushToggle } from "@/components/PushToggle";
+import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
+import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
+import { OPEN_ONBOARDING_EVENT } from "./onboardingEvents";
+
+/**
+ * L'écran d'accueil — trois réglages, puis le cinéma (21/09/2026).
+ *
+ * Pourquoi : sur 21 comptes, 13 n'avaient ni langue audio ni langue de sous-titres, et un seul
+ * avait choisi la langue de l'application. Tout le choix de piste (langue, puis la plus riche,
+ * puis les forcés) ne sert à rien tant qu'un compte n'a rien demandé.
+ *
+ * Les règles de Louis, qui sont le contrat de cet écran :
+ *  - il se propose tant que le marqueur du compte est allumé (voir `onboardingDb`) ;
+ *  - « Passer » le cache jusqu'au prochain lancement seulement — `sessionStorage`, que ferme la
+ *    fermeture de l'application ; une déconnexion en cours de route ne change rien ;
+ *  - seul le bouton de fin éteint le marqueur ;
+ *  - les réglages déjà faits chez Jellyfin sont préremplis ; le français seulement là où il n'y a
+ *    rien, pour ne jamais écraser un choix fait exprès ;
+ *  - tout se change ensuite dans Compte, et l'accueil s'y rouvre.
+ *
+ * Les contrôles sont ceux du panneau Compte (`accountControls`) : deux écrans qui recopieraient
+ * leurs listes finiraient par proposer des choix différents pour la même chose.
+ */
+
+const SKIPPED_KEY = "cine:onboarding-skipped";
+/** L'étape où reprendre après le rechargement qu'impose un changement de langue. */
+const RESUME_KEY = "cine:onboarding-resume";
+
+function readSession(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeSession(key: string, value: string | null) {
+  try {
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, value);
+  } catch {
+    // Navigation privée : l'accueil se reproposera, c'est tout.
+  }
+}
+
+/**
+ * Décide s'il faut montrer l'accueil — monté par la coquille du cinéma, sur toutes ses pages.
+ */
+export function PlayerOnboardingGate() {
+  const { data } = useSWR<{ pending: boolean }>("/api/onboarding", fetcher, { revalidateOnFocus: false });
+  // Lus une fois, au montage : ce sont des faits de ce lancement-ci.
+  const [skipped] = useState(() => typeof window !== "undefined" && readSession(SKIPPED_KEY) === "1");
+  const [resumeAt] = useState(() => {
+    const raw = typeof window !== "undefined" ? readSession(RESUME_KEY) : null;
+    return raw === null ? null : Number(raw) || 0;
+  });
+  const [manual, setManual] = useState(false);
+  const [closed, setClosed] = useState(false);
+
+  useEffect(() => {
+    const open = () => {
+      setClosed(false);
+      setManual(true);
+    };
+    window.addEventListener(OPEN_ONBOARDING_EVENT, open);
+    return () => window.removeEventListener(OPEN_ONBOARDING_EVENT, open);
+  }, []);
+
+  const show = !closed && (manual || resumeAt !== null || (data?.pending === true && !skipped));
+  if (!show) return null;
+  return (
+    <PlayerOnboarding
+      startAt={resumeAt ?? 0}
+      onSkip={() => {
+        writeSession(SKIPPED_KEY, "1");
+        setClosed(true);
+        setManual(false);
+      }}
+      onDone={() => {
+        setClosed(true);
+        setManual(false);
+      }}
+    />
+  );
+}
+
+type Step = "welcome" | "playback" | "notifications" | "done";
+
+export function PlayerOnboarding({
+  startAt = 0,
+  onSkip,
+  onDone,
+}: {
+  startAt?: number;
+  onSkip: () => void;
+  onDone: () => void;
+}) {
+  const t = useT();
+  const toast = useToast();
+  const { locale, setLocale } = useLocale();
+  const { data: me } = useSWR<{ username: string; jfUser: string | null }>("/api/auth/me", fetcher);
+  const hasJellyfin = me ? me.jfUser != null : true;
+  // Sans compte Jellyfin (le compte local), il n'y a pas de préférences de lecture à régler.
+  const steps = useMemo<Step[]>(
+    () => (hasJellyfin ? ["welcome", "playback", "notifications", "done"] : ["welcome", "notifications", "done"]),
+    [hasJellyfin]
+  );
+  const [index, setIndex] = useState(() => Math.min(startAt, 3));
+  const step = steps[Math.min(index, steps.length - 1)];
+  const [busy, setBusy] = useState(false);
+
+  // Après le rechargement d'une langue, on est revenu où il fallait : la reprise est consommée.
+  useEffect(() => {
+    writeSession(RESUME_KEY, null);
+  }, []);
+
+  const [lang, setLang] = useState<Locale>(locale);
+
+  const { data: prefs } = useSWR<PlayerPreferences>(hasJellyfin ? "/api/player/account/preferences" : null, fetcher, {
+    revalidateOnFocus: false,
+  });
+  /**
+   * Le préremplissage : ce qui existe chez Jellyfin, et le français seulement là où il n'y a rien.
+   * « Quand l'audio n'est pas dans ma langue » seulement pour un compte qui n'avait rien réglé du
+   * tout — « Selon le fichier » est aussi la valeur par défaut, on ne peut pas savoir s'il l'a
+   * choisi, donc on ne la change que chez ceux qui n'ont visiblement rien touché.
+   */
+  const initial = useMemo(() => {
+    if (!prefs) return null;
+    const untouched = !prefs.audioLanguage && !prefs.subtitleLanguage;
+    return {
+      audioLanguage: toJellyfinLanguage(prefs.audioLanguage) ?? "fra",
+      subtitleLanguage: toJellyfinLanguage(prefs.subtitleLanguage) ?? "fra",
+      subtitleMode: untouched ? "Smart" : prefs.subtitleMode ?? "Default",
+    };
+  }, [prefs]);
+  const [edits, setEdits] = useState<Partial<PlayerPreferences>>({});
+  const playback = initial ? { ...initial, ...edits } : null;
+
+  const pushSupported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+
+  async function next() {
+    if (busy) return;
+    if (step === "welcome" && lang !== locale) {
+      // Le dictionnaire vient du serveur : seul un rechargement le remplace. On reprend ensuite
+      // à l'étape suivante, dans la nouvelle langue.
+      setBusy(true);
+      writeSession(RESUME_KEY, String(index + 1));
+      await setLocale(lang);
+      setTimeout(() => window.location.reload(), 80);
+      return;
+    }
+    if (step === "playback" && playback && prefs) {
+      const changed =
+        playback.audioLanguage !== toJellyfinLanguage(prefs.audioLanguage) ||
+        playback.subtitleLanguage !== toJellyfinLanguage(prefs.subtitleLanguage) ||
+        playback.subtitleMode !== (prefs.subtitleMode ?? "Default");
+      if (changed) {
+        setBusy(true);
+        try {
+          await apiAction("/api/player/account/preferences", { method: "POST", body: JSON.stringify(playback) });
+        } catch (error) {
+          toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+          setBusy(false);
+          return;
+        }
+        setBusy(false);
+      }
+    }
+    if (step === "done") {
+      setBusy(true);
+      try {
+        await apiAction("/api/onboarding", { method: "POST" });
+      } catch (error) {
+        toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+        setBusy(false);
+        return;
+      }
+      onDone();
+      return;
+    }
+    setIndex((i) => Math.min(i + 1, steps.length - 1));
+  }
+
+  if (typeof document === "undefined") return null;
+
+  const name = me?.jfUser || me?.username || "";
+  const position = Math.min(index, steps.length - 1);
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("player.account.welcome")}
+      className="fixed inset-0 flex animate-fade-in items-stretch justify-center overflow-y-auto bg-ink sm:items-center"
+      style={{ zIndex: 70 }}
+    >
+      {/* Une lueur de la couleur d'accent, derrière tout : c'est la seule décoration de l'écran. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background:
+            "radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--color-accent-500) 22%, transparent), transparent 70%)",
+        }}
+      />
+
+      <div
+        className="relative flex w-full max-w-md flex-col px-6 sm:my-10 sm:rounded-3xl sm:border sm:border-white/10 sm:bg-white/[0.03] sm:px-8 sm:py-8 sm:shadow-2xl"
+        style={{
+          paddingTop: "max(1.5rem, env(safe-area-inset-top))",
+          paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
+        }}
+      >
+        {/* La progression et « Passer », toujours au même endroit. */}
+        <div className="flex items-center gap-4">
+          <div className="flex flex-1 gap-1.5" role="progressbar" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={position + 1} aria-label={t("player.onboarding.progress", { n: position + 1, total: steps.length })}>
+            {steps.map((s, i) => (
+              <span
+                key={s}
+                className={`h-1 flex-1 rounded-full transition-colors duration-300 ${i <= position ? "bg-white" : "bg-white/15"}`}
+              />
+            ))}
+          </div>
+          {step !== "done" && (
+            <button type="button" onClick={onSkip} className="text-sm font-medium text-white/50 transition-colors hover:text-white">
+              {t("player.onboarding.skip")}
+            </button>
+          )}
+        </div>
+
+        {/* Le contenu de l'étape, remonté à chaque changement pour rejouer son entrée. */}
+        <div key={step} className="flex flex-1 animate-fade-in-up flex-col justify-center py-10 sm:min-h-[26rem] sm:flex-none">
+          {step === "welcome" && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/icon-192.png" alt="" className="mb-6 h-16 w-16 rounded-2xl shadow-lg shadow-black/40" />
+              <h1 className="font-display text-3xl font-semibold leading-tight text-white">
+                {t("player.onboarding.welcomeTitle", { name })}
+              </h1>
+              <p className="mt-3 text-base leading-relaxed text-white/60">{t("player.onboarding.welcomeText")}</p>
+              <p className="mb-2.5 mt-8 text-xs font-medium uppercase tracking-wider text-white/40">
+                {t("player.onboarding.languageLabel")}
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {LOCALES.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => setLang(l)}
+                    aria-pressed={lang === l}
+                    className={`chip justify-center py-2.5 ${lang === l ? "chip-on" : ""}`}
+                  >
+                    {LOCALE_LABELS[l]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === "playback" && (
+            <>
+              <h1 className="font-display text-3xl font-semibold leading-tight text-white">{t("player.onboarding.playbackTitle")}</h1>
+              <p className="mt-3 text-base leading-relaxed text-white/60">{t("player.onboarding.playbackText")}</p>
+              <div className="mt-8 flex flex-col gap-4">
+                <LanguageSelect
+                  label={t("player.account.audioLanguage")}
+                  value={playback?.audioLanguage ?? null}
+                  disabled={!playback || busy}
+                  onChange={(code) => setEdits((e) => ({ ...e, audioLanguage: code }))}
+                />
+                <LanguageSelect
+                  label={t("player.account.subtitleLanguage")}
+                  value={playback?.subtitleLanguage ?? null}
+                  disabled={!playback || busy}
+                  onChange={(code) => setEdits((e) => ({ ...e, subtitleLanguage: code }))}
+                />
+                <SubtitleModeSelect
+                  value={playback?.subtitleMode ?? null}
+                  disabled={!playback || busy}
+                  onChange={(mode) => setEdits((e) => ({ ...e, subtitleMode: mode }))}
+                />
+              </div>
+              <p className="mt-4 text-xs leading-relaxed text-white/40">{t("player.onboarding.playbackNote")}</p>
+            </>
+          )}
+
+          {step === "notifications" && (
+            <>
+              <h1 className="font-display text-3xl font-semibold leading-tight text-white">{t("player.onboarding.notifTitle")}</h1>
+              <p className="mt-3 text-base leading-relaxed text-white/60">{t("player.onboarding.notifText")}</p>
+              <div className="mt-8">
+                {pushSupported ? (
+                  <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
+                    <PushToggle />
+                  </div>
+                ) : (
+                  // Sur iPhone, une page ouverte dans Safari ne peut pas s'abonner : il faut
+                  // l'application installée. On le dit, et on laisse passer.
+                  <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm leading-relaxed text-white/70">
+                    {t("player.onboarding.notifInstall")}
+                  </p>
+                )}
+                <NotificationChoices />
+              </div>
+            </>
+          )}
+
+          {step === "done" && (
+            <div className="flex flex-col items-center text-center">
+              <span className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-accent-500/20 text-accent-200 ring-1 ring-accent-400/40">
+                <Check size={30} />
+              </span>
+              <h1 className="font-display text-3xl font-semibold leading-tight text-white">{t("player.onboarding.doneTitle")}</h1>
+              <p className="mt-3 max-w-xs text-base leading-relaxed text-white/60">{t("player.onboarding.doneText")}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => void next()}
+            disabled={busy || (step === "playback" && !playback)}
+            className="flex w-full items-center justify-center rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-ink transition-transform active:scale-[0.98] disabled:opacity-60"
+          >
+            {step === "done" ? t("player.onboarding.finish") : t("player.onboarding.next")}
+          </button>
+          {position > 0 && step !== "done" && (
+            <button
+              type="button"
+              onClick={() => setIndex((i) => Math.max(0, i - 1))}
+              className="py-2 text-sm font-medium text-white/50 transition-colors hover:text-white"
+            >
+              {t("player.onboarding.back")}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}

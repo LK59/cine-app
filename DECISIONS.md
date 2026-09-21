@@ -213,6 +213,23 @@ a des notes, même si le synopsis tient en entier (`alwaysOpenable`).
 **Tests.** `CinemaDetailExtras.test.tsx`, `tvRuntime.test.ts`, `player-routes.test.ts`,
 `decisions-partagees.test.ts`.
 
+## 7 quater. Les réglages d'un compte, et l'écran d'accueil
+
+**Règle.** Les réglages d'un compte (langues audio et sous-titres, mode des sous-titres, choix des
+notifications) se choisissent avec les mêmes contrôles partout : panneau Compte et écran d'accueil.
+
+**Porteurs.** `src/components/player/accountControls.tsx` (`LanguageSelect`, `SubtitleModeSelect`,
+`NotificationChoices`). L'accueil : `PlayerOnboarding` / `PlayerOnboardingGate`, marqueur
+`onboardingDb` — seul le bouton de fin l'éteint ; « Passer » ne le cache que jusqu'au prochain
+lancement ; l'administrateur le rallume depuis Paramètres.
+
+**Voulu.** Le préremplissage garde ce qui est réglé chez Jellyfin et ne met le français que là où
+il n'y a rien ; « quand l'audio n'est pas dans ma langue » seulement pour un compte qui n'avait
+réglé aucune langue.
+
+**Tests.** `PlayerOnboarding.test.tsx`, `onboarding-db-routes.test.ts`,
+`player-notification-choices.test.tsx`.
+
 ## 8. Pastilles de qualité
 
 **Porteur.** `qualityBadges` (`videoQuality.ts`) et `QualityBadges.tsx`, pour les deux bannières et

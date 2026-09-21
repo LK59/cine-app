@@ -75,6 +75,8 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Ce que chacun veut recevoir, depuis le panneau Compte du cinéma (21/09/2026). La route n'écrit
   // que sous le nom de l'appelant, et seulement les annonces qu'un spectateur peut recevoir.
   "PUT /api/notifications/settings",
+  // « J'ai fini l'accueil » : n'éteint que le marqueur de l'appelant.
+  "POST /api/onboarding",
   "DELETE /api/auth/sessions",
 ]);
 

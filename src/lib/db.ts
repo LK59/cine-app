@@ -229,6 +229,29 @@ function migrate(db: Database.Database): void {
   // library file mtimes (see diskForecast.ts) — no history to wait weeks for, and one less
   // cron/table to maintain. Drops the now-unused table from the brief window it existed in.
   db.exec("DROP TABLE IF EXISTS disk_usage_history");
+
+  /**
+   * L'écran d'accueil à proposer, compte par compte (21/09/2026).
+   *
+   * Un marqueur par compte, sous son nom de session : allumé, l'accueil se propose à chaque
+   * lancement de l'application ; seul le bouton de fin l'éteint — « Passer » ne fait que le cacher
+   * jusqu'au prochain lancement, et une déconnexion en cours de route le laisse allumé.
+   * L'administrateur le rallume depuis la gestion. Un compte sans ligne n'a rien à voir.
+   *
+   * Au départ, le seul compte de Louis : il valide l'accueil avant de le proposer à tous.
+   */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS onboarding (
+      user_name  TEXT    PRIMARY KEY,
+      pending    INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+  if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
+    const now = Date.now();
+    db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
+    db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES ('onboarding-seed-louis', ?)").run(now);
+  }
 }
 
 // ─── User preferences ─────────────────────────────────────────────────────────
@@ -631,6 +654,26 @@ export interface StoredSession {
 }
 
 /** Les migrations de données déjà passées, pour qu'elles ne repassent pas. */
+export const onboardingDb = {
+  isPending(userName: string): boolean {
+    const row = getDb().prepare("SELECT pending FROM onboarding WHERE user_name = ?").get(userName) as { pending: number } | undefined;
+    return row?.pending === 1;
+  },
+  setPending(userName: string, pending: boolean): void {
+    getDb()
+      .prepare(`
+        INSERT INTO onboarding (user_name, pending, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT (user_name) DO UPDATE SET pending = excluded.pending, updated_at = excluded.updated_at
+      `)
+      .run(userName, pending ? 1 : 0, Date.now());
+  },
+  /** Le marqueur de chaque compte connu de la table. */
+  all(): Map<string, boolean> {
+    const rows = getDb().prepare("SELECT user_name, pending FROM onboarding").all() as { user_name: string; pending: number }[];
+    return new Map(rows.map((r) => [r.user_name, r.pending === 1]));
+  },
+};
+
 export const migrationDb = {
   isDone(name: string): boolean {
     return !!getDb().prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(name);

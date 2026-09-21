@@ -46,6 +46,8 @@ describe("proxy — what a plain user may write", () => {
       ["POST", "/api/client-error"],
       // Ce que chacun veut recevoir, depuis le cinéma (21/09/2026).
       ["PUT", "/api/notifications/settings"],
+      // La fin de l'écran d'accueil : n'éteint que le marqueur de l'appelant.
+      ["POST", "/api/onboarding"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

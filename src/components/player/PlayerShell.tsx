@@ -18,6 +18,8 @@ const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m)
 const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false });
 const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
+// L'écran d'accueil — chargé à part : la plupart des lancements ne l'affichent pas.
+const PlayerOnboardingGate = dynamic(() => import("./PlayerOnboarding").then((m) => m.PlayerOnboardingGate), { ssr: false });
 
 /**
  * La largeur que le rail replié occupe, réservée par le contenu.
@@ -174,6 +176,7 @@ export function PlayerShell() {
           haut hors de portée du pouce, et un écran entier recouvert pour poser une deuxième
           question. */}
       {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
+      <PlayerOnboardingGate />
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
           glissant. Voir useExitDelay. */}

@@ -832,6 +832,13 @@
       "subtitle": "Repasser par le serveur pour la lecture",
       "enable": "Utiliser le lecteur legacy",
       "enableDesc": "Par défaut, les films sont lus directement dans le navigateur, sans rien demander au serveur. Cette option repasse par l'ancien chemin : le serveur négocie le flux et transcode si nécessaire. Plus lent à démarrer et coûteux pour le serveur, mais c'est le chemin éprouvé — à activer si vous rencontrez un problème de lecture."
+    },
+    "onboarding": {
+      "title": "Écran d'accueil",
+      "hint": "Le proposer à un compte au prochain lancement de l'application. Il s'éteint quand la personne va jusqu'au bout.",
+      "all": "Proposer à tous",
+      "none": "Retirer à tous",
+      "pending": "À proposer"
     }
   },
   "watchlist": {
@@ -1244,10 +1251,10 @@
       "subtitleLanguage": "Langue des sous-titres",
       "subtitleMode": "Affichage des sous-titres",
       "subtitleModes": {
-        "Default": "Par défaut",
-        "Smart": "Intelligent",
+        "Default": "Selon le fichier",
+        "Smart": "Quand l'audio n'est pas dans ma langue",
         "Always": "Toujours",
-        "OnlyForced": "Seulement les forcés",
+        "OnlyForced": "Seulement les passages traduits",
         "None": "Jamais"
       },
       "playbackHint": "Ces réglages suivent votre compte : ils s’appliquent aussi dans les applications Jellyfin.",
@@ -1313,7 +1320,9 @@
       "notifRequest": "Mes demandes",
       "notifRequestHint": "Quand un titre demandé est disponible",
       "notifList": "Ma liste",
-      "notifListHint": "Quand un titre de votre liste arrive"
+      "notifListHint": "Quand un titre de votre liste arrive",
+      "redoOnboarding": "Revoir l'écran d'accueil",
+      "welcome": "Accueil"
     },
     "browse": {
       "seeAll": "Voir tout",
@@ -1372,6 +1381,24 @@
       "full": "Complets",
       "sdh": "Malentendants",
       "external": "externe"
+    },
+    "onboarding": {
+      "skip": "Passer",
+      "next": "Continuer",
+      "back": "Retour",
+      "finish": "C'est parti",
+      "progress": "Étape {n} sur {total}",
+      "welcomeTitle": "Bienvenue, {name}",
+      "welcomeText": "Trois réglages rapides, et tout sera à votre goût.",
+      "languageLabel": "Langue de l'application",
+      "playbackTitle": "Audio et sous-titres",
+      "playbackText": "Les films s'ouvriront directement dans vos langues.",
+      "playbackNote": "S'applique aussi à vos autres appareils Jellyfin, comme la télé.",
+      "notifTitle": "Notifications",
+      "notifText": "Être prévenu quand quelque chose arrive pour vous.",
+      "notifInstall": "Sur iPhone, ajoutez d'abord l'application à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis activez les notifications depuis Compte.",
+      "doneTitle": "C'est prêt",
+      "doneText": "Vous retrouverez tous ces réglages dans Compte, quand vous voulez."
     }
   },
   "cinema": {

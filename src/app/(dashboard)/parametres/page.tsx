@@ -306,6 +306,8 @@ export default function ParametresPage() {
           </section>
         )}
 
+        {role === "admin" && <OnboardingAdminSection />}
+
 
       </div>
     </div>
@@ -525,6 +527,59 @@ function LegacyPlayerSection() {
           </div>
           <Toggle checked={enabled} onChange={update} />
         </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * L'écran d'accueil du cinéma, compte par compte (21/09/2026).
+ *
+ * Allumer, c'est le proposer au prochain lancement de l'application ; il s'éteint tout seul quand
+ * la personne va jusqu'au bout — pas quand elle passe. « Proposer à tous » est le geste de mise en
+ * ligne, une fois l'accueil validé sur son propre compte.
+ */
+function OnboardingAdminSection() {
+  const t = useT();
+  const toast = useToast();
+  const { data, mutate } = useSWR<{ accounts: { name: string; pending: boolean }[] }>("/api/admin/onboarding", fetcher);
+
+  async function put(body: { user?: string; all?: boolean; pending: boolean }) {
+    try {
+      const next = (await apiAction("/api/admin/onboarding", { method: "PUT", body: JSON.stringify(body) })) as {
+        accounts: { name: string; pending: boolean }[];
+      };
+      await mutate(next, { revalidate: false });
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold text-white">{t("settings.onboarding.title")}</h2>
+        <p className="text-xs text-slate-500">{t("settings.onboarding.hint")}</p>
+      </div>
+      <div className="card divide-y divide-white/5">
+        {(data?.accounts ?? []).map((account) => (
+          <div key={account.name} className="flex items-center justify-between gap-4 px-5 py-3">
+            <span className="text-sm text-white">{account.name}</span>
+            <Toggle
+              checked={account.pending}
+              onChange={(pending) => void put({ user: account.name, pending })}
+              ariaLabel={`${t("settings.onboarding.pending")} — ${account.name}`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-ghost" onClick={() => void put({ all: true, pending: true })}>
+          {t("settings.onboarding.all")}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={() => void put({ all: true, pending: false })}>
+          {t("settings.onboarding.none")}
+        </button>
       </div>
     </section>
   );

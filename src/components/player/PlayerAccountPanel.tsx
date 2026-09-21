@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -12,9 +12,9 @@ import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
-import { Toggle } from "@/components/Toggle";
-import { VIEWER_NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notifications";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
+import { openOnboarding } from "./onboardingEvents";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
@@ -92,6 +92,15 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
             seulement pour l'administrateur : rien n'est bloqué au-delà de l'affichage — le proxy
             refuse déjà toute écriture à un compte ordinaire — mais proposer une porte qui ne
             s'ouvre pas est une promesse qu'on ne tient pas. */}
+        {/* L'écran d'accueil, à revoir quand on veut — sans toucher au marqueur du compte :
+            c'est le bouton de fin de l'accueil qui l'éteint, pas son ouverture. */}
+        <Section icon={Sparkles} title={t("player.account.welcome")}>
+          <button type="button" onClick={openOnboarding} className="btn btn-ghost w-full justify-center sm:w-auto">
+            <Sparkles size={16} />
+            {t("player.account.redoOnboarding")}
+          </button>
+        </Section>
+
         {me?.role === "admin" && (
           <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
             <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
@@ -180,65 +189,6 @@ function LanguageSection() {
   );
 }
 
-// Les codes sous lesquels Jellyfin range ces langues — la forme terminologique de l'ISO 639-2,
-// `fra` et non `fre`, vérifiée sur le serveur. Voir `toJellyfinLanguage`.
-const AUDIO_CHOICES = ["", "fra", "eng", "spa", "deu", "ita", "jpn"] as const;
-
-// `Smart` fait partie des modes de Jellyfin et manquait ici : un compte réglé dessus voyait
-// « Par défaut », c'est-à-dire le premier de la liste faute de correspondance.
-const SUBTITLE_MODES = ["Default", "Smart", "Always", "OnlyForced", "None"] as const;
-
-/**
- * Les choix à afficher, la valeur enregistrée comprise.
- *
- * Un compte réglé sur une langue absente de cette courte liste — du russe, du coréen — ne doit
- * pas voir « peu importe » : il croirait n'avoir rien choisi, et le premier réglage qu'il
- * toucherait effacerait sa préférence. La valeur est donc ajoutée à la liste, sous son code, et
- * survit à une visite.
- */
-function choicesWith(current: string | null): readonly string[] {
-  if (!current || (AUDIO_CHOICES as readonly string[]).includes(current)) return AUDIO_CHOICES;
-  return [...AUDIO_CHOICES, current];
-}
-
-function LanguageSelect({
-  label,
-  value,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  disabled: boolean;
-  onChange: (code: string | null) => void;
-}) {
-  const t = useT();
-  const current = toJellyfinLanguage(value);
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs text-slate-400">{label}</span>
-      <select
-        className="select"
-        disabled={disabled}
-        value={current ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-      >
-        {choicesWith(current).map((code) => (
-          <option key={code || "none"} value={code}>
-            {/* Une langue hors liste s'affiche sous son code en capitales plutôt que sous une clé
-                de traduction manquante : c'est laid mais juste, et ça se reconnaît. */}
-            {!code
-              ? t("player.account.langAny")
-              : (AUDIO_CHOICES as readonly string[]).includes(code)
-                ? t(`player.account.lang.${code}`)
-                : code.toUpperCase()}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 function PlaybackSection() {
   const t = useT();
   const toast = useToast();
@@ -277,21 +227,12 @@ function PlaybackSection() {
           onChange={(code) => void save({ subtitleLanguage: code })}
         />
 
-        <label className="flex flex-col gap-1.5 sm:col-span-2">
-          <span className="text-xs text-slate-400">{t("player.account.subtitleMode")}</span>
-          <select
-            className="select"
-            disabled={saving || !data}
-            value={data?.subtitleMode ?? "Default"}
-            onChange={(e) => void save({ subtitleMode: e.target.value })}
-          >
-            {SUBTITLE_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {t(`player.account.subtitleModes.${mode}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SubtitleModeSelect
+          className="sm:col-span-2"
+          value={data?.subtitleMode ?? null}
+          disabled={saving || !data}
+          onChange={(mode) => void save({ subtitleMode: mode })}
+        />
       </div>
       <p className="mt-3 text-xs text-slate-500">{t("player.account.playbackHint")}</p>
     </Section>
@@ -593,61 +534,5 @@ function MaintenanceSection() {
           : t("player.account.maintenanceHint")}
       </p>
     </Section>
-  );
-}
-
-/**
- * Ce que chacun veut recevoir — les trois annonces d'un spectateur.
- *
- * L'interrupteur du dessus abonne *cet appareil* ; ces choix-là appartiennent au *compte* et valent
- * sur tous ses appareils. Ils n'existaient que dans la gestion : un spectateur ne pouvait que tout
- * couper — ce qui compte depuis que « nouvel épisode », qui n'était jamais parti, part vraiment.
- *
- * Basculé tout de suite, remis en place et dit si le serveur refuse.
- */
-const CHOICE_LABELS: Record<(typeof VIEWER_NOTIFICATION_CATEGORIES)[number], [string, string]> = {
-  "new-episode": ["player.account.notifNewEpisode", "player.account.notifNewEpisodeHint"],
-  "request-available": ["player.account.notifRequest", "player.account.notifRequestHint"],
-  "watchlist-available": ["player.account.notifList", "player.account.notifListHint"],
-};
-
-function NotificationChoices() {
-  const t = useT();
-  const toast = useToast();
-  const { data, mutate } = useSWR<{ preferences: Record<NotificationCategory, boolean> }>("/api/notifications/settings", fetcher);
-
-  async function set(category: NotificationCategory, enabled: boolean) {
-    if (!data?.preferences) return;
-    const before = data;
-    await mutate({ preferences: { ...data.preferences, [category]: enabled } }, { revalidate: false });
-    try {
-      const next = (await apiAction("/api/notifications/settings", {
-        method: "PUT",
-        body: JSON.stringify({ preferences: { [category]: enabled } }),
-      })) as { preferences: Record<NotificationCategory, boolean> };
-      await mutate(next, { revalidate: false });
-    } catch (error) {
-      await mutate(before, { revalidate: false });
-      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
-    }
-  }
-
-  // Pas de préférences lisibles, pas de cases : mieux vaut rien qu'un interrupteur qui ment.
-  if (!data?.preferences) return null;
-  return (
-    <ul className="mt-3 flex flex-col divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5 px-4">
-      {VIEWER_NOTIFICATION_CATEGORIES.map((category) => {
-        const [label, hint] = CHOICE_LABELS[category];
-        return (
-          <li key={category} className="flex items-center justify-between gap-4 py-3">
-            <div>
-              <p className="text-sm text-white">{t(label)}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{t(hint)}</p>
-            </div>
-            <Toggle checked={data.preferences[category] === true} onChange={(value) => void set(category, value)} ariaLabel={t(label)} />
-          </li>
-        );
-      })}
-    </ul>
   );
 }
