@@ -1,6 +1,20 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import fs from "fs";
+import os from "os";
+
+/**
+ * Un dossier de données jetable pour chaque exécution de la suite.
+ *
+ * `DATA_DIR` vaut par défaut `<cwd>/data`, et la commande de vérification monte le dépôt entier
+ * dans le conteneur : sans ceci, tout test qui passait par `logError` écrivait dans le vrai
+ * `data/logs/server.log`. Le 19/09, un quart de ce journal était des erreurs de doubles Vitest
+ * (« No "tmdb" export is defined on the mock ») qu'on aurait lues comme des pannes du serveur.
+ * Les tests qui ont besoin de leur propre dossier (`db`, `session`, `dbBackup`…) le posent
+ * toujours eux-mêmes et l'emportent sur celui-ci.
+ */
+const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "cine-test-data-"));
 
 export default defineConfig({
   // tsconfig.json sets "jsx": "preserve" (correct for Next.js's own SWC compiler, which does the
@@ -30,6 +44,7 @@ export default defineConfig({
      * tests qui en dépendent, pas en montant de version.
      */
     clearMocks: false,
+    env: { DATA_DIR: TEST_DATA_DIR },
   },
   resolve: {
     alias: {
