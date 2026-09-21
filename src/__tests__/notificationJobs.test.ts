@@ -272,3 +272,37 @@ describe("checkNewEpisodes", () => {
     );
   });
 });
+
+describe("isRequestedSeriesAvailable", () => {
+  // 74 séries sur 137 ont une saison 0 sans épisode suivi : demandées en entier, elles n'auraient
+  // jamais été annoncées disponibles.
+  const season = (seasonNumber: number, episodeCount: number, episodeFileCount: number) => ({
+    seasonNumber,
+    statistics: { episodeCount, episodeFileCount },
+  });
+
+  it("ignore la saison des bonus et les saisons pas encore diffusées d'une demande entière", async () => {
+    const { isRequestedSeriesAvailable } = await import("@/lib/notificationJobs");
+    const show = { seasons: [season(0, 0, 0), season(1, 8, 8), season(2, 8, 8), season(3, 0, 0)] };
+    expect(isRequestedSeriesAvailable(show, null)).toBe(true);
+  });
+
+  it("attend qu'il ne manque rien de ce qui est sorti", async () => {
+    const { isRequestedSeriesAvailable } = await import("@/lib/notificationJobs");
+    expect(isRequestedSeriesAvailable({ seasons: [season(1, 8, 8), season(2, 8, 5)] }, null)).toBe(false);
+  });
+
+  it("ne regarde que les saisons demandées, quand elles le sont", async () => {
+    const { isRequestedSeriesAvailable } = await import("@/lib/notificationJobs");
+    const show = { seasons: [season(1, 8, 8), season(2, 8, 0)] };
+    expect(isRequestedSeriesAvailable(show, [1])).toBe(true);
+    expect(isRequestedSeriesAvailable(show, [2])).toBe(false);
+    // Une saison demandée qui n'est pas encore sortie n'est pas « disponible ».
+    expect(isRequestedSeriesAvailable({ seasons: [season(3, 0, 0)] }, [3])).toBe(false);
+  });
+
+  it("ne dit rien d'une série sans saison diffusée", async () => {
+    const { isRequestedSeriesAvailable } = await import("@/lib/notificationJobs");
+    expect(isRequestedSeriesAvailable({ seasons: [season(0, 0, 0)] }, null)).toBe(false);
+  });
+});

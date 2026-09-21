@@ -191,6 +191,31 @@ export async function checkNewEpisodes(): Promise<void> {
 // as that check), never calls Jellyseerr itself: a background cron has no user session to
 // authenticate with against this fork's session-gated API, and there's no need to — cine-app
 // already recorded who requested what at request-creation time (see /api/jellyseerr/requests).
+/**
+ * Une série demandée est-elle là ?
+ *
+ * Demandée en entier (`seasons` nul), elle exigeait que **toutes** ses saisons soient complètes —
+ * saison 0 comprise, et saisons annoncées pas encore diffusées comprises. Or la saison des bonus
+ * n'a presque jamais d'épisode suivi : 74 séries sur 137 ici (mesuré le 21/09/2026). Pour ces
+ * séries, « Ta demande est disponible » ne serait jamais parti.
+ *
+ * Une demande entière compte donc les vraies saisons qui ont déjà des épisodes à avoir ; une
+ * demande de saisons précises compte celles-là, et rien d'autre.
+ */
+export function isRequestedSeriesAvailable(
+  show: { seasons?: { seasonNumber: number; statistics?: { episodeCount: number; episodeFileCount: number } }[] },
+  requested: number[] | null
+): boolean {
+  const seasons = (show.seasons ?? []).filter((season) =>
+    requested ? requested.includes(season.seasonNumber) : season.seasonNumber > 0 && (season.statistics?.episodeCount ?? 0) > 0
+  );
+  if (seasons.length === 0) return false;
+  return seasons.every((season) => {
+    const stats = season.statistics;
+    return !!stats && stats.episodeCount > 0 && stats.episodeFileCount >= stats.episodeCount;
+  });
+}
+
 export async function checkRequestAvailability(): Promise<void> {
   try {
     const pending = pendingRequestDb.getAll();
@@ -215,15 +240,7 @@ export async function checkRequestAvailability(): Promise<void> {
         // Every specifically-requested season must be fully downloaded — a partial season
         // shouldn't count as "your request is ready", matching the season-aware request flow
         // this notification is meant to close the loop on.
-        const seasonNumbers = req.seasons ?? show?.seasons?.map((s) => s.seasonNumber) ?? [];
-        available =
-          !!show &&
-          seasonNumbers.length > 0 &&
-          seasonNumbers.every((n) => {
-            const season = show.seasons?.find((s) => s.seasonNumber === n);
-            const stats = season?.statistics;
-            return !!stats && stats.episodeCount > 0 && stats.episodeFileCount >= stats.episodeCount;
-          });
+        available = !!show && isRequestedSeriesAvailable(show, req.seasons);
       }
 
       if (!available || !title) continue;
