@@ -89,18 +89,21 @@ export const PlayerResultCard = memo(function PlayerResultCard({
             complète, six cent soixante-dix cartes en portaient une chacune, pour répéter « Film »
             six cent soixante-dix fois sous l'onglet Films. */}
         {showKind && (
-          <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+          <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white/85">
             <Icon size={10} />
             {kindLabel}
           </span>
         )}
 
+        {/* Sans flou, sur un fond un peu plus dense (21/09/2026) : une filmographie peut en porter
+            cent cinquante, dans une carte qui glisse — autant de `backdrop-filter` à recalculer
+            à chaque image. Même raison que l'étiquette du type juste au-dessus. */}
         {/* « Pas encore là » est l'état par défaut d'une liste d'envies : c'était l'information la
             moins importante de la grille et la plus voyante, un bandeau violet pleine largeur en
             travers de six affiches sur huit. Réduite à une pastille de coin sans fond plein, le
             violet reste disponible pour ce qui le mérite — un titre qui vient d'arriver. */}
         {missing && (
-          <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40 backdrop-blur-sm">
+          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40">
             {t("player.notInLibrary")}
           </span>
         )}

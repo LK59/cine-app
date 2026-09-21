@@ -327,3 +327,13 @@ describe("le second écran des fiches laisse sa place au bouton Retour", () => {
     }
   });
 });
+
+describe("la fiche découverte montre la même distribution que les autres", () => {
+  // Elle avait sa propre rangée — plus petite, sans le rôle : la cascade acteur → film → acteur
+  // changeait d'aspect à chaque cran selon que le film était dans la bibliothèque ou non.
+  it("passe par `CinemaCastRow`", () => {
+    const src = lire("src/components/player/PlayerDiscoverSheet.tsx");
+    expect(src).toContain("<CinemaCastRow cast={castFromTitle(data.cast)}");
+    expect(src).not.toMatch(/function CastRow\(/);
+  });
+});

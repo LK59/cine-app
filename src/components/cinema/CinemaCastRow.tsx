@@ -14,7 +14,10 @@ export interface CinemaCastMember {
 }
 
 /**
- * La distribution d'un titre, en visages — une seule rangée pour les trois fiches.
+ * La distribution d'un titre, en visages — une seule rangée pour toutes les fiches : film, série,
+ * téléphone, et la fiche découverte (titre absent de la bibliothèque), qui avait la sienne — plus
+ * petite, sans le rôle — si bien que la cascade acteur → film → acteur changeait d'aspect à chaque
+ * cran selon que le film était là ou non.
  *
  * Revenue le 21/09/2026 : en copiant Netflix, les fiches n'avaient gardé qu'une ligne de noms
  * (« Avec … ») et la partie qu'on aimait dans la gestion avait disparu — des têtes sur lesquelles
@@ -28,12 +31,18 @@ export interface CinemaCastMember {
  * Mémoïsée pour la même raison que `CinemaSimilarRow` : elle est en bas d'une fiche que le
  * moindre changement d'adresse redessine.
  */
-export const CinemaCastRow = memo(function CinemaCastRow({ cast }: { cast: CinemaCastMember[] }) {
+export const CinemaCastRow = memo(function CinemaCastRow({
+  cast,
+  className = "",
+}: {
+  cast: CinemaCastMember[];
+  className?: string;
+}) {
   const t = useT();
   if (cast.length === 0) return null;
 
   return (
-    <section className="w-full">
+    <section className={`w-full ${className}`}>
       <h2 className="mb-2 text-sm font-medium text-white/70">{t("cinema.castTitle")}</h2>
       {/* py-4 + overflow-y-hidden, comme la rangée des titres similaires : un visage qui grandit
           au focus a besoin de place dans la boîte, et la molette revient à la page. */}
@@ -68,3 +77,8 @@ export const CinemaCastRow = memo(function CinemaCastRow({ cast }: { cast: Cinem
     </section>
   );
 });
+
+/** La distribution d'une fiche découverte (`/api/player/title`), dans la forme de la rangée. */
+export function castFromTitle(cast: { id: number; name: string; character: string; profilePath: string | null }[]): CinemaCastMember[] {
+  return cast.slice(0, 12).map((c) => ({ tmdbId: c.id, name: c.name, character: c.character, photoUrl: c.profilePath }));
+}

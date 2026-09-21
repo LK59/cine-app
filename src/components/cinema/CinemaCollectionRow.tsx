@@ -190,7 +190,7 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
             {/* Le même signe discret que partout ailleurs pour « on ne l'a pas » — voir la grille
                 de Ma liste, où la pastille pleine largeur écrasait les affiches. */}
             {!part.movie && (
-              <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40 backdrop-blur-sm">
+              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40">
                 {t("player.notInLibrary")}
               </span>
             )}

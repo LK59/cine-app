@@ -183,6 +183,10 @@ const TMDB_POSTER = "https://image.tmdb.org/t/p/w342";
  * images au lieu d'une.
  */
 const FIRST_PAINT = 18;
+/** Ce qu'on ajoute à chaque temps mort, une fois la carte posée. Voir `settled`. */
+const FILL_CHUNK = 24;
+/** Au cas où la fin d'animation ne serait jamais annoncée (onglet caché, mouvement réduit…). */
+const SETTLE_FALLBACK_MS = 450;
 
 /**
  * La fiche d'une personne, dans le lecteur.
@@ -294,29 +298,58 @@ export function PlayerPersonSheet({
    * suffisent donc à ce qu'elle a à montrer — et c'est autant de travail en moins à l'instant
    * précis où le film du dessus se monte.
    */
-  const [complete, setComplete] = useState(false);
+  /**
+   * Rien de lourd tant que la carte glisse.
+   *
+   * Mesuré le 21/09/2026 sur un banc Playwright (téléphone 390×844, processeur bridé ×6) : poser
+   * soixante cartes d'un coup fige une image pendant ~140 ms, et le temps mort d'avant tombait
+   * **dans** le glissement (délai 300 ms, animation 340 ms) — l'à-coup se voyait en pleine entrée,
+   * à chaque cran d'une cascade acteur → film → acteur. Le flou, lui, ne pesait presque rien.
+   *
+   * `settled` passe à vrai à la fin de l'animation d'entrée (ou tout de suite quand on revient sur
+   * la carte par un retour, sans animation), avec un minuteur de secours si l'évènement ne vient
+   * pas. Ce qui attend : la suite de la filmographie, les photos, les liens et la biographie.
+   */
+  const [settled, setSettled] = useState(revealed);
   useEffect(() => {
-    // Armé sur l'arrivée des données, et non sur le montage : la filmographie vient d'une requête,
-    // donc au montage il n'y a rien à étaler et le temps mort passait avant elle — la borne ne
-    // servait alors jamais. Vérifié en test : soixante cartes dès la première image.
-    if (underneath || !data) return;
-    const fill = () => setComplete(true);
+    if (settled) return;
+    const timer = window.setTimeout(() => setSettled(true), SETTLE_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [settled]);
+
+  /**
+   * Puis la filmographie par paquets, un paquet par temps mort.
+   *
+   * Tout d'un coup après l'entrée, l'arrêt de ~140 ms ne faisait que changer de place : invisible
+   * tant que la carte est immobile, bien visible si le doigt la fait défiler aussitôt. Vingt-quatre
+   * cartes par tour, c'est une image courte chacune. Armé sur l'arrivée des données, et non sur le
+   * montage : la filmographie vient d'une requête. `setState` dans le rappel, jamais dans le corps
+   * de l'effet (règle du compilateur React) ; le minuteur couvre Safari, sans `requestIdleCallback`.
+   */
+  const [shown, setShown] = useState(FIRST_PAINT);
+  useEffect(() => {
+    if (underneath || !data || !settled || shown >= credits.length) return;
+    const grow = () => setShown((n) => n + FILL_CHUNK);
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
     if (idle) {
-      const handle = idle(fill, { timeout: 300 });
+      const handle = idle(grow, { timeout: 200 });
       return () => (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(handle);
     }
-    const timer = window.setTimeout(fill, 60);
+    const timer = window.setTimeout(grow, 32);
     return () => clearTimeout(timer);
-  }, [underneath, data]);
+  }, [underneath, data, settled, shown, credits.length]);
 
-  const shownCredits = complete ? credits : credits.slice(0, FIRST_PAINT);
+  const shownCredits = credits.slice(0, shown);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
   if (typeof document === "undefined") return null;
 
-  const bio = selectBio(data?.biography, enriched?.wikiBio);
+  // Liens et biographie une fois la carte posée : arrivés en plein glissement, ils poussaient
+  // tout le contenu vers le bas pendant qu'il bougeait. Avant, rien — plutôt que la biographie
+  // de TMDB remplacée par celle de Wikipédia sous les yeux.
+  const links = settled ? enriched : undefined;
+  const bio = settled ? selectBio(data?.biography, enriched?.wikiBio) : null;
   const age = data?.birthday ? ageAt(data.birthday, data.deathday, now) : null;
   const owned = shownCredits.filter((c) => c.inLibrary);
   const elsewhere = shownCredits.filter((c) => !c.inLibrary);
@@ -362,8 +395,12 @@ export function PlayerPersonSheet({
       {/* Le voile : il laisse voir le film qu'on regardait, et le toucher referme la carte. */}
       <div
         aria-hidden
+        data-person-scrim
         onClick={underneath ? undefined : requestClose}
-        className={`absolute inset-0 bg-black/70 backdrop-blur-sm ${
+        // Le flou sur grand écran seulement. Un `backdrop-filter` plein écran se recalcule à chaque
+        // image de ce qui bouge dessous ou dessus — et sur téléphone, dans une cascade, il y a
+        // toujours quelque chose qui bouge : c'est ce qui a déjà fait saccader iOS ailleurs ici.
+        className={`absolute inset-0 ${isMobile ? "bg-black/75" : "bg-black/70 backdrop-blur-sm"} ${
           leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
         }`}
         style={{ opacity: swipe.offset > 0 ? Math.max(0.2, 1 - swipe.offset / 400) : undefined }}
@@ -372,6 +409,10 @@ export function PlayerPersonSheet({
       <div
         role="dialog"
         aria-modal="true"
+        // La fin de l'entrée, et seulement la sienne : les animations des enfants remontent jusqu'ici.
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) setSettled(true);
+        }}
         aria-label={data?.name ?? undefined}
         /**
          * Sur téléphone, la carte **est** le conteneur de défilement, et c'est elle qu'on anime :
@@ -469,22 +510,22 @@ export function PlayerPersonSheet({
 
         {data && (
           <div className="px-5 pb-8 sm:px-8">
-            {(enriched?.instagram || enriched?.imdb || enriched?.wikipedia) && (
+            {(links?.instagram || links?.imdb || links?.wikipedia) && (
               <div className="mt-4 flex flex-wrap gap-2">
-                {enriched.instagram && (
-                  <a href={enriched.instagram} target="_blank" rel="noopener noreferrer"
+                {links.instagram && (
+                  <a href={links.instagram} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-pink-500/10 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition hover:bg-pink-500/20">
                     <InstagramIcon size={12} /> Instagram
                   </a>
                 )}
-                {enriched.imdb && (
-                  <a href={enriched.imdb} target="_blank" rel="noopener noreferrer"
+                {links.imdb && (
+                  <a href={links.imdb} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20">
                     <Star size={12} /> IMDb
                   </a>
                 )}
-                {enriched.wikipedia && (
-                  <a href={enriched.wikipedia} target="_blank" rel="noopener noreferrer"
+                {links.wikipedia && (
+                  <a href={links.wikipedia} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20">
                     <Globe size={12} /> Wikipédia
                   </a>
@@ -494,7 +535,7 @@ export function PlayerPersonSheet({
 
             {/* Pas sous une fiche pleine : c'est une rangée d'images qu'on ne verra pas, montée
                 à l'instant où le film du dessus, lui, a besoin de tout le fil d'exécution. */}
-            {!underneath && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
+            {!underneath && settled && <PhotoRow photos={photos} onOpen={setPhotoIndex} label={t("player.person.photos")} />}
 
             {/* La biographie de Wikipédia quand elle existe, dans la langue du compte — plus
                 complète que celle de TMDB, souvent vide ou en anglais. Voir `selectBio`. */}

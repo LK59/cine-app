@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, Users, X } from "lucide-react";
+import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
@@ -23,8 +23,9 @@ import {
   CinemaOverview,
   CinemaDetailModal,
 } from "@/components/cinema/CinemaDetailLayout";
-import type { PlayerTitlePayload, PlayerTitleCast } from "@/app/api/player/title/[type]/[tmdbId]/route";
+import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/route";
 import type { PlayerRequestState } from "@/lib/playerRequestState";
+import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
@@ -47,53 +48,6 @@ const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
  * Les deux gestes restent indépendants : ajouter à une liste n'envoie rien, demander ne range
  * rien. Chacun écrit là où vit sa vérité.
  */
-/**
- * La distribution, en pastilles rondes qui mènent chacune à sa fiche.
- *
- * Partagée par les deux mises en page de cette fiche — celle du grand écran et celle du
- * téléphone : c'est le même contenu, et le seul endroit d'où l'on part vers un acteur.
- */
-function CastRow({
-  cast,
-  label,
-  className = "",
-}: {
-  cast: PlayerTitleCast[];
-  label: string;
-  className?: string;
-}) {
-  if (cast.length === 0) return null;
-  return (
-    <div className={className}>
-      <p className="mb-2 flex items-center gap-1.5 text-xs text-white/50">
-        <Users size={12} /> {label}
-      </p>
-      <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-2">
-        {cast.slice(0, 12).map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => cinemaNavigate({ person: c.id })}
-            className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center focus-visible:outline-none"
-          >
-            <span className="h-16 w-16 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-              {c.profilePath ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.profilePath} alt="" loading="lazy" className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-white/30">
-                  <Users size={16} />
-                </span>
-              )}
-            </span>
-            <span className="line-clamp-2 text-[10px] leading-tight text-white/70">{c.name}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function PlayerDiscoverSheet({
   tmdbId,
   mediaType,
@@ -310,7 +264,7 @@ export function PlayerDiscoverSheet({
 
           {data.overview && <p className="mb-4 text-sm leading-6 text-white/90">{data.overview}</p>}
 
-          <CastRow cast={data.cast} label={t("player.discover.castTitle")} />
+          <CinemaCastRow cast={castFromTitle(data.cast)} />
         </div>
       )}
     </div>
@@ -338,7 +292,10 @@ export function PlayerDiscoverSheet({
         <img src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       <div
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
+        // Grand écran seulement : sur téléphone cette fiche arrive en glissant, souvent au milieu
+        // d'une cascade acteur → film → acteur, et un flou sur la moitié de l'écran se recalcule
+        // à chaque image du mouvement. Les deux voiles suffisent à la lecture du texte.
+        className="absolute inset-x-0 bottom-0 md:backdrop-blur-md"
         style={{
           height: "45%",
           maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
@@ -458,7 +415,7 @@ export function PlayerDiscoverSheet({
 
               </div>
 
-              <CastRow cast={data.cast} label={t("player.discover.castTitle")} className="mt-4" />
+              <CinemaCastRow cast={castFromTitle(data.cast)} className="mt-4" />
             </div>
           </div>
         </div>

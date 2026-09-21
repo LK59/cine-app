@@ -84,8 +84,8 @@ export interface SheetRef {
   /**
    * La personne recouverte, s'il s'agit d'elle.
    *
-   * Exclusif des deux champs ci-dessus : une entrée recouvre une fiche de titre **ou** une fiche
-   * personne, jamais les deux — c'est ce qui rend la question décidable sans rien stocker de plus.
+   * Elle peut coexister avec `film` / `serie` : une personne ouverte depuis un film laisse le film
+   * dans l'adresse, et l'entrée décrit alors l'acteur *posé sur* ce film. Voir `personBehind`.
    *
    * C'était le défaut structurel de la fiche personne : elle ne faisait pas partie de la pile. Une
    * fiche de titre recouverte est redessinée dessous à partir de cette référence (voir
@@ -97,10 +97,20 @@ export interface SheetRef {
   person: number | null;
 }
 
-/** La fiche personne que l'entrée courante recouvre, quand c'est d'elle qu'on vient. */
+/**
+ * La fiche personne que l'entrée courante recouvre, quand c'est d'elle qu'on vient.
+ *
+ * Y compris quand cette personne était elle-même posée sur un film (`film` **et** `person` dans
+ * l'entrée) : c'est le cas ordinaire d'une cascade film → acteur → film, et c'est exactement
+ * l'écran qu'on doit retrouver en tirant le second film vers le bas — l'acteur, sur le premier.
+ * La règle d'avant (« une entrée recouvre un titre *ou* une personne ») n'y voyait que le film :
+ * on découvrait le film A, puis la carte de l'acteur surgissait d'un coup à la fin du retour.
+ * La pile du téléphone redessine déjà le film sous elle (`behindSelected`) ; la personne se pose
+ * entre les deux — même plan 47 que le film recouvert, montée après lui, donc au-dessus.
+ */
 export function personBehind(behind: SheetRef | null): number | null {
   if (behind === null) return null;
-  return behind.film === null && behind.serie === null ? behind.person : null;
+  return behind.person;
 }
 
 /** Un titre, une personne : quelque chose est ouvert par-dessus la grille. */

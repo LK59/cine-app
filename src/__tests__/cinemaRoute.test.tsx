@@ -394,9 +394,7 @@ describe("personBehind", () => {
     expect(personBehind(result.current)).toBe(6384);
   });
 
-  // Exclusif : une entrée recouvre une fiche de titre *ou* une fiche personne, jamais les deux —
-  // c'est ce qui rend la question décidable sans rien stocker de plus, et ce qui fait que les deux
-  // ne se disputent jamais le plan du dessous.
+  // Une personne ouverte sur un film recouvre ce film : l'entrée d'en dessous est celle du film seul.
   it("ne nomme personne quand c'est un titre qui est recouvert", () => {
     const { result } = renderHook(() => useRouteBehind());
     act(() => openLibraryTitle("movie", 1));
@@ -404,6 +402,19 @@ describe("personBehind", () => {
 
     expect(result.current?.film).toBe(1);
     expect(personBehind(result.current)).toBeNull();
+  });
+
+  // La cascade film → acteur → film : l'entrée recouverte porte le premier film *et* l'acteur
+  // posé dessus. C'est l'acteur qu'on doit retrouver en tirant le second film — pas le premier,
+  // sur lequel sa carte surgissait ensuite d'un coup.
+  it("nomme l'acteur posé sur un film, dans une cascade", () => {
+    const { result } = renderHook(() => useRouteBehind());
+    act(() => openLibraryTitle("movie", 1));
+    act(() => cinemaNavigate({ person: 6384 }));
+    act(() => openLibraryTitle("movie", 2));
+
+    expect(result.current?.film).toBe(1);
+    expect(personBehind(result.current)).toBe(6384);
   });
 
   it("ne nomme personne quand il n'y a rien derrière", () => {

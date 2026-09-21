@@ -71,7 +71,25 @@ beforeEach(() => {
   });
   vi.stubGlobal("cancelIdleCallback", () => {});
 });
-const settle = () => act(async () => { idleCallbacks.forEach((cb) => cb()); });
+/**
+ * Tous les temps morts, jusqu'au dernier : la filmographie arrive maintenant par paquets, chacun
+ * programmant le suivant.
+ */
+const settle = async () => {
+  // Un `act` par tour : dans un seul, les mises à jour attendent la fin et l'effet qui programme
+  // le paquet suivant ne tourne jamais entre deux.
+  for (let i = 0; i < 20 && idleCallbacks.length > 0; i++) {
+    const pending = idleCallbacks;
+    idleCallbacks = [];
+    await act(async () => pending.forEach((cb) => cb()));
+  }
+};
+/**
+ * La fin de l'entrée. jsdom n'anime rien et React n'y reçoit pas `animationend` : c'est le minuteur
+ * de secours de la fiche qui la déclare posée — le chemin qu'on prend aussi quand l'évènement ne
+ * vient pas pour de vrai (onglet caché, mouvement réduit). On l'attend donc, tout simplement.
+ */
+const finishEntry = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 500)));
 
 afterEach(() => {
   cleanup();
@@ -85,10 +103,36 @@ describe("PlayerPersonSheet — la filmographie", () => {
     // De quoi remplir l'écran à toutes les densités, et rien de plus, à la première image.
     expect(cardCount()).toBe(18);
 
-    // Le reste suit au temps mort, donc bien avant qu'un doigt ait pu descendre jusque-là : rien
-    // n'est retiré, seulement étalé sur deux images au lieu d'une.
+    // Rien de plus tant que la carte glisse : c'est là que l'à-coup se voyait (banc du 21/09).
+    await settle();
+    expect(cardCount()).toBe(18);
+
+    // Puis, une fois posée, le reste par paquets — chacun une image courte.
+    await finishEntry();
     await settle();
     expect(cardCount()).toBe(60);
+  });
+
+  it("n'ajoute la suite que par paquets, jamais d'un coup", async () => {
+    draw({ tmdbId: 9 });
+    await screen.findByText("Film 0");
+    await finishEntry();
+    // Un seul temps mort : un paquet, pas toute la filmographie.
+    await act(async () => {
+      const pending = idleCallbacks;
+      idleCallbacks = [];
+      pending.forEach((cb) => cb());
+    });
+    expect(cardCount()).toBe(18 + 24);
+  });
+
+  it("garde photos, liens et biographie pour après l'entrée", async () => {
+    draw({ tmdbId: 10 });
+    await screen.findByText("Film 0");
+    await settle();
+    expect(screen.queryByText("Bio Wikipédia.")).toBeNull();
+    await finishEntry();
+    expect(await screen.findByText("Bio Wikipédia.")).toBeTruthy();
   });
 
   /**
@@ -119,6 +163,8 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
   // filmographie en deux temps, posée sur le titre) remplace la page plein écran du cinéma.
   it("donne les liens et la biographie de Wikipédia, avec sa source", async () => {
     draw({ tmdbId: 5 });
+    await screen.findByText("Film 0");
+    await finishEntry();
     expect(await screen.findByText("Bio Wikipédia.")).toBeTruthy();
     expect(screen.getByText("modals.actor.sourceWikipedia")).toBeTruthy();
     expect(screen.getByText("IMDb").closest("a")?.getAttribute("href")).toBe("https://www.imdb.com/name/nm1");
@@ -136,7 +182,7 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     cinemaClose.mockClear();
     const { unmount } = draw({ tmdbId: 7 });
     await screen.findByText("Film 0");
-    const voile = () => document.body.querySelector("[aria-hidden].backdrop-blur-sm") as HTMLElement;
+    const voile = () => document.body.querySelector("[data-person-scrim]") as HTMLElement;
     act(() => voile().click());
     expect(cinemaClose).toHaveBeenCalledWith({ person: null });
     unmount();

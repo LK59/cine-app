@@ -488,7 +488,7 @@ export function CinemaMobileDetail({
                   <div className="relative w-32 shrink-0">
                     <PosterImage src={episode.thumbnailUrl} alt={episode.title} aspectRatio="aspect-video" unoptimized subtle />
                     <span className="absolute inset-0 flex items-center justify-center">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xs">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white">
                         <Play size={14} fill="currentColor" />
                       </span>
                     </span>
