@@ -140,6 +140,7 @@ describe("Remuxer track selection", () => {
     expect((await open()).diagnostics()).toEqual({
       presentationDelaySeconds: 0,
       clampedSamples: 0,
+      nudgedSamples: 0,
       transcodedAudio: false,
       transcodedCodec: null,
       segmentStartSeconds: 0,

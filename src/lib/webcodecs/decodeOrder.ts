@@ -131,3 +131,86 @@ function median(values: number[]): number {
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? Math.round((sorted[middle - 1] + sorted[middle]) / 2) : sorted[middle];
 }
+
+/**
+ * Deux images ne partagent jamais un instant d'affichage — la règle que MediaSource impose.
+ *
+ * Trouvé le 21/09/2026 sur *Dirty Dancing*, importé le matin même : certaines images y portent
+ * l'instant d'une autre — une image lue à 2,5 s datée de 42 ms, des images de tête d'un GOP
+ * ouvert datées comme la dernière image du groupe précédent (6 en deux minutes). ffmpeg les
+ * décode sans broncher ; Safari, lui, échouait (« Media failed to decode ») peu après chacune, et
+ * le lecteur reconstruisait trois fois avant de passer la main. La spécification de MediaSource
+ * dit pourquoi : une image ajoutée à l'instant exact d'une image déjà en mémoire *retire*
+ * l'ancienne, et tout ce qui s'appuyait sur elle ne se décode plus.
+ *
+ * Décaler la seconde d'une milliseconde suffit à ce qu'elle ne remplace plus rien — la règle de
+ * retrait ne vise qu'une image commençant moins d'une microseconde après une autre. Rien n'est
+ * retiré du flux : retirer une image, c'est risquer de casser celles qui s'appuient sur elle.
+ * La mémoire est bornée — un doublon lointain ne peut plus rien retirer de ce que le navigateur
+ * garde encore.
+ */
+export const DUPLICATE_NUDGE_US = 1000;
+/**
+ * « Au même instant » veut dire à moins de 4 ms, pas seulement à l'identique.
+ *
+ * Le même fichier a deux images à 19,978 s et 19,979 s, dans deux groupes : une image de 42 ms
+ * qui commence une milliseconde avant une autre la recouvre, et MediaSource retire l'autre tout
+ * autant — et la chronologie de décodage reculait d'une milliseconde à cet endroit. Aucune cadence
+ * réelle ne met deux images à moins de 8 ms (120 i/s) ; 4 ms ne touche donc qu'aux fichiers faux.
+ */
+export const COLLISION_US = 4000;
+const REMEMBERED = 4096;
+
+export class PresentationDeduper {
+  /** Par tranche de COLLISION_US : une image n'a que trois tranches à regarder. */
+  private readonly buckets = new Map<number, number[]>();
+  private readonly order: number[] = [];
+  /** Combien d'images ont dû être décalées depuis le début — pour le panneau technique. */
+  nudged = 0;
+
+  private near(t: number): number | null {
+    const k = Math.floor(t / COLLISION_US);
+    let found: number | null = null;
+    for (const bucket of [k - 1, k, k + 1]) {
+      for (const seen of this.buckets.get(bucket) ?? []) {
+        if (Math.abs(seen - t) < COLLISION_US && (found === null || seen > found)) found = seen;
+      }
+    }
+    return found;
+  }
+
+  /**
+   * L'instant à donner à cette image : le sien, ou juste après l'image qu'il heurtait.
+   *
+   * Ne heurte qu'une image au même instant ou *juste après* : MediaSource retire ce qui commence
+   * à l'intérieur de la nouvelle image, pas ce qui commence avant elle. Une image déjà là une
+   * milliseconde plus tôt ne gêne donc pas, et on ne touche à rien.
+   */
+  take(timestampUs: number): number {
+    let t = timestampUs;
+    for (;;) {
+      const hit = this.near(t);
+      if (hit === null || hit < t) break;
+      if (t === timestampUs) this.nudged += 1;
+      t = hit + DUPLICATE_NUDGE_US;
+    }
+    const k = Math.floor(t / COLLISION_US);
+    (this.buckets.get(k) ?? this.buckets.set(k, []).get(k)!).push(t);
+    this.order.push(t);
+    if (this.order.length > REMEMBERED) {
+      const old = this.order.shift()!;
+      const list = this.buckets.get(Math.floor(old / COLLISION_US));
+      if (list) {
+        list.splice(list.indexOf(old), 1);
+        if (list.length === 0) this.buckets.delete(Math.floor(old / COLLISION_US));
+      }
+    }
+    return t;
+  }
+
+  /** Après un saut : le navigateur repart d'une zone neuve, les instants d'avant ne comptent plus. */
+  reset(): void {
+    this.buckets.clear();
+    this.order.length = 0;
+  }
+}

@@ -7,7 +7,7 @@
 // nothing and, unlike the WebCodecs path, hands the decoding back to the browser's own hardware
 // pipeline: no canvas, no per-frame JavaScript, no colour conversion, HDR handled natively.
 
-import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
+import { deriveDurations, assignDecodeTimes, PresentationDeduper } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
 import { av1CodecString, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
@@ -132,6 +132,8 @@ export interface RemuxDiagnostics {
   presentationDelaySeconds: number;
   /** Pictures whose offset had to be clamped because the fixed delay was too small. Should be 0. */
   clampedSamples: number;
+  /** Pictures moved a millisecond because another already had their instant. See PresentationDeduper. */
+  nudgedSamples: number;
   /** The sound is being decoded and encoded again on the way through, rather than copied. */
   transcodedAudio: boolean;
   /** What it was re-encoded as, when it was. Not always AAC — see chooseTranscodeCodec. */
@@ -493,6 +495,8 @@ export class Remuxer {
   private needKeyframe = false;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
+  /** Deux images au même instant : voir `PresentationDeduper`. */
+  private readonly presentations = new PresentationDeduper();
   private sequence = 1;
   private done = false;
 
@@ -695,6 +699,7 @@ export class Remuxer {
     return {
       presentationDelaySeconds: (this.presentationDelayUs ?? 0) / TIMESCALE,
       clampedSamples: this.clampedSamples,
+      nudgedSamples: this.presentations.nudged,
       transcodedAudio: this.transcoder !== null,
       transcodedCodec: this.transcoder?.codecString ?? null,
       segmentStartSeconds: this.segmentStartUs / TIMESCALE,
@@ -725,6 +730,7 @@ export class Remuxer {
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
+    this.presentations.reset();
     // The group being handed over piece by piece is abandoned with everything else.
     this.emitted = 0;
     this.boundary = null;
@@ -777,7 +783,7 @@ export class Remuxer {
     }
 
     while (!this.groupClosed && !this.settled()) {
-      const sample = await this.reader.next();
+      let sample = await this.reader.next();
       if (!sample) {
         this.done = true;
         this.groupClosed = true;
@@ -800,6 +806,10 @@ export class Remuxer {
           this.needKeyframe = false;
           this.seekTargetUs = null;
         }
+        // Un instant déjà pris par une autre image la ferait retirer par le navigateur — voir
+        // `PresentationDeduper`. Une copie : l'échantillon appartient au lecteur de fichier.
+        const at = this.presentations.take(sample.timestampUs);
+        if (at !== sample.timestampUs) sample = { ...sample, timestampUs: at };
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (this.startsHere(sample) && span >= SEGMENT_US) {
           this.boundary = sample;
@@ -959,6 +969,7 @@ export class Remuxer {
     this.pendingVideo = [];
     this.pendingAudio = [];
     this.pendingSubtitles = [];
+    this.presentations.reset();
     trace(
       `index : rien où démarrer avant ${(this.seekTargetUs / 1e6).toFixed(1)} s, ` +
         `relecture depuis ${(earlier / 1e6).toFixed(1)} s`
