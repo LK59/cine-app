@@ -63,3 +63,11 @@ services:
     networks:
       - media_net
     restart: unless-stopped
+    # Vivant et capable de lire sa base. Docker ne redémarre pas un conteneur « unhealthy » de
+    # lui-même : le statut se lit dans `docker ps` ou dans un outil de supervision.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

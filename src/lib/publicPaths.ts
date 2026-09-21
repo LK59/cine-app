@@ -19,6 +19,8 @@ export const PUBLIC_PATHS = [
   "/api/status/public",
   "/api/config/public",
   "/api/push/vapid-key",
+  // La sonde de santé de Docker, qui n'a pas de session à présenter — voir la route.
+  "/api/ping",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */
