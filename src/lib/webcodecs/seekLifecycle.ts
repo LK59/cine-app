@@ -71,3 +71,38 @@ export class SeekLifecycle {
     return this.intent !== null || this.requested !== null;
   }
 }
+
+/** Jusqu'où, après sa cible, un saut ou une ouverture peut aller chercher le média qu'il a produit. */
+export const LANDING_REACH_SECONDS = 15;
+
+/** Un pas dans le média plutôt que son premier instant — voir `landingFor`. */
+export const LANDING_INSET = 0.04;
+
+/**
+ * Où poser la tête pour rejoindre `target` : `target` si le média le couvre ; sinon un pas dans le
+ * premier média qui commence après lui, à `reach` secondes au plus ; sinon `null`, rien à rejoindre.
+ *
+ * **Un seul atterrissage pour l'ouverture et pour le saut** (22/09/2026). Il y en avait deux :
+ * après un saut (`nudgeIntoBuffer`) et à l'ouverture en cours de film (`placePendingStart`), qui
+ * ne s'accordaient ni sur la portée — quinze secondes contre une — ni sur l'endroit : l'ouverture
+ * posait la tête pile au bord du média, ce qui laisse WebKit dans un saut qu'il ne résout pas —
+ * un épisode figé à 0:00 avec vingt secondes en tampon, corrigé pour les sauts seulement. Et un
+ * index creux, dont le média commence quelques secondes après la position demandée, ne se
+ * rejoignait à l'ouverture que par une reprise qui relisait le fichier.
+ *
+ * Un pas, parce que le premier instant d'une plage est justement ce qui ne se résout pas ; une
+ * image, imperceptible, et jamais au-delà de la fin de la plage.
+ */
+export function landingFor(ranges: TimeRanges, target: number, reach: number): number | null {
+  let start: number | null = null;
+  let end = 0;
+  for (let i = 0; i < ranges.length; i++) {
+    if (ranges.start(i) <= target && target < ranges.end(i)) return target;
+    if (ranges.start(i) > target && (start === null || ranges.start(i) < start)) {
+      start = ranges.start(i);
+      end = ranges.end(i);
+    }
+  }
+  if (start === null || start - target > reach) return null;
+  return Math.min(start + LANDING_INSET, Math.max(start, end - 0.05));
+}

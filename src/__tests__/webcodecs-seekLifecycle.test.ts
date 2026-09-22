@@ -40,3 +40,26 @@ describe("SeekLifecycle", () => {
     expect(seek.pending).toBe(false);
   });
 });
+
+describe("landingFor — un seul atterrissage pour l'ouverture et le saut", () => {
+  const ranges = (...spans: [number, number][]) =>
+    ({ length: spans.length, start: (i: number) => spans[i][0], end: (i: number) => spans[i][1] }) as unknown as TimeRanges;
+
+  it("reste sur la cible quand le média la couvre", async () => {
+    const { landingFor } = await import("@/lib/webcodecs/seekLifecycle");
+    expect(landingFor(ranges([595, 630]), 600, 15)).toBe(600);
+  });
+
+  it("pose la tête un pas dans le premier média qui suit, jamais sur son premier instant", async () => {
+    const { landingFor } = await import("@/lib/webcodecs/seekLifecycle");
+    expect(landingFor(ranges([640, 660], [600.3, 620]), 600, 15)).toBeCloseTo(600.34, 5);
+    // Une plage plus courte que le pas : juste avant sa fin.
+    expect(landingFor(ranges([600.3, 600.32]), 600, 15)).toBe(600.3);
+  });
+
+  it("ne va pas chercher au-delà de sa portée, ni en arrière", async () => {
+    const { landingFor } = await import("@/lib/webcodecs/seekLifecycle");
+    expect(landingFor(ranges([640, 660]), 600, 15)).toBeNull();
+    expect(landingFor(ranges([500, 590]), 600, 15)).toBeNull();
+  });
+});

@@ -814,9 +814,11 @@ index can only be reached near its start (`reachable`).
   the clock held, and the out-of-place detector caught it both times. The hold also silenced the
   frozen-clock and stall watches. Safari fires no `requestVideoFrameCallback` at rate 0, so the
   release cannot wait for the first picture either.
-- **Not merged yet:** the two landings, `placePendingStart` at open and `nudgeIntoBuffer` after a
-  seek. They differ in tolerance (1 s against 15 s) and in inset. Merging them touches opening on
-  iPhone, so it is left for a separate change.
+- **One landing for opening and for seeking** (`landingFor`). The playhead stays on the target if
+  media covers it. Otherwise it goes one frame inside the first media that starts after the target
+  (`LANDING_INSET`), up to 15 s later. Opening used to land exactly on the media's first instant,
+  which WebKit leaves unresolved, and reached only 1 s ahead, so a sparse index could only be
+  joined through a recovery that re-read the file.
 
 ## Device test bench
 

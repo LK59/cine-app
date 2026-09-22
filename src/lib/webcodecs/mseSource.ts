@@ -14,7 +14,7 @@ import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
-import { SeekLifecycle } from "./seekLifecycle";
+import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
@@ -969,18 +969,18 @@ export class MseSource {
   private placePendingStart(): void {
     const target = this.pendingStart;
     if (target === null) return;
-    const ranges = this.video.buffered;
-    for (let i = 0; i < ranges.length; i++) {
-      const start = ranges.start(i);
-      const end = ranges.end(i);
-      const landing = target >= start && target <= end ? target : start > target && start - target < 1 ? start : null;
-      if (landing === null) continue;
-      this.pendingStart = null;
-      trace(`ouverture : le média couvre ${landing.toFixed(1)} s, la tête y est posée`);
-      this.video.currentTime = landing;
-      this.guard.opened(landing, !this.startPaused);
-      return;
-    }
+    // Le même atterrissage qu'après un saut — voir `landingFor`.
+    const landing = landingFor(this.video.buffered, target, LANDING_REACH_SECONDS);
+    if (landing === null) return;
+    this.pendingStart = null;
+    trace(
+      landing === target
+        ? `ouverture : le média couvre ${landing.toFixed(1)} s, la tête y est posée`
+        : `ouverture : le média commence après ${target.toFixed(1)} s, la tête est posée à ${landing.toFixed(2)} s`
+    );
+    this.seekState.moved(landing);
+    this.video.currentTime = landing;
+    this.guard.opened(landing, !this.startPaused);
   }
 
   private async clear(queue: BufferQueue): Promise<void> {

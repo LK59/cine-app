@@ -713,6 +713,30 @@ describe("MseSource", () => {
     expect(video.currentTime).toBeCloseTo(1200, 1);
   });
 
+  it("à l'ouverture, pose la tête un pas dans le média qui commence après elle, comme après un saut", async () => {
+    // Audit du 22/09/2026 : l'ouverture posait la tête pile au bord du média — ce qui laisse WebKit
+    // dans un saut qu'il ne résout pas, déjà corrigé pour les sauts (LANDING_INSET) — et ne
+    // l'atteignait qu'à moins d'une seconde, contre quinze après un saut.
+    const video = fakeVideo();
+    mediaStartsAtDefault = 1200.3;
+    await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() }, 1200);
+    await flush();
+    expect(video.currentTime).toBeCloseTo(1200.34, 3);
+  });
+
+  it("à l'ouverture, rejoint aussi un média qui commence plusieurs secondes après la position, comme un saut", async () => {
+    // Un index creux : le média produit commence 3,5 s après la position demandée. Avant, la tête
+    // restait à zéro jusqu'à ce que la détection « rien retenu » s'en mêle.
+    const video = fakeVideo();
+    mediaStartsAtDefault = 1203.5;
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() }, 1200);
+    await flush();
+    expect(video.currentTime).toBeCloseTo(1203.54, 3);
+    // Directement : pas par une reprise qui relit le fichier.
+    expect(remuxer.seeks).toEqual([1200]);
+  });
+
   it("laisse un saut remplacer l'ouverture au lieu de s'y ajouter", async () => {
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500);

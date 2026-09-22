@@ -9,6 +9,7 @@
 // evidence behind it — every rule here was measured on a device, and the comments say which.
 
 import { trace } from "./trace";
+import { LANDING_REACH_SECONDS, landingFor } from "./seekLifecycle";
 
 /**
  * What the guard needs from the source it belongs to.
@@ -64,15 +65,6 @@ const RESUME_TOLERANCE_SECONDS = 1.5;
  */
 const PAUSE_DRIFT_SECONDS = 0.25;
 
-/**
- * How far past a seek's target the playhead may be moved to reach the media it produced.
- *
- * Generously more than a segment, because a sparse index misses by that much, and far less than
- * any distance a viewer would notice as the wrong place in a film. Beyond it, the gap is a fault
- * worth reporting rather than stepping over.
- */
-const SEEK_LANDING_SECONDS = 15;
-
 /** Including the one made at the pause itself. Past this, the element is left alone. */
 const MAX_PAUSE_ASSERTIONS = 3;
 
@@ -89,9 +81,6 @@ const STILL_AT_THE_START = 1;
 
 /** How long after opening a film this may still insist on starting it. */
 const START_WINDOW_MS = 15000;
-
-/** How far inside the media a landing aims. One frame, and never past the range's own end. */
-const LANDING_INSET = 0.04;
 
 export class PlaybackGuard {
   constructor(
@@ -296,19 +285,6 @@ export class PlaybackGuard {
     if (ranges.length === 0 || this.host.destroyed || (this.video.paused && !landing)) return;
 
     const now = this.video.currentTime;
-    let start: number | null = null;
-    let end = 0;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= now && now < ranges.end(i)) {
-        this.seekLanding = null; // arrived
-        return;
-      }
-      if (ranges.start(i) > now && (start === null || ranges.start(i) < start)) {
-        start = ranges.start(i);
-        end = ranges.end(i);
-      }
-    }
-    if (start === null) return;
 
     // Two tolerances, because two different things are being closed.
     //
@@ -321,17 +297,17 @@ export class PlaybackGuard {
     // was served, and each time the playhead stayed on nothing until the reader gave up and
     // declared the browser to be keeping nothing. A media element seeking into a gap lands on
     // the nearest media it has; so does this.
-    const tolerance = landing ? SEEK_LANDING_SECONDS : this.host.delaySeconds + 0.15;
-    if (start - now > tolerance) return;
-    if (landing) trace(`atterrissage : la tête passe de ${now.toFixed(1)} s au média qui commence à ${start.toFixed(1)} s`);
+    const tolerance = landing ? LANDING_REACH_SECONDS : this.host.delaySeconds + 0.15;
+    // Le même atterrissage qu'à l'ouverture — voir `landingFor`, qui dit aussi pourquoi un pas dans
+    // le média plutôt que son premier instant.
+    const target = landingFor(ranges, now, tolerance);
+    if (target === null) return;
+    if (target === now) {
+      this.seekLanding = null; // arrived
+      return;
+    }
+    if (landing) trace(`atterrissage : la tête passe de ${now.toFixed(1)} s au média, posée à ${target.toFixed(2)} s`);
     this.seekLanding = null;
-
-    // A hair inside the media rather than exactly on its first instant. Seeking to the precise
-    // boundary of a buffered range regularly leaves the seek unresolved on this platform: the
-    // element reports itself as playing, the playhead sits on the boundary, and the clock never
-    // moves — which is what an episode opened from the beginning looked like, frozen at 0:00
-    // with twenty seconds buffered. One frame in is imperceptible and is unambiguously covered.
-    const target = Math.min(start + LANDING_INSET, Math.max(start, end - 0.05));
     this.host.noteSeekTarget(target);
     // A move made on purpose, and the resume guard must not mistake it for one. Left standing,
     // the anchor makes the next event read this step forward as a jump and pull it back — a
