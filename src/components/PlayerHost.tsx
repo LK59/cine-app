@@ -7,7 +7,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, returningFor, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, returningFor, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -996,7 +996,9 @@ function ActivePlayer({
    * il resterait sur ce lecteur jusqu'à la fin du film.
    */
   const handleCastReturn = useCallback(() => {
-    onCastEnded?.(videoRef.current?.currentTime || 0);
+    // Pas `currentTime || 0` : une diffusion quittée pendant son chargement n'a pas encore posé sa
+    // position, et le film repartait du début — voir `castHandBackPosition`.
+    onCastEnded?.(castHandBackPosition(videoRef.current?.currentTime ?? 0, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
   }, [onCastEnded]);
 
   const castAttempted = useRef(false);
@@ -1079,7 +1081,7 @@ function ActivePlayer({
         reason: `fin de diffusion (${source})`,
         at: Math.round(video.currentTime || 0),
       });
-      onCastEnded?.(video.currentTime || 0);
+      onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
     };
     const setActive = (active: boolean) => {
       castActiveRef.current = active;

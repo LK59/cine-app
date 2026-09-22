@@ -117,6 +117,20 @@ export function returningFor(
  * Recorded per item rather than globally, for the same reason: one file the experimental player
  * cannot carry says nothing about the next.
  */
+/**
+ * Où le lecteur natif reprend quand la diffusion rend la main.
+ *
+ * La position de la balise vidéo, si la diffusion a vraiment joué ; sinon la dernière position
+ * connue, puis celle où la diffusion devait démarrer. 22/09/2026, iPhone : une diffusion abandonnée
+ * pendant son chargement rendait `currentTime || 0`, le flux n'étant pas encore posé à sa reprise —
+ * et le film repartait du début. Zéro seulement quand rien d'autre n'est connu.
+ */
+export function castHandBackPosition(elementSeconds: number, lastKnownSeconds: number, plannedSeconds: number | undefined): number {
+  if (Number.isFinite(elementSeconds) && elementSeconds > 0.5) return elementSeconds;
+  if (Number.isFinite(lastKnownSeconds) && lastKnownSeconds > 0) return lastKnownSeconds;
+  return plannedSeconds !== undefined && Number.isFinite(plannedSeconds) ? plannedSeconds : 0;
+}
+
 export function useStableFallback(): StableFallback {
   const [handedOver, setHandedOver] = useState<string[]>([]);
   const [negotiating, setNegotiating] = useState(false);

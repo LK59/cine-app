@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useStableFallback, takeoverFor, returningFor, NEGOTIATING_MS } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, returningFor, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
 
 // The handover itself, apart from the two players it sits between. What matters is that it
 // happens without asking, says so once, and leaves an account of why.
@@ -184,5 +184,23 @@ describe("returningFor", () => {
     act(() => result.current.stepBack("film-1", 4200, session));
     expect(returningFor(result.current.returning, session)).toBe(4200);
     expect(returningFor(result.current.returning, { itemId: "film-1" })).toBeNull();
+  });
+});
+
+describe("castHandBackPosition", () => {
+  it("rend la position prévue quand la diffusion n'a pas encore commencé à jouer", () => {
+    // 22/09/2026, iPhone : diffusion lancée à 1 h 12, abandonnée pendant le chargement — le
+    // lecteur natif rouvrait au début. La balise vidéo était encore à 0, le flux pas encore posé.
+    expect(castHandBackPosition(0, 4320, 4320)).toBe(4320);
+    expect(castHandBackPosition(0, 0, 4320)).toBe(4320);
+  });
+
+  it("rend la position réelle une fois la diffusion partie", () => {
+    expect(castHandBackPosition(4401.5, 4400, 4320)).toBe(4401.5);
+  });
+
+  it("ne rend zéro que si rien d'autre n'est connu", () => {
+    expect(castHandBackPosition(0, 0, undefined)).toBe(0);
+    expect(castHandBackPosition(Number.NaN, 0, 12)).toBe(12);
   });
 });
