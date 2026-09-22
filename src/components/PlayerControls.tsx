@@ -98,6 +98,13 @@ export const VOLUME_STORAGE_KEY = "cine:player-volume";
 
 /** How long a seek may take before it is worth showing as a wait rather than as a still button. */
 const SEEK_SPINNER_MS = 150;
+/**
+ * La fenêtre, après un doigt levé, pendant laquelle un événement souris n'en est que l'écho.
+ * Les navigateurs rejouent la souris dans la foulée du touchend ; 800 ms laissent la marge d'un
+ * téléphone chargé sans jamais avaler un vrai clic, qu'une souris ne donne pas une demi-seconde
+ * après un doigt.
+ */
+const TOUCH_ECHO_MS = 800;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -249,6 +256,20 @@ export function PlayerControls({
    * 6:48 », systématiquement, sur Chrome et Firefox.
    */
   const mouseDragRef = useRef(false);
+  /**
+   * L'instant du dernier doigt levé de la barre — pour reconnaître la souris que le navigateur
+   * rejoue ensuite.
+   *
+   * Après un touchend sans preventDefault, le navigateur envoie au même point mousemove,
+   * mousedown puis mouseup « de compatibilité ». Le conteneur avait déjà validé le saut au
+   * touchend, et l'onMouseUp de l'input le validait une seconde fois : deux demandes de saut,
+   * currentTime écrit deux fois — le premier saut recommencé — et une ligne « superseded »
+   * fantôme dans le journal. Pas de preventDefault au touchend : il supprimerait aussi le clic
+   * que le reste de la barre du bas écoute (voir son onClickCapture).
+   */
+  const lastTouchEndRef = useRef(-Infinity);
+  /** Les événements souris qui suivent un toucher de près ne sont que son écho. */
+  const isTouchEcho = () => performance.now() - lastTouchEndRef.current < TOUCH_ECHO_MS;
 
   // Reset the dismiss/countdown state whenever a genuinely new "next episode" context arrives
   // (i.e. we've actually advanced), not on every render. Applied during render (not in an
@@ -1628,8 +1649,13 @@ export function PlayerControls({
             // on the bar — hovering to preview a thumbnail, or dragging — rather than merely
             // extending the timer, since a 10s cap could still expire mid-read on a long scrub.
             // The normal countdown only resumes once the pointer actually leaves or is released.
-            onMouseEnter={holdControls}
+            onMouseEnter={() => {
+              if (!isTouchEcho()) holdControls();
+            }}
             onMouseMove={(e) => {
+              // Rejoué au point du doigt, il rallumait la vignette que le touchend venait
+              // d'éteindre — et plus aucun mouseup ne l'éteint, voir lastTouchEndRef.
+              if (isTouchEcho()) return;
               holdControls();
               updatePreview(e.clientX);
             }}
@@ -1658,6 +1684,7 @@ export function PlayerControls({
              */
             onTouchEnd={() => {
               seekingRef.current = false;
+              lastTouchEndRef.current = performance.now();
               if (previewTime !== null) commitSeek(previewTime);
               setPreviewTime(null);
               setTimeout(() => showControls(5000), 0);
@@ -1767,6 +1794,8 @@ export function PlayerControls({
                 if (!mouseDragRef.current) previewSeek(Number(e.target.value));
               }}
               onMouseDown={(e) => {
+                // L'écho d'un toucher que le conteneur a déjà validé (voir lastTouchEndRef).
+                if (isTouchEcho()) return;
                 seekingRef.current = true;
                 mouseDragRef.current = true;
                 holdControls();
@@ -1785,6 +1814,7 @@ export function PlayerControls({
               // running after the click's synchronous dispatch has already finished is what
               // makes 5s the one that actually wins, per what was asked for here specifically.
               onMouseUp={(e) => {
+                if (isTouchEcho()) return;
                 seekingRef.current = false;
                 mouseDragRef.current = false;
                 const fraction = fractionAt(e.clientX);

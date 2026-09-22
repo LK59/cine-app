@@ -169,6 +169,50 @@ describe("PlayerControls — la barre de progression", () => {
     expect(Number(input.value)).toBe(0);
   });
 
+  it("un toucher bref ne saute qu'une fois, malgré les événements souris que le navigateur rejoue", async () => {
+    // Après un touchend, le navigateur envoie au même point mousemove, mousedown et mouseup
+    // « de compatibilité ». Le conteneur validait au touchend, puis l'onMouseUp de l'input
+    // validait une seconde fois : deux demandes de saut, currentTime écrit deux fois (le saut
+    // recommençait) et une ligne « superseded » fantôme dans le journal du lecteur.
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const onSeekRequest = vi.fn();
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} onSeekRequest={onSeekRequest} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.touchStart(input, { touches: [{ clientX: 50 }] }));
+    await act(async () => void fireEvent.touchEnd(input));
+    await act(async () => void fireEvent.mouseMove(input, { clientX: 50 }));
+    await act(async () => void fireEvent.mouseDown(input, { clientX: 50 }));
+    await act(async () => void fireEvent.mouseUp(input, { clientX: 50 }));
+
+    expect(onSeekRequest).toHaveBeenCalledTimes(1);
+    expect(onSeekRequest.mock.calls[0][0]).toBeCloseTo(900, 0);
+    // Et la barre redevient fine : le mousemove rejoué ne rallume pas la vignette.
+    expect(bar.hasAttribute("data-scrub")).toBe(false);
+  });
+
+  it("un vrai clic de souris saute toujours, une fois", async () => {
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const onSeekRequest = vi.fn();
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} onSeekRequest={onSeekRequest} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.mouseMove(bar, { clientX: 100 }));
+    await act(async () => void fireEvent.mouseDown(input, { clientX: 100 }));
+    await act(async () => void fireEvent.mouseUp(input, { clientX: 100 }));
+
+    expect(onSeekRequest).toHaveBeenCalledTimes(1);
+    expect(video!.currentTime).toBeCloseTo(1800, 0);
+  });
+
   it("ne valide rien quand le système reprend le toucher", async () => {
     // The finger was not released, it was taken away.
     stubMediaFetches();
