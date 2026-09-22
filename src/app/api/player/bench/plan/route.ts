@@ -1,9 +1,8 @@
-import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
-import { LOG_DIR } from "@/lib/logFile";
+import { playerLogFiles } from "@/lib/playerLog";
 import { candidatesFrom, readLogLines, suggest } from "@/lib/playerBench/plan";
 
 /**
@@ -17,7 +16,9 @@ export async function GET(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (session?.role !== "admin") return new NextResponse(null, { status: 403 });
 
-  const file = path.join(LOG_DIR, "player.log");
-  const candidates = candidatesFrom(readLogLines([`${file}.1`, file]));
+  // Toutes les archives, et les spectateurs seulement : les lignes du banc vont dans
+  // `bench-player.log`, et un banc qui choisirait ses films d'après ses propres blocages ne
+  // ferait que se répéter (`candidatesFrom` écarte en plus celles d'avant la séparation).
+  const candidates = candidatesFrom(readLogLines(playerLogFiles()));
   return NextResponse.json({ candidates: candidates.slice(0, 40), suggested: suggest(candidates, 8) });
 }

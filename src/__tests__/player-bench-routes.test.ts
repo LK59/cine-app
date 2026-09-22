@@ -83,4 +83,25 @@ describe("/api/player/bench", () => {
     expect(body.candidates.map((c: { itemId: string }) => c.itemId)).not.toContain("z");
     expect(body.suggested).toEqual(expect.arrayContaining(["a", "b", "c"]));
   });
+
+  it("lit toutes les archives du journal, et les spectateurs seulement", async () => {
+    // Le plan lisait `player.log` et `.1` : avec cinq générations, les films des jours d'avant
+    // auraient disparu du plan ; et les lignes du banc — ses propres blocages — y comptaient.
+    const line = (o: Record<string, unknown>) => JSON.stringify({ timestamp: "2026-09-20T10:00:00Z", ...o }) + "\n";
+    fs.writeFileSync(path.join(dir, "player.log.4"), line({ kind: "start", itemId: "ancien", title: "Ancien", container: "mkv", video: "h264", range: "SDR" }));
+    fs.writeFileSync(
+      path.join(dir, "player.log"),
+      line({ kind: "start", itemId: "d", title: "Récent", container: "mp4", video: "h264", range: "SDR" }) +
+        // Une archive d'avant la séparation porte encore des lignes du banc.
+        line({ kind: "stall", itemId: "d", bench: "banc-1" }) +
+        line({ kind: "start", itemId: "banc", title: "Joué par le banc", container: "mkv", video: "hevc", range: "SDR", bench: "banc-1" })
+    );
+    fs.writeFileSync(path.join(dir, "bench-player.log"), line({ kind: "stall", itemId: "d", bench: "banc-2" }));
+    const { GET } = await import("@/app/api/player/bench/plan/route");
+    const body = await (await GET(req())).json();
+    const ids = body.candidates.map((c: { itemId: string }) => c.itemId);
+    expect(ids).toEqual(expect.arrayContaining(["ancien", "d"]));
+    expect(ids).not.toContain("banc");
+    expect(body.candidates.find((c: { itemId: string }) => c.itemId === "d").stalls).toBe(0);
+  });
 });

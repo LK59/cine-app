@@ -708,8 +708,11 @@ the one field that says who this is must not be the one anybody can invent), the
 container, video codec, resolution, bit depth and range, plus the browser.
 
 Three guardrails, since a browser decides what gets written: fields are **bounded** (24 at most,
-500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping one generation, and a
+500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping five generations (`player.log.1` newest … `.5`), and a
 failed write **never brings down a playback**.
+
+Lines carrying `bench` (a device test bench session) are written to `data/logs/bench-player.log`
+instead — same format, two generations — so a bench never rotates real viewers' history away.
 
 ```bash
 tail -f data/logs/player.log | jq .
@@ -775,9 +778,10 @@ or computer to be tested, and it plays real films through the real player while 
   player registers a bridge (`src/lib/playerBench/bridge.ts`). Seeks go through the same
   `noteSeekRequest` + `currentTime` pair as the controls, track changes through the same
   `changeAudioTrack` as the menu. Bench sessions report nothing to Jellyfin (a bench seeks to the
-  end of films, which would mark them watched), and every `player.log` line they cause carries
-  `bench: <run id>`.
-- **Which films.** `/api/player/bench/plan` reads `player.log`: the files that stalled, erred, fell
+  end of films, which would mark them watched), and every player line they cause carries
+  `bench: <run id>` and goes to `data/logs/bench-player.log`, not `player.log`.
+- **Which films.** `/api/player/bench/plan` reads `player.log` and all its archives — real viewers
+  only, lines carrying `bench` ignored even in archives written before the split: the files that stalled, erred, fell
   back or seeked slowly first, then enough to cover Dolby Vision, HDR10, SDR, MP4, 4K and an episode.
   No title is written in the code.
 - **What is measured** (`measure.ts`, pure and tested): the film clock against wall time and against

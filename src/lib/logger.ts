@@ -19,6 +19,13 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
  */
 const SERVER_LOG_FILE = path.join(LOG_DIR, "server.log");
 
+/**
+ * Trois générations : depuis qu'il reçoit aussi les erreurs des navigateurs, une boucle d'erreurs
+ * sur un seul téléphone peut remplir 5 Mo en une soirée, et l'unique archive d'avant emportait
+ * alors les erreurs serveur des jours précédents.
+ */
+const SERVER_LOG_KEEP = 3;
+
 export function logError(scope: string, err: unknown, context?: Record<string, unknown>): void {
   const entry = {
     timestamp: new Date().toISOString(),
@@ -38,7 +45,7 @@ export function logError(scope: string, err: unknown, context?: Record<string, u
   appendJsonLine(SERVER_LOG_FILE, {
     ...entry,
     stack: err instanceof Error && err.stack ? err.stack.split("\n").slice(0, 6).join(" | ") : undefined,
-  });
+  }, { keep: SERVER_LOG_KEEP });
 }
 
 
@@ -74,5 +81,5 @@ export function logClientError(user: string, report: Record<string, unknown>): v
     ...entry,
     // Même forme que la pile d'une erreur serveur : six lignes, sur une seule.
     stack: stack ? stack.split("\n").slice(0, 6).map((line) => line.trim()).join(" | ") : undefined,
-  });
+  }, { keep: SERVER_LOG_KEEP });
 }

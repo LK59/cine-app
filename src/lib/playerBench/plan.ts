@@ -38,6 +38,7 @@ interface Line {
   range?: string;
   tookMs?: number;
   arrived?: boolean;
+  bench?: unknown;
 }
 
 export function readLogLines(files: string[]): Line[] {
@@ -65,6 +66,9 @@ export function candidatesFrom(lines: Line[]): BenchCandidate[] {
   const byItem = new Map<string, BenchCandidate>();
   for (const line of lines) {
     if (!line.itemId || typeof line.itemId !== "string") continue;
+    // Une ligne du banc ne désigne pas un film à éprouver : c'est le banc qui l'a éprouvé. Elles
+    // vont désormais dans `bench-player.log`, mais les archives d'avant la séparation en portent.
+    if (line.bench) continue;
     let c = byItem.get(line.itemId);
     if (!c) {
       c = {

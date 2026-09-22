@@ -1,5 +1,5 @@
 import path from "node:path";
-import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
+import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
 
 /**
  * What actually happened during playback, for everybody, written to a file.
@@ -15,7 +15,38 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
  * rest of the app already logs in.
  */
 
-const LOG_FILE = path.join(LOG_DIR, "player.log");
+/**
+ * Deux fichiers : les spectateurs d'un côté, le banc d'essai de l'autre.
+ *
+ * Une ligne portant `bench` (posé par l'hôte natif quand la séance est un banc) part dans
+ * `bench-player.log`. Mêlées au reste, ces lignes faisaient deux torts : une série complète —
+ * des centaines de sauts à 4 000 caractères de trace — faisait tourner `player.log` et emportait
+ * l'historique des vrais spectateurs de la veille ; et le plan du banc, qui choisit ses films dans
+ * ce journal, comptait les sauts lents et les blocages *que le banc avait lui-même provoqués*.
+ *
+ * Même forme, même nettoyage : seul le fichier change, et `jq` lit l'un comme l'autre.
+ *
+ * Des chemins calculés à l'appel, et non au chargement : les tests pointent `LOG_DIR` ailleurs.
+ */
+const playerLogFile = () => path.join(LOG_DIR, "player.log");
+const benchPlayerLogFile = () => path.join(LOG_DIR, "bench-player.log");
+
+/**
+ * Cinq générations pour les spectateurs (≈ 30 Mo au plus) : l'historique de plusieurs jours est ce
+ * qu'on vient y chercher. Deux pour le banc, dont seule la dernière série intéresse.
+ */
+const PLAYER_LOG_KEEP = 5;
+const BENCH_PLAYER_LOG_KEEP = 2;
+
+/** `player.log` et ses archives, du plus ancien au plus récent — les spectateurs seulement. */
+export function playerLogFiles(): string[] {
+  return logGenerations(playerLogFile(), PLAYER_LOG_KEEP);
+}
+
+/** `bench-player.log` et ses archives, du plus ancien au plus récent. */
+export function benchPlayerLogFiles(): string[] {
+  return logGenerations(benchPlayerLogFile(), BENCH_PLAYER_LOG_KEEP);
+}
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
 const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall"]);
@@ -92,11 +123,19 @@ export function logPlaybackEvent(
   kind: PlayerEventKind,
   fields: Record<string, unknown>
 ): void {
-  appendJsonLine(LOG_FILE, {
-    timestamp: new Date().toISOString(),
-    kind,
-    user,
-    ...clean(fields),
-  });
+  // Tout `bench` non vide suffit : c'est l'identifiant de série, mais la question posée ici est
+  // seulement « est-ce un banc », et une ligne de banc égarée chez les spectateurs coûte plus
+  // cher que l'inverse.
+  const bench = Boolean(fields.bench);
+  appendJsonLine(
+    bench ? benchPlayerLogFile() : playerLogFile(),
+    {
+      timestamp: new Date().toISOString(),
+      kind,
+      user,
+      ...clean(fields),
+    },
+    { keep: bench ? BENCH_PLAYER_LOG_KEEP : PLAYER_LOG_KEEP }
+  );
 }
 

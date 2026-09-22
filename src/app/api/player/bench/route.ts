@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
-import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
+import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
 import { readLogLines } from "@/lib/playerBench/plan";
 
 /**
@@ -15,6 +15,9 @@ import { readLogLines } from "@/lib/playerBench/plan";
  */
 
 const BENCH_LOG = () => path.join(LOG_DIR, "bench.log");
+
+/** Écrite et relue ici seulement : les deux côtés doivent parler du même nombre d'archives. */
+const BENCH_LOG_KEEP = 2;
 
 /** Un film et sa trace tiennent en quelques dizaines de kilo-octets ; au-delà, ce n'est pas le banc. */
 const MAX_BODY = 400_000;
@@ -39,12 +42,16 @@ export async function POST(req: NextRequest) {
   if ((body.kind !== "item" && body.kind !== "run") || typeof body.runId !== "string") {
     return NextResponse.json({ error: "Rapport illisible" }, { status: 400 });
   }
-  appendJsonLine(BENCH_LOG(), {
-    timestamp: new Date().toISOString(),
-    user: session.u,
-    agent: req.headers.get("user-agent") ?? "?",
-    ...body,
-  });
+  appendJsonLine(
+    BENCH_LOG(),
+    {
+      timestamp: new Date().toISOString(),
+      user: session.u,
+      agent: req.headers.get("user-agent") ?? "?",
+      ...body,
+    },
+    { keep: BENCH_LOG_KEEP }
+  );
   return NextResponse.json({ ok: true });
 }
 
@@ -61,9 +68,8 @@ export interface BenchRunSummary {
 /** Les dix dernières séries, les plus récentes d'abord. */
 export async function GET(req: NextRequest) {
   if (!(await admin(req))) return new NextResponse(null, { status: 403 });
-  const file = BENCH_LOG();
   const runs = new Map<string, BenchRunSummary>();
-  for (const line of readLogLines([`${file}.1`, file]) as Record<string, unknown>[]) {
+  for (const line of readLogLines(logGenerations(BENCH_LOG(), BENCH_LOG_KEEP)) as Record<string, unknown>[]) {
     const runId = String(line.runId ?? "");
     if (!runId) continue;
     let run = runs.get(runId);

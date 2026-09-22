@@ -113,6 +113,59 @@ describe("logPlaybackEvent", () => {
     expect(lines()).toHaveLength(1); // the new file holds only what came after the rotation
   });
 
+  it("garde plusieurs générations, la plus ancienne tombant la première", async () => {
+    // 22/09/2026 : une seule archive, et une série complète du banc suffisait à emporter
+    // l'historique des spectateurs de la veille.
+    const { appendJsonLine, logGenerations } = await import("@/lib/logFile");
+    const file = path.join(dir, "logs", "essai.log");
+    fs.mkdirSync(path.join(dir, "logs"), { recursive: true });
+    const big = "x".repeat(5 * 1024 * 1024);
+    for (let i = 1; i <= 5; i++) {
+      // Chaque génération pleine porte son numéro en tête, pour savoir où elle a glissé.
+      fs.writeFileSync(file, `${i}\n${big}`);
+      appendJsonLine(file, { n: i }, { keep: 3 });
+    }
+    const head = (f: string) => fs.readFileSync(f, "utf8").split("\n")[0];
+    expect(head(`${file}.1`)).toBe("5");
+    expect(head(`${file}.2`)).toBe("4");
+    expect(head(`${file}.3`)).toBe("3");
+    expect(fs.existsSync(`${file}.4`)).toBe(false);
+    expect(logGenerations(file, 3)).toEqual([`${file}.3`, `${file}.2`, `${file}.1`, file]);
+    // Sans rien demander, un journal garde ce qu'il gardait.
+    expect(logGenerations(file)).toEqual([`${file}.1`, file]);
+  });
+
+  it("garde cinq générations de l'historique des spectateurs", async () => {
+    const { logPlaybackEvent, playerLogFiles } = await import("@/lib/playerLog");
+    const file = path.join(dir, "logs", "player.log");
+    fs.mkdirSync(path.join(dir, "logs"), { recursive: true });
+    for (let i = 1; i <= 6; i++) {
+      fs.writeFileSync(file, "x".repeat(6 * 1024 * 1024));
+      logPlaybackEvent("louis", "start", {});
+    }
+    expect(fs.existsSync(`${file}.5`)).toBe(true);
+    expect(fs.existsSync(`${file}.6`)).toBe(false);
+    expect(playerLogFiles()).toEqual([5, 4, 3, 2, 1].map((i) => `${file}.${i}`).concat(file));
+  });
+
+  it("écrit les lignes du banc d'essai à part, jamais dans l'historique des spectateurs", async () => {
+    // Une série du banc écrivait ses centaines de sauts dans `player.log`, le faisait tourner, et
+    // le plan du banc y relisait ensuite ses propres blocages comme ceux d'un spectateur.
+    const { logPlaybackEvent, benchPlayerLogFiles } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "seek", { bench: "banc-1", itemId: "a", steps: "s".repeat(4000) });
+    logPlaybackEvent("louis", "start", { itemId: "b" });
+
+    expect(lines()).toHaveLength(1);
+    expect(lines()[0]).toMatchObject({ kind: "start", itemId: "b" });
+    const bench = path.join(dir, "logs", "bench-player.log");
+    const written = fs.readFileSync(bench, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    // Même forme, même nettoyage : seul le fichier change.
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatchObject({ kind: "seek", user: "louis", bench: "banc-1", itemId: "a" });
+    expect(written[0].steps).toHaveLength(4000);
+    expect(benchPlayerLogFiles().at(-1)).toBe(bench);
+  });
+
   it("ne fait jamais tomber une lecture parce que le disque refuse", async () => {
     const { logPlaybackEvent } = await import("@/lib/playerLog");
     vi.spyOn(fs, "appendFileSync").mockImplementation(() => {
@@ -166,7 +219,8 @@ describe("l'événement d'un blocage de lecture", () => {
       videoBuffered: "150.00–196.00", audioBuffered: "150.00–195.50", lead: 29.6, filling: false,
       recoveryStreak: 2, frozenNudges: 3, recoveries: 5, sinceAppendMs: 4100, streaming: true, steps,
     });
-    const line = lines()[0];
+    // Une ligne du banc : elle va dans `bench-player.log`, avec le même nettoyage.
+    const line = JSON.parse(fs.readFileSync(path.join(dir, "logs", "bench-player.log"), "utf8").trim());
     expect(line).toMatchObject({ kind: "stall", position: 166.4, frozenNudges: 3, recoveries: 5, streaming: true });
     // La trace n'est pas coupée à 500 caractères comme un champ ordinaire.
     expect(line.steps.length).toBeGreaterThan(500);
