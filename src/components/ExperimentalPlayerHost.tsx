@@ -665,8 +665,9 @@ export function ExperimentalPlayerHost({
       playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined,
       /**
        * « tampon » : le contenu du tampon audio remplacé, le lecteur continue. « reconstruction » :
-       * le format livré changeait, le lecteur a été reconstruit sur la nouvelle piste — voir
-       * `audioSwitchNeedsRebuild`. Les deux coûtent différemment, et c'est ce qu'on veut lire.
+       * le lecteur a été reconstruit sur la nouvelle piste — quand le format livré change, et sur
+       * WebKit toujours (`rebuildEveryAudioSwitch`). Les deux coûtent différemment, et c'est ce
+       * qu'on veut lire.
        */
       via: "tampon" | "reconstruction" = "tampon"
     ) => {
@@ -2027,7 +2028,7 @@ export function ExperimentalPlayerHost({
                 wantedAudioRef.current = id;
                 setCurrentAudio(id);
                 setFrozen(freezeFrame());
-                restart(positionRef.current, `piste ${id} dans un autre format audio — reconstruction sur elle`);
+                restart(positionRef.current, `piste ${id} — reconstruction sur elle`);
                 return;
               }
               setCurrentAudio(id);

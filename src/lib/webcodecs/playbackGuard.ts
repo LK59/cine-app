@@ -478,7 +478,10 @@ export class PlaybackGuard {
     if (abortedStart) this.startAborted = true;
     this.startingFrom = null;
     this.stopWatchingForFirstFrame();
-    this.setStarting(null, "mise en pause");
+    // Une pause posée par l'attente du son est la nôtre : elle garde son cercle, que `endAudioHold`
+    // lève quand le son revient. Levé ici, il disparaissait à l'instant où il s'affichait
+    // (relevé le 22/09/2026 dans le déroulé d'un changement de piste).
+    if (!this.audioHold?.engaged) this.setStarting(null, "mise en pause");
     /**
      * Et une pause pareille ne laisse pas d'ancre.
      *

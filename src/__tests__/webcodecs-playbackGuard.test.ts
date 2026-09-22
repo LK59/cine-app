@@ -306,4 +306,22 @@ describe("PlaybackGuard", () => {
     guard.releaseAudioHold();
     expect(video.play).toHaveBeenCalled();
   });
+
+  it("garde son cercle pendant l'attente du son, et ne le lève qu'au retour du son", async () => {
+    // 22/09/2026 : la pause posée par l'attente arrivait au gestionnaire de pause comme celle du
+    // spectateur, qui levait le cercle à l'instant où l'attente venait de l'afficher.
+    const { guard, video, host, starting } = build({ at: 10 });
+    guard.beginAudioHold();
+    (host as { audioRanges: TimeRanges | null }).audioRanges = ranges([50, 60]);
+    await tick(150);
+    expect(video.paused).toBe(true);
+    guard.paused(); // l'élément annonce la pause que l'attente vient de poser
+    expect(starting.filter((at) => at !== null)).toHaveLength(1);
+    expect(starting[starting.length - 1]).not.toBeNull();
+
+    (host as { audioRanges: TimeRanges | null }).audioRanges = ranges([0, 100]);
+    guard.releaseAudioHold();
+    expect(starting[starting.length - 1]).toBeNull();
+  });
 });
+

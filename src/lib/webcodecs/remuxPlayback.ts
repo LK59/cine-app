@@ -4,6 +4,7 @@
 // selection, same subtitle lookup — so the player component branches once on which path was
 // chosen and not again on every operation.
 
+import { isWebKit } from "@/lib/webkitEngine";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
@@ -176,6 +177,23 @@ export function openingAudio(
     if (track && playableAudio(track)) return track;
   }
   return preferredAudio(file, preferences);
+}
+
+/**
+ * Sur WebKit, tout changement de piste reconstruit le lecteur, même entre deux pistes du même
+ * format.
+ *
+ * Le changement « dans le tampon » y vide le son pendant que l'image défile, le remplit avec
+ * jusqu'à un intervalle d'images clés de son déjà passé, et ne recale le moteur audio de Safari
+ * sur l'image que si la pause d'attente gagne une course de quelques dizaines de millisecondes.
+ * Un spectateur sur iPad (22/09/2026, haut-parleurs de l'appareil) a gardé un décalage du son
+ * après deux changements de piste sur *Die Hard*, que seul un saut effaçait. La reconstruction
+ * repart d'un état propre — l'équivalent d'un saut —, et elle est aussi la plus rapide sur
+ * WebKit : 0,34 s en médiane sur 36 changements, contre 3,1 s sur 23 pour le tampon.
+ * Chrome et Firefox n'ont pas ce défaut ; ils gardent le changement dans le tampon.
+ */
+export function rebuildEveryAudioSwitch(): boolean {
+  return isWebKit();
 }
 
 /**
@@ -371,7 +389,10 @@ export class RemuxPlayback {
     // repartirait de zéro. Le changement est alors confié à `selectAudioTrack`, qui le refuse.
     if (this.switchNeedsIndex) return false;
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
-    return track ? audioSwitchNeedsRebuild(this.file, this.audioTrack, track) : false;
+    if (!track || track.number === this.audioTrack?.number) return false;
+    // Sur WebKit, toute piste — même format ou non. Voir `rebuildEveryAudioSwitch`.
+    if (rebuildEveryAudioSwitch() && playableAudio(track)) return true;
+    return audioSwitchNeedsRebuild(this.file, this.audioTrack, track);
   }
 
   /**
@@ -448,7 +469,7 @@ export class RemuxPlayback {
     // que Safari ne survit pas (03/09/2026). L'appelant reconstruit le lecteur — voir
     // needsRebuildForAudio.
     if (this.needsRebuildForAudio(trackNumber)) {
-      throw new Error(`la piste ${trackNumber} change le format du son : reconstruire le lecteur`);
+      throw new Error(`la piste ${trackNumber} se change par reconstruction du lecteur`);
     }
 
     const at = this.video.currentTime;

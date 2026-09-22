@@ -415,6 +415,16 @@ same position, opening directly on the new track (`audioSwitchNeedsRebuild`,
 `RemuxPlayback.needsRebuildForAudio`, `openingAudio`, `ExperimentalPlayerHost`). It is the
 machinery that already brings the player back after a lost source; a film paused stays paused.
 
+**On WebKit, every track change rebuilds (since 2026-09-22, `rebuildEveryAudioSwitch` in
+`remuxPlayback.ts`), same format or not.** The in-buffer change clears the audio buffer while the
+picture plays, refills it with up to one keyframe interval of audio already in the past, and
+only re-syncs Safari's audio renderer to the picture if the audio hold happens to win a race of a
+few tens of milliseconds. A viewer on iPad (built-in speakers) kept an audio offset after two
+same-format changes, cleared only by a seek. The rebuild starts from a clean state, like a seek,
+and was also the faster path on WebKit: 0.34 s median over 36 changes, against 3.1 s over 23 for
+the in-buffer change. Chrome and Firefox keep the in-buffer change. A rebuild caused by a track
+change does not spend the rebuild budget reserved for failures.
+
 Why: once TrueHD became decodable, 19 films mixing TrueHD and Dolby had their Dolby VF re-encoded
 — a second lossy generation, and work for the phone — and a re-encoded language change cost 2 to
 15 s on iPhone, where a recovery rebuild took 0.3 to 0.5 s.

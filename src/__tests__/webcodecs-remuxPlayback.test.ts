@@ -114,3 +114,36 @@ describe("changer de piste sur un fichier sans index", () => {
     expect(remuxer.setAudioTrack).toHaveBeenCalledWith(AAC_ENG.number);
   });
 });
+
+/**
+ * Sur WebKit, tout changement de piste reconstruit le lecteur (22/09/2026) : le changement dans
+ * le tampon y laissait le son décalé de l'image jusqu'au saut suivant, et il y était le plus lent
+ * des deux chemins. Chrome et Firefox gardent le changement dans le tampon.
+ */
+describe("le chemin d'un changement de piste selon le moteur", () => {
+  const SAFARI = "Mozilla/5.0 (iPad; CPU OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
+  const CHROME = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36";
+
+  it("sur WebKit, reconstruit même entre deux pistes du même format", async () => {
+    vi.stubGlobal("navigator", { userAgent: SAFARI });
+    const { playback } = await start(600, true);
+    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
+    // La piste qui joue déjà ne demande rien.
+    expect(playback.needsRebuildForAudio(AAC.number)).toBe(false);
+  });
+
+  it("sur Chrome, garde le changement dans le tampon entre deux pistes du même format", async () => {
+    vi.stubGlobal("navigator", { userAgent: CHROME });
+    const { playback } = await start(600, true);
+    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(false);
+    // Un format différent reconstruit partout.
+    expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
+  });
+
+  it("ne reconstruit pas sur un fichier sans index, même sur WebKit", async () => {
+    vi.stubGlobal("navigator", { userAgent: SAFARI });
+    const { playback } = await start(600, false);
+    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(false);
+  });
+});
+
