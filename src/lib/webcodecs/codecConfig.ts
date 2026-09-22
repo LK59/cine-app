@@ -355,6 +355,54 @@ export function strayUnits(
   return before.length + after.length > 0 ? { before, after } : null;
 }
 
+/**
+ * Une image HEVC sans ses métadonnées HDR10+ (SMPTE ST 2094-40), le reste intact.
+ *
+ * Chrome sous Windows affichait nettement trop sombre un épisode Dolby Vision + HDR10+, écran SDR
+ * comme HDR, quand Firefox et Safari le montraient juste — et un film Dolby Vision + HDR10 sans
+ * HDR10+, en 4K lui aussi, s'affichait bien dans le même Chrome (22/09/2026). Les métadonnées
+ * scène par scène étaient la seule différence : Chrome les applique, et mal. Sans elles, il
+ * retombe sur les métadonnées statiques HDR10 (`colourBoxes`), celles que tous lisent bien.
+ *
+ * Seule est retirée une unité SEI préfixe dont le premier message est un enregistrement UIT-T
+ * T.35 HDR10+ (pays 0xB5, fournisseur 0x003C, code 0x0001, application 4) et qui l'occupe presque
+ * entière — une SEI qui porterait autre chose en plus est laissée. Rendue telle quelle quand il
+ * n'y a rien à retirer, sans copie.
+ */
+export function withoutHdr10Plus(data: Uint8Array, lengthSize: number): Uint8Array {
+  const kept: Uint8Array[] = [];
+  let removed = false;
+  for (let at = 0; at + lengthSize + 2 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) return data;
+    const unit = data.subarray(at, at + lengthSize + length);
+    at += lengthSize + length;
+    if (((unit[lengthSize] >> 1) & 0x3f) === 39 && isHdr10PlusSei(unit.subarray(lengthSize + 2))) {
+      removed = true;
+      continue;
+    }
+    kept.push(unit);
+  }
+  return removed ? joinBytes(kept) : data;
+}
+
+function isHdr10PlusSei(sei: Uint8Array): boolean {
+  let at = 0;
+  let type = 0;
+  while (at < sei.length && sei[at] === 0xff) type += sei[at++];
+  if (at >= sei.length) return false;
+  type += sei[at++];
+  let size = 0;
+  while (at < sei.length && sei[at] === 0xff) size += sei[at++];
+  if (at >= sei.length) return false;
+  size += sei[at++];
+  if (type !== 4 || at + 6 > sei.length) return false;
+  const signature = sei[at] === 0xb5 && sei[at + 1] === 0x00 && sei[at + 2] === 0x3c && sei[at + 3] === 0x00 && sei[at + 4] === 0x01 && sei[at + 5] === 0x04;
+  // Le message remplit l'unité, à quelques octets près (fin de RBSP, octets d'échappement).
+  return signature && at + size >= sei.length - 8;
+}
+
 /** Joins byte runs into one. */
 export function joinBytes(parts: Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, part) => n + part.byteLength, 0));

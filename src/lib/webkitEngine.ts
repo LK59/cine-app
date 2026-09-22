@@ -27,3 +27,14 @@ export function isWebKitEngine(userAgent: string): boolean {
 export function isWebKit(): boolean {
   return typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent);
 }
+
+/**
+ * Chrome ou Edge sous Windows — le seul endroit où les métadonnées HDR10+ assombrissaient
+ * l'image (voir `withoutHdr10Plus`). Un défaut d'implémentation, qu'aucune capacité ne trahit :
+ * d'où un test d'agent utilisateur, comme pour WebKit. Chrome sur Android et sur Mac n'ont pas
+ * été observés : ils gardent le HDR10+.
+ */
+export function isChromiumOnWindows(userAgent: string): boolean {
+  return /Windows/i.test(userAgent) && /Chrom(e|ium)|Edg\//i.test(userAgent) && !/Firefox/i.test(userAgent);
+}
+

@@ -12,7 +12,7 @@
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
-import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
+import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withoutHdr10Plus } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
@@ -247,6 +247,17 @@ function naturalDelivery(track: MatroskaTrack): AudioDelivery {
  * sur place ; c'est le lecteur entier qui est reconstruit, comme après une coupure.
  */
 let perTrack = true;
+
+/**
+ * Retirer les métadonnées HDR10+ du flux vidéo — voir `withoutHdr10Plus`. Posé par
+ * `probePlaybackPath` selon le navigateur : c'est un défaut d'un moteur, pas une capacité qu'on
+ * pourrait lui demander.
+ */
+let stripHdr10Plus = false;
+
+export function setStripHdr10Plus(value: boolean): void {
+  stripHdr10Plus = value;
+}
 
 export function setPerTrackAudioDelivery(value: boolean): void {
   perTrack = value;
@@ -844,6 +855,9 @@ export class Remuxer {
         if (this.strayAhead.length > 0) {
           sample = { ...sample, data: joinBytes([...this.strayAhead, sample.data]) };
           this.strayAhead = [];
+        }
+        if (stripHdr10Plus && this.videoTrack.codecId === "V_MPEGH/ISO/HEVC") {
+          sample = { ...sample, data: withoutHdr10Plus(sample.data, this.nalLength) };
         }
         // A cluster does not have to begin on a picture a decoder can start on, and handing over
         // the ones that precede it produces a segment the browser holds but can never show —
