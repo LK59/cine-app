@@ -29,9 +29,27 @@ export interface MediaSampleReader {
  * @param key nomme le fichier pour que le rouvrir ne relise rien (voir `parseMatroska`).
  */
 export async function openMediaFile(source: ByteSource, key?: string): Promise<MatroskaFile> {
-  const head = await source.read(0, 12);
-  return isIsoBaseMedia(head) ? parseMp4(source, key) : parseMatroska(source, key);
+  const known = key === undefined ? undefined : containers.get(key);
+  const mp4 = known !== undefined ? known === "mp4" : isIsoBaseMedia(await source.read(0, 12));
+  if (key !== undefined) {
+    containers.delete(key);
+    containers.set(key, mp4 ? "mp4" : "matroska");
+    while (containers.size > REMEMBERED_CONTAINERS) containers.delete(containers.keys().next().value!);
+  }
+  return mp4 ? parseMp4(source, key) : parseMatroska(source, key);
 }
+
+/**
+ * Le conteneur de chaque fichier déjà ouvert, retenu comme son en-tête l'est.
+ *
+ * Reconnaître un MP4 lit les douze premiers octets du fichier — ce qu'on fait depuis que le MP4
+ * passe par le même traitement que le Matroska. Après un saut loin dans le film, ces octets ne
+ * sont plus dans le cache : un changement de piste, qui rouvre le fichier, repayait alors un
+ * aller-retour réseau pour une réponse déjà connue — 0,4 à 0,7 s sur un réseau lent, alors que
+ * l'en-tête, lui, était en mémoire (22/09/2026, les trois changements lents de la journée).
+ */
+const containers = new Map<string, "mp4" | "matroska">();
+const REMEMBERED_CONTAINERS = 16;
 
 /** Le lecteur d'échantillons qui va avec ce fichier, parti de `startOffset`. */
 export function createSampleReader(source: ByteSource, file: MatroskaFile, startOffset: number): MediaSampleReader {
