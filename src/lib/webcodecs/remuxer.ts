@@ -224,34 +224,17 @@ function naturalDelivery(track: MatroskaTrack): AudioDelivery {
 }
 
 /**
- * Whether this browser lets the audio buffer be replaced rather than reinterpreted.
- *
- * Settled by a probe before any file is opened, and it decides which of two designs runs: unify
- * every track onto one codec so no transition can happen, or keep each track's own codec and
- * rebuild the buffer when it changes. The first is what a browser that cannot do the second gets.
- */
-let rebuildable = false;
-
-export function setAudioBufferRebuildable(value: boolean): void {
-  rebuildable = value;
-}
-
-export function audioBufferRebuildable(): boolean {
-  return rebuildable;
-}
-
-/**
- * **La livraison par piste** — l'interrupteur de ce qui suit, comme `TRUST_BUFFER_REBUILD` l'est
- * du remplacement de tampon.
+ * **La livraison par piste** — l'interrupteur de ce qui suit.
  *
  * À `false`, c'est l'unification par fichier, décrite plus bas et stable depuis le 03/09/2026 :
  * si les pistes d'un fichier ne peuvent pas toutes passer telles quelles, toutes sont
  * ré-encodées, et le codec ne change jamais pendant la vie de la MediaSource.
  *
  * À `true`, chaque piste est livrée dans sa meilleure forme — le Dolby tel quel, le TrueHD et le
- * DTS ré-encodés —, et un changement de piste qui change le **format** livré reconstruit le
- * lecteur à la même position, directement sur la nouvelle piste, par le mécanisme qui relève
- * déjà le lecteur d'une coupure (voir `audioSwitchNeedsRebuild` et `ExperimentalPlayerHost`).
+ * DTS ré-encodés. Un changement de piste reconstruit le lecteur à la même position, directement
+ * sur la nouvelle piste, par le mécanisme qui relève déjà le lecteur d'une coupure (voir
+ * `ExperimentalPlayerHost`) — pour tout changement depuis le 22/09/2026, et non plus seulement
+ * pour un changement de format.
  *
  * Pourquoi, mesuré le 21/09/2026 : depuis que le TrueHD se décode ici, 19 films qui mêlent TrueHD
  * et Dolby voyaient leur VF Dolby ré-encodée — une seconde génération avec perte, du travail pour
@@ -289,18 +272,18 @@ const TRANSCODED_CODEC = () => transcodeTargetCodec();
  *
  * So the transition is removed instead. If a file's audio tracks cannot all be delivered as they
  * are, they are all delivered re-encoded, decided once when the file is opened. The codec then
- * never changes for the life of the MediaSource, and changing language is what it always should
- * have been: empty the audio buffer, read it again.
+ * never changes for the life of the MediaSource. (Changing language then emptied the audio
+ * buffer and read it again; since 2026-09-22 every change rebuilds the player instead, so this
+ * design — kept behind `perTrack = false` — no longer has a transition to protect.)
  *
  * The cost is real and worth naming: on a file that mixes codecs, a track that could have ridden
  * through untouched is decoded and encoded again. It buys a language change that cannot break
  * playback. A file whose tracks already agree — most of the library — pays nothing.
  */
 export function unifiedAudioCodec(file: MatroskaFile): string | null {
-  // Not needed where the audio buffer can simply be replaced when the codec changes: there, a
-  // track that can ride through untouched does, and only what has to be re-encoded is. Nor where
-  // each track is delivered on its own and a change of format rebuilds the player — see perTrack.
-  if (rebuildable || perTrack) return null;
+  // Not needed where each track is delivered on its own and a change of track rebuilds the
+  // player — see perTrack.
+  if (perTrack) return null;
 
   const audio = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
   if (audio.length < 2) return null;
@@ -339,12 +322,12 @@ export function unifiedAudioCodec(file: MatroskaFile): string | null {
  * navigateur ne sait pas produire autant de canaux — un Chrome qui plafonne à six repliera alors
  * les deux pistes en 5.1, ce qui les laisse unifiées quand même.
  *
- * Ne s'applique que là où le tampon ne peut pas être remplacé : ailleurs, chaque piste garde sa
- * disposition et le tampon est reconstruit.
+ * Écrit pour le changement de piste dans le tampon, retiré le 22/09/2026 : chaque changement
+ * reconstruit désormais le lecteur, et cette unification n'a plus de transition à protéger.
+ * Gardée telle quelle pour ne rien changer à ce qui est livré ; la retirer est une décision à
+ * part — elle rendrait à chaque piste ré-encodée son propre nombre de canaux.
  */
 export function unifiedAudioChannels(file: MatroskaFile): number | null {
-  if (rebuildable) return null;
-
   // Livrées piste par piste, seules les pistes ré-encodées partagent un tampon sans reconstruction
   // — elles sortent toutes dans le même codec — et c'est entre elles seulement que le nombre de
   // canaux doit être le même. Une piste copiée garde évidemment les siens.
@@ -381,41 +364,6 @@ export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile): AudioD
   if (!unified) return natural;
   if (natural === "copy" && audioCodecString(track) === unified) return "copy";
   return "transcode";
-}
-
-/**
- * Ce qu'une piste devient dans le tampon audio : son propre codec quand elle passe telle quelle,
- * « ré-encodée » sinon — toutes les pistes ré-encodées d'un fichier sortent dans le même codec et
- * la même disposition. `null` pour une piste que ce chemin ne porte pas.
- */
-export function deliveredAudio(track: MatroskaTrack, file: MatroskaFile): string | null {
-  const delivery = audioDelivery(track, file);
-  if (delivery === "none") return null;
-  if (delivery === "copy") return audioCodecString(track);
-  // La fréquence fait partie du format livré, au même titre que le codec : l'encodeur est
-  // configuré à celle du décodeur (voir `AudioTranscoder.open`), et elle est écrite dans la
-  // configuration du segment d'initialisation. Un FLAC à 44,1 kHz et un DTS à 48 kHz, tous deux
-  // « ré-encodés », changeaient donc la configuration d'un tampon vivant — exactement ce qu'aucun
-  // tampon de Safari ne survit (03/09/2026). Les canaux, eux, sont déjà unifiés entre pistes
-  // ré-encodées (`unifiedAudioChannels`).
-  return `ré-encodé ${Math.round(track.audio?.sampleRate ?? 48000)} Hz`;
-}
-
-/**
- * Passer de `from` à `to` exige-t-il de reconstruire le lecteur ?
- *
- * Oui quand le format livré change — d'un E-AC3 copié à un TrueHD ré-encodé, ou d'un AC-3 à un
- * E-AC3, tous deux copiés : c'est exactement la transition qu'aucun tampon vivant de Safari ne
- * survit (03/09/2026). Non entre deux pistes du même format, qui gardent le changement rapide
- * par remplacement du contenu du tampon — 0,1 à 0,8 s mesurées sur iPhone. Jamais hors de la
- * livraison par piste : l'unification rend tout format identique, et un navigateur qui sait
- * remplacer son tampon n'a rien à reconstruire.
- */
-export function audioSwitchNeedsRebuild(file: MatroskaFile, from: MatroskaTrack | null, to: MatroskaTrack): boolean {
-  if (!perTrack || rebuildable || !from) return false;
-  const before = deliveredAudio(from, file);
-  const after = deliveredAudio(to, file);
-  return before !== null && after !== null && before !== after;
 }
 
 /** Carried through at all — either untouched, or by being decoded and encoded again. */
@@ -569,14 +517,6 @@ export class Remuxer {
   private groupAnchorUs: number | null = null;
   /** The typical gap between pictures, for turning a reordering delay into a count of them. */
   private frameDurationUs: number | null = null;
-  /**
-   * Whether segments should carry their pictures.
-   *
-   * Lowered while the caller re-reads a stretch it already holds — a change of audio language
-   * reads the file again from the playhead, and on a 4K file that meant copying five and eight
-   * megabytes of picture into segments that were then dropped.
-   */
-  private videoWanted = true;
   /** Where a seek asked to be, while the reader is still looking for somewhere to start. */
   private seekTargetUs: number | null = null;
   private backupsLeft = 0;
@@ -735,80 +675,6 @@ export class Remuxer {
       audioInit: this.audioInfo ? initSegment(this.audioInfo, duration) : null,
       durationSeconds: duration,
     };
-  }
-
-  /**
-   * Swaps the audio track without disturbing anything else.
-   *
-   * The video description, the reader and the presentation delay all stay as they are: only the
-   * description of the sound and which samples are picked out of the stream change. Rebuilding
-   * the whole object instead would tear down the MediaSource the picture is playing through,
-   * which stops playback rather than changing its language.
-   */
-  async setAudioTrack(trackNumber: number): Promise<void> {
-    const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
-    if (!track) throw new Error(`Piste audio ${trackNumber} introuvable.`);
-    if (!playableAudio(track)) throw new Error(`Audio non remultiplexable : ${track.codecId}`);
-
-    // Nothing the current track depends on is released until the new one is ready to take over.
-    // Closing first and then failing to open leaves no way to produce sound at all — no segments,
-    // a buffer that never advances, and a player that loads for ever with nothing to say.
-    const previous = this.transcoder;
-    const at = this.videoDecodeTime / TIMESCALE;
-
-    if (this.closed) throw new Error("Le remultiplexeur est fermé.");
-
-    if (audioDelivery(track, this.file) === "transcode") {
-      // Primed where the viewer is, not at the beginning of the film: two hours in, the opening
-      // is long out of the byte source's cache, and fetching it back to read one header is
-      // network traffic spent on nothing.
-      const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file) ?? undefined, this.file);
-      // Before anything is released: a refusal here has to leave the working track working — and
-      // has to hand back the decoder and the encoder the refused track had already opened, which
-      // nothing else will ever come back for.
-      try {
-        if (this.closed) throw new Error("Le remultiplexeur a été fermé pendant l'ouverture de la piste.");
-        assertContainerTakes(next);
-        // Le filet de `deliveredAudio`, qui décide sur l'en-tête du fichier avant qu'aucun
-        // encodeur n'existe. Si ce qui sort réellement ne décrit pas le tampon comme la piste
-        // qu'il remplace — une autre fréquence, un autre nombre de canaux —, le changement est
-        // refusé et l'ancienne piste continue de jouer, plutôt que de changer la configuration
-        // d'un tampon vivant. Vaut aussi pour l'unification par fichier, où rien ne reconstruit.
-        if (previous && !rebuildable && !sameShape(previous, next)) {
-          throw new Error(
-            `la piste ré-encodée sortirait en ${next.sampleRate} Hz / ${next.channels} canaux, ` +
-              `le tampon est en ${previous.sampleRate} Hz / ${previous.channels} canaux`
-          );
-        }
-      } catch (refusal) {
-        next.close();
-        throw refusal;
-      }
-      if (previous) this.retiredTiming.push(previous.timingStats);
-      previous?.close();
-      this.transcoder = next;
-      this.audioInfo = transcodedAudioInfo(next, track);
-    } else {
-      // Same reasoning for a track that rides through untouched: any frame of it describes it
-      // equally well, so the nearest one is read rather than the first.
-      const here = clusterOffsetForTime(this.file, this.videoDecodeTime, this.videoTrack.number);
-      const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
-      const info =
-        (here !== null && here !== start
-          ? await describeAudio(this.source, this.file, here, track).catch(() => null)
-          : null) ?? (await describeAudio(this.source, this.file, start, track));
-      if (this.closed) throw new Error("Le remultiplexeur a été fermé pendant l'ouverture de la piste.");
-      if (previous) this.retiredTiming.push(previous.timingStats);
-      previous?.close();
-      this.transcoder = null;
-      this.audioInfo = info;
-    }
-
-    this.audioTrack = track;
-    this.pendingAudio = [];
-    this.audioFrameUs = null;
-    this.transcoderSeekPending = this.transcoder !== null;
-    this.tailDone = false;
   }
 
   /** Whether the file carries an index. Without one there is no way to reach a time directly. */
@@ -1164,11 +1030,6 @@ export class Remuxer {
     return next.framesUpTo(this.videoDecodeTime / TIMESCALE);
   }
 
-  /** Whether the pictures read are also written into the segments handed back. */
-  setVideoWanted(wanted: boolean): void {
-    this.videoWanted = wanted;
-  }
-
   /** Points the reader further back, one step at a time, and says whether it moved. */
   private backUp(): boolean {
     if (this.seekTargetUs === null || this.backupsLeft <= 0) return false;
@@ -1262,11 +1123,6 @@ export class Remuxer {
     this.videoDecodeTime =
       until >= this.pendingVideo.length ? ordered.endDecodeTime : ordered.samples[until].decode;
 
-    // Everything above still had to happen: the decode times, the presentation delay and where
-    // this piece ends are what the sound is cut against, and a reader that stopped keeping track
-    // of them would put the next real segment in the wrong place. Only the copying is skipped —
-    // which is all of the cost.
-    if (!this.videoWanted) return [];
     return this.fragmentise(samples);
   }
 

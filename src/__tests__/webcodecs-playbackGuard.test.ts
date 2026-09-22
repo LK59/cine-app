@@ -29,7 +29,7 @@ function fakeVideo(at = 0) {
   }) as unknown as HTMLVideoElement & { play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn> };
 }
 
-function build(options: { at?: number; playable?: TimeRanges; audio?: TimeRanges | null } = {}) {
+function build(options: { at?: number; playable?: TimeRanges } = {}) {
   const video = fakeVideo(options.at ?? 0);
   const seeks: { at: number; because: string }[] = [];
   const targets: number[] = [];
@@ -37,7 +37,6 @@ function build(options: { at?: number; playable?: TimeRanges; audio?: TimeRanges
     destroyed: false,
     delaySeconds: 0.2,
     playable: options.playable ?? ranges([0, 100]),
-    audioRanges: options.audio === undefined ? ranges([0, 100]) : options.audio,
     seek: async (at, because) => void seeks.push({ at, because }),
     noteSeekTarget: (at) => void targets.push(at),
   };
@@ -283,45 +282,6 @@ describe("PlaybackGuard", () => {
       guard.mediaArrived();
     }
     expect((video.play as ReturnType<typeof vi.fn>).mock.calls.length).toBeLessThanOrEqual(2);
-  });
-
-  it("holds the picture only once it would run on without sound", async () => {
-    // Chrome stalls by itself when a buffer has nothing at the playhead; Safari plays the picture
-    // on in silence. Stopping the element up front cost the first a visible pause every time.
-    const { guard, video } = build({ at: 10 });
-    guard.beginAudioHold();
-    await tick(100);
-    expect(video.paused).toBe(false); // the sound still covers the playhead
-
-    // Now it does not.
-    (guard as unknown as { host: { audioRanges: TimeRanges | null } }).host.audioRanges = ranges([50, 60]);
-    await tick(150);
-    expect(video.paused).toBe(true);
-
-    // A press of play into that gap is remembered, not obeyed.
-    (video as unknown as { paused: boolean }).paused = false;
-    video.dispatchEvent(new Event("play"));
-    expect(video.paused).toBe(true);
-
-    guard.releaseAudioHold();
-    expect(video.play).toHaveBeenCalled();
-  });
-
-  it("garde son cercle pendant l'attente du son, et ne le lève qu'au retour du son", async () => {
-    // 22/09/2026 : la pause posée par l'attente arrivait au gestionnaire de pause comme celle du
-    // spectateur, qui levait le cercle à l'instant où l'attente venait de l'afficher.
-    const { guard, video, host, starting } = build({ at: 10 });
-    guard.beginAudioHold();
-    (host as { audioRanges: TimeRanges | null }).audioRanges = ranges([50, 60]);
-    await tick(150);
-    expect(video.paused).toBe(true);
-    guard.paused(); // l'élément annonce la pause que l'attente vient de poser
-    expect(starting.filter((at) => at !== null)).toHaveLength(1);
-    expect(starting[starting.length - 1]).not.toBeNull();
-
-    (host as { audioRanges: TimeRanges | null }).audioRanges = ranges([0, 100]);
-    guard.releaseAudioHold();
-    expect(starting[starting.length - 1]).toBeNull();
   });
 });
 

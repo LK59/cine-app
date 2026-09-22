@@ -165,7 +165,7 @@ let probes: Callbacks[] = [];
 let nextProbe: () => unknown;
 
 function fakeRemux(over: Record<string, unknown> = {}) {
-  return {
+  const fake = {
     audioTracks: [
       { number: 1, codecId: "A_EAC3", language: "fre", name: null, isDefault: true, isForced: false },
       { number: 2, codecId: "A_AAC", language: "eng", name: null, isDefault: false, isForced: false },
@@ -174,10 +174,9 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     currentAudioTrack: 1,
     // Par défaut ce chemin porte tout : les tests qui examinent le refus le disent eux-mêmes.
     canCarryAudio: vi.fn(() => true),
-    // Par défaut, deux pistes du même format : le changement rapide. Les tests de la
-    // reconstruction sur une piste d'un autre format le disent eux-mêmes.
-    needsRebuildForAudio: vi.fn((_id: number): boolean => false),
-    selectAudioTrack: vi.fn(async () => {}),
+    // Tout changement de piste reconstruit le lecteur ; seul un fichier sans index en cours de
+    // film le refuse, et les tests qui l'examinent le disent eux-mêmes.
+    requestAudioTrack: vi.fn((id: number): "rebuild" | "refused" | null => (id === fake.currentAudioTrack ? null : "rebuild")),
     selectSubtitleTrack: vi.fn(),
     subtitleAt: vi.fn(() => null),
     diagnostics: {},
@@ -186,6 +185,14 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     position: 0,
     ...over,
   };
+  return fake;
+}
+
+/** Le pipeline qu'une reconstruction ouvre, directement sur la piste demandée. */
+function rebuildOn(track: number) {
+  const rebuilt = fakeRemux({ currentAudioTrack: track });
+  nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+  return rebuilt;
 }
 
 let remux: ReturnType<typeof fakeRemux>;
@@ -322,8 +329,10 @@ describe("une piste que ce chemin ne portera jamais", () => {
 
     expect(onFallback).toHaveBeenCalledTimes(1);
     expect(onFallback.mock.calls[0][0]).toContain("A_TRUEHD");
-    // Et surtout : rien n'a été tenté sur les tampons. Le verdict était connu d'avance.
-    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
+    // Et surtout : pas de reconstruction sur une piste que ce chemin refuserait. Le verdict était
+    // connu d'avance.
+    expect(remux.requestAudioTrack).not.toHaveBeenCalled();
+    expect(probes).toHaveLength(1);
   });
 
   it("dit au repli où reprendre et sur quelle piste", async () => {
@@ -641,14 +650,16 @@ describe("ce que le spectateur avait choisi", () => {
     // after a cut means coming back to a film in the wrong language.
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    const switched = rebuildOn(2);
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    await waitFor(() => expect(probes).toHaveLength(2));
 
-    const rebuilt = fakeRemux({ currentAudioTrack: 1 });
-    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
-    remux.lost = true;
-    act(() => probes[0].onError("morte"));
+    rebuildOn(2);
+    switched.lost = true;
+    act(() => probes[1].onError("morte"));
 
-    await waitFor(() => expect(rebuilt.selectAudioTrack).toHaveBeenCalledWith(2));
+    await waitFor(() => expect(probes).toHaveLength(3));
+    expect(probes[2]).toMatchObject({ audioTrackNumber: 2 });
   });
 
   it("ne repasse pas au pipeline un numéro qui n'appartient pas au fichier", async () => {
@@ -675,33 +686,30 @@ describe("ce que le spectateur avait choisi", () => {
 });
 
 /**
- * Une piste d'un autre format audio que celle qui joue — une VO TrueHD ré-encodée après une VF
- * Dolby copiée (Braveheart, 21/09/2026). Aucun tampon vivant ne survit à ce changement sur
- * WebKit : le lecteur est reconstruit à la même position, directement sur la piste voulue.
+ * Tout changement de piste reconstruit le lecteur à la même position, directement sur la piste
+ * voulue — même format ou non. Le changement « dans le tampon », plus lent et source d'un décalage
+ * durable du son sur WebKit, a été retiré le 22/09/2026.
  */
-describe("une piste d'un autre format", () => {
+describe("changer de piste audio", () => {
   const logged = () =>
     (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
       .filter(([url]) => url === "/api/player/log")
       .map(([, init]) => JSON.parse((init as { body: string }).body) as { kind: string; fields: Record<string, unknown> });
 
-  it("reconstruit le lecteur dessus, sans jamais passer par le tampon", async () => {
-    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
+  it("reconstruit le lecteur directement sur la piste choisie", async () => {
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
-    const rebuilt = fakeRemux({ currentAudioTrack: 2 });
-    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+    const rebuilt = rebuildOn(2);
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
 
     // Le pipeline suivant est demandé sur la piste choisie : il ouvre dessus.
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1]).toMatchObject({ audioTrackNumber: 2 });
-    // Et personne ne tente le changement de format dans un tampon vivant — ni l'ancien pipeline,
-    // ni le nouveau, qui a ouvert sur la bonne piste et n'a rien à changer.
-    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
-    await waitFor(() => expect(rebuilt.subtitleAt).toBeDefined());
-    expect(rebuilt.selectAudioTrack).not.toHaveBeenCalled();
+    expect(remux.requestAudioTrack).toHaveBeenCalledWith(2);
+    // Le nouveau a ouvert sur la bonne piste : il n'a rien à changer, donc rien à redemander.
+    await waitFor(() => expect(remux.destroy).toHaveBeenCalled());
+    expect(rebuilt.requestAudioTrack).not.toHaveBeenCalled();
     // Le compte rendu dit par où c'est passé.
     await waitFor(() =>
       expect(logged().some((e) => e.kind === "audio" && e.fields.via === "reconstruction" && e.fields.to === 2)).toBe(true)
@@ -709,15 +717,13 @@ describe("une piste d'un autre format", () => {
   });
 
   it("garde un film en pause en pause", async () => {
-    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
     await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
     Object.defineProperty(HTMLMediaElement.prototype, "paused", { value: true, configurable: true });
     try {
       (HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>).mockClear();
-      const rebuilt = fakeRemux({ currentAudioTrack: 2 });
-      nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+      rebuildOn(2);
       await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
       await waitFor(() => expect(probes).toHaveLength(2));
       // Et la source l'apprend aussi : sans cela, sa garde de démarrage prenait l'élément à
@@ -736,7 +742,6 @@ describe("une piste d'un autre format", () => {
     // Relu le 22/09/2026 : module TrueHD injoignable, encodeur qui refuse — la reconstruction
     // tombait sur le canevas ou le lecteur serveur, et un film qui jouait était perdu pour un
     // choix de langue. Avant la livraison par piste, un changement raté laissait l'ancienne jouer.
-    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
@@ -757,12 +762,20 @@ describe("une piste d'un autre format", () => {
     await waitFor(() => expect(screen.getByText("audioTrackRefused")).toBeTruthy());
   });
 
-  it("garde le changement rapide entre deux pistes du même format", async () => {
+  it("ne reconstruit rien quand le fichier refuse le changement, et le menu reste sur la piste qui joue", async () => {
+    // Un fichier sans index, en cours de film : la reconstruction le reprendrait à zéro. Le refus
+    // (et son avertissement) vient du pipeline ; ici, rien ne bouge et le journal le dit.
+    remux.requestAudioTrack = vi.fn((_id: number): "rebuild" | "refused" | null => "refused");
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
-    await waitFor(() => expect(remux.selectAudioTrack).toHaveBeenCalledWith(2));
+
+    expect(remux.requestAudioTrack).toHaveBeenCalledWith(2);
     expect(probes).toHaveLength(1);
+    expect(remux.destroy).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(logged().some((e) => e.kind === "audio" && e.fields.via === "refus" && e.fields.applied === false)).toBe(true)
+    );
   });
 });
 
@@ -813,8 +826,13 @@ describe("les préférences du compte Jellyfin", () => {
     // and this whole feature would silently do nothing.
     viewerState = { resumeSeconds: 0, preferences };
     remux = fakeRemux({ currentAudioTrack: 2 }); // opens on English
+    const rebuilt = fakeRemux({ currentAudioTrack: 1 });
+    nextProbe = () => ({ path: "remux", start: async () => (probes.length === 1 ? remux : rebuilt), discard: vi.fn() });
     mount();
-    await waitFor(() => expect(remux.selectAudioTrack).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(remux.requestAudioTrack).toHaveBeenCalledWith(1));
+    // Rouvert sur elle, comme tout changement de piste.
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1]).toMatchObject({ audioTrackNumber: 1 });
   });
 
   it("ne touche à rien quand la langue demandée n'est pas là", async () => {
@@ -822,7 +840,7 @@ describe("les préférences du compte Jellyfin", () => {
     viewerState = { resumeSeconds: 0, preferences: { ...preferences, audioLanguage: "jpn" } };
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
+    expect(remux.requestAudioTrack).not.toHaveBeenCalled();
   });
 
   it("laisse le choix du spectateur l'emporter sur une reconstruction", async () => {
@@ -831,13 +849,19 @@ describe("les préférences du compte Jellyfin", () => {
     viewerState = { resumeSeconds: 0, preferences };
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    const switched = rebuildOn(2);
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    await waitFor(() => expect(probes).toHaveLength(2));
 
-    const rebuilt = fakeRemux({ currentAudioTrack: 1 });
-    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
-    remux.lost = true;
-    act(() => probes[0].onError("morte"));
-    await waitFor(() => expect(rebuilt.selectAudioTrack).toHaveBeenCalledWith(2));
+    const rebuilt = rebuildOn(2);
+    switched.lost = true;
+    act(() => probes[1].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(3));
+    expect(probes[2]).toMatchObject({ audioTrackNumber: 2 });
+    // Rouvert sur la piste du spectateur, le nouveau pipeline n'a rien à changer — et surtout pas
+    // à revenir à celle du compte.
+    await waitFor(() => expect(switched.destroy).toHaveBeenCalled());
+    expect(rebuilt.requestAudioTrack).not.toHaveBeenCalled();
   });
 
   it("peut satisfaire une préférence de sous-titres avec un fichier posé à côté", async () => {
@@ -862,7 +886,7 @@ describe("les préférences du compte Jellyfin", () => {
     viewerState = { resumeSeconds: 0, preferences: null };
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    expect(remux.selectAudioTrack).not.toHaveBeenCalled();
+    expect(remux.requestAudioTrack).not.toHaveBeenCalled();
   });
 });
 
@@ -874,7 +898,9 @@ describe("un autre film", () => {
     // may well be another language — straight into the next episode.
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    rebuildOn(2);
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    await waitFor(() => expect(probes).toHaveLength(2));
     cleanup();
 
     const next = fakeRemux({ currentAudioTrack: 1 });
@@ -882,7 +908,7 @@ describe("un autre film", () => {
     mount({ itemId: "item-2" });
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
 
-    expect(next.selectAudioTrack).not.toHaveBeenCalled();
+    expect(next.requestAudioTrack).not.toHaveBeenCalled();
     expect(next.selectSubtitleTrack).not.toHaveBeenCalled();
     // And it opens where the new film asks to be opened, not where the last one stopped.
     expect(probes[probes.length - 1].startSeconds).toBe(0);
@@ -1255,15 +1281,13 @@ describe("relu le 22/09/2026", () => {
   it("un changement de piste pendant un saut encore en chargement rouvre à la position du saut", async () => {
     // 22/09/2026 : à 2 min, saut à 10 min, et changement de piste pendant le chargement — la
     // reconstruction repartait de la dernière position lue, 2 min. Un geste sur deux était perdu.
-    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
     await act(async () => void fireEvent(videoElement(120), new Event("timeupdate")));
 
     // Le saut est demandé ; l'élément n'y est pas encore (pas de `seeked`, pas de timeupdate).
     await act(async () => void fireEvent.click(screen.getByText("saut:600")));
-    const rebuilt = fakeRemux({ currentAudioTrack: 2 });
-    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+    rebuildOn(2);
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
 
     await waitFor(() => expect(probes).toHaveLength(2));

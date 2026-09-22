@@ -277,11 +277,11 @@ Four modules, split along the nature of the evidence each one holds:
 |---|---|
 | `mseSupport.ts` | What the browser **accepts** — asked, never assumed |
 | `bufferQueue.ts` | **One operation at a time** per buffer |
-| `playbackGuard.ts` | **The element's clock**: pause, resume, landing, picture hold |
+| `playbackGuard.ts` | **The element's clock**: pause, resume, landing, resumed start |
 | `mseSource.ts` | **The bytes**: buffers, filling, seeks, recovery |
 
 The guard never speaks of bytes; it decides *when* the playhead should move, and the source remains
-the only thing that moves media. The source hands it a narrow view of itself (`GuardHost`): four
+the only thing that moves media. The source hands it a narrow view of itself (`GuardHost`): three
 reads and two verbs.
 
 **Buffering.**
@@ -335,9 +335,6 @@ reads and two verbs.
 - **The rebuild budget decays.** Three source losses an hour apart are not the failure the limit
   exists to stop: past three minutes without incident the counter resets. Otherwise a two-hour film
   exhausts its budget by accident and yields to the stable player mid-session.
-- **Reactive picture hold**: Safari plays video **silently** when the audio buffer is empty at the
-  head; Chrome stalls correctly. The picture is therefore held only if it actually advances without
-  sound.
 
 ---
 
@@ -404,41 +401,44 @@ may mirror its encoder's convention and hide it.
 > it. Before the fix it was taken for a surround channel and mixed in, so the sound is quieter
 > afterwards. That is the correct behaviour, not a regression.
 
-### Audio delivery: per track, and a rebuild when the format changes
+### Audio delivery: per track, and every track change rebuilds
 
 **Default since 2026-09-21 (`perTrack` in `remuxer.ts`).** Each track is delivered in its best
 form — a Dolby track the browser takes is copied untouched, TrueHD, DTS and anything else it
-refuses is re-encoded. Changing to a track of the **same delivered format** keeps the fast path
-(the audio buffer's contents replaced: 0.1 to 0.8 s measured on iPhone). Changing to a track of
-**another format** — an E-AC3 VF copied, a TrueHD VO re-encoded — **rebuilds the player** at the
-same position, opening directly on the new track (`audioSwitchNeedsRebuild`,
-`RemuxPlayback.needsRebuildForAudio`, `openingAudio`, `ExperimentalPlayerHost`). It is the
-machinery that already brings the player back after a lost source; a film paused stays paused.
+refuses is re-encoded.
 
-**On WebKit, every track change rebuilds (since 2026-09-22, `rebuildEveryAudioSwitch` in
-`remuxPlayback.ts`), same format or not.** The in-buffer change clears the audio buffer while the
-picture plays, refills it with up to one keyframe interval of audio already in the past, and
-only re-syncs Safari's audio renderer to the picture if the audio hold happens to win a race of a
-few tens of milliseconds. A viewer on iPad (built-in speakers) kept an audio offset after two
-same-format changes, cleared only by a seek. The rebuild starts from a clean state, like a seek,
-and was also the faster path on WebKit: 0.34 s median over 36 changes, against 3.1 s over 23 for
-the in-buffer change. The same day, on a slow network, Chrome's and Firefox's in-buffer change
-waited 1.6 to 4.7 s before starting (it waits for the fragment being built to finish; a rebuild
-drops it), so every engine now rebuilds — to be confirmed by the `via` field of the `audio` log
-lines; reverting means returning `isWebKit()` from `rebuildEveryAudioSwitch`. A rebuild caused by
-a track change does not spend the rebuild budget reserved for failures.
+**Changing track has one path: the player is rebuilt** at the same position, opening directly on
+the new track (`RemuxPlayback.requestAudioTrack`, `openingAudio`, `ExperimentalPlayerHost`) — same
+format or not, on every engine, since 2026-09-22. It is the machinery that already brings the
+player back after a lost source; the frame on screen is held, a film paused stays paused, and a
+track change does not spend the rebuild budget reserved for failures. A position asked for by a
+seek still loading is the one reopened.
 
-Why: once TrueHD became decodable, 19 films mixing TrueHD and Dolby had their Dolby VF re-encoded
-— a second lossy generation, and work for the phone — and a re-encoded language change cost 2 to
-15 s on iPhone, where a recovery rebuild took 0.3 to 0.5 s.
+Until then a same-format change stayed **in the buffer**: the audio buffer emptied and refilled
+while the picture played, behind an exclusive section and a picture hold. Measured on Safari,
+Chrome and Firefox, it was the slower of the two (0.4 to 3.1 s median, with multi-second tails,
+against 0.05 to 0.35 s for a rebuild — it waited for the fragment being built, where a rebuild
+drops it), and on WebKit it could leave a lasting audio offset that only a seek cleared: the
+refill carried up to one keyframe interval of past audio, and Safari's audio renderer only
+re-synced to the picture if the hold won a race of a few tens of milliseconds. It was removed, with
+its buffer surgery and its capability probe.
 
-**What is not yet proven, and must be on a device before this ships**: every rebuild measured so
-far started from a source Safari had already lost, or from a minimised player. This one tears down
-a *healthy* MediaSource mid-playback. The 2026-09-03 attempt below, "rebuild the MediaSource",
-failed; the difference is that the recovery rebuild tears the whole pipeline down and builds a new
-one on the element, rather than swapping a MediaSource under a running one — which is why it is
-expected to hold, and why it has to be heard before being believed. Setting `perTrack = false`
-restores the per-file unification below, unchanged.
+**The one refusal**: a file with no index, past its first second. A rebuild reopens by the index,
+and without one it would restart the film from zero — so, like a seek on that file, the change is
+refused with a warning (`noIndexAudio`) and the previous track keeps playing. At the very start,
+reading from the beginning *is* the right answer, and the change rebuilds.
+
+The `audio` lines of the playback log carry `via`: `reconstruction`, or `refus` for that refusal
+(older lines say `tampon` for the in-buffer change).
+
+Why per track: once TrueHD became decodable, 19 films mixing TrueHD and Dolby had their Dolby VF
+re-encoded — a second lossy generation, and work for the phone — and a re-encoded language change
+cost 2 to 15 s on iPhone, where a recovery rebuild took 0.3 to 0.5 s.
+
+Rebuilding tears a *healthy* MediaSource down mid-playback. The 2026-09-03 attempt below, "rebuild
+the MediaSource", failed because it swapped a MediaSource under a running pipeline; this tears the
+whole pipeline down and builds a new one on the element, and holds on device. Setting
+`perTrack = false` restores the per-file unification below; track changes rebuild there too.
 
 What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what now holds it:
 
@@ -451,10 +451,9 @@ What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what n
 - **The encoder's rebuild budget decays** like the player's: three rebuilds, forgotten after thirty
   clean segments (`GOOD_SEGMENTS_TO_FORGIVE`) — otherwise a long film spent its budget on
   hiccups twenty minutes apart and went to the server player at the fourth.
-- **"Same delivered format" includes the sample rate** of a re-encoded track (`deliveredAudio`):
-  the encoder runs at the decoder's rate, and a 44.1 kHz FLAC after a 48 kHz DTS rebuilds rather
-  than changing a live buffer's configuration. `setAudioTrack` and `retryTranscoder` also refuse a
-  replacement whose actual rate or channel count differs from the buffer's.
+- **A replacement encoder must describe the buffer as the one it replaces**: `retryTranscoder`
+  refuses one whose actual codec, rate or channel count differs from the buffer's, rather than
+  changing a live buffer's configuration.
 - **The end of the file is declared with a transcoder too**: once the last picture is out, the
   rest of the re-encoded sound is asked for once, then `nextSegment()` answers `null` and the
   stream is ended. Until 22/09/2026 it never did, and every re-encoded film looped in its credits.
@@ -486,8 +485,9 @@ All three ways of changing a live buffer's codec were tested on device:
 | Rebuild the MediaSource | Detaches the element; Safari does not come back. |
 | `removeSourceBuffer` + `addSourceBuffer` | The API works, the result is inert: segments accepted, ranges growing, head advancing, **no sound**. The first seek closes the source. |
 
-The third one's code is kept behind `TRUST_BUFFER_REBUILD = false` (`pathSelector.ts`) — one line to
-flip the day a browser keeps its word.
+The third one's code, its probe and the `TRUST_BUFFER_REBUILD` switch that disbelieved it were
+removed on 2026-09-22 with the in-buffer track change: every track change now rebuilds the whole
+player, so no live buffer ever changes codec.
 
 **Accepted cost**: on a mixed-codec file, an AC-3 track that could have passed through intact is
 re-encoded. It buys a language change that cannot break playback.
@@ -769,7 +769,7 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 |---|---|
 | `mseSupport.ts` | What the browser accepts, and the buffer-replacement probe |
 | `bufferQueue.ts` | One operation at a time per buffer |
-| `playbackGuard.ts` | The element's clock: pause, resume, landing, picture hold |
+| `playbackGuard.ts` | The element's clock: pause, resume, landing, resumed start |
 | `mseSource.ts` | MediaSource, buffers, filling, seeks, recovery |
 | `pathSelector.ts` | Which path, and why |
 

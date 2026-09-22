@@ -9,7 +9,6 @@
 
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
-import { audioBufferRebuildable } from "./remuxer";
 import { trace } from "./trace";
 import { isNetworkFailure } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
@@ -18,7 +17,7 @@ import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCto
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
 // moving where they live should not mean touching a dozen call sites.
-export { containerAccepts, playabilityOf, canRebuildAudioBuffer } from "./mseSupport";
+export { containerAccepts, playabilityOf } from "./mseSupport";
 
 /** How far ahead of the playhead to keep buffered. Enough to ride out a slow read, not a download. */
 const TARGET_BUFFER_SECONDS = 30;
@@ -107,9 +106,6 @@ export interface MseCallbacks {
   onStarting?: (startedAt: number | null) => void;
 }
 
-/** How far before the end of the held picture the reader starts building segments in full again. */
-const VIDEO_SKIP_MARGIN = 6;
-
 export class MseSource {
   private readonly source: MediaSource | ManagedMediaSource;
   private videoBuffer: SourceBuffer | null = null;
@@ -119,13 +115,11 @@ export class MseSource {
   /** Consecutive refused appends. A single one is worth retrying; a run of them is not. */
   private appendFailures = 0;
   /**
-   * Everything about the element's own clock — pausing, resuming, landing after a seek, holding a
-   * picture that would run on without sound. A different subject from moving bytes, with a
+   * Everything about the element's own clock — pausing, resuming, landing after a seek, starting
+   * a film the element gave up on. A different subject from moving bytes, with a
    * different kind of evidence behind it, so it lives in its own file.
    */
   private readonly guard: PlaybackGuard;
-  /** Answered by the probe above, before the file was opened. */
-  rebuildAudioAllowed = false;
   /** Pas de démarrage dû à l'ouverture : la garde ne relance pas un élément laissé à l'arrêt. */
   private startPaused = false;
   private objectUrl: string | null = null;
@@ -138,19 +132,6 @@ export class MseSource {
   private pending: Promise<void> = Promise.resolve();
   /** The most recent seek asked for. Dragging a scrub bar asks for dozens; only the last matters. */
   private requestedSeek: number | null = null;
-  /**
-   * Le lecteur est à quelqu'un d'autre : une action exclusive, ou un rechargement du son, qui a
-   * arrêté la boucle de lecture et n'a pas encore repositionné le remultiplexeur.
-   *
-   * Seul un saut arrêtait la boucle pour de bon — par `requestedSeek`. `refillAudio` et
-   * `runExclusive` changeaient de génération et attendaient la boucle en cours, mais rien
-   * n'empêchait la suivante de partir aussitôt, sur un `timeupdate` ou un `waiting`, avant que le
-   * remultiplexeur ne soit replacé : la lecture reprenait à l'ancienne position, un `seekTo` du
-   * lecteur d'échantillons était écrasé par la grappe qu'on finissait de lire, et le transcodeur
-   * en cours de remplacement était interrogé en même temps. Un compteur, pas un booléen : les deux
-   * peuvent se chevaucher.
-   */
-  private fenced = 0;
   private delaySeconds = 0;
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
@@ -161,10 +142,8 @@ export class MseSource {
    * ouverture au début, qui n'a personne à attendre.
    */
   private pendingStart: number | null = null;
-  /** While set, video already held is not sent again — see refillAudio. */
-  private skipVideoUntil: number | null = null;
   private lastAppendAt = 0;
-  /** How far the reader has read, on the player's clock. See the video-skip margin. */
+  /** How far the reader has read, on the player's clock — for the trace of a misplaced reader. */
   private readUpTo = 0;
 
 
@@ -184,7 +163,7 @@ export class MseSource {
   private constructor(
     private readonly video: HTMLVideoElement,
     private readonly remuxer: Remuxer,
-    private plan: RemuxPlan,
+    private readonly plan: RemuxPlan,
     private readonly callbacks: MseCallbacks,
     Source: MediaSourceCtor
   ) {
@@ -204,9 +183,6 @@ export class MseSource {
         },
         get playable() {
           return self.playable;
-        },
-        get audioRanges() {
-          return self.audioBuffer?.buffered ?? null;
         },
         seek: (seconds, because) => this.seek(seconds, because),
         noteSeekTarget: (seconds) => {
@@ -231,7 +207,6 @@ export class MseSource {
 
     const instance = new MseSource(video, remuxer, plan, callbacks, Source);
     instance.startPaused = startPaused;
-    instance.rebuildAudioAllowed = audioBufferRebuildable();
     await instance.open(startSeconds);
     return instance;
   }
@@ -483,16 +458,6 @@ export class MseSource {
    * be a later range left over, and measuring against that would report a deep buffer while the
    * playhead sits in front of nothing at all — the player would then quietly stop fetching.
    */
-  /** How far the picture is held from the playhead, ignoring what the sound is doing. */
-  private videoBufferedEnd(): number {
-    const ranges = this.videoBuffer?.buffered;
-    const now = this.anchor;
-    for (let i = 0; ranges && i < ranges.length; i++) {
-      if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
-    }
-    return now;
-  }
-
   private bufferedEnd(): number {
     const ranges = this.playable;
     const now = this.anchor;
@@ -533,15 +498,6 @@ export class MseSource {
         // A seek is waiting. Reading thirty more seconds of a place the viewer has already left
         // is what makes a second seek feel like it does nothing for several seconds.
         if (this.requestedSeek !== null) break;
-        // Pareil pour un changement de piste en cours : c'est lui qui relancera la lecture, une
-        // fois le remultiplexeur replacé — voir `fenced`.
-        if (this.fenced > 0) break;
-
-        // Nothing asks for the pictures of a stretch the browser already holds — which is every
-        // language change. The file still has to be read for them (Matroska interleaves the sound
-        // with them), but copying megabytes into segments that are then dropped does not. The
-        // margin means the segment that crosses back over the line is built in full.
-        this.remuxer.setVideoWanted(this.skipVideoUntil === null || this.readUpTo >= this.skipVideoUntil - VIDEO_SKIP_MARGIN);
 
         const segment = await this.remuxer.nextSegment();
         if (this.generation !== generation || this.destroyed) break;
@@ -586,14 +542,7 @@ export class MseSource {
 
         if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
 
-        // Video the browser already holds is not sent again. Re-appending over media that has
-        // been played is what it catches up on at speed — the burst of fast-forward reported
-        // after changing audio language, and before that after choosing a subtitle.
-        if (this.skipVideoUntil !== null && segment.endSeconds > this.skipVideoUntil) {
-          this.skipVideoUntil = null;
-        }
-        const sendVideo = this.skipVideoUntil === null;
-        if (this.videoOps && sendVideo) {
+        if (this.videoOps) {
           // One call per fragment. Handing over a whole keyframe group at once is what this
           // splitting exists to stop — see Remuxer.fragmentise — so joining them back together
           // here would undo all of it.
@@ -638,7 +587,7 @@ export class MseSource {
         // An empty buffer is not a misplaced reader.
         //
         // `distanceToMedia` answers Infinity when nothing is buffered, and nothing is buffered
-        // for a moment after every seek and every audio refill — the element's ranges are the
+        // for a moment after every seek — the element's ranges are the
         // *intersection* of the two buffers, so emptying the audio one empties them entirely.
         // Read as a distance, that is "infinitely far from the media", and this fired a recovery
         // at the exact moment the loop was already fetching what was missing. Each recovery is a
@@ -792,135 +741,7 @@ export class MseSource {
 
 
 
-
-
-
-  /**
-   * Points the audio buffer at a different track, in place.
-   *
-   * Nothing about the video is touched, so the picture never stops. The initialisation segment
-   * is what a source buffer decodes by; replacing it and refilling is all a language change is.
-   */
-  async replaceAudio(mimeType: string | null, init: Uint8Array | null): Promise<void> {
-    const queue = this.audioOps;
-    if (!queue || !mimeType || !init || this.destroyed) return;
-    this.generation += 1;
-
-    // A different codec is not something to ask a buffer to absorb. Where the browser allows it,
-    // the buffer is replaced rather than reinterpreted: the MediaSource, the element and the
-    // picture's own buffer are all left standing, and only the sound is rebuilt from nothing.
-    if (mimeType !== this.plan.audioMimeType && this.rebuildAudioAllowed) {
-      await this.rebuildAudioBuffer(mimeType, init);
-      return;
-    }
-
-    // Emptied before the codec changes, not after. Asking a buffer to reinterpret itself while
-    // it still holds coded frames of the codec it is leaving is more than the specification
-    // requires of an implementation, and Safari answered it with a decode failure — which closes
-    // the MediaSource and takes the picture with it.
-    await this.clear(queue);
-
-    if (mimeType !== this.plan.audioMimeType) {
-      if (typeof queue.buffer.changeType !== "function") {
-        throw new Error("Ce navigateur ne sait pas changer de codec audio en cours de lecture.");
-      }
-      await queue.enqueue(() => queue.buffer.changeType(mimeType));
-    }
-    this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
-
-    await queue.enqueue(() => queue.buffer.appendBuffer(init as BufferSource));
-  }
-
-  /**
-   * Takes the audio buffer out and puts a new one in its place.
-   *
-   * Everything the viewer can see survives it: the MediaSource stays open, the element stays
-   * attached, and the picture's buffer keeps every frame it holds. Only the sound starts again
-   * from nothing — which is what a change of codec is.
-   */
-  private async rebuildAudioBuffer(mimeType: string, init: Uint8Array): Promise<void> {
-    const outgoing = this.audioBuffer;
-    // Nothing in flight: removing a buffer mid-operation is the one way to make this worse.
-    await this.audioOps?.enqueue(() => {}).catch(() => {});
-    if (this.destroyed || this.source.readyState !== "open") {
-      throw new Error(`La source ne peut plus recevoir de piste audio. ${this.elementState()}`);
-    }
-
-    if (outgoing) this.source.removeSourceBuffer(outgoing);
-    trace(`piste audio : tampon reconstruit en ${mimeType}`);
-    this.audioBuffer = this.source.addSourceBuffer(mimeType);
-    this.audioBuffer.mode = "segments";
-    this.audioOps = new BufferQueue(this.audioBuffer, () => this.elementState());
-    this.plan = { ...this.plan, audioMimeType: mimeType, audioInit: init };
-    await this.appendTo(this.audioOps, init, this.generation);
-  }
-
-  /**
-   * Replaces the sound from a point on the player's clock, leaving the picture alone.
-   *
-   * A change of audio language needs the sound re-read, and nothing else. Doing it with an
-   * ordinary seek clears the video too and sends it again over media the browser has already
-   * played — which it then catches up on at speed, replaying several seconds in one or two.
-   * Here the video buffer is untouched and the segments that would overlap it are not sent.
-   */
-  async refillAudio(playerSeconds: number): Promise<void> {
-    if (this.destroyed || !this.audioOps) return;
-    this.fenced += 1;
-    try {
-      await this.refillAudioFenced(playerSeconds, this.audioOps);
-    } finally {
-      this.fenced -= 1;
-    }
-    void this.fill();
-  }
-
-  private async refillAudioFenced(playerSeconds: number, audioOps: BufferQueue): Promise<void> {
-    this.generation += 1;
-    await this.fillTask?.catch(() => {});
-    // Le flux avait peut-être déjà été déclaré fini : un changement de langue dans les trente
-    // dernières secondes du film. `runFill` ne relit rien une fois `ended` levé, et le film
-    // finissait muet sur un tampon audio qu'on venait de vider. Un saut le rabaisse ; ceci aussi.
-    this.ended = false;
-
-    // Measured on the video buffer alone, and this matters: `bufferedEnd` reads the element's
-    // ranges, which are the *intersection* of the two buffers — and the audio one was just
-    // emptied by the codec change, so the intersection at the playhead is nothing at all. Read
-    // that way, this said "we hold no video", and the reader appended the picture again from the
-    // keyframe before the playhead: replacing, under a decoder mid-frame, the very samples it
-    // was working on. The sound carried on from its own fresh buffer while the picture stopped,
-    // and a seek — which re-primes the decoder — showed the right frame again.
-    this.skipVideoUntil = this.videoBufferedEnd();
-    this.readUpTo = playerSeconds;
-    await this.clear(audioOps);
-    this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
-  }
-
-  /**
-   * Runs something with the read loop stopped and no seek able to slip in beside it.
-   *
-   * Changing audio language is several steps — describe the new track, re-point the buffer,
-   * refill — and a seek arriving between any two of them touches the same buffer from the other
-   * side. That is the freeze reported after changing language just as a seek was settling.
-   */
-  async runExclusive<T>(action: () => Promise<T>): Promise<T> {
-    const task = this.pending.then(async () => {
-      this.fenced += 1;
-      try {
-        this.generation += 1;
-        await this.fillTask?.catch(() => {});
-        return await action();
-      } finally {
-        this.fenced -= 1;
-      }
-    });
-    this.pending = task.then(
-      () => {},
-      () => {}
-    );
-    return task;
-  }
-
-  private async performSeek(requested: number): Promise<void> {
+    private async performSeek(requested: number): Promise<void> {
     if (this.destroyed) return;
 
     // Un saut demandé remplace l'ouverture, il ne s'y ajoute pas. Sans cette ligne, sauter avant
@@ -946,8 +767,6 @@ export class MseSource {
     this.generation += 1;
     this.ended = false;
     this.lastSeekTarget = playerSeconds;
-    // An ordinary seek replaces everything, so nothing is being spared.
-    this.skipVideoUntil = null;
     this.readUpTo = playerSeconds;
     this.guard.seekServed(playerSeconds);
     this.seeksServed += 1;
@@ -1062,9 +881,6 @@ export class MseSource {
     // guessing how long a segment takes to arrive — and guessing short, as a 4K file over a slow
     // link showed, means seeking again to the very place already being fetched.
     if (this.fillTask) return;
-    // Un changement de piste tient le lecteur et relancera la lecture lui-même ; se replacer
-    // maintenant, ce serait sauter à travers lui — voir `fenced`.
-    if (this.fenced > 0) return;
 
     // Nothing is being read and the playhead is on nothing: whatever failed to say so, the
     // viewer is somewhere this player is not serving.
@@ -1162,21 +978,6 @@ export class MseSource {
    * closed cannot be reopened — every buffer on it is gone with it. There is nothing to repair
    * here; the caller has to build the whole thing again.
    */
-  /** Keeps the picture from running on without sound — see PlaybackGuard. */
-  beginAudioHold(): void {
-    this.guard.beginAudioHold();
-  }
-
-  /** Watches for the sound to come back, so the picture can move again. */
-  armAudioRelease(): Promise<void> {
-    return this.guard.armAudioRelease();
-  }
-
-  /** Lets the picture go again — for a caller whose change of track came to nothing. */
-  releaseAudioHold(): void {
-    this.guard.releaseAudioHold();
-  }
-
   get lost(): boolean {
     return !this.destroyed && this.source.readyState === "closed";
   }

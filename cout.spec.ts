@@ -21,7 +21,7 @@
 import { openSync, readSync, closeSync, statSync } from "node:fs";
 import { describe, it } from "vitest";
 import { parseMatroska } from "@/lib/webcodecs/matroska";
-import { Remuxer, setAudioBufferRebuildable } from "@/lib/webcodecs/remuxer";
+import { Remuxer, setPerTrackAudioDelivery } from "@/lib/webcodecs/remuxer";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
 const anySource = { isTypeSupported: () => true };
@@ -62,7 +62,8 @@ const bilan = (quoi: string, ms: number) =>
 
 describe.skipIf(!process.env.COUT_FILE)("coût", () => {
   it("ouverture et saut", { timeout: 600_000 }, async () => {
-    setAudioBufferRebuildable(true);
+    // Livraison par piste (le défaut) : pas d'unification, donc pas d'encodeur à réclamer ici.
+    setPerTrackAudioDelivery(true);
     const src = source(process.env.COUT_FILE!);
     console.log(`fichier : ${(src.size / 1024 / 1024 / 1024).toFixed(2)} Go`);
 

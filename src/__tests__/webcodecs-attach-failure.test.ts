@@ -91,8 +91,6 @@ function fakeRemuxer() {
   return {
     seekable: true,
     plan: () => PLAN,
-    setAudioTrack: async () => {},
-    setVideoWanted: () => {},
     diagnostics: () => ({ presentationDelaySeconds: 0, clampedSamples: 0 }),
     seekTo: () => {},
     nextSegment: async () => null,

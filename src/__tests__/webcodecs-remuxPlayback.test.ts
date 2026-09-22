@@ -4,21 +4,13 @@ import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import type { ChosenPath } from "@/lib/webcodecs/pathSelector";
 import type { Remuxer, RemuxPlan } from "@/lib/webcodecs/remuxer";
 
-// Un changement de piste sur un fichier sans index. Les deux façons de changer de piste repartent
-// de la position courante *par l'index* ; sans index, le rechargement du son relisait le film
-// depuis son premier octet, et la reconstruction le reprenait à zéro.
+// Un changement de piste reconstruit toujours le lecteur, à la position courante *par l'index* —
+// sauf sur un fichier sans index en cours de film, où la reconstruction reprendrait le film à zéro.
 
 const mse = vi.hoisted(() => ({
-  runExclusive: vi.fn(async (action: () => Promise<unknown>) => action()),
-  replaceAudio: vi.fn(async () => {}),
-  refillAudio: vi.fn(async () => {}),
   seek: vi.fn(async () => {}),
-  beginAudioHold: vi.fn(),
-  releaseAudioHold: vi.fn(),
-  armAudioRelease: vi.fn(async () => {}),
   destroy: vi.fn(),
   presentationDelay: 0,
-  rebuildAudioAllowed: false,
 }));
 
 vi.mock("@/lib/webcodecs/mseSource", async (importOriginal) => ({
@@ -59,7 +51,6 @@ async function start(at: number, seekable: boolean) {
   const remuxer = {
     seekable,
     plan: () => PLAN,
-    setAudioTrack: vi.fn(async () => {}),
     audioTracks: () => [AAC, EAC3, AAC_ENG],
     subtitleTracks: () => [],
     close: vi.fn(),
@@ -78,72 +69,49 @@ async function start(at: number, seekable: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Un navigateur qui prend l'AAC et l'E-AC3 tels quels : passer de l'un à l'autre change le
-  // format livré, et demande donc une reconstruction sur un fichier indexé.
+  // Un navigateur qui prend l'AAC et l'E-AC3 tels quels.
   vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: () => true } });
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("changer de piste sur un fichier sans index", () => {
   it("refuse, en cours de film, comme un saut est refusé — et la piste d'avant continue", async () => {
-    const { playback, remuxer, onWarning } = await start(600, false);
+    const { playback, onWarning } = await start(600, false);
 
     // Pas de reconstruction : elle rouvrirait le film à zéro.
-    expect(playback.needsRebuildForAudio(EAC3.number)).toBe(false);
-    // Ni de rechargement du son : il relirait le fichier depuis son premier octet.
-    await playback.selectAudioTrack(AAC_ENG.number);
+    expect(playback.requestAudioTrack(AAC_ENG.number)).toBe("refused");
     expect(onWarning).toHaveBeenCalledWith({ code: "noIndexAudio" });
-    expect(remuxer.setAudioTrack).not.toHaveBeenCalled();
-    expect(mse.refillAudio).not.toHaveBeenCalled();
     expect(playback.currentAudioTrack).toBe(AAC.number);
+    expect(mse.seek).not.toHaveBeenCalled();
   });
 
   it("laisse faire au tout début du film, où repartir du début est la bonne réponse", async () => {
     // La reconstruction rouvre au début : c'est justement là qu'on est.
     const { playback, onWarning } = await start(0.5, false);
-    expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
-    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
+    expect(playback.requestAudioTrack(EAC3.number)).toBe("rebuild");
+    expect(playback.requestAudioTrack(AAC_ENG.number)).toBe("rebuild");
     expect(onWarning).not.toHaveBeenCalled();
-  });
-
-  it("ne change rien pour un fichier indexé : la piste se change par reconstruction", async () => {
-    const { playback, remuxer } = await start(600, true);
-    expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
-    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
-    // Le changement dans le tampon refuse une piste qui se change par reconstruction.
-    await expect(playback.selectAudioTrack(AAC_ENG.number)).rejects.toThrow(/reconstruction/);
-    expect(remuxer.setAudioTrack).not.toHaveBeenCalled();
   });
 });
 
 /**
- * Tout changement de piste reconstruit le lecteur (22/09/2026) : sur WebKit, le changement dans
- * le tampon laissait le son décalé de l'image jusqu'au saut suivant ; sur Chrome et Firefox, il
- * attendait jusqu'à 4,7 s le morceau de film en cours avant de commencer.
+ * Tout changement de piste reconstruit le lecteur (22/09/2026), même entre deux pistes du même
+ * format : le changement dans le tampon, retiré, laissait sur WebKit le son décalé de l'image
+ * jusqu'au saut suivant, et attendait ailleurs jusqu'à plusieurs secondes avant de commencer.
  */
-describe("le chemin d'un changement de piste selon le moteur", () => {
-  const SAFARI = "Mozilla/5.0 (iPad; CPU OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
-  const CHROME = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36";
-
-  it("sur WebKit, reconstruit même entre deux pistes du même format", async () => {
-    vi.stubGlobal("navigator", { userAgent: SAFARI });
-    const { playback } = await start(600, true);
-    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
-    // La piste qui joue déjà ne demande rien.
-    expect(playback.needsRebuildForAudio(AAC.number)).toBe(false);
+describe("un seul chemin pour changer de piste : la reconstruction", () => {
+  it("reconstruit entre deux pistes du même format comme entre deux formats", async () => {
+    const { playback, onWarning } = await start(600, true);
+    expect(playback.requestAudioTrack(AAC_ENG.number)).toBe("rebuild");
+    expect(playback.requestAudioTrack(EAC3.number)).toBe("rebuild");
+    expect(onWarning).not.toHaveBeenCalled();
+    // Rien n'est touché ici : c'est l'appelant qui reconstruit.
+    expect(playback.currentAudioTrack).toBe(AAC.number);
   });
 
-  it("sur Chrome aussi, depuis que son changement dans le tampon attendait jusqu'à 4,7 s", async () => {
-    vi.stubGlobal("navigator", { userAgent: CHROME });
+  it("ne demande rien pour la piste qui joue déjà, ni pour une piste inconnue", async () => {
     const { playback } = await start(600, true);
-    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
-    expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
-  });
-
-  it("ne reconstruit pas sur un fichier sans index, même sur WebKit", async () => {
-    vi.stubGlobal("navigator", { userAgent: SAFARI });
-    const { playback } = await start(600, false);
-    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(false);
+    expect(playback.requestAudioTrack(AAC.number)).toBeNull();
+    expect(playback.requestAudioTrack(99)).toBeNull();
   });
 });
-

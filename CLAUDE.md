@@ -343,19 +343,17 @@ Four rules, each of which cost a real failure:
   on its own port precisely so it never has to be touched.
 - **Media files.** `/mnt/media/video` is mounted read-only and belongs to Radarr/Sonarr. Anything
   writing there goes through them.
-- **`TRUST_BUFFER_REBUILD = false`** (`pathSelector.ts`). The probe is still run and recorded, and
-  the answer is deliberately disbelieved: Safari accepts the buffer swap, accepts every segment,
-  grows its ranges correctly — and plays no sound. Left switchable, not deleted.
 - **The WebKit reload in `changeAudio`** (`PlayerHost.tsx`). WebKit cannot open a second HLS session
   in one page; every other angle was tested and ruled out, and a full reload is the only thing that
   works. Its guard, on the other hand, was wrong for years — see `isWebKitEngine`.
-- **No audio format change inside a live buffer** (`remuxer.ts`). Every attempt at surviving that
-  transition turned out to be a guess about someone else's decoder. Two designs keep it from
-  happening, behind `perTrack`: per-track delivery (the default since 2026-09-21 — each track in
-  its best form, a change of *format* rebuilds the player on the new track, see DOC-TECH "Audio
-  delivery") and per-file unification (`perTrack = false` — every track re-encoded to one codec
-  when they cannot all pass as they are). `selectAudioTrack` refuses a format change outright
-  rather than attempt it.
+- **Every audio track change rebuilds the player** (`RemuxPlayback.requestAudioTrack`,
+  `ExperimentalPlayerHost`). No live buffer ever changes track: every attempt at surviving a codec
+  change in one turned out to be a guess about someone else's decoder (Safari took a buffer swap
+  and played no sound), and the same-format change "in the buffer" — removed on 2026-09-22 — was
+  slower than a rebuild on every engine and left a lasting A/V offset on WebKit. The only refusal
+  is a file with no index past its first second (`noIndexAudio`). Delivery stays behind `perTrack`:
+  each track in its best form (default), or `perTrack = false` for per-file unification. See
+  DOC-TECH "Audio delivery".
 - **`CACHE_NAME` in `public/sw.js`.** Bumping it evicts every cached asset for every installed PWA;
   the version history in that file's header says why each bump happened. Since v12 the app's code lives in
   per-build caches (`cine-static-<build>`, the build number rides on `/sw.js?v=`): the current

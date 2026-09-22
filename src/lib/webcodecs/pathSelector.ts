@@ -24,7 +24,7 @@
 import type { ByteSource } from "./byteSource";
 import { unsupportedReason, dolbyVisionInfo } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
-import { canRebuildAudioBuffer, playabilityOf } from "./mseSource";
+import { playabilityOf } from "./mseSource";
 import { trace } from "./trace";
 import { chooseTranscodePlan, chooseTranscodeCodec } from "./audioTranscode";
 import {
@@ -33,27 +33,8 @@ import {
   plannedMimeTypes,
   playableAudio,
   remuxableVideo,
-  setAudioBufferRebuildable,
   type RemuxPlan,
 } from "./remuxer";
-
-/**
- * Whether a browser saying yes to replacing an audio buffer is believed.
- *
- * It is not, and the measurement is why. Safari accepts `removeSourceBuffer` followed by
- * `addSourceBuffer`, accepts every segment appended to the new buffer, and grows its ranges
- * exactly as it should — and plays no sound at all from it. The next seek then closes the
- * MediaSource with "media failed to decode". The API works; what it produces does not.
- *
- * So the answer is measured and written into the record, and the player behaves as though it were
- * no: a file whose tracks cannot all be delivered as they are has all of them re-encoded, decided
- * once when it is opened, and the audio codec never changes for the life of the MediaSource. That
- * costs a bit-exact AC-3 track on a file that mixes codecs, and buys a player that does not stop.
- *
- * Left switchable rather than deleted: the probe still says what the browser claims, so the day
- * one of them means it, this is one line.
- */
-const TRUST_BUFFER_REBUILD = false;
 
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
 const EMPTY = new Uint8Array(0);
@@ -91,8 +72,9 @@ export interface PathInput {
 /**
  * **L'interrupteur du Dolby Vision.**
  *
- * Même rôle et même raison d'être que `TRUST_BUFFER_REBUILD` quelques lignes plus bas : la sonde
- * tourne, sa réponse est écrite dans le journal, et ce drapeau décide si on la croit.
+ * La sonde tourne, sa réponse est écrite dans le journal, et ce drapeau décide si on la croit.
+ * (Il avait un pendant pour le remplacement du tampon audio en cours de lecture, jamais cru —
+ * Safari l'acceptait puis jouait muet —, retiré le 22/09/2026 avec ce changement de piste.)
  *
  * À `false`, le remultiplexeur écrit `hvc1` comme il l'a toujours fait et les 188 titres Dolby
  * Vision de cette bibliothèque continuent d'être lus en HDR10 — c'est-à-dire correctement. Un
@@ -189,16 +171,6 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     await chooseTranscodeCodec(audioTrack.audio?.sampleRate ?? 48000, audioTrack.audio?.channels ?? 2);
   }
 
-  // Asked, recorded, and then not acted on — see TRUST_BUFFER_REBUILD.
-  const video = plannedMimeTypes(videoTrack, null).video;
-  if (video) {
-    const rebuildable = await canRebuildAudioBuffer(video);
-    setAudioBufferRebuildable(rebuildable && TRUST_BUFFER_REBUILD);
-    trace(
-      `chemin : ce navigateur ${rebuildable ? "accepte" : "refuse"} de remplacer le tampon audio à chaud` +
-        (rebuildable && !TRUST_BUFFER_REBUILD ? " (mesuré inexploitable, non utilisé)" : "")
-    );
-  }
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
   if (audioTrack && !playableAudio(audioTrack)) {
     /**

@@ -278,13 +278,6 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
     seeks,
     seekable,
     plan: () => PLAN,
-    setAudioTrack: async () => {},
-    // Recorded, not merely tolerated: whether the pictures are built at all is a real decision
-    // the caller makes, and a bench that ignores it cannot show it being made wrongly.
-    videoWantedCalls: [] as boolean[],
-    setVideoWanted(wanted: boolean) {
-      remuxer.videoWantedCalls.push(wanted);
-    },
     diagnostics: () => ({ presentationDelaySeconds: delay, clampedSamples: 0 }),
     seekTo: (s: number) => {
       seeks.push(s);
@@ -296,21 +289,19 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
       if (readMs) await new Promise((r) => setTimeout(r, readMs));
       if (index >= segments) return null;
       index += 1;
-      // Every segment carries a line. Subtitles are read out of the same stretch of file as the
-      // pictures, so a bench whose segments carry none cannot show them going missing when the
-      // pictures stop being built.
+      // Every segment carries a line, read out of the same stretch of file as the pictures.
       const subtitles = [
         { track: 4, startSeconds: index * 2, endSeconds: index * 2 + 1.5, text: `ligne ${index}` },
       ];
       return {
-        video: remuxer.videoWantedCalls.at(-1) === false ? [] : [new Uint8Array([10 + index])],
+        video: [new Uint8Array([10 + index])],
         audio: new Uint8Array([20 + index]),
         subtitles,
         endSeconds: index * 2,
       };
     },
   };
-  return remuxer as unknown as Remuxer & { seeks: number[]; videoWantedCalls: boolean[] };
+  return remuxer as unknown as Remuxer & { seeks: number[] };
 }
 
 beforeEach(() => {
@@ -670,21 +661,6 @@ describe("MseSource", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it("replaces the audio track's description without disturbing the video buffer", async () => {
-    const video = fakeVideo();
-    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
-    await flush();
-    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
-    const videoAppends = videoBuffer.appended.length;
-
-    await mse.replaceAudio(PLAN.audioMimeType, new Uint8Array([99]));
-    // The picture must not stop for a language change: only the sound is re-described.
-    expect(videoBuffer.appended.length).toBe(videoAppends);
-    expect(videoBuffer.removed).toEqual([]);
-    expect(audioBuffer.removed[0][0]).toBe(0);
-    expect(Array.from(audioBuffer.appended[audioBuffer.appended.length - 1])).toEqual([99]);
-  });
-
   it("starts reading where the viewer is resuming, not at the beginning of the file", async () => {
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500);
@@ -863,11 +839,10 @@ describe("MseSource", () => {
     for (const buffer of FakeSource.instances[0].buffers) buffer.busyMs = 6;
 
     // MediaSource permits exactly one operation per buffer, and the things that touch one are
-    // driven by unrelated events: a seek, a language change, the read loop, eviction. Firing
-    // them into the same instant is what produced a freeze that a second seek then undid.
+    // driven by unrelated events: a seek, the read loop, eviction. Firing them into the same
+    // instant is what produced a freeze that a second seek then undid.
     await Promise.all([
       mse.seek(600),
-      mse.replaceAudio(PLAN.audioMimeType, new Uint8Array([7])),
       mse.seek(900),
       (async () => {
         video.dispatchEvent(new Event("timeupdate"));
@@ -876,24 +851,6 @@ describe("MseSource", () => {
     ]);
     await flush();
     await flush();
-
-    expect(onError).not.toHaveBeenCalled();
-  });
-
-  it("survives a language change landing while the read loop is mid-append", async () => {
-    const video = fakeVideo();
-    const onError = vi.fn();
-    const remuxer = fakeRemuxer(500, 0.2, true, 5);
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onWarning: vi.fn() });
-    await flush();
-    for (const buffer of FakeSource.instances[0].buffers) buffer.busyMs = 6;
-
-    // The reported freeze, in the order it was reported: seek, then change language before the
-    // seek's refill has finished. Both reach for the audio buffer from different directions.
-    void mse.seek(600);
-    await new Promise((r) => setTimeout(r, 8));
-    await mse.replaceAudio(PLAN.audioMimeType, new Uint8Array([7]));
-    await new Promise((r) => setTimeout(r, 120));
 
     expect(onError).not.toHaveBeenCalled();
   });
@@ -1221,110 +1178,6 @@ describe("MseSource", () => {
     expect(onStarting).toHaveBeenLastCalledWith(null);
   });
 
-  it("changes the sound without sending the picture again", async () => {
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await flush();
-    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
-    const videoAppends = videoBuffer.appended.length;
-    const audioAppends = audioBuffer.appended.length;
-
-    await mse.refillAudio(10);
-    await until(() => audioBuffer.appended.length > audioAppends, "le son est relu");
-
-    // Re-appending video over media the browser has already played is what it catches up on at
-    // speed: several seconds replayed in one or two, reported after every language change.
-    expect(videoBuffer.removed).toEqual([]);
-    expect(videoBuffer.appended.length).toBe(videoAppends);
-    // The sound, meanwhile, really is replaced.
-    expect(audioBuffer.removed.length).toBeGreaterThan(0);
-    expect(audioBuffer.appended.length).toBeGreaterThan(audioAppends);
-  });
-
-  it("still holds on to the picture when the codec changed first", async () => {
-    // The real sequence of a language change: the audio buffer is emptied for the new codec, and
-    // only then is the sound read again. Between the two, the element's own ranges — which are
-    // the intersection of the buffers — are empty at the playhead, and reading "how much do we
-    // hold" from them says none. The picture was then appended again from the keyframe before
-    // the playhead, under a decoder mid-frame: the picture froze while the sound played on.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await flush();
-    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
-    const videoAppends = videoBuffer.appended.length;
-    const audioAppends = audioBuffer.appended.length;
-
-    await mse.replaceAudio('audio/mp4; codecs="mp4a.40.2"', new Uint8Array([7]));
-    await mse.refillAudio(10);
-    await until(() => audioBuffer.appended.length > audioAppends, "le son est relu");
-
-    expect(videoBuffer.removed).toEqual([]);
-    expect(videoBuffer.appended.length).toBe(videoAppends);
-  });
-
-  it("replaces the audio buffer rather than reinterpreting it, where the browser allows", async () => {
-    // The third of three ways to change what the sound decodes by, and the only one that leaves
-    // the element attached and the picture's buffer untouched. changeType is accepted on Safari
-    // and then answered with a decode failure that closes the source.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await flush();
-    const source = FakeSource.instances[0];
-    const outgoing = source.buffers[1];
-    mse.rebuildAudioAllowed = true;
-
-    await mse.replaceAudio('audio/mp4; codecs="opus"', new Uint8Array([7]));
-
-    expect(source.removed).toContain(outgoing);
-    expect(outgoing.typeChangedAfter).toBe(-1); // never asked to reinterpret itself
-    const incoming = source.buffers[source.buffers.length - 1];
-    expect(incoming.type).toBe('audio/mp4; codecs="opus"');
-    expect(incoming.appended.length).toBe(1); // its initialisation segment, and nothing else yet
-    // The picture is untouched by any of it.
-    expect(source.removed).not.toContain(source.buffers[0]);
-  });
-
-  it("does not build the pictures of a stretch the browser already holds", async () => {
-    // A language change re-reads the file from the playhead. The bytes cannot be avoided — the
-    // sound is interleaved with the pictures in the same clusters — but copying megabytes of
-    // picture into segments that are then dropped can be, and on a 4K file that was five and
-    // eight megabytes per segment for nothing.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await flush();
-    remuxer.videoWantedCalls.length = 0;
-
-    // Asked for at least once while re-reading what is already held.
-    await mse.refillAudio(10);
-    await until(() => remuxer.videoWantedCalls.includes(false), "les images cessent d'être construites");
-
-    // And an ordinary seek, which replaces everything, wants them all again.
-    remuxer.videoWantedCalls.length = 0;
-    await mse.seek(300);
-    await until(() => remuxer.videoWantedCalls.length > 0, "le lecteur repart après le saut");
-    expect(remuxer.videoWantedCalls).not.toContain(false);
-  });
-
-  it("still finds the subtitles while the pictures are not being built", async () => {
-    // The lines are read out of the same stretch of file as the pictures. Skipping the picture is
-    // an optimisation about copying, not about reading, and a change of language must not cost
-    // the viewer their subtitles for the thirty seconds it re-reads.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const onSubtitles = vi.fn();
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn(), onSubtitles });
-    await flush();
-    onSubtitles.mockClear();
-
-    await mse.refillAudio(10);
-    await until(() => remuxer.videoWantedCalls.includes(false), "les images cessent d'être construites");
-    await until(() => onSubtitles.mock.calls.length > 0, "des sous-titres sont trouvés");
-  });
-
   it("lands the playhead on the media a seek actually produced", async () => {
     // An index is not exact. Asking a real file for 1568 s produced media beginning at 1570.6,
     // and no amount of waiting or asking again could ever make it cover 1568: the recovery asked
@@ -1373,53 +1226,6 @@ describe("MseSource", () => {
     expect(mse.position).toBe(42);
   });
 
-  it("empties the audio buffer before asking it to change codec", async () => {
-    // Asking a buffer to reinterpret itself while it still holds coded frames of the codec it is
-    // leaving is more than the specification requires of an implementation — and this device
-    // answered it with "media failed to decode", which closes the MediaSource and takes the
-    // picture with it.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await flush();
-    const audioBuffer = FakeSource.instances[0].buffers[1];
-
-    await mse.replaceAudio('audio/mp4; codecs="mp4a.40.2"', new Uint8Array([7]));
-    expect(audioBuffer.typeChangedAfter).toBeGreaterThan(0);
-  });
-
-  it("stops the picture only once it would run on without sound", async () => {
-    // Chrome stalls by itself when a buffer has nothing at the playhead; Safari plays the
-    // picture on in silence. Stopping the element up front fixed the second and cost the first a
-    // visible pause on every change of track, so nothing happens until the picture is actually
-    // moving with no sound under it.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2);
-    const onStarting = vi.fn();
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn(), onStarting });
-    await flush();
-    const audioBuffer = FakeSource.instances[0].buffers[1];
-
-    mse.beginAudioHold();
-    await new Promise((r) => setTimeout(r, 100));
-    // The outgoing track still covers the playhead: nothing to prevent, nothing done.
-    expect(video.paused).toBe(false);
-
-    // Now it does not.
-    (audioBuffer as unknown as { ranges: [number, number][] }).ranges = [];
-    await until(() => video.paused, "l'image est retenue");
-    expect(onStarting).toHaveBeenLastCalledWith(expect.any(Number));
-
-    // And a press of play into that gap is remembered, not obeyed.
-    (video as unknown as { paused: boolean }).paused = false;
-    video.dispatchEvent(new Event("play"));
-    expect(video.paused).toBe(true);
-
-    mse.releaseAudioHold();
-    expect(video.paused).toBe(false);
-    expect(onStarting).toHaveBeenLastCalledWith(null);
-  });
-
   it("gives a refused seek the same second chance as a refused append", async () => {
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500, 0.2);
@@ -1454,7 +1260,7 @@ describe("MseSource", () => {
     const video = fakeVideo();
     // A remuxer that never returns: attaching must still complete, or a slow or unhelpful
     // browser holds the whole session hostage behind a spinner with no reason to stop.
-    const stuck = { plan: () => PLAN, seekable: true, seeks: [], diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }), seekTo: () => {}, setAudioTrack: async () => {}, setVideoWanted: () => {}, nextSegment: () => new Promise(() => {}) };
+    const stuck = { plan: () => PLAN, seekable: true, seeks: [], diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }), seekTo: () => {}, nextSegment: () => new Promise(() => {}) };
     await expect(
       MseSource.attach(video, stuck as never, PLAN, { onError: vi.fn(), onWarning: vi.fn() })
     ).resolves.toBeDefined();
@@ -1558,80 +1364,3 @@ describe("MseSource sur un élément qui refuse srcObject", () => {
   });
 });
 
-describe("MseSource pendant un changement de piste", () => {
-  it("ne relit rien entre l'arrêt de la lecture et le replacement du lecteur", async () => {
-    // refillAudio changeait de génération et attendait la boucle en cours, mais un `timeupdate`
-    // en relançait une aussitôt, avant `remuxer.seekTo` : la lecture reprenait à l'ancienne
-    // position, et le placement du lecteur d'échantillons était écrasé par la grappe en cours.
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2, true, 2);
-    const log: string[] = [];
-    const read = remuxer.nextSegment;
-    remuxer.nextSegment = async () => {
-      log.push("lecture");
-      return read();
-    };
-    const place = remuxer.seekTo;
-    remuxer.seekTo = (seconds: number) => {
-      log.push("placement");
-      place(seconds);
-    };
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await until(() => mse.debug["Lecture en cours"] === "non", "le premier remplissage est fini");
-    const audioBuffer = FakeSource.instances[0].buffers[1];
-    audioBuffer.busyMs = 30;
-    log.length = 0;
-
-    const refill = mse.refillAudio(10);
-    await new Promise((r) => setTimeout(r, 5));
-    // L'horloge avance pendant que le tampon audio se vide.
-    video.dispatchEvent(new Event("timeupdate"));
-    await refill;
-
-    expect(log[0]).toBe("placement");
-    await until(() => log.includes("lecture"), "la lecture reprend, après");
-  });
-
-  it("ne relit rien non plus pendant une action exclusive", async () => {
-    const video = fakeVideo();
-    const remuxer = fakeRemuxer(500, 0.2, true, 2);
-    const log: string[] = [];
-    const read = remuxer.nextSegment;
-    remuxer.nextSegment = async () => {
-      log.push("lecture");
-      return read();
-    };
-    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await until(() => mse.debug["Lecture en cours"] === "non", "le premier remplissage est fini");
-    log.length = 0;
-
-    await mse.runExclusive(async () => {
-      // Ce que fait un changement de piste : le son d'avant n'est plus là, rien n'est replacé.
-      FakeSource.instances[0].buffers[1].setBuffered(0, 0);
-      video.dispatchEvent(new Event("timeupdate"));
-      video.dispatchEvent(new Event("waiting"));
-      await new Promise((r) => setTimeout(r, 20));
-      log.push("fin de l'action");
-    });
-
-    expect(log[0]).toBe("fin de l'action");
-  });
-
-  it("recharge le son d'un changement de langue fait après la fin du flux", async () => {
-    // Dans les trente dernières secondes : le flux était déjà déclaré fini, `runFill` ne relisait
-    // plus rien, et le film se terminait muet sur un tampon audio qu'on venait de vider.
-    const video = fakeVideo();
-    const mse = await MseSource.attach(video, fakeRemuxer(2), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
-    await flush();
-    const source = FakeSource.instances[0];
-    expect(source.endedTimes).toBe(1);
-    const audioBuffer = source.buffers[1];
-    const appended = audioBuffer.appended.length;
-
-    await mse.refillAudio(1);
-    await until(() => audioBuffer.appended.length > appended, "le son de la nouvelle piste est relu");
-    // Et l'ancienne piste est bien retirée, même la fin du flux déclarée : la spécification
-    // rouvre la source d'elle-même.
-    expect(audioBuffer.removed.length).toBeGreaterThan(0);
-  });
-});

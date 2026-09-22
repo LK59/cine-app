@@ -1,7 +1,7 @@
 // Everything about the element's own clock.
 //
-// Pausing, resuming, landing on media after a seek, and holding a picture that would otherwise
-// run on without sound. None of it is about buffers or bytes: it is about what the viewer sees
+// Pausing, resuming, landing on media after a seek, and starting a film the element gave up on.
+// None of it is about buffers or bytes: it is about what the viewer sees
 // and hears at the moment they press something, and almost all of it exists because a device
 // disagreed with the specification about what should happen next.
 //
@@ -22,15 +22,10 @@ export interface GuardHost {
   readonly delaySeconds: number;
   /** What the element can actually play: the intersection of its buffers. */
   readonly playable: TimeRanges;
-  /** The sound's own ranges, which is a different question — see the silent-picture guard. */
-  readonly audioRanges: TimeRanges | null;
   seek(seconds: number, because: string): Promise<void>;
   /** Tells the source a position was moved to deliberately, so it does not read it as a jump. */
   noteSeekTarget(seconds: number): void;
 }
-
-/** Past this, a silent picture is better than a still one — and the viewer is told nothing more. */
-const AUDIO_HOLD_TIMEOUT_MS = 10000;
 
 /**
  * How long after pressing play the position from the pause is still defended.
@@ -112,9 +107,6 @@ export class PlaybackGuard {
     }
     return false;
   }
-
-  /** Set while the picture is deliberately held still for want of sound. See beginAudioHold. */
-  private audioHold: { wanted: boolean; engaged: boolean } | null = null;
 
   /** Where a seek was served, until the playhead is actually standing on media. */
   private seekLanding: number | null = null;
@@ -349,94 +341,6 @@ export class PlaybackGuard {
     this.video.currentTime = target;
   }
 
-  /**
-   * Keeps the picture from running on without sound — but only if it actually would.
-   *
-   * A media element is supposed to stall when a buffer has nothing at the playhead. Chrome does;
-   * Safari plays the picture on in silence, and a couple of seconds of film go by unheard while a
-   * newly chosen track is still being decoded. Stopping the element up front fixed that and cost
-   * something else: on Chrome, where nothing was wrong, every change of track came with a visible
-   * pause. So nothing is done until the thing being prevented is actually happening — the picture
-   * moving with no sound under it — and on a browser that stalls by itself, nothing is done at all.
-   */
-  beginAudioHold(): void {
-    if (this.host.destroyed || this.audioHold) return;
-    this.audioHold = { wanted: false, engaged: false };
-    this.video.addEventListener("play", this.onPlayDuringHold);
-    void this.guardAgainstSilentPicture();
-  }
-
-  private readonly onPlayDuringHold = () => {
-    // A press of play into a gap is remembered rather than obeyed.
-    if (this.audioHold && !this.audioCovers(this.video.currentTime)) this.engageHold();
-  };
-
-  private engageHold(): void {
-    const hold = this.audioHold;
-    if (!hold || this.host.destroyed) return;
-    hold.wanted = true;
-    if (!hold.engaged) {
-      hold.engaged = true;
-      // The same signal the opening wait uses, so the viewer gets the spinner they already know.
-      this.setStarting(Date.now(), "image retenue faute de son");
-    }
-    this.video.pause();
-  }
-
-  /** Whether the sound covers a point on the player's clock. */
-  private audioCovers(seconds: number): boolean {
-    const ranges = this.host.audioRanges;
-    for (let i = 0; ranges && i < ranges.length; i++) {
-      if (ranges.start(i) <= seconds + 0.05 && seconds < ranges.end(i)) return true;
-    }
-    return false;
-  }
-
-  /** Runs for as long as the hold lasts, and only ever stops the picture — never starts it. */
-  private async guardAgainstSilentPicture(): Promise<void> {
-    while (this.audioHold && !this.host.destroyed) {
-      if (!this.video.paused && !this.audioCovers(this.video.currentTime)) this.engageHold();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    }
-  }
-
-  /**
-   * Ends the hold once there is sound at the playhead — or once waiting for it has gone on long
-   * enough that a silent picture is better than a still one.
-   */
-  private async releaseWhenAudioArrives(): Promise<void> {
-    const deadline = Date.now() + AUDIO_HOLD_TIMEOUT_MS;
-    while (this.audioHold && !this.host.destroyed && Date.now() < deadline) {
-      if (this.audioCovers(this.video.currentTime)) break;
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    }
-    this.endAudioHold();
-  }
-
-  private endAudioHold(): void {
-    const hold = this.audioHold;
-    if (!hold) return;
-    this.audioHold = null;
-    this.video.removeEventListener("play", this.onPlayDuringHold);
-    if (hold.engaged) this.setStarting(null, "le son est revenu");
-    if (hold.wanted && !this.host.destroyed) void this.video.play().catch(() => {});
-  }
-
-  /**
-   * Starts watching for the sound to come back, so the picture can move again.
-   *
-   * Called once whatever is going to produce that sound has been set going — never before, or it
-   * would find the *old* track still covering the playhead and let go immediately.
-   */
-  armAudioRelease(): Promise<void> {
-    return this.releaseWhenAudioArrives();
-  }
-
-  /** Lets the picture go again — for a caller whose change of track came to nothing. */
-  releaseAudioHold(): void {
-    this.endAudioHold();
-  }
-
   readonly clockTicked = () => {
     // The first tick after resuming is where a jump would show, so it is recorded before
     // anything here has a chance to act on it.
@@ -478,10 +382,7 @@ export class PlaybackGuard {
     if (abortedStart) this.startAborted = true;
     this.startingFrom = null;
     this.stopWatchingForFirstFrame();
-    // Une pause posée par l'attente du son est la nôtre : elle garde son cercle, que `endAudioHold`
-    // lève quand le son revient. Levé ici, il disparaissait à l'instant où il s'affichait
-    // (relevé le 22/09/2026 dans le déroulé d'un changement de piste).
-    if (!this.audioHold?.engaged) this.setStarting(null, "mise en pause");
+    this.setStarting(null, "mise en pause");
     /**
      * Et une pause pareille ne laisse pas d'ancre.
      *
@@ -682,8 +583,6 @@ export class PlaybackGuard {
     this.setStarting(null, "lecteur détruit");
     if (this.pauseSettleTimer) clearInterval(this.pauseSettleTimer);
     this.pauseSettleTimer = null;
-    this.video.removeEventListener("play", this.onPlayDuringHold);
-    this.audioHold = null;
     this.pauseAnchor = null;
   }
 

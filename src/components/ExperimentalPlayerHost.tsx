@@ -318,8 +318,6 @@ export function ExperimentalPlayerHost({
   const [announced, setAnnounced] = useState(false);
   /** Relances automatiques après une coupure depuis la dernière image — voir leur espacement. */
   const networkRetriesRef = useRef(0);
-  /** L'état de pause du spectateur au début d'un changement de piste de même format. */
-  const pausedBeforeSwitchRef = useRef(false);
   // Only failures that happen *during* playback are state. The two that are already known from
   // the fetch — the server refusing the file, and the fetch itself failing — are derived below,
   // because pushing them into state from an effect is both a cascading render and a second
@@ -488,10 +486,6 @@ export function ExperimentalPlayerHost({
   // Why this file is being played the way it is. Kept for the panel on *both* paths: a fallback
   // whose reason is only visible on the path that was not taken explains nothing at all.
   const [pathReason, setPathReason] = useState<string | null>(null);
-  // A change of audio track holds the picture still until there is sound to go with it. Without
-  // this the controls read the held element as simply paused and offer the play button, which is
-  // both wrong and an invitation to make it worse.
-  const [switchingAudio, setSwitchingAudio] = useState(false);
   // The remux path puts a real <video> on screen and is driven through it; only the WebCodecs
   // one paints a canvas and needs the façade in front of it.
   const onElement = path === "remux";
@@ -667,10 +661,7 @@ export function ExperimentalPlayerHost({
    * menu du lecteur. Un seul compte rendu pour les deux, sinon ils diront deux choses différentes
    * du même geste le jour où l'un des deux évoluera.
    *
-   * Posé **autour** de l'appel, jamais dedans : `selectAudioTrack` est la seule forme de
-   * changement de piste qui survive à WebKit — image figée, section exclusive, tampon audio
-   * remplacé sans toucher à celui de l'image — et chaque raccourci qu'on pourrait y voir a déjà
-   * été essayé et annoté. Mesurer ne doit rien en déplacer.
+   * Posé **autour** du changement, jamais dedans : mesurer ne doit rien en déplacer.
    *
    * `applied` est ce qui distingue un changement lent d'un changement refusé : une piste que le
    * navigateur n'ouvre pas laisse la précédente en place, et le menu suit ce qui s'est passé.
@@ -683,12 +674,11 @@ export function ExperimentalPlayerHost({
       startedAt: number,
       playback: { currentAudioTrack: number | null; diagnostics: Record<string, string> } | null | undefined,
       /**
-       * « tampon » : le contenu du tampon audio remplacé, le lecteur continue. « reconstruction » :
-       * le lecteur a été reconstruit sur la nouvelle piste — quand le format livré change, et sur
-       * WebKit toujours (`rebuildEveryAudioSwitch`). Les deux coûtent différemment, et c'est ce
-       * qu'on veut lire.
+       * « reconstruction » : le lecteur reconstruit sur la nouvelle piste, seule façon de changer
+       * depuis le 22/09/2026 — le champ reste pour que les lignes d'avant, « tampon », se lisent à
+       * côté. « refus » : un fichier sans index, en cours de film ; la piste d'avant continue.
        */
-      via: "tampon" | "reconstruction" = "tampon"
+      via: "reconstruction" | "refus"
     ) => {
       reportPlayback("audio", {
         ...describeFileRef.current(),
@@ -1207,7 +1197,6 @@ export function ExperimentalPlayerHost({
 
     const declareReady = () => {
       setStartingAt(null);
-      setSwitchingAudio(false);
       // The position this pipeline was built to resume at has now been used, and is cleared here
       // rather than from an effect watching readiness. That effect could land *after* a newer
       // failure had already written the next position — and it did: a source lost in the same
@@ -1276,14 +1265,15 @@ export function ExperimentalPlayerHost({
         pendingSwitchRef.current = null;
         reportAudioSwitch(pendingSwitch.from, pendingSwitch.fromLabel, pendingSwitch.to, pendingSwitch.startedAt, playback, "reconstruction");
       }
-      if (
-        wantedAudio !== null &&
-        wantedAudio !== playback.currentAudioTrack &&
-        playback.needsRebuildForAudio(wantedAudio)
-      ) {
-        // La piste voulue n'a pas le format de celle sur laquelle on a ouvert : on reconstruit
-        // dessus, jamais de changement de format dans ce tampon. Rare — l'ouverture et l'écran
-        // choisissent avec la même fonction —, mais un tampon qui meurt ne l'est jamais assez.
+      // La piste voulue n'est pas celle sur laquelle on a ouvert : on reconstruit dessus, comme
+      // pour tout changement de piste. Rare — l'ouverture et l'écran choisissent avec la même
+      // fonction. Sur un fichier sans index en cours de film, la demande est refusée (avertissement
+      // compris) et la piste ouverte continue.
+      const openingSwitch =
+        wantedAudio !== null && wantedAudio !== playback.currentAudioTrack
+          ? playback.requestAudioTrack(wantedAudio)
+          : null;
+      if (openingSwitch === "rebuild" && wantedAudio !== null) {
         pendingSwitchRef.current = {
           from: playback.currentAudioTrack,
           fromLabel: playback.diagnostics["Audio"] ?? "",
@@ -1291,23 +1281,11 @@ export function ExperimentalPlayerHost({
           startedAt: Date.now(),
         };
         wantedAudioRef.current = wantedAudio;
-        restart(startSeconds, `piste ${wantedAudio} dans un autre format audio que celle ouverte — reconstruction sur elle`);
+        restart(startSeconds, `piste ${wantedAudio} voulue, autre que celle ouverte — reconstruction sur elle`);
         return;
       }
-      if (wantedAudio !== null && wantedAudio !== playback.currentAudioTrack) {
-        wantedAudioRef.current = wantedAudio;
-        setSwitchingAudio(true);
-        const from = playback.currentAudioTrack;
-        const fromLabel = playback.diagnostics["Audio"] ?? "";
-        const startedAt = Date.now();
-        void playback
-          .selectAudioTrack(wantedAudio)
-          .then(() => setCurrentAudio(playback.currentAudioTrack))
-          .catch(() => {})
-          .finally(() => {
-            setSwitchingAudio(false);
-            reportAudioSwitch(from, fromLabel, wantedAudio, startedAt, playback);
-          });
+      if (openingSwitch === "refused" && wantedAudio !== null) {
+        reportAudioSwitch(playback.currentAudioTrack, playback.diagnostics["Audio"] ?? "", wantedAudio, Date.now(), playback, "refus");
       }
 
       const onTime = () => {
@@ -1769,7 +1747,6 @@ export function ExperimentalPlayerHost({
       Attente: [
         ready ? null : "démarrage",
         startingAt !== null ? "reprise" : null,
-        switchingAudio ? "changement de piste" : null,
       ]
         .filter(Boolean)
         .join(" · ") || "aucune",
@@ -2099,23 +2076,35 @@ export function ExperimentalPlayerHost({
                 });
                 return;
               }
-              // Une piste d'un autre format que celle qui joue — un TrueHD ré-encodé après une VF
-              // Dolby copiée, par exemple : aucun tampon vivant ne survit à ce changement sur
-              // WebKit, alors le lecteur est reconstruit à la même position, directement sur elle.
-              // C'est le mécanisme qui le relève déjà d'une coupure. Voir `audioSwitchNeedsRebuild`.
-              if (path === "remux" && remuxRef.current?.needsRebuildForAudio(id)) {
+              if (path === "remux") {
+                const playback = remuxRef.current;
+                if (!playback) {
+                  // Entre deux pipelines (une reconstruction en cours) : retenue, et celui qui
+                  // s'ouvre la rejoint dès qu'il est prêt — voir `startRemux`.
+                  wantedAudioRef.current = id;
+                  setCurrentAudio(id);
+                  return;
+                }
+                // Tout changement de piste reconstruit le lecteur à la même position, directement
+                // sur la nouvelle piste — le mécanisme qui le relève déjà d'une coupure. Voir
+                // `requestAudioTrack` pour pourquoi il n'y a plus d'autre façon de changer.
+                const request = playback.requestAudioTrack(id);
+                if (request === "refused") {
+                  // Fichier sans index, en cours de film : l'avertissement est déjà affiché, la
+                  // piste d'avant continue et le menu reste sur elle.
+                  reportAudioSwitch(playback.currentAudioTrack, playback.diagnostics["Audio"] ?? "", id, Date.now(), playback, "refus");
+                  return;
+                }
+                if (request !== "rebuild") return;
                 pendingSwitchRef.current = {
-                  from: remuxRef.current.currentAudioTrack ?? null,
-                  fromLabel: remuxRef.current.diagnostics["Audio"] ?? "",
+                  from: playback.currentAudioTrack ?? null,
+                  fromLabel: playback.diagnostics["Audio"] ?? "",
                   to: id,
                   startedAt: Date.now(),
                 };
-                // Pendant un changement de même format, WebKit met l'élément en pause lui-même le
-                // temps de remplir le son : ce `paused`-là n'est pas celui du spectateur. On lit
-                // alors celui d'avant ce changement, sans quoi le film reconstruit restait en pause.
-                keepPausedRef.current = switchingAudio
-                  ? pausedBeforeSwitchRef.current
-                  : videoElRef.current?.paused ?? false;
+                // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
+                // la lecture.
+                keepPausedRef.current = videoElRef.current?.paused ?? false;
                 wantedAudioRef.current = id;
                 setCurrentAudio(id);
                 setFrozen(freezeFrame());
@@ -2125,30 +2114,9 @@ export function ExperimentalPlayerHost({
                 return;
               }
               setCurrentAudio(id);
-              if (path === "remux") {
-                // The menu follows what actually happened rather than what was asked for: a track
-                // the browser turns out not to be able to open leaves the previous one playing.
-                wantedAudioRef.current = id;
-                pausedBeforeSwitchRef.current = videoElRef.current?.paused ?? false;
-                setSwitchingAudio(true);
-                const from = remuxRef.current?.currentAudioTrack ?? null;
-                const fromLabel = remuxRef.current?.diagnostics["Audio"] ?? "";
-                const startedAt = Date.now();
-                void remuxRef.current
-                  ?.selectAudioTrack(id)
-                  .then(() => setCurrentAudio(remuxRef.current?.currentAudioTrack ?? id))
-                  // Un pipeline détruit en plein changement (fermeture, reconstruction) rejette :
-                  // ce n'est pas une erreur à remonter au journal, le menu suit déjà l'état réel.
-                  .catch(() => {})
-                  .finally(() => {
-                    setSwitchingAudio(false);
-                    reportAudioSwitch(from, fromLabel, id, startedAt, remuxRef.current);
-                  });
-              } else {
-                // Retenu comme sur l'autre chemin, pour qu'une reconstruction rouvre sur elle.
-                wantedAudioRef.current = id;
-                void engineRef.current?.setAudioTrack(id).catch(() => {});
-              }
+              // Retenu comme sur l'autre chemin, pour qu'une reconstruction rouvre sur elle.
+              wantedAudioRef.current = id;
+              void engineRef.current?.setAudioTrack(id).catch(() => {});
             }}
             subtitleTracks={subtitleChoices.map((track) => ({
               id: track.number,
@@ -2160,7 +2128,7 @@ export function ExperimentalPlayerHost({
             hidden={false}
             // The controls already answer this by swapping the button for a spinner, so restarting
             // after a pause borrows the same treatment rather than growing a second indicator.
-            loading={!ready || resumeSpinner || switchingAudio}
+            loading={!ready || resumeSpinner}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
             // Playback speed needs nothing here: on the native path these controls hold a real
             // media element, so it is the browser's own.

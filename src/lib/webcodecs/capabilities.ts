@@ -85,8 +85,8 @@ export function probeCapabilities(): Promise<Capability[]> {
      * que le lecteur natif refuse désormais d'ouvrir (voir la route `direct`).
      *
      * Une réponse positive ne suffira pas à décider : `isTypeSupported` n'a pas de faux négatif
-     * connu mais de vrais faux positifs, et ce dépôt en porte la cicatrice — voir
-     * `TRUST_BUFFER_REBUILD`. Elle dit seulement si la question mérite d'être poursuivie.
+     * connu mais de vrais faux positifs, et ce dépôt en porte la cicatrice — Safari acceptait le
+     * remplacement du tampon audio en cours de lecture, puis jouait muet. Elle dit seulement si la question mérite d'être poursuivie.
      */
     sourceSupport('video/mp4; codecs="dvh1.08.06"', "Dolby Vision profil 8 dans MediaSource"),
     sourceSupport('video/mp4; codecs="dvh1.05.06"', "Dolby Vision profil 5 dans MediaSource"),

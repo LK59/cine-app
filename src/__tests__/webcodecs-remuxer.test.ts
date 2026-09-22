@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from "vitest";
 import {
   Remuxer, unifiedAudioCodec, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio,
-  setPerTrackAudioDelivery, deliveredAudio, audioSwitchNeedsRebuild, setAudioBufferRebuildable, unifiedAudioChannels,
+  setPerTrackAudioDelivery, unifiedAudioChannels,
 } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
@@ -9,27 +9,21 @@ import type { ByteSource } from "@/lib/webcodecs/byteSource";
 // A stand-in transcoder, so the one property that matters here can be checked: what is released,
 // and when. The real one needs a decoder and an encoder that exist only in a browser.
 const opened: { closed: boolean }[] = [];
-let openFails = false;
 let transcoderCodec = "mp4a.40.2";
-let transcoderRate = 48000;
 let failNextFrames = false;
 /** Ce que rend `framesUpTo`, et où on le lui a demandé — par défaut, rien. */
 let framesHook: ((endSeconds: number) => Promise<{ data: Uint8Array; timestampUs: number; durationUs: number }[]>) | null = null;
-/** Retardé à volonté, pour fermer le remultiplexeur pendant une ouverture. */
-let openGate: Promise<void> | null = null;
 vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/webcodecs/audioTranscode")>();
   return {
     ...original,
     AudioTranscoder: {
       open: async () => {
-        if (openFails) throw new Error("l'encodeur a refusé");
-        if (openGate) await openGate;
         const instance = {
           closed: false,
           codecString: transcoderCodec,
           sampleEntry: new Uint8Array([0, 0, 0, 8, 0x6d, 0x70, 0x34, 0x61]),
-          sampleRate: transcoderRate,
+          sampleRate: 48000,
           channels: 6,
           seekTo: () => {},
           framesUpTo: async (endSeconds: number) => {
@@ -246,42 +240,28 @@ describe("Remuxer track selection", () => {
     expect(audioDelivery(dts, file)).toBe("transcode");
   });
 
-  it("delivers each track in its best form, and says which changes need a rebuild — per-track delivery", () => {
-    // Braveheart, 21/09/2026: E-AC3 VF beside a TrueHD VO. Unified, the VF was re-encoded — a
-    // second lossy generation of a track that played untouched the day before. Per track, the VF
-    // is copied, the VO re-encoded, and switching between them rebuilds the player.
+  it("delivers each track in its best form — per-track delivery", () => {
+    // 21/09/2026: E-AC3 VF beside a TrueHD VO. Unified, the VF was re-encoded — a second lossy
+    // generation of a track that played untouched the day before. Per track, the VF is copied and
+    // the VO re-encoded; switching between them rebuilds the player, as every track change does.
     const eac3 = track({ number: 2, type: "audio", codecId: "A_EAC3", audio: { sampleRate: 48000, channels: 6 } });
     const trueHd = track({ number: 3, type: "audio", codecId: "A_TRUEHD", language: "eng", audio: { sampleRate: 48000, channels: 8 } });
     const dts = track({ number: 4, type: "audio", codecId: "A_DTS", language: "eng", audio: { sampleRate: 48000, channels: 6 } });
-    const eac3Eng = track({ number: 5, type: "audio", codecId: "A_EAC3", language: "eng", audio: { sampleRate: 48000, channels: 2 } });
-    const ac3 = track({ number: 6, type: "audio", codecId: "A_AC3", language: "eng", audio: { sampleRate: 48000, channels: 6 } });
-    const file = { ...FILE, tracks: [VIDEO, eac3, trueHd, dts, eac3Eng, ac3] } as never;
+    const file = { ...FILE, tracks: [VIDEO, eac3, trueHd, dts] } as never;
 
     expect(unifiedAudioCodec(file)).toBeNull();
     expect(audioDelivery(eac3, file)).toBe("copy");
     expect(plannedMimeTypes(VIDEO, eac3, file).audio).toBe('audio/mp4; codecs="ec-3"');
-    expect(deliveredAudio(eac3, file)).toBe("ec-3");
-    expect(deliveredAudio(trueHd, file)).toBe("ré-encodé 48000 Hz");
-
-    // A change of delivered format rebuilds; the same format keeps the fast buffer change —
-    // including two re-encoded tracks (one codec, one layout) and two E-AC3 of different layouts,
-    // measured fine on an iPhone ("2001", 6 → 2 channels, 0.1 to 0.8 s).
-    expect(audioSwitchNeedsRebuild(file, eac3, trueHd)).toBe(true);
-    expect(audioSwitchNeedsRebuild(file, trueHd, eac3)).toBe(true);
-    expect(audioSwitchNeedsRebuild(file, eac3, ac3)).toBe(true);
-    expect(audioSwitchNeedsRebuild(file, trueHd, dts)).toBe(false);
-    expect(audioSwitchNeedsRebuild(file, eac3, eac3Eng)).toBe(false);
+    expect(audioDelivery(trueHd, file)).toBe("transcode");
+    expect(audioDelivery(dts, file)).toBe("transcode");
 
     // The re-encoded tracks share a layout between them; the copied ones keep their own.
     expect(unifiedAudioChannels(file)).toBe(8);
 
-    // Neither mode that makes formats agree ever asks for a rebuild.
+    // Per-file unification, the other mode: the copied track is re-encoded too.
     setPerTrackAudioDelivery(false);
-    expect(audioSwitchNeedsRebuild(file, eac3, trueHd)).toBe(false);
+    expect(audioDelivery(eac3, file)).toBe("transcode");
     setPerTrackAudioDelivery(true);
-    setAudioBufferRebuildable(true);
-    expect(audioSwitchNeedsRebuild(file, eac3, trueHd)).toBe(false);
-    setAudioBufferRebuildable(false);
   });
 
   it("leaves a file whose tracks already agree completely alone", () => {
@@ -327,32 +307,6 @@ describe("Remuxer track selection", () => {
     } finally {
       FILE.tracks.pop();
       transcoderCodec = "mp4a.40.2";
-    }
-  });
-
-  it("keeps the track it has, and the machinery for it, when a change fails", async () => {
-    // Start on a track that is being re-encoded, so there is something to lose.
-    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
-    const otherDts = track({ ...dts, number: 8, language: "eng" });
-    FILE.tracks.push(dts, otherDts);
-    opened.length = 0;
-    openFails = false;
-
-    try {
-      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
-      expect(opened).toHaveLength(1);
-      const before = remuxer.plan().audioMimeType;
-
-      // Releasing the working one first and then failing to open its replacement leaves nothing
-      // able to produce sound: no segments, a buffer that never advances, and a player loading
-      // for ever with nothing to say for itself.
-      openFails = true;
-      await expect(remuxer.setAudioTrack(otherDts.number)).rejects.toThrow();
-      expect(opened[0].closed).toBe(false);
-      expect(remuxer.plan().audioMimeType).toBe(before);
-    } finally {
-      FILE.tracks.splice(-2, 2);
-      openFails = false;
     }
   });
 
@@ -461,25 +415,9 @@ describe("Remuxer encoder recovery", () => {
       await segment.catch(() => {});
       expect(opened.every((t) => t.closed)).toBe(true);
       expect(opened.length).toBe(1);
-
-      // Et une piste qui finit de s'ouvrir après la fermeture est refermée aussitôt.
-      framesHook = null;
-      const other = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
-      const otherDts = track({ ...dts, number: 8, language: "eng" });
-      FILE.tracks.push(otherDts);
-      let open!: () => void;
-      openGate = new Promise<void>((resolve) => (open = resolve));
-      const switching = other.setAudioTrack(otherDts.number);
-      await new Promise((r) => setTimeout(r, 0));
-      other.close();
-      open();
-      await expect(switching).rejects.toThrow();
-      expect(opened.every((t) => t.closed)).toBe(true);
-      FILE.tracks.pop();
     } finally {
       FILE.tracks.pop();
       framesHook = null;
-      openGate = null;
       readerSamples = [];
     }
   });
@@ -560,42 +498,6 @@ describe("la fin du fichier, son ré-encodé", () => {
       expect(await remuxer.nextSegment()).toBeNull();
     } finally {
       FILE.tracks.pop();
-    }
-  });
-});
-
-describe("pistes ré-encodées de fréquences différentes", () => {
-  it("demande une reconstruction plutôt que de changer la fréquence d'un tampon vivant", () => {
-    // Deux pistes « ré-encodées » : l'encodeur prend la fréquence du décodeur, et elle est écrite
-    // dans le segment d'initialisation. Un FLAC à 44,1 kHz après un DTS à 48 kHz, c'était une
-    // autre configuration dans le même tampon.
-    vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: (t: string) => t.includes("mp4a") } });
-    const flac = track({ number: 2, type: "audio", codecId: "A_FLAC", audio: { sampleRate: 44100, channels: 2 } });
-    const dts = track({ number: 3, type: "audio", codecId: "A_DTS", language: "eng", audio: { sampleRate: 48000, channels: 2 } });
-    const dts2 = track({ number: 4, type: "audio", codecId: "A_DTS", language: "spa", audio: { sampleRate: 48000, channels: 2 } });
-    const file = { ...FILE, tracks: [VIDEO, flac, dts, dts2] } as never;
-
-    expect(audioSwitchNeedsRebuild(file, dts, flac)).toBe(true);
-    expect(audioSwitchNeedsRebuild(file, flac, dts)).toBe(true);
-    expect(audioSwitchNeedsRebuild(file, dts, dts2)).toBe(false);
-  });
-
-  it("refuse un changement dont l'encodeur sort à une autre fréquence, et garde la piste d'avant", async () => {
-    // Le filet, pour ce que l'en-tête du fichier n'a pas su dire — et pour l'unification par
-    // fichier, où rien ne reconstruit.
-    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
-    const other = track({ ...dts, number: 8, language: "eng" });
-    FILE.tracks.push(dts, other);
-    opened.length = 0;
-    try {
-      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
-      transcoderRate = 44100;
-      await expect(remuxer.setAudioTrack(other.number)).rejects.toThrow(/44100 Hz/);
-      expect(opened[0].closed).toBe(false);
-      expect(opened[1].closed).toBe(true);
-    } finally {
-      FILE.tracks.splice(-2, 2);
-      transcoderRate = 48000;
     }
   });
 });

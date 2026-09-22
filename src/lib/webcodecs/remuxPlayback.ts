@@ -1,8 +1,9 @@
 // The remux path, assembled: file in, a playing <video> element out.
 //
-// Deliberately shaped like the WebCodecs engine's public surface — same track lists, same track
-// selection, same subtitle lookup — so the player component branches once on which path was
-// chosen and not again on every operation.
+// Deliberately shaped like the WebCodecs engine's public surface — same track lists, same subtitle
+// selection and lookup — so the player component branches once on which path was chosen and not
+// again on every operation. Audio is the exception: here a change of track rebuilds the player
+// (see `requestAudioTrack`), where the engine switches its own software decoder.
 
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
@@ -12,7 +13,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, audioSwitchNeedsRebuild, playableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 
@@ -176,28 +177,6 @@ export function openingAudio(
     if (track && playableAudio(track)) return track;
   }
   return preferredAudio(file, preferences);
-}
-
-/**
- * Tout changement de piste reconstruit le lecteur, même entre deux pistes du même format — sur
- * WebKit d'abord, partout depuis.
- *
- * Le changement « dans le tampon » y vide le son pendant que l'image défile, le remplit avec
- * jusqu'à un intervalle d'images clés de son déjà passé, et ne recale le moteur audio de Safari
- * sur l'image que si la pause d'attente gagne une course de quelques dizaines de millisecondes.
- * Un spectateur sur iPad (22/09/2026, haut-parleurs de l'appareil) a gardé un décalage du son
- * après deux changements de piste sur *Die Hard*, que seul un saut effaçait. La reconstruction
- * repart d'un état propre — l'équivalent d'un saut —, et elle est aussi la plus rapide sur
- * WebKit : 0,34 s en médiane sur 36 changements, contre 3,1 s sur 23 pour le tampon.
- *
- * Chrome et Firefox n'ont pas ce décalage, mais le même jour leur changement dans le tampon a
- * attendu 1,6 à 4,7 s avant de commencer, sur un réseau lent : il attend que le morceau de film
- * en cours de préparation arrive avant de toucher au son, là où la reconstruction l'abandonne.
- * Essayé partout, à comparer au journal (`via` des lignes `audio`) ; revenir en arrière, c'est
- * rendre ici `isWebKit()`.
- */
-export function rebuildEveryAudioSwitch(): boolean {
-  return true;
 }
 
 /**
@@ -374,45 +353,49 @@ export class RemuxPlayback {
   }
 
   /**
-   * Whether this path could carry that track's sound at all — asked *before* anything is touched.
+   * Ce que demande le passage à cette piste : `"rebuild"`, `"refused"`, ou `null` s'il n'y a rien
+   * à faire (piste inconnue, déjà jouée, lecteur détruit).
    *
-   * The same verdict is reached by `selectAudioTrack` a moment later, as a thrown error caught
-   * and turned into a warning. That is the right shape for a track that fails for a passing
-   * reason, and the wrong one for a codec no browser decodes: nothing about TrueHD will be
-   * different on the next attempt, and the buffer surgery leading up to the refusal — the audio
-   * hold, the exclusive section, the picture held still — is paid for an answer already known.
-   * Asked here, the caller can step aside to a player that *can* carry it instead of telling the
-   * viewer their language is unavailable.
+   * **Il n'y a plus qu'une façon de changer de piste : reconstruire le lecteur**, à la même
+   * position, directement sur la nouvelle piste — l'appelant s'en charge. Il y en avait une
+   * seconde jusqu'au 22/09/2026, « dans le tampon » : vider le son et le relire en gardant
+   * l'image. Mesurée sur les trois moteurs, elle était plus lente (0,4 à 3,1 s en médiane, avec
+   * des queues de plusieurs secondes, contre 0,05 à 0,35 s pour la reconstruction) et laissait sur
+   * WebKit un décalage durable entre le son et l'image ; elle a été retirée.
+   *
+   * Refusé — un avertissement, la piste d'avant continue — sur un fichier sans index en cours de
+   * film : voir `switchNeedsIndex`. Une demande, et non une question : c'est ici que le refus
+   * est dit au spectateur, comme un saut refusé l'est par la source.
    */
-  /**
-   * Passer à cette piste change-t-il le format du son livré ? Si oui, l'appelant reconstruit le
-   * lecteur dessus plutôt que d'appeler `selectAudioTrack` — voir `audioSwitchNeedsRebuild`.
-   */
-  needsRebuildForAudio(trackNumber: number): boolean {
-    // Sans index, une reconstruction ne sait pas rouvrir ailleurs qu'au début : le film
-    // repartirait de zéro. Le changement est alors confié à `selectAudioTrack`, qui le refuse.
-    if (this.switchNeedsIndex) return false;
+  requestAudioTrack(trackNumber: number): "rebuild" | "refused" | null {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
-    if (!track || track.number === this.audioTrack?.number) return false;
-    // Sur WebKit, toute piste — même format ou non. Voir `rebuildEveryAudioSwitch`.
-    if (rebuildEveryAudioSwitch() && playableAudio(track)) return true;
-    return audioSwitchNeedsRebuild(this.file, this.audioTrack, track);
+    if (!track || this.destroyed || track.number === this.audioTrack?.number) return null;
+    if (this.switchNeedsIndex) {
+      this.options.onWarning?.(playerWarning("noIndexAudio"));
+      return "refused";
+    }
+    return "rebuild";
   }
 
   /**
    * Un changement de piste ici relirait le fichier depuis son début.
    *
-   * Les deux façons de changer de piste repartent de la position courante *par l'index* : le
-   * rechargement du son pointe le remultiplexeur sur la grappe de la tête, la reconstruction
-   * rouvre à la même position. Un fichier sans index n'a pas de grappe à désigner —
-   * `clusterOffsetForTime` retombe sur la première —, et l'un relisait tout le film depuis le
-   * premier octet pour retrouver la tête, l'autre le reprenait à zéro. Au tout début du film, en
-   * revanche, lire depuis le début *est* la bonne réponse : même seuil qu'un saut refusé.
+   * La reconstruction rouvre à la position courante *par l'index*. Un fichier sans index n'a pas
+   * de grappe à désigner — `clusterOffsetForTime` retombe sur la première —, et le film
+   * reprendrait à zéro. Au tout début du film, en revanche, lire depuis le début *est* la bonne
+   * réponse : même seuil qu'un saut refusé.
    */
   private get switchNeedsIndex(): boolean {
     return !this.remuxer.seekable && this.video.currentTime > 1;
   }
 
+  /**
+   * Whether this path could carry that track's sound at all — asked *before* anything is touched.
+   *
+   * A codec this path cannot carry will not be carried on the next attempt either, so the caller
+   * steps aside to a player that *can* carry it instead of rebuilding this one onto a refusal, or
+   * telling the viewer their language is unavailable.
+   */
   canCarryAudio(trackNumber: number): boolean {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     // An unknown number is not a codec refusal: let the usual path answer it.
@@ -450,90 +433,6 @@ export class RemuxPlayback {
    */
   selectSubtitleTrack(trackNumber: number | null): void {
     this.currentSubtitle = trackNumber;
-  }
-
-  /**
-   * Changes audio language without interrupting the picture.
-   *
-   * Only the description of the sound and which samples are picked out of the stream change; the
-   * MediaSource, the video source buffer and the element itself are left alone. Tearing the whole
-   * thing down and rebuilding it — which is what this did first — detaches the element, and on
-   * Safari it does not reliably come back: playback simply stops.
-   */
-  async selectAudioTrack(trackNumber: number): Promise<void> {
-    const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
-    if (!track || this.destroyed || track.number === this.audioTrack?.number || !this.mse) return;
-    // Refusé comme un saut l'est sur ce fichier, et pour la même raison : la piste d'avant
-    // continue de jouer, et le spectateur sait pourquoi. Voir `switchNeedsIndex`.
-    if (this.switchNeedsIndex) {
-      this.options.onWarning?.(playerWarning("noIndexAudio"));
-      return;
-    }
-    // Refusé net plutôt que tenté : changer de format dans un tampon vivant est précisément ce
-    // que Safari ne survit pas (03/09/2026). L'appelant reconstruit le lecteur — voir
-    // needsRebuildForAudio.
-    if (this.needsRebuildForAudio(trackNumber)) {
-      throw new Error(`la piste ${trackNumber} se change par reconstruction du lecteur`);
-    }
-
-    const at = this.video.currentTime;
-    const mse = this.mse;
-    const previous = this.audioTrack;
-    // Before anything is awaited: from here until there is sound again, the picture is held. A
-    // press of play in that window is remembered and obeyed once the sound arrives, rather than
-    // running the film on in silence for the second or two the new track takes to decode.
-    mse.beginAudioHold();
-    // One indivisible step. Describing the new track, re-pointing the buffer and refilling are
-    // three operations on the same buffers, and a seek landing between any two of them reaches
-    // those buffers from the other side — which is the freeze seen when changing language just
-    // as a seek was settling.
-    const before = this.remuxer.plan().audioMimeType;
-    let codecChanged = false;
-    // Each phase named, so that the `audio` line in player.log can say where a slow change spent
-    // its time — asked on 21/09/2026 about a FLAC change that took 4.7 s, and unanswerable then.
-    trace(`changement de piste : ${previous?.codecId ?? "aucune"} → ${track.codecId} à ${at.toFixed(1)} s`);
-    try {
-      await mse.runExclusive(async () => {
-        await this.remuxer.setAudioTrack(trackNumber);
-        trace("changement de piste : piste ouverte");
-        this.audioTrack = track;
-        const plan = this.remuxer.plan();
-        codecChanged = plan.audioMimeType !== before;
-        await mse.replaceAudio(plan.audioMimeType, plan.audioInit);
-        trace("changement de piste : tampon audio remplacé");
-      });
-    } catch (error) {
-      // Nothing was released that could not be replaced, so the previous track is still playable.
-      // Saying so beats a player that quietly stops producing sound and loads for ever.
-      this.audioTrack = previous;
-      this.options.onWarning?.(
-        playerWarning("audioTrackRefused", error instanceof Error ? error.message : "raison inconnue")
-      );
-      // The old track never stopped working, so the picture has no reason to stay still.
-      mse.releaseAudioHold();
-      return;
-    }
-    // A full seek only where the codec changed *and* the buffer had to be reinterpreted rather
-    // than replaced. Where it was replaced, the picture's buffer never moved: clearing it and
-    // reading thirty seconds of 4K back over itself buys nothing, and it is the whole of why an
-    // inter-codec change felt slower than any other.
-    if (codecChanged && !mse.rebuildAudioAllowed) {
-      await mse.seek(at);
-      trace("changement de piste : saut complet terminé");
-    } else {
-      // Only the sound is read again, and only from where the viewer is. A seek would clear the
-      // picture too and send it back over what has already been played, which the browser
-      // catches up on at speed.
-      await mse.refillAudio(at);
-      trace("changement de piste : son rechargé depuis la tête");
-    }
-    // Now, and not before: armed any earlier it would find the old track still covering the
-    // playhead and let the picture go while there is nothing to hear. Awaited, so that a caller
-    // showing a spinner keeps showing it until there is something to play — otherwise the veil
-    // lifts on a held, paused element and the controls offer the play button, which then turns
-    // into the pause button on its own a moment later.
-    await mse.armAudioRelease();
-    trace("changement de piste : son disponible, image relâchée");
   }
 
   /** See MseSource.lost: the platform took the source, and only a rebuild brings it back. */

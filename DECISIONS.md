@@ -82,9 +82,9 @@ pipeline**, et par la même fonction que l'écran, sinon la bascule revient.
 **Appelants.**
 - Remux : `preferredAudio` (`remuxPlayback.ts`) à l'ouverture ; `applyPreferences` à l'écran.
   Un pipeline **reconstruit** ouvre sur la piste choisie par le spectateur quand elle joue ici
-  (`openingAudio`, depuis le 22/09/2026) : la livraison par piste reconstruit précisément pour
-  passer à une piste d'un autre format, et ouvrir ailleurs puis y basculer referait la transition
-  évitée.
+  (`openingAudio`, depuis le 22/09/2026) : tout changement de piste passe par cette
+  reconstruction (`requestAudioTrack`), et ouvrir ailleurs puis y basculer en redemanderait une
+  seconde.
 - Canevas : l'option `chooseAudioTrack` de `PlaybackEngine.load`, que l'hôte remplit avec la même
   fonction ; `applyPreferences` à l'écran.
 - Lecteur stable : Jellyfin choisit (l'index passé à `playback/start`).
