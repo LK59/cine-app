@@ -1,3 +1,4 @@
+import { displayIsHdr } from "./hdrDisplay";
 // What this device will actually accept, measured rather than assumed.
 //
 // Every codec decision in this player has one of two answers: what the documentation says, and
@@ -8,6 +9,14 @@
 // It exists for the DTS question in particular. No browser decodes DTS, so playing it means
 // decoding it here and handing the browser something else — which only works if the browser will
 // encode that something else. Whether it will is exactly what this reports.
+
+function gamutP3(): boolean | null {
+  try {
+    return typeof matchMedia === "function" ? matchMedia("(color-gamut: p3)").matches : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface Capability {
   label: string;
@@ -116,6 +125,10 @@ export function probeCapabilities(): Promise<Capability[]> {
     // Encoding to something the player will not take is no use: these close the loop.
     sourceSupport('audio/mp4; codecs="mp4a.40.2"', "AAC dans MediaSource"),
     sourceSupport('audio/mp4; codecs="opus"', "Opus dans MediaSource"),
+    // L'écran, tel que le navigateur le voit : c'est ce qui décide du plafond de lumière HDR sur
+    // Chrome sous Windows (voir hdrDisplay.ts). Une requête média, posée à chaque ouverture.
+    { label: "Écran HDR (dynamic-range: high)", supported: displayIsHdr() },
+    { label: "Couleurs larges (color-gamut: p3)", supported: gamutP3() },
     // Encoding needs somewhere to put the samples, and this is the class that holds them. It
     // travels with the encoder, but that is an assumption until it is asked.
     {

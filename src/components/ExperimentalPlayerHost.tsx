@@ -11,6 +11,7 @@ import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
 import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
+import { displayIsHdr, hdrLightCap } from "@/lib/webcodecs/hdrDisplay";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -1193,6 +1194,10 @@ export function ExperimentalPlayerHost({
         openedInMs: Date.now() - attemptStartedAt,
         at: startSeconds,
         rebuild: rebuildCount,
+        // L'écran tel que le navigateur le voit, et le plafond de lumière HDR qui en découle —
+        // voir hdrDisplay.ts. De quoi relire au journal pourquoi un film HDR a le rendu qu'il a.
+        displayHdr: displayIsHdr() ?? "inconnu",
+        hdrLightCap: hdrLightCap(typeof navigator !== "undefined" ? navigator.userAgent : "", displayIsHdr()) ?? 0,
       });
     };
 

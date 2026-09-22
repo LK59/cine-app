@@ -355,6 +355,114 @@ export function strayUnits(
   return before.length + after.length > 0 ? { before, after } : null;
 }
 
+/**
+ * Une image HEVC dont les messages SEI de lumière sont plafonnés à `capNits` : `content light
+ * level` (144, MaxCLL et MaxFALL) et `mastering display colour volume` (137, luminance maximale).
+ * Le reste de l'image est rendu tel quel ; sans rien à plafonner, l'image elle-même, sans copie.
+ *
+ * Pourquoi : Chrome sous Windows ramène tout le film sous la lumière maximale qu'il annonce. Un
+ * film annoncé à 4 000 nits devient très sombre sur un écran qui n'affiche pas le HDR — *2012*,
+ * *Apocalypse Now* —, quand Firefox le montre juste ; un film annoncé à 657 nits (*Dirty
+ * Dancing*) s'y affiche bien (22/09/2026). Chrome lit ces valeurs dans le flux, pas seulement
+ * dans le conteneur : les réécrire ici est le seul moyen qu'il en tienne compte. Voir
+ * `hdrLuminanceCap` pour le moment où on le fait.
+ *
+ * Les messages sont relus et réécrits sur la charge utile désembrouillée (octets d'échappement
+ * 0x000003 retirés puis remis) : une valeur changée en place pourrait sinon créer ou détruire un
+ * motif d'échappement et corrompre l'unité.
+ */
+export function withCappedLightLevels(data: Uint8Array, lengthSize: number, capNits: number): Uint8Array {
+  const kept: Uint8Array[] = [];
+  let changed = false;
+  for (let at = 0; at + lengthSize + 2 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) return data;
+    const unit = data.subarray(at, at + lengthSize + length);
+    at += lengthSize + length;
+    const type = (unit[lengthSize] >> 1) & 0x3f;
+    if (type === 39) {
+      const capped = cappedSei(unit.subarray(lengthSize), capNits);
+      if (capped) {
+        const prefix = new Uint8Array(lengthSize);
+        for (let i = 0, n = capped.length; i < lengthSize; i++) prefix[lengthSize - 1 - i] = (n >> (8 * i)) & 0xff;
+        kept.push(prefix, capped);
+        changed = true;
+        continue;
+      }
+    }
+    kept.push(unit);
+  }
+  return changed ? joinBytes(kept) : data;
+}
+
+/** L'unité SEI réécrite, ou `null` si elle ne porte rien à plafonner. */
+function cappedSei(nal: Uint8Array, capNits: number): Uint8Array | null {
+  const rbsp = unescapeRbsp(nal.subarray(2));
+  let at = 0;
+  let changed = false;
+  while (at < rbsp.length && !(rbsp[at] === 0x80 && at === rbsp.length - 1)) {
+    let type = 0;
+    while (at < rbsp.length && rbsp[at] === 0xff) type += rbsp[at++];
+    if (at >= rbsp.length) return null;
+    type += rbsp[at++];
+    let size = 0;
+    while (at < rbsp.length && rbsp[at] === 0xff) size += rbsp[at++];
+    if (at >= rbsp.length) return null;
+    size += rbsp[at++];
+    if (at + size > rbsp.length) return null;
+    const view = new DataView(rbsp.buffer, rbsp.byteOffset + at, size);
+    if (type === 144 && size >= 4) {
+      for (const offset of [0, 2]) {
+        if (view.getUint16(offset) > capNits) {
+          view.setUint16(offset, capNits);
+          changed = true;
+        }
+      }
+    } else if (type === 137 && size >= 24) {
+      // Luminance maximale en 0,0001 cd/m², après six primaires et le point blanc (seize octets).
+      if (view.getUint32(16) > capNits * 10000) {
+        view.setUint32(16, capNits * 10000);
+        changed = true;
+      }
+    }
+    at += size;
+  }
+  if (!changed) return null;
+  return joinBytes([nal.subarray(0, 2), escapeRbsp(rbsp)]);
+}
+
+/** Retire les octets d'échappement (0x00 0x00 0x03 → 0x00 0x00). Toujours une copie. */
+function unescapeRbsp(bytes: Uint8Array): Uint8Array {
+  const out = new Uint8Array(bytes.length);
+  let n = 0;
+  let zeros = 0;
+  for (const byte of bytes) {
+    if (zeros >= 2 && byte === 0x03) {
+      zeros = 0;
+      continue;
+    }
+    out[n++] = byte;
+    zeros = byte === 0 ? zeros + 1 : 0;
+  }
+  return out.subarray(0, n);
+}
+
+/** Remet les octets d'échappement là où la norme les exige (deux zéros suivis de 0 à 3). */
+function escapeRbsp(bytes: Uint8Array): Uint8Array {
+  const out: number[] = [];
+  let zeros = 0;
+  for (const byte of bytes) {
+    if (zeros >= 2 && byte <= 0x03) {
+      out.push(0x03);
+      zeros = 0;
+    }
+    out.push(byte);
+    zeros = byte === 0 ? zeros + 1 : 0;
+  }
+  return Uint8Array.from(out);
+}
+
 /** Joins byte runs into one. */
 export function joinBytes(parts: Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, part) => n + part.byteLength, 0));

@@ -12,8 +12,8 @@
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
-import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString } from "./codecConfig";
-import type { MatroskaFile, MatroskaTrack, MediaSample } from "./matroska";
+import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
+import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { clusterOffsetForTime } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
@@ -247,6 +247,28 @@ function naturalDelivery(track: MatroskaTrack): AudioDelivery {
  * sur place ; c'est le lecteur entier qui est reconstruit, comme après une coupure.
  */
 let perTrack = true;
+
+/**
+ * La lumière maximale annoncée au navigateur, plafonnée — ou `null` pour la laisser telle quelle.
+ * Posée par `probePlaybackPath` : sur Chrome ou Edge sous Windows, quand l'écran n'affiche pas le
+ * HDR. Voir `withCappedLightLevels` et `hdrLuminanceCap`.
+ */
+let lightCapNits: number | null = null;
+
+/** La description de l'en-tête, plafonnée de la même façon que le flux. */
+function cappedColour(colour: TrackColour | undefined, cap: number | null): TrackColour | undefined {
+  if (!colour || cap === null) return colour;
+  return {
+    ...colour,
+    ...(colour.maxContentLightNits && colour.maxContentLightNits > cap ? { maxContentLightNits: cap } : {}),
+    ...(colour.maxFrameAverageNits && colour.maxFrameAverageNits > cap ? { maxFrameAverageNits: cap } : {}),
+    ...(colour.masteringMaxNits && colour.masteringMaxNits > cap ? { masteringMaxNits: cap } : {}),
+  };
+}
+
+export function setHdrLightCap(nits: number | null): void {
+  lightCapNits = nits;
+}
 
 export function setPerTrackAudioDelivery(value: boolean): void {
   perTrack = value;
@@ -640,7 +662,7 @@ export class Remuxer {
         dimensions.width,
         dimensions.height,
         dolbyVision,
-        videoTrack.video?.colour
+        cappedColour(videoTrack.video?.colour, lightCapNits)
       ),
       width: dimensions.width,
       height: dimensions.height,
@@ -844,6 +866,9 @@ export class Remuxer {
         if (this.strayAhead.length > 0) {
           sample = { ...sample, data: joinBytes([...this.strayAhead, sample.data]) };
           this.strayAhead = [];
+        }
+        if (lightCapNits !== null && this.videoTrack.codecId === "V_MPEGH/ISO/HEVC") {
+          sample = { ...sample, data: withCappedLightLevels(sample.data, this.nalLength, lightCapNits) };
         }
         // A cluster does not have to begin on a picture a decoder can start on, and handing over
         // the ones that precede it produces a segment the browser holds but can never show —

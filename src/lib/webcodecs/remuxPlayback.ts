@@ -5,6 +5,7 @@
 // again on every operation. Audio is the exception: here a change of track rebuilds the player
 // (see `requestAudioTrack`), where the engine switches its own software decoder.
 
+import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
@@ -13,7 +14,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, setHdrLightCap, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 
@@ -189,7 +190,17 @@ export function openingAudio(
  */
 export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<PathProbe> {
   traceReset();
+  // Avant tout remultiplexage : la lumière annoncée à Chrome sous Windows, sur un écran qui
+  // n'affiche pas le HDR — voir `hdrDisplay.ts`.
+  const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const displayHdr = displayIsHdr();
+  const lightCap = hdrLightCap(userAgent, displayHdr);
+  setHdrLightCap(lightCap);
   trace("ouverture du flux");
+  trace(
+    `écran HDR : ${displayHdr === null ? "inconnu" : displayHdr ? "oui" : "non"}` +
+      (lightCap !== null ? ` — lumière HDR annoncée plafonnée à ${lightCap} nits (Chrome/Edge Windows)` : "")
+  );
   const source = await HttpByteSource.open(options.streamUrl);
   trace(`flux ouvert — ${source.size} octets`);
 
