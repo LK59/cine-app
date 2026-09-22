@@ -70,6 +70,13 @@ interface PlayerControlsProps {
   creditsStart: number | null;
   nextEpisode: { itemId: string; title: string } | null;
   onAdvance: () => void;
+  /**
+   * Chaque saut demandé par le spectateur, à la position visée — avant que l'élément ne l'ait
+   * atteinte. Un lecteur qui se reconstruit (changement de piste) part de là plutôt que de la
+   * dernière position lue : sinon un saut encore en chargement suivi d'un changement de piste
+   * ramenait le film là où il était avant le saut (22/09/2026).
+   */
+  onSeekRequest?: (seconds: number) => void;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -112,6 +119,7 @@ export function PlayerControls({
   onCastRequest,
   onCastReturn,
   castActive,
+  onSeekRequest,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -572,7 +580,9 @@ export function PlayerControls({
     // fonctionnaient : ils sont recréés à chaque rendu. C'est pourquoi les flèches semblaient
     // sans effet là où les boutons marchaient.
     const limit = video.duration || duration || video.currentTime;
-    video.currentTime = Math.min(Math.max(0, video.currentTime + deltaSeconds), limit);
+    const target = Math.min(Math.max(0, video.currentTime + deltaSeconds), limit);
+    onSeekRequest?.(target);
+    video.currentTime = target;
   }
 
   // Split in two: dragging the seek bar only moves the thumb/displayed time locally (no real
@@ -588,6 +598,7 @@ export function PlayerControls({
   function commitSeek(value: number) {
     const video = videoRef.current;
     if (!video) return;
+    onSeekRequest?.(value);
     video.currentTime = value;
     setCurrentTime(value);
   }
@@ -1067,7 +1078,10 @@ export function PlayerControls({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (videoRef.current) videoRef.current.currentTime = introSkip!.end;
+            if (videoRef.current) {
+              onSeekRequest?.(introSkip!.end);
+              videoRef.current.currentTime = introSkip!.end;
+            }
           }}
           className="player-glass pointer-events-auto absolute rounded-full px-4 py-2 text-sm font-medium text-white"
           style={{

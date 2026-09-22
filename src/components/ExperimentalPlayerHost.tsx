@@ -524,6 +524,23 @@ export function ExperimentalPlayerHost({
   // back from a locked screen means starting over, at the position the viewer left.
   const [rebuildCount, setRebuildCount] = useState(0);
   const rebuildAtRef = useRef<number | null>(null);
+  /**
+   * La dernière position demandée par le spectateur et pas encore atteinte — voir
+   * `onSeekRequest`. Deux gestes rapprochés ne doivent pas en perdre un : un saut encore en
+   * chargement suivi d'un changement de piste reconstruisait le lecteur à la position d'*avant*
+   * le saut, et un saut fait pendant la reconstruction était écrasé par la position de départ du
+   * nouveau lecteur (22/09/2026).
+   */
+  const requestedSeekRef = useRef<number | null>(null);
+  /** Où en est le film selon ce que le spectateur a demandé, pas seulement selon ce qu'il a vu. */
+  const intendedPosition = useCallback((): number => {
+    if (requestedSeekRef.current !== null) return requestedSeekRef.current;
+    const element = videoElRef.current;
+    // Un saut lancé par autre chose que les commandes (le système, la télécommande) : l'élément
+    // dit déjà où il va, la position lue ne le saura qu'une fois le saut fini.
+    if (element?.seeking) return element.currentTime;
+    return positionRef.current;
+  }, []);
   // Bounded, so a source that closes the instant it opens cannot become a rebuild loop.
   const rebuildsRef = useRef(0);
   const lastRebuildAtTimeRef = useRef(0);
@@ -1181,6 +1198,13 @@ export function ExperimentalPlayerHost({
       // resuming. Cleared at the exact moment the pipeline that consumed it is running, nothing
       // written afterwards can be undone by it.
       rebuildAtRef.current = null;
+      // Un saut demandé pendant la reconstruction, ailleurs que là où elle a rouvert : il est
+      // honoré maintenant, sur le lecteur neuf, au lieu d'être écrasé par sa position de départ.
+      const asked = requestedSeekRef.current;
+      if (asked !== null && Math.abs(asked - startSeconds) > 0.5) {
+        const media = facadeRef.current ?? videoElRef.current;
+        if (media) media.currentTime = asked;
+      } else requestedSeekRef.current = null;
       setReady(true);
       setAnnounced(true);
       everReadyRef.current = true;
@@ -1285,15 +1309,23 @@ export function ExperimentalPlayerHost({
         setPlaying(false);
         setEnded(true);
       };
+      // Le saut demandé est atteint : la position lue redevient la vérité.
+      const onSeeked = () => {
+        if (requestedSeekRef.current !== null && Math.abs(element.currentTime - requestedSeekRef.current) < 1.5) {
+          requestedSeekRef.current = null;
+        }
+      };
       element.addEventListener("timeupdate", onTime);
       element.addEventListener("play", onPlay);
       element.addEventListener("pause", onPause);
       element.addEventListener("ended", onEnded);
+      element.addEventListener("seeked", onSeeked);
       unsubscribes.push(() => {
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);
         element.removeEventListener("ended", onEnded);
+        element.removeEventListener("seeked", onSeeked);
       });
 
       // Reconstruit pour un changement de piste pendant une pause : il reste en pause.
@@ -1368,6 +1400,10 @@ export function ExperimentalPlayerHost({
         }),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
+          // Ce chemin n'a pas de `seeked` : le saut demandé est atteint quand la lecture y est.
+          if (requestedSeekRef.current !== null && Math.abs(engine.currentTime - requestedSeekRef.current) < 1.5) {
+            requestedSeekRef.current = null;
+          }
           if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);
         }),
         engine.on("playing", () => {
@@ -1967,6 +2003,11 @@ export function ExperimentalPlayerHost({
             // On the remux path this is a real media element, so seeking, volume and rate are the
             // browser's own; the facade exists only to give the canvas pipeline the same shape.
             videoRef={onElement ? videoElRef : facadeRefObject}
+            onSeekRequest={(seconds) => {
+              requestedSeekRef.current = seconds;
+              // Une reconstruction pas encore ouverte rouvre directement là.
+              if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
+            }}
             containerRef={containerRef}
             itemId={itemId}
             title={title}
@@ -2028,7 +2069,9 @@ export function ExperimentalPlayerHost({
                 wantedAudioRef.current = id;
                 setCurrentAudio(id);
                 setFrozen(freezeFrame());
-                restart(positionRef.current, `piste ${id} — reconstruction sur elle`);
+                // Là où le spectateur a demandé d'être, pas seulement là où il en était : un saut
+                // encore en chargement n'a pas encore déplacé la position lue.
+                restart(intendedPosition(), `piste ${id} — reconstruction sur elle`);
                 return;
               }
               setCurrentAudio(id);

@@ -73,8 +73,19 @@ vi.mock("@/components/PlayerControls", () => ({
     subtitleTracks: { id: number; label: string }[];
     onChangeAudio: (id: number) => void;
     onChangeSubtitle: (id: number | null) => void;
+    onSeekRequest?: (seconds: number) => void;
   }) => (
     <div data-testid="controls" data-loading={String(props.loading)}>
+      {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
+      <button
+        onClick={(e) => {
+          const target = Number((e.currentTarget as HTMLButtonElement).dataset.to);
+          props.onSeekRequest?.(target);
+        }}
+        data-to="600"
+      >
+        saut:600
+      </button>
       {props.audioTracks.map((track) => (
         <button key={track.id} onClick={() => props.onChangeAudio(track.id)}>{`audio:${track.label}`}</button>
       ))}
@@ -1239,5 +1250,22 @@ describe("relu le 22/09/2026", () => {
     emit("warning", "une phrase nue d'une ancienne version");
     expect(screen.queryByText(/phrase nue/)).toBeNull();
   });
-});
 
+  it("un changement de piste pendant un saut encore en chargement rouvre à la position du saut", async () => {
+    // 22/09/2026 : à 2 min, saut à 10 min, et changement de piste pendant le chargement — la
+    // reconstruction repartait de la dernière position lue, 2 min. Un geste sur deux était perdu.
+    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    await act(async () => void fireEvent(videoElement(120), new Event("timeupdate")));
+
+    // Le saut est demandé ; l'élément n'y est pas encore (pas de `seeked`, pas de timeupdate).
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    const rebuilt = fakeRemux({ currentAudioTrack: 2 });
+    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1].startSeconds).toBeCloseTo(600, 1);
+  });
+});
