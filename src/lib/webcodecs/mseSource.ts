@@ -10,7 +10,7 @@
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { trace, traceRecent } from "./trace";
-import { isNetworkFailure } from "./byteSource";
+import { isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
@@ -712,6 +712,9 @@ export class MseSource {
       }
     } catch (error) {
       if (this.destroyed) return;
+      // Une lecture coupée par un saut : ce n'est pas un segment refusé, et il n'y a rien à
+      // reprendre — le saut qui l'a coupée repositionne tout derrière.
+      if (isReadAbandoned(error)) return;
       // Reported by the viewer as a freeze that a second seek or a language change undoes — so
       // nothing was actually lost, and declaring playback over was the wrong answer. A refused
       // append is retried from where the playhead is; only a run of them is a real fault.
@@ -803,6 +806,17 @@ export class MseSource {
     // serving each in turn means every one of them is stale before its media arrives, and the
     // picture never catches up with the finger.
     this.requestedSeek = playerSeconds;
+    // Tout de suite, sans attendre que le saut soit servi : les lectures réseau de la position
+    // quittée sont coupées, et celles du saut partent. Sans ça, le saut attendait la fin d'une
+    // lecture déjà inutile — jusqu'à deux secondes depuis un serveur lointain (22/09/2026).
+    // Gardé : une détection qui lève sur le chemin d'un saut ne doit pas devenir l'échec du saut.
+    if (this.remuxer.seekable) {
+      try {
+        this.remuxer.prepareSeek?.(Math.max(0, playerSeconds - this.delaySeconds));
+      } catch {
+        /* le saut se fera sans avance */
+      }
+    }
     this.pending = this.pending
       .then(() => {
         const target = this.requestedSeek;

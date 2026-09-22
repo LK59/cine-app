@@ -28,6 +28,12 @@ export interface ByteSource {
    * et une préférence, pas une réservation : rien n'est téléchargé pour elle.
    */
   keep?(from: number, to: number): void;
+  /**
+   * Abandonne les lectures réseau en cours loin de `keepOffset` — la position où l'on saute.
+   * Celui qui les attendait reçoit `ReadAbandoned`. Optionnel : une source en mémoire n'a rien en
+   * vol.
+   */
+  abandon?(keepOffset: number): void;
   /** Releases any pending work. Safe to call twice. */
   close(): void;
 }
@@ -174,6 +180,24 @@ export class NetworkUnavailable extends Error {
   }
 }
 
+/**
+ * Une lecture abandonnée parce que le lecteur est allé ailleurs — ni une panne, ni le réseau.
+ *
+ * Tout ce qui attendait cette lecture doit s'effacer sans rien réparer : ni nouvelle tentative, ni
+ * reprise, ni reconstruction de l'encodeur. Le saut qui l'a causée repositionne tout derrière.
+ */
+export class ReadAbandoned extends Error {
+  readonly abandoned = true;
+  constructor() {
+    super("lecture abandonnée pour un saut");
+    this.name = "ReadAbandoned";
+  }
+}
+
+export function isReadAbandoned(error: unknown): boolean {
+  return error instanceof Error && "abandoned" in error && error.abandoned === true;
+}
+
 /** Whether a failure was the network's rather than the media's. */
 export function isNetworkFailure(error: unknown): boolean {
   return error instanceof Error && "network" in error && error.network === true;
@@ -257,6 +281,8 @@ export class HttpByteSource implements ByteSource {
   /** Les morceaux à garder de préférence, bornes comprises — voir `keep`. */
   private kept: Kept = null;
   private readonly inflight = new Map<number, Promise<Uint8Array>>();
+  /** L'interrupteur de chaque morceau en vol — pour n'abandonner que ceux qui ne servent plus. */
+  private readonly inflightControllers = new Map<number, AbortController>();
   private readonly controller = new AbortController();
 
   private constructor(url: string, size: number) {
@@ -331,13 +357,14 @@ export class HttpByteSource implements ByteSource {
    * A server that answers 200 to a Range header is not having a bad moment — it does not honour
    * ranges at all, and asking again would only download a forty-gigabyte film four times.
    */
-  private async fetchWithRetries(start: number, end: number): Promise<Uint8Array> {
+  private async fetchWithRetries(start: number, end: number, own: AbortSignal): Promise<Uint8Array> {
     let last: unknown;
     for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
       if (attempt > 0) {
-        await waitForNetwork(this.controller.signal);
+        await waitForNetwork(own);
         await new Promise((resolve) => setTimeout(resolve, FETCH_BACKOFF_MS[attempt - 1] ?? 1500));
         if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
+        if (own.aborted) throw new ReadAbandoned();
       }
       try {
         const res = await fetch(this.url, {
@@ -345,7 +372,8 @@ export class HttpByteSource implements ByteSource {
           // Le signal du lecteur *et* une échéance — voir `readSignal`. L'abandon sur échéance
           // laisse `this.controller.signal.aborted` à faux, si bien que la boucle ci-dessous le
           // traite comme n'importe quel échec réseau : une nouvelle tentative, puis l'écran.
-          signal: readSignal(this.controller.signal),
+          // Le signal de ce morceau, que la fermeture de la source coupe aussi — voir `abandon`.
+          signal: readSignal(own),
         });
         // 206 is the expected answer; a 200 means the server ignored the Range and sent the whole
         // file, which for a 40 GB movie must not be treated as a successful chunk read.
@@ -358,6 +386,8 @@ export class HttpByteSource implements ByteSource {
         // Cancelled by the player itself, and a server that ignores ranges: neither improves by
         // being asked again.
         if (this.controller.signal.aborted) throw error;
+        // Abandonné pour un saut : ce n'est pas un échec, et le redemander irait contre le saut.
+        if (own.aborted) throw new ReadAbandoned();
         if (error instanceof Error && error.message.includes("statut 200")) throw error;
         last = error;
         if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
@@ -376,13 +406,18 @@ export class HttpByteSource implements ByteSource {
 
     const start = index * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, this.size) - 1;
-    const promise = this.fetchWithRetries(start, end)
+    const own = new AbortController();
+    this.inflightControllers.set(index, own);
+    const promise = this.fetchWithRetries(start, end, own.signal)
       .then((bytes) => {
         this.chunks.set(index, bytes);
         this.evict();
         return bytes;
       })
-      .finally(() => this.inflight.delete(index));
+      .finally(() => {
+        this.inflight.delete(index);
+        if (this.inflightControllers.get(index) === own) this.inflightControllers.delete(index);
+      });
 
     this.inflight.set(index, promise);
     return promise;
@@ -467,6 +502,26 @@ export class HttpByteSource implements ByteSource {
     return written === out.length ? out : out.subarray(0, written);
   }
 
+  /**
+   * Un saut vient d'être demandé vers `keepOffset` : tout ce qui est en vol ailleurs est coupé.
+   *
+   * 22/09/2026, serveur lointain : un saut attendait la fin de la lecture en cours — jusqu'à deux
+   * secondes — avant de repositionner le lecteur, et pendant ce temps les six morceaux lus en
+   * avance de l'ancienne position occupaient le lien que la nouvelle attendait. On garde ce qui
+   * sert le saut lui-même : le morceau où il tombe et l'avance qui le suit.
+   */
+  abandon(keepOffset: number): void {
+    const first = Math.floor(Math.max(0, Math.min(keepOffset, this.size - 1)) / CHUNK_SIZE);
+    let dropped = 0;
+    for (const [index, own] of this.inflightControllers) {
+      if (index >= first && index <= first + PREFETCH_CHUNKS) continue;
+      own.abort();
+      this.inflightControllers.delete(index);
+      dropped += 1;
+    }
+    if (dropped > 0) trace(`réseau : ${dropped} lecture(s) de l'ancienne position abandonnée(s)`);
+  }
+
   keep(from: number, to: number): void {
     if (!(to > from)) {
       this.kept = null;
@@ -499,6 +554,9 @@ export class HttpByteSource implements ByteSource {
 
   close(): void {
     this.controller.abort();
+    // Chaque morceau a son propre interrupteur : la fermeture les coupe tous.
+    for (const own of this.inflightControllers.values()) own.abort();
+    this.inflightControllers.clear();
     // Les morceaux arrivés entiers restent valables pour ce fichier : laissés à la source qui le
     // rouvrira, s'il y en a une bientôt. Les requêtes en cours, elles, meurent avec celle-ci.
     leaveHandover(this.url, this.size, this.chunks, this.kept);

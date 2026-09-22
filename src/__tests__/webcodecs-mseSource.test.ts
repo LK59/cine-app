@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MseSource, playabilityOf } from "@/lib/webcodecs/mseSource";
 import type { Remuxer, RemuxPlan, RemuxSegment } from "@/lib/webcodecs/remuxer";
-import { traceText } from "@/lib/webcodecs/trace";
+import { traceReset, traceText } from "@/lib/webcodecs/trace";
 
 // MediaSource does not exist in jsdom, and the parts of it that matter here — when a buffer
 // signals it is done, when the system asks for data, what happens when it is full — are exactly
@@ -800,6 +800,44 @@ describe("MseSource", () => {
     // Un seul saut servi, le dernier (moins le retard de présentation s'il est déjà connu).
     expect(remuxer.seeks).toHaveLength(1);
     expect(remuxer.seeks[0]).toBeGreaterThan(1499);
+    mse.destroy();
+  });
+
+  it("n'attend plus la lecture en cours : un saut la coupe, sans la prendre pour une panne", async () => {
+    // 22/09/2026, serveur lointain : un saut attendait jusqu'à deux secondes la fin d'une lecture
+    // réseau de la position quittée. Il la coupe maintenant (`prepareSeek` → `ByteSource.abandon`),
+    // et la boucle de lecture s'efface sans compter d'échec ni lancer de reprise.
+    const { ReadAbandoned } = await import("@/lib/webcodecs/byteSource");
+    traceReset();
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const remuxer = fakeRemuxer(500, 0.2);
+    let hang: ((error: unknown) => void) | null = null;
+    const nextSegment = remuxer.nextSegment.bind(remuxer);
+    let slow = false;
+    Object.assign(remuxer, {
+      // Une lecture qui ne revient pas d'elle-même : dix secondes de réseau, disons.
+      nextSegment: () => (slow ? new Promise((_, reject) => (hang = reject)) : nextSegment()),
+      prepareSeek: () => hang?.(new ReadAbandoned()),
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError });
+    await flush();
+    slow = true;
+    // La tête avance : la boucle repart chercher, et reste suspendue à sa lecture.
+    (video as unknown as { currentTime: number }).currentTime = 25;
+    video.dispatchEvent(new Event("timeupdate"));
+    (mse as unknown as { fill: () => Promise<void> }).fill();
+    await flush();
+    expect(hang).not.toBeNull();
+
+    slow = false;
+    const started = Date.now();
+    await mse.seek(1200);
+    await flush();
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(remuxer.seeks).toEqual([1199.8]);
+    expect(onError).not.toHaveBeenCalled();
+    expect(traceText()).not.toContain("segment refusé");
     mse.destroy();
   });
 

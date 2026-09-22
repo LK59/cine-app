@@ -138,7 +138,17 @@ them structural:
   of remux work. Index back-off benefits from the same mechanism, since it targets a colder region
   still.
 
-Retries: 4 attempts, with 60 s of patience while the network is offline.
+- **A seek abandons the reads it no longer needs.** Each chunk has its own abort controller.
+  `MseSource.seek` calls `Remuxer.prepareSeek` at request time, before the seek is served; that
+  aborts every in-flight chunk outside the target chunk and its readahead (`ByteSource.abandon`), then
+  warms the target. On a distant server a seek used to wait up to 2 s for a read of the position just
+  left, while that position's readahead held the link. Whoever was awaiting an aborted read gets
+  `ReadAbandoned` and stands down without repair: the fill loop does not count a refused segment or
+  start a recovery, and the audio transcoder does not rebuild its encoder. `seekTo` then resets
+  everything, as after any seek.
+
+Retries: 4 attempts, with 60 s of patience while the network is offline. An abandoned read is never
+retried.
 
 ### `ebml` / `matroska` — header and index
 

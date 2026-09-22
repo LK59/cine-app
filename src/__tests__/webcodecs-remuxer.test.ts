@@ -360,6 +360,43 @@ describe("Remuxer encoder recovery", () => {
     }
   });
 
+  it("ne reconstruit pas l'encodeur pour une lecture coupée par un saut", async () => {
+    // 22/09/2026 : un saut coupe les lectures réseau de la position quittée. Le transcodeur lit le
+    // fichier lui-même ; une lecture coupée n'est pas une panne de l'encodeur à réparer.
+    const { ReadAbandoned } = await import("@/lib/webcodecs/byteSource");
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    opened.length = 0;
+    framesHook = async () => {
+      throw new ReadAbandoned();
+    };
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const build = () => (remuxer as unknown as { buildTranscodedAudio(): Promise<unknown> }).buildTranscodedAudio();
+      await expect(build()).rejects.toBeInstanceOf(ReadAbandoned);
+      expect(opened.length).toBe(1);
+      expect(opened[0].closed).toBe(false);
+    } finally {
+      FILE.tracks.pop();
+      framesHook = null;
+    }
+  });
+
+  it("coupe les lectures d'ailleurs et lance celles du saut, dès la demande", async () => {
+    const calls: string[] = [];
+    const source = {
+      ...SOURCE,
+      abandon: (at: number) => calls.push(`abandon ${at}`),
+      warm: (at: number) => calls.push(`warm ${at}`),
+    } as unknown as ByteSource;
+    const remuxer = await Remuxer.open(source, FILE, VIDEO, null, { width: 1920, height: 1080 });
+    calls.length = 0;
+    remuxer.prepareSeek(600);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatch(/^abandon /);
+    expect(calls[1]).toBe(calls[0].replace("abandon", "warm"));
+  });
+
   it("oublie les reconstructions après une minute de son sans échec, mais garde sa borne", async () => {
     // Trois reconstructions pour tout le film : un encodeur qui hoquette de loin en loin
     // épuisait ce crédit sur un long film, et le quatrième hoquet rendait le film au serveur.

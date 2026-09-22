@@ -15,6 +15,7 @@ import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { clusterOffsetForTime, cueTimeAfter } from "./matroska";
+import { isReadAbandoned } from "./byteSource";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
 import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
@@ -781,8 +782,7 @@ export class Remuxer {
    *   to subtract `presentationDelaySeconds` first.
    */
   seekTo(seconds: number): void {
-    const offset = clusterOffsetForTime(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
-    const from = offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart;
+    const from = this.offsetFor(seconds);
     this.reader.seekTo(from);
     // Asked for now rather than when the parser gets there. The index has just said where this
     // seek lands, and everything below — clearing the queues, resetting the timeline — takes a
@@ -812,6 +812,26 @@ export class Remuxer {
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
     this.videoDecodeTime = Math.round(seconds * TIMESCALE);
+  }
+
+  /** Où la lecture reprendra pour ce temps (horloge du fichier) : le cluster que l'index désigne. */
+  private offsetFor(seconds: number): number {
+    const offset = clusterOffsetForTime(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
+    return offset ?? this.file.firstClusterOffset ?? this.file.segmentDataStart;
+  }
+
+  /**
+   * Un saut vient d'être demandé : les lectures réseau d'ailleurs sont abandonnées, et celles du
+   * saut partent tout de suite — avant que le lecteur ait fini de vider ses tampons.
+   *
+   * Appelé au moment de la demande, pas quand le saut est servi : c'est l'attente de la lecture en
+   * cours qui coûtait (voir `ByteSource.abandon`). Ceux qui attendaient reçoivent `ReadAbandoned` et
+   * s'effacent ; `seekTo` remet ensuite tout d'aplomb, comme après n'importe quel saut.
+   */
+  prepareSeek(seconds: number): void {
+    const from = this.offsetFor(seconds);
+    this.source.abandon?.(from);
+    this.source.warm?.(from);
   }
 
   /** The next pair of segments, or null once the file is exhausted. */
@@ -991,6 +1011,9 @@ export class Remuxer {
     try {
       frames = await this.transcoder.framesUpTo(untilSeconds);
     } catch (error) {
+      // Abandonnée pour un saut : rien à réparer, et reconstruire l'encodeur serait en payer un
+      // neuf pour rien. Le saut repositionne le transcodeur derrière (`transcoderSeekPending`).
+      if (isReadAbandoned(error)) throw error;
       // La fin du son, derrière la dernière image : rien qui vaille une reconstruction, qui
       // repartirait du début du segment et renverrait un son déjà livré. Et un échec à cet
       // endroit ne doit pas devenir celui du film, qui se termine.
