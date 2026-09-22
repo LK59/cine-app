@@ -42,14 +42,14 @@ export async function POST(req: NextRequest) {
   if ((body.kind !== "item" && body.kind !== "run") || typeof body.runId !== "string") {
     return NextResponse.json({ error: "Rapport illisible" }, { status: 400 });
   }
+  // Le serveur a le dernier mot sur qui, avec quoi et quand — en tête pour la lecture, répété
+  // après le corps pour l'emporter. Étalé en dernier, le corps pouvait se dire d'un autre compte
+  // ou d'un autre navigateur, et l'historique des séries (`GET`) le croyait (22/09/2026). `kind`
+  // reste celui du rapport : c'est lui qui dit film ou série.
+  const server = { timestamp: new Date().toISOString(), user: session.u, agent: req.headers.get("user-agent") ?? "?" };
   appendJsonLine(
     BENCH_LOG(),
-    {
-      timestamp: new Date().toISOString(),
-      user: session.u,
-      agent: req.headers.get("user-agent") ?? "?",
-      ...body,
-    },
+    { ...server, ...body, ...server },
     { keep: BENCH_LOG_KEEP }
   );
   return NextResponse.json({ ok: true });

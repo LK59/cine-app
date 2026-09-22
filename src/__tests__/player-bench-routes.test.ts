@@ -63,6 +63,20 @@ describe("/api/player/bench", () => {
     expect((await POST(req("x".repeat(500_000)))).status).toBe(413);
   });
 
+  it("garde le compte, le navigateur et l'heure du serveur, quoi que dise le rapport", async () => {
+    // Chasse aux défauts du 22/09/2026 : le corps était étalé après les champs du serveur, et un
+    // rapport pouvait donc se dire d'un autre compte, d'un autre navigateur ou d'un autre jour.
+    const { POST } = await import("@/app/api/player/bench/route");
+    await POST(req({ kind: "item", runId: "r1", title: "Film", user: "mathis", agent: "Faux", timestamp: "2020-01-01T00:00:00.000Z" }));
+    const [line] = fs
+      .readFileSync(path.join(dir, "bench.log"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(line).toMatchObject({ kind: "item", runId: "r1", title: "Film", user: "admin", agent: "iPhone Safari" });
+    expect(line.timestamp).not.toBe("2020-01-01T00:00:00.000Z");
+  });
+
   it("propose d'abord les films qui ont posé problème, puis chaque sorte de fichier", async () => {
     const line = (o: Record<string, unknown>) => JSON.stringify({ timestamp: "2026-09-22T10:00:00Z", ...o });
     fs.writeFileSync(

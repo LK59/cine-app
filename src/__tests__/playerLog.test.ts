@@ -174,6 +174,19 @@ describe("logPlaybackEvent", () => {
     expect(() => logPlaybackEvent("louis", "start", {})).not.toThrow();
     vi.restoreAllMocks();
   });
+
+  it("garde le compte, le genre et l'heure du serveur, quoi que disent les champs", async () => {
+    // Chasse aux défauts du 22/09/2026 : les champs du navigateur étaient étalés *après* ceux du
+    // serveur, si bien qu'un compte connecté pouvait écrire une ligne au nom d'un autre, changer
+    // son genre ou la dater — dans le journal même qui sert à instruire les pannes.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("mathis", "start", { user: "louis", kind: "stop", timestamp: "2020-01-01T00:00:00.000Z", path: "remux" });
+    const [line] = lines();
+    expect(line.user).toBe("mathis");
+    expect(line.kind).toBe("start");
+    expect(line.timestamp).not.toBe("2020-01-01T00:00:00.000Z");
+    expect(line.path).toBe("remux");
+  });
 });
 
 /**

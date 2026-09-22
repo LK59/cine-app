@@ -127,14 +127,15 @@ export function logPlaybackEvent(
   // seulement « est-ce un banc », et une ligne de banc égarée chez les spectateurs coûte plus
   // cher que l'inverse.
   const bench = Boolean(fields.bench);
+  // Les valeurs du serveur en tête, pour l'ordre de lecture de la ligne, et encore après les
+  // champs, pour qu'elles l'emportent. Étalés en dernier, les champs du navigateur remplaçaient
+  // `user`, `kind` et `timestamp` : un compte connecté pouvait écrire au nom d'un autre, ou dater
+  // sa ligne à sa guise, dans le journal même qui sert à instruire les pannes (chasse aux
+  // défauts du 22/09/2026).
+  const server = { timestamp: new Date().toISOString(), kind, user };
   appendJsonLine(
     bench ? benchPlayerLogFile() : playerLogFile(),
-    {
-      timestamp: new Date().toISOString(),
-      kind,
-      user,
-      ...clean(fields),
-    },
+    { ...server, ...clean(fields), ...server },
     { keep: bench ? BENCH_PLAYER_LOG_KEEP : PLAYER_LOG_KEEP }
   );
 }
