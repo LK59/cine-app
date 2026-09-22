@@ -168,3 +168,55 @@ describe("après un saut, ce qui sert la première image d'abord", () => {
     }
   });
 });
+
+describe("une requête muette juste après un saut", () => {
+  /** Chaque plage demandée ; la première pour `hungChunk` ne répond jamais — jusqu'à son abandon. */
+  function stubHanging(hungChunk: number) {
+    const calls: number[] = [];
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") {
+        return Promise.resolve({ ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } });
+      }
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      const chunk = from / CHUNK;
+      calls.push(chunk);
+      if (chunk === hungChunk && calls.filter((c) => c === hungChunk).length === 1) {
+        return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+      }
+      return Promise.resolve({ status: 206, headers: { get: () => `bytes ${from}-${to}/${SIZE}` }, arrayBuffer: async () => new Uint8Array(to - from + 1).buffer });
+    });
+    return calls;
+  }
+
+  it("est redemandée après cinq secondes sans un octet, au lieu de vingt-cinq", async () => {
+    // Banc iPhone du 22/09/2026, 5G en itinérance : un saut sans un octet reçu en quinze secondes,
+    // douze requêtes encore en suspens au saut suivant. L'échéance d'une requête est de vingt-cinq
+    // secondes — faite pour une connexion morte, pas pour une requête restée muette après un saut.
+    vi.useFakeTimers({ toFake: ["setTimeout", "performance"] });
+    try {
+      const calls = stubHanging(100);
+      const source = await HttpByteSource.open("/film.mkv", SIZE);
+      source.abandon(100 * CHUNK);
+      const read = source.read(100 * CHUNK, 1000);
+      await vi.advanceTimersByTimeAsync(5300);
+      await expect(read).resolves.toHaveLength(1000);
+      expect(calls.filter((c) => c === 100)).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("n'est pas coupée en dehors d'un saut : une lecture lente reste une lecture", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "performance"] });
+    try {
+      const calls = stubHanging(20);
+      const source = await HttpByteSource.open("/film.mkv", SIZE);
+      void source.read(20 * CHUNK, 1000).catch(() => {});
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(calls.filter((c) => c === 20)).toHaveLength(1);
+      source.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

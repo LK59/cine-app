@@ -133,6 +133,18 @@ const PREFETCH_CHUNKS = 6;
  */
 const SEEK_PREFETCH_CHUNKS = 2;
 
+/**
+ * Juste après un saut, une requête qui n'a reçu aucun octet en ce temps est redemandée.
+ *
+ * Banc iPhone du 22/09/2026, 5G en itinérance : un saut sans un octet en quinze secondes, douze
+ * requêtes encore en suspens au saut suivant. L'échéance ordinaire (`REQUEST_TIMEOUT_MS`, 25 s) est
+ * faite pour reconnaître une connexion morte ; une requête restée muette pendant qu'un spectateur
+ * attend son saut se redemande bien avant. Première tentative seulement, et seulement pendant
+ * qu'un saut attend sa première image : sur un lien vraiment lent, redemander en boucle ne ferait
+ * que recommencer.
+ */
+const SEEK_FIRST_BYTE_MS = 5000;
+
 /** Au-delà, l'avance entière reprend d'elle-même : un saut qui n'aboutit pas ne la bride pas. */
 const SEEK_FOCUS_MS = 8000;
 
@@ -504,6 +516,19 @@ export class HttpByteSource implements ByteSource {
         if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
         if (own.aborted) throw new ReadAbandoned();
       }
+      // Cette tentative-ci peut être coupée seule, sans abandonner le morceau : c'est ce que fait
+      // l'échéance du premier octet après un saut (`SEEK_FIRST_BYTE_MS`).
+      const attemptControl = new AbortController();
+      const forward = () => attemptControl.abort();
+      own.addEventListener("abort", forward, { once: true });
+      let muted = false;
+      const firstByteTimer =
+        attempt === 0 && performance.now() < this.focusUntil
+          ? setTimeout(() => {
+              muted = true;
+              attemptControl.abort();
+            }, SEEK_FIRST_BYTE_MS)
+          : null;
       try {
         const sentAt = performance.now();
         const res = await fetch(this.url, {
@@ -512,8 +537,10 @@ export class HttpByteSource implements ByteSource {
           // laisse `this.controller.signal.aborted` à faux, si bien que la boucle ci-dessous le
           // traite comme n'importe quel échec réseau : une nouvelle tentative, puis l'écran.
           // Le signal de ce morceau, que la fermeture de la source coupe aussi — voir `abandon`.
-          signal: readSignal(own),
+          signal: readSignal(attemptControl.signal),
         });
+        // Des en-têtes : la requête parle, elle n'est plus muette.
+        if (firstByteTimer !== null) clearTimeout(firstByteTimer);
         // 206 is the expected answer; a 200 means the server ignored the Range and sent the whole
         // file, which for a 40 GB movie must not be treated as a successful chunk read.
         if (res.status === 200) {
@@ -533,7 +560,11 @@ export class HttpByteSource implements ByteSource {
         if (own.aborted) throw new ReadAbandoned();
         if (error instanceof Error && error.message.includes("statut 200")) throw error;
         last = error;
-        if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
+        if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
+        else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);
+      } finally {
+        if (firstByteTimer !== null) clearTimeout(firstByteTimer);
+        own.removeEventListener("abort", forward);
       }
     }
     throw new NetworkUnavailable(
