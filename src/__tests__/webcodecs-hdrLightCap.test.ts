@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { withCappedLightLevels } from "@/lib/webcodecs/codecConfig";
 import { cappedColour } from "@/lib/webcodecs/remuxer";
-import { hdrCapRelevant, isChromiumOnWindows, readHdrCapChoice, resolveHdrCap, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
+import { hdrCapRelevant, hdrLightCap, isChromiumOnWindows, readHdrCapChoice, resolveHdrCap, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 
 /**
  * 22/09/2026 : Chrome sous Windows ramène un film HDR sous la lumière maximale annoncée — *2012*
@@ -123,6 +123,35 @@ describe("le plafond de lumière HDR", () => {
     expect(readHdrCapChoice()).toBe("auto");
     vi.unstubAllGlobals();
     expect(isChromiumOnWindows(WINDOWS_CHROME + " Edg/153.0")).toBe(true);
+  });
+
+  it("garde le choix pour la séance quand le stockage est refusé", () => {
+    // Navigation privée ou stockage bloqué : l'écriture échouait en silence, le menu montrait
+    // 400 et la reconstruction qui suivait relisait le stockage — « auto ».
+    const refused = () => {
+      throw new DOMException("refusé", "SecurityError");
+    };
+    vi.stubGlobal("localStorage", { getItem: refused, setItem: refused, removeItem: refused });
+    vi.stubGlobal("navigator", { userAgent: WINDOWS_CHROME });
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q !== "(dynamic-range: high)" }));
+    writeHdrCapChoice(400);
+    expect(readHdrCapChoice()).toBe(400);
+    expect(hdrLightCap()).toBe(400);
+    writeHdrCapChoice("native");
+    expect(readHdrCapChoice()).toBe("native");
+
+    // Le stockage revenu, c'est lui qui fait foi de nouveau.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+    writeHdrCapChoice("auto");
+    expect(readHdrCapChoice()).toBe("auto");
+    store.set("cine.hdrLightCap", "650");
+    expect(readHdrCapChoice()).toBe(650);
+    vi.unstubAllGlobals();
   });
 });
 

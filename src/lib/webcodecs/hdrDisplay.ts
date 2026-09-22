@@ -33,8 +33,18 @@ export const CHROME_SDR_WHITE_NITS = 203;
 
 const HDR_CAP_KEY = "cine.hdrLightCap";
 
+/**
+ * Le choix que le stockage a refusé, gardé en mémoire pour le reste de la séance.
+ *
+ * Navigation privée ou stockage bloqué : l'écriture échouait en silence, le menu affichait 400,
+ * et la reconstruction qui suit le choix relisait `hdrLightCap()` dans le stockage — « auto ». Le
+ * réglage ne prenait jamais. `undefined` dès que le stockage accepte : c'est lui qui fait foi.
+ */
+let unstoredChoice: HdrCapChoice | undefined;
+
 /** Le choix fait sur cet appareil ; « auto » quand il n'y en a pas, ou qu'il est illisible. */
 export function readHdrCapChoice(): HdrCapChoice {
+  if (unstoredChoice !== undefined) return unstoredChoice;
   try {
     const stored = globalThis.localStorage?.getItem(HDR_CAP_KEY);
     if (stored === "native") return "native";
@@ -49,8 +59,10 @@ export function writeHdrCapChoice(choice: HdrCapChoice): void {
   try {
     if (choice === "auto") globalThis.localStorage?.removeItem(HDR_CAP_KEY);
     else globalThis.localStorage?.setItem(HDR_CAP_KEY, String(choice));
+    unstoredChoice = undefined;
   } catch {
-    // Navigation privée ou stockage refusé : le choix vaut pour cette ouverture seulement.
+    // Navigation privée ou stockage refusé : le choix vaut pour cette séance seulement.
+    unstoredChoice = choice;
   }
 }
 
