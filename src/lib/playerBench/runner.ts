@@ -253,10 +253,14 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
   const switchAudio = async (id: string, track: number, expectAt: number, paused: boolean) => {
     const start = deps.now();
     bridge().changeAudio(track);
+    // Jusqu'à ce que la tête soit revenue où elle était : le lecteur neuf se dit prêt un instant
+    // avant d'y avoir posé sa tête, et la mesure lisait alors 0 s (banc du 22/09/2026). Ce que le
+    // spectateur attend, c'est l'image au bon endroit.
+    const near = () => Math.abs(time() - expectAt) < 3 + (paused ? 0 : (deps.now() - start) / 1000);
     const ms = await waitFor(() => {
       const b = bridge();
       const element = b.media();
-      return !!element && b.ready() && b.currentAudio() === track && !element.seeking && (paused || !element.paused);
+      return !!element && b.ready() && b.currentAudio() === track && !element.seeking && (paused || !element.paused) && near();
     }, SWITCH_TIMEOUT_MS);
     if (ms === null) {
       const b = deps.bridge();
@@ -265,7 +269,9 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
           id,
           verdict: "fail",
           ms: SWITCH_TIMEOUT_MS,
-          detail: `piste ${track} jamais appliquée (piste en cours ${b?.currentAudio() ?? "?"}, prêt ${b?.ready() ?? "?"})`,
+          detail:
+            `piste ${track} : pas rouvert au bon endroit en ${SWITCH_TIMEOUT_MS / 1000} s — attendu ${expectAt.toFixed(1)} s, ` +
+            `tête à ${b?.media()?.currentTime.toFixed(1) ?? "?"} s, piste en cours ${b?.currentAudio() ?? "?"}, prêt ${b?.ready() ?? "?"}`,
         },
         SWITCH_TIMEOUT_MS + 2000
       );
@@ -315,9 +321,11 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
 
     // ── Lecture au début ───────────────────────────────────────────────────────────────────────
     step("lecture");
+    // Après l'atterrissage : un film ouvert à 0 pose sa tête sur son premier média, 1,3 s plus
+    // loin dans un fichier à images B, et ce pas-là n'est pas un saut (banc du 22/09/2026).
+    await waitFor(() => time() > 0.5, 3000);
     const start = await watch(full ? 10_000 : 6000);
     record({ id: "play", verdict: start.verdict, detail: describe(start) });
-    await ask("sync");
 
     const D = result.durationSeconds;
     if (D < 60) {
@@ -326,8 +334,11 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       // ── Sauts ────────────────────────────────────────────────────────────────────────────────
       const watchMs = full ? 4000 : 3000;
       await seekCheck("seek-far", D * 0.5, watchMs);
-      await ask("seekPicture");
+      // La synchro se juge au milieu d'un film, sur des visages qui parlent — pas sur un générique
+      // d'ouverture, où il n'y a rien à comparer (remarque du 22/09/2026).
+      await ask("sync");
       await seekCheck("seek-back-10", Math.max(5, time() - 10), watchMs);
+      await ask("seekPicture");
       await seekCheck("seek-forward-30", Math.min(D - 40, time() + 30), watchMs);
       const random = seededPositions(item.itemId, full ? 5 : 2, D);
       for (let i = 0; i < random.length; i++) await seekCheck(`seek-random-${i + 1}`, random[i], watchMs);

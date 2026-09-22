@@ -51,7 +51,9 @@ describe("readPlayback", () => {
 });
 
 /** Un lecteur simulé, sur une horloge simulée. `faults` y met les pannes à trouver. */
-function simulated(faults: { runawayAfterSeek?: boolean; losePause?: boolean; vanishOnAudio?: boolean } = {}) {
+function simulated(
+  faults: { runawayAfterSeek?: boolean; losePause?: boolean; vanishOnAudio?: boolean; landsLate?: boolean; losePosition?: boolean; landsAtOpen?: boolean } = {}
+) {
   let now = 0;
   const media = {
     currentTime: 0,
@@ -68,6 +70,7 @@ function simulated(faults: { runawayAfterSeek?: boolean; losePause?: boolean; va
   let audio = 1;
   let subtitle: number | null = null;
   let open: string | null = null;
+  let placeAt: { at: number; time: number } | null = null;
   const bridge: BenchBridge = {
     itemId: "film",
     media: () => media as unknown as HTMLVideoElement,
@@ -89,6 +92,12 @@ function simulated(faults: { runawayAfterSeek?: boolean; losePause?: boolean; va
       audio = id;
       ready = false;
       readyAt = now + 600;
+      // Le lecteur neuf, prêt avant d'avoir posé sa tête : elle est à 0 un instant.
+      if (faults.landsLate || faults.losePosition) {
+        placeAt = { at: now + 900, time: media.currentTime };
+        media.currentTime = 0;
+        if (faults.losePosition) placeAt = null;
+      }
       if (faults.losePause) media.paused = false;
     },
     subtitleTracks: () => [{ id: 5, label: "Français — forcés" }],
@@ -105,6 +114,8 @@ function simulated(faults: { runawayAfterSeek?: boolean; losePause?: boolean; va
       open = "film";
       readyAt = now + 800;
       media.paused = false;
+      // Un fichier à images B : le premier média commence à 1,3 s, et la tête y est posée.
+      if (faults.landsAtOpen) placeAt = { at: now + 1000, time: 1.5 };
     },
     close: () => void (open = null),
     bridge: () => (open ? bridge : null),
@@ -112,6 +123,10 @@ function simulated(faults: { runawayAfterSeek?: boolean; losePause?: boolean; va
     sleep: async (ms) => {
       now += ms;
       if (!ready && now >= readyAt) ready = true;
+      if (placeAt && now >= placeAt.at) {
+        media.currentTime = placeAt.time;
+        placeAt = null;
+      }
       if (ready && !media.paused) {
         media.currentTime += ms / 1000;
         if (!framesStuck) frames += Math.round((ms / 1000) * 24);
@@ -155,6 +170,25 @@ describe("runBench", () => {
     const { deps } = simulated({ losePause: true });
     const [result] = await runBench(CONFIG, deps);
     expect(result.checks.find((c) => c.id === "audio-paused")?.detail).toMatch(/pause n'a pas été gardée/);
+  });
+
+  it("attend que la tête soit reposée avant de mesurer un changement de piste", async () => {
+    const { deps } = simulated({ landsLate: true });
+    const [result] = await runBench(CONFIG, deps);
+    expect(result.checks.filter((c) => c.id.startsWith("audio") && c.verdict !== "ok")).toEqual([]);
+  });
+
+  it("trouve un changement de piste qui rouvre au début du film", async () => {
+    const { deps } = simulated({ losePosition: true });
+    const [result] = await runBench(CONFIG, deps);
+    expect(result.checks.find((c) => c.id === "audio-2")).toMatchObject({ verdict: "fail" });
+    expect(result.checks.find((c) => c.id === "audio-2")?.detail).toMatch(/pas rouvert au bon endroit/);
+  });
+
+  it("ne prend pas l'atterrissage de l'ouverture pour un saut", async () => {
+    const { deps } = simulated({ landsAtOpen: true });
+    const [result] = await runBench({ ...CONFIG, depth: "quick" }, deps);
+    expect(result.checks.find((c) => c.id === "play")?.verdict).toBe("ok");
   });
 
   it("note un lecteur qui disparaît, et passe au film suivant", async () => {
