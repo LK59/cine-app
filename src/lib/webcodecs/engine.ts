@@ -105,11 +105,7 @@ export function subtitleText(raw: string, codecId: string): string {
   }
   const fields = raw.split(",");
   const text = fields.length > 8 ? fields.slice(8).join(",") : raw;
-  return stripSubtitleMarkup(text)
-    .replace(/\{[^}]*\}/g, "")
-    .replace(/\\N/gi, "\n")
-    .replace(/\\h/gi, " ")
-    .trim();
+  return stripSubtitleMarkup(text.replace(/\\N/gi, "\n").replace(/\\h/gi, " "), { allBraces: true }).trim();
 }
 
 export interface EngineOptions {

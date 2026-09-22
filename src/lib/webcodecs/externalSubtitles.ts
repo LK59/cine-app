@@ -62,9 +62,8 @@ function seconds(h: string, m: string, s: string, fraction: string): number {
  * Ce qui reste ici est propre au format des fichiers : les blocs d'override ASS.
  */
 function plainText(lines: string[]): string {
-  return stripSubtitleMarkup(lines.join("\n"))
-    .replace(/\{\\[^}]*\}/g, "")
-    .trim();
+  // Les blocs d'override sont retirés par `stripSubtitleMarkup`, qui garde la position voulue.
+  return stripSubtitleMarkup(lines.join("\n")).trim();
 }
 
 /**

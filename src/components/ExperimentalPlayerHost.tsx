@@ -10,6 +10,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
+import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -1836,7 +1837,13 @@ export function ExperimentalPlayerHost({
       />
 
       {subtitle && !isMini && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-24 z-10 flex justify-center px-8">
+        // En haut quand le fichier le demande (`{\an8}`) : un sous-titre forcé qui traduit un texte
+        // à l'image ne doit pas le cacher. Voir `subtitlePlacement`.
+        <div
+          className={`pointer-events-none absolute inset-x-0 z-10 flex justify-center px-8 ${
+            subtitlePlacement(subtitle).top ? "top-20" : "bottom-24"
+          }`}
+        >
           <p
             // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
             // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
@@ -1844,7 +1851,7 @@ export function ExperimentalPlayerHost({
             className="max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
             style={overlayCss(subtitleStyle)}
           >
-            {subtitle}
+            {subtitlePlacement(subtitle).text}
           </p>
         </div>
       )}
