@@ -1,5 +1,7 @@
 "use client";
 
+import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
+
 /**
  * Se déconnecter : prévenir le serveur, puis aller à la page de connexion — **quoi qu'il arrive**.
  *
@@ -10,6 +12,10 @@
  * vers la connexion, c'est ce que la personne a demandé.
  */
 export async function signOut(go: (path: string) => void): Promise<void> {
+  // L'état du spectateur demandé d'avance n'est rangé que par titre, et partir vers la connexion
+  // ne recharge pas la page : le compte suivant, ouvrant le même film dans les trente secondes,
+  // reprenait à la position du compte qui venait de partir (chasse aux bugs du 22/09/2026).
+  forgetPrefetchedPlaybackState();
   try {
     await fetch("/api/auth/logout", { method: "POST" });
   } catch {

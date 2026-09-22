@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "fs";
 import { signOut } from "@/lib/signOut";
+import { prefetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -25,6 +26,16 @@ describe("signOut", () => {
     const go = vi.fn();
     await expect(signOut(go)).resolves.toBeUndefined();
     expect(go).toHaveBeenCalledWith("/login");
+  });
+
+  it("oublie l'état du spectateur demandé d'avance pour le compte qui part", async () => {
+    // Chasse aux bugs du 22/09/2026 : la table n'est rangée que par titre, et la déconnexion
+    // ne recharge pas la page. Le compte suivant, ouvrant le même film dans les trente
+    // secondes, reprenait à la position du compte précédent.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ resumeSeconds: 1200, preferences: null }) }));
+    prefetchPlaybackState("film");
+    await signOut(vi.fn());
+    expect(takePrefetchedPlaybackState("film")).toBeNull();
   });
 
   // Une seule façon de se déconnecter : trois copies non gardées, c'est ainsi que le défaut
