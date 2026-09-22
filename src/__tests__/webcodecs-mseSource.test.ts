@@ -861,8 +861,25 @@ describe("MseSource", () => {
     const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
     const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
     const onBrowser = (ua: string) => vi.spyOn(navigator, "userAgent", "get").mockReturnValue(ua);
-    afterEach(() => vi.restoreAllMocks());
+    // L'horloge arrêtée est coupée par défaut depuis l'audit du 22/09/2026 ; ses tests l'allument.
+    beforeEach(() => void (MseSource.holdClockDuringSeek = true));
+    afterEach(() => {
+      MseSource.holdClockDuringSeek = false;
+      vi.restoreAllMocks();
+    });
     const withRate = (video: HTMLVideoElement) => Object.assign(video, { playbackRate: 1, seeking: false });
+
+    it("n'arrête pas l'horloge par défaut, même sous WebKit", async () => {
+      MseSource.holdClockDuringSeek = false;
+      onBrowser(IPHONE);
+      const video = withRate(fakeVideo());
+      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+      await flush();
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      expect(video.playbackRate).toBe(1);
+      mse.destroy();
+    });
 
     it("sous WebKit, arrête l'horloge pendant un saut et la rend à l'arrivée", async () => {
       // Trois sauts sur huit films partis de 20 à 650 s au-delà de leur cible, horloge courant

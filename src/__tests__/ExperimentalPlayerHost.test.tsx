@@ -1330,6 +1330,47 @@ describe("relu le 22/09/2026", () => {
     expect(probes[1].startSeconds).toBeCloseTo(600, 1);
   });
 
+  it("oublie la cible demandée quand la source dit le saut arrivé, même ailleurs qu'elle", async () => {
+    // Audit du 22/09/2026 : la source peut poser la tête plus loin que la cible — sur le premier
+    // média, sur l'image clé suivante. La cible de l'hôte restait alors en mémoire, et un
+    // changement de piste vingt minutes plus tard reconstruisait le lecteur à l'ancienne cible.
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    Object.assign(remux, { seekPending: false });
+    const element = videoElement(120);
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    // Posée 12 s plus loin que demandé, et la source considère le saut arrivé.
+    element.currentTime = 612;
+    await act(async () => void fireEvent(element, new Event("seeked")));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 0))));
+    element.currentTime = 1800;
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+
+    rebuildOn(2);
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1].startSeconds).toBeCloseTo(1800, 1);
+  });
+
+  it("écrit un saut remplacé par le suivant comme remplacé, et arrivé s'il était à sa cible", async () => {
+    // Une rafale remplace chaque saut 30 ms plus tard : 125 lignes sur 128 « jamais arrivé » à
+    // tort le 22/09/2026, et le banc comptait ces films comme éprouvés.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(120);
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    element.currentTime = 600;
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+
+    const seeks = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === "seek");
+    expect(seeks[0].fields).toMatchObject({ to: 600, arrived: true, superseded: true });
+  });
+
   it("écrit chaque saut au journal : d'où, vers où, déjà chargé ou non, et combien de temps", async () => {
     // 22/09/2026 : des sauts jugés lents sur un réseau d'entreprise, et aucun chiffre pour dire
     // si c'était le réseau ou le lecteur.

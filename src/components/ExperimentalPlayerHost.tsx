@@ -54,6 +54,7 @@ import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trac
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { registerBenchBridge } from "@/lib/playerBench/bridge";
+import { seekArrived } from "@/lib/webcodecs/seekArrival";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -577,13 +578,16 @@ export function ExperimentalPlayerHost({
     const timing = seekTimingRef.current;
     if (!timing) return;
     seekTimingRef.current = null;
+    // Remplacé par le geste suivant avant son `seeked` : le cas ordinaire d'une rafale. Arrivé
+    // s'il était à sa cible — 125 lignes sur 128 « jamais arrivé » à tort le 22/09/2026.
     reportPlayback("seek", {
       ...describeFileRef.current(),
       path: "remux",
       from: Math.round(timing.from),
       to: Math.round(timing.to),
       buffered: timing.buffered,
-      arrived: false,
+      arrived: seekArrived(landedAt, timing.to),
+      superseded: true,
       landedAt: Math.round(landedAt * 10) / 10,
       tookMs: Date.now() - timing.startedAt,
       steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
@@ -1380,11 +1384,20 @@ export function ExperimentalPlayerHost({
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
-        if (requestedSeekRef.current !== null && Math.abs(element.currentTime - requestedSeekRef.current) < 1.5) {
+        if (requestedSeekRef.current !== null && seekArrived(element.currentTime, requestedSeekRef.current)) {
           requestedSeekRef.current = null;
         }
+        // Posée ailleurs que la cible — sur le premier média, sur l'image clé suivante — mais
+        // arrivée selon la source : la cible demandée ne vaut plus. Restée en mémoire, elle servait
+        // de position au changement de piste suivant, fût-il vingt minutes plus tard (audit du
+        // 22/09/2026). Lu après ce tour : la source écoute le même événement, et après l'hôte.
+        setTimeout(() => {
+          if (requestedSeekRef.current !== null && remuxRef.current?.seekPending === false && !element.seeking) {
+            requestedSeekRef.current = null;
+          }
+        }, 0);
         const timing = seekTimingRef.current;
-        if (timing && Math.abs(element.currentTime - timing.to) < 1.5) {
+        if (timing && seekArrived(element.currentTime, timing.to)) {
           seekTimingRef.current = null;
           reportPlayback("seek", {
             ...describeFileRef.current(),
@@ -1486,7 +1499,7 @@ export function ExperimentalPlayerHost({
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
           // Ce chemin n'a pas de `seeked` : le saut demandé est atteint quand la lecture y est.
-          if (requestedSeekRef.current !== null && Math.abs(engine.currentTime - requestedSeekRef.current) < 1.5) {
+          if (requestedSeekRef.current !== null && seekArrived(engine.currentTime, requestedSeekRef.current)) {
             requestedSeekRef.current = null;
           }
           if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);

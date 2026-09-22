@@ -14,6 +14,7 @@ import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { isWebKitEngine } from "../webkitEngine";
+import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
@@ -108,12 +109,6 @@ const STALL_REPORT_COOLDOWN_MS = 60_000;
  */
 const RUNAWAY_REPORT_SECONDS = 3;
 
-/**
- * Un saut dont la tête s'éloigne de plus que cela de sa cible, sans y être arrivée, est parti.
- * Plus large que tout pas volontaire autour d'une cible (atterrissage, poussée), qui passe par
- * `noteSeekTarget` et déplace la cible avec lui.
- */
-const SEEK_RUNAWAY_SECONDS = 1.5;
 
 /** L'horloge arrêtée pour un saut sous WebKit ne le reste jamais plus longtemps que cela. */
 const CLOCK_HOLD_MAX_MS = 12_000;
@@ -215,7 +210,7 @@ export class MseSource {
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
   /**
-   * Le saut en cours, tant que la tête n'est pas arrivée à sa cible — voir `watchForSeekRunaway`.
+   * Le saut en cours, tant que la tête n'est pas arrivée à sa cible — voir `watchForHeadAway`.
    */
   private seekIntent: { target: number; since: number } | null = null;
   /**
@@ -224,7 +219,20 @@ export class MseSource {
    */
   private clockHold: { rate: number; since: number } | null = null;
   private readonly holdClockOnSeek =
-    typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent ?? "");
+    MseSource.holdClockDuringSeek && typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent ?? "");
+
+  /**
+   * L'horloge arrêtée pendant un saut sous WebKit — coupée le 22/09/2026, gardée derrière cet
+   * interrupteur le temps d'un banc iPhone qui dise si elle servait.
+   *
+   * Sa prémisse ne tient pas : au banc du même jour, Safari a replacé la tête à son ancienne
+   * position pendant un saut *alors que l'horloge était arrêtée* — c'est le filet de la tête hors
+   * de sa place qui l'a rattrapé. Et elle en rendait d'autres muets : pendant qu'elle tenait, ni
+   * l'horloge figée ni les blocages n'étaient surveillés, si bien qu'un saut qui ne se résout pas
+   * attendait environ dix-huit secondes par tentative. Si le banc iPhone ne montre rien sans elle,
+   * elle part.
+   */
+  static holdClockDuringSeek = false;
   /**
    * Où le film doit s'ouvrir, tant que le média n'est pas encore là pour l'y recevoir.
    *
@@ -278,6 +286,8 @@ export class MseSource {
    * Voir `RUNAWAY_REPORT_SECONDS`.
    */
   private runawaySeconds = 0;
+  /** Le tour où la tête hors de sa place a été traitée — pour que le chien de garde n'agisse pas deux fois. */
+  private headAwayHandledAt = -1;
 
   private constructor(
     private readonly video: HTMLVideoElement,
@@ -405,7 +415,7 @@ export class MseSource {
       // pendant que le chien de garde redemandait la position toutes les 1,8 s sans effet. Un saut
       // *pendant* la lecture n'a jamais eu ce défaut — là, le média et le décodeur existent déjà,
       // et c'est toute la différence.
-      if (startSeconds > 1 && this.remuxer.seekable) {
+      if (startSeconds > NO_INDEX_REACH_SECONDS && reachable(this.remuxer.seekable, startSeconds)) {
         this.remuxer.seekTo(startSeconds);
         this.lastSeekTarget = startSeconds;
         this.pendingStart = startSeconds;
@@ -919,7 +929,7 @@ export class MseSource {
     // A file with no index cannot be reached at a time. Restarting from the beginning and
     // reading forward would look like the player thinking very hard and then, minutes later,
     // arriving — so it is refused, and playback carries on where it was.
-    if (!this.remuxer.seekable && playerSeconds > 1) {
+    if (!reachable(this.remuxer.seekable, playerSeconds)) {
       this.callbacks.onWarning?.(playerWarning("noIndexSeek"));
       if (this.lastSeekTarget >= 0) this.video.currentTime = this.lastSeekTarget;
       return;
@@ -1031,12 +1041,12 @@ export class MseSource {
    */
   /**
    * Arrivé : la tête est où le saut voulait qu'elle soit. L'horloge repart, et le saut n'est plus
-   * surveillé. Un `seeked` loin de la cible, lui, ne vaut pas arrivée — voir `watchForSeekRunaway`.
+   * surveillé. Un `seeked` loin de la cible, lui, ne vaut pas arrivée — voir `watchForHeadAway`.
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
     const intent = this.seekIntent;
-    if (intent && Math.abs(this.video.currentTime - intent.target) > SEEK_RUNAWAY_SECONDS) return;
+    if (intent && !seekArrived(this.video.currentTime, intent.target)) return;
     this.seekIntent = null;
     this.releaseClock("saut arrivé");
   };
@@ -1073,32 +1083,6 @@ export class MseSource {
     if (Date.now() - hold.since > 1000) trace(`horloge rendue après ${Date.now() - hold.since} ms (${because})`);
   }
 
-  /**
-   * Un saut qui part ailleurs : la tête s'éloigne de sa cible sans y être arrivée.
-   *
-   * Aucune autre surveillance ne le voyait : l'élément se dit en train de sauter, ce qui écarte la
-   * détection de l'horloge sans média comme celle du blocage. Le saut est redemandé vers sa
-   * **cible**, pas vers l'endroit où la tête s'est enfuie, par l'échelle habituelle des reprises.
-   */
-  private watchForSeekRunaway(now: number): boolean {
-    const intent = this.seekIntent;
-    if (!intent || this.video.paused || this.requestedSeek !== null) return false;
-    if (Math.abs(now - intent.target) <= SEEK_RUNAWAY_SECONDS) return false;
-    this.seekIntent = null;
-    this.releaseClock("saut parti ailleurs");
-    trace(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne ${this.elementState()}`);
-    if (Date.now() - this.lastStallReportAt >= STALL_REPORT_COOLDOWN_MS) {
-      this.lastStallReportAt = Date.now();
-      try {
-        this.callbacks.onStall?.({ runaway: true, seekTarget: intent.target, ...this.stallReport(now, Date.now() - intent.since) });
-      } catch {
-        /* the log is not worth a player */
-      }
-    }
-    if (!this.recover(intent.target)) this.handOver(now);
-    return true;
-  }
-
   private readonly watchdog = () => {
     // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
     // underneath it would move the picture for no reason and land the resume elsewhere.
@@ -1113,7 +1097,8 @@ export class MseSource {
     if (this.ended || !this.videoBuffer || this.video.paused) return;
 
     const now = this.video.currentTime;
-    if (this.watchForSeekRunaway(now)) return;
+    // La tête a quitté sa place et vient d'être renvoyée : rien d'autre à faire à ce tour.
+    if (this.headAwayHandledAt === now) return;
     // L'horloge est arrêtée exprès : ni figée, ni bloquée.
     if (this.clockHold) return;
     // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
@@ -1170,11 +1155,20 @@ export class MseSource {
       }
     }
 
-    if (!running || this.clockHold) {
+    if (!running) {
       this.stallSince = null;
       return;
     }
-    this.watchForRunaway(now, delta);
+    // Avant l'horloge arrêtée : une tête qui s'enfuit pendant un saut doit être vue même alors.
+    if (!this.stuck && this.watchForHeadAway(now, delta)) {
+      this.stallSince = null;
+      this.headAwayHandledAt = now;
+      return;
+    }
+    if (this.clockHold) {
+      this.stallSince = null;
+      return;
+    }
     // Un saut qui attend son média n'est pas un blocage : c'est l'attente du réseau, et la ligne
     // `seek` en porte déjà la durée. Compté, il écrivait une ligne `stall` à chaque saut lent
     // depuis un serveur lointain (banc du 22/09/2026 : quatre « blocages », tous des sauts).
@@ -1205,36 +1199,61 @@ export class MseSource {
     }
   }
 
-  /** Une horloge qui court hors du média : écrite comme un blocage, une fois par épisode. */
-  private watchForRunaway(now: number, delta: number): void {
+  /**
+   * La tête hors de sa place — un seul détecteur pour les deux formes qu'on lui a connues.
+   *
+   * - **Pendant un saut** : elle s'éloigne de sa cible sans y être arrivée. Banc iPhone du
+   *   22/09/2026 : trois sauts sur huit films partis de 20 à 650 s au-delà de leur cible, et un
+   *   Titanic ramené par Safari à son ancienne position. L'élément se disait en train de sauter, ce
+   *   qui rendait aveugles toutes les autres surveillances. Renvoyée vers sa **cible**.
+   * - **Après** : l'horloge avance trois secondes sans rien sous la tête (2012 sur iPhone : 658
+   *   images pour 55 s regardées, la tête posée à chaque envoi sur la fin de la vidéo reçue). Aucune
+   *   cible à retrouver : reprise là où elle est, ce qui relit depuis l'image clé.
+   *
+   * Deux détecteurs jusqu'au 22/09/2026, qui écrivaient chacun leur ligne et appelaient chacun les
+   * reprises ; un seul désormais, pour un seul fait. Par l'échelle habituelle des reprises, écrit
+   * comme un blocage (`runaway`), une ligne par minute au plus.
+   */
+  private watchForHeadAway(now: number, delta: number): boolean {
+    const intent = this.seekIntent;
+    if (intent) {
+      if (this.requestedSeek !== null || seekArrived(now, intent.target)) return false;
+      this.seekIntent = null;
+      this.releaseClock("saut parti ailleurs");
+      this.headAway(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne`, now, intent.target, {
+        seekTarget: intent.target,
+        stalledMs: Date.now() - intent.since,
+      });
+      return true;
+    }
     // Une ouverture en attente de son média, ou un saut en cours : la tête est hors du média
     // par construction, et ce n'est pas elle qui avance.
     if (this.pendingStart !== null || this.video.seeking || this.isBufferedAt(now)) {
       this.runawaySeconds = 0;
-      return;
+      return false;
     }
-    if (delta <= 0 || delta > 5) return;
+    if (delta <= 0 || delta > 5) return false;
     const before = this.runawaySeconds;
     this.runawaySeconds += delta;
-    if (before >= RUNAWAY_REPORT_SECONDS || this.runawaySeconds < RUNAWAY_REPORT_SECONDS) return;
-    trace(`horloge qui avance sans média : ${this.runawaySeconds.toFixed(1)} s courues jusqu'à ${now.toFixed(2)} s — ${this.elementState()}`);
+    if (before >= RUNAWAY_REPORT_SECONDS || this.runawaySeconds < RUNAWAY_REPORT_SECONDS) return false;
+    this.headAway(`horloge qui avance sans média : ${this.runawaySeconds.toFixed(1)} s courues jusqu'à ${now.toFixed(2)} s`, now, now, { stalledMs: 0 });
+    return true;
+  }
+
+  /** Écrit, puis renvoie la tête par l'échelle des reprises. */
+  private headAway(what: string, now: number, target: number, facts: { seekTarget?: number; stalledMs: number }): void {
+    trace(`${what} — ${this.elementState()}`);
     if (Date.now() - this.lastStallReportAt >= STALL_REPORT_COOLDOWN_MS) {
       this.lastStallReportAt = Date.now();
       try {
-        // En tête : `clean()` garde 24 champs, et celui-ci est le seul qui distingue les deux lignes.
-        this.callbacks.onStall?.({ runaway: true, ...this.stallReport(now, 0) });
+        // `runaway` en tête : `clean()` borne le nombre de champs, et c'est lui qui distingue la ligne.
+        const { stalledMs, ...rest } = facts;
+        this.callbacks.onStall?.({ runaway: true, ...rest, ...this.stallReport(now, stalledMs) });
       } catch {
         /* the log is not worth a player */
       }
     }
-    // Et on la reprend. Ce que le journal de 2012 montrait (22/09/2026) : un saut au milieu d'un
-    // groupe d'images de 8 s, le son tamponné des secondes en avance, et WebKit qui lance son
-    // horloge avant que le décodeur ait rattrapé la cible — plus une image affichée (658 images
-    // pour 55 s regardées), une tête posée à chaque envoi sur la fin de la vidéo reçue. Aucune
-    // surveillance ne le voyait : une lecture était en cours (le chien de garde s'efface
-    // devant elle), la tête était « au bord » du média, et l'horloge bougeait. Redemander la
-    // position vide les tampons et relit depuis l'image clé, avec la limite de `recover`.
-    if (!this.stuck && !this.recover(now)) this.handOver(now);
+    if (!this.recover(target)) this.handOver(now);
   }
 
   /**
@@ -1435,6 +1454,15 @@ export class MseSource {
       `lecture bloquée à ${at.toFixed(1)} s après ${this.recoveries} reprises ${this.elementState()}`,
       "playback"
     );
+  }
+
+  /**
+   * Un saut en cours, selon la source : demandé et pas encore servi, ou servi et pas encore arrivé.
+   * L'hôte le lit pour savoir quand oublier la cible qu'il a demandée — la source peut l'avoir
+   * posée ailleurs (premier média, image clé suivante), et c'est elle qui sait si c'est fini.
+   */
+  get seekPending(): boolean {
+    return this.seekIntent !== null || this.requestedSeek !== null;
   }
 
   /** What the `stop` line wants to know of the recoveries over the whole session. */

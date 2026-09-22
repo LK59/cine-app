@@ -17,6 +17,7 @@
 
 import type { BenchBridge } from "./bridge";
 import { trace } from "../webcodecs/trace";
+import { seekArrived } from "../webcodecs/seekArrival";
 import { readPlayback, seededPositions, worst, type Sample, type Verdict } from "./measure";
 
 export interface BenchItem {
@@ -232,7 +233,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
   const arrivedAt = (target: number) => () => {
     const b = bridge();
     const element = b.media();
-    return !!element && b.ready() && !element.seeking && Math.abs(element.currentTime - target) < 1.5;
+    return !!element && b.ready() && !element.seeking && seekArrived(element.currentTime, target);
   };
 
   const seekCheck = async (id: string, target: number, watchMs: number) => {

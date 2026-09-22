@@ -6,6 +6,7 @@
 // (see `requestAudioTrack`), where the engine switches its own software decoder.
 
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
+import { reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
@@ -407,7 +408,7 @@ export class RemuxPlayback {
    * réponse : même seuil qu'un saut refusé.
    */
   private get switchNeedsIndex(): boolean {
-    return !this.remuxer.seekable && this.video.currentTime > 1;
+    return !reachable(this.remuxer.seekable, this.video.currentTime);
   }
 
   /**
@@ -457,6 +458,11 @@ export class RemuxPlayback {
   }
 
   /** See MseSource.lost: the platform took the source, and only a rebuild brings it back. */
+  /** Voir `MseSource.seekPending`. Faux sans source : il n'y a alors rien en cours. */
+  get seekPending(): boolean {
+    return this.mse?.seekPending ?? false;
+  }
+
   get lost(): boolean {
     return this.mse?.lost ?? false;
   }
