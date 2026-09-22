@@ -35,6 +35,8 @@ export interface BenchBridge {
   subtitleText(): string | null;
   /** Images présentées depuis l'ouverture de l'élément, quand le navigateur le dit. */
   frames(): number | null;
+  /** Images par seconde du fichier, quand on la connaît. */
+  nominalFps(): number | null;
   /** La trace du lecteur sur les `ms` dernières millisecondes. */
   trace(ms: number): string;
   /** Faits de synchronisation et de reprise — ce que la ligne `stop` porte. */

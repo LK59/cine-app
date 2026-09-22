@@ -45,7 +45,13 @@ const RUNAWAY_FPS = 8;
 /** Entre deux échantillons, ce que l'horloge peut faire de plus que le temps réel. */
 const JUMP_TOLERANCE_S = 0.6;
 
-export function readPlayback(samples: Sample[]): PlaybackReading {
+/**
+ * Sous cette part de la cadence du fichier, l'image saccade : 18 images/s pour un film à 24 (banc
+ * du 22/09/2026, 4K Dolby Vision sur un portable) se voyait à peine dans les chiffres.
+ */
+const JUDDER_RATIO = 0.85;
+
+export function readPlayback(samples: Sample[], nominalFps: number | null = null): PlaybackReading {
   const empty: PlaybackReading = { verdict: "ok", problems: [], wallSeconds: 0, clockSeconds: 0, fps: null, longestFreezeMs: 0, jumps: 0 };
   if (samples.length < 2) return { ...empty, verdict: "warn", problems: ["trop peu d'échantillons"] };
 
@@ -106,6 +112,9 @@ export function readPlayback(samples: Sample[]): PlaybackReading {
     if (clockSeconds >= 1.5 && fps < RUNAWAY_FPS) {
       failed = true;
       problems.push(`l'horloge avance sans image : ${fps.toFixed(1)} images/s`);
+    } else if (nominalFps && clockSeconds >= 2.5 && fps < nominalFps * JUDDER_RATIO) {
+      warned = true;
+      problems.push(`saccades : ${fps.toFixed(0)} images/s pour ${nominalFps.toFixed(0)}`);
     }
   }
 

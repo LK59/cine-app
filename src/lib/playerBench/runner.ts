@@ -168,7 +168,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       if (deps.now() >= end) break;
       await deps.sleep(SAMPLE_MS);
     }
-    return readPlayback(samples);
+    return readPlayback(samples, bridge().nominalFps());
   };
 
   const record = (check: CheckResult, traceMs?: number) => {

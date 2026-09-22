@@ -73,6 +73,8 @@ export interface DirectPlayInfo {
     bitDepth: number | null;
     rangeType: string | null;
     isHdr: boolean;
+    /** Images par seconde du fichier, d'après Jellyfin — pour que le banc d'essai voie des saccades. */
+    frameRate?: number | null;
   } | null;
   audio: DirectPlayAudioTrack[];
   /**
@@ -247,6 +249,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
           height: videoStream.Height ?? null,
           bitDepth: videoStream.BitDepth ?? null,
           rangeType,
+          frameRate: videoStream.AverageFrameRate ?? null,
           isHdr,
         }
       : null,

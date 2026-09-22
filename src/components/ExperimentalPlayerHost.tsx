@@ -1956,6 +1956,7 @@ export function ExperimentalPlayerHost({
     currentAudio: number | null;
     currentSubtitle: number | null;
     subtitle: string | null;
+    fps: number | null;
   } | null>(null);
   useEffect(() => {
     benchStateRef.current = {
@@ -1970,6 +1971,7 @@ export function ExperimentalPlayerHost({
       currentAudio,
       currentSubtitle,
       subtitle,
+      fps: info?.video?.frameRate ?? null,
     };
   });
   useEffect(() => {
@@ -2007,6 +2009,7 @@ export function ExperimentalPlayerHost({
           return null;
         }
       },
+      nominalFps: () => state()?.fps ?? null,
       trace: (ms) => traceRecent(ms).join(" | "),
       facts: () => syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
     });

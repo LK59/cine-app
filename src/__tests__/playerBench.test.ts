@@ -35,6 +35,16 @@ describe("readPlayback", () => {
     expect(r.jumps).toBe(1);
   });
 
+  it("voit des saccades quand on connaît la cadence du fichier", () => {
+    // 18 images/s pour un film à 24 : l'horloge va bien, l'image non.
+    const judder = samples(41, (i) => ({ frames: Math.round(i * 4.5) }));
+    expect(readPlayback(judder).verdict).toBe("ok");
+    const r = readPlayback(judder, 24);
+    expect(r.verdict).toBe("warn");
+    expect(r.problems.join()).toMatch(/saccades : 18 images\/s pour 24/);
+    expect(readPlayback(samples(41, () => ({})), 24).verdict).toBe("ok");
+  });
+
   it("ne compte pas une pause voulue contre le rythme", () => {
     expect(readPlayback(samples(17, () => ({ paused: true, time: 5 }))).problems).toEqual(["resté en pause"]);
   });
@@ -105,6 +115,7 @@ function simulated(
     changeSubtitle: (id) => void (subtitle = id),
     subtitleText: () => (subtitle !== null ? "Bonjour" : null),
     frames: () => frames,
+    nominalFps: () => 24,
     trace: () => "trace",
     facts: () => ({ recoveries: 0 }),
   };
