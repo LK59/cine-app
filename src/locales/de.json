@@ -1421,7 +1421,9 @@
     },
     "hdrCap": {
       "title": "HDR-Helligkeit",
-      "native": "Nativ"
+      "native": "Nativ",
+      "auto": "Auto",
+      "hint": "Ändert die Helligkeit von HDR-Filmen auf diesem Bildschirm. Auto sollte passen."
     }
   },
   "cinema": {

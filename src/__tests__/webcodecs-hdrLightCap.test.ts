@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { withCappedLightLevels } from "@/lib/webcodecs/codecConfig";
 import { cappedColour } from "@/lib/webcodecs/remuxer";
-import { hdrLightCap, isChromiumOnWindows, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
+import { hdrCapRelevant, isChromiumOnWindows, readHdrCapChoice, resolveHdrCap, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 
 /**
  * 22/09/2026 : Chrome sous Windows ramène un film HDR sous la lumière maximale annoncée — *2012*
@@ -64,24 +64,55 @@ describe("withCappedLightLevels", () => {
   });
 });
 
-describe("hdrLightCap", () => {
-  it("est natif par défaut, et suit ensuite le choix fait sur l'appareil", () => {
-    // Le plafond automatique à 650 nits n'a rien changé sur Chrome (22/09/2026) : c'est désormais
-    // un choix, que rien ne fait à la place du spectateur.
+describe("le plafond de lumière HDR", () => {
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
+  const FIREFOX = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0";
+
+  it("vaut 203 d'office sur Chrome Windows avec un écran SDR, et rien ailleurs", () => {
+    // 22/09/2026 : toute la gamme comparée à l'œil, 203 — le blanc de référence de Chrome sur
+    // écran SDR — est le plus fidèle, mieux que Firefox.
+    expect(resolveHdrCap("auto", WINDOWS_CHROME, false)).toBe(203);
+    expect(resolveHdrCap("auto", WINDOWS_CHROME + " Edg/153.0", false)).toBe(203);
+    expect(resolveHdrCap("auto", WINDOWS_CHROME, true)).toBeNull();
+    expect(resolveHdrCap("auto", WINDOWS_CHROME, null)).toBeNull();
+    expect(resolveHdrCap("auto", FIREFOX, false)).toBeNull();
+    expect(resolveHdrCap("auto", IPHONE, false)).toBeNull();
+  });
+
+  it("suit un choix fait à la main, là où le réglage a un sens", () => {
+    expect(resolveHdrCap("native", WINDOWS_CHROME, false)).toBeNull();
+    expect(resolveHdrCap(150, WINDOWS_CHROME, false)).toBe(150);
+    expect(resolveHdrCap(150, FIREFOX, false)).toBe(150);
+    // Sur un écran HDR ou sous WebKit, un choix resté en mémoire ne s'applique pas.
+    expect(resolveHdrCap(150, WINDOWS_CHROME, true)).toBeNull();
+    expect(resolveHdrCap(150, IPHONE, false)).toBeNull();
+  });
+
+  it("n'est proposé ni sous WebKit, ni sur un écran HDR", () => {
+    expect(hdrCapRelevant(WINDOWS_CHROME, false)).toBe(true);
+    expect(hdrCapRelevant(FIREFOX, false)).toBe(true);
+    expect(hdrCapRelevant(IPHONE, false)).toBe(false);
+    expect(hdrCapRelevant(WINDOWS_CHROME, true)).toBe(false);
+    expect(hdrCapRelevant(WINDOWS_CHROME, null)).toBe(false);
+  });
+
+  it("garde le choix sur l'appareil, « auto » par défaut", () => {
     const store = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => void store.set(k, v),
       removeItem: (k: string) => void store.delete(k),
     });
-    expect(hdrLightCap()).toBeNull();
+    expect(readHdrCapChoice()).toBe("auto");
     writeHdrCapChoice(150);
-    expect(hdrLightCap()).toBe(150);
-    writeHdrCapChoice(null);
-    expect(hdrLightCap()).toBeNull();
+    expect(readHdrCapChoice()).toBe(150);
+    writeHdrCapChoice("native");
+    expect(readHdrCapChoice()).toBe("native");
+    writeHdrCapChoice("auto");
+    expect(store.has("cine.hdrLightCap")).toBe(false);
     // Une valeur qui n'est pas proposée ne s'applique pas.
     store.set("cine.hdrLightCap", "7");
-    expect(hdrLightCap()).toBeNull();
+    expect(readHdrCapChoice()).toBe("auto");
     vi.unstubAllGlobals();
     expect(isChromiumOnWindows(WINDOWS_CHROME + " Edg/153.0")).toBe(true);
   });

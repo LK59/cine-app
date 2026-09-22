@@ -77,7 +77,7 @@ vi.mock("@/components/PlayerControls", () => ({
     onChangeSubtitle: (id: number | null) => void;
     onSeekRequest?: (seconds: number) => void;
     suspended?: boolean;
-    hdrCap?: { current: number | null; onPick: (nits: number | null) => void };
+    hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
   }) => (
     <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
@@ -90,7 +90,7 @@ vi.mock("@/components/PlayerControls", () => ({
       >
         saut:600
       </button>
-      {props.hdrCap && <button onClick={() => props.hdrCap!.onPick(150)}>{`hdr:${props.hdrCap.current ?? "natif"}`}</button>}
+      {props.hdrCap && <button onClick={() => props.hdrCap!.onPick(150)}>{`hdr:${props.hdrCap.current}:${props.hdrCap.autoNits}`}</button>}
       {props.audioTracks.map((track) => (
         <button key={track.id} onClick={() => props.onChangeAudio(track.id)}>{`audio:${track.label}`}</button>
       ))}
@@ -1350,28 +1350,53 @@ describe("relu le 22/09/2026", () => {
     expect(typeof seeks[0].fields.tookMs).toBe("number");
   });
 
-  it("propose le plafond HDR sur un film HDR, et le choisir rouvre le lecteur au même endroit", async () => {
-    // 22/09/2026 : le plafond automatique n'a rien changé sur Chrome ; il devient un choix par
-    // appareil, natif par défaut, à comparer à l'œil. Il est écrit dans l'en-tête du flux, donc
-    // s'applique en reconstruisant.
+  /** Un navigateur et un écran : ce qui décide si le réglage de luminosité HDR a un sens. */
+  const onScreen = (userAgent: string, hdrDisplay: boolean) => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dynamic-range") ? hdrDisplay : false }));
+  };
+  const CHROME_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+  const HDR_FILM = { video: { codec: "hevc", width: 3840, height: 1600, bitDepth: 10, isHdr: true, rangeType: "HDR10" } };
+
+  it("propose la luminosité HDR sur Chrome Windows écran SDR, en Auto à 203 nits, et un choix rouvre au même endroit", async () => {
+    // 22/09/2026 : 203 nits, le blanc de référence de Chrome sur écran SDR, s'est montré le plus
+    // fidèle à l'œil ; il devient la valeur d'office, le menu restant là pour comparer.
     const store = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => void store.set(k, v),
       removeItem: (k: string) => void store.delete(k),
     });
-    swr = { data: info({ video: { codec: "hevc", width: 3840, height: 1600, bitDepth: 10, isHdr: true, rangeType: "HDR10" } }), error: undefined };
+    onScreen(CHROME_WINDOWS, false);
+    swr = { data: info(HDR_FILM), error: undefined };
     mount();
-    await waitFor(() => expect(screen.getByText("hdr:natif")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("hdr:auto:203")).toBeTruthy());
     await act(async () => void fireEvent(videoElement(420), new Event("timeupdate")));
 
     rebuildOn(1);
-    await act(async () => void fireEvent.click(screen.getByText("hdr:natif")));
+    await act(async () => void fireEvent.click(screen.getByText("hdr:auto:203")));
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1].startSeconds).toBeCloseTo(420, 1);
     expect(store.get("cine.hdrLightCap")).toBe("150");
-    await waitFor(() => expect(screen.getByText("hdr:150")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("hdr:150:203")).toBeTruthy());
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("ne propose pas la luminosité HDR sous WebKit ni sur un écran HDR", async () => {
+    swr = { data: info(HDR_FILM), error: undefined };
+    onScreen("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1", false);
+    const first = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(screen.queryByText(/^hdr:/)).toBeNull();
+    first.unmount();
+
+    onScreen(CHROME_WINDOWS, true);
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(screen.queryByText(/^hdr:/)).toBeNull();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("ne propose pas de plafond HDR sur un film SDR", async () => {

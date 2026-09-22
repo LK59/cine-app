@@ -1421,7 +1421,9 @@
     },
     "hdrCap": {
       "title": "Brillo HDR",
-      "native": "Nativo"
+      "native": "Nativo",
+      "auto": "Auto",
+      "hint": "Cambia el brillo de las películas HDR en esta pantalla. El valor Auto debería ser adecuado."
     }
   },
   "cinema": {

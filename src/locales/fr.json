@@ -1421,7 +1421,9 @@
     },
     "hdrCap": {
       "title": "Luminosité HDR",
-      "native": "Natif"
+      "native": "Natif",
+      "auto": "Auto",
+      "hint": "Change la luminosité des films HDR sur cet écran. La valeur Auto devrait convenir."
     }
   },
   "cinema": {

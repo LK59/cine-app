@@ -1421,7 +1421,9 @@
     },
     "hdrCap": {
       "title": "HDR brightness",
-      "native": "Native"
+      "native": "Native",
+      "auto": "Auto",
+      "hint": "Changes how bright HDR films look on this screen. Auto should be right."
     }
   },
   "cinema": {

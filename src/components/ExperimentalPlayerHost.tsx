@@ -11,7 +11,16 @@ import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
 import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
-import { displayIsHdr, hdrLightCap, readHdrCapChoice, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
+import {
+  autoHdrCap,
+  displayIsHdr,
+  displayIsWideGamut,
+  hdrCapRelevant,
+  hdrLightCap,
+  readHdrCapChoice,
+  writeHdrCapChoice,
+  type HdrCapChoice,
+} from "@/lib/webcodecs/hdrDisplay";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -491,7 +500,17 @@ export function ExperimentalPlayerHost({
   const [tracks, setTracks] = useState<{ audio: EngineTrack[]; subtitles: EngineTrack[] }>({ audio: [], subtitles: [] });
   const [currentAudio, setCurrentAudio] = useState<number | null>(null);
   /** Le plafond de lumière HDR choisi sur cet appareil — voir `hdrDisplay.ts`. */
-  const [hdrCapChoice, setHdrCapChoice] = useState<number | null>(readHdrCapChoice);
+  const [hdrCapChoice, setHdrCapChoice] = useState<HdrCapChoice>(readHdrCapChoice);
+  /**
+   * Le réglage n'est proposé que là où il sert — écran SDR, hors WebKit — et « auto » y vaut ce
+   * que `autoHdrCap` dit. Lu une fois à l'ouverture : l'écran ne change pas en cours de film, ou
+   * alors le film se rouvrira sur le nouveau.
+   */
+  const [hdrCapContext] = useState(() => {
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const displayHdr = displayIsHdr();
+    return { relevant: hdrCapRelevant(userAgent, displayHdr), autoNits: autoHdrCap(userAgent, displayHdr) };
+  });
   const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
@@ -1240,6 +1259,9 @@ export function ExperimentalPlayerHost({
         // voir hdrDisplay.ts. De quoi relire au journal pourquoi un film HDR a le rendu qu'il a.
         displayHdr: displayIsHdr() ?? "inconnu",
         hdrLightCap: hdrLightCap() ?? "natif",
+        // Le choix d'où vient ce plafond : « auto » d'office, ou un réglage fait à la main.
+        hdrChoice: String(readHdrCapChoice()),
+        wideGamut: displayIsWideGamut() ?? "inconnu",
       });
     };
 
@@ -2284,15 +2306,16 @@ export function ExperimentalPlayerHost({
             // Et pas de clavier non plus : l'écouteur est posé sur la fenêtre, `inert` ne l'arrête pas.
             suspended={!ready}
             hdrCap={
-              path === "remux" && info?.video?.rangeType && info.video.rangeType !== "SDR"
+              path === "remux" && hdrCapContext.relevant && info?.video?.rangeType && info.video.rangeType !== "SDR"
                 ? {
                     current: hdrCapChoice,
-                    onPick: (nits) => {
-                      writeHdrCapChoice(nits);
-                      setHdrCapChoice(nits);
+                    autoNits: hdrCapContext.autoNits,
+                    onPick: (choice) => {
+                      writeHdrCapChoice(choice);
+                      setHdrCapChoice(choice);
                       // Le plafond est écrit dans l'en-tête du flux : il faut le reconstruire,
                       // à la même position, comme pour un changement de piste.
-                      restart(intendedPosition(), `plafond HDR ${nits ?? "natif"}`);
+                      restart(intendedPosition(), `plafond HDR ${choice}`);
                     },
                   }
                 : undefined

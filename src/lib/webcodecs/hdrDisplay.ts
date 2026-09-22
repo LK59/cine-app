@@ -12,37 +12,67 @@
  * rendre toute la plage, et le plafond ne ferait qu'écrêter des reflets qu'il sait montrer.
  */
 
+import { isWebKitEngine } from "@/lib/webkitEngine";
+
 /**
- * Les plafonds proposés, `null` étant « natif » : la lumière du fichier, telle quelle.
+ * Le plafond de lumière HDR : « auto » par défaut, « natif », ou un nombre de nits.
  *
- * Le plafond automatique à 650 nits (22/09/2026) n'a rien changé, et l'analyse de Chrome dit
- * pourquoi : son opérateur (ST 2094-50 annexe C) assombrit d'un diaphragme fixe tout ce qui passe
- * sous le blanc de référence dès que la lumière annoncée dépasse environ deux fois ce blanc — 203
- * nits sur l'écran où c'était mesuré, donc tout MaxCLL au-dessus de ~400. En attendant de savoir à
- * l'œil ce que donne chaque niveau, c'est un choix du spectateur, par appareil, et non plus une
- * détection. 203 est le blanc de référence lui-même.
+ * Chrome assombrit d'un diaphragme fixe tout ce qui passe sous son blanc de référence dès que la
+ * lumière annoncée dépasse environ deux fois ce blanc (opérateur ST 2094-50 annexe C). Ce blanc
+ * vaut 203 nits sur un écran qui n'affiche pas le HDR : annoncer 203, c'est retirer cet
+ * assombrissement. Comparé à l'œil sur toute la gamme (22/09/2026, Chrome Windows, écran SDR) :
+ * 203 est le plus fidèle, plus que Firefox. D'où « auto » = 203 là, et le fichier tel quel
+ * ailleurs, en attendant d'avoir regardé les autres navigateurs.
  */
-export const HDR_CAP_CHOICES: readonly (number | null)[] = [null, 650, 400, 203, 150, 100];
+export type HdrCapChoice = "auto" | "native" | number;
+
+export const HDR_CAP_CHOICES: readonly HdrCapChoice[] = ["auto", "native", 650, 400, 203, 150, 100];
+
+/** Le blanc de référence de Chrome sur un écran SDR, mesuré dans `chrome://gpu`. */
+export const CHROME_SDR_WHITE_NITS = 203;
 
 const HDR_CAP_KEY = "cine.hdrLightCap";
 
-/** Le plafond choisi sur cet appareil, `null` pour natif — y compris quand rien n'est lisible. */
-export function readHdrCapChoice(): number | null {
+/** Le choix fait sur cet appareil ; « auto » quand il n'y en a pas, ou qu'il est illisible. */
+export function readHdrCapChoice(): HdrCapChoice {
   try {
-    const stored = Number(globalThis.localStorage?.getItem(HDR_CAP_KEY));
-    return HDR_CAP_CHOICES.includes(stored) ? stored : null;
+    const stored = globalThis.localStorage?.getItem(HDR_CAP_KEY);
+    if (stored === "native") return "native";
+    const nits = Number(stored);
+    return stored && HDR_CAP_CHOICES.includes(nits) ? nits : "auto";
   } catch {
-    return null;
+    return "auto";
   }
 }
 
-export function writeHdrCapChoice(nits: number | null): void {
+export function writeHdrCapChoice(choice: HdrCapChoice): void {
   try {
-    if (nits === null) globalThis.localStorage?.removeItem(HDR_CAP_KEY);
-    else globalThis.localStorage?.setItem(HDR_CAP_KEY, String(nits));
+    if (choice === "auto") globalThis.localStorage?.removeItem(HDR_CAP_KEY);
+    else globalThis.localStorage?.setItem(HDR_CAP_KEY, String(choice));
   } catch {
     // Navigation privée ou stockage refusé : le choix vaut pour cette ouverture seulement.
   }
+}
+
+/** Ce que « auto » veut dire ici : 203 pour Chrome/Edge sous Windows sur écran SDR, sinon rien. */
+export function autoHdrCap(userAgent: string, displayHdr: boolean | null): number | null {
+  return isChromiumOnWindows(userAgent) && displayHdr === false ? CHROME_SDR_WHITE_NITS : null;
+}
+
+/**
+ * Le réglage a-t-il un sens ici ? Sur un écran HDR, le plafond ne ferait qu'écrêter des reflets
+ * que l'écran sait montrer ; sous WebKit, la conversion (EDR) est déjà juste et n'a pas à être
+ * corrigée. Une réponse inconnue de l'écran ne le propose pas non plus : dans le doute, rien.
+ */
+export function hdrCapRelevant(userAgent: string, displayHdr: boolean | null): boolean {
+  return displayHdr === false && !isWebKitEngine(userAgent);
+}
+
+export function resolveHdrCap(choice: HdrCapChoice, userAgent: string, displayHdr: boolean | null): number | null {
+  if (!hdrCapRelevant(userAgent, displayHdr)) return null;
+  if (choice === "native") return null;
+  if (choice === "auto") return autoHdrCap(userAgent, displayHdr);
+  return choice;
 }
 
 /**
@@ -66,7 +96,18 @@ export function displayIsHdr(): boolean | null {
   }
 }
 
-/** Le plafond à appliquer à la prochaine ouverture, ou `null` (natif). */
+/** `color-gamut: p3`, comme `displayIsHdr` : `null` quand la question ne répond pas. */
+export function displayIsWideGamut(): boolean | null {
+  try {
+    if (typeof matchMedia !== "function") return null;
+    return matchMedia("(color-gamut: p3)").matches;
+  } catch {
+    return null;
+  }
+}
+
+/** Le plafond à appliquer à la prochaine ouverture, ou `null` (le fichier tel quel). */
 export function hdrLightCap(): number | null {
-  return readHdrCapChoice();
+  const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  return resolveHdrCap(readHdrCapChoice(), userAgent, displayIsHdr());
 }
