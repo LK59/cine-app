@@ -780,6 +780,29 @@ describe("MseSource", () => {
     expect(remuxer.seeks).toEqual([1499.8]);
   });
 
+  it("sert le dernier saut d'une rafale arrivée pendant qu'une lecture réseau finissait", async () => {
+    // Banc du 22/09/2026, serveur distant : cinq sauts en 0,6 s arrivaient au dernier en 6,5 s.
+    // Le premier attendait la fin de la lecture en cours, puis lisait sa propre position — déjà
+    // abandonnée — et le dernier attendait à son tour cette lecture-là.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2, true, 40);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    await new Promise((r) => setTimeout(r, 20));
+
+    void mse.seek(300);
+    // Le premier saut est parti, et attend la lecture en cours.
+    await new Promise((r) => setTimeout(r, 5));
+    void mse.seek(900);
+    await mse.seek(1500);
+    await flush();
+
+    // Un seul saut servi, le dernier (moins le retard de présentation s'il est déjà connu).
+    expect(remuxer.seeks).toHaveLength(1);
+    expect(remuxer.seeks[0]).toBeGreaterThan(1499);
+    mse.destroy();
+  });
+
   it("keeps a playable amount of media even while the system says it wants none", async () => {
     const video = fakeVideo();
     class NeverStreaming extends FakeSource {

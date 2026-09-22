@@ -873,6 +873,13 @@ export class MseSource {
     // back. Moving the reader before then would corrupt it.
     await this.fillTask?.catch(() => {});
 
+    // Pendant cette attente — une lecture réseau qui finit, deux secondes sur un serveur lointain —
+    // d'autres sauts ont pu arriver : un doigt qui glisse sur la barre. Servir celui-ci lirait une
+    // position déjà abandonnée, que le dernier attendrait à son tour (banc du 22/09/2026 : cinq
+    // sauts en 0,6 s, 6,5 s pour arriver au dernier). On sert directement le plus récent.
+    const latest = this.requestedSeek;
+    if (latest !== null && latest !== requested) return this.performSeek(latest);
+
     // No abort() here any more. Cancelling an operation mid-flight leaves the buffer's parser in
     // a state the next append has to be careful about, and the queue already guarantees that
     // whatever was running has finished before this removal starts.
