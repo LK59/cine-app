@@ -14,7 +14,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, setHdrLightCap, playableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 
@@ -195,8 +195,9 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
   // Avant tout remultiplexage : le plafond de lumière HDR choisi sur cet appareil, s'il y en a
   // un — voir `hdrDisplay.ts`.
   const displayHdr = displayIsHdr();
+  // Lu une fois ici et passé au remultiplexeur de cette ouverture seulement (`RemuxOptions`) : une
+  // variable de module, posée à chaque ouverture, était lue par toutes les chaînes vivantes.
   const lightCap = hdrLightCap();
-  setHdrLightCap(lightCap);
   trace("ouverture du flux");
   trace(
     `écran HDR : ${displayHdr === null ? "inconnu" : displayHdr ? "oui" : "non"}` +
@@ -238,6 +239,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
     dimensions: { width: videoTrack.video?.width ?? 1920, height: videoTrack.video?.height ?? 1080 },
     videoRangeType: options.videoRangeType,
     startSeconds: options.startSeconds,
+    remux: { lightCapNits: lightCap },
   });
 
   trace(`chemin choisi : ${describePath(chosen)}`);

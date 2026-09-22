@@ -361,8 +361,9 @@ Four rules, each of which cost a real failure:
   and played no sound), and the same-format change "in the buffer" — removed on 2026-09-22 — was
   slower than a rebuild on every engine and left a lasting A/V offset on WebKit. The only refusal
   is a file with no index past its first second (`noIndexAudio`). Delivery stays behind `perTrack`:
-  each track in its best form (default), or `perTrack = false` for per-file unification. See
-  DOC-TECH "Audio delivery".
+  each track in its best form (default), or `perTrack: false` for per-file unification — an
+  option passed to `Remuxer.open` (`RemuxOptions`, with the HDR light cap), never a module
+  setting, so two live pipelines cannot read each other's. See DOC-TECH "Audio delivery".
 - **`CACHE_NAME` in `public/sw.js`.** Bumping it evicts every cached asset for every installed PWA;
   the version history in that file's header says why each bump happened. Since v12 the app's code lives in
   per-build caches (`cine-static-<build>`, the build number rides on `/sw.js?v=`): the current

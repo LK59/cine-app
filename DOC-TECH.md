@@ -472,8 +472,9 @@ cost 2 to 15 s on iPhone, where a recovery rebuild took 0.3 to 0.5 s.
 
 Rebuilding tears a *healthy* MediaSource down mid-playback. The 2026-09-03 attempt below, "rebuild
 the MediaSource", failed because it swapped a MediaSource under a running pipeline; this tears the
-whole pipeline down and builds a new one on the element, and holds on device. Setting
-`perTrack = false` restores the per-file unification below; track changes rebuild there too.
+whole pipeline down and builds a new one on the element, and holds on device. Passing
+`perTrack: false` (`RemuxOptions`, given to `Remuxer.open` and to the plan functions — no longer a
+module-level setting) restores the per-file unification below; track changes rebuild there too.
 
 What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what now holds it:
 

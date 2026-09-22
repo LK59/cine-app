@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   Remuxer, unifiedAudioCodec, audioDelivery, plannedMimeTypes, playableAudio, remuxableAudio,
-  setPerTrackAudioDelivery, unifiedAudioChannels,
+  unifiedAudioChannels,
 } from "@/lib/webcodecs/remuxer";
 import type { MatroskaFile, MatroskaTrack, MediaSample } from "@/lib/webcodecs/matroska";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
@@ -225,19 +225,18 @@ describe("Remuxer track selection", () => {
     // other language changes what the audio buffer decodes by mid-playback — which this device
     // answers with "media failed to decode", closing the MediaSource and taking the picture with
     // it. So both are delivered re-encoded and the codec never changes. This is the mode kept
-    // behind setPerTrackAudioDelivery(false) since per-track delivery became the default.
-    setPerTrackAudioDelivery(false);
-    onTestFinished(() => setPerTrackAudioDelivery(true));
+    // behind `perTrack: false` since per-track delivery became the default.
+    const unify = { perTrack: false };
     const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
     const ac3 = track({ number: 8, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 2 } });
     const file = { ...FILE, tracks: [VIDEO, dts, ac3] } as never;
 
-    expect(unifiedAudioCodec(file)).toBe("mp4a.40.2");
-    expect(audioDelivery(ac3)).toBe("copy");
-    expect(audioDelivery(ac3, file)).toBe("transcode");
-    expect(plannedMimeTypes(VIDEO, ac3, file).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
+    expect(unifiedAudioCodec(file, unify)).toBe("mp4a.40.2");
+    expect(audioDelivery(ac3, undefined, unify)).toBe("copy");
+    expect(audioDelivery(ac3, file, unify)).toBe("transcode");
+    expect(plannedMimeTypes(VIDEO, ac3, file, unify).audio).toBe('audio/mp4; codecs="mp4a.40.2"');
     // And the track that was already going to be re-encoded is unaffected.
-    expect(audioDelivery(dts, file)).toBe("transcode");
+    expect(audioDelivery(dts, file, unify)).toBe("transcode");
   });
 
   it("delivers each track in its best form — per-track delivery", () => {
@@ -259,9 +258,9 @@ describe("Remuxer track selection", () => {
     expect(unifiedAudioChannels(file)).toBe(8);
 
     // Per-file unification, the other mode: the copied track is re-encoded too.
-    setPerTrackAudioDelivery(false);
-    expect(audioDelivery(eac3, file)).toBe("transcode");
-    setPerTrackAudioDelivery(true);
+    expect(audioDelivery(eac3, file, { perTrack: false })).toBe("transcode");
+    // Asked of one call, it leaves the next one — and every other pipeline — on the default.
+    expect(audioDelivery(eac3, file)).toBe("copy");
   });
 
   it("leaves a file whose tracks already agree completely alone", () => {
@@ -315,6 +314,59 @@ describe("Remuxer track selection", () => {
     // reason to guess at the channel layout.
     const ac3 = track({ number: 2, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 6 } });
     await expect(Remuxer.open(SOURCE, FILE, VIDEO, ac3, { width: 1920, height: 1080 })).rejects.toThrow(/AC-3/);
+  });
+});
+
+/**
+ * Les réglages d'une ouverture appartiennent à ce remultiplexeur, pas au module.
+ *
+ * Le plafond de lumière HDR était une variable de module, posée par `probePlaybackPath` avant
+ * chaque ouverture et relue à chaque image. Deux chaînes vivent parfois ensemble — la
+ * reconstruction qui relève un lecteur ouvre la nouvelle pendant que l'ancienne produit encore — et
+ * la dernière ouverte imposait son réglage à l'autre.
+ */
+describe("les options d'ouverture", () => {
+  // SEI préfixe « content light level » : MaxCLL 4451 (0x1163), MaxFALL 700 (0x02bc), puis l'IDR.
+  const CLL = [0, 0, 0, 9, 39 << 1, 1, 144, 4, 0x11, 0x63, 0x02, 0xbc, 0x80];
+  const picture = (): MediaSample => ({ ...idr(0), data: new Uint8Array([...CLL, 0, 0, 0, 3, 0x26, 0x01, 0xaf]) });
+  const has = (haystack: Uint8Array, needle: number[]) =>
+    haystack.some((_, i) => needle.every((b, j) => haystack[i + j] === b));
+  // Le `HVCC` commun s'arrête avant `lengthSizeMinusOne` et se lit donc en longueurs d'un octet ;
+  // celui-ci annonce les quatre octets que portent les images ci-dessus.
+  const HEVC4 = track({ ...VIDEO, codecPrivate: new Uint8Array([...HVCC.subarray(0, 21), 0xff, 0]) });
+
+  it("gardent à chaque remultiplexeur son propre plafond de lumière", async () => {
+    readerSamples = [picture()];
+    try {
+      const dims = { width: 1920, height: 1080 };
+      const capped = await Remuxer.open(SOURCE, FILE, HEVC4, null, dims, null, 0, { lightCapNits: 650 });
+      // Ouvert après, sans plafond, pendant que le premier vit encore — une reconstruction, une
+      // sonde : il n'a ni à lui retirer le sien, ni à en hériter.
+      const natural = await Remuxer.open(SOURCE, FILE, HEVC4, null, dims);
+
+      const cappedVideo = (await capped.nextSegment())!.video;
+      const naturalVideo = (await natural.nextSegment())!.video;
+      const bytes = (parts: Uint8Array[]) => new Uint8Array(parts.flatMap((p) => [...p]));
+
+      // 650 = 0x028a, en MaxCLL comme en MaxFALL ; le second n'a pas été touché.
+      expect(has(bytes(cappedVideo), [144, 4, 0x02, 0x8a, 0x02, 0x8a])).toBe(true);
+      expect(has(bytes(naturalVideo), [144, 4, 0x11, 0x63, 0x02, 0xbc])).toBe(true);
+    } finally {
+      readerSamples = [];
+    }
+  });
+
+  it("gardent à chaque remultiplexeur sa propre livraison audio", async () => {
+    // DTS et AC-3 : unifiés, l'AC-3 serait ré-encodé ; livrés piste par piste, il est copié.
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    const ac3 = track({ number: 8, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 2 } });
+    const file = { ...FILE, tracks: [VIDEO, dts, ac3] } as MatroskaFile;
+    const unified = await Remuxer.open(SOURCE, file, VIDEO, ac3, { width: 1920, height: 1080 }, null, 0, { perTrack: false });
+    expect(unified.plan().audioMimeType).toBe('audio/mp4; codecs="mp4a.40.2"');
+    expect(unified.diagnostics().transcodedAudio).toBe(true);
+    // Et l'ouverture suivante, sans rien demander, revient au défaut.
+    expect(plannedMimeTypes(VIDEO, ac3, file).audio).toBe('audio/mp4; codecs="ac-3"');
+    unified.close();
   });
 });
 

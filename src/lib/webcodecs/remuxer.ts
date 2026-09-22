@@ -190,13 +190,14 @@ function videoCodecString(track: MatroskaTrack): string | null {
 export function plannedMimeTypes(
   videoTrack: MatroskaTrack,
   audioTrack: MatroskaTrack | null,
-  file?: MatroskaFile
+  file?: MatroskaFile,
+  options?: AudioDeliveryOptions
 ): { video: string | null; audio: string | null } {
   const video = videoCodecString(videoTrack);
   // What will arrive in the container, which for a re-encoded track is not what is in the file.
   const audio = !audioTrack
     ? null
-    : audioDelivery(audioTrack, file) === "transcode"
+    : audioDelivery(audioTrack, file, options) === "transcode"
       ? TRANSCODED_CODEC()
       : audioCodecString(audioTrack);
   return {
@@ -247,14 +248,34 @@ function naturalDelivery(track: MatroskaTrack): AudioDelivery {
  * change le codec d'un tampon vivant, ni ne remplace une MediaSource saine en cours de lecture
  * sur place ; c'est le lecteur entier qui est reconstruit, comme après une coupure.
  */
-let perTrack = true;
+export const DEFAULT_PER_TRACK = true;
 
 /**
- * La lumière maximale annoncée au navigateur, plafonnée — ou `null` pour la laisser telle quelle.
- * Posée par `probePlaybackPath` : sur Chrome ou Edge sous Windows, quand l'écran n'affiche pas le
- * HDR. Voir `withCappedLightLevels` et `hdrLuminanceCap`.
+ * Ce qu'un remultiplexeur reçoit en paramètre à son ouverture, et garde pour lui.
+ *
+ * C'étaient deux variables de module, posées juste avant chaque ouverture (`setHdrLightCap`,
+ * `setPerTrackAudioDelivery`) et relues pendant toute la vie du remultiplexeur — à chaque image
+ * pour le plafond de lumière. Or deux chaînes vivent parfois en même temps : la reconstruction
+ * qui relève un lecteur ouvre la nouvelle pendant que l'ancienne produit encore, et la sonde d'un
+ * fichier suivant peut tourner pendant qu'un autre joue. Chacune lisait alors le réglage posé par
+ * la dernière arrivée, pas le sien. Passés à l'ouverture, ils ne peuvent plus fuir de l'une à
+ * l'autre.
  */
-let lightCapNits: number | null = null;
+export interface RemuxOptions {
+  /** La livraison par piste (défaut) ou l'unification par fichier — voir `DEFAULT_PER_TRACK`. */
+  perTrack?: boolean;
+  /**
+   * La lumière maximale annoncée au navigateur, plafonnée — ou `null` (défaut) pour la laisser
+   * telle quelle. Choisie par `probePlaybackPath` : sur Chrome ou Edge sous Windows, quand l'écran
+   * n'affiche pas le HDR. Voir `withCappedLightLevels` et `hdrLuminanceCap`.
+   */
+  lightCapNits?: number | null;
+}
+
+/** Ce que les fonctions de plan lisent des options : la livraison seulement. */
+export type AudioDeliveryOptions = Pick<RemuxOptions, "perTrack">;
+
+const perTrackOf = (options: AudioDeliveryOptions | undefined): boolean => options?.perTrack ?? DEFAULT_PER_TRACK;
 
 /** La description de l'en-tête, plafonnée de la même façon que le flux. */
 export function cappedColour(colour: TrackColour | undefined, cap: number | null): TrackColour | undefined {
@@ -268,18 +289,6 @@ export function cappedColour(colour: TrackColour | undefined, cap: number | null
     ...(colour.maxFrameAverageNits ? (colour.maxFrameAverageNits > cap ? { maxFrameAverageNits: cap } : {}) : pq ? { maxFrameAverageNits: cap } : {}),
     ...(colour.masteringMaxNits && colour.masteringMaxNits > cap ? { masteringMaxNits: cap } : {}),
   };
-}
-
-export function setHdrLightCap(nits: number | null): void {
-  lightCapNits = nits;
-}
-
-export function setPerTrackAudioDelivery(value: boolean): void {
-  perTrack = value;
-}
-
-export function perTrackAudioDelivery(): boolean {
-  return perTrack;
 }
 
 /** What a re-encoded track is delivered as, and therefore what every track is unified to. */
@@ -300,16 +309,16 @@ const TRANSCODED_CODEC = () => transcodeTargetCodec();
  * are, they are all delivered re-encoded, decided once when the file is opened. The codec then
  * never changes for the life of the MediaSource. (Changing language then emptied the audio
  * buffer and read it again; since 2026-09-22 every change rebuilds the player instead, so this
- * design — kept behind `perTrack = false` — no longer has a transition to protect.)
+ * design — kept behind `perTrack: false` — no longer has a transition to protect.)
  *
  * The cost is real and worth naming: on a file that mixes codecs, a track that could have ridden
  * through untouched is decoded and encoded again. It buys a language change that cannot break
  * playback. A file whose tracks already agree — most of the library — pays nothing.
  */
-export function unifiedAudioCodec(file: MatroskaFile): string | null {
+export function unifiedAudioCodec(file: MatroskaFile, options?: AudioDeliveryOptions): string | null {
   // Not needed where each track is delivered on its own and a change of track rebuilds the
-  // player — see perTrack.
-  if (perTrack) return null;
+  // player — see DEFAULT_PER_TRACK.
+  if (perTrackOf(options)) return null;
 
   const audio = file.tracks.filter((t) => t.type === "audio" && naturalDelivery(t) !== "none");
   if (audio.length < 2) return null;
@@ -353,7 +362,8 @@ export function unifiedAudioCodec(file: MatroskaFile): string | null {
  * Gardée telle quelle pour ne rien changer à ce qui est livré ; la retirer est une décision à
  * part — elle rendrait à chaque piste ré-encodée son propre nombre de canaux.
  */
-export function unifiedAudioChannels(file: MatroskaFile): number | null {
+export function unifiedAudioChannels(file: MatroskaFile, options?: AudioDeliveryOptions): number | null {
+  const perTrack = perTrackOf(options);
   // Livrées piste par piste, seules les pistes ré-encodées partagent un tampon sans reconstruction
   // — elles sortent toutes dans le même codec — et c'est entre elles seulement que le nombre de
   // canaux doit être le même. Une piste copiée garde évidemment les siens.
@@ -382,11 +392,11 @@ export function unifiedAudioChannels(file: MatroskaFile): number | null {
  * Given the file as well, the answer also accounts for the other tracks in it: see
  * {@link unifiedAudioCodec}.
  */
-export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile): AudioDelivery {
+export function audioDelivery(track: MatroskaTrack, file?: MatroskaFile, options?: AudioDeliveryOptions): AudioDelivery {
   const natural = naturalDelivery(track);
   if (!file || natural === "none") return natural;
 
-  const unified = unifiedAudioCodec(file);
+  const unified = unifiedAudioCodec(file, options);
   if (!unified) return natural;
   if (natural === "copy" && audioCodecString(track) === unified) return "copy";
   return "transcode";
@@ -613,7 +623,12 @@ export class Remuxer {
      * ferait rejeter le segment d'initialisation entier — la règle de CLAUDE.md sur les boîtes qui
      * se contredisent, appliquée cette fois entre le conteneur et le type MIME.
      */
-    private readonly dolbyVisionCodec: string | null = null
+    private readonly dolbyVisionCodec: string | null = null,
+    /** Les options de son ouverture, à lui seul — voir `RemuxOptions`. */
+    private readonly settings: { perTrack: boolean; lightCapNits: number | null } = {
+      perTrack: DEFAULT_PER_TRACK,
+      lightCapNits: null,
+    }
   ) {
     this.nalLength = nalLengthSize(videoTrack.codecId, videoTrack.codecPrivate);
   }
@@ -636,8 +651,10 @@ export class Remuxer {
      * film, puis sautait : une reconstruction à une heure lisait d'abord les premières secondes
      * du fichier — 0,7 s de plus, relevées sur iPhone le 21/09/2026, pour rien.
      */
-    startSeconds = 0
+    startSeconds = 0,
+    options: RemuxOptions = {}
   ): Promise<Remuxer> {
+    const settings = { perTrack: perTrackOf(options), lightCapNits: options.lightCapNits ?? null };
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
@@ -645,8 +662,8 @@ export class Remuxer {
     // A track that cannot ride in the container is decoded and encoded again on the way through,
     // and the encoder — not the file — is then what describes it.
     const transcoder =
-      audioTrack && audioDelivery(audioTrack, file) === "transcode"
-        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file) ?? undefined, file)
+      audioTrack && audioDelivery(audioTrack, file, settings) === "transcode"
+        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file)
         : null;
     if (transcoder) assertContainerTakes(transcoder);
     const audioInfo = audioTrack
@@ -666,7 +683,7 @@ export class Remuxer {
         dimensions.width,
         dimensions.height,
         dolbyVision,
-        cappedColour(videoTrack.video?.colour, lightCapNits)
+        cappedColour(videoTrack.video?.colour, settings.lightCapNits)
       ),
       width: dimensions.width,
       height: dimensions.height,
@@ -682,7 +699,8 @@ export class Remuxer {
       reader,
       source,
       transcoder,
-      dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null
+      dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null,
+      settings
     );
   }
 
@@ -697,7 +715,7 @@ export class Remuxer {
         ? null
         : this.transcoder
           ? `audio/mp4; codecs="${this.transcoder.codecString}"`
-          : plannedMimeTypes(this.videoTrack, this.audioTrack, this.file).audio,
+          : plannedMimeTypes(this.videoTrack, this.audioTrack, this.file, this.settings).audio,
       videoInit: initSegment(this.videoInfo, duration),
       audioInit: this.audioInfo ? initSegment(this.audioInfo, duration) : null,
       durationSeconds: duration,
@@ -917,8 +935,9 @@ export class Remuxer {
           sample = { ...sample, data: joinBytes([...this.strayAhead, sample.data]) };
           this.strayAhead = [];
         }
-        if (lightCapNits !== null && this.videoTrack.codecId === "V_MPEGH/ISO/HEVC") {
-          sample = { ...sample, data: withCappedLightLevels(sample.data, this.nalLength, lightCapNits) };
+        const cap = this.settings.lightCapNits;
+        if (cap !== null && this.videoTrack.codecId === "V_MPEGH/ISO/HEVC") {
+          sample = { ...sample, data: withCappedLightLevels(sample.data, this.nalLength, cap) };
         }
         // A cluster does not have to begin on a picture a decoder can start on, and handing over
         // the ones that precede it produces a segment the browser holds but can never show —
@@ -1088,7 +1107,7 @@ export class Remuxer {
     const why = cause instanceof Error ? cause.message : String(cause);
     trace(`transcodage audio : chaîne en échec (${why}), reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
     const previous = this.transcoder;
-    const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file) ?? undefined, this.file);
+    const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file);
     // Fermé pendant l'ouverture : ce transcodeur n'aurait plus aucun propriétaire.
     if (this.closed) {
       next.close();

@@ -21,7 +21,7 @@
 import { openSync, readSync, closeSync, statSync } from "node:fs";
 import { describe, it } from "vitest";
 import { parseMatroska } from "@/lib/webcodecs/matroska";
-import { Remuxer, setPerTrackAudioDelivery } from "@/lib/webcodecs/remuxer";
+import { Remuxer } from "@/lib/webcodecs/remuxer";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
 const anySource = { isTypeSupported: () => true };
@@ -62,8 +62,8 @@ const bilan = (quoi: string, ms: number) =>
 
 describe.skipIf(!process.env.COUT_FILE)("coût", () => {
   it("ouverture et saut", { timeout: 600_000 }, async () => {
-    // Livraison par piste (le défaut) : pas d'unification, donc pas d'encodeur à réclamer ici.
-    setPerTrackAudioDelivery(true);
+    // Livraison par piste (le défaut) : pas d'unification, donc pas d'encodeur à réclamer ici —
+    // passée explicitement à `Remuxer.open` plus bas.
     const src = source(process.env.COUT_FILE!);
     console.log(`fichier : ${(src.size / 1024 / 1024 / 1024).toFixed(2)} Go`);
 
@@ -78,9 +78,11 @@ describe.skipIf(!process.env.COUT_FILE)("coût", () => {
 
     remise();
     t = performance.now();
-    const remuxer = await Remuxer.open(src, file, video, audio, {
-      width: video.video?.width ?? 1920, height: video.video?.height ?? 1080,
-    });
+    const remuxer = await Remuxer.open(
+      src, file, video, audio,
+      { width: video.video?.width ?? 1920, height: video.video?.height ?? 1080 },
+      null, 0, { perTrack: true }
+    );
     bilan("ouverture du remultiplexeur", performance.now() - t);
 
     remise();

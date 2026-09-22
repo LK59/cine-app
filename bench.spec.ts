@@ -6,7 +6,7 @@
 
 import { openSync, readSync, closeSync, statSync, writeFileSync } from "node:fs";
 import { openMediaFile } from "@/lib/webcodecs/mediaFile";
-import { Remuxer, setPerTrackAudioDelivery } from "@/lib/webcodecs/remuxer";
+import { Remuxer } from "@/lib/webcodecs/remuxer";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
 // The remuxer asks the browser what it will accept. Here it accepts everything, so every track
@@ -64,8 +64,7 @@ describe.skipIf(!process.env.BENCH_FILE)("banc", () => {
   it("remultiplexe un vrai fichier", { timeout: 600_000 }, async () => {
     // Unification would re-encode every track on a file that mixes codecs, and there is no
     // AudioEncoder here. Per-track delivery (the default) keeps it off, so the copied path — the
-    // one whose bytes are being checked — runs.
-    setPerTrackAudioDelivery(true);
+    // one whose bytes are being checked — runs. Passed explicitly to `Remuxer.open` below.
     const source = fileSource(path);
     // Matroska ou MP4 : la même porte que le lecteur (mediaFile.ts).
     const file = await openMediaFile(source);
@@ -85,10 +84,16 @@ describe.skipIf(!process.env.BENCH_FILE)("banc", () => {
     console.log(`pistes : ${file.tracks.map((t) => `${t.number}:${t.type}:${t.codecId}`).join(" ")}`);
     console.log(`vidéo ${video.codecId} ${video.video?.width}×${video.video?.height}, audio ${audio?.codecId ?? "aucune"}`);
     
-    const remuxer = await Remuxer.open(source, file, video, audio, {
-      width: video.video?.width ?? 1920,
-      height: video.video?.height ?? 1080,
-    });
+    const remuxer = await Remuxer.open(
+      source,
+      file,
+      video,
+      audio,
+      { width: video.video?.width ?? 1920, height: video.video?.height ?? 1080 },
+      null,
+      0,
+      { perTrack: true }
+    );
     const plan = remuxer.plan();
     console.log(`plan : ${plan.videoMimeType} + ${plan.audioMimeType}`);
     

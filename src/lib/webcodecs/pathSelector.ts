@@ -33,6 +33,7 @@ import {
   plannedMimeTypes,
   playableAudio,
   remuxableVideo,
+  type RemuxOptions,
   type RemuxPlan,
 } from "./remuxer";
 
@@ -67,6 +68,12 @@ export interface PathInput {
   videoRangeType?: string | null;
   /** Où la lecture commencera — pour y amorcer un encodeur audio, voir `Remuxer.open`. */
   startSeconds?: number;
+  /**
+   * Les réglages de ce remultiplexage — plafond de lumière HDR, livraison audio —, donnés à
+   * l'ouverture et non plus posés sur le module : voir `RemuxOptions`. Le plan (types MIME,
+   * ré-encodage ou non) et le remultiplexeur ouvert lisent les mêmes.
+   */
+  remux?: RemuxOptions;
 }
 
 /**
@@ -192,7 +199,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   // Asked before a megabyte and a half of decoder is fetched. A track that has to be re-encoded
   // is only carried here if this browser will do the encoding, and finding that out afterwards
   // would mean paying for the download to learn it.
-  if (audioTrack && audioDelivery(audioTrack, file) === "transcode") {
+  if (audioTrack && audioDelivery(audioTrack, file, input.remux) === "transcode") {
     const rate = audioTrack.audio?.sampleRate ?? 48000;
     const channels = audioTrack.audio?.channels ?? 2;
     trace(`chemin : ${audioTrack.codecId} doit être ré-encodé, on cherche un codec en ${channels} canaux`);
@@ -214,7 +221,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
 
   // Asked before anything is opened. Describing an AC-3 track means reading a frame out of the
   // file, and there is no reason to pay for that only to be told the browser wanted none of it.
-  const mime = plannedMimeTypes(videoTrack, audioTrack, file);
+  const mime = plannedMimeTypes(videoTrack, audioTrack, file, input.remux);
   const playable = playabilityOf({
     videoMimeType: mime.video ?? "",
     audioMimeType: mime.audio,
@@ -255,7 +262,8 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
       audioTrack,
       dimensions,
       dv.kind === "dolby" ? dv.box : null,
-      input.startSeconds ?? 0
+      input.startSeconds ?? 0,
+      input.remux
     );
     trace("chemin : remultiplexeur ouvert");
     return { remuxer, plan: remuxer.plan() };
