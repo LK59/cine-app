@@ -74,6 +74,7 @@ function BenchRunner() {
         ask: benchAsk,
         progress: benchProgress,
         cancelled: () => benchStore.get().cancelled,
+        hidden: () => document.visibilityState === "hidden",
         report: (result) => {
           benchAddResult(result);
           post({ kind: "item", runId: config.runId, depth: config.depth, interactive: config.interactive, ...result });

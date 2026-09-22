@@ -1539,7 +1539,7 @@
   },
   "bench": {
     "title": "Banc d'essai du lecteur",
-    "hint": "Ouvre de vrais films sur cet appareil et les éprouve comme un spectateur : sauts, pauses, langues, sous-titres. Les résultats sont enregistrés sur le serveur ; aucune reprise ni aucun « vu » n'est modifié.",
+    "hint": "Ouvre de vrais films sur cet appareil et les éprouve comme un spectateur : sauts, pauses, langues, sous-titres. Les résultats sont enregistrés sur le serveur ; aucune reprise ni aucun « vu » n'est modifié. Garde cette fenêtre visible pendant le banc : cachée, le navigateur cesse d'afficher la vidéo.",
     "prepare": "Préparer un banc",
     "loading": "Chargement des films…",
     "empty": "Le journal du lecteur ne connaît encore aucun film.",

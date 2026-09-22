@@ -1539,7 +1539,7 @@
   },
   "bench": {
     "title": "Banco de pruebas del reproductor",
-    "hint": "Abre películas reales en este dispositivo y las somete a lo que hace un espectador: saltos, pausas, idiomas, subtítulos. Los resultados se guardan en el servidor; no se modifica ninguna reanudación ni ningún «visto».",
+    "hint": "Abre películas reales en este dispositivo y las somete a lo que hace un espectador: saltos, pausas, idiomas, subtítulos. Los resultados se guardan en el servidor; no se modifica ninguna reanudación ni ningún «visto». Mantén esta ventana visible durante la prueba: oculta, el navegador deja de mostrar el vídeo.",
     "prepare": "Preparar una prueba",
     "loading": "Cargando películas…",
     "empty": "El registro del reproductor aún no conoce ninguna película.",

@@ -76,6 +76,8 @@ export interface BenchDeps {
   progress(itemIndex: number, step: string): void;
   cancelled(): boolean;
   report(result: ItemResult): void;
+  /** La page est-elle cachée ? Sans réponse, on la suppose visible. */
+  hidden?(): boolean;
 }
 
 class Cancelled extends Error {}
@@ -172,6 +174,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
         frames: bridge().frames(),
         paused: element.paused,
         seeking: element.seeking,
+        hidden: deps.hidden?.() ?? false,
       });
       if (deps.now() >= end) break;
       await deps.sleep(SAMPLE_MS);

@@ -1539,7 +1539,7 @@
   },
   "bench": {
     "title": "Testlauf des Players",
-    "hint": "Öffnet echte Filme auf diesem Gerät und prüft sie wie ein Zuschauer: Sprünge, Pausen, Sprachen, Untertitel. Die Ergebnisse werden auf dem Server gespeichert; keine Fortsetzungsposition und kein „gesehen“ wird verändert.",
+    "hint": "Öffnet echte Filme auf diesem Gerät und prüft sie wie ein Zuschauer: Sprünge, Pausen, Sprachen, Untertitel. Die Ergebnisse werden auf dem Server gespeichert; keine Fortsetzungsposition und kein „gesehen“ wird verändert. Lass dieses Fenster während des Testlaufs sichtbar: verdeckt zeichnet der Browser das Video nicht mehr.",
     "prepare": "Testlauf vorbereiten",
     "loading": "Filme werden geladen…",
     "empty": "Das Player-Protokoll kennt noch keinen Film.",

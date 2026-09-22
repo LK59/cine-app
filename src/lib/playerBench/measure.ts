@@ -20,6 +20,8 @@ export interface Sample {
   frames: number | null;
   paused: boolean;
   seeking: boolean;
+  /** La page était cachée : le navigateur cesse alors d'afficher la vidéo, pas de la lire. */
+  hidden?: boolean;
 }
 
 export type Verdict = "ok" | "warn" | "fail";
@@ -107,7 +109,12 @@ export function readPlayback(samples: Sample[], nominalFps: number | null = null
   }
 
   let fps: number | null = null;
-  if (first.frames !== null && last.frames !== null && clockSeconds > 0.5) {
+  // Fenêtre cachée ou recouverte : Chrome continue le son et cesse de dessiner l'image. Les images
+  // n'y disent rien du lecteur — banc du 22/09/2026, « 0 image/s » pendant que l'on regardait
+  // ailleurs. Pas de verdict sur elles, seulement une note.
+  if (samples.some((s) => s.hidden)) {
+    problems.push("fenêtre cachée : images non comptées");
+  } else if (first.frames !== null && last.frames !== null && clockSeconds > 0.5) {
     fps = Math.max(0, last.frames - first.frames) / clockSeconds;
     if (clockSeconds >= 1.5 && fps < RUNAWAY_FPS) {
       failed = true;

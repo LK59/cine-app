@@ -45,6 +45,13 @@ describe("readPlayback", () => {
     expect(readPlayback(samples(41, () => ({})), 24).verdict).toBe("ok");
   });
 
+  it("ne juge pas les images d'une fenêtre cachée, et le note", () => {
+    // Chrome cesse de dessiner la vidéo d'une fenêtre cachée ou recouverte, le son continue.
+    const r = readPlayback(samples(17, (i) => ({ frames: 0, hidden: i > 4 })), 24);
+    expect(r.verdict).toBe("ok");
+    expect(r.problems).toEqual(["fenêtre cachée : images non comptées"]);
+  });
+
   it("ne compte pas une pause voulue contre le rythme", () => {
     expect(readPlayback(samples(17, () => ({ paused: true, time: 5 }))).problems).toEqual(["resté en pause"]);
   });

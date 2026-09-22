@@ -1578,6 +1578,38 @@ describe("l'échelle des reprises", () => {
     after(6000);
     expect(onStall).toHaveBeenCalledTimes(2);
   });
+  it("ne prend pas l'attente réseau d'un saut pour un blocage, mais garde le saut qui ne se résout pas", async () => {
+    // Banc du 22/09/2026, serveur lointain : quatre lignes `stall`, toutes des sauts qui
+    // attendaient leur média — la ligne `seek` en porte déjà la durée.
+    const video = fakeVideo();
+    const onStall = vi.fn();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onStall });
+    const internals = internalsOf(mse);
+    await until(() => internals.fillTask === null && video.buffered.length > 0, "le premier remplissage est fini");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const after = (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+      internals.watchForStall();
+    };
+
+    // Tête loin de tout média, `seeking` : le réseau travaille.
+    Object.assign(video, { seeking: true });
+    setTime(video, 900);
+    internals.watchForStall();
+    after(3000);
+    after(3000);
+    expect(onStall).not.toHaveBeenCalled();
+
+    // Le même `seeking`, média sous la tête : ce n'est plus le réseau, c'est un saut qui ne se
+    // résout pas, et il s'écrit.
+    setTime(video, 5);
+    internals.watchForStall();
+    after(3000);
+    after(2500);
+    expect(onStall).toHaveBeenCalledTimes(1);
+  });
+
   it("écrit une horloge qui avance sans rien sous la tête", async () => {
     // 22/09/2026, iPhone : « le temps avance de plusieurs dizaines de secondes, pas d'image, et ça
     // ne s'arrête pas tant que je ne ressaute pas ». Une horloge qui court n'est pas un blocage aux

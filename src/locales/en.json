@@ -1539,7 +1539,7 @@
   },
   "bench": {
     "title": "Player test bench",
-    "hint": "Opens real films on this device and puts them through what a viewer does: seeks, pauses, languages, subtitles. Results are saved on the server; no resume point or watched state is changed.",
+    "hint": "Opens real films on this device and puts them through what a viewer does: seeks, pauses, languages, subtitles. Results are saved on the server; no resume point or watched state is changed. Keep this window visible during the run: when hidden, the browser stops drawing the video.",
     "prepare": "Prepare a run",
     "loading": "Loading films…",
     "empty": "The player log does not know any film yet.",

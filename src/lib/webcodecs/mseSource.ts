@@ -1045,6 +1045,15 @@ export class MseSource {
       return;
     }
     this.watchForRunaway(now, delta);
+    // Un saut qui attend son média n'est pas un blocage : c'est l'attente du réseau, et la ligne
+    // `seek` en porte déjà la durée. Compté, il écrivait une ligne `stall` à chaque saut lent
+    // depuis un serveur lointain (banc du 22/09/2026 : quatre « blocages », tous des sauts).
+    // Un saut resté `seeking` alors que le média est là, lui, reste compté — c'est le WebKit qui
+    // ne résout pas son saut (1917 sur iPhone).
+    if (this.video.seeking && !this.isBufferedAt(now)) {
+      this.stallSince = null;
+      return;
+    }
     if (this.stallSince === null || Math.abs(now - this.stallClockAt) >= 1) {
       this.stallClockAt = now;
       this.stallSince = Date.now();
