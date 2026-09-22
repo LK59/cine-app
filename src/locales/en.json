@@ -1596,7 +1596,20 @@
       "long-play": "Long playback (30 s)",
       "question": "Answer",
       "lost": "Player lost",
-      "cancelled": "Stopped"
-    }
+      "cancelled": "Stopped",
+      "x-storm": "Storm of 20 seeks",
+      "x-pingpong": "Fast back and forth",
+      "x-steps": "Small 0.2 s steps",
+      "x-seek-audio-seek": "Seek, language, seek",
+      "x-audio-storm": "Three languages in a row",
+      "x-pause-storm": "Pause spam during a seek",
+      "x-subs-storm": "Subtitle spam during a seek",
+      "x-edge-start": "Seek to the very start",
+      "x-edge-end": "Playback to the end",
+      "x-after-end": "Seek after the end",
+      "x-beyond-end": "Seek past the end",
+      "x-reopen": "Close and reopen at once"
+    },
+    "depthExtreme": "Extreme"
   }
 }

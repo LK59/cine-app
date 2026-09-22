@@ -80,14 +80,14 @@ export function BenchSection() {
           </ul>
 
           <div className="flex flex-wrap gap-2">
-            {(["full", "quick"] as const).map((d) => (
+            {(["full", "quick", "extreme"] as const).map((d) => (
               <button
                 key={d}
                 type="button"
                 onClick={() => setDepth(d)}
                 className={`rounded-full px-3 py-1.5 text-xs ${depth === d ? "bg-accent-500 text-white" : "bg-white/10 text-slate-300"}`}
               >
-                {t(d === "full" ? "bench.depthFull" : "bench.depthQuick")}
+                {t(d === "full" ? "bench.depthFull" : d === "quick" ? "bench.depthQuick" : "bench.depthExtreme")}
               </button>
             ))}
             <label className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-slate-300">

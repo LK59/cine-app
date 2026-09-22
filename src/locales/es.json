@@ -1596,7 +1596,20 @@
       "long-play": "Reproducción larga (30 s)",
       "question": "Respuesta",
       "lost": "Reproductor perdido",
-      "cancelled": "Detenida"
-    }
+      "cancelled": "Detenida",
+      "x-storm": "Tormenta de 20 saltos",
+      "x-pingpong": "Ida y vuelta rápida",
+      "x-steps": "Pasos de 0,2 s",
+      "x-seek-audio-seek": "Salto, idioma, salto",
+      "x-audio-storm": "Tres idiomas seguidos",
+      "x-pause-storm": "Pausas en ráfaga durante un salto",
+      "x-subs-storm": "Subtítulos en ráfaga durante un salto",
+      "x-edge-start": "Salto al principio",
+      "x-edge-end": "Reproducción hasta el final",
+      "x-after-end": "Salto tras el final",
+      "x-beyond-end": "Salto más allá del final",
+      "x-reopen": "Cerrar y reabrir al instante"
+    },
+    "depthExtreme": "Extrema"
   }
 }

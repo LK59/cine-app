@@ -216,6 +216,24 @@ describe("runBench", () => {
     expect(results[0].checks.at(-1)).toMatchObject({ id: "lost", verdict: "fail" });
   });
 
+  it("joue tous les scénarios du mode extrême sur un lecteur sain, sans échec", async () => {
+    const { deps } = simulated();
+    const [result] = await runBench({ ...CONFIG, depth: "extreme", interactive: false }, deps);
+    const ids = result.checks.map((c) => c.id);
+    for (const id of ["x-storm", "x-pingpong", "x-steps", "x-seek-audio-seek", "x-audio-storm", "x-pause-storm", "x-subs-storm", "x-edge-start", "x-edge-end", "x-after-end", "x-beyond-end", "x-reopen"]) {
+      expect(ids).toContain(id);
+    }
+    expect(result.checks.filter((c) => c.verdict === "fail")).toEqual([]);
+    // Le parcours ordinaire ne se joue pas en plus.
+    expect(ids).not.toContain("seek-far");
+  });
+
+  it("trouve, en mode extrême, un lecteur qui perd la position d'un changement de langue", async () => {
+    const { deps } = simulated({ losePosition: true });
+    const [result] = await runBench({ ...CONFIG, depth: "extreme", interactive: false }, deps);
+    expect(result.verdict).toBe("fail");
+  });
+
   it("annonce sa durée", () => {
     expect(estimateSeconds("full", 8, false)).toBe(1600);
     expect(estimateSeconds("quick", 4, true)).toBe(480);

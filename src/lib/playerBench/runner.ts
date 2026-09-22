@@ -23,7 +23,7 @@ export interface BenchItem {
   title: string;
 }
 
-export type BenchDepth = "quick" | "full";
+export type BenchDepth = "quick" | "full" | "extreme";
 
 export interface BenchConfig {
   runId: string;
@@ -82,6 +82,9 @@ export interface BenchDeps {
 
 class Cancelled extends Error {}
 
+/** Le mode extrême a fini ses scénarios : le reste du parcours ordinaire ne se joue pas. */
+class ExtremeDone extends Error {}
+
 /** Le lecteur n'est plus le nôtre : erreur affichée, ou passage au lecteur serveur. */
 class Lost extends Error {}
 
@@ -101,7 +104,7 @@ const SEEK_FAIL_MS = 8000;
 
 /** Ce que coûte un film, en secondes, pour annoncer la durée avant de lancer. */
 export function estimateSeconds(depth: BenchDepth, items: number, interactive: boolean): number {
-  const perItem = depth === "full" ? 200 : 90;
+  const perItem = depth === "full" ? 200 : depth === "extreme" ? 150 : 90;
   return items * (perItem + (interactive ? 30 : 0));
 }
 
@@ -304,6 +307,168 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     return true;
   };
 
+  /**
+   * Le mode extrême : ce qu'aucun spectateur ne fait exprès, mais que des doigts pressés, un
+   * réseau lent et un téléphone qui rame finissent par produire. Chaque scénario se termine sur
+   * une question simple — la tête est-elle là où le dernier geste l'a demandée, sur la bonne piste,
+   * et l'image repart-elle —, parce que c'est ce qu'un spectateur constate.
+   */
+  const extreme = async (D: number) => {
+    const positions = seededPositions(`${item.itemId}:extreme`, 60, D);
+    let cursor = 0;
+    const next = () => positions[cursor++ % positions.length];
+
+    const land = async (id: string, target: number, extra = "") => {
+      const ms = await waitFor(arrivedAt(target), 20_000);
+      if (ms === null) {
+        record({ id, verdict: "fail", detail: `jamais arrivé à ${target.toFixed(1)} s (tête à ${time().toFixed(1)} s)${extra}` }, 25_000);
+        return;
+      }
+      await ensurePlaying();
+      const reading = await watch(3000);
+      record(
+        { id, verdict: worst(reading.verdict, ms > SEEK_FAIL_MS ? "warn" : "ok"), ms, detail: `arrivé à ${target.toFixed(1)} s en ${ms} ms${extra} — ${describe(reading)}` },
+        ms + 5000
+      );
+    };
+
+    await ensurePlaying();
+
+    step("tempête : 20 sauts en 0,6 s");
+    let last = 0;
+    for (let i = 0; i < 20; i++) {
+      last = next();
+      bridge().seek(last);
+      await deps.sleep(30);
+    }
+    await land("x-storm", last);
+
+    step("aller-retour entre deux positions");
+    const a = next();
+    const b = next();
+    for (let i = 0; i < 6; i++) {
+      bridge().seek(i % 2 === 0 ? a : b);
+      await deps.sleep(150);
+    }
+    await land("x-pingpong", b);
+
+    step("petits pas de 0,2 s");
+    let stepTarget = time();
+    for (let i = 0; i < 10; i++) {
+      stepTarget += 0.2;
+      bridge().seek(stepTarget);
+      await deps.sleep(60);
+    }
+    await land("x-steps", stepTarget);
+
+    const tracks = bridge().audioTracks();
+    if (tracks.length > 1) {
+      step("saut, langue, saut");
+      const other = tracks.find((t) => t.id !== bridge().currentAudio())!;
+      bridge().seek(next());
+      await deps.sleep(100);
+      bridge().changeAudio(other.id);
+      await deps.sleep(100);
+      const target = next();
+      bridge().seek(target);
+      const applied = await waitFor(() => bridge().ready() && bridge().currentAudio() === other.id, 20_000);
+      if (applied === null) {
+        record({ id: "x-seek-audio-seek", verdict: "fail", detail: `piste ${other.id} jamais appliquée (piste ${bridge().currentAudio()})` }, 25_000);
+      } else {
+        await land("x-seek-audio-seek", target, `, piste ${other.id}`);
+      }
+
+      step("trois langues en 0,6 s");
+      let wanted = bridge().currentAudio();
+      // La position d'avant la rafale : c'est là que le film doit rouvrir, pas où il est après.
+      const before = time();
+      for (let i = 0; i < 3; i++) {
+        const o = tracks.find((t) => t.id !== wanted)!;
+        wanted = o.id;
+        bridge().changeAudio(o.id);
+        await deps.sleep(200);
+      }
+      const ms = await waitFor(() => {
+        const bb = bridge();
+        const m = bb.media();
+        return bb.ready() && bb.currentAudio() === wanted && !!m && !m.seeking && Math.abs(m.currentTime - before) < 10;
+      }, 25_000);
+      if (ms === null) {
+        record({ id: "x-audio-storm", verdict: "fail", detail: `la dernière piste demandée (${wanted}) n'est jamais devenue celle qui joue (piste ${bridge().currentAudio()}, prêt ${bridge().ready()})` }, 30_000);
+      } else {
+        await ensurePlaying();
+        const reading = await watch(3000);
+        record({ id: "x-audio-storm", verdict: worst(reading.verdict, "ok"), ms, detail: `piste ${wanted} en place en ${ms} ms, à ${time().toFixed(1)} s — ${describe(reading)}` }, ms + 5000);
+      }
+    }
+
+    step("pause et lecture en rafale pendant un saut");
+    const paused = next();
+    bridge().seek(paused);
+    for (let i = 0; i < 8; i++) {
+      const m = media();
+      if (i % 2 === 0) m.pause();
+      else void m.play().catch(() => {});
+      await deps.sleep(80);
+    }
+    await land("x-pause-storm", paused);
+
+    const subs = bridge().subtitleTracks();
+    if (subs.length > 0) {
+      step("sous-titres en rafale pendant un saut");
+      const target = next();
+      bridge().seek(target);
+      let choice: number | null = null;
+      for (let i = 0; i < 6; i++) {
+        choice = i % 2 === 0 ? subs[i % subs.length].id : null;
+        bridge().changeSubtitle(choice);
+        await deps.sleep(70);
+      }
+      await land("x-subs-storm", target);
+      if (bridge().currentSubtitle() !== choice) {
+        record({ id: "x-subs-storm", verdict: "fail", detail: `sous-titres : ${bridge().currentSubtitle()} au lieu du dernier choix (${choice})` });
+      }
+    }
+
+    step("bords du film");
+    bridge().seek(0.5);
+    await land("x-edge-start", 0.5);
+    const nearEnd = Math.max(0, D - 4);
+    bridge().seek(nearEnd);
+    const endArrived = await waitFor(arrivedAt(nearEnd), 20_000);
+    await ensurePlaying();
+    const ended = endArrived === null ? null : await waitFor(() => media().ended || time() >= D - 0.5, 10_000);
+    record({
+      id: "x-edge-end",
+      verdict: endArrived === null ? "fail" : ended === null ? "warn" : "ok",
+      detail: endArrived === null ? `fin du film jamais atteinte (tête à ${time().toFixed(1)} s)` : ended === null ? `arrivé près de la fin, mais la lecture ne l'a pas atteinte (tête à ${time().toFixed(1)} s)` : `lu jusqu'à la fin (${time().toFixed(1)} s)`,
+    }, 15_000);
+    const back = D * 0.5;
+    bridge().seek(back);
+    await land("x-after-end", back);
+    bridge().seek(D + 100);
+    const clamped = await waitFor(() => !media().seeking && time() >= D - 3, 10_000);
+    record({ id: "x-beyond-end", verdict: clamped === null ? "warn" : "ok", detail: clamped === null ? `saut au-delà de la fin : tête à ${time().toFixed(1)} s` : `ramené à la fin (${time().toFixed(1)} s)` });
+
+    step("fermer et rouvrir aussitôt");
+    deps.close();
+    await deps.sleep(250);
+    const reopenStart = deps.now();
+    deps.open(item);
+    const reopened = await waitFor(() => {
+      const bb = deps.bridge();
+      if (bb?.itemId === item.itemId && bb.error()) throw new Lost(`erreur à la réouverture : ${bb.error()}`);
+      return bb?.itemId === item.itemId && bb.ready();
+    }, OPEN_TIMEOUT_MS);
+    if (reopened === null) {
+      record({ id: "x-reopen", verdict: "fail", detail: "pas de première image après une réouverture immédiate" });
+      return;
+    }
+    await ensurePlaying();
+    const reading = await watch(3000);
+    record({ id: "x-reopen", verdict: reading.verdict, ms: deps.now() - reopenStart, detail: `rouvert en ${deps.now() - reopenStart} ms — ${describe(reading)}` });
+  };
+
   try {
     // ── Ouverture ──────────────────────────────────────────────────────────────────────────────
     step("ouverture");
@@ -339,6 +504,11 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     record({ id: "play", verdict: start.verdict, detail: describe(start) });
 
     const D = result.durationSeconds;
+    if (config.depth === "extreme") {
+      if (D < 120) record({ id: "seeks", verdict: "skip", detail: "trop court pour le mode extrême" });
+      else await extreme(D);
+      throw new ExtremeDone();
+    }
     if (D < 60) {
       record({ id: "seeks", verdict: "skip", detail: "trop court pour les sauts" });
     } else {
@@ -503,7 +673,9 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       await ask("picture");
     }
   } catch (error) {
-    if (error instanceof Cancelled) {
+    if (error instanceof ExtremeDone) {
+      // Fini : rien à noter.
+    } else if (error instanceof Cancelled) {
       checks.push({ id: "cancelled", verdict: "skip", detail: "banc arrêté" });
     } else {
       const b = deps.bridge();

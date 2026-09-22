@@ -1596,7 +1596,20 @@
       "long-play": "Lecture longue (30 s)",
       "question": "Réponse",
       "lost": "Lecteur perdu",
-      "cancelled": "Arrêté"
-    }
+      "cancelled": "Arrêté",
+      "x-storm": "Tempête de 20 sauts",
+      "x-pingpong": "Aller-retour rapide",
+      "x-steps": "Petits pas de 0,2 s",
+      "x-seek-audio-seek": "Saut, langue, saut",
+      "x-audio-storm": "Trois langues en rafale",
+      "x-pause-storm": "Pause en rafale pendant un saut",
+      "x-subs-storm": "Sous-titres en rafale pendant un saut",
+      "x-edge-start": "Saut au tout début",
+      "x-edge-end": "Lecture jusqu'à la fin",
+      "x-after-end": "Saut après la fin",
+      "x-beyond-end": "Saut au-delà de la fin",
+      "x-reopen": "Fermer et rouvrir aussitôt"
+    },
+    "depthExtreme": "Extrême"
   }
 }

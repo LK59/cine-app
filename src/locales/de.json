@@ -1596,7 +1596,20 @@
       "long-play": "Lange Wiedergabe (30 s)",
       "question": "Antwort",
       "lost": "Player verloren",
-      "cancelled": "Angehalten"
-    }
+      "cancelled": "Angehalten",
+      "x-storm": "Sturm aus 20 Sprüngen",
+      "x-pingpong": "Schnelles Hin und Her",
+      "x-steps": "Kleine Schritte von 0,2 s",
+      "x-seek-audio-seek": "Sprung, Sprache, Sprung",
+      "x-audio-storm": "Drei Sprachen hintereinander",
+      "x-pause-storm": "Pausen-Serie während eines Sprungs",
+      "x-subs-storm": "Untertitel-Serie während eines Sprungs",
+      "x-edge-start": "Sprung an den Anfang",
+      "x-edge-end": "Wiedergabe bis zum Ende",
+      "x-after-end": "Sprung nach dem Ende",
+      "x-beyond-end": "Sprung über das Ende hinaus",
+      "x-reopen": "Schließen und sofort wieder öffnen"
+    },
+    "depthExtreme": "Extrem"
   }
 }

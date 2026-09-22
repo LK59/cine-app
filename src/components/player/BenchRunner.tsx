@@ -162,6 +162,8 @@ export function checkLabelKey(id: string): { key: string; suffix: string } {
     "open", "play", "seek-far", "seek-back-10", "seek-forward-30", "seek-random", "seek-back-far", "seek-near-end",
     "seek-return", "seeks", "burst", "pause", "paused-seek", "seek-then-audio", "audio-paused", "audio-back-play",
     "audio", "subtitles", "long-play", "lost", "cancelled",
+    "x-storm", "x-pingpong", "x-steps", "x-seek-audio-seek", "x-audio-storm", "x-pause-storm", "x-subs-storm",
+    "x-edge-start", "x-edge-end", "x-after-end", "x-beyond-end", "x-reopen",
   ];
   const play = /^audio-\d+-play$/.test(id);
   if (play) return { key: "audio-play", suffix: "" };
