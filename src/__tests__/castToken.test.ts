@@ -181,6 +181,30 @@ describe("le report du laissez-passer dans le manifeste", () => {
     expect(out).not.toContain('jeton.signe",NAME'.replace("jeton.signe", 'jeton.signe"'));
   });
 
+  it("signe les adresses relatives, la forme que Jellyfin emploie vraiment", () => {
+    // Relevé sur un vrai manifeste le 22/09/2026 : les pistes de sous-titres et la variante sont
+    // écrites en relatif, sans `/videos/{id}/`, donc la réécriture de la route ne les voit pas.
+    // Un téléviseur résout une adresse relative sans reprendre la requête d'origine : il perdait
+    // le laissez-passer, chaque piste répondait 401, et la diffusion restait en chargement.
+    const m =
+      `#EXT-X-MEDIA:TYPE=SUBTITLES,DEFAULT=YES,URI="${ITEM}/Subtitles/4/subtitles.m3u8?SegmentLength=30",LANGUAGE="fra"\n` +
+      `#EXT-X-STREAM-INF:BANDWIDTH=640000\n` +
+      `main.m3u8?MediaSourceId=${ITEM}\n`;
+    const out = withCastPass(m, ITEM, PASS);
+    expect(out).toContain(`subtitles.m3u8?SegmentLength=30&${CAST_TOKEN_PARAM}=jeton.signe"`);
+    expect(out).toContain(`main.m3u8?MediaSourceId=${ITEM}&${CAST_TOKEN_PARAM}=jeton.signe`);
+  });
+
+  it("ne signe pas le retour chariot d'un manifeste en CRLF", () => {
+    const out = withCastPass(`main.m3u8\r\n`, ITEM, PASS);
+    expect(out).toBe(`main.m3u8?${CAST_TOKEN_PARAM}=jeton.signe\r\n`);
+  });
+
+  it("laisse tranquille une adresse qui ne mène pas chez nous", () => {
+    const m = `#EXT-X-MEDIA:URI="https://ailleurs.test/x.m3u8"\n`;
+    expect(withCastPass(m, ITEM, PASS)).toBe(m);
+  });
+
   it("ne touche à rien d'autre", () => {
     const m = `#EXTM3U\n#EXT-X-VERSION:7\n/api/jellyfin/stream/autre/x.mp4\n`;
     expect(withCastPass(m, ITEM, PASS)).toBe(m);

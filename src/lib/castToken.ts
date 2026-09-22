@@ -167,10 +167,26 @@ export function castItemOf(pathname: string): string | null {
  */
 export function withCastPass(manifest: string, itemId: string, pass: string): string {
   const prefix = `/api/jellyfin/stream/${itemId}/`;
-  // Tout ce qui suit le préfixe jusqu'au premier blanc, guillemet ou apostrophe : les playlists
-  // portent leurs adresses seules sur une ligne, et entre guillemets dans les attributs `URI=`.
-  return manifest.replace(new RegExp(`${prefix.replace(/[/]/g, "\\/")}[^\\s"']+`, "g"), (url) =>
-    url.includes(`${CAST_TOKEN_PARAM}=`) ? url : `${url}${url.includes("?") ? "&" : "?"}${CAST_TOKEN_PARAM}=${encodeURIComponent(pass)}`
-  );
-}
+  const sign = (url: string) => {
+    if (url.includes(`${CAST_TOKEN_PARAM}=`)) return url;
+    // Une adresse absolue doit désigner ce titre-là chez nous ; tout le reste — un autre titre,
+    // un autre hôte — repart intact. Une adresse relative, elle, se résout forcément sous le
+    // manifeste, donc sous ce même titre : c'est la forme que Jellyfin emploie vraiment pour ses
+    // pistes de sous-titres et ses variantes, et celle qui manquait (relevé le 22/09/2026 — le
+    // téléviseur répondait 401 sur chaque piste et restait en chargement).
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
+    if (url.startsWith("/") && !url.startsWith(prefix)) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}${CAST_TOKEN_PARAM}=${encodeURIComponent(pass)}`;
+  };
 
+  return manifest
+    .split("\n")
+    .map((line) => {
+      // Une ligne d'attributs porte ses adresses dans `URI="…"` ; une ligne nue *est* une adresse.
+      if (line.startsWith("#")) return line.replace(/URI="([^"]*)"/g, (_m, url: string) => `URI="${sign(url)}"`);
+      // Un manifeste peut arriver en CRLF : signer la ligne entière emporterait le retour chariot
+      // dans l'adresse.
+      return line.replace(/^(\s*)(\S+)(\s*)$/, (_m, before: string, url: string, after: string) => `${before}${sign(url)}${after}`);
+    })
+    .join("\n");
+}
