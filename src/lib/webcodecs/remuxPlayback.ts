@@ -5,7 +5,6 @@
 // again on every operation. Audio is the exception: here a change of track rebuilds the player
 // (see `requestAudioTrack`), where the engine switches its own software decoder.
 
-import { isChromiumOnWindows } from "@/lib/webkitEngine";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
@@ -14,7 +13,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
-import { Remuxer, setStripHdr10Plus, playableAudio, type TrackedCue } from "./remuxer";
+import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
 
@@ -190,11 +189,7 @@ export function openingAudio(
  */
 export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<PathProbe> {
   traceReset();
-  // Avant tout remultiplexage : voir `withoutHdr10Plus`.
-  const stripHdr10 = typeof navigator !== "undefined" && isChromiumOnWindows(navigator.userAgent);
-  setStripHdr10Plus(stripHdr10);
   trace("ouverture du flux");
-  if (stripHdr10) trace("hdr10+ : métadonnées dynamiques retirées pour ce navigateur (Chrome/Edge sous Windows)");
   const source = await HttpByteSource.open(options.streamUrl);
   trace(`flux ouvert — ${source.size} octets`);
 
