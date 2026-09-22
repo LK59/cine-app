@@ -90,6 +90,35 @@ describe("l'état du spectateur demandé d'avance", () => {
     expect(calls("/api/jellyfin/playback-state/")).toBe(2);
   });
 
+  it("n'attend pas plus que la garde de huit secondes quand la demande d'avance est restée muette", async () => {
+    // Chasse aux bugs du 22/09/2026 : une demande d'avance suspendue épuisait ses huit secondes,
+    // puis la question reposée en attendait huit autres — jusqu'à seize secondes de roue au lieu
+    // de la garde de huit.
+    vi.useFakeTimers();
+    // Le délai d'AbortSignal.timeout ne suit pas les horloges simulées : le même, sur elles.
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("délai", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    // Un serveur qui ne répond jamais : seul le délai termine la demande.
+    const silent = (_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason))) as never;
+    fetchMock.mockImplementationOnce(silent).mockImplementationOnce(silent);
+    prefetchPlaybackState("film");
+    await vi.advanceTimersByTimeAsync(1000);
+    let settled = false;
+    const taken = takePrefetchedPlaybackState("film")!.then((state) => {
+      settled = true;
+      return state;
+    });
+    // Huit secondes après l'appui sur Lire, c'est fini — la demande d'avance comprise.
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(settled).toBe(true);
+    expect(await taken).toBeNull();
+    vi.restoreAllMocks();
+  });
+
   it("est oubliée dès qu'une lecture se ferme, et de nouveau quand son arrêt est enregistré", async () => {
     prefetchPlaybackState("film");
     let reported!: () => void;

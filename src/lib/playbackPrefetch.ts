@@ -32,9 +32,12 @@ export const directInfoKey = (itemId: string) => `/api/jellyfin/direct/${itemId}
  */
 export const PLAYBACK_STATE_FRESH_MS = 30_000;
 
+/** La garde de l'hôte : au-delà, le film s'ouvre sans l'état du spectateur. */
+const PLAYBACK_STATE_TIMEOUT_MS = 8000;
+
 /** La lecture nue de l'état du spectateur, avec la garde de huit secondes de l'hôte. */
-export function fetchPlaybackState(itemId: string): Promise<PlaybackState | null> {
-  return fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(8000) })
+export function fetchPlaybackState(itemId: string, timeoutMs = PLAYBACK_STATE_TIMEOUT_MS): Promise<PlaybackState | null> {
+  return fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(timeoutMs) })
     .then((response) => (response.ok ? (response.json() as Promise<PlaybackState>) : null))
     .catch(() => null);
 }
@@ -60,14 +63,22 @@ export function prefetchPlaybackState(itemId: string): void {
  *
  * Pris, pas lu : la réponse sert l'ouverture qu'elle précède et aucune autre. Une seconde
  * lecture du même titre relit sa position, qui a bougé pendant la première. Une réponse vide
- * (serveur muet, délai dépassé) ne vaut pas mieux qu'une question neuve : on redemande.
+ * (serveur muet, délai dépassé) ne vaut pas mieux qu'une question neuve : on redemande — dans ce
+ * qui reste des huit secondes comptées depuis l'appui. Chasse aux bugs du 22/09/2026 : une
+ * demande d'avance suspendue épuisait les siennes, la question reposée en prenait huit autres, et
+ * la roue tournait jusqu'à seize secondes au lieu de la garde de huit.
  */
 export function takePrefetchedPlaybackState(itemId: string): Promise<PlaybackState | null> | null {
   const entry = prefetched.get(itemId);
   if (!entry) return null;
   prefetched.delete(itemId);
   if (Date.now() - entry.at >= PLAYBACK_STATE_FRESH_MS) return null;
-  return entry.state.then((state) => state ?? fetchPlaybackState(itemId));
+  const deadline = Date.now() + PLAYBACK_STATE_TIMEOUT_MS;
+  return entry.state.then((state) => {
+    if (state) return state;
+    const remaining = deadline - Date.now();
+    return remaining > 0 ? fetchPlaybackState(itemId, remaining) : null;
+  });
 }
 
 /**
