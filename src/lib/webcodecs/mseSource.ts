@@ -9,7 +9,7 @@
 
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
-import { trace } from "./trace";
+import { trace, traceRecent } from "./trace";
 import { isNetworkFailure } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
@@ -34,7 +34,13 @@ const FROZEN_CLOCK_MS = 1500;
  */
 const FROZEN_STEP = 0.08;
 
-/** And how many times, before leaving an element alone with whatever it is doing. */
+/**
+ * And how many times, before the push gives way to a real recovery.
+ *
+ * It used to be "before leaving an element alone with whatever it is doing" — and the counter only
+ * resets when the clock moves, so a clock that three pushes did not free was never looked at
+ * again: playing, media ahead, and nothing whatsoever trying to get it going.
+ */
 const MAX_FROZEN_NUDGES = 3;
 
 /**
@@ -50,6 +56,39 @@ const MIN_BUFFER_SECONDS = 8;
 
 /** How long repeated recoveries at one spot keep counting against each other. */
 const RECOVERY_WINDOW_MS = 5000;
+
+/** Seeks to the same spot, in a row, before that spot is given up on and the ladder climbs. */
+const MAX_RECOVERY_ATTEMPTS = 3;
+
+/**
+ * Recoveries of any kind, anywhere, with no playback in between, before the ladder climbs anyway.
+ *
+ * The window above resets the count at one spot once attempts stop being rapid — right for a
+ * spot that fails again a minute later, wrong for one that fails every six seconds for ever. This
+ * bound does not care about spacing: only real playback clears it (`PLAYED_TO_CLEAR_SECONDS`).
+ * Above the three rapid attempts plus the keyframe step, so the ordinary ladder never reaches it.
+ */
+const MAX_UNPLAYED_ATTEMPTS = 8;
+
+/** Seconds of the clock genuinely running before the ladder goes back to its first rung. */
+const PLAYED_TO_CLEAR_SECONDS = 3;
+
+/** How far inside the next keyframe's group the keyframe step lands — inside, not on its edge. */
+const NEXT_KEYFRAME_MARGIN = 0.1;
+
+/**
+ * How long a playing clock may cover less than a second before the stall is written to the log.
+ *
+ * Longer than any recovery here takes to act (1.5 s for a frozen clock, 0.7 s for a playhead on
+ * nothing), so a line means those did not settle it — the case nothing on the server could see.
+ */
+const STALL_REPORT_MS = 5000;
+
+/** And no second line within this long, however the clock flaps in between. */
+const STALL_REPORT_COOLDOWN_MS = 60_000;
+
+/** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
+const STALL_TRACE_MS = 20_000;
 
 /** Refused appends in a row before playback is declared broken rather than merely interrupted. */
 const MAX_APPEND_FAILURES = 3;
@@ -104,6 +143,12 @@ export interface MseCallbacks {
    * is in, and without inventing a delay where there is none.
    */
   onStarting?: (startedAt: number | null) => void;
+  /**
+   * The clock has stood still for `STALL_REPORT_MS` while the element says it is playing — once per
+   * stall, for the playback log. Flat facts (see `stallReport`), nothing to act on: the recoveries
+   * are already under way, and this is how anyone learns afterwards what they were up against.
+   */
+  onStall?: (facts: Record<string, unknown>) => void;
 }
 
 export class MseSource {
@@ -159,6 +204,30 @@ export class MseSource {
   private lastClockAt = -1;
   private frozenSince: number | null = null;
   private frozenNudges = 0;
+  /** Every push over the session, for the `stop` line — the one above resets when the clock moves. */
+  private frozenNudgesTotal = 0;
+  /**
+   * Which rung of the recovery ladder has been climbed since the clock last really played: 0 none,
+   * 1 the keyframe step, 2 handed to the host for a rebuild. See `escalate`.
+   */
+  private escalation = 0;
+  private escalations = 0;
+  /** Recoveries since the clock last really played — see `MAX_UNPLAYED_ATTEMPTS`. */
+  private unplayedAttempts = 0;
+  /** Seconds the clock has genuinely run since the last recovery. */
+  private playedSinceTrouble = 0;
+  /**
+   * Handed to the host: nothing more this source can try. Reads as `lost`, so the host's own
+   * rebuild — its budget, its skip past a place that failed twice — takes over from here.
+   */
+  private stuck = false;
+  /** For the stall line: where the clock was, since when, and whether this stall was written. */
+  private stallClockAt = -1;
+  private stallSince: number | null = null;
+  private stallReported = false;
+  private lastStallReportAt = -Infinity;
+  /** The clock as last seen by the watchdog, to tell playback from a jump. */
+  private tickClockAt = -1;
 
   private constructor(
     private readonly video: HTMLVideoElement,
@@ -862,7 +931,13 @@ export class MseSource {
   private readonly watchdog = () => {
     // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
     // underneath it would move the picture for no reason and land the resume elsewhere.
-    if (this.destroyed || this.ended || !this.videoBuffer || this.video.paused) return;
+    if (this.destroyed) return;
+    // Before anything returns early: a stall is exactly the case where every check below has
+    // decided there is nothing to do, and that decision is what the log line has to show.
+    this.watchForStall();
+    // Handed to the host, which is rebuilding: another seek from here would only race it.
+    if (this.stuck) return;
+    if (this.ended || !this.videoBuffer || this.video.paused) return;
 
     const now = this.video.currentTime;
     // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
@@ -889,8 +964,103 @@ export class MseSource {
       `reprise : rien sous la tête à ${now.toFixed(1)} s, ` +
         `dernier envoi il y a ${Date.now() - this.lastAppendAt} ms, ${this.elementState()}`
     );
-    this.recover(now);
+    if (!this.recover(now)) this.handOver(now);
   };
+
+  /**
+   * Notes whether the clock is really running, and writes a stall to the log when it is not.
+   *
+   * 22/09/2026 : a −10 s skip on an iPhone landed just before a keyframe, `seeked` fired, and the
+   * clock then sat between 166 and 167 s for nineteen seconds under a spinner, until the viewer
+   * seeked elsewhere. The log held the `seek` line and nothing after it: which recovery ran, what
+   * the buffers held, whether anything was being read — all of it stayed on the phone.
+   *
+   * "Stood still" is measured as covering less than a second in `STALL_REPORT_MS`, not as an
+   * unchanged value: the pushes and recoveries move the clock by fractions of a second, and a
+   * stall they fail to cure must not read as playback.
+   */
+  private watchForStall(): void {
+    const now = this.video.currentTime;
+    const running = !this.video.paused && !this.video.ended;
+    // What really playing looks like from a 250 ms tick: forward, by less than a jump. A seek is
+    // neither, and does not count towards leaving the ladder.
+    const delta = now - this.tickClockAt;
+    this.tickClockAt = now;
+    if (running && !this.video.seeking && delta > 0 && delta < 0.6) {
+      this.playedSinceTrouble += delta;
+      if (this.playedSinceTrouble >= PLAYED_TO_CLEAR_SECONDS) {
+        this.escalation = 0;
+        this.unplayedAttempts = 0;
+      }
+    }
+
+    if (!running) {
+      this.stallSince = null;
+      return;
+    }
+    if (this.stallSince === null || Math.abs(now - this.stallClockAt) >= 1) {
+      this.stallClockAt = now;
+      this.stallSince = Date.now();
+      this.stallReported = false;
+      return;
+    }
+    const stalledMs = Date.now() - this.stallSince;
+    if (stalledMs < STALL_REPORT_MS || this.stallReported) return;
+    // Marked even when the cooldown holds it back: this stall has had its chance to be written.
+    this.stallReported = true;
+    if (Date.now() - this.lastStallReportAt < STALL_REPORT_COOLDOWN_MS) return;
+    this.lastStallReportAt = Date.now();
+    trace(`lecture bloquée depuis ${(stalledMs / 1000).toFixed(1)} s à ${now.toFixed(2)} s — ${this.elementState()}`);
+    // Instrumentation on the path that is already failing: it must not become the failure.
+    try {
+      this.callbacks.onStall?.(this.stallReport(now, stalledMs));
+    } catch {
+      /* the log is not worth a player */
+    }
+  }
+
+  /**
+   * What a stall line carries: one level deep and short, for `clean()` in playerLog.ts, which keeps
+   * 24 fields — with the file's own six and the path, this leaves room and no more.
+   */
+  private stallReport(now: number, stalledMs: number): Record<string, unknown> {
+    const managed = (this.source as ManagedMediaSource).streaming;
+    return {
+      position: now,
+      stalledMs,
+      readyState: this.video.readyState,
+      networkState: this.video.networkState,
+      seeking: this.video.seeking,
+      source: this.source.readyState,
+      videoBuffered: this.spansNear(this.videoBuffer, now),
+      audioBuffered: this.audioBuffer ? this.spansNear(this.audioBuffer, now) : "aucun",
+      lead: Math.round(this.lead * 100) / 100,
+      filling: this.fillTask !== null,
+      recoveryStreak: this.recoveryStreak,
+      frozenNudges: this.frozenNudges,
+      recoveries: this.recoveries,
+      sinceAppendMs: Date.now() - this.lastAppendAt,
+      // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
+      streaming: typeof managed === "boolean" ? managed : "sans objet",
+      steps: traceRecent(STALL_TRACE_MS).join(" | "),
+    };
+  }
+
+  /** One buffer's ranges within half a minute of the head, written short. Never throws. */
+  private spansNear(buffer: SourceBuffer | null, at: number): string {
+    try {
+      const ranges = buffer?.buffered;
+      if (!ranges || ranges.length === 0) return "vide";
+      const spans: string[] = [];
+      for (let i = 0; i < ranges.length && spans.length < 4; i++) {
+        if (ranges.end(i) < at - 30 || ranges.start(i) > at + 30) continue;
+        spans.push(`${ranges.start(i).toFixed(2)}–${ranges.end(i).toFixed(2)}`);
+      }
+      return spans.join(" · ") || "rien près de la tête";
+    } catch {
+      return "illisible (source fermée)";
+    }
+  }
 
   /**
    * The other kind of stall: playing, media under the playhead, and a clock that does not move.
@@ -916,10 +1086,20 @@ export class MseSource {
     if (Date.now() - this.frozenSince < FROZEN_CLOCK_MS) return;
     // Only when there is plainly something to play: a clock that is not moving because the
     // buffer ran dry is an ordinary wait, and the fill loop is already on it.
-    if (this.lead < 1 || this.frozenNudges >= MAX_FROZEN_NUDGES) return;
+    if (this.lead < 1) return;
+    this.frozenSince = Date.now();
+    if (this.frozenNudges >= MAX_FROZEN_NUDGES) {
+      // Three pushes did not free it. This used to be the end of it — `return`, for as long as
+      // the clock stayed put, which is to say for ever. Now it is the start of the recovery
+      // ladder: the position asked for again the heavy way, buffers cleared and read afresh,
+      // then the next keyframe, then a rebuild. Paced by `frozenSince`, once per 1.5 s at most.
+      trace(`horloge figée à ${now.toFixed(2)} s malgré ${this.frozenNudges} poussées — reprise`);
+      if (!this.recover(now + FROZEN_STEP)) this.handOver(now);
+      return;
+    }
 
     this.frozenNudges += 1;
-    this.frozenSince = Date.now();
+    this.frozenNudgesTotal += 1;
     trace(`horloge figée à ${now.toFixed(2)} s avec ${this.lead.toFixed(1)} s en avance — on redemande la position`);
     this.guard.forgetPause();
     this.video.currentTime = now + FROZEN_STEP;
@@ -936,26 +1116,108 @@ export class MseSource {
     // The count only means anything while the attempts are rapid. The same position failing
     // again a minute later is a fresh problem, not a spin — and treating it as one used to latch
     // the guard shut, so the position stayed unreachable until the viewer seeked elsewhere.
+    //
+    // Measured from the last attempt that *went ahead*, never from the last call. It was
+    // refreshed on every call, abandoned ones included, and the watchdog calls every 250 ms: the
+    // window never ran out, and after the third attempt every later call gave up — the same latch
+    // this was written to remove, reached by another road (22/09/2026, a clock held at 166 s for
+    // nineteen seconds with nothing trying anything).
     if (Date.now() - this.lastRecoveryAt > RECOVERY_WINDOW_MS) this.recoveryStreak = 0;
-    this.lastRecoveryAt = Date.now();
 
-    if (Math.abs(target - this.recoveryTarget) < 1) {
-      this.recoveryStreak += 1;
-      if (this.recoveryStreak > 3) {
-        // Also traced rather than shown, and for a sharper reason: giving up here does not mean
-        // the position is unreachable. The remuxer's own index back-up regularly lands it a
-        // moment later — measured on the file with the false keyframes — so the banner announced
-        // a failure to a viewer whose film was about to carry on, and stayed up while it did.
-        trace(`reprise abandonnée après ${this.recoveryStreak} tentatives vers ${target.toFixed(1)} s`);
-        return false;
-      }
-    } else {
+    const sameSpot = Math.abs(target - this.recoveryTarget) < 1;
+    if ((sameSpot && this.recoveryStreak >= MAX_RECOVERY_ATTEMPTS) || this.unplayedAttempts >= MAX_UNPLAYED_ATTEMPTS) {
+      return this.escalate(target);
+    }
+    if (sameSpot) this.recoveryStreak += 1;
+    else {
       this.recoveryTarget = target;
       this.recoveryStreak = 1;
     }
-    this.recoveries += 1;
-    void this.seek(target, `reprise ${this.recoveryStreak}`);
+    this.attempt(target, `reprise ${this.recoveryStreak}`);
     return true;
+  }
+
+  /** One recovery seek, counted everywhere it has to be. */
+  private attempt(target: number, because: string): void {
+    this.lastRecoveryAt = Date.now();
+    this.recoveries += 1;
+    this.unplayedAttempts += 1;
+    this.playedSinceTrouble = 0;
+    void this.seek(target, because);
+  }
+
+  /**
+   * Asking for the same spot again has not helped: the next rung, or false when none is left.
+   *
+   * Giving up used to be the last word — traced, and then nothing, for as long as the viewer
+   * waited. The rungs, each tried once until the clock has really played again:
+   *
+   * 1. **The next keyframe past the head.** The same position re-read is the same group of
+   *    pictures decoded the same way; an open-GOP keyframe ten seconds on is a group nothing has
+   *    touched. A viewer loses a few seconds rather than the film.
+   * 2. **Nothing more here** — false, and the caller hands over (`handOver`) so the host rebuilds
+   *    the whole pipeline at the head, within its own budget.
+   *
+   * Still traced rather than shown, as the abandon always was: the remuxer's own index back-up
+   * regularly lands a position a moment after the source has given up on it, and a banner
+   * announced a failure to a viewer whose film was about to carry on.
+   */
+  private escalate(target: number): boolean {
+    if (this.escalation >= 1) return false;
+    this.escalation = 1;
+    this.escalations += 1;
+    trace(`reprise abandonnée après ${this.recoveryStreak} tentatives vers ${target.toFixed(1)} s`);
+    const next = this.nextKeyframeAfter(target);
+    if (next === null) return false;
+    trace(`reprise : image clé suivante, ${next.toFixed(1)} s`);
+    // Counted as the first attempt at the new spot, so it too gets three before the last rung.
+    this.recoveryTarget = next;
+    this.recoveryStreak = 1;
+    this.attempt(next, "reprise : image clé suivante");
+    return true;
+  }
+
+  /**
+   * The next indexed keyframe on the player's clock, far enough past `target` to be a different
+   * group, or null. Never throws: this runs on the path that is already failing.
+   */
+  private nextKeyframeAfter(target: number): number | null {
+    try {
+      if (!this.remuxer.seekable) return null;
+      // Half a second on, so a head standing right on a keyframe does not pick that same one.
+      const fileSeconds = this.remuxer.keyframeAfter(Math.max(0, target - this.delaySeconds) + 0.5);
+      if (fileSeconds === null) return null;
+      const end = this.plan.durationSeconds > 0 ? this.plan.durationSeconds + this.delaySeconds : Infinity;
+      const next = fileSeconds + this.delaySeconds + NEXT_KEYFRAME_MARGIN;
+      return next < end - 1 ? next : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The last rung: this source has nothing left to try, and says so the way a lost source does.
+   *
+   * Through `onError` and `lost`, the host's existing answer to a source it must build again — not
+   * a parallel mechanism: its budget (three in three minutes) and its step past a place that has
+   * already failed twice apply unchanged, and past that budget it hands the film to the stable
+   * player. Once only; the watchdog stands down behind `stuck`.
+   */
+  private handOver(at: number): void {
+    if (this.stuck || this.destroyed) return;
+    this.stuck = true;
+    this.escalation = 2;
+    this.escalations += 1;
+    trace(`reprise impossible ici à ${at.toFixed(1)} s — reconstruction demandée ${this.elementState()}`);
+    this.callbacks.onError(
+      `lecture bloquée à ${at.toFixed(1)} s après ${this.recoveries} reprises ${this.elementState()}`,
+      "playback"
+    );
+  }
+
+  /** What the `stop` line wants to know of the recoveries over the whole session. */
+  get recoveryFacts(): { recoveries: number; frozenNudges: number; escalations: number } {
+    return { recoveries: this.recoveries, frozenNudges: this.frozenNudgesTotal, escalations: this.escalations };
   }
 
   /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
@@ -979,7 +1241,9 @@ export class MseSource {
    * here; the caller has to build the whole thing again.
    */
   get lost(): boolean {
-    return !this.destroyed && this.source.readyState === "closed";
+    // Or this source has handed over (`handOver`): open, but nothing left to try. The same answer
+    // fits — build again at the head — and the host already knows how to give it.
+    return !this.destroyed && (this.stuck || this.source.readyState === "closed");
   }
 
   /** Where the viewer was, for a caller that has to rebuild and wants to come back to it. */

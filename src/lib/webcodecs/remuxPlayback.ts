@@ -37,6 +37,8 @@ export interface RemuxPlaybackOptions {
   onWarning?: (warning: PlayerWarning) => void;
   /** Play pressed and the clock not yet moving, or null once it is. See MseCallbacks. */
   onStarting?: (startedAt: number | null) => void;
+  /** A playing clock that has stood still for seconds, once per stall. See MseCallbacks. */
+  onStall?: (facts: Record<string, unknown>) => void;
   /**
    * Ce que le serveur sait de la plage dynamique — `"DOVI"`, `"DOVIWithHDR10"`, `"HDR10"`, `"SDR"`…
    *
@@ -331,6 +333,7 @@ export class RemuxPlayback {
         onError: this.options.onError,
         onWarning: this.options.onWarning,
         onStarting: this.options.onStarting,
+        onStall: this.options.onStall,
         onSubtitles: (cues) => this.collect(cues),
       },
       // Handed in rather than seeked to afterwards, so the first read happens where the viewer
@@ -460,6 +463,11 @@ export class RemuxPlayback {
   }
 
   /** Le pire écart d'horloge du son ré-encodé, `null` quand le son est copié — voir `Remuxer.audioTiming`. */
+  /** Reprises, poussées et barreaux gravis sur la séance, pour la ligne `stop` — voir `MseSource.recoveryFacts`. */
+  recoveryFacts(): { recoveries: number; frozenNudges: number; escalations: number } | null {
+    return this.mse?.recoveryFacts ?? null;
+  }
+
   audioTiming(): { sourceMs: number; encoderMs: number } | null {
     return this.remuxer.audioTiming();
   }

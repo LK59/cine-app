@@ -18,7 +18,7 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
 const LOG_FILE = path.join(LOG_DIR, "player.log");
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -32,8 +32,13 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * `seek` (22/09/2026) : chaque saut demandé depuis les commandes, avec sa durée jusqu'à l'arrivée
  * et le fait qu'il tombait ou non dans ce qui était déjà chargé — des sauts jugés lents sur un
  * réseau d'entreprise n'avaient aucun chiffre pour dire si c'était le réseau ou le lecteur.
+ *
+ * `stall` (22/09/2026) : une horloge qui ne couvre pas une seconde en cinq alors que l'élément dit
+ * jouer — une fois par blocage. Un saut arrière posé juste avant une image clé a laissé un film
+ * figé dix-neuf secondes sous un indicateur de chargement, et le journal n'en gardait que la ligne
+ * `seek` d'avant : ni les tampons, ni les reprises tentées, ni la trace. Voir `MseSource.watchForStall`.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek";
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall";
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);

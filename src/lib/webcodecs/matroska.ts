@@ -547,6 +547,23 @@ export function clusterOffsetForTime(file: MatroskaFile, timeUs: number, trackNu
 }
 
 /**
+ * Le premier point d'index strictement après `timeUs`, en microsecondes, ou null s'il n'y en a pas.
+ *
+ * Le pendant de `clusterOffsetForTime`, qui cherche en arrière : c'est l'avant-dernier barreau de
+ * l'échelle des reprises (`MseSource.escalate`). Une tête bloquée juste avant une image clé — un
+ * saut arrière sur un film à images clés espacées de dix secondes, 22/09/2026 — ne se débloque pas
+ * en redemandant la même position : c'est le même groupe d'images qui est relu, et il échoue de la
+ * même façon. L'image clé suivante, elle, ouvre un groupe que rien n'a encore touché.
+ */
+export function cueTimeAfter(file: MatroskaFile, timeUs: number, trackNumber?: number): number | null {
+  const forTrack = trackNumber === undefined ? file.cues : file.cues.filter((cue) => cue.track === trackNumber);
+  const cues = forTrack.length > 0 ? forTrack : file.cues;
+  // Triés à la lecture de l'index (voir plus haut) : le premier qui dépasse est le bon.
+  for (const cue of cues) if (cue.timeUs > timeUs) return cue.timeUs;
+  return null;
+}
+
+/**
  * La plage d'octets à garder en mémoire autour d'un instant : depuis la grappe de l'image clé qui
  * précède l'instant (moins une seconde — ce que relit un décodeur audio qui s'amorce, voir
  * truehdAudio.ts), jusqu'à la première image clé passé l'instant plus `aheadSeconds`. C'est ce que

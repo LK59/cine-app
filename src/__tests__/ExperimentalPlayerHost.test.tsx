@@ -21,7 +21,9 @@ vi.mock("@/components/TranslationProvider", () => ({
   useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }));
-vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn(), traceRecent: () => [] }));
+/** Ce que la trace rend quand on lui demande ses dernières étapes — vide, sauf pour qui le dit. */
+let recentSteps: string[] = [];
+vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn(), traceRecent: () => recentSteps }));
 vi.mock("@/lib/webcodecs/pathSelector", () => ({ describePath: () => "raison du choix" }));
 vi.mock("@/lib/webcodecs/capabilities", () => ({
   probeCapabilities: async () => ({}),
@@ -159,6 +161,7 @@ type Callbacks = {
   onError: (message: string, kind?: "network" | "playback") => void;
   onWarning: (warning: { code: string; detail?: string }) => void;
   onStarting: (at: number | null) => void;
+  onStall?: (facts: Record<string, unknown>) => void;
   startSeconds: number;
 };
 let probes: Callbacks[] = [];
@@ -277,6 +280,7 @@ const settle = () => act(async () => void (await Promise.resolve()));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  recentSteps = [];
   serverFallback = undefined;
   probes = [];
   engineHandlers.clear();
@@ -1097,6 +1101,36 @@ describe("la fin d'une séance, au journal", () => {
     });
   });
 
+  it("dit combien de fois la source a dû se reprendre sur la séance", async () => {
+    // Une séance à douze reprises et une séance sans aucune se lisaient pareil au journal.
+    remux = fakeRemux({ recoveryFacts: () => ({ recoveries: 7, frozenNudges: 3, escalations: 1 }) });
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+    unmount();
+
+    expect(logged("stop")[0].fields).toMatchObject({ recoveries: 7, frozenNudges: 3, escalations: 1 });
+  });
+
+  it("écrit un blocage que la source signale, avec le fichier et le chemin", async () => {
+    // 22/09/2026 : une horloge figée dix-neuf secondes après un saut arrière, et au journal rien
+    // d'autre que la ligne `seek` qui l'avait précédée.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+    act(() => probes[0].onStall?.({ position: 166.4, recoveries: 3, steps: "+0 ms saut demandé" }));
+
+    const stalls = logged("stall");
+    expect(stalls).toHaveLength(1);
+    expect(stalls[0].fields).toMatchObject({
+      itemId: "item-1",
+      path: "remux",
+      position: 166.4,
+      recoveries: 3,
+      steps: "+0 ms saut demandé",
+    });
+  });
+
   it("n'en écrit qu'une, quand la page s'en va avant le lecteur", async () => {
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
@@ -1312,6 +1346,25 @@ describe("relu le 22/09/2026", () => {
     expect(seeks).toHaveLength(1);
     expect(seeks[0].fields).toMatchObject({ from: 120, to: 600, buffered: false, path: "remux" });
     expect(typeof seeks[0].fields.tookMs).toBe("number");
+  });
+
+  it("joint au saut ce que la source a fait pour le servir", async () => {
+    // 22/09/2026 : « de 176 à 166 en 900 ms », puis un blocage — et rien pour dire comment le saut
+    // avait été servi. La ligne porte désormais les étapes de la trace depuis la demande.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(120);
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    recentSteps = ["+0 ms saut demandé vers 600.0 s", "+412 ms segment 1 construit"];
+    element.currentTime = 600;
+    await act(async () => void fireEvent(element, new Event("seeked")));
+
+    const seek = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .find((entry) => entry.kind === "seek");
+    expect(seek?.fields.steps).toBe("+0 ms saut demandé vers 600.0 s | +412 ms segment 1 construit");
   });
 
   it("garde les commandes pendant une reconstruction, estompées et sans clavier", async () => {

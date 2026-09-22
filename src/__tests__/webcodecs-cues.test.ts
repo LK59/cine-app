@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseMatroska, forgetMatroskaHeader, clusterOffsetForTime, type MatroskaFile, type CuePoint } from "@/lib/webcodecs/matroska";
+import { parseMatroska, forgetMatroskaHeader, clusterOffsetForTime, cueTimeAfter, type MatroskaFile, type CuePoint } from "@/lib/webcodecs/matroska";
 
 // A cue point carries one set of positions per indexed track. They are not interchangeable: an
 // audio entry marks where the sound can be picked up, which on a real 4K file turned out to be
@@ -64,6 +64,24 @@ describe("clusterOffsetForTime", () => {
   it("uses the earliest entry for a time before the first one", () => {
     const cues = file([cue(VIDEO_TRACK, 12, 400), cue(VIDEO_TRACK, 24, 800)]);
     expect(clusterOffsetForTime(cues, 3_000_000, VIDEO_TRACK)).toBe(400);
+  });
+});
+
+describe("cueTimeAfter", () => {
+  // Le barreau « image clé suivante » des reprises : une tête bloquée juste avant une image clé
+  // ne se débloque pas en relisant le même groupe, mais en ouvrant le suivant.
+  it("donne la première image clé strictement après l'instant, sur la piste demandée", () => {
+    const mixed = file([
+      cue(VIDEO_TRACK, 156, 1000),
+      cue(AUDIO_TRACK, 160, 1500),
+      cue(VIDEO_TRACK, 167, 2000),
+      cue(VIDEO_TRACK, 177, 3000),
+    ]);
+    expect(cueTimeAfter(mixed, 158_000_000, VIDEO_TRACK)).toBe(167_000_000);
+    // Posée exactement sur une image clé, la tête n'y est pas renvoyée.
+    expect(cueTimeAfter(mixed, 167_000_000, VIDEO_TRACK)).toBe(177_000_000);
+    expect(cueTimeAfter(mixed, 180_000_000, VIDEO_TRACK)).toBeNull();
+    expect(cueTimeAfter(file([]), 0, VIDEO_TRACK)).toBeNull();
   });
 });
 

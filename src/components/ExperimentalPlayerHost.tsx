@@ -136,7 +136,10 @@ function useElapsedSince(startedAt: number | null): number | null {
  * qui le porte.
  */
 function syncFacts(
-  remux: { audioTiming(): { sourceMs: number; encoderMs: number } | null } | null,
+  remux: {
+    audioTiming(): { sourceMs: number; encoderMs: number } | null;
+    recoveryFacts?(): { recoveries: number; frozenNudges: number; escalations: number } | null;
+  } | null,
   element: HTMLVideoElement | null
 ): Record<string, unknown> {
   const facts: Record<string, unknown> = {};
@@ -145,6 +148,18 @@ function syncFacts(
     if (timing) facts.audioSync = timing;
   } catch {
     // Un pipeline déjà détruit : rien à dire.
+  }
+  try {
+    // Combien de fois la source a dû se reprendre sur la séance. Une séance à douze reprises et
+    // une séance à zéro se lisaient pareil ; les barreaux gravis ne sont écrits que s'il y en a eu.
+    const recovery = remux?.recoveryFacts?.();
+    if (recovery) {
+      facts.recoveries = recovery.recoveries;
+      facts.frozenNudges = recovery.frozenNudges;
+      if (recovery.escalations > 0) facts.escalations = recovery.escalations;
+    }
+  } catch {
+    // Idem.
   }
   try {
     const quality = element?.getVideoPlaybackQuality?.();
@@ -1325,6 +1340,10 @@ export function ExperimentalPlayerHost({
             to: Math.round(timing.to),
             buffered: timing.buffered,
             tookMs: Date.now() - timing.startedAt,
+            // Ce que la source a fait entre la demande et l'arrivée — et une demi-seconde avant,
+            // pour le geste qui l'a lancée. Un saut arrière suivi d'un blocage (22/09/2026) ne
+            // laissait au journal que « de 176 à 166 en 900 ms », sans rien de ce qui l'avait servi.
+            steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
           });
         }
       };
@@ -1572,6 +1591,9 @@ export function ExperimentalPlayerHost({
       },
       onWarning: showPipelineWarning,
       onStarting: (at) => setStartingAt(at),
+      // Une horloge qui ne bouge plus alors que l'élément dit jouer : écrit tel quel, une fois par
+      // blocage. Rien à décider ici — les reprises sont déjà en cours dans la source.
+      onStall: (facts) => reportPlayback("stall", { ...describeFileRef.current(), path: "remux", ...facts }),
     })
       .then((probe) => {
         if (cancelled) {

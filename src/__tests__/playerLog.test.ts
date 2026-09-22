@@ -145,3 +145,29 @@ describe("l'événement d'un changement de piste audio", () => {
     expect(lines()[0]).toMatchObject({ kind: "audio", user: "louis", from: 2, to: 3, tookMs: 412, applied: true });
   });
 });
+
+/**
+ * Un blocage de lecture s'écrit (22/09/2026) : une horloge figée dix-neuf secondes sous un
+ * indicateur de chargement ne laissait au journal que la ligne `seek` d'avant.
+ */
+describe("l'événement d'un blocage de lecture", () => {
+  it("est accepté, et garde tout ce que la source en dit, trace comprise", async () => {
+    const { isPlayerEventKind, logPlaybackEvent } = await import("@/lib/playerLog");
+    expect(isPlayerEventKind("stall")).toBe(true);
+
+    // Ce que l'hôte envoie : la description du fichier (six champs), le chemin, et le relevé de
+    // la source. Le tout doit tenir sous le plafond de 24 champs de `clean()`, sinon les derniers
+    // — la trace en tête — disparaîtraient sans un mot.
+    const steps = Array.from({ length: 40 }, (_, i) => `+${i * 400} ms étape ${i}`).join(" | ");
+    logPlaybackEvent("louis", "stall", {
+      itemId: "x", title: "t", container: "mkv", video: "hevc", range: "SDR", agent: "a", path: "remux",
+      position: 166.4, stalledMs: 5250, readyState: 2, networkState: 2, seeking: false, source: "open",
+      videoBuffered: "150.00–196.00", audioBuffered: "150.00–195.50", lead: 29.6, filling: false,
+      recoveryStreak: 2, frozenNudges: 3, recoveries: 5, sinceAppendMs: 4100, streaming: true, steps,
+    });
+    const line = lines()[0];
+    expect(line).toMatchObject({ kind: "stall", position: 166.4, frozenNudges: 3, recoveries: 5, streaming: true });
+    // La trace n'est pas coupée à 500 caractères comme un champ ordinaire.
+    expect(line.steps.length).toBeGreaterThan(500);
+  });
+});

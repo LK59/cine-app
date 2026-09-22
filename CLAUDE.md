@@ -68,7 +68,8 @@ measures what a seek costs in one file.
 `docker exec cine-app node -e '...'` has every service URL and API key in its environment, and
 `data/logs/player.log` holds what each viewer's player reported about itself — path taken,
 fallbacks, browser, file. Several bugs this repository has fixed were found there and nowhere else.
-`player.log` records `start`, `fallback`, `network`, `rebuild`, `error`, `stop` **and `audio`** —
+`player.log` records `start`, `fallback`, `network`, `rebuild`, `error`, `stop`, `seek`, `stall`
+(a playing clock stuck for 5 s, with buffers, recoveries and the last 20 s of trace) **and `audio`** —
 the last one added on 2026-09-20 because a track change was the one costly gesture leaving no
 trace, and the `rebuild` lines that look like it are network recoveries. It carries the elapsed
 time, both tracks described, whether the sound was copied or re-encoded, and `applied` — a track

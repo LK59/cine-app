@@ -1325,6 +1325,175 @@ function videoRefusingSrcObject(fetched: string[]): HTMLVideoElement {
   return video as unknown as HTMLVideoElement;
 }
 
+/**
+ * L'échelle des reprises, et ce qu'elle écrit au journal.
+ *
+ * 22/09/2026, sur un iPhone : un saut de −10 s tombé juste avant une image clé (espacées de 10,43 s
+ * dans ce film), `seeked`, puis une horloge tenue entre 166 et 167 s pendant dix-neuf secondes sous
+ * l'indicateur de chargement — jusqu'à ce que le spectateur saute ailleurs. Deux verrous : la
+ * fenêtre des reprises rafraîchie par les appels *abandonnés* (le chien de garde appelle toutes les
+ * 250 ms, elle n'expirait donc jamais), et l'horloge figée laissée seule après trois poussées.
+ */
+describe("l'échelle des reprises", () => {
+  /** Les parties privées que ces tests pilotent à la main, pour ne dépendre d'aucune horloge réelle. */
+  type Internals = {
+    watchdog: () => void;
+    watchdogTimer: ReturnType<typeof setInterval> | null;
+    fill: () => Promise<void>;
+    fillTask: Promise<void> | null;
+    watchForFrozenClock: (at: number) => void;
+    watchForStall: () => void;
+    frozenSince: number | null;
+    frozenNudges: number;
+  };
+  const internalsOf = (mse: MseSource) => mse as unknown as Internals;
+  /** Les images clés du fichier, sur son horloge. */
+  const withKeyframes = <T extends object>(remuxer: T, times: number[]) =>
+    Object.assign(remuxer, { keyframeAfter: (s: number) => times.find((t) => t > s) ?? null });
+  const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+  afterEach(() => vi.useRealTimers());
+
+  it("ne s'arrête plus après trois reprises : image clé suivante, puis reconstruction demandée", async () => {
+    const video = fakeVideo();
+    const remuxer = withKeyframes(fakeRemuxer(500, 0.2), [156.4, 166.9, 177.3]);
+    const onError = vi.fn();
+    const onStall = vi.fn();
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError, onWarning: vi.fn(), onStall });
+    const internals = internalsOf(mse);
+    await until(() => internals.fillTask === null && video.buffered.length > 0, "le premier remplissage est fini");
+
+    // Le chien de garde est mené à la main, 250 ms par 250 ms, sur une horloge simulée : c'est
+    // exactement la cadence qui gardait la fenêtre des reprises ouverte pour toujours.
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    // Et rien n'arrive jamais sous la tête : c'est le cas où redemander la position ne sert à rien.
+    internals.fill = () => Promise.resolve();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const tick = async () => {
+      vi.setSystemTime(Date.now() + 250);
+      internals.watchdog();
+      await flush();
+    };
+
+    setTime(video, 166);
+    for (let i = 0; i < 60 && onError.mock.calls.length === 0; i++) await tick();
+
+    // Trois demandes de la même position, comme avant…
+    expect(remuxer.seeks.filter((at) => Math.abs(at - 165.8) < 0.01)).toHaveLength(3);
+    // …puis l'image clé suivante (166,9 s du fichier, donc 167,1 s du lecteur, un peu dedans)…
+    expect(remuxer.seeks.some((at) => Math.abs(at - 167.0) < 0.01)).toBe(true);
+    // …puis, elle aussi sans effet, la main passée à l'hôte comme pour une source perdue.
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][1]).toBe("playback");
+    expect(mse.lost).toBe(true);
+
+    // Borné : plus rien ne part d'ici, l'hôte reconstruit.
+    const seeksSoFar = remuxer.seeks.length;
+    for (let i = 0; i < 40; i++) await tick();
+    expect(remuxer.seeks).toHaveLength(seeksSoFar);
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // Et le blocage s'est écrit au journal, une fois — le chien de garde le surveille même après
+    // avoir passé la main, puisque c'est précisément là que tout le reste s'est tu.
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onStall.mock.calls[0][0]).toMatchObject({ recoveries: 6, filling: false });
+  });
+
+  it("ne laisse plus une horloge figée seule après trois poussées", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(200);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = internalsOf(mse);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 5, "du média devant la tête");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+
+    const before = 0.25;
+    setTime(video, before);
+    video.dispatchEvent(new Event("play"));
+    internals.watchForFrozenClock(before);
+    for (let i = 0; i < 3; i++) {
+      internals.frozenSince = Date.now() - 5000;
+      internals.watchForFrozenClock(before);
+    }
+    expect(internals.frozenNudges).toBe(3);
+    expect(remuxer.seeks).toEqual([]);
+
+    // La quatrième fois, ce n'était plus rien du tout. C'est désormais une vraie reprise : la
+    // position redemandée à la source, tampons vidés et relus.
+    internals.frozenSince = Date.now() - 5000;
+    internals.watchForFrozenClock(before);
+    await flush();
+    expect(remuxer.seeks).toHaveLength(1);
+    expect(remuxer.seeks[0]).toBeCloseTo(before + 0.08 - 0.2, 2);
+    expect(traceText()).toContain("malgré 3 poussées");
+  });
+
+  it("écrit un blocage une fois, avec de quoi le comprendre, et pas davantage", async () => {
+    const video = fakeVideo();
+    Object.assign(video, { readyState: 2, networkState: 2, seeking: false });
+    const onStall = vi.fn();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onStall });
+    const internals = internalsOf(mse);
+    await until(() => internals.fillTask === null && video.buffered.length > 0, "le premier remplissage est fini");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const after = (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+      internals.watchForStall();
+    };
+
+    setTime(video, 5);
+    internals.watchForStall();
+    // Trois secondes : rien encore — les reprises ont le temps d'agir avant que ce soit un fait.
+    after(3000);
+    expect(onStall).not.toHaveBeenCalled();
+    after(2500);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    const facts = onStall.mock.calls[0][0] as Record<string, unknown>;
+    expect(facts).toMatchObject({
+      position: 5,
+      readyState: 2,
+      networkState: 2,
+      seeking: false,
+      source: "open",
+      filling: false,
+      recoveryStreak: 0,
+      frozenNudges: 0,
+      recoveries: 0,
+      streaming: true,
+    });
+    expect(facts.stalledMs).toBeGreaterThanOrEqual(5000);
+    expect(facts.videoBuffered).toMatch(/^0\.00–\d+\.\d\d$/);
+    expect(facts.audioBuffered).toMatch(/–/);
+    expect(facts.lead).toBeGreaterThan(0);
+    expect(typeof facts.sinceAppendMs).toBe("number");
+    // Rien d'imbriqué au-delà d'un niveau : `clean()` jetterait le reste.
+    for (const value of Object.values(facts)) expect(typeof value === "object" && value !== null).toBe(false);
+    expect(facts.steps).toContain("lecture bloquée");
+
+    // Le même blocage qui dure : pas une ligne de plus.
+    after(10_000);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    // Il repart, se refige aussitôt : un nouvel épisode, mais dans la minute — toujours rien.
+    setTime(video, 7);
+    after(250);
+    after(6000);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    // Passé la minute, un nouveau blocage s'écrit.
+    after(60_000);
+    setTime(video, 9);
+    after(250);
+    after(6000);
+    expect(onStall).toHaveBeenCalledTimes(2);
+
+    // Et une pause n'est pas un blocage.
+    (video as unknown as { paused: boolean }).paused = true;
+    after(120_000);
+    after(6000);
+    expect(onStall).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("MseSource sur un élément qui refuse srcObject", () => {
   let created: string[];
   let revoked: string[];

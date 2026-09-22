@@ -14,7 +14,7 @@ import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
-import { clusterOffsetForTime } from "./matroska";
+import { clusterOffsetForTime, cueTimeAfter } from "./matroska";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
 import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
@@ -713,6 +713,15 @@ export class Remuxer {
       this.videoCuePointsCache = this.file.cues.filter((cue) => cue.track === this.videoTrack.number).length;
     }
     return this.videoCuePointsCache;
+  }
+
+  /**
+   * L'image clé indexée qui suit cet instant, sur l'horloge du fichier, ou null — voir
+   * `cueTimeAfter`. Ce que `MseSource` vise quand redemander la même position n'a rien donné.
+   */
+  keyframeAfter(seconds: number): number | null {
+    const us = cueTimeAfter(this.file, Math.round(seconds * 1e6), this.videoTrack.number);
+    return us === null ? null : us / 1e6;
   }
 
   /** The subtitle tracks this path can render — the text ones; styled formats are not handled. */

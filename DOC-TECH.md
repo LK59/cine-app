@@ -322,7 +322,23 @@ reads and two verbs.
   buffers, so emptying audio empties them all.
 - **Frozen clock (1.5 s)**: playing, head on media, seconds of lead, and the clock not moving. The
   inverse shape of every other stall, handled the same way — re-request the position, slightly
-  further on. Three nudges of 0.08 s at most.
+  further on. Three nudges of 0.08 s; past those, a real recovery (below), once per 1.5 s.
+- **The recovery ladder** (`recover` → `escalate` → `handOver`, `mseSource.ts`). Both kinds of
+  stall climb the same rungs, and no rung is ever a dead end:
+  1. seek to the head again, buffers cleared and re-read — **three times** at one spot within 5 s;
+  2. **the next indexed keyframe** past the head (`Remuxer.keyframeAfter`, `cueTimeAfter`), 0.1 s
+     inside its group — the same group re-read fails the same way, the next one has not been
+     touched. Three attempts there too;
+  3. **hand over to the host**: `onError(…, "playback")` with `lost` now true, so the host's
+     ordinary source-loss rebuild runs — its budget, its step past a place that failed twice, and
+     the stable player once that budget is spent. The watchdog stands down.
+
+  Each rung is climbed once until the clock has **really played for 3 s** (forward ticks under
+  0.6 s, no seek). Eight attempts without playback climb it anyway, however they are spaced.
+  Two latches this replaced (22/09/2026, a −10 s skip that froze a film for nineteen seconds):
+  the 5 s window was refreshed by *abandoned* calls too — the watchdog calls every 250 ms, so it
+  never expired and every call after the third gave up; and the frozen clock was left alone for
+  good after its third nudge.
 - **Source loss**: iOS reclaims media resources in the background and closes the MediaSource. This
   is a pipeline to rebuild at the current position, not a failure to report — up to three times.
 - **A platform audio decoder that fails on the canvas path is not fatal**: the codec is set aside
@@ -618,8 +634,8 @@ Shown:
 
 Sent to the trace instead, because the viewer saw nothing and has nothing to do: refused segment
 retried, refused seek retried, recovery abandoned after N attempts (the remuxer's index back-off
-routinely reaches the position just afterwards), pipeline rebuilt, sound restored by the software
-decoder.
+routinely reaches the position just afterwards) and the ladder's next rung, pipeline rebuilt, sound
+restored by the software decoder.
 
 ---
 
@@ -664,13 +680,16 @@ unwitnessed.
 | `network` | The network dropped mid-playback, with the position |
 | `rebuild` | Source lost and rebuilt, with the attempt number and whether a passage was skipped |
 | `error` | An error shown to the viewer |
+| `seek` | A seek from the controls: from, to, already buffered or not, how long, and `steps` — the trace since the request |
+| `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
+| `stop` | The player went away; carries `recoveries`, `frozenNudges` and, when any, `escalations` over the session |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
 the one field that says who this is must not be the one anybody can invent), the file, its
 container, video codec, resolution, bit depth and range, plus the browser.
 
 Three guardrails, since a browser decides what gets written: fields are **bounded** (24 at most,
-500 characters each, nothing nested), the file **rotates** at 5 MB keeping one generation, and a
+500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping one generation, and a
 failed write **never brings down a playback**.
 
 ```bash
