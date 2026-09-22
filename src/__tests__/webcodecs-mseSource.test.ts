@@ -892,6 +892,34 @@ describe("MseSource", () => {
       expect(video.playbackRate).toBe(1);
     });
 
+    it("ne rend l'horloge qu'à la première image affichée du saut, et pas plus de 2 s après l'arrivée", async () => {
+      // Rafale sur un 4K, iPhone : `seeked`, puis trois secondes de son sur une image figée.
+      onBrowser(IPHONE);
+      vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+      try {
+        const video = withRate(fakeVideo());
+        const frames: (() => void)[] = [];
+        Object.assign(video, { requestVideoFrameCallback: (cb: () => void) => frames.push(cb) });
+        const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+        (video as unknown as { currentTime: number }).currentTime = 5;
+        video.dispatchEvent(new Event("seeking"));
+        video.dispatchEvent(new Event("seeked"));
+        expect(video.playbackRate).toBe(0);
+        frames.shift()!();
+        expect(video.playbackRate).toBe(1);
+
+        // Une image qui ne se signale jamais : l'horloge repart quand même.
+        video.dispatchEvent(new Event("seeking"));
+        video.dispatchEvent(new Event("seeked"));
+        expect(video.playbackRate).toBe(0);
+        vi.advanceTimersByTime(2100);
+        expect(video.playbackRate).toBe(1);
+        mse.destroy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("ne touche pas à l'horloge ailleurs que sous WebKit, ni en pause", async () => {
       onBrowser(CHROME);
       const video = withRate(fakeVideo());
