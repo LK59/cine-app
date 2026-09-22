@@ -79,6 +79,14 @@ describe("le plafond de lumière HDR", () => {
     expect(resolveHdrCap("auto", IPHONE, false)).toBeNull();
   });
 
+  it("vaut 203 aussi sur Chrome Linux, mais pas sur Android ni Firefox Linux", () => {
+    const linux = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+    expect(resolveHdrCap("auto", linux, false)).toBe(203);
+    expect(resolveHdrCap("auto", linux, true)).toBeNull();
+    expect(resolveHdrCap("auto", "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36", false)).toBeNull();
+    expect(resolveHdrCap("auto", "Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0", false)).toBeNull();
+  });
+
   it("suit un choix fait à la main, là où le réglage a un sens", () => {
     expect(resolveHdrCap("native", WINDOWS_CHROME, false)).toBeNull();
     expect(resolveHdrCap(150, WINDOWS_CHROME, false)).toBe(150);

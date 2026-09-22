@@ -54,9 +54,18 @@ export function writeHdrCapChoice(choice: HdrCapChoice): void {
   }
 }
 
-/** Ce que « auto » veut dire ici : 203 pour Chrome/Edge sous Windows sur écran SDR, sinon rien. */
+/**
+ * Ce que « auto » veut dire ici : 203 pour Chrome/Edge sous Windows ou Linux sur écran SDR, sinon
+ * rien. Linux ajouté le 22/09/2026 sur la même conversion (Skia) sans avoir été regardé à l'œil :
+ * à revoir s'il s'y montre trop clair.
+ */
 export function autoHdrCap(userAgent: string, displayHdr: boolean | null): number | null {
-  return isChromiumOnWindows(userAgent) && displayHdr === false ? CHROME_SDR_WHITE_NITS : null;
+  return (isChromiumOnWindows(userAgent) || isChromiumOnLinux(userAgent)) && displayHdr === false ? CHROME_SDR_WHITE_NITS : null;
+}
+
+/** Chrome ou Edge sur un Linux de bureau — Android, qui se dit aussi Linux, n'en est pas. */
+export function isChromiumOnLinux(userAgent: string): boolean {
+  return /Linux/i.test(userAgent) && !/Android|CrOS/i.test(userAgent) && /Chrom(e|ium)|Edg\//i.test(userAgent) && !/Firefox/i.test(userAgent);
 }
 
 /**
