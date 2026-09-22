@@ -1488,6 +1488,45 @@ describe("relu le 22/09/2026", () => {
     expect(seek?.fields.steps).toBe("+0 ms saut demandé vers 600.0 s | +412 ms segment 1 construit");
   });
 
+  it("ne mesure pas les sauts du chemin canvas, que seul le remux sait conclure", async () => {
+    // Chasse aux bugs du 22/09/2026 : sur le canevas, la mesure ouverte par un saut n'était
+    // fermée que par le `seeked` de l'élément du remux, qui n'y existe pas — chaque saut suivant
+    // écrivait une ligne fausse, « remux », tombée à 0, jamais arrivée.
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+
+    const seeks = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === "seek");
+    expect(seeks).toHaveLength(0);
+  });
+
+  it("ne dit pas arrivé ou non un saut remplacé pendant que l'élément cherche encore", async () => {
+    // Pendant `seeking`, currentTime vaut déjà la cible : « arrivé » n'y voulait rien dire, et un
+    // saut remplacé en plein chargement se lisait arrivé. L'endroit reste, le verdict part.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(120);
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    element.currentTime = 600;
+    Object.defineProperty(element, "seeking", { value: true, configurable: true });
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+
+    const seeks = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === "seek");
+    expect(seeks).toHaveLength(1);
+    expect(seeks[0].fields).toMatchObject({ to: 600, superseded: true, landedAt: 600 });
+    expect(seeks[0].fields).not.toHaveProperty("arrived");
+  });
+
   it("garde les commandes pendant une reconstruction, estompées et sans clavier", async () => {
     // 22/09/2026 : elles disparaissaient puis réapparaissaient d'un coup à chaque changement de
     // piste. Elles restent là, s'effacent, et ne répondent plus le temps de la reconstruction.

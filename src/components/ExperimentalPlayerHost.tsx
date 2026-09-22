@@ -574,19 +574,22 @@ export function ExperimentalPlayerHost({
    * l'arrivée. 2012 sur iPhone (22/09/2026) : une tête passée de 2141 à 1681 s sans une trace.
    * Il est désormais écrit quand un autre geste le remplace, avec l'endroit où il est tombé.
    */
-  const reportUnarrivedSeek = (landedAt: number) => {
+  const reportUnarrivedSeek = (landedAt: number, stillSeeking: boolean) => {
     const timing = seekTimingRef.current;
     if (!timing) return;
     seekTimingRef.current = null;
     // Remplacé par le geste suivant avant son `seeked` : le cas ordinaire d'une rafale. Arrivé
     // s'il était à sa cible — 125 lignes sur 128 « jamais arrivé » à tort le 22/09/2026.
+    // Sauf pendant `seeking`, où currentTime vaut déjà la cible avant que rien n'y soit : un
+    // saut remplacé en plein chargement se lisait « arrivé ». Là, le verdict n'est pas écrit —
+    // l'endroit, si (chasse aux bugs du 22/09/2026).
     reportPlayback("seek", {
       ...describeFileRef.current(),
       path: "remux",
       from: Math.round(timing.from),
       to: Math.round(timing.to),
       buffered: timing.buffered,
-      arrived: seekArrived(landedAt, timing.to),
+      ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
       superseded: true,
       landedAt: Math.round(landedAt * 10) / 10,
       tookMs: Date.now() - timing.startedAt,
@@ -1889,6 +1892,15 @@ export function ExperimentalPlayerHost({
    */
   const noteSeekRequest = (seconds: number) => {
     requestedSeekRef.current = seconds;
+    // Une reconstruction pas encore ouverte rouvre directement là.
+    if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
+    // Mesuré sur le remux seulement : c'est le `seeked` de son élément qui ferme la mesure. Sur
+    // le canevas, rien ne la fermait, et chaque saut suivant écrivait la précédente en ligne
+    // fausse — « remux », tombée à 0, jamais arrivée (chasse aux bugs du 22/09/2026).
+    if (pathRef.current !== "remux") {
+      seekTimingRef.current = null;
+      return;
+    }
     // Mesuré jusqu'à l'arrivée (`seeked`). Un saut qui en remplace un autre en cours
     // remplace aussi sa mesure : c'est le dernier geste qui compte.
     const element = videoElRef.current;
@@ -1896,10 +1908,8 @@ export function ExperimentalPlayerHost({
     for (let i = 0; element && i < element.buffered.length; i++) {
       if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
     }
-    reportUnarrivedSeek(element?.currentTime ?? positionRef.current);
+    reportUnarrivedSeek(element?.currentTime ?? positionRef.current, element?.seeking ?? false);
     seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), buffered };
-    // Une reconstruction pas encore ouverte rouvre directement là.
-    if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
   };
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */
