@@ -57,4 +57,17 @@ describe("POST /api/player/log", () => {
     expect((await post({ kind: "start" })).status).toBe(404);
     expect(mockLog).not.toHaveBeenCalled();
   });
+
+  it("ne laisse que l'administrateur marquer une ligne comme venant du banc", async () => {
+    // Une ligne `bench` part dans bench-player.log : ouvert à tous, n'importe quel compte pouvait
+    // sortir ses propres lignes du journal des spectateurs.
+    mockVerifySessionFull.mockResolvedValue({ u: "mathis", role: "user", jfId: "jf-2" });
+    await post({ kind: "stop", fields: { bench: "banc-x", at: 12 } });
+    expect(mockLog.mock.calls[0][2]).not.toHaveProperty("bench");
+
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin", jfId: "jf-1" });
+    await post({ kind: "stop", fields: { bench: "banc-x", at: 12 } });
+    expect(mockLog.mock.calls[1][2]).toMatchObject({ bench: "banc-x" });
+  });
 });
+

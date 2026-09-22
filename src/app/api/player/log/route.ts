@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
   const fields = body?.fields;
   // The account comes from the session, never from the body: the one field that says who this
   // was about must not be the one field anybody can forge.
-  logPlaybackEvent(session.u, body.kind, fields && typeof fields === "object" ? (fields as Record<string, unknown>) : {});
+  const cleaned = fields && typeof fields === "object" ? { ...(fields as Record<string, unknown>) } : {};
+  // `bench` envoie la ligne dans le journal du banc : réservé à l'administrateur, qui seul lance
+  // un banc. Sinon, n'importe quel compte pourrait sortir ses lignes du journal des spectateurs.
+  if (session.role !== "admin") delete cleaned.bench;
+  logPlaybackEvent(session.u, body.kind, cleaned);
   return NextResponse.json({ ok: true });
 }
