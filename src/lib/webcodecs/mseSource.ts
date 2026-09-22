@@ -1057,15 +1057,24 @@ export class MseSource {
     const before = this.runawaySeconds;
     this.runawaySeconds += delta;
     if (before >= RUNAWAY_REPORT_SECONDS || this.runawaySeconds < RUNAWAY_REPORT_SECONDS) return;
-    if (Date.now() - this.lastStallReportAt < STALL_REPORT_COOLDOWN_MS) return;
-    this.lastStallReportAt = Date.now();
     trace(`horloge qui avance sans média : ${this.runawaySeconds.toFixed(1)} s courues jusqu'à ${now.toFixed(2)} s — ${this.elementState()}`);
-    try {
-      // En tête : `clean()` garde 24 champs, et celui-ci est le seul qui distingue les deux lignes.
-      this.callbacks.onStall?.({ runaway: true, ...this.stallReport(now, 0) });
-    } catch {
-      /* the log is not worth a player */
+    if (Date.now() - this.lastStallReportAt >= STALL_REPORT_COOLDOWN_MS) {
+      this.lastStallReportAt = Date.now();
+      try {
+        // En tête : `clean()` garde 24 champs, et celui-ci est le seul qui distingue les deux lignes.
+        this.callbacks.onStall?.({ runaway: true, ...this.stallReport(now, 0) });
+      } catch {
+        /* the log is not worth a player */
+      }
     }
+    // Et on la reprend. Ce que le journal de 2012 montrait (22/09/2026) : un saut au milieu d'un
+    // groupe d'images de 8 s, le son tamponné des secondes en avance, et WebKit qui lance son
+    // horloge avant que le décodeur ait rattrapé la cible — plus une image affichée (658 images
+    // pour 55 s regardées), une tête posée à chaque envoi sur la fin de la vidéo reçue. Aucune
+    // surveillance ne le voyait : une lecture était en cours (le chien de garde s'efface
+    // devant elle), la tête était « au bord » du média, et l'horloge bougeait. Redemander la
+    // position vide les tampons et relit depuis l'image clé, avec la limite de `recover`.
+    if (!this.stuck && !this.recover(now)) this.handOver(now);
   }
 
   /**
