@@ -19,6 +19,7 @@ import { castPassFor, withCastPass, CAST_TOKEN_PARAM } from "@/lib/castToken";
 // a WebKit element-reuse limitation after all (a genuinely fresh <video> element hit it just the
 // same), a real server-timing race that Firefox was silently protecting us from all along.
 const UPSTREAM_RETRY_DELAYS_MS = [200, 500, 1000];
+const UPSTREAM_HEADERS_TIMEOUT_MS = 30_000;
 
 async function fetchWithRetry(target: string, headers: Record<string, string>, signal: AbortSignal) {
   let res = await fetch(target, { signal, headers });
@@ -82,14 +83,28 @@ export async function GET(
     // response to a Range request under HTTP (the client falls back to using the whole body).
     const range = isManifest ? null : req.headers.get("range");
     const upstreamAt = performance.now();
-    const res = await fetchWithRetry(
-      target,
-      // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
-      // here is what lets the browser's native <video> seeking issue real HTTP range requests
-      // instead of always re-fetching from byte 0.
-      { ...jellyfinAuthHeaders(config.jellyfin.apiKey), ...(range ? { Range: range } : {}) },
-      AbortSignal.any([req.signal, AbortSignal.timeout(30_000)])
+    // Le délai borne l'attente de la réponse de Jellyfin, pas le transfert : un signal de
+    // délai passé à `fetch` couvre aussi la lecture du corps, et coupait net au bout de 30 s
+    // un segment du lecteur serveur ou une plage lue lentement par un téléphone en itinérance.
+    // Une fois les en-têtes là, seul le départ du navigateur (`req.signal`) arrête le flux.
+    const headerWait = new AbortController();
+    const headerTimer = setTimeout(
+      () => headerWait.abort(new DOMException("Jellyfin n'a pas répondu", "TimeoutError")),
+      UPSTREAM_HEADERS_TIMEOUT_MS
     );
+    let res: Response;
+    try {
+      res = await fetchWithRetry(
+        target,
+        // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
+        // here is what lets the browser's native <video> seeking issue real HTTP range requests
+        // instead of always re-fetching from byte 0.
+        { ...jellyfinAuthHeaders(config.jellyfin.apiKey), ...(range ? { Range: range } : {}) },
+        AbortSignal.any([req.signal, headerWait.signal])
+      );
+    } finally {
+      clearTimeout(headerTimer);
+    }
     if (!res.ok || !res.body) {
       // The one log kept from the debugging era: an upstream failure that survived the retry
       // budget is a genuine ops signal (Jellyfin down, dead session), and it's low-volume.

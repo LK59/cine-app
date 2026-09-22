@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
@@ -73,6 +73,52 @@ describe("GET /api/jellyfin/stream/[itemId]/[...path]", () => {
     const res = await get();
     expect(res.status).toBe(503);
     expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  // Chasse aux bugs du 22/09/2026 : le délai de 30 s couvrait le corps entier. Un segment du
+  // lecteur serveur, ou une plage lue lentement par un téléphone en itinérance, était coupé net au
+  // milieu du transfert — seule l'attente de la réponse de Jellyfin doit être bornée.
+  describe("délai d'attente de Jellyfin", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      // Le vrai `AbortSignal.timeout` échappe aux horloges simulées : on le rend observable.
+      vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+        const c = new AbortController();
+        setTimeout(() => c.abort(new DOMException("timeout", "TimeoutError")), ms);
+        return c.signal;
+      });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it("ne coupe plus le corps une fois la réponse arrivée", async () => {
+      let signal: AbortSignal | undefined;
+      mockFetch.mockImplementation(async (_url: string, init: { signal: AbortSignal }) => {
+        signal = init.signal;
+        return upstream(200);
+      });
+      const res = await get();
+      expect(res.status).toBe(200);
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(signal?.aborted).toBe(false);
+    });
+
+    it("abandonne toujours un Jellyfin muet au bout de 30 s", async () => {
+      let signal: AbortSignal | undefined;
+      mockFetch.mockImplementation(
+        (_url: string, init: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            signal = init.signal;
+            init.signal.addEventListener("abort", () => reject(init.signal.reason));
+          })
+      );
+      const pending = get();
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(signal?.aborted).toBe(true);
+      await pending.catch(() => undefined);
+    });
   });
 
   it("refuses a malformed item id and an unauthenticated caller", async () => {
