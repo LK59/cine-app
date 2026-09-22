@@ -913,6 +913,35 @@ describe("MseSource", () => {
       mse.destroy();
     });
 
+    it("laisse passer une tête encore en train de sauter", async () => {
+      // Banc iPhone du 22/09/2026, Titanic : cinq sauts en 0,4 s. Le navigateur applique
+      // `currentTime` tout de suite et n'émet `seeking` qu'ensuite — dans cet intervalle, la tête
+      // est déjà au cinquième saut alors que la cible connue est encore celle du quatrième. Le
+      // détecteur y voyait une fuite et ramenait la tête 935 s en arrière, défaisant le dernier
+      // saut du spectateur. Une tête en route ne s'est pas égarée : elle n'est pas encore arrivée.
+      onBrowser(CHROME);
+      const video = withRate(fakeVideo());
+      const remuxer = fakeRemuxer(200);
+      const onStall = vi.fn();
+      const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onStall });
+      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 20, "du média devant la tête");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      const seeksBefore = remuxer.seeks.length;
+
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      // Le saut suivant : la tête y est déjà, son `seeking` n'est pas encore arrivé.
+      (video as unknown as { currentTime: number }).currentTime = 20;
+      Object.assign(video, { seeking: true });
+      internals.watchdog();
+      await flush();
+
+      expect(remuxer.seeks.length).toBe(seeksBefore);
+      expect(onStall).not.toHaveBeenCalled();
+      mse.destroy();
+    });
+
     it("fait reconstruire à la cible, pas là où la tête s'est enfuie, quand les reprises n'y suffisent plus", async () => {
       // Audit du 22/09/2026 : la reconstruction partait de `position`, c'est-à-dire de la tête
       // partie ailleurs.

@@ -1169,6 +1169,13 @@ export class MseSource {
     const intent = this.seekState.intent;
     if (intent) {
       if (this.seekState.requested !== null || seekArrived(now, intent.target)) return false;
+      // Encore en train de sauter : la tête n'est pas égarée, elle n'est pas arrivée. Un navigateur
+      // applique `currentTime` aussitôt et n'émet `seeking` qu'ensuite ; dans cet intervalle, une
+      // rafale a déjà déplacé la tête vers une cible dont on n'a pas encore été averti. Banc iPhone
+      // du 22/09/2026, Titanic : cinq sauts en 0,4 s, et le détecteur ramenait la tête 935 s en
+      // arrière — il défaisait le dernier saut demandé. Quand l'élément se posera, `seeked` dira
+      // s'il est arrivé, et ce même détecteur tranchera alors avec la bonne cible.
+      if (this.video.seeking) return false;
       this.seekState.drop();
       this.headAway(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne`, now, intent.target, {
         seekTarget: intent.target,
