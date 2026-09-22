@@ -13,7 +13,6 @@ import { trace, traceRecent } from "./trace";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
-import { isWebKitEngine } from "../webkitEngine";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { SeekLifecycle } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
@@ -111,9 +110,6 @@ const STALL_REPORT_COOLDOWN_MS = 60_000;
 const RUNAWAY_REPORT_SECONDS = 3;
 
 
-/** L'horloge arrêtée pour un saut sous WebKit ne le reste jamais plus longtemps que cela. */
-const CLOCK_HOLD_MAX_MS = 12_000;
-
 /** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
 const STALL_TRACE_MS = 20_000;
 
@@ -208,26 +204,6 @@ export class MseSource {
   /** Le saut : demandé, servi, en route, arrivé — voir `SeekLifecycle`. */
   private readonly seekState = new SeekLifecycle();
   private delaySeconds = 0;
-  /**
-   * L'horloge arrêtée le temps d'un saut, et la vitesse à lui rendre — voir `holdClock`. WebKit
-   * seulement : c'est là, et là seul, que l'horloge filait pendant un saut.
-   */
-  private clockHold: { rate: number; since: number } | null = null;
-  private readonly holdClockOnSeek =
-    MseSource.holdClockDuringSeek && typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent ?? "");
-
-  /**
-   * L'horloge arrêtée pendant un saut sous WebKit — coupée le 22/09/2026, gardée derrière cet
-   * interrupteur le temps d'un banc iPhone qui dise si elle servait.
-   *
-   * Sa prémisse ne tient pas : au banc du même jour, Safari a replacé la tête à son ancienne
-   * position pendant un saut *alors que l'horloge était arrêtée* — c'est le filet de la tête hors
-   * de sa place qui l'a rattrapé. Et elle en rendait d'autres muets : pendant qu'elle tenait, ni
-   * l'horloge figée ni les blocages n'étaient surveillés, si bien qu'un saut qui ne se résout pas
-   * attendait environ dix-huit secondes par tentative. Si le banc iPhone ne montre rien sans elle,
-   * elle part.
-   */
-  static holdClockDuringSeek = false;
   /**
    * Où le film doit s'ouvrir, tant que le média n'est pas encore là pour l'y recevoir.
    *
@@ -510,7 +486,6 @@ export class MseSource {
     if (this.destroyed) return;
     const target = this.video.currentTime;
     this.seekState.started(target, Date.now());
-    this.holdClock();
     // This object's own move, already being served — serving it again would clear the buffers
     // it is in the middle of refilling.
     if (this.seekState.isOwnMove(target)) return void this.fill();
@@ -1036,53 +1011,24 @@ export class MseSource {
    * failure mode is that no event comes.
    */
   /**
-   * Arrivé : la tête est où le saut voulait qu'elle soit. L'horloge repart, et le saut n'est plus
-   * surveillé. Un `seeked` loin de la cible, lui, ne vaut pas arrivée — voir `watchForHeadAway`.
+   * Arrivé : la tête est où le saut voulait qu'elle soit, et le saut n'est plus surveillé. Un
+   * `seeked` loin de la cible, lui, ne vaut pas arrivée — voir `watchForHeadAway`.
+   *
+   * Il y avait ici, du 22/09/2026 au soir, une horloge arrêtée pendant les sauts sous WebKit
+   * (vitesse 0, rendue à l'arrivée). Retirée après deux bancs iPhone : Safari a replacé une tête à
+   * son ancienne position l'horloge arrêtée comme sans elle — c'est le filet qui l'a rattrapée les
+   * deux fois —, elle rendait muettes l'horloge figée et les blocages, et Safari ne signale aucune
+   * image à vitesse 0, si bien qu'on ne pouvait pas non plus l'attendre.
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
-    if (!this.seekState.arrive(this.video.currentTime)) return;
-    this.releaseClock("saut arrivé");
+    this.seekState.arrive(this.video.currentTime);
   };
-
-  /**
-   * Sous WebKit, un saut se fait horloge arrêtée (vitesse 0), et elle repart à l'arrivée.
-   *
-   * Banc iPhone du 22/09/2026 : trois sauts sur huit films ne sont jamais arrivés, la tête partie
-   * de 20 à 650 s au-delà de sa cible — l'horloge de Safari courait pendant le saut, sans image,
-   * collée au bout de ce qui venait d'arriver. Les six cas étaient des sauts faits en lecture ; le
-   * saut fait en pause, lui, a été propre sur les huit films. La vitesse 0 arrête l'horloge sans
-   * mettre en pause : ni le bouton, ni la position retenue d'une pause ne bougent.
-   */
-  private holdClock(): void {
-    if (!this.holdClockOnSeek || this.clockHold || this.video.paused) return;
-    try {
-      this.clockHold = { rate: this.video.playbackRate || 1, since: Date.now() };
-      this.video.playbackRate = 0;
-    } catch {
-      this.clockHold = null;
-    }
-  }
-
-  private releaseClock(because: string): void {
-    const hold = this.clockHold;
-    if (!hold) return;
-    this.clockHold = null;
-    try {
-      // Seulement si personne n'a changé la vitesse entre-temps : un choix du spectateur passe avant.
-      if (this.video.playbackRate === 0) this.video.playbackRate = hold.rate;
-    } catch {
-      /* rien de plus à faire */
-    }
-    if (Date.now() - hold.since > 1000) trace(`horloge rendue après ${Date.now() - hold.since} ms (${because})`);
-  }
 
   private readonly watchdog = () => {
     // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
     // underneath it would move the picture for no reason and land the resume elsewhere.
     if (this.destroyed) return;
-    // Une horloge arrêtée pour un saut ne le reste pas : si l'arrivée ne vient pas, elle repart.
-    if (this.clockHold && Date.now() - this.clockHold.since > CLOCK_HOLD_MAX_MS) this.releaseClock("délai dépassé");
     // Before anything returns early: a stall is exactly the case where every check below has
     // decided there is nothing to do, and that decision is what the log line has to show.
     this.watchForStall();
@@ -1093,8 +1039,6 @@ export class MseSource {
     const now = this.video.currentTime;
     // La tête a quitté sa place et vient d'être renvoyée : rien d'autre à faire à ce tour.
     if (this.headAwayHandledAt === now) return;
-    // L'horloge est arrêtée exprès : ni figée, ni bloquée.
-    if (this.clockHold) return;
     // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
     // would be this player seeking against itself.
     if (this.seekState.requested !== null) return;
@@ -1153,14 +1097,9 @@ export class MseSource {
       this.stallSince = null;
       return;
     }
-    // Avant l'horloge arrêtée : une tête qui s'enfuit pendant un saut doit être vue même alors.
     if (!this.stuck && this.watchForHeadAway(now, delta)) {
       this.stallSince = null;
       this.headAwayHandledAt = now;
-      return;
-    }
-    if (this.clockHold) {
-      this.stallSince = null;
       return;
     }
     // Un saut qui attend son média n'est pas un blocage : c'est l'attente du réseau, et la ligne
@@ -1213,7 +1152,6 @@ export class MseSource {
     if (intent) {
       if (this.seekState.requested !== null || seekArrived(now, intent.target)) return false;
       this.seekState.drop();
-      this.releaseClock("saut parti ailleurs");
       this.headAway(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne`, now, intent.target, {
         seekTarget: intent.target,
         stalledMs: Date.now() - intent.since,
@@ -1585,8 +1523,6 @@ export class MseSource {
     this.video.removeEventListener("waiting", this.request);
     this.video.removeEventListener("seeking", this.onSeeking);
     this.video.removeEventListener("seeked", this.onSeeked);
-    // L'élément sert au lecteur suivant : il ne doit pas hériter d'une horloge arrêtée.
-    this.releaseClock("lecteur fermé");
     this.video.removeEventListener("pause", this.guard.paused);
     this.video.removeEventListener("play", this.onPlay);
     this.video.removeEventListener("playing", this.request);

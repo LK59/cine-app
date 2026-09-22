@@ -809,10 +809,11 @@ index can only be reached near its start (`reachable`).
 - **The host forgets the target it asked for** once the source says the seek is over
   (`seekPending`), even if the playhead landed elsewhere. A seek replaced by the next one is logged
   as `superseded`, and as `arrived` if it was at its target.
-- **WebKit clock hold** (`MseSource.holdClockDuringSeek`) is **off**. It stopped the clock with
-  `playbackRate = 0` during a seek. Safari still moved a playhead back to its old position with the
-  clock held, and the hold silenced the frozen-clock and stall watches. Safari also never fires
-  `requestVideoFrameCallback` at rate 0, so "release on the first picture" cannot work.
+- **No clock hold during a seek.** A WebKit-only `playbackRate = 0` hold was tried and removed on the
+  same day. Across two iPhone benches, Safari still moved a playhead back to its old position with
+  the clock held, and the out-of-place detector caught it both times. The hold also silenced the
+  frozen-clock and stall watches. Safari fires no `requestVideoFrameCallback` at rate 0, so the
+  release cannot wait for the first picture either.
 - **Not merged yet:** the two landings, `placePendingStart` at open and `nudgeIntoBuffer` after a
   seek. They differ in tolerance (1 s against 15 s) and in inset. Merging them touches opening on
   iPhone, so it is left for a separate change.

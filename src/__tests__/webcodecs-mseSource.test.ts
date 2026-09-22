@@ -857,98 +857,11 @@ describe("MseSource", () => {
     mse.destroy();
   });
 
-  describe("sauts sous WebKit et sauts qui partent ailleurs (banc iPhone du 22/09/2026)", () => {
-    const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
+  describe("sauts qui partent ailleurs (banc iPhone du 22/09/2026)", () => {
     const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
     const onBrowser = (ua: string) => vi.spyOn(navigator, "userAgent", "get").mockReturnValue(ua);
-    // L'horloge arrêtée est coupée par défaut depuis l'audit du 22/09/2026 ; ses tests l'allument.
-    beforeEach(() => void (MseSource.holdClockDuringSeek = true));
-    afterEach(() => {
-      MseSource.holdClockDuringSeek = false;
-      vi.restoreAllMocks();
-    });
+    afterEach(() => vi.restoreAllMocks());
     const withRate = (video: HTMLVideoElement) => Object.assign(video, { playbackRate: 1, seeking: false });
-
-    it("n'arrête pas l'horloge par défaut, même sous WebKit", async () => {
-      MseSource.holdClockDuringSeek = false;
-      onBrowser(IPHONE);
-      const video = withRate(fakeVideo());
-      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
-      await flush();
-      (video as unknown as { currentTime: number }).currentTime = 5;
-      video.dispatchEvent(new Event("seeking"));
-      expect(video.playbackRate).toBe(1);
-      mse.destroy();
-    });
-
-    it("sous WebKit, arrête l'horloge pendant un saut et la rend à l'arrivée", async () => {
-      // Trois sauts sur huit films partis de 20 à 650 s au-delà de leur cible, horloge courant
-      // sans image — tous faits en lecture ; les sauts faits en pause ont tous été propres.
-      onBrowser(IPHONE);
-      const video = withRate(fakeVideo());
-      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
-      await flush();
-
-      (video as unknown as { currentTime: number }).currentTime = 5;
-      video.dispatchEvent(new Event("seeking"));
-      expect(video.playbackRate).toBe(0);
-      expect(video.paused).toBe(false);
-      video.dispatchEvent(new Event("seeked"));
-      expect(video.playbackRate).toBe(1);
-
-      // Une vitesse choisie pendant le saut n'est pas écrasée à l'arrivée.
-      video.dispatchEvent(new Event("seeking"));
-      video.playbackRate = 1.5;
-      video.dispatchEvent(new Event("seeked"));
-      expect(video.playbackRate).toBe(1.5);
-
-      // Et un lecteur fermé en plein saut ne laisse pas l'élément à l'arrêt.
-      video.playbackRate = 1;
-      video.dispatchEvent(new Event("seeking"));
-      mse.destroy();
-      expect(video.playbackRate).toBe(1);
-    });
-
-    it("ne touche pas à l'horloge ailleurs que sous WebKit, ni en pause", async () => {
-      onBrowser(CHROME);
-      const video = withRate(fakeVideo());
-      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
-      await flush();
-      (video as unknown as { currentTime: number }).currentTime = 5;
-      video.dispatchEvent(new Event("seeking"));
-      expect(video.playbackRate).toBe(1);
-      mse.destroy();
-
-      onBrowser(IPHONE);
-      const paused = withRate(fakeVideo());
-      const other = await MseSource.attach(paused, fakeRemuxer(200), PLAN, { onError: vi.fn() });
-      await flush();
-      (paused as unknown as { paused: boolean }).paused = true;
-      paused.dispatchEvent(new Event("seeking"));
-      expect(paused.playbackRate).toBe(1);
-      other.destroy();
-    });
-
-    it("rend l'horloge d'elle-même si l'arrivée ne vient pas", async () => {
-      onBrowser(IPHONE);
-      const video = withRate(fakeVideo());
-      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
-      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
-      await flush();
-      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
-      vi.useFakeTimers({ toFake: ["Date"] });
-      try {
-        (video as unknown as { currentTime: number }).currentTime = 5;
-        video.dispatchEvent(new Event("seeking"));
-        expect(video.playbackRate).toBe(0);
-        vi.setSystemTime(Date.now() + 13_000);
-        internals.watchdog();
-        expect(video.playbackRate).toBe(1);
-      } finally {
-        vi.useRealTimers();
-        mse.destroy();
-      }
-    });
 
     it("redemande la cible d'un saut dont la tête part ailleurs, et l'écrit", async () => {
       onBrowser(CHROME);
