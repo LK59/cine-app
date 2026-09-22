@@ -274,6 +274,8 @@ export class MseSource {
    * rebuild — its budget, its skip past a place that failed twice — takes over from here.
    */
   private stuck = false;
+  /** Où reprendre après `handOver` — voir `position`. */
+  private handedOverAt: number | null = null;
   /** For the stall line: where the clock was, since when, and whether this stall was written. */
   private stallClockAt = -1;
   private stallSince: number | null = null;
@@ -1253,7 +1255,9 @@ export class MseSource {
         /* the log is not worth a player */
       }
     }
-    if (!this.recover(target)) this.handOver(now);
+    // Vers la cible, là aussi : c'est de là que l'hôte reconstruira, et non de l'endroit où la
+    // tête s'est enfuie (audit du 22/09/2026).
+    if (!this.recover(target)) this.handOver(target);
   }
 
   /**
@@ -1447,6 +1451,7 @@ export class MseSource {
   private handOver(at: number): void {
     if (this.stuck || this.destroyed) return;
     this.stuck = true;
+    this.handedOverAt = at;
     this.escalation = 2;
     this.escalations += 1;
     trace(`reprise impossible ici à ${at.toFixed(1)} s — reconstruction demandée ${this.elementState()}`);
@@ -1497,8 +1502,12 @@ export class MseSource {
   }
 
   /** Where the viewer was, for a caller that has to rebuild and wants to come back to it. */
+  /**
+   * Où le film en est — et, une fois la main passée à l'hôte, où il doit reprendre : la position
+   * donnée à `handOver`, qui peut être la cible d'un saut parti ailleurs plutôt que la tête.
+   */
   get position(): number {
-    return this.video.currentTime;
+    return this.stuck && this.handedOverAt !== null ? this.handedOverAt : this.video.currentTime;
   }
 
   /**

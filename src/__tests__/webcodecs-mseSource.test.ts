@@ -976,6 +976,30 @@ describe("MseSource", () => {
       mse.destroy();
     });
 
+    it("fait reconstruire à la cible, pas là où la tête s'est enfuie, quand les reprises n'y suffisent plus", async () => {
+      // Audit du 22/09/2026 : la reconstruction partait de `position`, c'est-à-dire de la tête
+      // partie ailleurs.
+      onBrowser(CHROME);
+      const video = withRate(fakeVideo());
+      const onError = vi.fn();
+      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError });
+      const internals = mse as unknown as { recover: (t: number) => boolean; watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 20, "du média devant la tête");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      // Plus aucune reprise possible : la main passe à l'hôte.
+      internals.recover = () => false;
+
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      (video as unknown as { currentTime: number }).currentTime = 20;
+      internals.watchdog();
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(mse.lost).toBe(true);
+      expect(mse.position).toBe(5);
+      mse.destroy();
+    });
+
     it("laisse jouer un saut arrivé : la tête qui avance ensuite n'est pas un départ", async () => {
       onBrowser(CHROME);
       const video = withRate(fakeVideo());
