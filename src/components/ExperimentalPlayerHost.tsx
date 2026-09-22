@@ -123,6 +123,38 @@ function useElapsedSince(startedAt: number | null): number | null {
 }
 
 /** "1 h 12" — where the film will pick up, said the way a viewer thinks of it. */
+/**
+ * Ce qu'on sait, en fin de séance, de l'accord entre le son et l'image.
+ *
+ * Un spectateur sur Chrome Android voyait le son se décaler peu à peu, et un saut le recaler
+ * (22/09/2026) — sans que rien, nulle part, n'en garde la trace. Deux faits pour trancher : les
+ * horloges du son ré-encodé (`audioSync`, voir `AudioTimingStats` ; absent quand le son est copié),
+ * et les images que le navigateur a sautées (`frames`) — un appareil qui n'arrive plus à suivre
+ * décale aussi l'image du son. Mesuré sans rien montrer, et sans jamais faire échouer la ligne
+ * qui le porte.
+ */
+function syncFacts(
+  remux: { audioTiming(): { sourceMs: number; encoderMs: number } | null } | null,
+  element: HTMLVideoElement | null
+): Record<string, unknown> {
+  const facts: Record<string, unknown> = {};
+  try {
+    const timing = remux?.audioTiming();
+    if (timing) facts.audioSync = timing;
+  } catch {
+    // Un pipeline déjà détruit : rien à dire.
+  }
+  try {
+    const quality = element?.getVideoPlaybackQuality?.();
+    if (quality && quality.totalVideoFrames > 0) {
+      facts.frames = { total: quality.totalVideoFrames, dropped: quality.droppedVideoFrames };
+    }
+  } catch {
+    // Non pris en charge ici.
+  }
+  return facts;
+}
+
 function formatClock(seconds: number): string {
   const total = Math.max(0, Math.round(seconds));
   const h = Math.floor(total / 3600);
@@ -252,6 +284,8 @@ export function ExperimentalPlayerHost({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
   const remuxRef = useRef<RemuxPlayback | null>(null);
+  /** Le dernier élément vidéo du pipeline, pour `syncFacts` — voir `reportStop`. */
+  const lastVideoElRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
   const facadeRef = useRef<MediaElementFacade | null>(null);
@@ -943,6 +977,7 @@ export function ExperimentalPlayerHost({
       // Fermé avant la première image : combien de temps le spectateur a attendu avant de renoncer.
       ...(facts.ready ? {} : { gaveUpAfterMs: Date.now() - mountedAtRef.current }),
       ...(facts.error ? { error: facts.error } : {}),
+      ...syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
     });
   }, []);
   useEffect(() => {
@@ -1506,6 +1541,8 @@ export function ExperimentalPlayerHost({
     };
 
     const element = videoElRef.current;
+    // Gardée pour la ligne de fin de séance : au démontage, React a déjà détaché la ref.
+    lastVideoElRef.current = element;
     probePlaybackPath({
       streamUrl: info.streamUrl,
       startSeconds,

@@ -388,8 +388,32 @@ export async function canEncodeAac(sampleRate: number, numberOfChannels: number)
   return (await chooseTranscodeCodec(sampleRate, numberOfChannels)) !== null;
 }
 
+/**
+ * Deux horloges du son ré-encodé, suivies sur l'appareil — pour le journal de fin de séance.
+ *
+ * Un spectateur sur Chrome Android (22/09/2026) voyait le son se décaler peu à peu de l'image,
+ * et un saut de dix secondes le recaler. Rien de ce qui est livré ne compare le temps du son à
+ * celui du fichier : le temps des images ré-encodées est celui que l'encodeur de la plateforme
+ * leur donne, et un saut repart d'un encodeur neuf. Ce qu'on mesure ici, en microsecondes :
+ *
+ * - `source` : l'écart entre les instants que le fichier donne au son décodé et la quantité de
+ *   son effectivement décodée depuis le début du flux. Il grandit si le fichier a des trous — et
+ *   un encodeur qui compte ses échantillons sans voir ces trous prendrait alors de l'avance ;
+ * - `encoder` : l'écart entre les instants que l'encodeur rend et la quantité de son qu'il a
+ *   rendue. Nul si l'encodeur compte ; il suit `source` si l'encodeur recale sur ses entrées.
+ *
+ * Les deux repartent à chaque saut, comme l'encodeur ; on garde le plus grand de la séance.
+ */
+export interface AudioTimingStats {
+  sourceUs: number;
+  encoderUs: number;
+}
+
 export class AudioTranscoder {
   private generator: AsyncGenerator<DecodedAudio> | null = null;
+  /** Voir `AudioTimingStats` : l'état du flux en cours, et le pire de la séance. */
+  private timing = { firstInUs: null as number | null, inFrames: 0, firstOutUs: null as number | null, outFrames: 0 };
+  private timingWorst: AudioTimingStats = { sourceUs: 0, encoderUs: 0 };
   private pending: TranscodedFrame[] = [];
   private lastDecodedSeconds = 0;
   private exhausted = false;
@@ -656,6 +680,8 @@ export class AudioTranscoder {
     }
 
     this.generator = this.decoder.samples(Math.max(0, seconds));
+    // Un flux neuf, un encodeur neuf : les deux horloges repartent d'ici.
+    this.timing = { firstInUs: null, inFrames: 0, firstOutUs: null, outFrames: 0 };
     this.pending = [];
     this.lastDecodedSeconds = seconds;
     this.exhausted = false;
@@ -685,6 +711,7 @@ export class AudioTranscoder {
         break;
       }
       this.lastDecodedSeconds = next.value.timestampSeconds;
+      this.noteInput(next.value);
       encode(this.encoder, next.value, this.channels, this.actualCodec);
     }
 
@@ -708,7 +735,36 @@ export class AudioTranscoder {
 
   /** Both called by the encoder's own callbacks, redirected here once this object exists. */
   private collect(frame: TranscodedFrame): void {
+    this.noteOutput(frame);
     this.pending.push(frame);
+  }
+
+  /** Le son décodé qui entre : son instant selon le fichier, contre ce qui a été décodé avant. */
+  private noteInput(decoded: DecodedAudio): void {
+    const at = decoded.timestampSeconds * 1e6;
+    const frames = decoded.planes[0]?.length ?? 0;
+    const rate = decoded.sampleRate || this.sampleRate;
+    const timing = this.timing;
+    if (timing.firstInUs === null) timing.firstInUs = at;
+    const drift = at - timing.firstInUs - (timing.inFrames * 1e6) / rate;
+    if (Math.abs(drift) > Math.abs(this.timingWorst.sourceUs)) this.timingWorst.sourceUs = drift;
+    timing.inFrames += frames;
+  }
+
+  /** Une image encodée qui sort : son instant selon l'encodeur, contre ce qu'il a rendu avant. */
+  private noteOutput(frame: TranscodedFrame): void {
+    const timing = this.timing;
+    if (timing.firstOutUs === null) timing.firstOutUs = frame.timestampUs;
+    const drift = frame.timestampUs - timing.firstOutUs - (timing.outFrames * 1e6) / this.sampleRate;
+    if (Math.abs(drift) > Math.abs(this.timingWorst.encoderUs)) this.timingWorst.encoderUs = drift;
+    // En échantillons entiers, depuis la durée arrondie à la microseconde : additionner les
+    // durées elles-mêmes accumulerait l'arrondi (0,33 µs par image AAC) et inventerait une dérive.
+    timing.outFrames += Math.round(((frame.durationUs || 0) * this.sampleRate) / 1e6);
+  }
+
+  /** Le pire écart de la séance, pour le journal — voir `AudioTimingStats`. */
+  get timingStats(): AudioTimingStats {
+    return { ...this.timingWorst };
   }
 
   private closed = false;

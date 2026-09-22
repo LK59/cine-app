@@ -531,6 +531,11 @@ export class RemuxPlayback {
     return this.mse?.seek(seconds) ?? Promise.resolve();
   }
 
+  /** Le pire écart d'horloge du son ré-encodé, `null` quand le son est copié — voir `Remuxer.audioTiming`. */
+  audioTiming(): { sourceMs: number; encoderMs: number } | null {
+    return this.remuxer.audioTiming();
+  }
+
   get diagnostics(): Record<string, string> {
     const remux = this.remuxer.diagnostics();
     return {

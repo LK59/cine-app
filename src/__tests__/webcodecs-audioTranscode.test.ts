@@ -458,3 +458,87 @@ describe("AudioTranscoder", () => {
     expect(Math.min(...frames.map((f) => f.timestampUs))).toBeGreaterThanOrEqual(900_000_000);
   });
 });
+
+/**
+ * Les deux horloges du son ré-encodé, mesurées pour le journal de fin de séance (22/09/2026 :
+ * sur Chrome Android, le son se décalait peu à peu de l'image, et un saut le recalait).
+ */
+describe("AudioTranscoder — horloges du son", () => {
+  /** Des blocs de 512 images, avec un trou de 40 ms au milieu — un fichier qui a perdu du son. */
+  function withGap(count: number, gapAt: number, gapSeconds: number) {
+    return (async function* () {
+      for (let i = 0; i < count; i++) {
+        yield {
+          planes: Array.from({ length: 6 }, () => new Float32Array(512)),
+          sampleRate: 48000,
+          timestampSeconds: (i * 512) / 48000 + (i >= gapAt ? gapSeconds : 0),
+        };
+      }
+    })();
+  }
+
+  /** Un encodeur qui date ses images en comptant ses échantillons depuis la première entrée. */
+  function countingEncoderClass() {
+    const Base = fakeEncoderClass();
+    return class extends Base {
+      private anchor: number | null = null;
+      private counted = 0;
+      private waiting = 0;
+      private sink: (c: unknown, m?: unknown) => void;
+      constructor(init: { output: (c: unknown, m?: unknown) => void; error: (e: unknown) => void }) {
+        super(init);
+        this.sink = init.output;
+      }
+      override encode(data: FakeAudioData) {
+        this.anchor ??= data.init.timestamp;
+        this.waiting += data.init.numberOfFrames;
+        while (this.waiting >= 1024) {
+          const timestamp = Math.round(this.anchor + (this.counted * 1e6) / 48000);
+          this.sink(
+            { timestamp, duration: Math.round((1024 / 48000) * 1e6), byteLength: 8, copyTo: (d: Uint8Array) => d.fill(7) },
+            { decoderConfig: { description: new Uint8Array([0x11, 0xb0]) } }
+          );
+          this.counted += 1024;
+          this.waiting -= 1024;
+        }
+      }
+    };
+  }
+
+  it("voit un trou du fichier qu'un encodeur qui compte ses échantillons ne voit pas", async () => {
+    // Cet encodeur compte : ses instants ne sautent pas le trou. C'est précisément le cas où le
+    // son prend de l'avance sur l'image, sans que rien ne le voie.
+    vi.stubGlobal("AudioEncoder", countingEncoderClass());
+    samples.mockImplementation(() => withGap(400, 200, 0.04));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    await transcoder.framesUpTo(5);
+    const stats = transcoder.timingStats;
+    expect(Math.abs(stats.sourceUs - 40_000)).toBeLessThan(1_000);
+    expect(Math.abs(stats.encoderUs)).toBeLessThan(1_000);
+  });
+
+  it("montre aussi l'encodeur qui se recale sur ses entrées : les deux écarts se suivent", async () => {
+    // Le trou tombe entre deux images : le double repart de l'instant de son entrée.
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    samples.mockImplementation(() => withGap(400, 200, 0.04));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    await transcoder.framesUpTo(5);
+    const stats = transcoder.timingStats;
+    expect(Math.abs(stats.sourceUs - 40_000)).toBeLessThan(1_000);
+    expect(Math.abs(stats.encoderUs - 40_000)).toBeLessThan(1_000);
+  });
+
+  it("ne voit rien sur un flux continu, même sur des milliers d'images (pas d'arrondi qui s'additionne)", async () => {
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    samples.mockImplementation(() => decoded(20_000));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    await transcoder.framesUpTo(200);
+    const stats = transcoder.timingStats;
+    expect(Math.abs(stats.sourceUs)).toBeLessThan(1_000);
+    expect(Math.abs(stats.encoderUs)).toBeLessThan(1_000);
+  });
+});
+

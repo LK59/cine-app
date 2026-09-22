@@ -1039,6 +1039,23 @@ describe("la fin d'une séance, au journal", () => {
     expect(stops[0].fields.gaveUpAfterMs).toBeUndefined();
   });
 
+  it("dit l'accord du son et de l'image : horloges du son ré-encodé et images sautées", async () => {
+    // 22/09/2026 : sur Chrome Android, le son se décalait peu à peu et un saut le recalait —
+    // sans aucune trace nulle part. La ligne de fin de séance porte maintenant de quoi trancher.
+    remux = fakeRemux({ audioTiming: () => ({ sourceMs: 40, encoderMs: 0 }) });
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(600);
+    Object.assign(element, { getVideoPlaybackQuality: () => ({ totalVideoFrames: 14400, droppedVideoFrames: 12 }) });
+
+    unmount();
+
+    expect(logged("stop")[0].fields).toMatchObject({
+      audioSync: { sourceMs: 40, encoderMs: 0 },
+      frames: { total: 14400, dropped: 12 },
+    });
+  });
+
   it("n'en écrit qu'une, quand la page s'en va avant le lecteur", async () => {
     const { unmount } = mount();
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));

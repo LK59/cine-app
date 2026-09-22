@@ -781,6 +781,7 @@ export class Remuxer {
         next.close();
         throw refusal;
       }
+      if (previous) this.retiredTiming.push(previous.timingStats);
       previous?.close();
       this.transcoder = next;
       this.audioInfo = transcodedAudioInfo(next, track);
@@ -794,6 +795,7 @@ export class Remuxer {
           ? await describeAudio(this.source, this.file, here, track).catch(() => null)
           : null) ?? (await describeAudio(this.source, this.file, start, track));
       if (this.closed) throw new Error("Le remultiplexeur a été fermé pendant l'ouverture de la piste.");
+      if (previous) this.retiredTiming.push(previous.timingStats);
       previous?.close();
       this.transcoder = null;
       this.audioInfo = info;
@@ -835,9 +837,28 @@ export class Remuxer {
   /** Releases the decoder and encoder a transcoded track holds. */
   close(): void {
     this.closed = true;
+    // Gardé : la ligne de fin de séance peut être écrite après la fermeture.
+    if (this.transcoder) this.retiredTiming.push(this.transcoder.timingStats);
     this.transcoder?.close();
     this.transcoder = null;
   }
+
+  /**
+   * Le pire écart d'horloge du son ré-encodé sur la séance, en millisecondes — voir
+   * `AudioTimingStats`. Additionne ce qu'ont vu les transcodeurs déjà remplacés (changement de
+   * piste, reprise après un échec) à celui qui tourne.
+   */
+  audioTiming(): { sourceMs: number; encoderMs: number } | null {
+    const all = [...this.retiredTiming, ...(this.transcoder ? [this.transcoder.timingStats] : [])];
+    if (all.length === 0) return null;
+    const worst = (pick: (t: { sourceUs: number; encoderUs: number }) => number) =>
+      all.map(pick).reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
+    return {
+      sourceMs: Math.round(worst((t) => t.sourceUs) / 100) / 10,
+      encoderMs: Math.round(worst((t) => t.encoderUs) / 100) / 10,
+    };
+  }
+  private retiredTiming: { sourceUs: number; encoderUs: number }[] = [];
 
   diagnostics(): RemuxDiagnostics {
     return {
@@ -1132,6 +1153,7 @@ export class Remuxer {
       next.close();
       throw cause;
     }
+    if (previous) this.retiredTiming.push(previous.timingStats);
     previous?.close();
     this.transcoder = next;
     this.audioInfo = transcodedAudioInfo(next, track);
