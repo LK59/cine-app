@@ -2,6 +2,7 @@ import { mutate as globalMutate } from "swr";
 import { noteUnauthorized } from "@/lib/sessionExpired";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
 import { withCode } from "@/lib/upstreamError";
+import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 
 export const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -137,6 +138,9 @@ function whenScreenIsFree(): Promise<boolean> {
  * listes qui divergeront.
  */
 export async function revalidateWatchState(itemId: string | null): Promise<void> {
+  // L'état du spectateur demandé d'avance par une fiche porte la position d'avant : il ne doit
+  // pas servir la prochaine ouverture — voir `playbackPrefetch.ts`.
+  forgetPrefetchedPlaybackState();
   const keys = itemId ? [RESUME_KEY, NEXT_UP_KEY, progressKey(itemId)] : [RESUME_KEY, NEXT_UP_KEY];
   await Promise.all([
     ...keys.map((key) => globalMutate(key)),
@@ -186,7 +190,11 @@ export async function revalidateWatchState(itemId: string | null): Promise<void>
  * déjà là. Elle appelle donc `revalidateWatchState` directement.
  */
 export async function refreshAfterPlayback(reported: Promise<void>, itemId: string | null): Promise<void> {
+  // Tout de suite, puis de nouveau une fois le rapport d'arrêt enregistré : une fiche ouverte
+  // entre les deux aurait relu la position d'avant.
+  forgetPrefetchedPlaybackState();
   await reported;
+  forgetPrefetchedPlaybackState();
   if (!(await whenScreenIsFree())) return;
   await revalidateWatchState(itemId);
 }

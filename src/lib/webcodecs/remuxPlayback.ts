@@ -32,6 +32,12 @@ const CUE_FUTURE_SECONDS = 120;
 
 export interface RemuxPlaybackOptions {
   streamUrl: string;
+  /**
+   * La taille du fichier, quand la description du fichier la porte (`DirectPlayInfo.sizeBytes`).
+   * Épargne le HEAD de l'ouverture — un aller-retour entier avant les premiers octets. Voir
+   * `HttpByteSource.open`.
+   */
+  knownSize?: number | null;
   startSeconds: number;
   onError: (message: string, kind?: "network" | "playback") => void;
   onWarning?: (warning: PlayerWarning) => void;
@@ -203,7 +209,7 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
     `écran HDR : ${displayHdr === null ? "inconnu" : displayHdr ? "oui" : "non"}` +
       (lightCap !== null ? ` — lumière HDR annoncée plafonnée à ${lightCap} nits (choix de l'appareil)` : "")
   );
-  const source = await HttpByteSource.open(options.streamUrl);
+  const source = await HttpByteSource.open(options.streamUrl, options.knownSize);
   trace(`flux ouvert — ${source.size} octets`);
 
   // Named by its URL, so opening the same file again — or rebuilding after the platform closed

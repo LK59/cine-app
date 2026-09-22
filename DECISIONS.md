@@ -396,6 +396,35 @@ refusée et rend son `fallback`, puis prévient l'appelant par `onError`.
 sixième, l'avait oublié : *Dallas Buyers Club* y montrait l'icône d'image cassée de Safari au
 milieu de l'affiche, et plus aucun nom.
 
+## 12. Ce que Lire trouve déjà prêt
+
+**Règle.** Une fiche ouverte demande d'avance les deux réponses sans lesquelles le lecteur natif
+ne peut pas ouvrir son titre : la description du fichier (`/api/jellyfin/direct/…`) et l'état du
+spectateur (`/api/jellyfin/playback-state/…`). Seulement pour le titre du bouton principal — le
+film, ou l'épisode à reprendre —, **jamais** depuis une carte ni une ligne d'épisode. Seulement
+quand c'est le lecteur natif qui ouvrira (même règle que `PlayerHost`). L'état du spectateur n'est
+repris que s'il a moins de trente secondes, une seule fois, et il est oublié à chaque fermeture de
+lecteur et à chaque « vu » coché à la main : une position gardée à travers une lecture ferait
+reprendre le film là où il en était avant.
+
+**Porteurs.** `usePlaybackPrefetch(itemId)` (`src/lib/usePlaybackPrefetch.ts`) côté fiche ;
+`src/lib/playbackPrefetch.ts` pour le reste — `directInfoKey`, `fetchPlaybackState`,
+`prefetchPlaybackState`, `takePrefetchedPlaybackState`, `forgetPrefetchedPlaybackState`.
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`. Lecteur natif :
+`ExperimentalPlayerHost` lit la description sous `directInfoKey` (SWR reprend la demande en vol)
+et prend l'état préparé, sinon le demande. L'oubli : `refreshAfterPlayback` (avant et après le
+rapport d'arrêt) et `revalidateWatchState`.
+
+**Tests.** `playbackPrefetch.test.tsx`, `ExperimentalPlayerHost.test.tsx` (« ce que la fiche a
+préparé avant Lire »), `decisions-partagees.test.ts`.
+
+**Voulu.** Le lecteur serveur ne consomme rien de ce qui est préparé : il ne lit pas la
+description, et `resolveResumeAt` ne sert qu'aux appelants qui ne connaissent pas la position.
+La description, elle, reste en cache toute la session — c'était déjà le cas dans l'hôte, et le
+fichier ne change pas sous un film ; une taille périmée est corrigée par le flux lui-même (voir
+DOC-TECH, « `byteSource` — HTTP range reads »).
+
 ---
 
 ## Ce qui n'est pas une dette

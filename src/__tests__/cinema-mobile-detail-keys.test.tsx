@@ -25,7 +25,7 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => ({
   useRouteBehind: () => null,
 }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => true, useIsShortViewport: () => false }));
-vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => true }));
+vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => true, usePlayerServerFallback: () => true }));
 vi.mock("@/lib/useWatchlistStatusMap", () => ({ useWatchlistStatusMap: () => ({}) }));
 vi.mock("@/lib/useAddToWatchlist", () => ({
   canJoinWatchlist: (tmdbId: number | null | undefined) => !!tmdbId,

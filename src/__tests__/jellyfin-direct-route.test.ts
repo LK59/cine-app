@@ -99,6 +99,15 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     expect(body.streamUrl).toContain("static=true");
   });
 
+  // Le lecteur ouvre le flux sans HEAD quand la taille est là — elle y était toujours nulle.
+  it("porte la taille du fichier que Jellyfin connaît, et rien quand il ne la dit pas", async () => {
+    expect((await (await get()).json()).sizeBytes).toBe(1024);
+    const sansTaille = mediaSource();
+    delete (sansTaille.MediaSources[0] as { Size?: number }).Size;
+    mockGetSources.mockResolvedValue(sansTaille);
+    expect((await (await get()).json()).sizeBytes).toBeNull();
+  });
+
   // The demuxer reads Matroska and nothing else, on either pipeline, so this refusal is absolute.
   it("refuses a container no pipeline can read, naming it", async () => {
     // AVI, in this library, is MPEG-4 ASP and MP3 — undecodable in any browser, so the file is

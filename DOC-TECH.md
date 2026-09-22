@@ -128,6 +128,13 @@ them structural:
   30 s of lead, about 20 MB.
 - **Chunks of one read are requested together**, so a read straddling four chunks costs one round
   trip rather than four.
+- **No round trip before the first range when the size is known.** The file description the host
+  fetches (`sizeBytes`, from Jellyfin's media source) is passed down to `HttpByteSource.open`, which
+  then skips its `HEAD` and starts both ends at once; with no size, the `HEAD` (then a
+  `bytes=0-0` probe) comes back. A known size is checked against the first `Content-Range` that
+  arrives — before the parser has read a byte — and replaced by it if they differ (a file replaced
+  while its description sat in the session cache), with a trace line; cached chunks the new size
+  makes wrong are dropped.
 - **Both ends of the file are requested at open**, in parallel: the header at the start, the index
   wherever the Cues were written (the very end, for a streaming-oriented file). The parse result is
   **cached under the file name**, so reopening the same file — or rebuilding after the platform
@@ -153,8 +160,20 @@ them structural:
   seek that needed 4 to 6. The six readahead chunks were sharing the link with the one the parser
   was waiting for.
 - **Every seek traces its network cost** at its first append: requests, bytes, throughput, first-byte
-  delays, the slowest request, and the server's own time (`Server-Timing: app;dur, jf;dur`, added by
-  the stream relay).
+  delays, the slowest request, the server's own time (`Server-Timing: app;dur, jf;dur`, added by
+  the stream relay), and the protocol of each request counted (`protocole h2`, or
+  `protocoles h2 ×5, http/1.1 ×1`) — read from the latest Resource Timing entry for the stream URL
+  (`nextHopProtocol`), since every range shares that URL. The browser's buffer stops at a few hundred
+  entries; past it, the value read is that of the earliest requests, which for one origin is the
+  same answer. Absent when the browser does not say; never thrown.
+
+**Before the stream is even opened**, the player needs two JSON answers: the file description
+(`/api/jellyfin/direct/…`) and the viewer's state (`/api/jellyfin/playback-state/…`, resume position
+and track preferences). A detail sheet asks for both when it opens, for the title its main button
+would play and nothing else (`usePlaybackPrefetch`): the description goes into SWR under the key the
+host reads, so a request still in flight is taken over rather than repeated; the viewer's state is
+kept for 30 s, used once, and forgotten whenever a player closes — a resume position must not be
+carried across a viewing. See `DECISIONS.md`, « Ce que Lire trouve déjà prêt ».
 
 Retries: 4 attempts, with 60 s of patience while the network is offline. An abandoned read is never
 retried.

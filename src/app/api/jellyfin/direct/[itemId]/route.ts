@@ -240,7 +240,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     // which is exactly what a demuxer jumping around a 40 GB file needs.
     streamUrl: `/api/jellyfin/stream/${itemId}/stream.${container || "mkv"}?static=true&mediaSourceId=${source.Id}`,
     container,
-    sizeBytes: null,
+    // Ce que Jellyfin sait de la taille du fichier. Le lecteur s'en sert pour ouvrir le flux sans
+    // la redemander par un HEAD ; nul si Jellyfin ne la donne pas, et le HEAD revient.
+    sizeBytes: typeof source.Size === "number" && Number.isFinite(source.Size) && source.Size > 0 ? source.Size : null,
     runtimeSeconds: item?.RunTimeTicks ? item.RunTimeTicks / 10_000_000 : null,
     video: videoStream
       ? {

@@ -216,6 +216,16 @@ export interface NetworkWindow {
   slowestMs: number;
   /** Le temps passé côté serveur, d'après `Server-Timing` (`app`) — le plus long vu. */
   serverMaxMs: number | null;
+  /**
+   * Le protocole de chaque requête — `h2`, `h3`, `http/1.1` —, compté. Vide quand le navigateur
+   * ne le dit pas.
+   *
+   * Un saut lent depuis un serveur lointain se lit autrement selon la réponse : en HTTP/1.1, six
+   * connexions au plus par origine, et chaque morceau lu en avance fait la queue derrière les
+   * autres ; en HTTP/2, une seule connexion dont les pertes retiennent toutes les requêtes à la
+   * fois ; en HTTP/3, ni l'un ni l'autre. Sans ce champ, la trace ne permettait pas de trancher.
+   */
+  protocols: Record<string, number>;
 }
 
 /** La même fenêtre, en une ligne de trace. */
@@ -224,8 +234,43 @@ export function describeNetwork(w: NetworkWindow): string {
   return (
     `${(w.bytes / 1048576).toFixed(1)} Mo en ${w.elapsedMs} ms (${mbps.toFixed(0)} Mb/s), ${w.requests} requête(s), ` +
     `premier octet ${w.firstByteMinMs}–${w.firstByteMaxMs} ms, la plus lente ${w.slowestMs} ms` +
-    (w.serverMaxMs !== null ? `, serveur ≤ ${w.serverMaxMs} ms` : "")
+    (w.serverMaxMs !== null ? `, serveur ≤ ${w.serverMaxMs} ms` : "") +
+    describeProtocols(w.protocols)
   );
+}
+
+/** `{ h2: 5 }` → `, protocole h2` ; `{ h2: 5, "http/1.1": 1 }` → `, protocoles h2 ×5, http/1.1 ×1`. */
+function describeProtocols(protocols: Record<string, number> | undefined): string {
+  const seen = Object.entries(protocols ?? {}).sort((a, b) => b[1] - a[1]);
+  if (seen.length === 0) return "";
+  if (seen.length === 1) return `, protocole ${seen[0][0]}`;
+  return `, protocoles ${seen.map(([name, count]) => `${name} ×${count}`).join(", ")}`;
+}
+
+/**
+ * Le protocole de la dernière requête terminée vers `url`, d'après le Resource Timing du
+ * navigateur — ou `null` s'il ne le dit pas.
+ *
+ * Toutes les plages d'un film ont la même adresse : la dernière entrée de ce nom est donc la
+ * requête qu'on vient de finir, ou sa voisine immédiate si le navigateur ne l'a pas encore
+ * enregistrée — sur une même origine, le protocole ne change pas d'une requête à l'autre. Le
+ * tampon du navigateur s'arrête à quelques centaines d'entrées : passé ce nombre, c'est celui des
+ * premières requêtes qu'on lit, ce qui reste la bonne réponse pour la même raison.
+ *
+ * Ne lève jamais : c'est une mesure, sur le chemin de lecture.
+ */
+export function protocolOf(url: string): string | null {
+  try {
+    if (typeof performance === "undefined" || typeof performance.getEntriesByName !== "function") return null;
+    // Les entrées sont nommées par l'adresse absolue ; le lecteur demande une adresse relative.
+    const name = typeof location !== "undefined" && location?.href ? new URL(url, location.href).href : url;
+    const entries = performance.getEntriesByName(name, "resource");
+    const last = entries[entries.length - 1] as PerformanceResourceTiming | undefined;
+    const protocol = last?.nextHopProtocol;
+    return typeof protocol === "string" && protocol !== "" ? protocol : null;
+  } catch {
+    return null;
+  }
 }
 
 /** `app;dur=12, jf;dur=8` → 12. */
@@ -329,7 +374,16 @@ export function forgetHandover(): void {
 }
 
 export class HttpByteSource implements ByteSource {
-  readonly size: number;
+  /**
+   * La taille du fichier — corrigée une fois, si le serveur en annonce une autre que celle avec
+   * laquelle la source a été ouverte. Voir `checkTotal`.
+   */
+  get size(): number {
+    return this.total;
+  }
+  private total: number;
+  /** Le total annoncé par une réponse a été lu et comparé : voir `checkTotal`. */
+  private totalChecked = false;
   private readonly url: string;
   private chunks = new Map<number, Uint8Array>();
   /** Les morceaux à garder de préférence, bornes comprises — voir `keep`. */
@@ -343,17 +397,34 @@ export class HttpByteSource implements ByteSource {
   private focusUntil = 0;
   /** Le dernier morceau qu'une lecture a demandé : d'où l'avance repart quand le saut aboutit. */
   private lastDemanded = -1;
-  private window: { since: number; requests: number; bytes: number; lastEnd: number; fbMin: number; fbMax: number; slowest: number; server: number | null } | null = null;
+  private window: {
+    since: number;
+    requests: number;
+    bytes: number;
+    lastEnd: number;
+    fbMin: number;
+    fbMax: number;
+    slowest: number;
+    server: number | null;
+    protocols: Record<string, number>;
+  } | null = null;
 
   private constructor(url: string, size: number) {
     this.url = url;
-    this.size = size;
+    this.total = size;
   }
 
   // The length has to come from the server before anything else can be parsed. HEAD is tried
   // first because it costs nothing; some proxies answer it without Content-Length, in which case
   // a one-byte ranged GET gets the total out of Content-Range instead.
-  static async open(url: string): Promise<HttpByteSource> {
+  //
+  // Sauf quand l'appelant la connaît déjà (`knownSize`). La description du fichier, que l'hôte a
+  // demandée avant d'ouvrir quoi que ce soit, la porte — Jellyfin la tient de son analyse du
+  // fichier. Le HEAD coûtait alors un aller-retour entier pour une réponse déjà en main, avant
+  // que les deux premières plages puissent même partir : relevé le 22/09/2026 depuis un serveur
+  // lointain, ~60 ms d'aller-retour, soit autant de moins à chaque ouverture. Une taille fausse
+  // n'est pas crue sur parole : la première réponse la corrige — voir `checkTotal`.
+  static async open(url: string, knownSize?: number | null): Promise<HttpByteSource> {
     // Le même fichier que la source qu'on vient de fermer : sa taille et ses morceaux sont déjà
     // là, sans aller-retour — voir `handover`.
     const inherited = takeHandover(url);
@@ -365,6 +436,13 @@ export class HttpByteSource implements ByteSource {
       source.kept = inherited.kept;
       trace(`flux repris de la lecture précédente — ${inherited.chunks.size} Mo déjà là`);
       return source;
+    }
+    if (typeof knownSize === "number" && Number.isFinite(knownSize) && knownSize > 0) {
+      // Rien n'est attendu ici : les deux plages partent tout de suite. Un réseau absent se dit
+      // donc à la première lecture plutôt qu'à l'ouverture, avec la même erreur nommée
+      // (`NetworkUnavailable`, après `waitForNetwork` et les nouvelles tentatives).
+      trace(`taille connue d'avance (${Math.floor(knownSize)} octets) — pas de HEAD`);
+      return HttpByteSource.warmed(url, Math.floor(knownSize));
     }
     // Named for what it is. A file that cannot be opened because there is no network is not a
     // file this player cannot play, and handing it to a player needing the same network is the
@@ -442,6 +520,7 @@ export class HttpByteSource implements ByteSource {
           throw new Error("Le serveur n'honore pas les requêtes de plage (statut 200).");
         }
         if (res.status !== 206) throw new Error(`Le serveur a refusé la plage demandée (statut ${res.status}).`);
+        this.checkTotal(res);
         const headersAt = performance.now();
         const bytes = new Uint8Array(await res.arrayBuffer());
         this.note(sentAt, headersAt, performance.now(), bytes.byteLength, res);
@@ -474,8 +553,12 @@ export class HttpByteSource implements ByteSource {
     this.inflightControllers.set(index, own);
     const promise = this.fetchWithRetries(start, end, own.signal)
       .then((bytes) => {
-        this.chunks.set(index, bytes);
-        this.evict();
+        // Demandé avant que `checkTotal` ne corrige la taille, un morceau de fin peut avoir été
+        // coupé au mauvais endroit : servi à la lecture qui l'attendait, mais pas gardé.
+        if (bytes.byteLength === this.expectedLength(index)) {
+          this.chunks.set(index, bytes);
+          this.evict();
+        }
         return bytes;
       })
       .finally(() => {
@@ -578,7 +661,7 @@ export class HttpByteSource implements ByteSource {
    */
   abandon(keepOffset: number): void {
     this.focusUntil = performance.now() + SEEK_FOCUS_MS;
-    this.window = { since: performance.now(), requests: 0, bytes: 0, lastEnd: 0, fbMin: Infinity, fbMax: 0, slowest: 0, server: null };
+    this.window = { since: performance.now(), requests: 0, bytes: 0, lastEnd: 0, fbMin: Infinity, fbMax: 0, slowest: 0, server: null, protocols: {} };
     const first = Math.floor(Math.max(0, Math.min(keepOffset, this.size - 1)) / CHUNK_SIZE);
     let dropped = 0;
     for (const [index, own] of this.inflightControllers) {
@@ -588,6 +671,39 @@ export class HttpByteSource implements ByteSource {
       dropped += 1;
     }
     if (dropped > 0) trace(`réseau : ${dropped} lecture(s) de l'ancienne position abandonnée(s)`);
+  }
+
+  /** La longueur qu'a le morceau `index` dans un fichier de la taille actuelle. */
+  private expectedLength(index: number): number {
+    return Math.max(0, Math.min(CHUNK_SIZE, this.total - index * CHUNK_SIZE));
+  }
+
+  /**
+   * La taille annoncée par la première réponse qui en porte une, comparée à celle de l'ouverture.
+   *
+   * Une taille connue d'avance vient de la description du fichier, que le lecteur garde en
+   * mémoire toute la session : un fichier remplacé entre-temps par son gestionnaire en aurait une
+   * autre. Le `Content-Range` d'une plage est la vérité du moment — il arrive avec les premiers
+   * octets, avant que le démultiplexeur ait lu quoi que ce soit, et c'est lui qu'on garde. Les
+   * morceaux déjà reçus que la nouvelle taille rend faux (un morceau de fin coupé trop tôt) sont
+   * oubliés. Tracé, parce qu'un écart dit que la description était périmée. Ne lève jamais.
+   */
+  private checkTotal(res: Response): void {
+    if (this.totalChecked) return;
+    try {
+      const header = res.headers?.get?.("Content-Range");
+      const total = header ? Number(header.split("/")[1]) : NaN;
+      if (!Number.isFinite(total) || total <= 0) return;
+      this.totalChecked = true;
+      if (total === this.total) return;
+      trace(`réseau : le serveur annonce ${total} octets, la source était ouverte sur ${this.total} — taille corrigée`);
+      this.total = total;
+      for (const [index, bytes] of this.chunks) {
+        if (bytes.byteLength !== this.expectedLength(index)) this.chunks.delete(index);
+      }
+    } catch {
+      /* une vérification n'est pas une lecture */
+    }
   }
 
   /** Une requête terminée, comptée dans la fenêtre du saut en cours. Ne lève jamais. */
@@ -604,6 +720,8 @@ export class HttpByteSource implements ByteSource {
       w.slowest = Math.max(w.slowest, endAt - sentAt);
       const server = serverTimingApp(serverTiming);
       if (server !== null) w.server = Math.max(w.server ?? 0, server);
+      const protocol = protocolOf(this.url);
+      if (protocol !== null) w.protocols[protocol] = (w.protocols[protocol] ?? 0) + 1;
     } catch {
       /* une mesure n'est pas une lecture */
     }
@@ -626,6 +744,7 @@ export class HttpByteSource implements ByteSource {
       firstByteMaxMs: Math.round(w.fbMax),
       slowestMs: Math.round(w.slowest),
       serverMaxMs: w.server,
+      protocols: { ...w.protocols },
     };
   }
 

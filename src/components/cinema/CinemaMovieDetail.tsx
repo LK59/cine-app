@@ -30,6 +30,7 @@ import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip, BELOW_SECTION_CLASS } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -100,6 +101,8 @@ export function CinemaMovieDetail({
   const { progress, watched, known: flagsKnown, busy: flagsBusy, toggleWatched } =
     useJellyfinItemState(item.jellyfinItemId);
   const hasResume = !!progress?.resumeTicks && progress.resumeTicks > 0;
+  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
+  usePlaybackPrefetch(item.jellyfinItemId);
   // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
   // watchlist — useAddToWatchlist only reflects whatever status is handed to it as initialStatus
   // (see its own doc comment), and nothing was passing one here, unlike every other surface that

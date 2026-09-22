@@ -37,6 +37,7 @@ import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/seri
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
+import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -216,6 +217,10 @@ export function CinemaMobileDetail({
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const playTargetId = isSeries ? nextEpisode?.itemId : item.jellyfinItemId;
   const playTargetTitle = isSeries ? nextEpisode?.title ?? item.title : item.title;
+  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
+  // Le titre du bouton principal seulement — le film, ou l'épisode à reprendre —, pas chaque
+  // ligne d'épisode.
+  usePlaybackPrefetch(playTargetId);
 
   // Flat (season, episode) order — powers the player's own credits-time auto-advance, same
   // contract PlayButton/PlayerHost already expect on desktop.

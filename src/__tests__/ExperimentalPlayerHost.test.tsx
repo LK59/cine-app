@@ -1472,3 +1472,42 @@ describe("relu le 22/09/2026", () => {
   });
 });
 
+describe("ce que la fiche a préparé avant Lire", () => {
+  beforeEach(async () => {
+    const { forgetPrefetchedPlaybackState } = await import("@/lib/playbackPrefetch");
+    forgetPrefetchedPlaybackState();
+  });
+
+  const playbackStateCalls = () =>
+    (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter(
+      ([url]) => typeof url === "string" && url.startsWith("/api/jellyfin/playback-state/")
+    ).length;
+
+  it("ouvre le flux avec la taille que la description du fichier porte déjà", async () => {
+    // Sans elle, l'ouverture demandait la taille par un HEAD : un aller-retour entier avant la
+    // première plage, depuis un serveur lointain.
+    swr = { data: info({ sizeBytes: 7_340_032 }), error: undefined };
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0]).toMatchObject({ knownSize: 7_340_032 });
+  });
+
+  it("prend l'état du spectateur que la fiche a demandé, sans le redemander", async () => {
+    const { prefetchPlaybackState } = await import("@/lib/playbackPrefetch");
+    viewerState = { resumeSeconds: 42, preferences: null };
+    prefetchPlaybackState("item-1");
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0].startSeconds).toBe(42);
+    expect(playbackStateCalls()).toBe(1);
+  });
+
+  it("repose la question pour un autre titre que celui de la fiche", async () => {
+    const { prefetchPlaybackState } = await import("@/lib/playbackPrefetch");
+    prefetchPlaybackState("item-2");
+    mount({ itemId: "item-1" });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(playbackStateCalls()).toBe(2);
+  });
+});
+

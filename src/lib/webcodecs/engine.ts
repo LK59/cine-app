@@ -124,6 +124,8 @@ export interface EngineOptions {
    * lieu. Une réponse que ce navigateur ne décode pas est ignorée : on retombe sur la règle d'avant.
    */
   chooseAudioTrack?: (tracks: EngineTrack[]) => number | null;
+  /** La taille du fichier, si on la connaît : épargne le HEAD — voir `HttpByteSource.open`. */
+  knownSize?: number | null;
 }
 
 /**
@@ -412,7 +414,7 @@ export class PlaybackEngine {
     // été ouvert entre-temps : sans cela, le chargement continuait après la destruction et
     // créait un contexte WebGL, un VideoDecoder, un AudioContext, une boucle de décodage logiciel
     // et une source HTTP que plus rien ne fermerait.
-    this.source = await HttpByteSource.open(streamUrl);
+    this.source = await HttpByteSource.open(streamUrl, options.knownSize);
     // La zone gardée héritée d'une source précédente sur le même fichier (voir `handover` dans
     // byteSource.ts) n'a plus de gardien ici : ce chemin n'appelle jamais `keep`, et jusqu'à
     // 24 Mo du cache restaient réservés à un endroit du film que plus personne ne relira.

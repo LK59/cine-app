@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
 import { fetcher, playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
+import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PlayerControls } from "@/components/PlayerControls";
@@ -853,7 +854,9 @@ export function ExperimentalPlayerHost({
   // depends on, so the whole pipeline was torn down and rebuilt behind the viewer's back: a
   // second decoder, a second encoder, a second MediaSource, and the first one's read loop still
   // running against buffers its source had already released.
-  const { data: info, error: infoError } = useSWR<DirectPlayInfo>(`/api/jellyfin/direct/${itemId}`, fetcher, {
+  // La clé que la fiche a préchargée à son ouverture (`usePlaybackPrefetch`) : la même, sans quoi
+  // le préchargement tomberait à côté et Lire reposerait la question.
+  const { data: info, error: infoError } = useSWR<DirectPlayInfo>(directInfoKey(itemId), fetcher, {
     // La description du fichier est ce qui décide du chemin de lecture : la mettre en pause parce
     // qu'un film occupe l'écran, c'est attendre que le film commence pour savoir comment le lire.
     ...playerBootstrapOptions,
@@ -940,12 +943,13 @@ export function ExperimentalPlayerHost({
     // Huit secondes, comme les routes qui vont chercher chez Jellyfin. Passé ce délai on ouvre le
     // film à son début sur ses pistes par défaut, ce qui vaut infiniment mieux que de ne pas
     // l'ouvrir — et c'est déjà ce que fait ce chemin quand le serveur refuse de répondre.
-    fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(8000) })
-      .then((response) => (response.ok ? (response.json() as Promise<PlaybackState>) : null))
-      .catch(() => null)
-      .then((value) => {
-        if (!abandoned) setPlaybackState(value);
-      });
+    //
+    // La réponse que la fiche a demandée à son ouverture, quand elle a moins de trente secondes et
+    // n'a encore servi à aucune lecture — un aller-retour de moins avant le premier octet. Sinon
+    // la question est posée ici, comme avant. Voir `playbackPrefetch.ts`.
+    void (takePrefetchedPlaybackState(itemId) ?? fetchPlaybackState(itemId)).then((value) => {
+      if (!abandoned) setPlaybackState(value);
+    });
     return () => {
       abandoned = true;
     };
@@ -1513,6 +1517,7 @@ export function ExperimentalPlayerHost({
 
       await engine.load(info.streamUrl, {
         hdr: info.video?.isHdr ?? false,
+        knownSize: info.sizeBytes,
         startSeconds,
         // La même question que `applyPreferences` pose juste après, posée avant d'ouvrir : si
         // les deux répondent pareil — et elles lisent les mêmes pistes, par la même règle — il
@@ -1583,6 +1588,9 @@ export function ExperimentalPlayerHost({
     lastVideoElRef.current = element;
     probePlaybackPath({
       streamUrl: info.streamUrl,
+      // La taille, déjà dans la description du fichier : l'ouverture n'a plus à la demander par
+      // un HEAD, et les deux premières plages partent sans attendre cet aller-retour.
+      knownSize: info.sizeBytes,
       startSeconds,
       // Ce que le serveur sait de la plage dynamique : le conteneur seul ne suffit pas à décider
       // si un Dolby Vision refusé a une couche de base où se rattraper. Voir `planDolbyVision`.

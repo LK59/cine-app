@@ -128,6 +128,8 @@ export interface JellyfinMediaSource {
   ETag?: string;
   TranscodingUrl?: string;
   Container?: string;
+  /** Taille du fichier en octets — celle que le flux statique annonce dans `Content-Length`. */
+  Size?: number;
   Bitrate?: number;
   SupportsDirectPlay?: boolean;
   SupportsDirectStream?: boolean;

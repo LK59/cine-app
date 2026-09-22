@@ -447,6 +447,37 @@ describe("une seule prise de pointeur", () => {
   });
 });
 
+describe("ce que Lire trouve déjà prêt", () => {
+  // Une fonction, appelée par les trois fiches et par elles seules : une carte ou une ligne
+  // d'épisode qui l'appellerait ferait partir une rafale de requêtes à chaque grille affichée.
+  const code = (f: string) =>
+    lire(f)
+      .split("\n")
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join("\n");
+  const sources = () =>
+    (readdirSync("src", { recursive: true }) as string[])
+      .map((f) => `src/${f}`)
+      .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"));
+
+  it("les trois fiches, et elles seules, préparent la lecture", () => {
+    const hits = sources().filter((f) => f !== "src/lib/usePlaybackPrefetch.ts" && /usePlaybackPrefetch\(/.test(code(f)));
+    expect(hits.sort()).toEqual([
+      "src/components/cinema/CinemaMovieDetail.tsx",
+      "src/components/cinema/CinemaSeriesDetail.tsx",
+      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    ]);
+  });
+
+  it("le lecteur lit la description sous la clé que la fiche précharge", () => {
+    const host = code("src/components/ExperimentalPlayerHost.tsx");
+    expect(host).toContain("useSWR<DirectPlayInfo>(directInfoKey(itemId)");
+    expect(host).toContain("takePrefetchedPlaybackState(itemId) ?? fetchPlaybackState(itemId)");
+    // L'adresse écrite à la main, qui ferait précharger dans le vide.
+    expect(host).not.toMatch(/`\/api\/jellyfin\/(direct|playback-state)\//);
+  });
+});
+
 describe("une seule recherche du lecteur", () => {
   // `keepPreviousData` gardait les résultats d'avant sous une recherche qui avait échoué, sur les
   // deux écrans à la fois. Voir `useSearchResults`.

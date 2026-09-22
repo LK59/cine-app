@@ -33,7 +33,9 @@ function stubFetch(options: { rangeStatus?: number; contentLength?: string | nul
 
     return {
       status: options.rangeStatus ?? 206,
-      headers: { get: () => `bytes ${from}-${to}/${SIZE}` },
+      // Le même total que le HEAD : la source se range désormais à celui d'une plage, et un
+      // serveur qui se contredit n'est pas ce que ces tests examinent.
+      headers: { get: () => `bytes ${from}-${to}/${options.contentLength ?? SIZE}` },
       arrayBuffer: async () => new Uint8Array(to - from + 1).buffer,
     };
   });
@@ -384,5 +386,105 @@ describe("HttpByteSource — une requête qui ne revient pas", () => {
     await expect(lecture).resolves.toBeInstanceOf(Uint8Array);
     // Elle a bien été redemandée : sans échéance, il n'y aurait jamais eu de seconde requête.
     expect(calls).toBeGreaterThan(1);
+  });
+});
+
+describe("HttpByteSource — une taille déjà connue", () => {
+  const countingHeads = () => {
+    stubFetch();
+    const inner = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    const counted = Object.assign(
+      async (url: string, init?: RequestInit) => {
+        if (init?.method === "HEAD") counted.heads++;
+        return inner(url, init);
+      },
+      { heads: 0 }
+    );
+    vi.stubGlobal("fetch", counted);
+    return counted;
+  };
+
+  it("ouvre sans HEAD, et les deux bouts du fichier partent aussitôt", async () => {
+    // 22/09/2026, serveur lointain : le HEAD coûtait un aller-retour entier avant la première
+    // plage, pour une taille que la description du fichier portait déjà.
+    const counted = countingHeads();
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    expect(counted.heads).toBe(0);
+    expect(source.size).toBe(SIZE);
+    await settle();
+    expect(chunksAsked()).toEqual([0, 9]);
+    source.close();
+  });
+
+  it("demande encore la taille quand on ne la connaît pas", async () => {
+    const counted = countingHeads();
+    for (const unknown of [undefined, null, 0, NaN, -1]) {
+      forgetHandover();
+      const source = await HttpByteSource.open("/film.mkv", unknown);
+      expect(source.size).toBe(SIZE);
+      source.close();
+    }
+    expect(counted.heads).toBe(5);
+  });
+
+  it("se range à la taille que le serveur annonce quand celle d'avance était fausse", async () => {
+    // Une description gardée en mémoire toute la session, et un fichier remplacé entre-temps : le
+    // `Content-Range` de la première plage dit la vérité, avant que rien n'ait été lu.
+    stubFetch();
+    const source = await HttpByteSource.open("/film.mkv", SIZE - CHUNK / 2);
+    const bytes = await source.read(0, 16);
+    expect(bytes.length).toBe(16);
+    expect(source.size).toBe(SIZE);
+    // Le dernier morceau, coupé à la mauvaise taille, n'est pas gardé : relu, il est redemandé
+    // en entier.
+    await settle();
+    asked = [];
+    const tail = await source.read(9 * CHUNK, CHUNK);
+    expect(tail.length).toBe(CHUNK);
+    expect(asked).toContainEqual([9 * CHUNK, SIZE - 1]);
+    source.close();
+  });
+});
+
+describe("HttpByteSource — le protocole de chaque requête", () => {
+  it("compte le protocole des requêtes depuis le saut, et la ligne de trace le nomme", async () => {
+    stubFetch();
+    const spy = vi
+      .spyOn(performance, "getEntriesByName")
+      .mockImplementation(((name: string) =>
+        name.endsWith("/film.mkv") ? [{ nextHopProtocol: "http/1.1" }, { nextHopProtocol: "h2" }] : []) as never);
+    try {
+      const { describeNetwork } = await import("@/lib/webcodecs/byteSource");
+      const source = await HttpByteSource.open("/film.mkv", SIZE);
+      source.abandon(4 * CHUNK);
+      await source.read(4 * CHUNK, 2 * CHUNK);
+      const w = source.networkSinceSeek()!;
+      // La dernière entrée de ce nom : la requête qu'on vient de finir.
+      expect(w.protocols).toEqual({ h2: w.requests });
+      expect(describeNetwork(w)).toMatch(/, protocole h2$/);
+      expect(describeNetwork({ ...w, protocols: { h2: 3, "http/1.1": 1 } })).toMatch(/, protocoles h2 ×3, http\/1\.1 ×1$/);
+      source.close();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("une mesure qui lève ne casse pas la lecture", async () => {
+    stubFetch();
+    const spy = vi.spyOn(performance, "getEntriesByName").mockImplementation(() => {
+      throw new Error("indisponible");
+    });
+    try {
+      const { describeNetwork } = await import("@/lib/webcodecs/byteSource");
+      const source = await HttpByteSource.open("/film.mkv", SIZE);
+      source.abandon(4 * CHUNK);
+      await expect(source.read(4 * CHUNK, 16)).resolves.toHaveLength(16);
+      const w = source.networkSinceSeek()!;
+      expect(w.protocols).toEqual({});
+      expect(describeNetwork(w)).not.toMatch(/protocole/);
+      source.close();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
