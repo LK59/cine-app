@@ -150,6 +150,9 @@ const FRUITLESS_APPENDS = 8;
 /** Only the opening handful of segments is recorded: after that the record says nothing new. */
 const TRACED_APPENDS = 4;
 
+/** Envois tracés après chaque saut : de quoi voir la tête rejoindre le média, pas davantage. */
+const TRACED_APPENDS_PER_SEEK = 6;
+
 /** How much already-played media to keep before evicting, so a short step back does not re-fetch. */
 const KEEP_BEHIND_SECONDS = 30;
 
@@ -335,6 +338,12 @@ export class MseSource {
   }
 
   private appendsTraced = 0;
+  /**
+   * Envois depuis le dernier saut (ou l'ouverture) : seuls les premiers sont tracés. Écrite à
+   * chaque segment jusqu'au 22/09/2026, la ligne « après envoi » occupait à elle seule les quarante
+   * étapes des lignes `seek` et `stall`, et masquait ce qui s'y était passé.
+   */
+  private appendsSinceSeek = 0;
   /** Le premier envoi après un saut écrit ce que le réseau a coûté — voir `NetworkWindow`. */
   private seekNetworkPending = false;
 
@@ -499,10 +508,12 @@ export class MseSource {
     // This object's own move, already being served — serving it again would clear the buffers
     // it is in the middle of refilling.
     if (Math.abs(target - this.lastSeekTarget) < 0.25) return void this.fill();
+    // A deliberate move settles the question of where playback belongs — et c'est vrai aussi d'un
+    // saut dans ce qui est déjà chargé. Oublié sur ce raccourci jusqu'au 22/09/2026 : pause, saut
+    // en avant, Lecture, et la garde ramenait la tête à sa position de pause.
+    this.guard.forgetPause();
     // A step inside what is already buffered needs no work from the file at all.
     if (this.isBufferedAt(target)) return void this.fill();
-    // A deliberate move settles the question of where playback belongs.
-    this.guard.forgetPause();
     void this.seek(target);
   };
 
@@ -699,12 +710,13 @@ export class MseSource {
           }
         }
         const depth = this.bufferedEnd();
-        if (this.appendsTraced <= TRACED_APPENDS && this.appendsTraced > 0) {
+        if (++this.appendsSinceSeek <= TRACED_APPENDS_PER_SEEK) {
           trace(`après envoi : tampon jusqu'à ${depth.toFixed(1)} s, tête à ${this.video.currentTime.toFixed(1)} s`);
-          // There is something to play now, which there was not when the element was first asked
-          // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
-          this.guard.mediaArrived();
         }
+        // There is something to play now, which there was not when the element was first asked
+        // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
+        // À chaque envoi, et non plus au rythme de la trace : les deux étaient liés par accident.
+        this.guard.mediaArrived();
         if (depth > deepestSoFar + 0.01) {
           deepestSoFar = depth;
           fruitless = 0;
@@ -944,6 +956,7 @@ export class MseSource {
 
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     this.seekNetworkPending = true;
+    this.appendsSinceSeek = 0;
     // Only when the element is not already there: reassigning would fire another seeking event
     // and start this over.
     if (Math.abs(this.video.currentTime - playerSeconds) > 0.05) this.video.currentTime = playerSeconds;

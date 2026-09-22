@@ -1285,6 +1285,52 @@ describe("MseSource", () => {
     expect(video.currentTime).toBe(5);
   });
 
+  it("garde un saut en avant fait pendant la pause, dans ce qui est déjà chargé", async () => {
+    // Audit du 22/09/2026 : le raccourci « saut dans le tampon » sortait sans prévenir la garde de
+    // pause. Pause, saut en avant plus d'une seconde après, Lecture : la garde voyait la tête « trop
+    // loin » de sa position de pause et l'y ramenait. Seul le saut en arrière était couvert.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 26, "du média devant la tête");
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    setTime(12);
+    (video as unknown as { paused: boolean }).paused = true;
+    video.dispatchEvent(new Event("pause"));
+    // Plus que la fenêtre où la garde adopte d'elle-même la position.
+    await new Promise((r) => setTimeout(r, 1200));
+    setTime(25);
+    video.dispatchEvent(new Event("seeking"));
+    video.dispatchEvent(new Event("seeked"));
+    (video as unknown as { paused: boolean }).paused = false;
+    video.dispatchEvent(new Event("play"));
+    await flush();
+    video.dispatchEvent(new Event("timeupdate"));
+    await flush();
+
+    expect(video.currentTime).toBe(25);
+    expect(remuxer.seeks).toEqual([]);
+  }, 10_000);
+
+  it("ne remplit pas la trace d'un saut de lignes « après envoi »", async () => {
+    // Écrite à chaque segment, elle occupait les quarante étapes des lignes `seek` et `stall`.
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn() });
+    await flush();
+    traceReset();
+    await mse.seek(1200);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 1215, "vingt secondes de média");
+    // Les lignes de ce lecteur-ci : d'autres sources de la suite, encore vivantes, écrivent dans
+    // la même trace — leur tête n'est pas à 1 200 s.
+    const lines = traceText()
+      .split("\n")
+      .filter((l) => l.includes("après envoi") && Number(/tête à ([\d.]+)/.exec(l)?.[1] ?? 0) >= 1199);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.length).toBeLessThanOrEqual(6);
+    mse.destroy();
+  });
+
   it("does not move the picture under a viewer who has paused", async () => {
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500);
