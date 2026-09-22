@@ -225,6 +225,15 @@ export function PlayerControls({
   // needs to re-render off it directly) by the 'timeupdate' handler to stop the real playback
   // position from fighting the dragged one, and by the two hide-suppression handlers below.
   const seekingRef = useRef(false);
+  /**
+   * Un glisser à la souris est en cours : la position vient du curseur, jamais de l'input.
+   *
+   * L'input natif ramène le pixel à une valeur en retirant la demi-pastille à chaque bout ; la
+   * vignette, elle, compte sur toute la largeur. Les deux disaient deux temps différents pour
+   * le même pixel, et c'est celui de l'input qu'on validait : « je vise 6:54, il me met à
+   * 6:48 », systématiquement, sur Chrome et Firefox.
+   */
+  const mouseDragRef = useRef(false);
 
   // Reset the dismiss/countdown state whenever a genuinely new "next episode" context arrives
   // (i.e. we've actually advanced), not on every render. Applied during render (not in an
@@ -690,11 +699,17 @@ export function PlayerControls({
   // extra state/hooks added alongside chapters/PiP/speed tripped the React Compiler's own
   // memoization-preservation check on the manually memoized version for reasons unrelated to
   // this function's own logic.
-  function updatePreview(clientX: number) {
+  /** Le temps sous ce pixel, sur toute la largeur de la barre — ce que la vignette annonce. */
+  function fractionAt(clientX: number): number | null {
     const bar = seekBarRef.current;
-    if (!bar || !duration) return;
+    if (!bar || !duration) return null;
     const rect = bar.getBoundingClientRect();
-    const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return rect.width > 0 ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) : null;
+  }
+
+  function updatePreview(clientX: number) {
+    const fraction = fractionAt(clientX);
+    if (fraction === null) return;
     setPreviewFraction(fraction);
     setPreviewTime(fraction * duration);
     // And the bar follows the finger, which it did not: a touch drag never reaches the input's
@@ -1704,10 +1719,18 @@ export function PlayerControls({
               // mousedown/touchstart mark the start of a drag; mouseup/touchend (native pointer
               // capture keeps these firing on the input even if the pointer wanders outside its
               // bounds) commit the FINAL value as one real seek and let auto-hide resume after 5s.
-              onChange={(e) => previewSeek(Number(e.target.value))}
-              onMouseDown={() => {
+              // Sauf sous la souris, où l'action par défaut de l'input passe après le mousemove
+              // du conteneur et remettrait sa propre valeur par-dessus (voir mouseDragRef).
+              onChange={(e) => {
+                if (!mouseDragRef.current) previewSeek(Number(e.target.value));
+              }}
+              onMouseDown={(e) => {
                 seekingRef.current = true;
+                mouseDragRef.current = true;
                 holdControls();
+                // Un simple clic, sans mouvement : le même calcul que la vignette.
+                const fraction = fractionAt(e.clientX);
+                if (fraction !== null) previewSeek(fraction * duration);
               }}
               onTouchStart={() => {
                 seekingRef.current = true;
@@ -1721,7 +1744,9 @@ export function PlayerControls({
               // makes 5s the one that actually wins, per what was asked for here specifically.
               onMouseUp={(e) => {
                 seekingRef.current = false;
-                commitSeek(Number((e.target as HTMLInputElement).value));
+                mouseDragRef.current = false;
+                const fraction = fractionAt(e.clientX);
+                commitSeek(fraction !== null ? fraction * duration : Number((e.target as HTMLInputElement).value));
                 // Was missing here (only onTouchEnd cleared it) — a plain click/drag-release
                 // with a mouse (or a mouse-like pointer, which iOS itself can synthesize in some
                 // interaction patterns) left the trickplay preview frozen on screen indefinitely,
@@ -1746,6 +1771,8 @@ export function PlayerControls({
               onKeyDown={(e) => {
                 if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                 seekingRef.current = true;
+                // Un relâchement hors de la fenêtre n'arrive jamais jusqu'ici.
+                mouseDragRef.current = false;
                 holdControls();
               }}
               onKeyUp={(e) => {

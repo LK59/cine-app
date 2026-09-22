@@ -131,6 +131,29 @@ describe("PlayerControls — la barre de progression", () => {
     expect(Number(input.value)).toBeCloseTo(2700, 0);
   });
 
+  it("à la souris, saute là où est le curseur, pas là où l'input l'a placé", async () => {
+    // L'input natif ne compte pas la demi-pastille à chaque bout : sa valeur, pour un même
+    // pixel, tombe avant ce que la vignette annonce — neuf secondes au début d'un épisode de
+    // 45 min sur un écran de PC (« je vise 6:54, il me met à 6:48 », Chrome et Firefox).
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    const bar = container.querySelector(".player-seek")!.parentElement!;
+    const input = container.querySelector(".player-seek") as HTMLInputElement;
+    await withDuration(video!, bar);
+
+    await act(async () => void fireEvent.mouseDown(input, { clientX: 50 }));
+    await act(async () => void fireEvent.mouseMove(bar, { clientX: 50 }));
+    // Puis l'action par défaut du navigateur, qui passe après la propagation : avec une
+    // pastille de 14 px, (50 − 7) / (200 − 14) de l'heure.
+    await act(async () => void fireEvent.change(input, { target: { value: "832" } }));
+    expect(Number(input.value)).toBeCloseTo(900, 0);
+    await act(async () => void fireEvent.mouseUp(input, { clientX: 50 }));
+
+    expect(video!.currentTime).toBeCloseTo(900, 0);
+  });
+
   it("ne suit pas un curseur qui ne fait que passer", async () => {
     // Previewing what is under the pointer is one thing; moving the playhead under it would be
     // the bar chasing the mouse.
