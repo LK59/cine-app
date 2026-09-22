@@ -69,15 +69,37 @@ describe("logPlaybackEvent", () => {
   });
 
   it("laisse de côté ce qui n'est ni texte, ni nombre, ni booléen", async () => {
-    // Nothing nested: a log line is one flat object or it is not greppable.
+    // Une ligne reste un objet plat, sinon elle ne se lit plus à la ligne de commande.
     const { logPlaybackEvent } = await import("@/lib/playerLog");
-    logPlaybackEvent("louis", "start", { ok: true, at: 12.3456, nested: { a: 1 }, list: [1], nothing: null });
+    logPlaybackEvent("louis", "start", { ok: true, at: 12.3456, list: [1], nothing: null });
 
     const written = lines()[0];
     expect(written).toMatchObject({ ok: true, at: 12.346 });
-    expect(written.nested).toBeUndefined();
     expect(written.list).toBeUndefined();
     expect(written.nothing).toBeUndefined();
+  });
+
+  it("aplatit un objet d'un niveau plutôt que de le jeter", async () => {
+    // 22/09/2026 : la mesure de l'accord du son et de l'image partait en objets
+    // (`audioSync: { sourceMs, encoderMs }`, `frames: { total, dropped }`) et le journal les
+    // jetait sans un mot — les premières séances qui devaient la porter n'en avaient rien.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "stop", {
+      audioSync: { sourceMs: 40, encoderMs: 0 },
+      frames: { total: 14400, dropped: 12 },
+      deep: { inner: { x: 1 } },
+    });
+
+    const written = lines()[0];
+    expect(written).toMatchObject({
+      "audioSync.sourceMs": 40,
+      "audioSync.encoderMs": 0,
+      "frames.total": 14400,
+      "frames.dropped": 12,
+    });
+    expect(written.audioSync).toBeUndefined();
+    // Un seul niveau : ce qui est plus profond reste dehors.
+    expect(Object.keys(written).some((key) => key.startsWith("deep"))).toBe(false);
   });
 
   it("tourne le fichier plutôt que de remplir le disque", async () => {

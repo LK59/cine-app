@@ -43,15 +43,28 @@ export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
 function clean(fields: Record<string, unknown>): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
   let kept = 0;
-  for (const [key, value] of Object.entries(fields)) {
-    if (kept >= 24 || key.length > 40) continue;
+  const keep = (key: string, value: unknown): void => {
+    if (kept >= 24 || key.length > 40) return;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the
     // whole point of the line it rides on. Still bounded — by eight times the rest, not by trust.
     else if (typeof value === "string" && value) out[key] = value.slice(0, key === "steps" ? 4000 : 500);
-    else continue;
+    else return;
     kept += 1;
+  };
+  for (const [key, value] of Object.entries(fields)) {
+    /**
+     * Un objet est aplati d'un niveau (`audioSync.sourceMs`), jamais davantage.
+     *
+     * Il était jeté sans un mot : la mesure de l'accord du son et de l'image (`audioSync`,
+     * `frames`) et le relais d'un repli (`takeover` — position et piste) partaient du navigateur
+     * et n'arrivaient jamais au journal (relevé le 22/09/2026 sur les premières séances qui
+     * devaient les porter). Un seul niveau, et le même plafond de champs que le reste.
+     */
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [sub, inner] of Object.entries(value as Record<string, unknown>)) keep(`${key}.${sub}`, inner);
+    } else keep(key, value);
   }
   return out;
 }
