@@ -342,6 +342,32 @@ async function waitForNetwork(signal?: AbortSignal): Promise<void> {
 }
 
 /**
+ * Le délai avant une nouvelle tentative — que l'interrupteur du morceau écourte.
+ *
+ * Chasse aux défauts du 22/09/2026 : l'attente ignorait l'abandon. Un morceau coupé par un saut
+ * pendant son délai (jusqu'à 1,5 s) restait une promesse vivante tout ce temps, et le saut, qui
+ * attendait la lecture en cours, attendait avec lui la fin d'un délai qui ne servait plus à rien.
+ * Rend la main aussitôt ; c'est l'appelant qui regarde le signal et lève `ReadAbandoned`.
+ */
+function backoff(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** Ce qui répond à une source fermée : aucune requête ne part plus pour elle. */
+function closedSource(): Error {
+  return new Error("source fermée");
+}
+
+/**
  * Ce qu'une source fermée laisse à la suivante, pour le même fichier.
  *
  * Un changement de piste d'un format à un autre reconstruit le lecteur (voir `perTrack` dans
@@ -512,7 +538,7 @@ export class HttpByteSource implements ByteSource {
     for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
       if (attempt > 0) {
         await waitForNetwork(own);
-        await new Promise((resolve) => setTimeout(resolve, FETCH_BACKOFF_MS[attempt - 1] ?? 1500));
+        await backoff(FETCH_BACKOFF_MS[attempt - 1] ?? 1500, own);
         if (this.controller.signal.aborted) throw last ?? new Error("lecture annulée");
         if (own.aborted) throw new ReadAbandoned();
       }
@@ -573,6 +599,10 @@ export class HttpByteSource implements ByteSource {
   }
 
   private async fetchChunk(index: number): Promise<Uint8Array> {
+    // Fermée : rien ne part plus. Une lecture ou une avance arrivée après `close` (une boucle de
+    // remplissage qui finit son tour, un `warm` tardif) lançait une requête que plus personne
+    // n'écoutait — et qui, abandonnée d'avance, n'aboutissait qu'au bout de ses tentatives.
+    if (this.controller.signal.aborted) throw closedSource();
     const cached = this.chunks.get(index);
     if (cached) return cached;
     const pending = this.inflight.get(index);
@@ -593,7 +623,10 @@ export class HttpByteSource implements ByteSource {
         return bytes;
       })
       .finally(() => {
-        this.inflight.delete(index);
+        // Seulement si l'entrée est encore la sienne : un morceau abandonné puis redemandé a déjà
+        // une promesse neuve à cette place, et l'effacer en lancerait une troisième au prochain
+        // appel — ou ferait croire à la lecture en avance que rien n'est en route.
+        if (this.inflight.get(index) === promise) this.inflight.delete(index);
         if (this.inflightControllers.get(index) === own) this.inflightControllers.delete(index);
       });
 
@@ -609,6 +642,7 @@ export class HttpByteSource implements ByteSource {
    * That stall is what turns a decoder that can keep up into one that visibly cannot.
    */
   private prefetchAfter(index: number): void {
+    if (this.controller.signal.aborted) return;
     const depth = performance.now() < this.focusUntil ? SEEK_PREFETCH_CHUNKS : PREFETCH_CHUNKS;
     for (let ahead = 1; ahead <= depth; ahead++) {
       const next = index + ahead;
@@ -634,6 +668,7 @@ export class HttpByteSource implements ByteSource {
    * fetch already in flight or already cached is left alone.
    */
   warm(offset: number): void {
+    if (this.controller.signal.aborted) return;
     const first = Math.floor(Math.max(0, Math.min(offset, this.size - 1)) / CHUNK_SIZE);
     if (!this.chunks.has(first) && !this.inflight.has(first)) {
       void this.fetchChunk(first).catch(() => {
@@ -644,6 +679,7 @@ export class HttpByteSource implements ByteSource {
   }
 
   async read(offset: number, length: number): Promise<Uint8Array> {
+    if (this.controller.signal.aborted) throw closedSource();
     const start = Math.max(0, Math.min(offset, this.size));
     const end = Math.max(start, Math.min(offset + length, this.size));
     if (end === start) return new Uint8Array(0);
@@ -699,6 +735,12 @@ export class HttpByteSource implements ByteSource {
       if (index >= first && index <= first + PREFETCH_CHUNKS) continue;
       own.abort();
       this.inflightControllers.delete(index);
+      // Sa promesse aussi. Laissée dans `inflight`, elle était rendue par `fetchChunk` à toute
+      // lecture de ce morceau jusqu'à ce qu'elle s'éteigne — et avec elle `ReadAbandoned`, pour
+      // un morceau que le lecteur voulait bel et bien (22/09/2026 : boucle de remplissage arrêtée
+      // sans un mot, image en double, plus de son jusqu'au saut suivant). La lecture en avance,
+      // elle, le sautait en le croyant en route.
+      this.inflight.delete(index);
       dropped += 1;
     }
     if (dropped > 0) trace(`réseau : ${dropped} lecture(s) de l'ancienne position abandonnée(s)`);
@@ -810,6 +852,10 @@ export class HttpByteSource implements ByteSource {
   }
 
   close(): void {
+    // Une seule fois. Une seconde fermeture (un nettoyage tardif) laissait au relais une carte
+    // vide — ce qui l'efface —, et effaçait donc celui qu'une *autre* source, rouverte sur ce même
+    // fichier puis refermée entre-temps, venait d'y laisser.
+    if (this.controller.signal.aborted) return;
     this.controller.abort();
     // Chaque morceau a son propre interrupteur : la fermeture les coupe tous.
     for (const own of this.inflightControllers.values()) own.abort();

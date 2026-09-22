@@ -488,3 +488,104 @@ describe("HttpByteSource — le protocole de chaque requête", () => {
     }
   });
 });
+
+describe("HttpByteSource — un morceau abandonné pendant son attente avant nouvelle tentative", () => {
+  /**
+   * Chasse aux défauts du 22/09/2026. Un morceau dont la première requête avait échoué attendait
+   * son délai avant de redemander (200 ms à 1,5 s) sans écouter son interrupteur. `abandon` le
+   * coupait mais laissait sa promesse dans `inflight` : pendant tout ce délai, `fetchChunk` la
+   * rendait à la première lecture venue — qui recevait `ReadAbandoned` pour un morceau que le
+   * lecteur voulait bel et bien (boucle de remplissage arrêtée sans un mot, image en double, son
+   * perdu jusqu'au saut suivant) —, la lecture en avance le croyait en route, et le saut lui-même
+   * attendait la fin du délai.
+   */
+  const failFirst = (index: number) => {
+    stubFetch();
+    const inner = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    let failed = false;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      const from = Number(/bytes=(\d+)-/.exec(init?.headers?.Range ?? "")?.[1] ?? -1);
+      if (from === index * CHUNK && !failed) {
+        failed = true;
+        asked.push([from, from + CHUNK - 1]);
+        throw new TypeError("Failed to fetch");
+      }
+      return inner(url, init);
+    });
+  };
+  const askedFor = (index: number) => asked.filter(([from]) => from === index * CHUNK).length;
+
+  it("une lecture demandée après l'abandon repart d'une requête neuve, et une seule", async () => {
+    failFirst(3);
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    source.warm(3 * CHUNK);
+    // La première requête du morceau 3 a échoué : il attend son délai avant de redemander.
+    await settle();
+    expect(askedFor(3)).toBe(1);
+
+    source.abandon(8 * CHUNK);
+    // Deux lectures du même morceau, la seconde après que l'ancienne promesse s'est éteinte : une
+    // seule requête neuve pour les deux, et aucune ne reçoit l'abandon de l'ancienne.
+    const first = source.read(3 * CHUNK, 16);
+    await settle();
+    const second = source.read(3 * CHUNK + 32, 16);
+    await expect(first).resolves.toHaveLength(16);
+    await expect(second).resolves.toHaveLength(16);
+    expect(askedFor(3)).toBe(2);
+    source.close();
+  });
+
+  it("l'abandon interrompt l'attente au lieu d'en attendre la fin", async () => {
+    failFirst(3);
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    const doomed = source.read(3 * CHUNK, 16);
+    await settle();
+    source.abandon(8 * CHUNK);
+    const outcome = await Promise.race([
+      doomed.then(
+        () => "résolue",
+        (error: unknown) => (error instanceof Error ? error.name : "autre")
+      ),
+      new Promise((resolve) => setTimeout(() => resolve("toujours en attente"), 100)),
+    ]);
+    expect(outcome).toBe("ReadAbandoned");
+    source.close();
+  });
+});
+
+describe("HttpByteSource — après la fermeture", () => {
+  it("ne lance plus aucune requête : ni lecture, ni préchauffage", async () => {
+    stubFetch();
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    await settle();
+    source.close();
+    asked = [];
+    await expect(source.read(4 * CHUNK, 16)).rejects.toThrow();
+    source.warm(6 * CHUNK);
+    await settle();
+    expect(asked).toEqual([]);
+  });
+
+  it("une seconde fermeture n'efface pas le relais laissé par une autre source", async () => {
+    let heads = 0;
+    stubFetch();
+    const inner = fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (init?.method === "HEAD") heads++;
+      return inner(url, init);
+    });
+    const first = await HttpByteSource.open("/film.mkv");
+    await first.read(0, 16);
+    first.close();
+    // Une reconstruction : même fichier, hérité, puis refermée à son tour.
+    const second = await HttpByteSource.open("/film.mkv");
+    await second.read(0, 16);
+    second.close();
+    const headsBefore = heads;
+
+    // L'ancienne source, refermée une seconde fois par un nettoyage tardif.
+    first.close();
+    await HttpByteSource.open("/film.mkv");
+    expect(heads).toBe(headsBefore);
+  });
+});
