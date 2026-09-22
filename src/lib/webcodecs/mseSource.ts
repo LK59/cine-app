@@ -118,12 +118,6 @@ const SEEK_RUNAWAY_SECONDS = 1.5;
 /** L'horloge arrêtée pour un saut sous WebKit ne le reste jamais plus longtemps que cela. */
 const CLOCK_HOLD_MAX_MS = 12_000;
 
-/**
- * Et, une fois le saut annoncé arrivé, pas plus longtemps que cela à attendre sa première image.
- * Borne courte : si le navigateur ne signalait jamais l'image, chaque saut paierait l'attente.
- */
-const FIRST_FRAME_WAIT_MS = 2000;
-
 /** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
 const STALL_TRACE_MS = 20_000;
 
@@ -1031,34 +1025,8 @@ export class MseSource {
     const intent = this.seekIntent;
     if (intent && Math.abs(this.video.currentTime - intent.target) > SEEK_RUNAWAY_SECONDS) return;
     this.seekIntent = null;
-    this.releaseAtFirstFrame();
+    this.releaseClock("saut arrivé");
   };
-
-  /**
-   * L'horloge repart sur la première image affichée du saut, pas sur son annonce.
-   *
-   * Banc iPhone du 22/09/2026, rafale de cinq sauts sur un 4K : `seeked` arrivait, l'horloge
-   * repartait, et l'image ne suivait que trois secondes plus tard — le son sur une image figée. Le
-   * décodeur n'avait pas fini ; « arrivé » ne voulait pas dire « à l'écran ».
-   */
-  private releaseAtFirstFrame(): void {
-    const hold = this.clockHold;
-    if (!hold) return;
-    const video = this.video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: () => void) => number };
-    if (typeof video.requestVideoFrameCallback !== "function") return this.releaseClock("saut arrivé");
-    let done = false;
-    const release = (because: string) => {
-      if (done || this.clockHold !== hold) return;
-      done = true;
-      this.releaseClock(because);
-    };
-    try {
-      video.requestVideoFrameCallback(() => release("première image du saut"));
-    } catch {
-      return release("saut arrivé");
-    }
-    setTimeout(() => release("saut arrivé, première image attendue en vain"), FIRST_FRAME_WAIT_MS);
-  }
 
   /**
    * Sous WebKit, un saut se fait horloge arrêtée (vitesse 0), et elle repart à l'arrivée.
