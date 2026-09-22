@@ -841,6 +841,22 @@ describe("MseSource", () => {
     mse.destroy();
   });
 
+  it("rend la lecture en avance entière dès que le saut a sa première image", async () => {
+    // Voir `SEEK_PREFETCH_CHUNKS` : bridée pendant le saut, elle doit reprendre — sinon toute la
+    // suite du film se lirait avec deux morceaux d'avance.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    const settled = vi.fn();
+    Object.assign(remuxer, { seekSettled: settled });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    expect(settled).not.toHaveBeenCalled();
+    await mse.seek(1200);
+    await flush();
+    expect(settled).toHaveBeenCalledTimes(1);
+    mse.destroy();
+  });
+
   it("keeps a playable amount of media even while the system says it wants none", async () => {
     const video = fakeVideo();
     class NeverStreaming extends FakeSource {

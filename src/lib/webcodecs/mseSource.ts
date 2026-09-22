@@ -661,6 +661,8 @@ export class MseSource {
 
         if (this.seekNetworkPending) {
           this.seekNetworkPending = false;
+          // La première image du saut est là : la lecture en avance reprend en entier.
+          this.remuxer.seekSettled?.();
           // Mesure seulement : jamais sur le chemin d'une lecture.
           try {
             const network = this.remuxer.networkSinceSeek?.();

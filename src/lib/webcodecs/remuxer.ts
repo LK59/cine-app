@@ -834,6 +834,15 @@ export class Remuxer {
     this.source.warm?.(from);
   }
 
+  /** Le saut a sa première image : la source reprend sa lecture en avance entière. */
+  seekSettled(): void {
+    try {
+      this.source.seekSettled?.();
+    } catch {
+      /* une préférence de lecture, pas une lecture */
+    }
+  }
+
   /** Le réseau depuis le dernier saut, pour la trace — voir `NetworkWindow`. */
   networkSinceSeek(): NetworkWindow | null {
     try {

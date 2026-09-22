@@ -147,6 +147,15 @@ them structural:
   start a recovery, and the audio transcoder does not rebuild its encoder. `seekTo` then resets
   everything, as after any seek.
 
+- **Readahead is cut to two chunks until a seek has its first picture** (`seekSettled`, 8 s at most).
+  Measured with `Server-Timing` and the per-seek network trace, from a distant server at 75 Mb/s: the
+  server spent under 20 ms per range, and 11 to 21 MB crossed the link before the first picture of a
+  seek that needed 4 to 6. The six readahead chunks were sharing the link with the one the parser
+  was waiting for.
+- **Every seek traces its network cost** at its first append: requests, bytes, throughput, first-byte
+  delays, the slowest request, and the server's own time (`Server-Timing: app;dur, jf;dur`, added by
+  the stream relay).
+
 Retries: 4 attempts, with 60 s of patience while the network is offline. An abandoned read is never
 retried.
 

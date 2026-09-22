@@ -131,3 +131,40 @@ describe("ce que le réseau a coûté depuis le saut", () => {
     expect(serverTimingApp("jf;dur=3")).toBeNull();
   });
 });
+
+describe("après un saut, ce qui sert la première image d'abord", () => {
+  it("n'avance que de deux morceaux tant que le saut n'a pas sa première image, puis reprend", async () => {
+    // Banc du 22/09/2026 : 11 à 21 Mo transférés avant la première image d'un saut qui n'en
+    // demandait que 4 à 6 — la lecture en avance (six morceaux) prenait six parts de la bande
+    // passante sur sept au morceau attendu.
+    const source = await HttpByteSource.open("/film.mkv");
+    await settle();
+    asked = [];
+    source.abandon(100 * CHUNK);
+    source.warm(100 * CHUNK);
+    const first = source.read(100 * CHUNK, 1000);
+    await settle();
+    expect([...new Set(asked)].sort((a, b) => a - b)).toEqual([100, 101, 102]);
+
+    // La première image est là : la lecture en avance repart en entier.
+    release.forEach((answer) => answer());
+    await first;
+    source.seekSettled();
+    await settle();
+    expect(Math.max(...asked)).toBe(106);
+  });
+
+  it("ne reste pas bridée si la première image n'arrive jamais", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    try {
+      const source = await HttpByteSource.open("/film.mkv");
+      source.abandon(100 * CHUNK);
+      vi.advanceTimersByTime(9000);
+      asked = [];
+      source.warm(50 * CHUNK);
+      expect(Math.max(...asked)).toBe(56);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

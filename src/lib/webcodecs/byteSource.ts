@@ -34,6 +34,8 @@ export interface ByteSource {
    * vol.
    */
   abandon?(keepOffset: number): void;
+  /** Le saut a sa première image : la lecture en avance reprend en entier. Optionnel. */
+  seekSettled?(): void;
   /** Le réseau depuis le dernier saut (`abandon`) — voir `NetworkWindow`. Optionnel. */
   networkSinceSeek?(): NetworkWindow | null;
   /** Releases any pending work. Safe to call twice. */
@@ -119,6 +121,20 @@ const MAX_KEPT_CHUNKS = 24;
  * thrown away. It is only ever bytes that were going to be asked for a moment later.
  */
 const PREFETCH_CHUNKS = 6;
+
+/**
+ * Et juste après un saut, tant que sa première image n'est pas là : deux seulement.
+ *
+ * Banc du 22/09/2026, serveur lointain à 75 Mb/s : 11 à 21 Mo transférés avant la première image
+ * d'un saut qui n'en demandait que 4 à 6. Les six morceaux lus en avance partageaient le lien avec
+ * celui que le lecteur attendait, qui n'en recevait qu'une part sur sept. Deux suffisent à garder
+ * le lien plein (un aller-retour de 60 ms à 75 Mb/s, c'est un demi-mégaoctet en vol) ; l'avance
+ * entière reprend dès que le saut a son image (`seekSettled`).
+ */
+const SEEK_PREFETCH_CHUNKS = 2;
+
+/** Au-delà, l'avance entière reprend d'elle-même : un saut qui n'aboutit pas ne la bride pas. */
+const SEEK_FOCUS_MS = 8000;
 
 /**
  * How a chunk that fails to arrive is retried.
@@ -323,6 +339,10 @@ export class HttpByteSource implements ByteSource {
   private readonly inflightControllers = new Map<number, AbortController>();
   private readonly controller = new AbortController();
   /** Voir `NetworkWindow` : remis à zéro à chaque `abandon`, c'est-à-dire à chaque saut. */
+  /** Jusqu'à quand la lecture en avance est bridée — voir `SEEK_PREFETCH_CHUNKS`. */
+  private focusUntil = 0;
+  /** Le dernier morceau qu'une lecture a demandé : d'où l'avance repart quand le saut aboutit. */
+  private lastDemanded = -1;
   private window: { since: number; requests: number; bytes: number; lastEnd: number; fbMin: number; fbMax: number; slowest: number; server: number | null } | null = null;
 
   private constructor(url: string, size: number) {
@@ -475,7 +495,8 @@ export class HttpByteSource implements ByteSource {
    * That stall is what turns a decoder that can keep up into one that visibly cannot.
    */
   private prefetchAfter(index: number): void {
-    for (let ahead = 1; ahead <= PREFETCH_CHUNKS; ahead++) {
+    const depth = performance.now() < this.focusUntil ? SEEK_PREFETCH_CHUNKS : PREFETCH_CHUNKS;
+    for (let ahead = 1; ahead <= depth; ahead++) {
       const next = index + ahead;
       if (next * CHUNK_SIZE >= this.size) return;
       if (this.chunks.has(next) || this.inflight.has(next)) continue;
@@ -516,6 +537,7 @@ export class HttpByteSource implements ByteSource {
     const firstChunk = Math.floor(start / CHUNK_SIZE);
     const lastChunk = Math.floor((end - 1) / CHUNK_SIZE);
 
+    this.lastDemanded = lastChunk;
     // Fast path: the whole read sits inside one chunk, so it's a view, not a copy.
     if (firstChunk === lastChunk) {
       const chunk = await this.fetchChunk(firstChunk);
@@ -555,6 +577,7 @@ export class HttpByteSource implements ByteSource {
    * sert le saut lui-même : le morceau où il tombe et l'avance qui le suit.
    */
   abandon(keepOffset: number): void {
+    this.focusUntil = performance.now() + SEEK_FOCUS_MS;
     this.window = { since: performance.now(), requests: 0, bytes: 0, lastEnd: 0, fbMin: Infinity, fbMax: 0, slowest: 0, server: null };
     const first = Math.floor(Math.max(0, Math.min(keepOffset, this.size - 1)) / CHUNK_SIZE);
     let dropped = 0;
@@ -584,6 +607,12 @@ export class HttpByteSource implements ByteSource {
     } catch {
       /* une mesure n'est pas une lecture */
     }
+  }
+
+  seekSettled(): void {
+    if (this.focusUntil === 0) return;
+    this.focusUntil = 0;
+    if (this.lastDemanded >= 0) this.prefetchAfter(this.lastDemanded);
   }
 
   networkSinceSeek(): NetworkWindow | null {
