@@ -10,7 +10,7 @@
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan, TrackedCue } from "./remuxer";
 import { trace, traceRecent } from "./trace";
-import { isNetworkFailure, isReadAbandoned } from "./byteSource";
+import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
@@ -311,6 +311,8 @@ export class MseSource {
   }
 
   private appendsTraced = 0;
+  /** Le premier envoi après un saut écrit ce que le réseau a coûté — voir `NetworkWindow`. */
+  private seekNetworkPending = false;
 
   private async open(startSeconds: number): Promise<void> {
     // AirPlay cannot carry a managed stream, and Safari refuses to attach one until this is set.
@@ -657,6 +659,16 @@ export class MseSource {
         this.guard.nudgeIntoBuffer();
         this.lastAppendAt = Date.now();
 
+        if (this.seekNetworkPending) {
+          this.seekNetworkPending = false;
+          // Mesure seulement : jamais sur le chemin d'une lecture.
+          try {
+            const network = this.remuxer.networkSinceSeek?.();
+            if (network) trace(`réseau depuis le saut : ${describeNetwork(network)}`);
+          } catch {
+            /* rien */
+          }
+        }
         const depth = this.bufferedEnd();
         if (this.appendsTraced <= TRACED_APPENDS && this.appendsTraced > 0) {
           trace(`après envoi : tampon jusqu'à ${depth.toFixed(1)} s, tête à ${this.video.currentTime.toFixed(1)} s`);
@@ -902,6 +914,7 @@ export class MseSource {
     }
 
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
+    this.seekNetworkPending = true;
     // Only when the element is not already there: reassigning would fire another seeking event
     // and start this over.
     if (Math.abs(this.video.currentTime - playerSeconds) > 0.05) this.video.currentTime = playerSeconds;

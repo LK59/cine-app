@@ -15,7 +15,7 @@ import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { clusterOffsetForTime, cueTimeAfter } from "./matroska";
-import { isReadAbandoned } from "./byteSource";
+import { isReadAbandoned, type NetworkWindow } from "./byteSource";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
 import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
@@ -832,6 +832,15 @@ export class Remuxer {
     const from = this.offsetFor(seconds);
     this.source.abandon?.(from);
     this.source.warm?.(from);
+  }
+
+  /** Le réseau depuis le dernier saut, pour la trace — voir `NetworkWindow`. */
+  networkSinceSeek(): NetworkWindow | null {
+    try {
+      return this.source.networkSinceSeek?.() ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** The next pair of segments, or null once the file is exhausted. */

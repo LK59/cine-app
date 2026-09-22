@@ -95,3 +95,39 @@ describe("abandonner les lectures d'une position quittée", () => {
     expect(asked.filter((c) => c === 10).length).toBe(before);
   });
 });
+
+describe("ce que le réseau a coûté depuis le saut", () => {
+  it("compte les requêtes, les octets, le premier octet et le temps annoncé par le serveur", async () => {
+    const { describeNetwork, serverTimingApp } = await import("@/lib/webcodecs/byteSource");
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      if (init?.method === "HEAD") {
+        return Promise.resolve({ ok: true, headers: { get: (n: string) => (n === "Content-Length" ? String(SIZE) : null) } });
+      }
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      return new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              status: 206,
+              headers: { get: (n: string) => (n === "Server-Timing" ? "app;dur=12, jf;dur=9" : `bytes ${from}-${to}/${SIZE}`) },
+              arrayBuffer: async () => new Uint8Array(to - from + 1).buffer,
+            }),
+          20
+        )
+      );
+    });
+    const source = await HttpByteSource.open("/film.mkv");
+    // Rien avant un saut : la fenêtre s'ouvre avec lui.
+    expect(source.networkSinceSeek()).toBeNull();
+    source.abandon(100 * CHUNK);
+    await source.read(100 * CHUNK, 3 * CHUNK);
+    const w = source.networkSinceSeek()!;
+    expect(w.requests).toBeGreaterThanOrEqual(3);
+    expect(w.bytes).toBeGreaterThanOrEqual(3 * CHUNK);
+    expect(w.firstByteMaxMs).toBeGreaterThanOrEqual(15);
+    expect(w.serverMaxMs).toBe(12);
+    expect(describeNetwork(w)).toMatch(/Mo en \d+ ms \(\d+ Mb\/s\), \d+ requête\(s\), premier octet \d+–\d+ ms, la plus lente \d+ ms, serveur ≤ 12 ms/);
+    expect(serverTimingApp(null)).toBeNull();
+    expect(serverTimingApp("jf;dur=3")).toBeNull();
+  });
+});

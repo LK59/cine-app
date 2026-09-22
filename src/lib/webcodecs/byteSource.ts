@@ -34,6 +34,8 @@ export interface ByteSource {
    * vol.
    */
   abandon?(keepOffset: number): void;
+  /** Le réseau depuis le dernier saut (`abandon`) — voir `NetworkWindow`. Optionnel. */
+  networkSinceSeek?(): NetworkWindow | null;
   /** Releases any pending work. Safe to call twice. */
   close(): void;
 }
@@ -181,6 +183,42 @@ export class NetworkUnavailable extends Error {
 }
 
 /**
+ * Ce que le réseau a fait depuis le dernier saut : de quoi dire, d'un saut lent, si c'était le
+ * trajet, le relais ou Jellyfin (22/09/2026 : sauts de dix secondes depuis un serveur lointain
+ * pour quelques mégaoctets, alors que le serveur servait la même plage en vingt millisecondes).
+ */
+export interface NetworkWindow {
+  /** Requêtes terminées depuis le saut. */
+  requests: number;
+  bytes: number;
+  /** Du saut à la fin de la dernière requête terminée. */
+  elapsedMs: number;
+  /** Délai jusqu'aux en-têtes (premier octet), le plus court et le plus long. */
+  firstByteMinMs: number;
+  firstByteMaxMs: number;
+  /** La plus longue requête, de l'envoi au dernier octet. */
+  slowestMs: number;
+  /** Le temps passé côté serveur, d'après `Server-Timing` (`app`) — le plus long vu. */
+  serverMaxMs: number | null;
+}
+
+/** La même fenêtre, en une ligne de trace. */
+export function describeNetwork(w: NetworkWindow): string {
+  const mbps = w.elapsedMs > 0 ? (w.bytes * 8) / (w.elapsedMs / 1000) / 1e6 : 0;
+  return (
+    `${(w.bytes / 1048576).toFixed(1)} Mo en ${w.elapsedMs} ms (${mbps.toFixed(0)} Mb/s), ${w.requests} requête(s), ` +
+    `premier octet ${w.firstByteMinMs}–${w.firstByteMaxMs} ms, la plus lente ${w.slowestMs} ms` +
+    (w.serverMaxMs !== null ? `, serveur ≤ ${w.serverMaxMs} ms` : "")
+  );
+}
+
+/** `app;dur=12, jf;dur=8` → 12. */
+export function serverTimingApp(header: string | null): number | null {
+  const match = header ? /(?:^|,)\s*app;dur=([\d.]+)/.exec(header) : null;
+  return match ? Math.round(Number(match[1])) : null;
+}
+
+/**
  * Une lecture abandonnée parce que le lecteur est allé ailleurs — ni une panne, ni le réseau.
  *
  * Tout ce qui attendait cette lecture doit s'effacer sans rien réparer : ni nouvelle tentative, ni
@@ -284,6 +322,8 @@ export class HttpByteSource implements ByteSource {
   /** L'interrupteur de chaque morceau en vol — pour n'abandonner que ceux qui ne servent plus. */
   private readonly inflightControllers = new Map<number, AbortController>();
   private readonly controller = new AbortController();
+  /** Voir `NetworkWindow` : remis à zéro à chaque `abandon`, c'est-à-dire à chaque saut. */
+  private window: { since: number; requests: number; bytes: number; lastEnd: number; fbMin: number; fbMax: number; slowest: number; server: number | null } | null = null;
 
   private constructor(url: string, size: number) {
     this.url = url;
@@ -367,6 +407,7 @@ export class HttpByteSource implements ByteSource {
         if (own.aborted) throw new ReadAbandoned();
       }
       try {
+        const sentAt = performance.now();
         const res = await fetch(this.url, {
           headers: { Range: `bytes=${start}-${end}` },
           // Le signal du lecteur *et* une échéance — voir `readSignal`. L'abandon sur échéance
@@ -381,7 +422,10 @@ export class HttpByteSource implements ByteSource {
           throw new Error("Le serveur n'honore pas les requêtes de plage (statut 200).");
         }
         if (res.status !== 206) throw new Error(`Le serveur a refusé la plage demandée (statut ${res.status}).`);
-        return new Uint8Array(await res.arrayBuffer());
+        const headersAt = performance.now();
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        this.note(sentAt, headersAt, performance.now(), bytes.byteLength, res);
+        return bytes;
       } catch (error) {
         // Cancelled by the player itself, and a server that ignores ranges: neither improves by
         // being asked again.
@@ -511,6 +555,7 @@ export class HttpByteSource implements ByteSource {
    * sert le saut lui-même : le morceau où il tombe et l'avance qui le suit.
    */
   abandon(keepOffset: number): void {
+    this.window = { since: performance.now(), requests: 0, bytes: 0, lastEnd: 0, fbMin: Infinity, fbMax: 0, slowest: 0, server: null };
     const first = Math.floor(Math.max(0, Math.min(keepOffset, this.size - 1)) / CHUNK_SIZE);
     let dropped = 0;
     for (const [index, own] of this.inflightControllers) {
@@ -520,6 +565,39 @@ export class HttpByteSource implements ByteSource {
       dropped += 1;
     }
     if (dropped > 0) trace(`réseau : ${dropped} lecture(s) de l'ancienne position abandonnée(s)`);
+  }
+
+  /** Une requête terminée, comptée dans la fenêtre du saut en cours. Ne lève jamais. */
+  private note(sentAt: number, headersAt: number, endAt: number, bytes: number, res: Response): void {
+    const w = this.window;
+    if (!w) return;
+    try {
+      const serverTiming = res.headers?.get?.("Server-Timing") ?? null;
+      w.requests += 1;
+      w.bytes += bytes;
+      w.lastEnd = Math.max(w.lastEnd, endAt);
+      w.fbMin = Math.min(w.fbMin, headersAt - sentAt);
+      w.fbMax = Math.max(w.fbMax, headersAt - sentAt);
+      w.slowest = Math.max(w.slowest, endAt - sentAt);
+      const server = serverTimingApp(serverTiming);
+      if (server !== null) w.server = Math.max(w.server ?? 0, server);
+    } catch {
+      /* une mesure n'est pas une lecture */
+    }
+  }
+
+  networkSinceSeek(): NetworkWindow | null {
+    const w = this.window;
+    if (!w || w.requests === 0) return null;
+    return {
+      requests: w.requests,
+      bytes: w.bytes,
+      elapsedMs: Math.round(w.lastEnd - w.since),
+      firstByteMinMs: Math.round(w.fbMin),
+      firstByteMaxMs: Math.round(w.fbMax),
+      slowestMs: Math.round(w.slowest),
+      serverMaxMs: w.server,
+    };
   }
 
   keep(from: number, to: number): void {

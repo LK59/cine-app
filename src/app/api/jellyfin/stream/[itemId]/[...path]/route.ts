@@ -39,6 +39,7 @@ export async function GET(
   { params }: { params: Promise<{ itemId: string; path: string[] }> }
 ) {
   if (!config.player.enabled) return new NextResponse(null, { status: 404 });
+  const receivedAt = performance.now();
 
   const { itemId, path } = await params;
   if (!isJellyfinId(itemId)) return new NextResponse(null, { status: 400 });
@@ -80,6 +81,7 @@ export async function GET(
     // send the browser the full rewritten text back with a plain 200, which is a perfectly valid
     // response to a Range request under HTTP (the client falls back to using the whole body).
     const range = isManifest ? null : req.headers.get("range");
+    const upstreamAt = performance.now();
     const res = await fetchWithRetry(
       target,
       // Only DirectPlay/DirectStream's static file endpoint is Range-seekable — forwarding it
@@ -152,6 +154,12 @@ export async function GET(
       if (contentRange) passthroughHeaders["Content-Range"] = contentRange;
       if (contentLength) passthroughHeaders["Content-Length"] = contentLength;
       if (acceptRanges) passthroughHeaders["Accept-Ranges"] = acceptRanges;
+      // Ce que le serveur a coûté à cette plage, lisible par le lecteur (22/09/2026) : des sauts de
+      // dix secondes depuis un serveur lointain, et rien pour dire si c'était le trajet, ce relais
+      // ou Jellyfin. `app` : de la réception de la requête aux en-têtes de Jellyfin ; `jf` : Jellyfin
+      // seul. Le reste du délai que le navigateur mesure est le trajet.
+      const now = performance.now();
+      passthroughHeaders["Server-Timing"] = `app;dur=${Math.round(now - receivedAt)}, jf;dur=${Math.round(now - upstreamAt)}`;
       return new NextResponse(res.body, { status: res.status, headers: passthroughHeaders });
     }
 
