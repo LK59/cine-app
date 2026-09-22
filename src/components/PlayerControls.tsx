@@ -77,6 +77,12 @@ interface PlayerControlsProps {
    * ramenait le film là où il était avant le saut (22/09/2026).
    */
   onSeekRequest?: (seconds: number) => void;
+  /**
+   * Visibles mais en train de s'effacer, pendant qu'un lecteur se reconstruit : elles ne répondent
+   * plus au clavier, dont l'écouteur est posé sur la fenêtre. Une barre d'espace à ce moment-là
+   * relançait un film que la reconstruction devait garder en pause.
+   */
+  suspended?: boolean;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -120,6 +126,7 @@ export function PlayerControls({
   onCastReturn,
   castActive,
   onSeekRequest,
+  suspended = false,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -485,6 +492,10 @@ export function PlayerControls({
   // fermeture gardait le `playing` du montage — en pause, puisque les contrôles arrivent avant
   // la lecture. Une touche pendant le film montrait donc les contrôles pour de bon, sans jamais
   // relancer leur disparition (relu le 22/09/2026).
+  const suspendedRef = useRef(suspended);
+  useEffect(() => {
+    suspendedRef.current = suspended;
+  }, [suspended]);
   const playingRef = useRef(playing);
   useEffect(() => {
     playingRef.current = playing;
@@ -893,6 +904,7 @@ export function PlayerControls({
     }
 
     function onKeyDown(e: KeyboardEvent) {
+      if (suspendedRef.current) return;
       const active = document.activeElement;
       const navName = active instanceof HTMLElement ? active.getAttribute("data-player-nav") : null;
       const navGroup = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-player-navgroup]") : null;

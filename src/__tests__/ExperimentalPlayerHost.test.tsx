@@ -74,8 +74,9 @@ vi.mock("@/components/PlayerControls", () => ({
     onChangeAudio: (id: number) => void;
     onChangeSubtitle: (id: number | null) => void;
     onSeekRequest?: (seconds: number) => void;
+    suspended?: boolean;
   }) => (
-    <div data-testid="controls" data-loading={String(props.loading)}>
+    <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
       <button
         onClick={(e) => {
@@ -1268,4 +1269,50 @@ describe("relu le 22/09/2026", () => {
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1].startSeconds).toBeCloseTo(600, 1);
   });
+
+  it("écrit chaque saut au journal : d'où, vers où, déjà chargé ou non, et combien de temps", async () => {
+    // 22/09/2026 : des sauts jugés lents sur un réseau d'entreprise, et aucun chiffre pour dire
+    // si c'était le réseau ou le lecteur.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(120);
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    element.currentTime = 600;
+    await act(async () => void fireEvent(element, new Event("seeked")));
+
+    const seeks = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === "seek");
+    expect(seeks).toHaveLength(1);
+    expect(seeks[0].fields).toMatchObject({ from: 120, to: 600, buffered: false, path: "remux" });
+    expect(typeof seeks[0].fields.tookMs).toBe("number");
+  });
+
+  it("garde les commandes pendant une reconstruction, estompées et sans clavier", async () => {
+    // 22/09/2026 : elles disparaissaient puis réapparaissaient d'un coup à chaque changement de
+    // piste. Elles restent là, s'effacent, et ne répondent plus le temps de la reconstruction.
+    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage: vi.fn() })) as never;
+    mount();
+    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
+    const element = videoElement(120);
+    Object.defineProperty(element, "readyState", { value: 4, configurable: true });
+    Object.defineProperty(element, "videoWidth", { value: 1920, configurable: true });
+    Object.defineProperty(element, "videoHeight", { value: 1080, configurable: true });
+
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const rebuilt = fakeRemux({ currentAudioTrack: 2 });
+    nextProbe = () => ({ path: "remux", start: async () => (await gate, rebuilt), discard: vi.fn() });
+    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
+    await waitFor(() => expect(probes).toHaveLength(2));
+
+    // Pendant la reconstruction : toujours là, mais suspendues.
+    expect(screen.getByTestId("controls").dataset.suspended).toBe("true");
+    await act(async () => void open());
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("false"));
+  });
 });
+

@@ -18,7 +18,7 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
 const LOG_FILE = path.join(LOG_DIR, "player.log");
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -28,7 +28,12 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  *
  * Il ne change rien au comportement du lecteur : il le raconte.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio";
+/**
+ * `seek` (22/09/2026) : chaque saut demandé depuis les commandes, avec sa durée jusqu'à l'arrivée
+ * et le fait qu'il tombait ou non dans ce qui était déjà chargé — des sauts jugés lents sur un
+ * réseau d'entreprise n'avaient aucun chiffre pour dire si c'était le réseau ou le lecteur.
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek";
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);

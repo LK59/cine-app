@@ -532,6 +532,8 @@ export function ExperimentalPlayerHost({
    * nouveau lecteur (22/09/2026).
    */
   const requestedSeekRef = useRef<number | null>(null);
+  /** Le saut en cours de mesure, pour la ligne `seek` du journal — le dernier demandé seulement. */
+  const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; buffered: boolean } | null>(null);
   /** Où en est le film selon ce que le spectateur a demandé, pas seulement selon ce qu'il a vu. */
   const intendedPosition = useCallback((): number => {
     if (requestedSeekRef.current !== null) return requestedSeekRef.current;
@@ -754,6 +756,21 @@ export function ExperimentalPlayerHost({
     const deadline = setTimeout(release, FREEZE_MAX_MS);
     if (!ready) return () => clearTimeout(deadline);
     const video = videoElRef.current;
+    /**
+     * Levée à la première image *affichée* du nouveau lecteur, quand le navigateur sait le dire.
+     *
+     * `readyState` dit qu'une image est décodée, pas qu'elle est à l'écran : l'image figée
+     * partait parfois sur un noir d'une fraction de seconde, ce qui rendait le changement de piste
+     * « sec » (22/09/2026). `requestVideoFrameCallback` répond à l'image effectivement présentée.
+     */
+    const presented = video as (HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number; cancelVideoFrameCallback?: (id: number) => void }) | null;
+    if (presented?.requestVideoFrameCallback) {
+      const handle = presented.requestVideoFrameCallback(release);
+      return () => {
+        clearTimeout(deadline);
+        presented.cancelVideoFrameCallback?.(handle);
+      };
+    }
     if (!video || video.readyState >= 2) {
       const soon = setTimeout(release, 0);
       return () => {
@@ -1314,6 +1331,18 @@ export function ExperimentalPlayerHost({
         if (requestedSeekRef.current !== null && Math.abs(element.currentTime - requestedSeekRef.current) < 1.5) {
           requestedSeekRef.current = null;
         }
+        const timing = seekTimingRef.current;
+        if (timing && Math.abs(element.currentTime - timing.to) < 1.5) {
+          seekTimingRef.current = null;
+          reportPlayback("seek", {
+            ...describeFileRef.current(),
+            path: "remux",
+            from: Math.round(timing.from),
+            to: Math.round(timing.to),
+            buffered: timing.buffered,
+            tookMs: Date.now() - timing.startedAt,
+          });
+        }
       };
       element.addEventListener("timeupdate", onTime);
       element.addEventListener("play", onPlay);
@@ -1803,8 +1832,11 @@ export function ExperimentalPlayerHost({
         ref={videoElRef}
         playsInline
         hidden={!onElement}
+        // Sous une image figée, l'élément reste pleinement visible : s'il s'éteignait pendant que
+        // l'image figée s'efface, les deux passaient ensemble par la demi-transparence et le noir
+        // se voyait au travers — un creux sombre au lieu d'un fondu.
         className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
-          ready ? "opacity-100" : "opacity-0"
+          ready || frozen ? "opacity-100" : "opacity-0"
         }`}
       />
       <canvas
@@ -1822,7 +1854,7 @@ export function ExperimentalPlayerHost({
         // Là d'un coup, partie en fondu : apparue en fondu, elle laissait voir le noir de l'élément
         // qu'on démonte pendant ses premières centaines de millisecondes.
         className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity ease-out ${
-          frozen ? "opacity-100 duration-0" : "opacity-0 duration-300"
+          frozen ? "opacity-100 duration-0" : "opacity-0 duration-200"
         }`}
       />
 
@@ -1996,15 +2028,33 @@ export function ExperimentalPlayerHost({
           onClose={handleClose}
         />
       ) : (
-        ready &&
+        // Gardées pendant une reconstruction pour changement de piste (`frozen`), le temps de
+        // s'estomper puis de revenir : elles disparaissaient d'un coup et réapparaissaient d'un
+        // coup, ce qui ajoutait à l'effet « sec » du changement (22/09/2026).
+        (ready || frozen) &&
         (facade || onElement) &&
         !error && (
+          <div
+            className={`absolute inset-0 z-10 transition-opacity duration-200 ease-out ${
+              ready ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+            // Hors d'atteinte tant qu'elles s'effacent : ni toucher, ni focus.
+            inert={!ready}
+          >
           <PlayerControls
             // On the remux path this is a real media element, so seeking, volume and rate are the
             // browser's own; the facade exists only to give the canvas pipeline the same shape.
             videoRef={onElement ? videoElRef : facadeRefObject}
             onSeekRequest={(seconds) => {
               requestedSeekRef.current = seconds;
+              // Mesuré jusqu'à l'arrivée (`seeked`). Un saut qui en remplace un autre en cours
+              // remplace aussi sa mesure : c'est le dernier geste qui compte.
+              const element = videoElRef.current;
+              let buffered = false;
+              for (let i = 0; element && i < element.buffered.length; i++) {
+                if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
+              }
+              seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), buffered };
               // Une reconstruction pas encore ouverte rouvre directement là.
               if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
             }}
@@ -2118,7 +2168,10 @@ export function ExperimentalPlayerHost({
             creditsStart={info?.creditsStart ?? null}
             nextEpisode={nextEpisode}
             onAdvance={handleAdvance}
+            // Et pas de clavier non plus : l'écouteur est posé sur la fenêtre, `inert` ne l'arrête pas.
+            suspended={!ready}
           />
+          </div>
         )
       )}
 

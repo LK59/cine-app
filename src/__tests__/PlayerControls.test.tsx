@@ -694,3 +694,26 @@ describe("PlayerControls — une touche pendant le film", () => {
     expect(shown()).toBe(false);
   });
 });
+
+describe("PlayerControls — suspendues pendant une reconstruction", () => {
+  it("ne répondent plus au clavier", async () => {
+    // Une barre d'espace pendant la reconstruction relançait un film qui devait rester en pause.
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const play = vi.fn();
+    render(
+      <Harness
+        suspended
+        onVideoRef={(v) => {
+          video = v;
+          video.play = play;
+        }}
+      />
+    );
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space" })));
+    expect(play).not.toHaveBeenCalled();
+  });
+});
+
