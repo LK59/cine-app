@@ -16,6 +16,7 @@
  */
 
 import type { BenchBridge } from "./bridge";
+import { trace } from "../webcodecs/trace";
 import { readPlayback, seededPositions, worst, type Sample, type Verdict } from "./measure";
 
 export interface BenchItem {
@@ -203,7 +204,10 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     checks.push({ id: `question:${id}`, verdict: answer === "yes" ? "ok" : "fail", detail: answer === "yes" ? "oui" : "non" });
   };
 
+  /** Ce que la dernière demande de geste a fait attendre — voir `ensurePlaying`. */
+  let lastGestureWaitMs = 0;
   const ensurePlaying = async () => {
+    lastGestureWaitMs = 0;
     const element = media();
     if (!element.paused) return;
     try {
@@ -214,7 +218,13 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     if ((await waitFor(() => !media().paused, 1500)) !== null) return;
     // Le navigateur exige un geste. La question porte le geste : c'est pendant le toucher que
     // `play()` est appelé, là où il est accepté.
+    // Mesuré à part : c'est le temps de la personne qui tient le téléphone, pas celui du lecteur —
+    // un banc du 22/09/2026 a noté « rouvert en 393 s » pour six minutes passées à attendre un
+    // toucher, le film ouvert en 0,3 s.
+    const askedAt = deps.now();
     await deps.ask({ id: "tap", kind: "tap", onTap: () => void deps.bridge()?.media()?.play().catch(() => {}) });
+    lastGestureWaitMs = deps.now() - askedAt;
+    trace(`banc : lecture relancée par un geste, attendu ${lastGestureWaitMs} ms`);
     await waitFor(() => !media().paused, 3000);
   };
 
@@ -464,9 +474,18 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       record({ id: "x-reopen", verdict: "fail", detail: "pas de première image après une réouverture immédiate" });
       return;
     }
+    const firstImageMs = deps.now() - reopenStart;
     await ensurePlaying();
     const reading = await watch(3000);
-    record({ id: "x-reopen", verdict: reading.verdict, ms: deps.now() - reopenStart, detail: `rouvert en ${deps.now() - reopenStart} ms — ${describe(reading)}` });
+    record({
+      id: "x-reopen",
+      verdict: worst(reading.verdict, firstImageMs > 8000 ? "warn" : "ok"),
+      ms: firstImageMs,
+      detail:
+        `première image en ${firstImageMs} ms` +
+        (lastGestureWaitMs > 0 ? `, puis ${Math.round(lastGestureWaitMs / 1000)} s à attendre un toucher (Safari exige un geste)` : "") +
+        ` — ${describe(reading)}`,
+    });
   };
 
   try {

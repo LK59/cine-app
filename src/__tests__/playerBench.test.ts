@@ -234,6 +234,45 @@ describe("runBench", () => {
     expect(result.verdict).toBe("fail");
   });
 
+  it("ne compte pas l'attente d'un toucher dans le temps de réouverture", async () => {
+    // Banc du 22/09/2026 : « rouvert en 393 s » — le film ouvert en 0,3 s, puis six minutes à
+    // attendre que quelqu'un touche l'écran, parce que Safari exige un geste.
+    const { deps } = simulated();
+    let refuse = false;
+    const originalOpen = deps.open;
+    deps.open = (item) => {
+      originalOpen(item);
+      refuse = true;
+    };
+    const originalBridge = deps.bridge;
+    deps.bridge = () => {
+      const b = originalBridge();
+      if (!b) return b;
+      const media = b.media() as unknown as { paused: boolean; play: () => Promise<void> };
+      if (refuse) {
+        media.paused = true;
+        media.play = async () => {
+          throw new Error("NotAllowedError");
+        };
+      }
+      return b;
+    };
+    deps.ask = async (q) => {
+      if (q.kind === "tap") {
+        await deps.sleep(400_000);
+        refuse = false;
+        const media = originalBridge()!.media() as unknown as { paused: boolean; play: () => Promise<void> };
+        media.play = async () => void (media.paused = false);
+        media.paused = false;
+      }
+      return "yes";
+    };
+    const [result] = await runBench({ ...CONFIG, depth: "extreme", interactive: false }, deps);
+    const reopen = result.checks.find((c) => c.id === "x-reopen")!;
+    expect(reopen.ms).toBeLessThan(5000);
+    expect(reopen.detail).toMatch(/à attendre un toucher/);
+  });
+
   it("annonce sa durée", () => {
     expect(estimateSeconds("full", 8, false)).toBe(1600);
     expect(estimateSeconds("quick", 4, true)).toBe(480);
