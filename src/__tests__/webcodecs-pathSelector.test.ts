@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { choosePlaybackPath, describePath, type PathInput } from "@/lib/webcodecs/pathSelector";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
-import { MemoryByteSource, type ByteSource } from "@/lib/webcodecs/byteSource";
+import {
+  MemoryByteSource,
+  NetworkUnavailable,
+  ReadAbandoned,
+  isNetworkFailure,
+  isReadAbandoned,
+  type ByteSource,
+} from "@/lib/webcodecs/byteSource";
 import { readFileSync } from "fs";
-import { plannedMimeTypes } from "@/lib/webcodecs/remuxer";
+import { Remuxer, plannedMimeTypes } from "@/lib/webcodecs/remuxer";
 
 // A real hvcC: Main profile, level 120. The selector reads it to build the codec string it then
 // asks the browser about, so a placeholder would not exercise the decision at all.
@@ -141,6 +148,49 @@ describe("choosePlaybackPath", () => {
 });
 
 /**
+ * Chasse aux défauts du 22/09/2026 : le `catch` autour de `Remuxer.open` changeait toute erreur en
+ * refus de chemin (« pas par ici, essayez le suivant »). Une coupure du Wi-Fi pendant l'ouverture
+ * envoyait donc le film au canevas — ou au lecteur serveur, qui a besoin du même réseau —, et une
+ * reconstruction pour un changement de piste répondait « piste refusée ». Le réseau et la lecture
+ * abandonnée ne disent rien du chemin : ils remontent tels quels, jusqu'à l'écran « connexion
+ * perdue » de l'hôte.
+ */
+describe("une ouverture interrompue par le réseau", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("remonte une panne réseau au lieu de descendre au canevas", async () => {
+    const mime = mimeFor(VIDEO, AAC);
+    supported = new Set([mime.video, mime.audio!]);
+    vi.spyOn(Remuxer, "open").mockRejectedValueOnce(new NetworkUnavailable("Plage inaccessible : Failed to fetch"));
+    const failure = await choosePlaybackPath(input()).then(
+      () => null,
+      (error: unknown) => error
+    );
+    expect(isNetworkFailure(failure)).toBe(true);
+  });
+
+  it("remonte une lecture abandonnée telle quelle", async () => {
+    const mime = mimeFor(VIDEO, AAC);
+    supported = new Set([mime.video, mime.audio!]);
+    vi.spyOn(Remuxer, "open").mockRejectedValueOnce(new ReadAbandoned());
+    const failure = await choosePlaybackPath(input()).then(
+      () => null,
+      (error: unknown) => error
+    );
+    expect(isReadAbandoned(failure)).toBe(true);
+  });
+
+  it("une autre erreur reste un refus de ce chemin", async () => {
+    const mime = mimeFor(VIDEO, AAC);
+    supported = new Set([mime.video, mime.audio!]);
+    vi.spyOn(Remuxer, "open").mockRejectedValueOnce(new Error("en-tête incohérent"));
+    const chosen = await choosePlaybackPath(input());
+    expect(chosen.path).toBe("webcodecs");
+    expect(describePath(chosen)).toContain("en-tête incohérent");
+  });
+});
+
+/**
  * Un fichier tout en TrueHD — Top Gun Maverick, Sinners, American Sniper.
  *
  * Jusqu'au 21/09/2026, aucun décodeur n'existait nulle part : un tel fichier était cédé d'office au
@@ -231,6 +281,35 @@ describe("le conteneur du navigateur", () => {
     await expect(probePlaybackPath({ streamUrl: "/film.mp4", startSeconds: 0, onError: vi.fn() })).rejects.toThrow(/fragmenté/);
     // La connexion n'a plus d'usage : fermée, pas abandonnée.
     expect(close).toHaveBeenCalled();
+    vi.doUnmock("@/lib/webcodecs/byteSource");
+  });
+
+  it("ferme la source quand le choix du chemin échoue, et laisse passer la panne réseau", async () => {
+    // Chasse aux défauts du 22/09/2026 : seule une erreur d'en-tête refermait la source. Un choix
+    // de chemin qui levait — réseau coupé, refus au profit du lecteur serveur — la laissait
+    // ouverte, avec sa lecture en avance, pour un film que plus personne ne lisait.
+    const bytes = new Uint8Array(readFileSync("src/__tests__/fixtures/mp4/c-hevc-multi.mp4"));
+    const close = vi.fn();
+    vi.resetModules();
+    vi.doMock("@/lib/webcodecs/byteSource", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@/lib/webcodecs/byteSource")>()),
+      HttpByteSource: { open: async () => Object.assign(new MemoryByteSource(bytes), { close }) },
+    }));
+    vi.doMock("@/lib/webcodecs/pathSelector", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@/lib/webcodecs/pathSelector")>()),
+      choosePlaybackPath: async () => {
+        throw new NetworkUnavailable("Plage inaccessible : Failed to fetch");
+      },
+    }));
+    const { probePlaybackPath } = await import("@/lib/webcodecs/remuxPlayback");
+    const failure = await probePlaybackPath({ streamUrl: "/film.mp4", startSeconds: 0, onError: vi.fn() }).then(
+      () => null,
+      (error: unknown) => error
+    );
+    // L'hôte reconnaît la panne réseau (`isNetworkFailure`) et montre « connexion perdue ».
+    expect(isNetworkFailure(failure)).toBe(true);
+    expect(close).toHaveBeenCalled();
+    vi.doUnmock("@/lib/webcodecs/pathSelector");
     vi.doUnmock("@/lib/webcodecs/byteSource");
   });
 

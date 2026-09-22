@@ -21,7 +21,7 @@
 // path to the second looks like it works and hides that the good path never ran — which is
 // exactly how a performance problem stays invisible for months.
 
-import type { ByteSource } from "./byteSource";
+import { isNetworkFailure, isReadAbandoned, type ByteSource } from "./byteSource";
 import { unsupportedReason, dolbyVisionInfo } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
@@ -268,6 +268,12 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     trace("chemin : remultiplexeur ouvert");
     return { remuxer, plan: remuxer.plan() };
   } catch (error) {
+    // Le réseau et la lecture abandonnée ne disent rien de ce chemin : ils remontent tels quels.
+    // Changés en refus (chasse aux défauts du 22/09/2026), une coupure du Wi-Fi pendant
+    // l'ouverture envoyait le film au canevas — ou au lecteur serveur, qui a besoin du même réseau
+    // —, et une reconstruction pour un changement de piste répondait « piste refusée ». Remontée,
+    // la panne réseau trouve l'écran « connexion perdue » de l'hôte (`isNetworkFailure`).
+    if (isNetworkFailure(error) || isReadAbandoned(error)) throw error;
     return error instanceof Error ? error.message : "ouverture impossible";
   }
 }

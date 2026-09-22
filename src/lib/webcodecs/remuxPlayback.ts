@@ -212,20 +212,26 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
   );
   const source = await HttpByteSource.open(options.streamUrl, options.knownSize);
   trace(`flux ouvert — ${source.size} octets`);
+  try {
+    return await probeOpened(source, options, lightCap);
+  } catch (error) {
+    // Rien de ce qui lève ici ne rend la source à personne : elle est fermée, et sa lecture en
+    // avance avec elle. Seule l'erreur d'en-tête le faisait ; un choix de chemin qui levait —
+    // réseau coupé, refus au profit du lecteur serveur — ou un fichier sans image la laissaient
+    // ouverte pour un film que plus personne ne lisait (chasse aux défauts du 22/09/2026).
+    // L'erreur, elle, remonte telle quelle : un en-tête illisible part au lecteur serveur par
+    // l'appelant (`fallToStable`), une panne réseau à l'écran « connexion perdue ».
+    source.close();
+    throw error;
+  }
+}
 
+async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, lightCap: number | null): Promise<PathProbe> {
   // Named by its URL, so opening the same file again — or rebuilding after the platform closed
   // the source — does not pay for its header and index a second time. Matroska or MP4, told
   // apart by the file's own first bytes.
   const headerAt = Date.now();
-  let file: MatroskaFile;
-  try {
-    file = await openMediaFile(source, options.streamUrl);
-  } catch (error) {
-    // Un en-tête illisible — un MP4 fragmenté, que ce lecteur refuse — part au lecteur serveur
-    // par l'appelant (`fallToStable`) ; la connexion, elle, n'a plus d'usage.
-    source.close();
-    throw error;
-  }
+  const file = await openMediaFile(source, options.streamUrl);
   const headerMs = Date.now() - headerAt;
   trace(
     `en-tête ${headerMs < 15 ? "déjà connu" : "lu"} en ${headerMs} ms — ` +
