@@ -12,8 +12,38 @@
  * rendre toute la plage, et le plafond ne ferait qu'écrêter des reflets qu'il sait montrer.
  */
 
-/** Le niveau jugé juste, à l'œil, sur le film qui s'affichait bien (MaxCLL 657). */
-export const SDR_LIGHT_CAP_NITS = 650;
+/**
+ * Les plafonds proposés, `null` étant « natif » : la lumière du fichier, telle quelle.
+ *
+ * Le plafond automatique à 650 nits (22/09/2026) n'a rien changé, et l'analyse de Chrome dit
+ * pourquoi : son opérateur (ST 2094-50 annexe C) assombrit d'un diaphragme fixe tout ce qui passe
+ * sous le blanc de référence dès que la lumière annoncée dépasse environ deux fois ce blanc — 203
+ * nits sur l'écran où c'était mesuré, donc tout MaxCLL au-dessus de ~400. En attendant de savoir à
+ * l'œil ce que donne chaque niveau, c'est un choix du spectateur, par appareil, et non plus une
+ * détection. 203 est le blanc de référence lui-même.
+ */
+export const HDR_CAP_CHOICES: readonly (number | null)[] = [null, 650, 400, 203, 150, 100];
+
+const HDR_CAP_KEY = "cine.hdrLightCap";
+
+/** Le plafond choisi sur cet appareil, `null` pour natif — y compris quand rien n'est lisible. */
+export function readHdrCapChoice(): number | null {
+  try {
+    const stored = Number(globalThis.localStorage?.getItem(HDR_CAP_KEY));
+    return HDR_CAP_CHOICES.includes(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeHdrCapChoice(nits: number | null): void {
+  try {
+    if (nits === null) globalThis.localStorage?.removeItem(HDR_CAP_KEY);
+    else globalThis.localStorage?.setItem(HDR_CAP_KEY, String(nits));
+  } catch {
+    // Navigation privée ou stockage refusé : le choix vaut pour cette ouverture seulement.
+  }
+}
 
 /**
  * Chrome ou Edge sous Windows : un défaut d'implémentation qu'aucune capacité ne trahit, d'où un
@@ -36,7 +66,7 @@ export function displayIsHdr(): boolean | null {
   }
 }
 
-/** Le plafond à appliquer, ou `null`. Une réponse inconnue ne plafonne pas : dans le doute, rien. */
-export function hdrLightCap(userAgent: string, displayHdr: boolean | null): number | null {
-  return isChromiumOnWindows(userAgent) && displayHdr === false ? SDR_LIGHT_CAP_NITS : null;
+/** Le plafond à appliquer à la prochaine ouverture, ou `null` (natif). */
+export function hdrLightCap(): number | null {
+  return readHdrCapChoice();
 }

@@ -1418,6 +1418,10 @@
       "noSound": "Pas de son sur cette piste.",
       "audioInterrupted": "Le son s'est interrompu.",
       "noAudioDecoder": "Cette piste audio ne peut pas être lue ici."
+    },
+    "hdrCap": {
+      "title": "Luminosité HDR",
+      "native": "Natif"
     }
   },
   "cinema": {

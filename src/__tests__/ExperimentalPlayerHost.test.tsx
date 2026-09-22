@@ -77,6 +77,7 @@ vi.mock("@/components/PlayerControls", () => ({
     onChangeSubtitle: (id: number | null) => void;
     onSeekRequest?: (seconds: number) => void;
     suspended?: boolean;
+    hdrCap?: { current: number | null; onPick: (nits: number | null) => void };
   }) => (
     <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
       {/* Un saut demandé depuis les commandes : le signal d'abord, puis l'élément, comme elles. */}
@@ -89,6 +90,7 @@ vi.mock("@/components/PlayerControls", () => ({
       >
         saut:600
       </button>
+      {props.hdrCap && <button onClick={() => props.hdrCap!.onPick(150)}>{`hdr:${props.hdrCap.current ?? "natif"}`}</button>}
       {props.audioTracks.map((track) => (
         <button key={track.id} onClick={() => props.onChangeAudio(track.id)}>{`audio:${track.label}`}</button>
       ))}
@@ -1346,6 +1348,36 @@ describe("relu le 22/09/2026", () => {
     expect(seeks).toHaveLength(1);
     expect(seeks[0].fields).toMatchObject({ from: 120, to: 600, buffered: false, path: "remux" });
     expect(typeof seeks[0].fields.tookMs).toBe("number");
+  });
+
+  it("propose le plafond HDR sur un film HDR, et le choisir rouvre le lecteur au même endroit", async () => {
+    // 22/09/2026 : le plafond automatique n'a rien changé sur Chrome ; il devient un choix par
+    // appareil, natif par défaut, à comparer à l'œil. Il est écrit dans l'en-tête du flux, donc
+    // s'applique en reconstruisant.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+    swr = { data: info({ video: { codec: "hevc", width: 3840, height: 1600, bitDepth: 10, isHdr: true, rangeType: "HDR10" } }), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("hdr:natif")).toBeTruthy());
+    await act(async () => void fireEvent(videoElement(420), new Event("timeupdate")));
+
+    rebuildOn(1);
+    await act(async () => void fireEvent.click(screen.getByText("hdr:natif")));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1].startSeconds).toBeCloseTo(420, 1);
+    expect(store.get("cine.hdrLightCap")).toBe("150");
+    await waitFor(() => expect(screen.getByText("hdr:150")).toBeTruthy());
+    vi.unstubAllGlobals();
+  });
+
+  it("ne propose pas de plafond HDR sur un film SDR", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(screen.queryByText(/^hdr:/)).toBeNull();
   });
 
   it("écrit aussi le saut qui n'est jamais arrivé, quand un autre le remplace", async () => {

@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { withCappedLightLevels } from "@/lib/webcodecs/codecConfig";
-import { hdrLightCap, isChromiumOnWindows, SDR_LIGHT_CAP_NITS } from "@/lib/webcodecs/hdrDisplay";
+import { cappedColour } from "@/lib/webcodecs/remuxer";
+import { hdrLightCap, isChromiumOnWindows, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 
 /**
  * 22/09/2026 : Chrome sous Windows ramène un film HDR sous la lumière maximale annoncée — *2012*
@@ -64,13 +65,35 @@ describe("withCappedLightLevels", () => {
 });
 
 describe("hdrLightCap", () => {
-  it("plafonne sur Chrome Windows quand l'écran n'affiche pas le HDR, et seulement là", () => {
-    expect(hdrLightCap(WINDOWS_CHROME, false)).toBe(SDR_LIGHT_CAP_NITS);
-    expect(hdrLightCap(WINDOWS_CHROME, true)).toBeNull();
-    // Dans le doute, rien.
-    expect(hdrLightCap(WINDOWS_CHROME, null)).toBeNull();
-    expect(hdrLightCap("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0", false)).toBeNull();
-    expect(hdrLightCap("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1", false)).toBeNull();
+  it("est natif par défaut, et suit ensuite le choix fait sur l'appareil", () => {
+    // Le plafond automatique à 650 nits n'a rien changé sur Chrome (22/09/2026) : c'est désormais
+    // un choix, que rien ne fait à la place du spectateur.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+    expect(hdrLightCap()).toBeNull();
+    writeHdrCapChoice(150);
+    expect(hdrLightCap()).toBe(150);
+    writeHdrCapChoice(null);
+    expect(hdrLightCap()).toBeNull();
+    // Une valeur qui n'est pas proposée ne s'applique pas.
+    store.set("cine.hdrLightCap", "7");
+    expect(hdrLightCap()).toBeNull();
+    vi.unstubAllGlobals();
     expect(isChromiumOnWindows(WINDOWS_CHROME + " Edg/153.0")).toBe(true);
+  });
+});
+
+describe("cappedColour", () => {
+  it("annonce le plafond pour un PQ qui n'annonce rien, et ne touche pas un SDR", () => {
+    // Sans MaxCLL, Chrome suppose 1 000 nits : le plafond ne ferait rien sur ces fichiers-là.
+    expect(cappedColour({ transferCharacteristics: 16 }, 150)).toMatchObject({ maxContentLightNits: 150, maxFrameAverageNits: 150 });
+    expect(cappedColour({ transferCharacteristics: 16, maxContentLightNits: 4451, maxFrameAverageNits: 90 }, 150))
+      .toMatchObject({ maxContentLightNits: 150, maxFrameAverageNits: 90 });
+    expect(cappedColour({ transferCharacteristics: 1 }, 150)).toEqual({ transferCharacteristics: 1 });
+    expect(cappedColour({ transferCharacteristics: 16 }, null)).toEqual({ transferCharacteristics: 16 });
   });
 });

@@ -1418,6 +1418,10 @@
       "noSound": "No sound on this track.",
       "audioInterrupted": "The sound was interrupted.",
       "noAudioDecoder": "This audio track can't be played here."
+    },
+    "hdrCap": {
+      "title": "HDR brightness",
+      "native": "Native"
     }
   },
   "cinema": {

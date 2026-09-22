@@ -11,7 +11,7 @@ import { PlayerControls } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { isPlayerWarning } from "@/lib/webcodecs/playerWarning";
 import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
-import { displayIsHdr, hdrLightCap } from "@/lib/webcodecs/hdrDisplay";
+import { displayIsHdr, hdrLightCap, readHdrCapChoice, writeHdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -489,6 +489,8 @@ export function ExperimentalPlayerHost({
   // they already are for the stable player.
   const [tracks, setTracks] = useState<{ audio: EngineTrack[]; subtitles: EngineTrack[] }>({ audio: [], subtitles: [] });
   const [currentAudio, setCurrentAudio] = useState<number | null>(null);
+  /** Le plafond de lumière HDR choisi sur cet appareil — voir `hdrDisplay.ts`. */
+  const [hdrCapChoice, setHdrCapChoice] = useState<number | null>(readHdrCapChoice);
   const [currentSubtitle, setCurrentSubtitle] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
@@ -1233,7 +1235,7 @@ export function ExperimentalPlayerHost({
         // L'écran tel que le navigateur le voit, et le plafond de lumière HDR qui en découle —
         // voir hdrDisplay.ts. De quoi relire au journal pourquoi un film HDR a le rendu qu'il a.
         displayHdr: displayIsHdr() ?? "inconnu",
-        hdrLightCap: hdrLightCap(typeof navigator !== "undefined" ? navigator.userAgent : "", displayIsHdr()) ?? 0,
+        hdrLightCap: hdrLightCap() ?? "natif",
       });
     };
 
@@ -2194,6 +2196,20 @@ export function ExperimentalPlayerHost({
             onAdvance={handleAdvance}
             // Et pas de clavier non plus : l'écouteur est posé sur la fenêtre, `inert` ne l'arrête pas.
             suspended={!ready}
+            hdrCap={
+              path === "remux" && info?.video?.rangeType && info.video.rangeType !== "SDR"
+                ? {
+                    current: hdrCapChoice,
+                    onPick: (nits) => {
+                      writeHdrCapChoice(nits);
+                      setHdrCapChoice(nits);
+                      // Le plafond est écrit dans l'en-tête du flux : il faut le reconstruire,
+                      // à la même position, comme pour un changement de piste.
+                      restart(intendedPosition(), `plafond HDR ${nits ?? "natif"}`);
+                    },
+                  }
+                : undefined
+            }
           />
           </div>
         )

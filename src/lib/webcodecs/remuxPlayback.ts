@@ -192,16 +192,15 @@ export function openingAudio(
  */
 export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<PathProbe> {
   traceReset();
-  // Avant tout remultiplexage : la lumière annoncée à Chrome sous Windows, sur un écran qui
-  // n'affiche pas le HDR — voir `hdrDisplay.ts`.
-  const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  // Avant tout remultiplexage : le plafond de lumière HDR choisi sur cet appareil, s'il y en a
+  // un — voir `hdrDisplay.ts`.
   const displayHdr = displayIsHdr();
-  const lightCap = hdrLightCap(userAgent, displayHdr);
+  const lightCap = hdrLightCap();
   setHdrLightCap(lightCap);
   trace("ouverture du flux");
   trace(
     `écran HDR : ${displayHdr === null ? "inconnu" : displayHdr ? "oui" : "non"}` +
-      (lightCap !== null ? ` — lumière HDR annoncée plafonnée à ${lightCap} nits (Chrome/Edge Windows)` : "")
+      (lightCap !== null ? ` — lumière HDR annoncée plafonnée à ${lightCap} nits (choix de l'appareil)` : "")
   );
   const source = await HttpByteSource.open(options.streamUrl);
   trace(`flux ouvert — ${source.size} octets`);

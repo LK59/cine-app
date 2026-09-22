@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun } from "lucide-react";
+import { HDR_CAP_CHOICES } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -83,6 +84,12 @@ interface PlayerControlsProps {
    * relançait un film que la reconstruction devait garder en pause.
    */
   suspended?: boolean;
+  /**
+   * Le plafond de lumière HDR de cet appareil (`null` : natif), proposé seulement pour un film HDR.
+   * Un choix pour comparer à l'œil sur un écran qui n'affiche pas le HDR — voir `hdrDisplay.ts`.
+   * Il s'applique en reconstruisant le lecteur, comme un changement de piste.
+   */
+  hdrCap?: { current: number | null; onPick: (nits: number | null) => void };
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -127,6 +134,7 @@ export function PlayerControls({
   castActive,
   onSeekRequest,
   suspended = false,
+  hdrCap,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -192,7 +200,7 @@ export function PlayerControls({
   }, []);
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "more">(null);
+  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "more">(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -1326,6 +1334,14 @@ export function PlayerControls({
                 >
                   <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
+                {hdrCap && (
+                  <button
+                    onClick={() => setMenu("hdrCap")}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <Sun size={16} /> {t("player.hdrCap.title")} · {hdrCap.current === null ? t("player.hdrCap.native") : `${hdrCap.current} nits`}
+                  </button>
+                )}
                 {castSupported && (
                   <button
                     onClick={() => {
@@ -1394,7 +1410,7 @@ export function PlayerControls({
                 )}
               </>
             )}
-            {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle") && (
+            {(menu === "chapters" || menu === "speed" || menu === "subtitleStyle" || menu === "hdrCap") && (
               <button
                 onClick={() => setMenu("more")}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
@@ -1465,6 +1481,22 @@ export function PlayerControls({
                 />
               </>
             )}
+            {menu === "hdrCap" &&
+              hdrCap &&
+              HDR_CAP_CHOICES.map((nits) => (
+                <button
+                  key={nits ?? "natif"}
+                  onClick={() => {
+                    setMenu(null);
+                    if (nits !== hdrCap.current) hdrCap.onPick(nits);
+                  }}
+                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${
+                    hdrCap.current === nits ? "text-accent-400" : "text-white"
+                  }`}
+                >
+                  {nits === null ? t("player.hdrCap.native") : `${nits} nits`}
+                </button>
+              ))}
             {menu === "speed" &&
               PLAYBACK_SPEEDS.map((rate) => (
                 <button

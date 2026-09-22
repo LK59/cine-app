@@ -1418,6 +1418,10 @@
       "noSound": "Kein Ton auf dieser Spur.",
       "audioInterrupted": "Der Ton wurde unterbrochen.",
       "noAudioDecoder": "Diese Tonspur kann hier nicht abgespielt werden."
+    },
+    "hdrCap": {
+      "title": "HDR-Helligkeit",
+      "native": "Nativ"
     }
   },
   "cinema": {

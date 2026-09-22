@@ -595,6 +595,19 @@
     overscroll-behavior-y: contain;
   }
 
+  /* Les petits portables : l'interface, dessinée pour un écran de bureau, y était trop grande —
+     boutons qui débordent, et un zoom du navigateur à 90 % pour la rendre juste (13 pouces,
+     1280 × 800). C'est ce zoom-là, appliqué d'office : presque toutes les tailles sont en rem,
+     elles suivent la taille de base. Les points de rupture aussi sont en rem, mais une requête
+     média les lit sur la taille par défaut du navigateur, pas sur celle-ci : la mise en page ne
+     change pas de forme, elle rétrécit. Souris seulement — une tablette ou un téléphone de cette
+     largeur a son interface à lui. */
+  @media (hover: hover) and (pointer: fine) and (min-width: 1024px) and (max-width: 1440px) {
+    html {
+      font-size: 90%;
+    }
+  }
+
   body {
     @apply text-slate-100 antialiased;
     /* ─── Le noir d'une salle, pas le bleu d'un tableau de bord ────────────────

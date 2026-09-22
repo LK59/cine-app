@@ -256,12 +256,15 @@ let perTrack = true;
 let lightCapNits: number | null = null;
 
 /** La description de l'en-tête, plafonnée de la même façon que le flux. */
-function cappedColour(colour: TrackColour | undefined, cap: number | null): TrackColour | undefined {
+export function cappedColour(colour: TrackColour | undefined, cap: number | null): TrackColour | undefined {
   if (!colour || cap === null) return colour;
+  // Un fichier PQ qui n'annonce rien est lu par Chrome comme un 1 000 nits : le plafond n'aurait
+  // aucun effet sur lui. On l'annonce donc, plutôt que de ne plafonner que ceux qui déclarent.
+  const pq = colour.transferCharacteristics === 16;
   return {
     ...colour,
-    ...(colour.maxContentLightNits && colour.maxContentLightNits > cap ? { maxContentLightNits: cap } : {}),
-    ...(colour.maxFrameAverageNits && colour.maxFrameAverageNits > cap ? { maxFrameAverageNits: cap } : {}),
+    ...(colour.maxContentLightNits ? (colour.maxContentLightNits > cap ? { maxContentLightNits: cap } : {}) : pq ? { maxContentLightNits: cap } : {}),
+    ...(colour.maxFrameAverageNits ? (colour.maxFrameAverageNits > cap ? { maxFrameAverageNits: cap } : {}) : pq ? { maxFrameAverageNits: cap } : {}),
     ...(colour.masteringMaxNits && colour.masteringMaxNits > cap ? { masteringMaxNits: cap } : {}),
   };
 }

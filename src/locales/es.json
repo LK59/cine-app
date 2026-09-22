@@ -1418,6 +1418,10 @@
       "noSound": "Sin sonido en esta pista.",
       "audioInterrupted": "El sonido se ha interrumpido.",
       "noAudioDecoder": "Esta pista de audio no se puede reproducir aquí."
+    },
+    "hdrCap": {
+      "title": "Brillo HDR",
+      "native": "Nativo"
     }
   },
   "cinema": {
