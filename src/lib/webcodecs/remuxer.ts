@@ -639,7 +639,8 @@ export class Remuxer {
         videoTrack.codecPrivate!,
         dimensions.width,
         dimensions.height,
-        dolbyVision
+        dolbyVision,
+        videoTrack.video?.colour
       ),
       width: dimensions.width,
       height: dimensions.height,

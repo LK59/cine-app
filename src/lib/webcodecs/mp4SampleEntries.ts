@@ -9,6 +9,7 @@
 // file: it has to be read out of the first audio frame's own bitstream header. That is 71% of
 // this library, so it is not optional.
 
+import type { TrackColour } from "./matroska";
 import { box, concat, fourcc, fullBox, u16, u32, u8, zeros } from "./mp4Boxes";
 
 /** Reads big-endian bit fields, which is how every audio bitstream header is defined. */
@@ -92,14 +93,53 @@ function dolbyVisionSampleEntry(
   codecPrivate: Uint8Array,
   width: number,
   height: number,
-  dolbyVision: { type: string; record: Uint8Array }
+  dolbyVision: { type: string; record: Uint8Array },
+  colour: Uint8Array
 ): Uint8Array {
   return visualSampleEntry(
     "dvh1",
     width,
     height,
-    concat(box("hvcC", codecPrivate), box(dolbyVision.type, dolbyVision.record))
+    concat(box("hvcC", codecPrivate), box(dolbyVision.type, dolbyVision.record), colour)
   );
+}
+
+/**
+ * La description de l'image que tout MP4 bien construit porte, recopiée du conteneur : `colr`
+ * (primaires, courbe de transfert, matrice, plage), `mdcv` (l'écran de mastering) et `clli` (la
+ * lumière du contenu lui-même).
+ *
+ * Absentes jusqu'au 22/09/2026. Le navigateur n'avait que ce qu'il trouve dans le flux, et chacun
+ * s'en arrangeait à sa façon : un épisode HDR10+ s'affichait nettement trop sombre dans Chrome
+ * sous Windows — écran SDR ou HDR — quand Firefox et Safari le montraient juste. Une boîte n'est
+ * écrite que si le fichier en donne toutes les valeurs ; rien n'est inventé (CLAUDE.md : ce qu'une
+ * boîte porte vient du fichier, pas d'une constante).
+ */
+export function colourBoxes(colour: TrackColour | undefined): Uint8Array {
+  if (!colour) return new Uint8Array(0);
+  const parts: Uint8Array[] = [];
+  const { primaries, transferCharacteristics: transfer, matrixCoefficients: matrix } = colour;
+  // 2 veut dire « non précisé » dans les trois tables (ISO/IEC 23091-2) : pas de quoi écrire.
+  if (primaries && transfer && matrix && primaries !== 2 && transfer !== 2 && matrix !== 2) {
+    parts.push(box("colr", fourcc("nclx"), u16(primaries), u16(transfer), u16(matrix), u8(colour.range === 2 ? 0x80 : 0)));
+  }
+  const m = colour.masteringPrimaries;
+  if (m && colour.masteringMaxNits && colour.masteringMinNits !== undefined) {
+    // Ordre vert, bleu, rouge, en 0,00002 ; luminances en 0,0001 cd/m² — celui de la SEI HEVC.
+    const xy = ([x, y]: [number, number]) => concat(u16(Math.round(x * 50000)), u16(Math.round(y * 50000)));
+    parts.push(
+      box(
+        "mdcv",
+        xy(m.g), xy(m.b), xy(m.r), xy(m.white),
+        u32(Math.round(colour.masteringMaxNits * 10000)),
+        u32(Math.round(colour.masteringMinNits * 10000))
+      )
+    );
+  }
+  if (colour.maxContentLightNits) {
+    parts.push(box("clli", u16(Math.min(65535, colour.maxContentLightNits)), u16(Math.min(65535, colour.maxFrameAverageNits ?? 0))));
+  }
+  return parts.length ? concat(...parts) : new Uint8Array(0);
 }
 
 export function videoSampleEntry(
@@ -112,20 +152,23 @@ export function videoSampleEntry(
    * conteneur porte l'enregistrement *et* que le navigateur a dit accepter la chaîne construite
    * depuis lui. Absent, rien ne change : l'entrée reste `hvc1`, comme depuis toujours.
    */
-  dolbyVision?: { type: string; record: Uint8Array } | null
+  dolbyVision?: { type: string; record: Uint8Array } | null,
+  /** Voir `colourBoxes`. */
+  colour?: TrackColour
 ): Uint8Array {
+  const described = colourBoxes(colour);
   switch (codecId) {
     case "V_MPEGH/ISO/HEVC":
-      if (dolbyVision) return dolbyVisionSampleEntry(codecPrivate, width, height, dolbyVision);
+      if (dolbyVision) return dolbyVisionSampleEntry(codecPrivate, width, height, dolbyVision, described);
       // hvc1: parameter sets live in this box rather than in the stream, which is what Matroska
       // already stores and what MP4 expects.
-      return visualSampleEntry("hvc1", width, height, box("hvcC", codecPrivate));
+      return visualSampleEntry("hvc1", width, height, concat(box("hvcC", codecPrivate), described));
     case "V_MPEG4/ISO/AVC":
-      return visualSampleEntry("avc1", width, height, box("avcC", codecPrivate));
+      return visualSampleEntry("avc1", width, height, concat(box("avcC", codecPrivate), described));
     case "V_AV1":
       // The easiest of the three: Matroska keeps an AV1 track's configuration as the very box an
       // MP4 wants, so it is carried across untouched rather than parsed and rebuilt.
-      return visualSampleEntry("av01", width, height, box("av1C", codecPrivate));
+      return visualSampleEntry("av01", width, height, concat(box("av1C", codecPrivate), described));
     default:
       throw new Error(`Codec vidéo non remultiplexable : ${codecId}`);
   }

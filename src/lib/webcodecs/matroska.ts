@@ -29,6 +29,15 @@ export interface TrackColour {
   masteringMaxNits?: number;
   /** The brightest the content itself ever gets. Frequently written as zero, meaning unknown. */
   maxContentLightNits?: number;
+  /** The brightest frame on average (MaxFALL), in nits. */
+  maxFrameAverageNits?: number;
+  /** The dimmest the grading display could go, in nits. */
+  masteringMinNits?: number;
+  /**
+   * The grading display's primaries and white point (CIE 1931 x, y), when the file gives all
+   * eight — what an MP4 `mdcv` box carries, beside the two luminances.
+   */
+  masteringPrimaries?: { r: [number, number]; g: [number, number]; b: [number, number]; white: [number, number] };
 }
 
 export interface MatroskaTrack {
@@ -235,16 +244,37 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
                     if (nits > 0) colour.maxContentLightNits = nits;
                     break;
                   }
-                  case ID.MasteringMetadata:
+                  case ID.MaxFall: {
+                    const nits = readUint(await payload(source, c));
+                    if (nits > 0) colour.maxFrameAverageNits = nits;
+                    break;
+                  }
+                  case ID.MasteringMetadata: {
+                    const chroma: Record<number, number> = {};
                     await forEachChild(source, c.offset, c.offset + (c.size ?? 0), async (m) => {
-                      // A float, in nits, and zero when the writer had nothing to say.
-                      if (m.id === ID.LuminanceMax) {
-                        const nits = readFloat(await payload(source, m));
-                        if (nits > 0) colour.masteringMaxNits = nits;
-                      }
+                      // Floats, zero when the writer had nothing to say.
+                      const value = readFloat(await payload(source, m));
+                      if (m.id === ID.LuminanceMax && value > 0) colour.masteringMaxNits = value;
+                      else if (m.id === ID.LuminanceMin && value >= 0) colour.masteringMinNits = value;
+                      else if (m.id >= ID.PrimaryRChromaticityX && m.id <= ID.WhitePointChromaticityY) chroma[m.id] = value;
                       return "continue";
                     });
+                    // Toutes les huit ou aucune : une boîte `mdcv` à moitié inventée serait pire que pas de boîte.
+                    const at = (id: number) => chroma[id];
+                    const ids = [
+                      ID.PrimaryRChromaticityX, ID.PrimaryRChromaticityY, ID.PrimaryGChromaticityX, ID.PrimaryGChromaticityY,
+                      ID.PrimaryBChromaticityX, ID.PrimaryBChromaticityY, ID.WhitePointChromaticityX, ID.WhitePointChromaticityY,
+                    ];
+                    if (ids.every((id) => typeof at(id) === "number" && at(id) > 0 && at(id) < 1)) {
+                      colour.masteringPrimaries = {
+                        r: [at(ID.PrimaryRChromaticityX), at(ID.PrimaryRChromaticityY)],
+                        g: [at(ID.PrimaryGChromaticityX), at(ID.PrimaryGChromaticityY)],
+                        b: [at(ID.PrimaryBChromaticityX), at(ID.PrimaryBChromaticityY)],
+                        white: [at(ID.WhitePointChromaticityX), at(ID.WhitePointChromaticityY)],
+                      };
+                    }
                     break;
+                  }
                 }
                 return "continue";
               });
