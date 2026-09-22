@@ -89,6 +89,14 @@ const ARRIVAL_TIMEOUT_MS = 15_000;
 const SWITCH_TIMEOUT_MS = 20_000;
 const STEPS_MAX = 3500;
 
+/**
+ * Au-delà, un saut est « lent », puis « en échec ». Relevé de 2,5 à 4 s le 22/09/2026 : la lecture
+ * est toujours distante (serveur loin des spectateurs), et un saut en 4K doit faire venir le groupe
+ * d'images depuis l'image clé précédente — 2 à 4 s de réseau, qui marquaient presque tous les sauts.
+ */
+const SEEK_SLOW_MS = 4000;
+const SEEK_FAIL_MS = 8000;
+
 /** Ce que coûte un film, en secondes, pour annoncer la durée avant de lancer. */
 export function estimateSeconds(depth: BenchDepth, items: number, interactive: boolean): number {
   const perItem = depth === "full" ? 200 : 90;
@@ -224,10 +232,10 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     const reading = await watch(watchMs);
     let verdict: Verdict = reading.verdict;
     const notes = [...reading.problems];
-    if (ms > 6000) {
+    if (ms > SEEK_FAIL_MS) {
       verdict = "fail";
       notes.push("arrivée très lente");
-    } else if (ms > 2500) {
+    } else if (ms > SEEK_SLOW_MS) {
       verdict = worst(verdict, "warn");
       notes.push("arrivée lente");
     }
