@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { SeekLifecycle } from "@/lib/webcodecs/seekLifecycle";
 
 // L'état d'un saut, réuni le 22/09/2026 : ses transitions, sans lecteur autour.
@@ -19,6 +19,23 @@ describe("SeekLifecycle", () => {
     seek.serving(600);
     expect(seek.isOwnMove(600.2)).toBe(true);
     expect(seek.isOwnMove(601)).toBe(false);
+  });
+
+  it("ne reconnaît son propre déplacement qu'une fois, et pas longtemps", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const seek = new SeekLifecycle();
+      seek.moved(0.24);
+      expect(seek.isOwnMove(0.24)).toBe(true);
+      // Pris : un second `seeking` au même endroit est celui du spectateur.
+      expect(seek.isOwnMove(0.24)).toBe(false);
+      seek.moved(0.24);
+      vi.setSystemTime(Date.now() + 60_000);
+      // « Revoir », une heure et demie plus tard : c'est le spectateur.
+      expect(seek.isOwnMove(0)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("n'arrive qu'à sa cible, et suit un pas volontaire de la source", () => {

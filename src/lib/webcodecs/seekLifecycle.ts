@@ -9,11 +9,24 @@ import { seekArrived } from "./seekArrival";
  * transitions qui les font changer ; ce qui *agit* sur un saut (servir, reprendre, atterrir)
  * reste dans la source, qui interroge cet état au lieu de le recomposer.
  */
+/** Combien de temps un déplacement de la source attend son `seeking`. */
+const OWN_MOVE_MS = 2000;
+
 export class SeekLifecycle {
   /** Demandé, pas encore servi. Une rafale en demande des dizaines : seul le dernier compte. */
   requested: number | null = null;
-  /** La dernière cible que la source a servie ou posée — pour reconnaître ses propres déplacements. */
+  /** La dernière cible que la source a servie ou posée. */
   lastTarget = -1;
+  /**
+   * Le déplacement que la source vient de faire, attendu une seule fois, et brièvement.
+   *
+   * Reconnu jusqu'au 22/09/2026 par la seule proximité de `lastTarget` — durable, elle : tout saut
+   * du spectateur à moins de 0,25 s de la dernière position posée par la source passait pour le
+   * sien, des heures après. « Revoir » à la fin d'un film restait ainsi figé à 0:00, la source ayant
+   * posé la tête à 0,24 s à l'ouverture. Un jeton, pris au premier `seeking` qui lui correspond, et
+   * qui expire : le `seeking` d'une écriture de `currentTime` suit en quelques millisecondes.
+   */
+  private ownMove: { at: number; until: number } | null = null;
   /** En route vers sa cible, depuis l'événement `seeking` jusqu'à l'arrivée. */
   intent: { target: number; since: number } | null = null;
 
@@ -25,6 +38,7 @@ export class SeekLifecycle {
   /** La source commence à le servir : c'est désormais sa cible. */
   serving(seconds: number): void {
     this.lastTarget = seconds;
+    this.expectOwnMove(seconds);
   }
 
   /** Servi : la demande est satisfaite, sauf si une autre l'a remplacée entre-temps. */
@@ -38,7 +52,12 @@ export class SeekLifecycle {
    */
   moved(seconds: number): void {
     this.lastTarget = seconds;
+    this.expectOwnMove(seconds);
     if (this.intent) this.intent.target = seconds;
+  }
+
+  private expectOwnMove(seconds: number): void {
+    this.ownMove = { at: seconds, until: Date.now() + OWN_MOVE_MS };
   }
 
   /** L'élément commence à sauter vers `seconds`. */
@@ -48,7 +67,10 @@ export class SeekLifecycle {
 
   /** Ce `seeking` est-il le déplacement que la source vient elle-même de faire ? */
   isOwnMove(seconds: number): boolean {
-    return Math.abs(seconds - this.lastTarget) < 0.25;
+    const own = this.ownMove;
+    if (!own || Date.now() > own.until || Math.abs(seconds - own.at) >= 0.25) return false;
+    this.ownMove = null;
+    return true;
   }
 
   /**

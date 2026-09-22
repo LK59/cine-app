@@ -958,6 +958,87 @@ describe("MseSource", () => {
     });
   });
 
+  describe("chasse aux bugs du 22/09/2026 au soir", () => {
+    it("libère un saut ramené dans la durée du film — +30 s dans les dernières secondes ne fige plus rien", async () => {
+      // La cible était ramenée à la fin du média, puis comparée ainsi corrigée à la demande
+      // d'origine pour la libérer : elles ne correspondaient plus, la demande restait pendante,
+      // et le remplissage comme le chien de garde s'arrêtaient devant elle.
+      const video = fakeVideo();
+      const remuxer = fakeRemuxer(500);
+      const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+      await flush();
+      await mse.seek(3630);
+      await flush();
+      expect(mse.seekPending).toBe(false);
+      expect(remuxer.seeks.at(-1)).toBeGreaterThan(3590);
+      mse.destroy();
+    });
+
+    it("libère un saut refusé sur un fichier sans index, et rend la tête là où elle jouait", async () => {
+      const video = fakeVideo();
+      const onWarning = vi.fn();
+      const mse = await MseSource.attach(video, fakeRemuxer(500, 0.2, false), PLAN, { onError: vi.fn(), onWarning });
+      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 10, "du média");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      internals.watchdog();
+
+      (video as unknown as { currentTime: number }).currentTime = 1800;
+      video.dispatchEvent(new Event("seeking"));
+      await flush();
+      expect(onWarning).toHaveBeenCalledWith({ code: "noIndexSeek" });
+      expect(mse.seekPending).toBe(false);
+      expect(video.currentTime).toBe(5);
+      mse.destroy();
+    });
+
+    it("ne prend pas pour son propre déplacement un saut du spectateur, longtemps après, au même endroit", async () => {
+      // « Revoir » à la fin d'un film restait figé à 0:00 : la source avait posé la tête à 0,24 s
+      // à l'ouverture, et tout saut à moins de 0,25 s de là passait pour le sien, des heures après.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const video = fakeVideo();
+        const remuxer = fakeRemuxer(500);
+        const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+        await flush();
+        const timer = (mse as unknown as { watchdogTimer: ReturnType<typeof setInterval> | null }).watchdogTimer;
+        if (timer) clearInterval(timer);
+        (mse as unknown as { seekState: { moved: (t: number) => void } }).seekState.moved(1000.2);
+        vi.setSystemTime(Date.now() + 60_000);
+        traceReset();
+        (video as unknown as { currentTime: number }).currentTime = 1000;
+        video.dispatchEvent(new Event("seeking"));
+        // Servi tout de suite, par le saut lui-même — pas rattrapé plus tard par une reprise.
+        expect(traceText()).toContain("saut demandé vers 1000.0 s (le viseur)");
+        mse.destroy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("renvoie un lecteur égaré vers la cible du saut en cours, pas vers la tête partie ailleurs", async () => {
+      // Deux relectures pour un seul saut : d'abord vers la tête enfuie, puis vers la cible.
+      const video = fakeVideo();
+      const remuxer = fakeRemuxer(500, 0.2, true, 20);
+      const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+      await flush();
+      // Le contrôle d'égarement de la boucle de lecture seul : le chien de garde, qui le
+      // rattraperait vers la bonne cible, est arrêté.
+      const timer = (mse as unknown as { watchdogTimer: ReturnType<typeof setInterval> | null }).watchdogTimer;
+      if (timer) clearInterval(timer);
+      (video as unknown as { currentTime: number }).currentTime = 1000;
+      video.dispatchEvent(new Event("seeking"));
+      // Le média du saut commence d'arriver, là où il a été demandé.
+      await until(() => video.buffered.length > 0 && video.buffered.start(0) < 1100 && video.buffered.start(0) > 900, "le média du saut");
+      // La tête s'en va sans que l'élément le dise.
+      (video as unknown as { currentTime: number }).currentTime = 1600;
+      await new Promise((r) => setTimeout(r, 300));
+      expect(remuxer.seeks.some((t) => Math.abs(t - 1599.8) < 0.01)).toBe(false);
+      mse.destroy();
+    });
+  });
+
   it("keeps a playable amount of media even while the system says it wants none", async () => {
     const video = fakeVideo();
     class NeverStreaming extends FakeSource {

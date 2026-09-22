@@ -203,6 +203,8 @@ export class MseSource {
   private pending: Promise<void> = Promise.resolve();
   /** Le saut : demandé, servi, en route, arrivé — voir `SeekLifecycle`. */
   private readonly seekState = new SeekLifecycle();
+  /** La dernière position où l'élément jouait sans sauter — où revenir d'un saut refusé. */
+  private lastPlayedAt = 0;
   private delaySeconds = 0;
   /**
    * Où le film doit s'ouvrir, tant que le média n'est pas encore là pour l'y recevoir.
@@ -741,7 +743,9 @@ export class MseSource {
             `reprise : média à ${distance.toFixed(1)} s de la tête (${this.anchor.toFixed(1)} s), ` +
               `lecteur à ${this.readUpTo.toFixed(1)} s`
           );
-          if (this.recover(this.anchor)) break;
+          // Vers la cible du saut en cours s'il y en a un, pas vers la tête partie ailleurs : c'était
+          // une relecture pour rien, suivie de celle vers la cible (22/09/2026).
+          if (this.recover(this.seekState.intent?.target ?? this.anchor)) break;
         }
       }
     } catch (error) {
@@ -902,7 +906,13 @@ export class MseSource {
     // arriving — so it is refused, and playback carries on where it was.
     if (!reachable(this.remuxer.seekable, playerSeconds)) {
       this.callbacks.onWarning?.(playerWarning("noIndexSeek"));
-      if (this.seekState.lastTarget >= 0) this.video.currentTime = this.seekState.lastTarget;
+      // Refusé, donc servi : sans cela la demande restait pendante, et le film se figeait au bout
+      // de ce qui était chargé (22/09/2026). La tête revient là où elle jouait — pas à la dernière
+      // position posée par la source, qui pouvait être l'ouverture à 0,24 s.
+      this.seekState.served(requested);
+      this.seekState.drop();
+      this.seekState.moved(this.lastPlayedAt);
+      this.video.currentTime = this.lastPlayedAt;
       return;
     }
 
@@ -944,7 +954,10 @@ export class MseSource {
 
     // Served: the reader is where it was asked to be. Anything asked for after this point is a
     // new seek, and the refill below is free to run.
-    this.seekState.served(playerSeconds);
+    // La demande telle qu'elle a été faite, pas la cible ramenée dans le film : comparée ainsi
+    // corrigée, un saut au-delà de la fin (+30 s dans les dernières secondes) ne la libérait jamais,
+    // et le remplissage comme le chien de garde restaient arrêtés devant elle (22/09/2026).
+    this.seekState.served(requested);
 
     // Not awaited. A seek is finished the moment the reader is repositioned; waiting for thirty
     // seconds of media to be fetched before admitting so means the next seek queues behind a
@@ -1029,6 +1042,7 @@ export class MseSource {
     // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
     // underneath it would move the picture for no reason and land the resume elsewhere.
     if (this.destroyed) return;
+    if (!this.video.seeking && this.seekState.intent === null) this.lastPlayedAt = this.video.currentTime;
     // Before anything returns early: a stall is exactly the case where every check below has
     // decided there is nothing to do, and that decision is what the log line has to show.
     this.watchForStall();
@@ -1273,6 +1287,7 @@ export class MseSource {
     this.frozenNudgesTotal += 1;
     trace(`horloge figée à ${now.toFixed(2)} s avec ${this.lead.toFixed(1)} s en avance — on redemande la position`);
     this.guard.forgetPause();
+    this.seekState.moved(now + FROZEN_STEP);
     this.video.currentTime = now + FROZEN_STEP;
     // Le mouvement se mesure depuis là où la poussée a mis l'horloge. Mesuré depuis `now`, les
     // 0,08 s de la poussée passaient pour de la lecture et remettaient le compteur à zéro : douze
