@@ -53,7 +53,22 @@ const JUMP_TOLERANCE_S = 0.6;
  */
 const JUDDER_RATIO = 0.85;
 
-export function readPlayback(samples: Sample[], nominalFps: number | null = null): PlaybackReading {
+/**
+ * Les images se comptent-elles sur cette fenêtre ?
+ *
+ * `totalVideoFrames` compte les images **décodées**, pas celles affichées, et le lecteur décode en
+ * avance : après un saut il rattrape à marche forcée — 43 à 95 images/s relevées sur des fichiers à
+ * 24 (banc iPhone du 22/09/2026) —, et après une rafale de sauts tout est déjà décodé, si bien
+ * qu'il ne bouge presque plus : 1,8 image/s, lu comme « l'horloge avance sans image ». Le même
+ * compteur ment donc dans les deux sens autour d'un saut. Ce qui se mesure là, c'est le temps
+ * d'arrivée ; les images ne se jugent que sur une lecture franche.
+ */
+export interface ReadOptions {
+  /** Faux après un saut, un changement de piste ou une réouverture. */
+  frames?: boolean;
+}
+
+export function readPlayback(samples: Sample[], nominalFps: number | null = null, options: ReadOptions = {}): PlaybackReading {
   const empty: PlaybackReading = { verdict: "ok", problems: [], wallSeconds: 0, clockSeconds: 0, fps: null, longestFreezeMs: 0, jumps: 0 };
   if (samples.length < 2) return { ...empty, verdict: "warn", problems: ["trop peu d'échantillons"] };
 
@@ -119,7 +134,9 @@ export function readPlayback(samples: Sample[], nominalFps: number | null = null
   // annoncés à tort). Ce que le saut a coûté est mesuré ailleurs, par son temps d'arrivée.
   const seekInWindow = samples.some((s) => s.seeking);
   const counterRestarted = first.frames !== null && last.frames !== null && last.frames < first.frames;
-  if (samples.some((s) => s.hidden)) {
+  if (options.frames === false) {
+    problems.push("images non comptées : le décodage court encore après le saut");
+  } else if (samples.some((s) => s.hidden)) {
     problems.push("fenêtre cachée : images non comptées");
   } else if (seekInWindow || counterRestarted) {
     problems.push(`${seekInWindow ? "saut" : "reconstruction"} dans la fenêtre : images non comptées`);

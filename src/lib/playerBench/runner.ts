@@ -18,7 +18,7 @@
 import type { BenchBridge } from "./bridge";
 import { trace } from "../webcodecs/trace";
 import { seekArrived } from "../webcodecs/seekArrival";
-import { readPlayback, seededPositions, worst, type Sample, type Verdict } from "./measure";
+import { readPlayback, seededPositions, worst, type ReadOptions, type Sample, type Verdict } from "./measure";
 
 export interface BenchItem {
   itemId: string;
@@ -104,6 +104,9 @@ const STEPS_MAX = 3500;
  * est toujours distante (serveur loin des spectateurs), et un saut en 4K doit faire venir le groupe
  * d'images depuis l'image clé précédente — 2 à 4 s de réseau, qui marquaient presque tous les sauts.
  */
+/** Après un saut, une piste changée ou une réouverture : voir `ReadOptions.frames`. */
+const AFTER_SEEK: ReadOptions = { frames: false };
+
 const SEEK_SLOW_MS = 4000;
 const SEEK_FAIL_MS = 8000;
 
@@ -181,7 +184,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     return predicate() ? deps.now() - start : null;
   };
 
-  const watch = async (ms: number) => {
+  const watch = async (ms: number, options: ReadOptions = {}) => {
     const samples: Sample[] = [];
     const end = deps.now() + ms;
     for (;;) {
@@ -197,7 +200,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       if (deps.now() >= end) break;
       await deps.sleep(SAMPLE_MS);
     }
-    return readPlayback(samples, bridge().nominalFps());
+    return readPlayback(samples, bridge().nominalFps(), options);
   };
 
   const record = (check: CheckResult, traceMs?: number) => {
@@ -259,7 +262,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       return;
     }
     const landing = time() - target;
-    const reading = await watch(watchMs);
+    const reading = await watch(watchMs, AFTER_SEEK);
     let verdict: Verdict = reading.verdict;
     const notes = [...reading.problems];
     if (ms > SEEK_FAIL_MS) {
@@ -349,7 +352,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
         return;
       }
       await ensurePlaying();
-      const reading = await watch(3000);
+      const reading = await watch(3000, AFTER_SEEK);
       record(
         { id, verdict: worst(reading.verdict, ms > SEEK_FAIL_MS ? "warn" : "ok"), ms, detail: `arrivé à ${target.toFixed(1)} s en ${ms} ms${extra} — ${describe(reading)}` },
         ms + 5000
@@ -421,7 +424,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
         record({ id: "x-audio-storm", verdict: "fail", detail: `la dernière piste demandée (${wanted}) n'est jamais devenue celle qui joue (piste ${bridge().currentAudio()}, prêt ${bridge().ready()})` }, 30_000);
       } else {
         await ensurePlaying();
-        const reading = await watch(3000);
+        const reading = await watch(3000, AFTER_SEEK);
         record({ id: "x-audio-storm", verdict: worst(reading.verdict, "ok"), ms, detail: `piste ${wanted} en place en ${ms} ms, à ${time().toFixed(1)} s — ${describe(reading)}` }, ms + 5000);
       }
     }
@@ -490,7 +493,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     }
     const firstImageMs = deps.now() - reopenStart;
     await ensurePlaying();
-    const reading = await watch(3000);
+    const reading = await watch(3000, AFTER_SEEK);
     record({
       id: "x-reopen",
       verdict: worst(reading.verdict, firstImageMs > 8000 ? "warn" : "ok"),
@@ -572,7 +575,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       if (burstMs === null) {
         record({ id: "burst", verdict: "fail", detail: `cinq sauts en 0,6 s : jamais arrivé à ${final.toFixed(1)} s (tête à ${time().toFixed(1)} s)` }, ARRIVAL_TIMEOUT_MS + 3000);
       } else {
-        const reading = await watch(3000);
+        const reading = await watch(3000, AFTER_SEEK);
         record({ id: "burst", verdict: worst(reading.verdict, burstMs > 5000 ? "warn" : "ok"), ms: burstMs, detail: `arrivé au dernier en ${burstMs} ms — ${describe(reading)}` }, burstMs + 5000);
       }
 
@@ -610,7 +613,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       const pausedDrift = Math.abs(time() - pausedTarget);
       await media().play().catch(() => {});
       await ensurePlaying();
-      const afterPaused = await watch(3000);
+      const afterPaused = await watch(3000, AFTER_SEEK);
       record({
         id: "paused-seek",
         verdict: worst(pausedMs === null || !stillPaused || pausedDrift > 1.5 ? "fail" : "ok", afterPaused.verdict),

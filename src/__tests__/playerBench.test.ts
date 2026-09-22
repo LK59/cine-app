@@ -45,6 +45,24 @@ describe("readPlayback", () => {
     expect(readPlayback(samples(41, () => ({})), 24).verdict).toBe("ok");
   });
 
+  it("ne juge pas les images sur la fenêtre qui suit un saut", () => {
+    // Banc iPhone du 22/09/2026 : `totalVideoFrames` compte le décodage, qui court en avance. Après
+    // un saut il rattrape — 43 à 95 im/s sur des fichiers à 24 — et après une rafale tout est déjà
+    // décodé : 1,8 im/s, lu comme « l'horloge avance sans image ». Faux dans les deux sens.
+    const stalled = samples(17, () => ({ frames: 100 }));
+    expect(readPlayback(stalled, 24).verdict).toBe("fail");
+    const r = readPlayback(stalled, 24, { frames: false });
+    expect(r.verdict).toBe("ok");
+    expect(r.fps).toBeNull();
+    expect(r.problems.join()).toMatch(/images non comptées/);
+  });
+
+  it("juge toujours l'horloge, elle, sur la fenêtre qui suit un saut", () => {
+    // Ce que l'option écarte, ce sont les images — pas une horloge immobile ni un saut subi.
+    const frozen = samples(17, (i) => ({ time: i < 4 ? i * 0.25 : 1, frames: i * 6 }));
+    expect(readPlayback(frozen, 24, { frames: false }).verdict).toBe("fail");
+  });
+
   it("ne juge pas les images d'une fenêtre qui contient un saut", () => {
     // Banc du 22/09/2026 : deux échecs annoncés à tort — « 2,1 images/s » sur un saut arrivé en
     // 1,1 s, et 66 à 107 images/s sur des fichiers à 24. Le compteur d'images n'est pas comparable
@@ -203,13 +221,16 @@ describe("runBench", () => {
     expect(reports).toHaveLength(1);
   });
 
-  it("trouve l'horloge qui court sans image après un saut", async () => {
+  it("trouve l'horloge qui court sans image, sur la première lecture franche", async () => {
+    // Le saut lui-même ne peut pas le dire : le compteur d'images est celui du décodage, qui court
+    // en avance et rattrape après un saut (22/09/2026 — voir `ReadOptions.frames`). Une image
+    // vraiment figée, elle, le reste : la lecture posée qui suit la voit.
     const { deps } = simulated({ runawayAfterSeek: true });
     const [result] = await runBench(CONFIG, deps);
-    const seek = result.checks.find((c) => c.id === "seek-far")!;
-    expect(seek.verdict).toBe("fail");
-    expect(seek.detail).toMatch(/sans image/);
-    expect(seek.steps).toBe("trace");
+    expect(result.checks.find((c) => c.id === "seek-far")!.verdict).toBe("ok");
+    const caught = result.checks.filter((c) => c.verdict === "fail" && /sans image/.test(c.detail));
+    expect(caught.map((c) => c.id)).toContain("long-play");
+    expect(caught[0].steps).toBe("trace");
   });
 
   it("trouve une pause perdue au changement de piste", async () => {
