@@ -1107,7 +1107,16 @@ export class Remuxer {
     const why = cause instanceof Error ? cause.message : String(cause);
     trace(`transcodage audio : chaîne en échec (${why}), reconstruction (${this.encoderRestarts}) à ${at.toFixed(1)} s`);
     const previous = this.transcoder;
-    const next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file);
+    let next: AudioTranscoder;
+    try {
+      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file);
+    } catch (error) {
+      // Une lecture coupée par un saut n'est pas un échec de l'encodeur : elle ne compte pas dans
+      // le budget de reconstructions — sans quoi quelques sauts pendant une panne d'encodeur
+      // l'épuisaient, et la suivante devenait une erreur (chasse aux bugs du 22/09/2026).
+      if (isReadAbandoned(error)) this.encoderRestarts -= 1;
+      throw error;
+    }
     // Fermé pendant l'ouverture : ce transcodeur n'aurait plus aucun propriétaire.
     if (this.closed) {
       next.close();

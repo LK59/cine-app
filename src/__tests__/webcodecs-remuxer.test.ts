@@ -434,6 +434,27 @@ describe("Remuxer encoder recovery", () => {
     }
   });
 
+  it("ne compte pas une lecture coupée par un saut dans le budget de reconstructions de l'encodeur", async () => {
+    // Chasse aux bugs du 22/09/2026 : chaque reconstruction interrompue par un saut usait le budget.
+    const { ReadAbandoned } = await import("@/lib/webcodecs/byteSource");
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 2 } });
+    FILE.tracks.push(dts);
+    try {
+      const remuxer = await Remuxer.open(SOURCE, FILE, VIDEO, dts, { width: 1920, height: 1080 });
+      const { AudioTranscoder } = await import("@/lib/webcodecs/audioTranscode");
+      const open = AudioTranscoder.open;
+      (AudioTranscoder as unknown as { open: () => Promise<never> }).open = async () => {
+        throw new ReadAbandoned();
+      };
+      const retry = (remuxer as unknown as { retryTranscoder: (e: unknown) => Promise<unknown>; encoderRestarts: number });
+      for (let i = 0; i < 5; i++) await expect(retry.retryTranscoder(new Error("encodeur"))).rejects.toBeInstanceOf(ReadAbandoned);
+      expect(retry.encoderRestarts).toBe(0);
+      (AudioTranscoder as unknown as { open: typeof open }).open = open;
+    } finally {
+      FILE.tracks.pop();
+    }
+  });
+
   it("coupe les lectures d'ailleurs et lance celles du saut, dès la demande", async () => {
     const calls: string[] = [];
     const source = {
