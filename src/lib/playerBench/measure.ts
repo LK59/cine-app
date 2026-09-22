@@ -112,8 +112,17 @@ export function readPlayback(samples: Sample[], nominalFps: number | null = null
   // Fenêtre cachée ou recouverte : Chrome continue le son et cesse de dessiner l'image. Les images
   // n'y disent rien du lecteur — banc du 22/09/2026, « 0 image/s » pendant que l'on regardait
   // ailleurs. Pas de verdict sur elles, seulement une note.
+  // Un saut, ou une reconstruction, dans la fenêtre : le compteur d'images n'y est plus comparable
+  // à l'horloge. Il repart de zéro quand le lecteur est reconstruit — d'où des « 2 images/s » sur
+  // un saut par ailleurs parfait —, et il continue de monter pendant que l'horloge est arrêtée sur
+  // place — d'où des 66 à 107 images/s sur des fichiers à 24 (banc du 22/09/2026, deux échecs
+  // annoncés à tort). Ce que le saut a coûté est mesuré ailleurs, par son temps d'arrivée.
+  const seekInWindow = samples.some((s) => s.seeking);
+  const counterRestarted = first.frames !== null && last.frames !== null && last.frames < first.frames;
   if (samples.some((s) => s.hidden)) {
     problems.push("fenêtre cachée : images non comptées");
+  } else if (seekInWindow || counterRestarted) {
+    problems.push(`${seekInWindow ? "saut" : "reconstruction"} dans la fenêtre : images non comptées`);
   } else if (first.frames !== null && last.frames !== null && clockSeconds > 0.5) {
     fps = Math.max(0, last.frames - first.frames) / clockSeconds;
     if (clockSeconds >= 1.5 && fps < RUNAWAY_FPS) {

@@ -8,6 +8,7 @@ import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback, takeoverFor, returningFor, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { useViewportResizing } from "@/lib/useViewportResizing";
@@ -130,6 +131,11 @@ export function PlayerHost() {
   // The handover to the stable player: which files it has taken over, why, and the word shown
   // to the viewer while it settles in. See useStableFallback.
   const { handedOver, negotiating, reason: fallbackReason, takeover, stepAside, stepBack, returning } = useStableFallback();
+
+  // Le banc d'essai éprouve le lecteur natif : un film déjà confié au lecteur serveur ne lui
+  // reviendra pas, et l'attendre revenait à annoncer un échec là où il n'y a rien à mesurer.
+  // Publié d'ici parce que c'est ici que ce fait vit — le banc n'a pas à connaître cet état.
+  useEffect(() => publishHandedOver(handedOver), [handedOver]);
 
   // Stable across renders on purpose. Handed down as an inline arrow, this was a different
   // function every time this component drew — and minimising the player draws it — which the

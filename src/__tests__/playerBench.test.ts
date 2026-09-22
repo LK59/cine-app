@@ -45,6 +45,23 @@ describe("readPlayback", () => {
     expect(readPlayback(samples(41, () => ({})), 24).verdict).toBe("ok");
   });
 
+  it("ne juge pas les images d'une fenêtre qui contient un saut", () => {
+    // Banc du 22/09/2026 : deux échecs annoncés à tort — « 2,1 images/s » sur un saut arrivé en
+    // 1,1 s, et 66 à 107 images/s sur des fichiers à 24. Le compteur d'images n'est pas comparable
+    // à l'horloge de part et d'autre d'un saut ; le coût du saut se mesure à son arrivée.
+    const r = readPlayback(samples(17, (i) => ({ frames: 0, seeking: i > 3 && i < 8 })), 24);
+    expect(r.verdict).toBe("ok");
+    expect(r.problems.join()).toMatch(/saut dans la fenêtre/);
+    expect(r.fps).toBeNull();
+  });
+
+  it("ne juge pas les images quand le compteur est reparti de zéro", () => {
+    // Une reconstruction remet à zéro les images présentées : la soustraction devient négative.
+    const r = readPlayback(samples(17, (i) => ({ frames: i < 8 ? 500 + i * 6 : (i - 8) * 6 })), 24);
+    expect(r.verdict).toBe("ok");
+    expect(r.problems.join()).toMatch(/reconstruction dans la fenêtre/);
+  });
+
   it("ne juge pas les images d'une fenêtre cachée, et le note", () => {
     // Chrome cesse de dessiner la vidéo d'une fenêtre cachée ou recouverte, le son continue.
     const r = readPlayback(samples(17, (i) => ({ frames: 0, hidden: i > 4 })), 24);
@@ -173,6 +190,17 @@ describe("runBench", () => {
     for (const id of ["open", "play", "seek-far", "seek-back-10", "burst", "pause", "paused-seek", "audio-2", "seek-then-audio", "audio-paused", "subtitles-5", "long-play", "question:sync"]) {
       expect(ids).toContain(id);
     }
+  });
+
+  it("ne juge pas un film confié au lecteur serveur", async () => {
+    // 22/09/2026 : après une demande de diffusion, le film reste au lecteur serveur pour toute la
+    // session. Le banc l'ouvrait quand même, n'en voyait jamais la première image, et concluait
+    // « échec » au bout de 45 s — deux fois sur quatre passages du soir.
+    const { deps, reports } = simulated();
+    const [result] = await runBench(CONFIG, { ...deps, handedOver: () => true });
+    expect(result.verdict).toBe("skip");
+    expect(result.checks).toEqual([{ id: "handed-over", verdict: "skip", detail: "confié au lecteur serveur : rien à mesurer ici" }]);
+    expect(reports).toHaveLength(1);
   });
 
   it("trouve l'horloge qui court sans image après un saut", async () => {

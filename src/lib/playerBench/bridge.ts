@@ -57,6 +57,24 @@ export function registerBenchBridge(bridge: BenchBridge): () => void {
   };
 }
 
+/**
+ * Les films que le lecteur natif a laissés au lecteur serveur, pour cette session d'application.
+ *
+ * Posés ici par le lecteur, parce que le banc doit les connaître sans rien savoir de son état
+ * interne. Sans cela, il ouvrait un film déjà confié au lecteur serveur, n'en voyait jamais la
+ * première image et l'annonçait « en échec » au bout de 45 s — deux fois le 22/09/2026, après une
+ * demande de diffusion. Ce n'est pas un échec du lecteur : c'est une question qui ne se pose pas.
+ */
+let handedOverItems: string[] = [];
+
+export function publishHandedOver(itemIds: string[]): void {
+  handedOverItems = itemIds;
+}
+
+export function benchHandedOver(itemId: string): boolean {
+  return handedOverItems.includes(itemId);
+}
+
 export function benchBridge(): BenchBridge | null {
   return current;
 }

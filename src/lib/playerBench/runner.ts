@@ -47,7 +47,8 @@ export interface CheckResult {
 export interface ItemResult {
   itemId: string;
   title: string;
-  verdict: Verdict;
+  /** « skip » : la question ne se pose pas — voir `handedOver`. */
+  verdict: Verdict | "skip";
   path: string | null;
   openMs: number | null;
   durationSeconds: number;
@@ -80,6 +81,8 @@ export interface BenchDeps {
   report(result: ItemResult): void;
   /** La page est-elle cachée ? Sans réponse, on la suppose visible. */
   hidden?(): boolean;
+  /** Ce film a-t-il déjà été confié au lecteur serveur ? Sans réponse, on suppose que non. */
+  handedOver?(itemId: string): boolean;
 }
 
 class Cancelled extends Error {}
@@ -143,6 +146,16 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
   };
   const full = config.depth === "full";
   const step = (text: string) => deps.progress(index, text);
+
+  // Confié au lecteur serveur — par une diffusion, ou parce que le lecteur natif n'a pas su porter
+  // ce fichier. Le pont n'existera pas, et l'attendre 45 s pour conclure « échec » dirait le
+  // contraire de ce qui s'est passé.
+  if (deps.handedOver?.(item.itemId)) {
+    checks.push({ id: "handed-over", verdict: "skip", detail: "confié au lecteur serveur : rien à mesurer ici" });
+    result.verdict = "skip";
+    result.elapsedMs = deps.now() - startedAt;
+    return result;
+  }
 
   const bridge = (): BenchBridge => {
     if (deps.cancelled()) throw new Cancelled();
@@ -716,6 +729,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
   }
   result.elapsedMs = deps.now() - startedAt;
   result.verdict = checks.reduce<Verdict>((acc, c) => (c.verdict === "skip" ? acc : worst(acc, c.verdict)), "ok");
+
   return result;
 }
 

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { FlaskConical, Square, CircleCheckBig, CircleAlert, CircleX, CircleMinus, X } from "lucide-react";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { useT } from "@/components/TranslationProvider";
-import { benchBridge } from "@/lib/playerBench/bridge";
+import { benchHandedOver, benchBridge } from "@/lib/playerBench/bridge";
 import {
   benchStore,
   benchAddResult,
@@ -75,6 +75,7 @@ function BenchRunner() {
         progress: benchProgress,
         cancelled: () => benchStore.get().cancelled,
         hidden: () => document.visibilityState === "hidden",
+        handedOver: benchHandedOver,
         report: (result) => {
           benchAddResult(result);
           post({ kind: "item", runId: config.runId, depth: config.depth, interactive: config.interactive, ...result });
@@ -201,7 +202,7 @@ function BenchResults({ results, elapsedMs }: { results: ItemResult[]; elapsedMs
         </div>
         <div className="overflow-y-auto p-4 text-xs">
           {results.map((r) => (
-            <details key={r.itemId + r.elapsedMs} className="mb-3 rounded-xl border border-white/10 bg-white/5" open={r.verdict !== "ok"}>
+            <details key={r.itemId + r.elapsedMs} className="mb-3 rounded-xl border border-white/10 bg-white/5" open={r.verdict !== "ok" && r.verdict !== "skip"}>
               <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm">
                 {ICONS[r.verdict]} <span className="min-w-0 truncate">{r.title}</span>
                 <span className="ml-auto shrink-0 text-xs text-slate-500">{r.path ?? "—"} · {Math.round(r.elapsedMs / 1000)} s</span>
