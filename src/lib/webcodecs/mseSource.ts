@@ -13,6 +13,7 @@ import { trace, traceRecent } from "./trace";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
+import { isWebKitEngine } from "../webkitEngine";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
@@ -106,6 +107,16 @@ const STALL_REPORT_COOLDOWN_MS = 60_000;
  * ligne `stall`, qui ne voit qu'une horloge immobile.
  */
 const RUNAWAY_REPORT_SECONDS = 3;
+
+/**
+ * Un saut dont la tête s'éloigne de plus que cela de sa cible, sans y être arrivée, est parti.
+ * Plus large que tout pas volontaire autour d'une cible (atterrissage, poussée), qui passe par
+ * `noteSeekTarget` et déplace la cible avec lui.
+ */
+const SEEK_RUNAWAY_SECONDS = 1.5;
+
+/** L'horloge arrêtée pour un saut sous WebKit ne le reste jamais plus longtemps que cela. */
+const CLOCK_HOLD_MAX_MS = 12_000;
 
 /** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
 const STALL_TRACE_MS = 20_000;
@@ -201,6 +212,17 @@ export class MseSource {
   /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
   private lastSeekTarget = -1;
   /**
+   * Le saut en cours, tant que la tête n'est pas arrivée à sa cible — voir `watchForSeekRunaway`.
+   */
+  private seekIntent: { target: number; since: number } | null = null;
+  /**
+   * L'horloge arrêtée le temps d'un saut, et la vitesse à lui rendre — voir `holdClock`. WebKit
+   * seulement : c'est là, et là seul, que l'horloge filait pendant un saut.
+   */
+  private clockHold: { rate: number; since: number } | null = null;
+  private readonly holdClockOnSeek =
+    typeof navigator !== "undefined" && isWebKitEngine(navigator.userAgent ?? "");
+  /**
    * Où le film doit s'ouvrir, tant que le média n'est pas encore là pour l'y recevoir.
    *
    * Voir `placePendingStart`. `null` dès que la tête y a été posée, et dès le départ pour une
@@ -281,6 +303,8 @@ export class MseSource {
         seek: (seconds, because) => this.seek(seconds, because),
         noteSeekTarget: (seconds) => {
           this.lastSeekTarget = seconds;
+          // Un pas volontaire autour de la cible la déplace : ce n'est pas un départ.
+          if (this.seekIntent) this.seekIntent.target = seconds;
         },
       },
       callbacks.onStarting
@@ -403,6 +427,7 @@ export class MseSource {
       // appended to, while the reader keeps grinding forward from wherever it was — which looks
       // exactly like the player decoding every frame up to the target before resuming.
       this.video.addEventListener("seeking", this.onSeeking);
+      this.video.addEventListener("seeked", this.onSeeked);
       this.video.addEventListener("pause", this.guard.paused);
       this.video.addEventListener("play", this.onPlay);
       this.video.addEventListener("playing", this.request);
@@ -469,6 +494,8 @@ export class MseSource {
   private readonly onSeeking = () => {
     if (this.destroyed) return;
     const target = this.video.currentTime;
+    this.seekIntent = { target, since: Date.now() };
+    this.holdClock();
     // This object's own move, already being served — serving it again would clear the buffers
     // it is in the middle of refilling.
     if (Math.abs(target - this.lastSeekTarget) < 0.25) return void this.fill();
@@ -989,10 +1016,82 @@ export class MseSource {
    * seeks to wherever the viewer actually is. It is checked on a timer precisely because the
    * failure mode is that no event comes.
    */
+  /**
+   * Arrivé : la tête est où le saut voulait qu'elle soit. L'horloge repart, et le saut n'est plus
+   * surveillé. Un `seeked` loin de la cible, lui, ne vaut pas arrivée — voir `watchForSeekRunaway`.
+   */
+  private readonly onSeeked = () => {
+    if (this.destroyed) return;
+    const intent = this.seekIntent;
+    if (intent && Math.abs(this.video.currentTime - intent.target) > SEEK_RUNAWAY_SECONDS) return;
+    this.seekIntent = null;
+    this.releaseClock("saut arrivé");
+  };
+
+  /**
+   * Sous WebKit, un saut se fait horloge arrêtée (vitesse 0), et elle repart à l'arrivée.
+   *
+   * Banc iPhone du 22/09/2026 : trois sauts sur huit films ne sont jamais arrivés, la tête partie
+   * de 20 à 650 s au-delà de sa cible — l'horloge de Safari courait pendant le saut, sans image,
+   * collée au bout de ce qui venait d'arriver. Les six cas étaient des sauts faits en lecture ; le
+   * saut fait en pause, lui, a été propre sur les huit films. La vitesse 0 arrête l'horloge sans
+   * mettre en pause : ni le bouton, ni la position retenue d'une pause ne bougent.
+   */
+  private holdClock(): void {
+    if (!this.holdClockOnSeek || this.clockHold || this.video.paused) return;
+    try {
+      this.clockHold = { rate: this.video.playbackRate || 1, since: Date.now() };
+      this.video.playbackRate = 0;
+    } catch {
+      this.clockHold = null;
+    }
+  }
+
+  private releaseClock(because: string): void {
+    const hold = this.clockHold;
+    if (!hold) return;
+    this.clockHold = null;
+    try {
+      // Seulement si personne n'a changé la vitesse entre-temps : un choix du spectateur passe avant.
+      if (this.video.playbackRate === 0) this.video.playbackRate = hold.rate;
+    } catch {
+      /* rien de plus à faire */
+    }
+    if (Date.now() - hold.since > 1000) trace(`horloge rendue après ${Date.now() - hold.since} ms (${because})`);
+  }
+
+  /**
+   * Un saut qui part ailleurs : la tête s'éloigne de sa cible sans y être arrivée.
+   *
+   * Aucune autre surveillance ne le voyait : l'élément se dit en train de sauter, ce qui écarte la
+   * détection de l'horloge sans média comme celle du blocage. Le saut est redemandé vers sa
+   * **cible**, pas vers l'endroit où la tête s'est enfuie, par l'échelle habituelle des reprises.
+   */
+  private watchForSeekRunaway(now: number): boolean {
+    const intent = this.seekIntent;
+    if (!intent || this.video.paused || this.requestedSeek !== null) return false;
+    if (Math.abs(now - intent.target) <= SEEK_RUNAWAY_SECONDS) return false;
+    this.seekIntent = null;
+    this.releaseClock("saut parti ailleurs");
+    trace(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne ${this.elementState()}`);
+    if (Date.now() - this.lastStallReportAt >= STALL_REPORT_COOLDOWN_MS) {
+      this.lastStallReportAt = Date.now();
+      try {
+        this.callbacks.onStall?.({ runaway: true, seekTarget: intent.target, ...this.stallReport(now, Date.now() - intent.since) });
+      } catch {
+        /* the log is not worth a player */
+      }
+    }
+    if (!this.recover(intent.target)) this.handOver(now);
+    return true;
+  }
+
   private readonly watchdog = () => {
     // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
     // underneath it would move the picture for no reason and land the resume elsewhere.
     if (this.destroyed) return;
+    // Une horloge arrêtée pour un saut ne le reste pas : si l'arrivée ne vient pas, elle repart.
+    if (this.clockHold && Date.now() - this.clockHold.since > CLOCK_HOLD_MAX_MS) this.releaseClock("délai dépassé");
     // Before anything returns early: a stall is exactly the case where every check below has
     // decided there is nothing to do, and that decision is what the log line has to show.
     this.watchForStall();
@@ -1001,6 +1100,9 @@ export class MseSource {
     if (this.ended || !this.videoBuffer || this.video.paused) return;
 
     const now = this.video.currentTime;
+    if (this.watchForSeekRunaway(now)) return;
+    // L'horloge est arrêtée exprès : ni figée, ni bloquée.
+    if (this.clockHold) return;
     // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
     // would be this player seeking against itself.
     if (this.requestedSeek !== null) return;
@@ -1055,7 +1157,7 @@ export class MseSource {
       }
     }
 
-    if (!running) {
+    if (!running || this.clockHold) {
       this.stallSince = null;
       return;
     }
@@ -1440,6 +1542,9 @@ export class MseSource {
     this.video.removeEventListener("timeupdate", this.request);
     this.video.removeEventListener("waiting", this.request);
     this.video.removeEventListener("seeking", this.onSeeking);
+    this.video.removeEventListener("seeked", this.onSeeked);
+    // L'élément sert au lecteur suivant : il ne doit pas hériter d'une horloge arrêtée.
+    this.releaseClock("lecteur fermé");
     this.video.removeEventListener("pause", this.guard.paused);
     this.video.removeEventListener("play", this.onPlay);
     this.video.removeEventListener("playing", this.request);

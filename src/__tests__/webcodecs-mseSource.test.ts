@@ -857,6 +857,129 @@ describe("MseSource", () => {
     mse.destroy();
   });
 
+  describe("sauts sous WebKit et sauts qui partent ailleurs (banc iPhone du 22/09/2026)", () => {
+    const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
+    const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+    const onBrowser = (ua: string) => vi.spyOn(navigator, "userAgent", "get").mockReturnValue(ua);
+    afterEach(() => vi.restoreAllMocks());
+    const withRate = (video: HTMLVideoElement) => Object.assign(video, { playbackRate: 1, seeking: false });
+
+    it("sous WebKit, arrête l'horloge pendant un saut et la rend à l'arrivée", async () => {
+      // Trois sauts sur huit films partis de 20 à 650 s au-delà de leur cible, horloge courant
+      // sans image — tous faits en lecture ; les sauts faits en pause ont tous été propres.
+      onBrowser(IPHONE);
+      const video = withRate(fakeVideo());
+      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+      await flush();
+
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      expect(video.playbackRate).toBe(0);
+      expect(video.paused).toBe(false);
+      video.dispatchEvent(new Event("seeked"));
+      expect(video.playbackRate).toBe(1);
+
+      // Une vitesse choisie pendant le saut n'est pas écrasée à l'arrivée.
+      video.dispatchEvent(new Event("seeking"));
+      video.playbackRate = 1.5;
+      video.dispatchEvent(new Event("seeked"));
+      expect(video.playbackRate).toBe(1.5);
+
+      // Et un lecteur fermé en plein saut ne laisse pas l'élément à l'arrêt.
+      video.playbackRate = 1;
+      video.dispatchEvent(new Event("seeking"));
+      mse.destroy();
+      expect(video.playbackRate).toBe(1);
+    });
+
+    it("ne touche pas à l'horloge ailleurs que sous WebKit, ni en pause", async () => {
+      onBrowser(CHROME);
+      const video = withRate(fakeVideo());
+      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+      await flush();
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      expect(video.playbackRate).toBe(1);
+      mse.destroy();
+
+      onBrowser(IPHONE);
+      const paused = withRate(fakeVideo());
+      const other = await MseSource.attach(paused, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+      await flush();
+      (paused as unknown as { paused: boolean }).paused = true;
+      paused.dispatchEvent(new Event("seeking"));
+      expect(paused.playbackRate).toBe(1);
+      other.destroy();
+    });
+
+    it("rend l'horloge d'elle-même si l'arrivée ne vient pas", async () => {
+      onBrowser(IPHONE);
+      const video = withRate(fakeVideo());
+      const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await flush();
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        (video as unknown as { currentTime: number }).currentTime = 5;
+        video.dispatchEvent(new Event("seeking"));
+        expect(video.playbackRate).toBe(0);
+        vi.setSystemTime(Date.now() + 13_000);
+        internals.watchdog();
+        expect(video.playbackRate).toBe(1);
+      } finally {
+        vi.useRealTimers();
+        mse.destroy();
+      }
+    });
+
+    it("redemande la cible d'un saut dont la tête part ailleurs, et l'écrit", async () => {
+      onBrowser(CHROME);
+      const video = withRate(fakeVideo());
+      const remuxer = fakeRemuxer(200);
+      const onStall = vi.fn();
+      const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onStall });
+      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 20, "du média devant la tête");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      const seeksBefore = remuxer.seeks.length;
+
+      // Un saut vers 5 s, dans ce qui est déjà là…
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      // …et la tête file à 20 s sans être jamais arrivée.
+      (video as unknown as { currentTime: number }).currentTime = 20;
+      internals.watchdog();
+      await flush();
+
+      expect(remuxer.seeks.length).toBe(seeksBefore + 1);
+      expect(remuxer.seeks.at(-1)).toBeCloseTo(5 - 0.2, 1);
+      expect(onStall).toHaveBeenCalledWith(expect.objectContaining({ runaway: true, seekTarget: 5 }));
+      expect(traceText()).toContain("saut parti ailleurs");
+      mse.destroy();
+    });
+
+    it("laisse jouer un saut arrivé : la tête qui avance ensuite n'est pas un départ", async () => {
+      onBrowser(CHROME);
+      const video = withRate(fakeVideo());
+      const remuxer = fakeRemuxer(200);
+      const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 20, "du média devant la tête");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      const seeksBefore = remuxer.seeks.length;
+
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      video.dispatchEvent(new Event("seeked"));
+      (video as unknown as { currentTime: number }).currentTime = 9;
+      internals.watchdog();
+      await flush();
+      expect(remuxer.seeks.length).toBe(seeksBefore);
+      mse.destroy();
+    });
+  });
+
   it("keeps a playable amount of media even while the system says it wants none", async () => {
     const video = fakeVideo();
     class NeverStreaming extends FakeSource {
