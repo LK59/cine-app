@@ -2348,7 +2348,10 @@ export function ExperimentalPlayerHost({
                       writeHdrCapChoice(choice);
                       setHdrCapChoice(choice);
                       // Le plafond est écrit dans l'en-tête du flux : il faut le reconstruire,
-                      // à la même position, comme pour un changement de piste.
+                      // à la même position, comme pour un changement de piste — pause et image
+                      // figée comprises : sans elles, un film à l'arrêt repartait sur un écran noir.
+                      keepPausedRef.current = videoElRef.current?.paused ?? false;
+                      setFrozen(freezeFrame());
                       restart(intendedPosition(), `plafond HDR ${choice}`);
                     },
                   }

@@ -1424,6 +1424,31 @@ describe("relu le 22/09/2026", () => {
     vi.restoreAllMocks();
   });
 
+  it("garde la pause quand on change la luminosité HDR d'un film à l'arrêt", async () => {
+    // Chasse aux bugs du 22/09/2026 : changer le plafond reconstruisait le lecteur sans dire que le
+    // film était en pause — il repartait tout seul, sur un écran passé au noir.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+    onScreen(CHROME_WINDOWS, false);
+    swr = { data: info(HDR_FILM), error: undefined };
+    mount();
+    await waitFor(() => expect(screen.getByText("hdr:auto:203")).toBeTruthy());
+    const element = videoElement(420);
+    Object.defineProperty(element, "paused", { value: true, configurable: true });
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+
+    rebuildOn(1);
+    await act(async () => void fireEvent.click(screen.getByText("hdr:auto:203")));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1]).toMatchObject({ startPaused: true });
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("ne propose pas la luminosité HDR sous WebKit ni sur un écran HDR", async () => {
     swr = { data: info(HDR_FILM), error: undefined };
     onScreen("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1", false);
