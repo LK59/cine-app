@@ -74,6 +74,11 @@ describe("landingFor — un seul atterrissage pour l'ouverture et le saut", () =
     expect(landingFor(ranges([600.3, 600.32]), 600, 15)).toBe(600.3);
   });
 
+  it("ignore une plage vide", async () => {
+    const { landingFor } = await import("@/lib/webcodecs/seekLifecycle");
+    expect(landingFor(ranges([600.2, 600.2], [601, 620]), 600, 15)).toBeCloseTo(601.04, 5);
+  });
+
   it("ne va pas chercher au-delà de sa portée, ni en arrière", async () => {
     const { landingFor } = await import("@/lib/webcodecs/seekLifecycle");
     expect(landingFor(ranges([640, 660]), 600, 15)).toBeNull();

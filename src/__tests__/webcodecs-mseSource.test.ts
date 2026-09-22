@@ -1039,6 +1039,24 @@ describe("MseSource", () => {
     });
   });
 
+  it("ne signale pas une seconde erreur après avoir passé la main à l'hôte", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError });
+    await flush();
+    const internals = mse as unknown as { handOver: (at: number) => void; recover: () => boolean; seek: (t: number) => Promise<void>; performSeek: () => Promise<void> };
+    internals.handOver(12);
+    expect(onError).toHaveBeenCalledTimes(1);
+    internals.recover = () => false;
+    internals.performSeek = async () => {
+      throw new Error("refusé");
+    };
+    await internals.seek(40);
+    await flush();
+    expect(onError).toHaveBeenCalledTimes(1);
+    mse.destroy();
+  });
+
   it("keeps a playable amount of media even while the system says it wants none", async () => {
     const video = fakeVideo();
     class NeverStreaming extends FakeSource {

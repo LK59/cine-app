@@ -119,6 +119,8 @@ export function landingFor(ranges: TimeRanges, target: number, reach: number): n
   let start: number | null = null;
   let end = 0;
   for (let i = 0; i < ranges.length; i++) {
+    // Une plage vide n'a rien où poser la tête — et y atterrir, c'est le bord exact.
+    if (ranges.end(i) <= ranges.start(i)) continue;
     if (ranges.start(i) <= target && target < ranges.end(i)) return target;
     if (ranges.start(i) > target && (start === null || ranges.start(i) < start)) {
       start = ranges.start(i);

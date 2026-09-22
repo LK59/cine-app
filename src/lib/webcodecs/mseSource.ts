@@ -764,6 +764,9 @@ export class MseSource {
         trace(`segment refusé, repris — ${this.elementState()}`);
         return;
       }
+      // Déjà passée à l'hôte (`handOver`), qui reconstruit : une seconde erreur lancerait une
+      // seconde reconstruction par-dessus la première.
+      if (this.stuck) return;
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       this.callbacks.onError(`${detail} ${this.elementState()}`, isNetworkFailure(error) ? "network" : "playback");
     }
@@ -876,6 +879,7 @@ export class MseSource {
           trace(`saut refusé, repris — ${detail}`);
           return;
         }
+        if (this.stuck) return;
         this.callbacks.onError(`${detail} ${this.elementState()}`, isNetworkFailure(error) ? "network" : "playback");
       });
     return this.pending;
