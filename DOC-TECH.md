@@ -746,6 +746,33 @@ original defects lived.
 
 ---
 
+## Device test bench
+
+The benches above prove what the remuxer *produces*; they cannot say what a given browser does with
+it. The device bench does: an administrator starts it from the cinema's Account panel, on the phone
+or computer to be tested, and it plays real films through the real player while measuring.
+
+- **Driven, not simulated.** When a session carries `bench` (`PlaybackSession.bench`), the native
+  player registers a bridge (`src/lib/playerBench/bridge.ts`). Seeks go through the same
+  `noteSeekRequest` + `currentTime` pair as the controls, track changes through the same
+  `changeAudioTrack` as the menu. Bench sessions report nothing to Jellyfin (a bench seeks to the
+  end of films, which would mark them watched), and every `player.log` line they cause carries
+  `bench: <run id>`.
+- **Which films.** `/api/player/bench/plan` reads `player.log`: the files that stalled, erred, fell
+  back or seeked slowly first, then enough to cover Dolby Vision, HDR10, SDR, MP4, 4K and an episode.
+  No title is written in the code.
+- **What is measured** (`measure.ts`, pure and tested): the film clock against wall time and against
+  presented frames (`getVideoPlaybackQuality`), sampled every 250 ms. That reads a frozen clock, a
+  clock running with no picture, an unrequested jump, and a clock running fast.
+- **Scenarios** (`runner.ts`): opening; playback; seeks (far forward, −10 s, +30 s, seeded random
+  positions, far back, near the end, back again); a burst of five seeks in 0.6 s; pause and resume;
+  a seek while paused; each other audio track; a seek immediately followed by a track change; a
+  track change while paused; subtitles; 30 s of continuous playback. The quick depth keeps a subset.
+- **Questions.** Optional yes/no prompts for what cannot be measured: sync, picture after a seek,
+  language after a switch, subtitle timing, picture quality.
+- **Results.** One line per film in `data/logs/bench.log` (admin-only routes), each failure with the
+  player's own trace; the Account panel lists recent runs.
+
 ## Known limitations
 
 | Limitation | Detail |

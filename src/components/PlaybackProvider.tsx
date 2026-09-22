@@ -44,6 +44,14 @@ export interface PlaybackSession {
    *  minor tradeoff: the "next episode" prompt just won't reappear for that session until the
    *  user navigates away and back, no crash either way. */
   getNextEpisode?: (currentItemId: string) => { itemId: string; title: string } | null;
+  /**
+   * L'identifiant d'une série du banc d'essai, quand c'est lui qui a ouvert le film.
+   *
+   * Trois effets, et seulement ceux-là : le lecteur expose son pont (`playerBench/bridge.ts`), ses
+   * lignes au journal portent `bench`, et rien n'est rapporté à Jellyfin — un banc saute à la fin
+   * des films, et chacun d'eux aurait été marqué vu, avec une reprise au milieu de nulle part.
+   */
+  bench?: string;
 }
 
 // WebKit-only workaround (see the long comment in PlayerHost's changeAudio) for a reproducible

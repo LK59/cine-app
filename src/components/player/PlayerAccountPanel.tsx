@@ -14,6 +14,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { BenchSection } from "./BenchSection";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
 import { openOnboarding } from "./onboardingEvents";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
@@ -86,6 +87,7 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
         <KnownIssuesSection />
 
         {me?.role === "admin" && <MaintenanceSection />}
+        {me?.role === "admin" && <BenchSection />}
 
         {/* « Gestion » vivait tout en bas du tiroir, qui n'existe plus. Elle atterrit ici, et
             seulement pour l'administrateur : rien n'est bloqué au-delà de l'affichage — le proxy

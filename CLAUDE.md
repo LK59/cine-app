@@ -85,6 +85,9 @@ the boundary around the root player made a film vanish without a word. The same 
 to be sent — declared from the start, emitted by nothing: 444 `start` and not one `stop`, so a
 film watched to the end and one abandoned after thirty seconds read the same. Both files are one
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`), and read with `tail`/`jq`.
+`data/logs/bench.log` holds the device test bench's results — one line per film, failures with the
+player's trace — started by an administrator from the cinema's Account panel (DOC-TECH "Device test
+bench"). Its `player.log` lines carry `bench`.
 
 ## Architecture
 

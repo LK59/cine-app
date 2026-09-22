@@ -43,6 +43,7 @@ import {
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
+import { registerBenchBridge } from "@/lib/playerBench/bridge";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -965,8 +966,10 @@ export function ExperimentalPlayerHost({
       video: `${info?.video?.codec ?? "?"} ${info?.video?.width ?? "?"}x${info?.video?.height ?? "?"} ${info?.video?.bitDepth ?? "?"}bit`,
       range: info?.video?.rangeType ?? "SDR",
       agent: typeof navigator === "undefined" ? "?" : navigator.userAgent,
+      // Les lignes écrites pendant un banc d'essai, reconnaissables — voir `PlaybackSession.bench`.
+      ...(session.bench ? { bench: session.bench } : {}),
     }),
-    [itemId, info, openedAs]
+    [itemId, info, openedAs, session.bench]
   );
 
   useEffect(() => {
@@ -1059,7 +1062,8 @@ export function ExperimentalPlayerHost({
     // progress still has to be reported, or resume points would stop updating for this player.
     // It announces its own start for the same reason: nothing else tells the server this film is
     // being watched, so without it the reports described a session Jellyfin had never heard of.
-    announced
+    // Rien pour le banc d'essai : il saute jusqu'à la fin des films, qui seraient tous marqués vus.
+    announced && !session.bench
       ? {
           itemId,
           playSessionId: `cine-engine-${itemId}`,
@@ -1805,8 +1809,6 @@ export function ExperimentalPlayerHost({
     running: ready && !error,
   };
 
-  if (typeof document === "undefined") return null;
-
   const style: React.CSSProperties = isMini
     ? {
         position: "fixed",
@@ -1837,6 +1839,160 @@ export function ExperimentalPlayerHost({
         // pas assez pour que ça ressemble à un effet.
         transform: revealed && !closing ? "scale(1)" : "scale(0.985)",
       };
+
+  /**
+   * Un saut demandé depuis les commandes — ou depuis le banc d'essai, qui passe par ici pour que
+   * ce qu'il mesure soit ce que vit le spectateur.
+   */
+  const noteSeekRequest = (seconds: number) => {
+    requestedSeekRef.current = seconds;
+    // Mesuré jusqu'à l'arrivée (`seeked`). Un saut qui en remplace un autre en cours
+    // remplace aussi sa mesure : c'est le dernier geste qui compte.
+    const element = videoElRef.current;
+    let buffered = false;
+    for (let i = 0; element && i < element.buffered.length; i++) {
+      if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
+    }
+    reportUnarrivedSeek(element?.currentTime ?? positionRef.current);
+    seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), buffered };
+    // Une reconstruction pas encore ouverte rouvre directement là.
+    if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
+  };
+
+  /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */
+  const changeAudioTrack = (id: number) => {
+    // Une piste que ce chemin ne portera jamais n'est pas un échec à signaler : c'est
+    // un fichier pour le lecteur qui, lui, sait la porter. La question est posée avant
+    // que le menu bouge et avant qu'un seul tampon soit touché — voir `canCarryAudio`.
+    // Le spectateur qui demande la VO obtient la VO, au lieu d'un bandeau lui disant
+    // que sa langue est indisponible.
+    if (path === "remux" && remuxRef.current?.canCarryAudio(id) === false) {
+      const wanted = tracks.audio.find((track) => track.number === id);
+      fallToStable(`la piste ${wanted?.codecId ?? "demandée"} ne peut pas être portée ici`, {
+        ...takeoverNow(),
+        // La piste *demandée*, et non celle qui joue : c'est elle qu'on va chercher.
+        audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, id),
+      });
+      return;
+    }
+    if (path === "remux") {
+      const playback = remuxRef.current;
+      if (!playback) {
+        // Entre deux pipelines (une reconstruction en cours) : retenue, et celui qui
+        // s'ouvre la rejoint dès qu'il est prêt — voir `startRemux`.
+        wantedAudioRef.current = id;
+        setCurrentAudio(id);
+        return;
+      }
+      // Tout changement de piste reconstruit le lecteur à la même position, directement
+      // sur la nouvelle piste — le mécanisme qui le relève déjà d'une coupure. Voir
+      // `requestAudioTrack` pour pourquoi il n'y a plus d'autre façon de changer.
+      const request = playback.requestAudioTrack(id);
+      if (request === "refused") {
+        // Fichier sans index, en cours de film : l'avertissement est déjà affiché, la
+        // piste d'avant continue et le menu reste sur elle.
+        reportAudioSwitch(playback.currentAudioTrack, playback.diagnostics["Audio"] ?? "", id, Date.now(), playback, "refus");
+        return;
+      }
+      if (request !== "rebuild") return;
+      pendingSwitchRef.current = {
+        from: playback.currentAudioTrack ?? null,
+        fromLabel: playback.diagnostics["Audio"] ?? "",
+        to: id,
+        startedAt: Date.now(),
+      };
+      // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
+      // la lecture.
+      keepPausedRef.current = videoElRef.current?.paused ?? false;
+      wantedAudioRef.current = id;
+      setCurrentAudio(id);
+      setFrozen(freezeFrame());
+      // Là où le spectateur a demandé d'être, pas seulement là où il en était : un saut
+      // encore en chargement n'a pas encore déplacé la position lue.
+      restart(intendedPosition(), `piste ${id} — reconstruction sur elle`);
+      return;
+    }
+    setCurrentAudio(id);
+    // Retenu comme sur l'autre chemin, pour qu'une reconstruction rouvre sur elle.
+    wantedAudioRef.current = id;
+    void engineRef.current?.setAudioTrack(id).catch(() => {});
+    };
+
+  /**
+   * Le banc d'essai — voir `playerBench/bridge.ts`. Ce qu'il lit est recopié ici à chaque rendu,
+   * par un effet et non pendant le rendu ; le pont lui-même n'est posé qu'une fois par séance.
+   */
+  const benchStateRef = useRef<{
+    seek: (seconds: number) => void;
+    changeAudio: (id: number) => void;
+    changeSubtitle: (id: number | null) => void;
+    ready: boolean;
+    path: string | null;
+    error: string | null;
+    audio: { id: number; label: string }[];
+    subtitles: { id: number; label: string }[];
+    currentAudio: number | null;
+    currentSubtitle: number | null;
+    subtitle: string | null;
+  } | null>(null);
+  useEffect(() => {
+    benchStateRef.current = {
+      seek: noteSeekRequest,
+      changeAudio: changeAudioTrack,
+      changeSubtitle: (id) => chooseSubtitle(id, info?.externalSubtitles ?? []),
+      ready,
+      path,
+      error: runtimeError ?? (networkLost ? "connexion perdue" : null),
+      audio: tracks.audio.map((track) => ({ id: track.number, label: audioLabels.get(track.number) ?? String(track.number) })),
+      subtitles: subtitleChoices.map((track) => ({ id: track.number, label: subtitleLabels.get(track.number) ?? String(track.number) })),
+      currentAudio,
+      currentSubtitle,
+      subtitle,
+    };
+  });
+  useEffect(() => {
+    if (!session.bench) return;
+    const state = () => benchStateRef.current;
+    const media = () => (facadeRef.current as unknown as HTMLVideoElement | null) ?? videoElRef.current;
+    return registerBenchBridge({
+      itemId,
+      media,
+      path: () => state()?.path ?? null,
+      ready: () => state()?.ready ?? false,
+      error: () => state()?.error ?? null,
+      duration: () => {
+        const d = media()?.duration ?? 0;
+        return Number.isFinite(d) ? d : 0;
+      },
+      // Comme les commandes : le signal d'abord, puis l'élément (voir `commitSeek`).
+      seek: (seconds) => {
+        state()?.seek(seconds);
+        const element = media();
+        if (element) element.currentTime = seconds;
+      },
+      audioTracks: () => state()?.audio ?? [],
+      currentAudio: () => state()?.currentAudio ?? null,
+      changeAudio: (id) => state()?.changeAudio(id),
+      subtitleTracks: () => state()?.subtitles ?? [],
+      currentSubtitle: () => state()?.currentSubtitle ?? null,
+      changeSubtitle: (id) => state()?.changeSubtitle(id),
+      subtitleText: () => state()?.subtitle ?? null,
+      frames: () => {
+        if (facadeRef.current) return null;
+        try {
+          return videoElRef.current?.getVideoPlaybackQuality?.().totalVideoFrames ?? null;
+        } catch {
+          return null;
+        }
+      },
+      trace: (ms) => traceRecent(ms).join(" | "),
+      facts: () => syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
+    });
+  }, [session.bench, itemId]);
+
+  // Après tous les hooks : le banc d'essai en a ajouté trois au-dessus, et un retour anticipé
+  // avant eux en changeait le nombre d'un rendu à l'autre.
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
@@ -2079,20 +2235,7 @@ export function ExperimentalPlayerHost({
             // On the remux path this is a real media element, so seeking, volume and rate are the
             // browser's own; the facade exists only to give the canvas pipeline the same shape.
             videoRef={onElement ? videoElRef : facadeRefObject}
-            onSeekRequest={(seconds) => {
-              requestedSeekRef.current = seconds;
-              // Mesuré jusqu'à l'arrivée (`seeked`). Un saut qui en remplace un autre en cours
-              // remplace aussi sa mesure : c'est le dernier geste qui compte.
-              const element = videoElRef.current;
-              let buffered = false;
-              for (let i = 0; element && i < element.buffered.length; i++) {
-                if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
-              }
-              reportUnarrivedSeek(element?.currentTime ?? positionRef.current);
-              seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), buffered };
-              // Une reconstruction pas encore ouverte rouvre directement là.
-              if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
-            }}
+            onSeekRequest={noteSeekRequest}
             containerRef={containerRef}
             itemId={itemId}
             title={title}
@@ -2119,63 +2262,7 @@ export function ExperimentalPlayerHost({
                 : () => fallToStable("diffusion demandée", { ...takeoverNow(), cast: true })
             }
             currentAudioId={currentAudio}
-            onChangeAudio={(id) => {
-              // Une piste que ce chemin ne portera jamais n'est pas un échec à signaler : c'est
-              // un fichier pour le lecteur qui, lui, sait la porter. La question est posée avant
-              // que le menu bouge et avant qu'un seul tampon soit touché — voir `canCarryAudio`.
-              // Le spectateur qui demande la VO obtient la VO, au lieu d'un bandeau lui disant
-              // que sa langue est indisponible.
-              if (path === "remux" && remuxRef.current?.canCarryAudio(id) === false) {
-                const wanted = tracks.audio.find((track) => track.number === id);
-                fallToStable(`la piste ${wanted?.codecId ?? "demandée"} ne peut pas être portée ici`, {
-                  ...takeoverNow(),
-                  // La piste *demandée*, et non celle qui joue : c'est elle qu'on va chercher.
-                  audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, id),
-                });
-                return;
-              }
-              if (path === "remux") {
-                const playback = remuxRef.current;
-                if (!playback) {
-                  // Entre deux pipelines (une reconstruction en cours) : retenue, et celui qui
-                  // s'ouvre la rejoint dès qu'il est prêt — voir `startRemux`.
-                  wantedAudioRef.current = id;
-                  setCurrentAudio(id);
-                  return;
-                }
-                // Tout changement de piste reconstruit le lecteur à la même position, directement
-                // sur la nouvelle piste — le mécanisme qui le relève déjà d'une coupure. Voir
-                // `requestAudioTrack` pour pourquoi il n'y a plus d'autre façon de changer.
-                const request = playback.requestAudioTrack(id);
-                if (request === "refused") {
-                  // Fichier sans index, en cours de film : l'avertissement est déjà affiché, la
-                  // piste d'avant continue et le menu reste sur elle.
-                  reportAudioSwitch(playback.currentAudioTrack, playback.diagnostics["Audio"] ?? "", id, Date.now(), playback, "refus");
-                  return;
-                }
-                if (request !== "rebuild") return;
-                pendingSwitchRef.current = {
-                  from: playback.currentAudioTrack ?? null,
-                  fromLabel: playback.diagnostics["Audio"] ?? "",
-                  to: id,
-                  startedAt: Date.now(),
-                };
-                // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
-                // la lecture.
-                keepPausedRef.current = videoElRef.current?.paused ?? false;
-                wantedAudioRef.current = id;
-                setCurrentAudio(id);
-                setFrozen(freezeFrame());
-                // Là où le spectateur a demandé d'être, pas seulement là où il en était : un saut
-                // encore en chargement n'a pas encore déplacé la position lue.
-                restart(intendedPosition(), `piste ${id} — reconstruction sur elle`);
-                return;
-              }
-              setCurrentAudio(id);
-              // Retenu comme sur l'autre chemin, pour qu'une reconstruction rouvre sur elle.
-              wantedAudioRef.current = id;
-              void engineRef.current?.setAudioTrack(id).catch(() => {});
-            }}
+            onChangeAudio={changeAudioTrack}
             subtitleTracks={subtitleChoices.map((track) => ({
               id: track.number,
               label: subtitleLabels.get(track.number) ?? String(track.number),

@@ -65,7 +65,7 @@ describe("logPlaybackEvent", () => {
     const written = lines()[0];
     expect(written.reason.length).toBe(500);
     // Three of its own keys, plus what a caller is allowed to add.
-    expect(Object.keys(written).length).toBeLessThanOrEqual(27);
+    expect(Object.keys(written).length).toBeLessThanOrEqual(31);
   });
 
   it("laisse de côté ce qui n'est ni texte, ni nombre, ni booléen", async () => {
@@ -156,12 +156,13 @@ describe("l'événement d'un blocage de lecture", () => {
     expect(isPlayerEventKind("stall")).toBe(true);
 
     // Ce que l'hôte envoie : la description du fichier (six champs), le chemin, et le relevé de
-    // la source. Le tout doit tenir sous le plafond de 24 champs de `clean()`, sinon les derniers
-    // — la trace en tête — disparaîtraient sans un mot.
+    // la source — et, pendant un banc d'essai, `bench` et `runaway` en plus. Le tout doit tenir
+    // sous le plafond de champs de `clean()`, sinon les derniers — la trace en tête —
+    // disparaîtraient sans un mot.
     const steps = Array.from({ length: 40 }, (_, i) => `+${i * 400} ms étape ${i}`).join(" | ");
     logPlaybackEvent("louis", "stall", {
-      itemId: "x", title: "t", container: "mkv", video: "hevc", range: "SDR", agent: "a", path: "remux",
-      position: 166.4, stalledMs: 5250, readyState: 2, networkState: 2, seeking: false, source: "open",
+      itemId: "x", title: "t", container: "mkv", video: "hevc", range: "SDR", agent: "a", bench: "banc-x", path: "remux",
+      runaway: true, position: 166.4, stalledMs: 5250, readyState: 2, networkState: 2, seeking: false, source: "open",
       videoBuffered: "150.00–196.00", audioBuffered: "150.00–195.50", lead: 29.6, filling: false,
       recoveryStreak: 2, frozenNudges: 3, recoveries: 5, sinceAppendMs: 4100, streaming: true, steps,
     });

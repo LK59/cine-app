@@ -29,6 +29,7 @@ import { PlaybackProvider } from "@/components/PlaybackProvider";
 import { LOCALES, LOCALE_COOKIE, loadLocaleDict, type Locale } from "@/lib/i18n";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PlayerHostLazy } from "@/components/PlayerHostLazy";
+import { BenchGate } from "@/components/player/BenchRunner";
 import { MaintenanceNotices } from "@/components/MaintenanceNotices";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientErrorListener } from "@/components/ClientErrorListener";
@@ -187,6 +188,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       point de l'arbre qui les a tous les deux. */}
                   <ErrorBoundary name="notices-maintenance">
                     <MaintenanceNotices />
+                  </ErrorBoundary>
+                  {/* Le banc d'essai du lecteur : rien tant qu'un administrateur ne l'a pas lancé
+                      depuis son panneau Compte. Il ouvre et ferme les films par `PlaybackProvider`. */}
+                  <ErrorBoundary name="banc-essai">
+                    <BenchGate />
                   </ErrorBoundary>
                 </PlaybackProvider>
               </ToastProvider>

@@ -54,7 +54,9 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
   const out: Record<string, string | number | boolean> = {};
   let kept = 0;
   const keep = (key: string, value: unknown): void => {
-    if (kept >= 24 || key.length > 40) return;
+    // 28 : le banc d'essai ajoute `bench` en tête des lignes, et une ligne `stall` en portait déjà
+    // 24 — la dernière, `steps`, la plus précieuse, serait tombée.
+    if (kept >= 28 || key.length > 40) return;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the
