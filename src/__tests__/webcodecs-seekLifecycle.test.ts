@@ -1,0 +1,42 @@
+import { describe, it, expect } from "vitest";
+import { SeekLifecycle } from "@/lib/webcodecs/seekLifecycle";
+
+// L'état d'un saut, réuni le 22/09/2026 : ses transitions, sans lecteur autour.
+describe("SeekLifecycle", () => {
+  it("garde la dernière demande d'une rafale, et ne l'oublie qu'une fois servie", () => {
+    const seek = new SeekLifecycle();
+    seek.request(300);
+    seek.request(900);
+    expect(seek.requested).toBe(900);
+    seek.served(300);
+    expect(seek.requested).toBe(900);
+    seek.served(900);
+    expect(seek.requested).toBeNull();
+  });
+
+  it("reconnaît ses propres déplacements, à un quart de seconde près", () => {
+    const seek = new SeekLifecycle();
+    seek.serving(600);
+    expect(seek.isOwnMove(600.2)).toBe(true);
+    expect(seek.isOwnMove(601)).toBe(false);
+  });
+
+  it("n'arrive qu'à sa cible, et suit un pas volontaire de la source", () => {
+    const seek = new SeekLifecycle();
+    seek.started(600, 0);
+    expect(seek.pending).toBe(true);
+    expect(seek.arrive(612)).toBe(false);
+    // L'atterrissage l'a posée sur le premier média, douze secondes plus loin.
+    seek.moved(612);
+    expect(seek.arrive(612)).toBe(true);
+    expect(seek.pending).toBe(false);
+  });
+
+  it("se laisse abandonner quand la tête est partie ailleurs", () => {
+    const seek = new SeekLifecycle();
+    seek.started(600, 0);
+    seek.drop();
+    expect(seek.intent).toBeNull();
+    expect(seek.pending).toBe(false);
+  });
+});

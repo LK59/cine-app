@@ -788,6 +788,35 @@ original defects lived.
 
 ---
 
+## Seek lifecycle
+
+A seek's state lives in one object, `SeekLifecycle` (`src/lib/webcodecs/seekLifecycle.ts`), owned by
+`MseSource`: *requested* (a burst keeps only the last), *serving* (the target the source is serving,
+used to recognise its own `seeking` events), *in flight* (from `seeking` until the playhead reaches
+the target), *arrived*. Its two rules are written once in `seekArrival.ts` and shared by the source,
+the host and the bench: arrived means within 1.5 s of the target (`seekArrived`), and a file with no
+index can only be reached near its start (`reachable`).
+
+- **A deliberate step around the target moves the target with it** (`moved`): landing on the first
+  media, a frozen-clock nudge, a re-asserted pause position. None of these is a departure.
+- **One detector for a playhead out of place** (`watchForHeadAway`). During a seek, the playhead
+  moving away from its target sends it back to the *target*. After arrival, a clock running three
+  seconds with no media under the playhead resumes from where it is. Both go through the recovery
+  ladder. When the ladder is exhausted, `handOver` keeps the position the host rebuilds from, which
+  is the target and not wherever the playhead ran to.
+- **Any deliberate move tells the pause guard**, including a step within what is already buffered.
+  A forward seek made while paused was pulled back to the pause position on resume.
+- **The host forgets the target it asked for** once the source says the seek is over
+  (`seekPending`), even if the playhead landed elsewhere. A seek replaced by the next one is logged
+  as `superseded`, and as `arrived` if it was at its target.
+- **WebKit clock hold** (`MseSource.holdClockDuringSeek`) is **off**. It stopped the clock with
+  `playbackRate = 0` during a seek. Safari still moved a playhead back to its old position with the
+  clock held, and the hold silenced the frozen-clock and stall watches. Safari also never fires
+  `requestVideoFrameCallback` at rate 0, so "release on the first picture" cannot work.
+- **Not merged yet:** the two landings, `placePendingStart` at open and `nudgeIntoBuffer` after a
+  seek. They differ in tolerance (1 s against 15 s) and in inset. Merging them touches opening on
+  iPhone, so it is left for a separate change.
+
 ## Device test bench
 
 The benches above prove what the remuxer *produces*; they cannot say what a given browser does with

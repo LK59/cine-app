@@ -15,6 +15,7 @@ import { BufferQueue } from "./bufferQueue";
 import { PlaybackGuard } from "./playbackGuard";
 import { isWebKitEngine } from "../webkitEngine";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
+import { SeekLifecycle } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
@@ -204,15 +205,9 @@ export class MseSource {
   /** Bumped by every seek, so appends already in flight are recognised as stale and dropped. */
   private generation = 0;
   private pending: Promise<void> = Promise.resolve();
-  /** The most recent seek asked for. Dragging a scrub bar asks for dozens; only the last matters. */
-  private requestedSeek: number | null = null;
+  /** Le saut : demandé, servi, en route, arrivé — voir `SeekLifecycle`. */
+  private readonly seekState = new SeekLifecycle();
   private delaySeconds = 0;
-  /** Where the last seek this object performed landed, so its own `seeking` event is not re-served. */
-  private lastSeekTarget = -1;
-  /**
-   * Le saut en cours, tant que la tête n'est pas arrivée à sa cible — voir `watchForHeadAway`.
-   */
-  private seekIntent: { target: number; since: number } | null = null;
   /**
    * L'horloge arrêtée le temps d'un saut, et la vitesse à lui rendre — voir `holdClock`. WebKit
    * seulement : c'est là, et là seul, que l'horloge filait pendant un saut.
@@ -317,9 +312,8 @@ export class MseSource {
         },
         seek: (seconds, because) => this.seek(seconds, because),
         noteSeekTarget: (seconds) => {
-          this.lastSeekTarget = seconds;
           // Un pas volontaire autour de la cible la déplace : ce n'est pas un départ.
-          if (this.seekIntent) this.seekIntent.target = seconds;
+          this.seekState.moved(seconds);
         },
       },
       callbacks.onStarting
@@ -419,7 +413,7 @@ export class MseSource {
       // et c'est toute la différence.
       if (startSeconds > NO_INDEX_REACH_SECONDS && reachable(this.remuxer.seekable, startSeconds)) {
         this.remuxer.seekTo(startSeconds);
-        this.lastSeekTarget = startSeconds;
+        this.seekState.moved(startSeconds);
         this.pendingStart = startSeconds;
       }
       // Opening a film is a request to be somewhere, and it is about to be answered with media
@@ -515,11 +509,11 @@ export class MseSource {
   private readonly onSeeking = () => {
     if (this.destroyed) return;
     const target = this.video.currentTime;
-    this.seekIntent = { target, since: Date.now() };
+    this.seekState.started(target, Date.now());
     this.holdClock();
     // This object's own move, already being served — serving it again would clear the buffers
     // it is in the middle of refilling.
-    if (Math.abs(target - this.lastSeekTarget) < 0.25) return void this.fill();
+    if (this.seekState.isOwnMove(target)) return void this.fill();
     // A deliberate move settles the question of where playback belongs — et c'est vrai aussi d'un
     // saut dans ce qui est déjà chargé. Oublié sur ce raccourci jusqu'au 22/09/2026 : pause, saut
     // en avant, Lecture, et la garde ramenait la tête à sa position de pause.
@@ -643,7 +637,7 @@ export class MseSource {
         if (lead >= MIN_BUFFER_SECONDS && !this.streamingWanted) break;
         // A seek is waiting. Reading thirty more seconds of a place the viewer has already left
         // is what makes a second seek feel like it does nothing for several seconds.
-        if (this.requestedSeek !== null) break;
+        if (this.seekState.requested !== null) break;
 
         const segment = await this.remuxer.nextSegment();
         if (this.generation !== generation || this.destroyed) break;
@@ -870,7 +864,7 @@ export class MseSource {
     // Coalesced, not queued. Dragging a scrub bar across a film asks to be in dozens of places;
     // serving each in turn means every one of them is stale before its media arrives, and the
     // picture never catches up with the finger.
-    this.requestedSeek = playerSeconds;
+    this.seekState.request(playerSeconds);
     // Tout de suite, sans attendre que le saut soit servi : les lectures réseau de la position
     // quittée sont coupées, et celles du saut partent. Sans ça, le saut attendait la fin d'une
     // lecture déjà inutile — jusqu'à deux secondes depuis un serveur lointain (22/09/2026).
@@ -884,7 +878,7 @@ export class MseSource {
     }
     this.pending = this.pending
       .then(() => {
-        const target = this.requestedSeek;
+        const target = this.seekState.requested;
         if (target === null || this.destroyed) return;
         // Deliberately not cleared here. The flag is what tells the read loop to stop filling a
         // place the viewer has left, and it has to stay up for as long as that is still true —
@@ -933,13 +927,13 @@ export class MseSource {
     // arriving — so it is refused, and playback carries on where it was.
     if (!reachable(this.remuxer.seekable, playerSeconds)) {
       this.callbacks.onWarning?.(playerWarning("noIndexSeek"));
-      if (this.lastSeekTarget >= 0) this.video.currentTime = this.lastSeekTarget;
+      if (this.seekState.lastTarget >= 0) this.video.currentTime = this.seekState.lastTarget;
       return;
     }
 
     this.generation += 1;
     this.ended = false;
-    this.lastSeekTarget = playerSeconds;
+    this.seekState.serving(playerSeconds);
     this.readUpTo = playerSeconds;
     this.guard.seekServed(playerSeconds);
     this.seeksServed += 1;
@@ -956,7 +950,7 @@ export class MseSource {
     // d'autres sauts ont pu arriver : un doigt qui glisse sur la barre. Servir celui-ci lirait une
     // position déjà abandonnée, que le dernier attendrait à son tour (banc du 22/09/2026 : cinq
     // sauts en 0,6 s, 6,5 s pour arriver au dernier). On sert directement le plus récent.
-    const latest = this.requestedSeek;
+    const latest = this.seekState.requested;
     if (latest !== null && latest !== requested) return this.performSeek(latest);
 
     // No abort() here any more. Cancelling an operation mid-flight leaves the buffer's parser in
@@ -975,7 +969,7 @@ export class MseSource {
 
     // Served: the reader is where it was asked to be. Anything asked for after this point is a
     // new seek, and the refill below is free to run.
-    if (this.requestedSeek === playerSeconds) this.requestedSeek = null;
+    this.seekState.served(playerSeconds);
 
     // Not awaited. A seek is finished the moment the reader is repositioned; waiting for thirty
     // seconds of media to be fetched before admitting so means the next seek queues behind a
@@ -1047,9 +1041,7 @@ export class MseSource {
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
-    const intent = this.seekIntent;
-    if (intent && !seekArrived(this.video.currentTime, intent.target)) return;
-    this.seekIntent = null;
+    if (!this.seekState.arrive(this.video.currentTime)) return;
     this.releaseClock("saut arrivé");
   };
 
@@ -1105,7 +1097,7 @@ export class MseSource {
     if (this.clockHold) return;
     // A seek already on its way: leave it to arrive. Pushing the playhead in the middle of one
     // would be this player seeking against itself.
-    if (this.requestedSeek !== null) return;
+    if (this.seekState.requested !== null) return;
     // Une ouverture qui attend son média non plus. La tête est restée là où l'élément l'a laissée
     // — zéro — pendant que le film s'ouvre ailleurs, et c'est exactement ce que `pendingStart`
     // organise. « Rien sous la tête » est donc l'état normal ici, pas une panne : la ramener
@@ -1217,10 +1209,10 @@ export class MseSource {
    * comme un blocage (`runaway`), une ligne par minute au plus.
    */
   private watchForHeadAway(now: number, delta: number): boolean {
-    const intent = this.seekIntent;
+    const intent = this.seekState.intent;
     if (intent) {
-      if (this.requestedSeek !== null || seekArrived(now, intent.target)) return false;
-      this.seekIntent = null;
+      if (this.seekState.requested !== null || seekArrived(now, intent.target)) return false;
+      this.seekState.drop();
       this.releaseClock("saut parti ailleurs");
       this.headAway(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne`, now, intent.target, {
         seekTarget: intent.target,
@@ -1467,7 +1459,7 @@ export class MseSource {
    * posée ailleurs (premier média, image clé suivante), et c'est elle qui sait si c'est fini.
    */
   get seekPending(): boolean {
-    return this.seekIntent !== null || this.requestedSeek !== null;
+    return this.seekState.pending;
   }
 
   /** What the `stop` line wants to know of the recoveries over the whole session. */
