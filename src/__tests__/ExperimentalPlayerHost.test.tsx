@@ -1317,7 +1317,6 @@ describe("relu le 22/09/2026", () => {
   it("garde les commandes pendant une reconstruction, estompées et sans clavier", async () => {
     // 22/09/2026 : elles disparaissaient puis réapparaissaient d'un coup à chaque changement de
     // piste. Elles restent là, s'effacent, et ne répondent plus le temps de la reconstruction.
-    remux.needsRebuildForAudio = vi.fn((id: number): boolean => id === 2);
     HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage: vi.fn() })) as never;
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
