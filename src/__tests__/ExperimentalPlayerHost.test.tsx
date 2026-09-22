@@ -1348,6 +1348,29 @@ describe("relu le 22/09/2026", () => {
     expect(typeof seeks[0].fields.tookMs).toBe("number");
   });
 
+  it("écrit aussi le saut qui n'est jamais arrivé, quand un autre le remplace", async () => {
+    // 22/09/2026, 2012 sur iPhone : un saut à 2141 s, puis vingt-sept secondes plus tard une
+    // tête à 1681 s dont rien au journal ne disait comment elle y était venue. Un saut qui
+    // n'atteignait jamais sa cible n'était tout simplement pas écrit.
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(120);
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+    // Arrivé ailleurs.
+    element.currentTime = 480;
+    await act(async () => void fireEvent(element, new Event("seeked")));
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
+
+    const seeks = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === "seek");
+    expect(seeks).toHaveLength(1);
+    expect(seeks[0].fields).toMatchObject({ from: 120, to: 600, arrived: false, landedAt: 480 });
+  });
+
   it("joint au saut ce que la source a fait pour le servir", async () => {
     // 22/09/2026 : « de 176 à 166 en 900 ms », puis un blocage — et rien pour dire comment le saut
     // avait été servi. La ligne porte désormais les étapes de la trace depuis la demande.

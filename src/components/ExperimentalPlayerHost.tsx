@@ -545,6 +545,27 @@ export function ExperimentalPlayerHost({
   const requestedSeekRef = useRef<number | null>(null);
   /** Le saut en cours de mesure, pour la ligne `seek` du journal — le dernier demandé seulement. */
   const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; buffered: boolean } | null>(null);
+  /**
+   * Un saut qui n'arrive pas là où il était demandé n'écrivait rien : la ligne ne part qu'à
+   * l'arrivée. 2012 sur iPhone (22/09/2026) : une tête passée de 2141 à 1681 s sans une trace.
+   * Il est désormais écrit quand un autre geste le remplace, avec l'endroit où il est tombé.
+   */
+  const reportUnarrivedSeek = (landedAt: number) => {
+    const timing = seekTimingRef.current;
+    if (!timing) return;
+    seekTimingRef.current = null;
+    reportPlayback("seek", {
+      ...describeFileRef.current(),
+      path: "remux",
+      from: Math.round(timing.from),
+      to: Math.round(timing.to),
+      buffered: timing.buffered,
+      arrived: false,
+      landedAt: Math.round(landedAt * 10) / 10,
+      tookMs: Date.now() - timing.startedAt,
+      steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
+    });
+  };
   /** Où en est le film selon ce que le spectateur a demandé, pas seulement selon ce qu'il a vu. */
   const intendedPosition = useCallback((): number => {
     if (requestedSeekRef.current !== null) return requestedSeekRef.current;
@@ -2065,6 +2086,7 @@ export function ExperimentalPlayerHost({
               for (let i = 0; element && i < element.buffered.length; i++) {
                 if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
               }
+              reportUnarrivedSeek(element?.currentTime ?? positionRef.current);
               seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), buffered };
               // Une reconstruction pas encore ouverte rouvre directement là.
               if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;

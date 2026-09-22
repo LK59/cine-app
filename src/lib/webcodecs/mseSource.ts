@@ -99,6 +99,14 @@ const STALL_REPORT_MS = 5000;
 /** And no second line within this long, however the clock flaps in between. */
 const STALL_REPORT_COOLDOWN_MS = 60_000;
 
+/**
+ * L'autre forme de blocage, celle où l'horloge avance : autant de secondes courues sans rien sous
+ * la tête avant de l'écrire. 22/09/2026, iPhone : « le temps avance de plusieurs dizaines de
+ * secondes, pas d'image, et ça ne s'arrête pas tant que je ne ressaute pas » — invisible pour la
+ * ligne `stall`, qui ne voit qu'une horloge immobile.
+ */
+const RUNAWAY_REPORT_SECONDS = 3;
+
 /** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
 const STALL_TRACE_MS = 20_000;
 
@@ -240,6 +248,11 @@ export class MseSource {
   private lastStallReportAt = -Infinity;
   /** The clock as last seen by the watchdog, to tell playback from a jump. */
   private tickClockAt = -1;
+  /**
+   * Secondes d'horloge écoulées sans média sous la tête, depuis la dernière fois qu'il y en avait.
+   * Voir `RUNAWAY_REPORT_SECONDS`.
+   */
+  private runawaySeconds = 0;
 
   private constructor(
     private readonly video: HTMLVideoElement,
@@ -1010,6 +1023,7 @@ export class MseSource {
       this.stallSince = null;
       return;
     }
+    this.watchForRunaway(now, delta);
     if (this.stallSince === null || Math.abs(now - this.stallClockAt) >= 1) {
       this.stallClockAt = now;
       this.stallSince = Date.now();
@@ -1026,6 +1040,29 @@ export class MseSource {
     // Instrumentation on the path that is already failing: it must not become the failure.
     try {
       this.callbacks.onStall?.(this.stallReport(now, stalledMs));
+    } catch {
+      /* the log is not worth a player */
+    }
+  }
+
+  /** Une horloge qui court hors du média : écrite comme un blocage, une fois par épisode. */
+  private watchForRunaway(now: number, delta: number): void {
+    // Une ouverture en attente de son média, ou un saut en cours : la tête est hors du média
+    // par construction, et ce n'est pas elle qui avance.
+    if (this.pendingStart !== null || this.video.seeking || this.isBufferedAt(now)) {
+      this.runawaySeconds = 0;
+      return;
+    }
+    if (delta <= 0 || delta > 5) return;
+    const before = this.runawaySeconds;
+    this.runawaySeconds += delta;
+    if (before >= RUNAWAY_REPORT_SECONDS || this.runawaySeconds < RUNAWAY_REPORT_SECONDS) return;
+    if (Date.now() - this.lastStallReportAt < STALL_REPORT_COOLDOWN_MS) return;
+    this.lastStallReportAt = Date.now();
+    trace(`horloge qui avance sans média : ${this.runawaySeconds.toFixed(1)} s courues jusqu'à ${now.toFixed(2)} s — ${this.elementState()}`);
+    try {
+      // En tête : `clean()` garde 24 champs, et celui-ci est le seul qui distingue les deux lignes.
+      this.callbacks.onStall?.({ runaway: true, ...this.stallReport(now, 0) });
     } catch {
       /* the log is not worth a player */
     }

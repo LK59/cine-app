@@ -1517,6 +1517,33 @@ describe("l'échelle des reprises", () => {
     after(6000);
     expect(onStall).toHaveBeenCalledTimes(2);
   });
+  it("écrit une horloge qui avance sans rien sous la tête", async () => {
+    // 22/09/2026, iPhone : « le temps avance de plusieurs dizaines de secondes, pas d'image, et ça
+    // ne s'arrête pas tant que je ne ressaute pas ». Une horloge qui court n'est pas un blocage aux
+    // yeux de la ligne `stall` : rien ne l'écrivait.
+    const video = fakeVideo();
+    Object.assign(video, { seeking: false });
+    const onStall = vi.fn();
+    const mse = await MseSource.attach(video, fakeRemuxer(500), PLAN, { onError: vi.fn(), onStall });
+    const internals = internalsOf(mse);
+    await until(() => internals.fillTask === null && video.buffered.length > 0, "le premier remplissage est fini");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    vi.useFakeTimers({ toFake: ["Date"] });
+
+    // Bien au-delà du média, et l'horloge avance.
+    let at = 400;
+    setTime(video, at);
+    internals.watchForStall();
+    for (let i = 0; i < 20; i++) {
+      vi.setSystemTime(Date.now() + 250);
+      at += 0.25;
+      setTime(video, at);
+      internals.watchForStall();
+    }
+    expect(onStall).toHaveBeenCalledTimes(1);
+    expect(onStall.mock.calls[0][0]).toMatchObject({ runaway: true });
+    expect(onStall.mock.calls[0][0].steps).toContain("horloge qui avance sans média");
+  });
 });
 
 describe("MseSource sur un élément qui refuse srcObject", () => {
