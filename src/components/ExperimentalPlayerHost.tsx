@@ -361,7 +361,7 @@ export function ExperimentalPlayerHost({
    * directly. These are filled in by effects below, once there is something to describe.
    */
   const describeFileRef = useRef<() => Record<string, unknown>>(() => ({}));
-  const pathRef = useRef<"remux" | "webcodecs" | "direct" | null>(null);
+  const pathRef = useRef<"remux" | "webcodecs" | null>(null);
   // Read through a ref so this function is stable for the life of the player. The pipeline is
   // built by an effect that depends on it, and a caller passing an inline arrow — which the one
   // above did — turned every one of its own renders into a teardown and a rebuild.
@@ -480,7 +480,7 @@ export function ExperimentalPlayerHost({
   // Answered once and kept: none of it changes while the page is open.
   // Which of the two pipelines is running. Null until the file has been examined — the element
   // that shows the picture differs between them, so both are mounted and one is hidden.
-  const [path, setPath] = useState<"remux" | "webcodecs" | "direct" | null>(null);
+  const [path, setPath] = useState<"remux" | "webcodecs" | null>(null);
   // When playback was asked to start, and has not yet. Reported by the pipeline as a measured
   // fact rather than guessed from the platform: on a desktop it clears within a frame, so none
   // of what follows ever appears there.
@@ -492,9 +492,9 @@ export function ExperimentalPlayerHost({
   // this the controls read the held element as simply paused and offer the play button, which is
   // both wrong and an invitation to make it worse.
   const [switchingAudio, setSwitchingAudio] = useState(false);
-  // Two of the three paths put a real <video> on screen and are driven through it; only the
-  // WebCodecs one paints a canvas and needs the façade in front of it.
-  const onElement = path === "remux" || path === "direct";
+  // The remux path puts a real <video> on screen and is driven through it; only the WebCodecs
+  // one paints a canvas and needs the façade in front of it.
+  const onElement = path === "remux";
   /**
    * The façade dressed as a ref, kept stable while the façade is.
    *
@@ -584,8 +584,7 @@ export function ExperimentalPlayerHost({
    * Chooses a subtitle, from the menu or from the viewer's account.
    *
    * Both pipelines are told, and neither branches on which one is running: only one of the two
-   * refs is ever set, and on the direct path neither is — where the only subtitles there can be
-   * are the ones beside the film anyway.
+   * refs is ever set. Files beside the film reach both the same way.
    */
   const chooseSubtitle = useCallback(
     (id: number | null, sources: ExternalSubtitleSource[]) => {
@@ -1158,7 +1157,7 @@ export function ExperimentalPlayerHost({
     const attemptStartedAt = Date.now();
     let announced = false;
     /** Written once per pipeline: what was actually chosen, and how long it took to get there. */
-    const announceStart = (chosen: "remux" | "webcodecs" | "direct", why: string | null) => {
+    const announceStart = (chosen: "remux" | "webcodecs", why: string | null) => {
       if (announced) return;
       announced = true;
       reportPlayback("start", {
@@ -1302,85 +1301,6 @@ export function ExperimentalPlayerHost({
         return;
       }
       await element.play().catch(() => {});
-    };
-
-    /**
-     * The shortest path there is: hand the element the URL and get out of the way.
-     *
-     * An ISO base media file needs none of this machinery — it is already the packaging the
-     * remux path spends its time producing. The browser fetches its own ranges, decodes in
-     * hardware, seeks and shows HDR, and does all of it better than anything that could be put
-     * in front of it. What is given up is the track and subtitle menus, which are read out of a
-     * Matroska container this player never opens here; those files carry one audio track.
-     */
-    const startDirect = async (element: HTMLVideoElement) => {
-      // Un changement de piste qui attendait une reconstruction native n'a plus d'objet ici : ce
-      // chemin choisit sa piste lui-même, et n'hérite pas du compte rendu. La pause, elle, est
-      // gardée — un film à l'arrêt ne repart pas parce qu'il a changé de chemin —, et l'image
-      // figée s'efface : ce chemin ne dessine pas sur l'élément qu'elle attendait.
-      pendingSwitchRef.current = null;
-      const stayPaused = keepPausedRef.current;
-      keepPausedRef.current = false;
-      setFrozen(false);
-      pathRef.current = "direct";
-      setPath("direct");
-      setPathReason("lecture directe — le conteneur est déjà celui du navigateur");
-      announceStart("direct", "le conteneur est déjà celui du navigateur");
-      setTracks({ audio: [], subtitles: [] });
-      setCurrentAudio(null);
-      // Nothing here opens the container, so the only tracks to choose between are the subtitle
-      // files beside the film — which is exactly what this path would otherwise have none of.
-      applyPreferences([], []);
-
-      const onTime = () => {
-        positionRef.current = element.currentTime;
-        // The only subtitles this path can have are the ones beside the file: nothing here opens
-        // the container, so there is nothing else to read them out of.
-        showSubtitleAt(element.currentTime, () => null);
-      };
-      const onPlay = () => {
-        setPlaying(true);
-        setEnded(false);
-        showWarning(null);
-      };
-      const onPause = () => setPlaying(false);
-      const onEnded = () => {
-        setPlaying(false);
-        setEnded(true);
-      };
-      // The element's own verdict, which is the only one there is on this path.
-      const onFailure = () => {
-        const failure = element.error;
-        const said = `Ce navigateur n'a pas pu lire ce fichier${failure?.message ? ` : ${failure.message}` : ` (code ${failure?.code ?? "?"})`}.`;
-        reportPlayback("error", { ...describeFileRef.current(), reason: said, at: positionRef.current });
-        // Le journal garde sa phrase ; l'écran parle la langue du spectateur.
-        const detail = failure?.message || `code ${failure?.code ?? "?"}`;
-        setRuntimeError(tRef.current("player.experimental.browserCouldNotRead", { detail }));
-      };
-      // Set once the element knows how long the film is: asking earlier is ignored.
-      const onMetadata = () => {
-        if (startSeconds > 1) element.currentTime = startSeconds;
-        declareReady();
-      };
-      element.addEventListener("timeupdate", onTime);
-      element.addEventListener("play", onPlay);
-      element.addEventListener("pause", onPause);
-      element.addEventListener("ended", onEnded);
-      element.addEventListener("error", onFailure);
-      element.addEventListener("loadedmetadata", onMetadata, { once: true });
-      unsubscribes.push(() => {
-        element.removeEventListener("timeupdate", onTime);
-        element.removeEventListener("play", onPlay);
-        element.removeEventListener("pause", onPause);
-        element.removeEventListener("ended", onEnded);
-        element.removeEventListener("error", onFailure);
-        element.removeEventListener("loadedmetadata", onMetadata);
-        element.removeAttribute("src");
-        element.load();
-      });
-
-      element.src = info.streamUrl;
-      if (!stayPaused) await element.play().catch(() => {});
     };
 
     /**
@@ -1629,10 +1549,9 @@ export function ExperimentalPlayerHost({
           setPathReason(describePath(probe.chosen));
           return startRemux(element, probe.start);
         }
-        // Les deux autres nomment déjà le leur, chacune avec ses propres mots : la lecture directe
-        // parce qu'elle n'a pas de chemin à décrire, le moteur parce qu'il reçoit le motif en
-        // argument.
-        if (probe.path === "direct") return startDirect(element);
+        // Le moteur nomme déjà le sien : il reçoit le motif en argument. (Il y avait un troisième
+        // chemin, la lecture directe d'un MP4 ; tout fichier passe désormais par le traitement —
+        // voir remuxPlayback.ts.)
         return startEngine(describePath(probe.chosen));
       })
       .catch((cause: unknown) => {

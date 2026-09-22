@@ -8,7 +8,8 @@ import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
 import { fromMatroskaTrack } from "./engineTrack";
-import { keptRangeAt, parseMatroska, type MatroskaFile, type MatroskaTrack } from "./matroska";
+import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
+import { openMediaFile } from "./mediaFile";
 import { MseSource } from "./mseSource";
 import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
 import { Remuxer, audioSwitchNeedsRebuild, playableAudio, type TrackedCue } from "./remuxer";
@@ -85,25 +86,15 @@ export type PathProbe = { discard: () => void } & (
    */
   | { path: "remux"; start: (video: HTMLVideoElement) => Promise<RemuxPlayback>; chosen: ChosenPath }
   | { path: "webcodecs"; chosen: ChosenPath }
-  /** Nothing to repackage: the browser can be handed the URL and left alone. See below. */
-  | { path: "direct" }
+  /*
+   * Il y avait un troisième chemin, « direct » : un MP4 remis tel quel à `<video>`. Retiré le
+   * 22/09/2026 — un bon conteneur ne dit pas que tout se lit nativement. Sur les MP4 de la
+   * bibliothèque, il jouait l'E-AC3 muet sur Chrome et Firefox sans erreur ni repli, n'offrait ni
+   * menu de pistes ni langue du compte, n'affichait aucun sous-titre intégré, et un HEVC refusé
+   * finissait en écran d'erreur. Tout fichier passe désormais par le même traitement, qui ne fait
+   * rien (ou presque) quand rien n'est à faire : voir mediaFile.ts et mp4Demux.ts.
+   */
 );
-
-/**
- * Whether a file is already in a container the browser opens by itself.
- *
- * An ISO base media file — an .mp4 or .m4v — needs none of this machinery. There is no
- * repackaging to do, because it is already the packaging; a `<video>` given the URL fetches its
- * own ranges, decodes in hardware, seeks, and shows HDR, which is the whole of what the remux
- * path exists to achieve by a longer road.
- *
- * Read from the bytes rather than the file name: a name is a guess and the first twelve bytes are
- * not. Every ISOBMFF file names its brand in a `ftyp` box at the very front.
- */
-function isoBaseMedia(head: Uint8Array): boolean {
-  return head.length >= 8 && head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70;
-}
-
 
 /**
  * The audio track to open on.
@@ -201,17 +192,19 @@ export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<
   const source = await HttpByteSource.open(options.streamUrl);
   trace(`flux ouvert — ${source.size} octets`);
 
-  // Asked before anything is parsed, because for one kind of file the answer is that there is
-  // nothing to do at all.
-  if (isoBaseMedia(await source.read(0, 12))) {
-    trace("conteneur ISO : rien à remultiplexer, le navigateur le lit tel quel");
-    source.close();
-    return { path: "direct", discard: () => {} };
-  }
   // Named by its URL, so opening the same file again — or rebuilding after the platform closed
-  // the source — does not pay for its header and index a second time.
+  // the source — does not pay for its header and index a second time. Matroska or MP4, told
+  // apart by the file's own first bytes.
   const headerAt = Date.now();
-  const file = await parseMatroska(source, options.streamUrl);
+  let file: MatroskaFile;
+  try {
+    file = await openMediaFile(source, options.streamUrl);
+  } catch (error) {
+    // Un en-tête illisible — un MP4 fragmenté, que ce lecteur refuse — part au lecteur serveur
+    // par l'appelant (`fallToStable`) ; la connexion, elle, n'a plus d'usage.
+    source.close();
+    throw error;
+  }
   const headerMs = Date.now() - headerAt;
   trace(
     `en-tête ${headerMs < 15 ? "déjà connu" : "lu"} en ${headerMs} ms — ` +

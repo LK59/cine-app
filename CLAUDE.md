@@ -125,8 +125,11 @@ for weeks before that was fixed.
 stays drawn under the one above it.
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`.
-Three paths, chosen per file — remux → native `<video>` (normal), WebCodecs → canvas (fallback),
-direct play. `PlayerHost` chooses between the native player and the legacy server-transcoding one;
+Two paths, chosen per file — remux → native `<video>` (normal), WebCodecs → canvas (fallback).
+Every file goes through them, MP4 included: `mediaFile.ts` reads Matroska or MP4 into the same
+description, and a good container does not mean everything in it plays natively (there used to be
+a "direct play" path for MP4 — silent E-AC3 on Chrome, no track menus, no embedded subtitles).
+`PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
 is no server-side player to hand to and the same call surfaces a clean playback error instead.
 

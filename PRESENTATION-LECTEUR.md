@@ -78,7 +78,7 @@ solution en fonction de la réponse.
 | **Dolby Vision profil 5** | Natif sur les appareils Dolby Vision, sinon lu par le serveur |
 | **HDR sur écran standard** | Converti pour l'écran |
 
-Conteneurs : **MKV**, réorganisé à la volée, et **MP4**, lu tel quel.
+Conteneurs : **MKV** et **MP4**, réorganisés à la volée de la même façon (un MP4 fragmenté part au lecteur serveur).
 
 ### Audio
 
@@ -126,7 +126,7 @@ Dans tous ces cas, le lecteur du serveur prend le relais automatiquement.
 
 ## Fonctionnement
 
-- **Réorganisation à la volée.** Le fichier MKV est lu par morceaux, converti en MP4 fragmenté et
+- **Réorganisation à la volée.** Le fichier, MKV ou MP4, est lu par morceaux, converti en MP4 fragmenté et
   confié au lecteur vidéo du navigateur. Cette étape prend quelques dizaines de millisecondes par
   morceau : c'est le débit du réseau qui fixe la vitesse.
 - **Décodeurs audio intégrés.** Les décodeurs TrueHD (FFmpeg), FLAC (libFLAC), Dolby Digital et

@@ -1134,8 +1134,6 @@
       "serverTranscodeNo": "keine",
       "gaveWay": "Der native Player hat abgegeben: {reason}",
       "paths": {
-        "directName": "Direktwiedergabe",
-        "directDetail": "kein Remuxing",
         "remuxName": "Remuxing",
         "remuxDetail": "Hardware-Dekodierung, natives HDR",
         "webcodecsName": "WebCodecs → Canvas",
@@ -1156,7 +1154,6 @@
       "resumedAfterInterruption": "Wiedergabe nach einer Unterbrechung fortgesetzt.",
       "audioTrackRefused": "Diese Tonspur konnte nicht geöffnet werden: die vorherige läuft weiter.",
       "passageSkipped": "Ein Abschnitt dieser Datei konnte nicht dekodiert werden: die Wiedergabe geht direkt danach weiter.",
-      "browserCouldNotRead": "Dieser Browser konnte die Datei nicht abspielen ({detail}).",
       "connectionBack": "Verbindung wiederhergestellt",
       "connectionLost": "Verbindung unterbrochen",
       "connectionBackBody": "Die Wiedergabe geht dort weiter, wo sie angehalten hat.",

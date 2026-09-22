@@ -5,7 +5,7 @@
 // for ffprobe to be compared against — the method that found every bug the synthetic tests missed.
 
 import { openSync, readSync, closeSync, statSync, writeFileSync } from "node:fs";
-import { parseMatroska } from "@/lib/webcodecs/matroska";
+import { openMediaFile } from "@/lib/webcodecs/mediaFile";
 import { Remuxer, setAudioBufferRebuildable } from "@/lib/webcodecs/remuxer";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
@@ -66,15 +66,20 @@ describe.skipIf(!process.env.BENCH_FILE)("banc", () => {
     // AudioEncoder here. Off, so the copied path — the one whose bytes are being checked — runs.
     setAudioBufferRebuildable(true);
     const source = fileSource(path);
-    const file = await parseMatroska(source);
+    // Matroska ou MP4 : la même porte que le lecteur (mediaFile.ts).
+    const file = await openMediaFile(source);
     const video = file.tracks.find((t) => t.type === "video")!;
     // A track that rides through untouched: no AudioEncoder exists here.
     // BENCH_AUDIO=none checks the picture alone — a file whose only copyable track is TrueHD,
-    // which the remuxer refuses by design, still has a video worth checking.
+    // which the remuxer refuses by design, still has a video worth checking. BENCH_AUDIO=<n> picks
+    // track number n — a file with several copyable tracks, checked one at a time.
+    const wanted = Number(process.env.BENCH_AUDIO);
     const audio =
       process.env.BENCH_AUDIO === "none"
         ? null
-        : (file.tracks.filter((t) => t.type === "audio").find((t) => t.codecId !== "A_DTS" && t.codecId !== "A_TRUEHD") ?? null);
+        : Number.isInteger(wanted) && wanted > 0
+          ? (file.tracks.find((t) => t.type === "audio" && t.number === wanted) ?? null)
+          : (file.tracks.filter((t) => t.type === "audio").find((t) => t.codecId !== "A_DTS" && t.codecId !== "A_TRUEHD") ?? null);
     
     console.log(`pistes : ${file.tracks.map((t) => `${t.number}:${t.type}:${t.codecId}`).join(" ")}`);
     console.log(`vidéo ${video.codecId} ${video.video?.width}×${video.video?.height}, audio ${audio?.codecId ?? "aucune"}`);

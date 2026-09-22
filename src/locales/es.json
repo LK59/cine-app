@@ -1134,8 +1134,6 @@
       "serverTranscodeNo": "ninguna",
       "gaveWay": "El reproductor nativo cedió el paso: {reason}",
       "paths": {
-        "directName": "Reproducción directa",
-        "directDetail": "sin remultiplexado",
         "remuxName": "Remultiplexado",
         "remuxDetail": "decodificación por hardware, HDR nativo",
         "webcodecsName": "WebCodecs → canvas",
@@ -1156,7 +1154,6 @@
       "resumedAfterInterruption": "La reproducción se reanudó tras una interrupción.",
       "audioTrackRefused": "No se pudo abrir esta pista de audio: sigue la anterior.",
       "passageSkipped": "No se pudo decodificar un fragmento de este archivo: la reproducción sigue justo después.",
-      "browserCouldNotRead": "Este navegador no pudo reproducir este archivo ({detail}).",
       "connectionBack": "La conexión ha vuelto",
       "connectionLost": "Conexión perdida",
       "connectionBackBody": "La reproducción sigue donde se detuvo.",

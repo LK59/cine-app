@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { choosePlaybackPath, describePath, type PathInput } from "@/lib/webcodecs/pathSelector";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
-import type { ByteSource } from "@/lib/webcodecs/byteSource";
+import { MemoryByteSource, type ByteSource } from "@/lib/webcodecs/byteSource";
+import { readFileSync } from "fs";
 import { plannedMimeTypes } from "@/lib/webcodecs/remuxer";
 
 // A real hvcC: Main profile, level 120. The selector reads it to build the codec string it then
@@ -189,18 +190,47 @@ describe("le conteneur du navigateur", () => {
     close: vi.fn(),
   });
 
-  const ftyp = [0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d];
   const ebml = [0x1a, 0x45, 0xdf, 0xa3, 0x84, 0x42, 0x86, 0x81, 0x01, 0, 0, 0];
 
-  it("reconnaît un fichier que le navigateur ouvre tout seul", async () => {
-    // An .mp4 needs none of this machinery: it is already the packaging the remux path spends
-    // its time producing.
-    vi.doMock("@/lib/webcodecs/byteSource", () => ({
-      HttpByteSource: { open: async () => sourceOf(ftyp) },
+  it("fait passer un MP4 par le remultiplexage, comme un Matroska", async () => {
+    // Il était remis tel quel à <video> : un bon conteneur ne dit pas que tout se lit nativement
+    // — E-AC3 muet sur Chrome, ni menu de pistes ni sous-titres. Il suit désormais le même
+    // chemin que le reste, qui ne fait rien (ou presque) quand rien n'est à faire.
+    const bytes = new Uint8Array(readFileSync("src/__tests__/fixtures/mp4/c-hevc-multi.mp4"));
+    vi.resetModules();
+    vi.doMock("@/lib/webcodecs/byteSource", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@/lib/webcodecs/byteSource")>()),
+      HttpByteSource: { open: async () => new MemoryByteSource(bytes) },
+    }));
+    vi.stubGlobal("window", { ManagedMediaSource: { isTypeSupported: () => true } });
+    const { probePlaybackPath } = await import("@/lib/webcodecs/remuxPlayback");
+    const probe = await probePlaybackPath({
+      streamUrl: "/film.mp4",
+      startSeconds: 0,
+      onError: vi.fn(),
+      // La langue du compte est honorée, ce que la lecture directe ne savait pas faire.
+      audioPreferences: { audioLanguage: "fra", subtitleLanguage: null, subtitleMode: "Default", playDefaultAudioTrack: false },
+    });
+    expect(probe.path).toBe("remux");
+    if (probe.path !== "remux") return;
+    expect(probe.chosen.plan?.videoMimeType).toMatch(/hvc1/);
+    expect(probe.chosen.plan?.audioMimeType).toBe('audio/mp4; codecs="ac-3"');
+    probe.discard();
+    vi.doUnmock("@/lib/webcodecs/byteSource");
+  });
+
+  it("refuse un MP4 fragmenté par une erreur — que l'appelant confie au lecteur serveur", async () => {
+    const bytes = new Uint8Array(readFileSync("src/__tests__/fixtures/mp4/d-fragmented.mp4"));
+    const close = vi.fn();
+    vi.resetModules();
+    vi.doMock("@/lib/webcodecs/byteSource", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@/lib/webcodecs/byteSource")>()),
+      HttpByteSource: { open: async () => Object.assign(new MemoryByteSource(bytes), { close }) },
     }));
     const { probePlaybackPath } = await import("@/lib/webcodecs/remuxPlayback");
-    const probe = await probePlaybackPath({ streamUrl: "/film.mp4", startSeconds: 0, onError: vi.fn() });
-    expect(probe.path).toBe("direct");
+    await expect(probePlaybackPath({ streamUrl: "/film.mp4", startSeconds: 0, onError: vi.fn() })).rejects.toThrow(/fragmenté/);
+    // La connexion n'a plus d'usage : fermée, pas abandonnée.
+    expect(close).toHaveBeenCalled();
     vi.doUnmock("@/lib/webcodecs/byteSource");
   });
 

@@ -10,8 +10,8 @@
 // mediabunny n'est pas en jeu ici : son lecteur Matroska ne connaît pas A_TRUEHD. Les blocs sont
 // lus par le nôtre, au travers du même cache d'octets que le reste du lecteur.
 import type { ByteSource } from "../byteSource";
-import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "../matroska";
-import { SampleReader } from "../sampleReader";
+import { clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "../matroska";
+import { createSampleReader, openMediaFile } from "../mediaFile";
 import type { DecodedAudio } from "../softwareAudio";
 import { openTrueHdDecoder, type DecodedBatch } from "./truehdDecoder";
 
@@ -103,7 +103,7 @@ export interface TrueHdTrack {
 export async function openTrueHdTrack(source: ByteSource, trackNumber: number, parsed?: MatroskaFile): Promise<TrueHdTrack> {
   // Le fichier que le lecteur a déjà lu, de préférence : le relire coûtait 4 à 5 s sur un iPhone,
   // à chaque changement de piste, pour l'en-tête et l'index d'un 4K de soixante gigaoctets.
-  const file = parsed ?? (await parseMatroska(source));
+  const file = parsed ?? (await openMediaFile(source));
   const found: MatroskaTrack | undefined = file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
   if (!found || !TRUEHD_CODECS.has(found.codecId)) throw new Error("piste TrueHD introuvable");
   const track: MatroskaTrack = found;
@@ -128,7 +128,7 @@ export async function openTrueHdTrack(source: ByteSource, trackNumber: number, p
     decoder.reset();
     const fromUs = Math.max(0, fromSeconds) * 1e6;
     const start = clusterOffsetForTime(file, Math.max(0, fromUs - PREROLL_US)) ?? file.firstClusterOffset ?? file.segmentDataStart;
-    const reader = new SampleReader(source, file, start);
+    const reader = createSampleReader(source, file, start);
     let blocks: Uint8Array[] = [];
     let times: number[] = [];
 

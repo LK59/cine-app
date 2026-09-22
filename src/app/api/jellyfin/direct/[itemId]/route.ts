@@ -14,8 +14,9 @@ const TEXT_SUBTITLE_FORMATS = new Set(["srt", "subrip", "ass", "ssa", "vtt", "we
 
 // Containers the experimental player's demuxer understands. Matroska is 99.7% of this library;
 // anything else is refused with a reason rather than half-played.
-// mkv and webm are read by the remuxer; mp4 and m4v need nothing read at all — the browser
-// opens them itself, which is the whole of what the remuxer spends its time producing.
+// All four go through the same pipeline: mkv and webm are read as Matroska, mp4 and m4v as ISO
+// BMFF (mp4Demux.ts) — the container told apart by the file's bytes, not by this name. A
+// fragmented MP4 is refused there, by name, and ends at the server player like any refusal.
 const SUPPORTED_CONTAINERS = new Set(["mkv", "webm", "mp4", "m4v"]);
 
 // HDR ranges the WebGL tone-mapping path can handle. Dolby Vision profile 5 is deliberately
@@ -184,7 +185,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
    * Ce qui reste ici est la donnée, pas le verdict : `rangeType` descend jusqu'au sélecteur de
    * chemin, parce que le conteneur seul ne dit pas toujours s'il existe une couche de base.
    */
-  // Refused outright: either the remuxer reads the container, or the browser opens it unaided.
+  // Refused outright unless the remuxer reads the container (Matroska or MP4).
   // Anything else — AVI above all, whose codecs no browser decodes — belongs to the server.
   const refusedReason = SUPPORTED_CONTAINERS.has(container)
     ? null

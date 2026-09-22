@@ -9,6 +9,7 @@
 import { SlicedSource, type ByteSource } from "./byteSource";
 import { ID, TRACK_TYPE } from "./matroskaIds";
 import { forEachChild, readElementAt, readFloat, readString, readUint, readVarInt, readVarSize } from "./ebml";
+import type { Mp4Index } from "./mp4Demux";
 
 export interface TrackColour {
   matrixCoefficients?: number;
@@ -89,6 +90,12 @@ export interface MatroskaFile {
   segmentEnd: number;
   /** Absolute offset of the first Cluster, for playing from the start without cues. */
   firstClusterOffset: number | null;
+  /**
+   * Présent pour un MP4 seulement : où est chaque échantillon, que le fichier ne dit pas au fil de
+   * la lecture comme un Matroska. Tout le reste de cette description a la même forme et le même
+   * sens pour les deux conteneurs — voir mp4Demux.ts ; seul le lecteur d'échantillons s'en sert.
+   */
+  mp4?: Mp4Index;
 }
 
 export interface MediaSample {

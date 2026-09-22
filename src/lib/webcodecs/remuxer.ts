@@ -6,6 +6,9 @@
 // copies samples verbatim and rebuilds the wrapper around them, which is why it costs almost
 // nothing and, unlike the WebCodecs path, hands the decoding back to the browser's own hardware
 // pipeline: no canvas, no per-frame JavaScript, no colour conversion, HDR handled natively.
+//
+// An MP4 comes through here too, described in the same shape (mp4Demux.ts) and read through the
+// same factory (mediaFile.ts): the remuxer never learns which container it is reading.
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
@@ -17,7 +20,7 @@ import { audioSampleEntryFor, videoSampleEntry } from "./mp4SampleEntries";
 import { transcodeTargetCodec, AudioTranscoder, transcodableAudio, type TranscodedFrame } from "./audioTranscode";
 import { trace } from "./trace";
 import { containerAccepts } from "./mseSource";
-import { SampleReader } from "./sampleReader";
+import { createSampleReader, type MediaSampleReader } from "./mediaFile";
 import type { ByteSource } from "./byteSource";
 
 /** Microseconds — Matroska's own precision, so sample times are copied rather than rescaled. */
@@ -438,7 +441,7 @@ async function describeAudio(
 ): Promise<MuxTrackInfo> {
   let firstFrame: Uint8Array | null = null;
   if (track.codecId === "A_AC3" || track.codecId === "A_EAC3") {
-    const probe = new SampleReader(source, file, start);
+    const probe = createSampleReader(source, file, start);
     for (let i = 0; i < 20_000 && !firstFrame; i++) {
       const sample = await probe.next();
       if (!sample) break;
@@ -632,7 +635,7 @@ export class Remuxer {
      * the beginning of the file and hand back the samples the probe already consumed, which
      * duplicates the opening keyframe and shifts the entire presentation timeline.
      */
-    private readonly reader: SampleReader,
+    private readonly reader: MediaSampleReader,
     private readonly source: ByteSource,
     /** Present only when the chosen track has to be re-encoded to be carried at all. */
     private transcoder: AudioTranscoder | null,
@@ -685,7 +688,7 @@ export class Remuxer {
         ? transcodedAudioInfo(transcoder, audioTrack)
         : await describeAudio(source, file, start, audioTrack)
       : null;
-    const reader = new SampleReader(source, file, start);
+    const reader = createSampleReader(source, file, start);
 
     const videoInfo: MuxTrackInfo = {
       id: 1,

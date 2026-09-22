@@ -373,16 +373,18 @@ describe("le chemin choisi", () => {
     expect(screen.getByText(/^st:Français — full/)).toBeTruthy();
   });
 
-  it("donne l'URL à l'élément lui-même quand le fichier est déjà un MP4", async () => {
-    nextProbe = () => ({ path: "direct", discard: vi.fn() });
+  it("fait passer un MP4 par le même traitement qu'un Matroska, menus compris", async () => {
+    // Il était remis tel quel à l'élément : ni menu de pistes, ni langue du compte, ni
+    // sous-titres intégrés, et un E-AC3 muet sur Chrome sans que rien ne le dise.
     swr = { data: info({ container: "mp4", streamUrl: "/film.mp4" }), error: undefined };
     mount();
 
-    await waitFor(() => expect(document.querySelector("video")!.getAttribute("src")).toBe("/film.mp4"));
-    // Nothing opens the container on this path, so there are no track menus to offer.
-    fireEvent(document.querySelector("video")!, new Event("loadedmetadata"));
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    expect(screen.queryByText(/^audio:/)).toBeNull();
+    expect(probes[0]).toMatchObject({ streamUrl: "/film.mp4" });
+    expect(screen.getByText(/^audio:Français/)).toBeTruthy();
+    expect(screen.getByText(/^st:Français — full/)).toBeTruthy();
+    // L'élément reçoit une MediaSource, jamais l'adresse du fichier.
+    expect(document.querySelector("video")!.getAttribute("src")).not.toBe("/film.mp4");
   });
 
   it("ne démarre rien pour un fichier que le serveur a déjà refusé", async () => {
@@ -827,8 +829,9 @@ describe("les préférences du compte Jellyfin", () => {
   });
 
   it("peut satisfaire une préférence de sous-titres avec un fichier posé à côté", async () => {
-    // The direct path has no tracks of its own at all, so this is the only way it has any.
+    // Un fichier sans sous-titre intégré : celui d'à côté est le seul moyen d'en avoir.
     stubFetch();
+    remux = fakeRemux({ subtitleTracks: [] });
     swr = {
       data: info({
         container: "mp4",
@@ -836,8 +839,8 @@ describe("les préférences du compte Jellyfin", () => {
       }),
       error: undefined,
     };
-    viewerState = { resumeSeconds: 0, preferences: { ...preferences, subtitleMode: "Default" } };
-    nextProbe = () => ({ path: "direct", discard: vi.fn() });
+    // « Always » : le son est déjà en français, et « Default » ne montrerait alors que les forcés.
+    viewerState = { resumeSeconds: 0, preferences: { ...preferences, subtitleMode: "Always" } };
     mount();
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/sub.vtt", expect.anything()));
     vi.unstubAllGlobals();

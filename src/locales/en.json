@@ -1134,8 +1134,6 @@
       "serverTranscodeNo": "none",
       "gaveWay": "The native player gave way: {reason}",
       "paths": {
-        "directName": "Direct play",
-        "directDetail": "no remuxing",
         "remuxName": "Remuxing",
         "remuxDetail": "hardware decoding, native HDR",
         "webcodecsName": "WebCodecs → canvas",
@@ -1156,7 +1154,6 @@
       "resumedAfterInterruption": "Playback resumed after an interruption.",
       "audioTrackRefused": "This audio track could not be opened: the previous one keeps playing.",
       "passageSkipped": "A passage of this file could not be decoded: playback resumes just after it.",
-      "browserCouldNotRead": "This browser could not play this file ({detail}).",
       "connectionBack": "Connection restored",
       "connectionLost": "Connection lost",
       "connectionBackBody": "Playback picks up where it stopped.",

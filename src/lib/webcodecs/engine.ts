@@ -15,8 +15,8 @@
 import { playerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import { stripSubtitleMarkup } from "./subtitleMarkup";
-import { parseMatroska, clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
-import { SampleReader } from "./sampleReader";
+import { clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
+import { createSampleReader, openMediaFile, type MediaSampleReader } from "./mediaFile";
 import { audioConfigCandidates, audioConfigFor, joinBytes, nalLengthSize, strayUnits, videoConfigFor, unsupportedReason } from "./codecConfig";
 import { createRenderer, type FrameRenderer } from "./renderer";
 import type { AudioConfig } from "./codecConfig";
@@ -184,7 +184,7 @@ export function selectCue(cues: SubtitleCue[], seconds: number): SubtitleCue | n
 export class PlaybackEngine {
   private source: ByteSource | null = null;
   private file: MatroskaFile | null = null;
-  private reader: SampleReader | null = null;
+  private reader: MediaSampleReader | null = null;
   private videoDecoder: VideoDecoder | null = null;
   private audioDecoder: AudioDecoder | null = null;
   private renderer: FrameRenderer | null = null;
@@ -422,7 +422,7 @@ export class PlaybackEngine {
     // 24 Mo du cache restaient réservés à un endroit du film que plus personne ne relira.
     this.source.keep?.(0, 0);
     if (this.abandoned()) return;
-    this.file = await parseMatroska(this.source);
+    this.file = await openMediaFile(this.source);
     if (this.abandoned()) return;
     this.duration = this.file.durationSeconds ?? 0;
 
@@ -504,7 +504,7 @@ export class PlaybackEngine {
     }
 
     const startUs = Math.round((options.startSeconds ?? 0) * 1e6);
-    this.reader = new SampleReader(this.source, this.file, clusterOffsetForTime(this.file, startUs) ?? this.file.firstClusterOffset ?? 0);
+    this.reader = createSampleReader(this.source, this.file, clusterOffsetForTime(this.file, startUs) ?? this.file.firstClusterOffset ?? 0);
     this.presentFromUs = startUs;
     this.wallClock.seek(startUs / 1e6);
     this.emit("loadedmetadata");

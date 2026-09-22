@@ -2,7 +2,7 @@
 
 Reference documentation for the playback engine that reads library files **without asking the
 server for anything**: no transcoding, no stream negotiation, no HLS. The browser fetches the
-`.mkv` over HTTP byte ranges and everything else happens in the tab.
+file — Matroska or MP4 — over HTTP byte ranges and everything else happens in the tab.
 
 Source: `src/lib/webcodecs/`, plus the routes and hooks listed in the [file map](#file-map).
 
@@ -16,6 +16,7 @@ watched and how far — see [Playback reporting](#playback-reporting).
 - [The remux pipeline](#the-remux-pipeline)
   - [`byteSource` — HTTP range reads](#bytesource--http-range-reads)
   - [`ebml` / `matroska` — header and index](#ebml--matroska--header-and-index)
+  - [`mp4Demux` — MP4 input](#mp4demux--mp4-input)
   - [`decodeOrder` — reconstructing decode times](#decodeorder--reconstructing-decode-times)
   - [`mp4Muxer` — writing the container](#mp4muxer--writing-the-container)
   - [`remuxer` — segmentation and delivery](#remuxer--segmentation-and-delivery)
@@ -64,10 +65,9 @@ downgrade — a player that drops a level without saying so looks like a player 
 
 | Path | Mechanism | When |
 |---|---|---|
-| **1. Remux → native `<video>`** | Matroska repackaged into fragmented MP4 in the browser, fed to a real `<video>` through MediaSource | The normal path |
+| **1. Remux → native `<video>`** | Matroska or MP4 repackaged into fragmented MP4 in the browser, fed to a real `<video>` through MediaSource | The normal path |
 | **2. WebCodecs → canvas** | Software decode frame by frame, canvas render, hand-held audio clock, HDR→SDR conversion in a shader | The browser refuses a codec in MediaSource but can decode it another way |
-| **3. Direct play** | The file is handed to the browser untouched | The file is already MP4 |
-| **4. Explicit refusal** | Named codec, stop | None of the three can carry it |
+| **3. Explicit refusal** | Named codec, stop | Neither path can carry it |
 
 **Path 1 is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no
@@ -75,22 +75,42 @@ audio sample passes through JavaScript: the browser decodes in hardware, compose
 drives its own audio clock, and **displays HDR natively**. Building one group of pictures takes
 15–56 ms, against ~2 500 ms to download it.
 
-**Path 3 is detected on the file's own bytes** (`ftyp`), never on what the server calls it:
+**Every file goes through the same pipeline, MP4 included.** An MP4 used to be handed to
+`<video>` untouched ("direct play"), on the reasoning that it is already the packaging the remuxer
+produces. A good container does not mean everything in it plays natively: E-AC3/AC-3 in an MP4
+played **silently** on Chrome and Firefox — no error, so no fallback —, a file with several audio
+and subtitle tracks offered no track menu and ignored the account's language, embedded subtitles
+never showed, and an HEVC the browser refused ended on an error screen instead of the server
+player. The pipeline does nothing (or almost) when nothing is needed — copied samples, a new
+wrapper — and everything it knows how to do when something is: track choice, audio re-encoding,
+subtitles, seeking, the kept byte zone, rebuilds. See [`mp4Demux`](#mp4demux--mp4-input).
+
+**The container is detected on the file's own bytes** (`mediaFile.ts`: a `ftyp`, `moov`, `mdat`,
+`free`, `skip` or `wide` box at offset 0 means ISO BMFF), never on what the server calls it:
 Jellyfin names a container after the ffmpeg demuxer that reads it, so an ordinary MP4 comes back
 as `mov,mp4,m4a,3gp,3g2,mj2`.
 
-**Path 4** in practice covers the library's `.avi` files, in MPEG-4 ASP and MP3, which no browser
-decodes.
+**Path 3** in practice covers `.avi` files, in MPEG-4 ASP and MP3, which no browser decodes — and
+MP4s this player does not read (fragmented), which are refused before any path is tried and go to
+the server player.
 
 ---
 
 ## The remux pipeline
 
 ```
-byteSource ──▶ ebml/matroska ──▶ sampleReader ──▶ remuxer ──▶ mseSource ──▶ <video>
- HTTP ranges     header, tracks,    raw samples,    fragmented    MediaSource
-                 index              decode order    MP4
+byteSource ──▶ ebml/matroska ──▶ sampleReader ──────▶ remuxer ──▶ mseSource ──▶ <video>
+ HTTP ranges   │ header, tracks,    raw samples,        fragmented    MediaSource
+               │ index              decode order        MP4
+               └▶ mp4Demux ───────▶ Mp4SampleReader ─┘
+                  moov → same        samples in
+                  description        decode-time order
 ```
+
+`mediaFile.ts` is the only door: `openMediaFile` reads the header of either container into the
+same `MatroskaFile` description, and `createSampleReader` returns the matching reader. Every caller
+— remuxer, canvas engine, TrueHD decoder, path selection — goes through it, so none of them knows
+or cares which container it reads.
 
 ### `byteSource` — HTTP range reads
 
@@ -130,6 +150,61 @@ place where *audio* can resume, almost never a keyframe — so the track's own p
 selected explicitly.
 
 A file with no Cues can be played but not seeked, and says so.
+
+### `mp4Demux` — MP4 input
+
+An MP4 (ISO BMFF: `.mp4`, `.m4v`, `.mov`) is described in **exactly the shape of a parsed
+Matroska** — same `MatroskaTrack`s, same codec ids, same configuration records, an index of access
+points — so nothing downstream branches on the container. Checked against ffmpeg on synthetic
+fixtures: the codec records of an MP4 and of its `ffmpeg -c copy` Matroska twin come out
+identical, and every sample's presentation time, size, file offset and sync flag matches
+`ffprobe -show_packets`.
+
+- **`moov` is read whole, `mdat` never.** The top-level boxes are walked by their headers only
+  (16 bytes each), so the index is found at the front or behind a multi-gigabyte `mdat` at the
+  end. `moov` is one read: 2–14 MB on a feature film (it lists every sample of every track), the
+  same bytes a `<video>` given the URL would read before its first frame.
+- **Sample entries → Matroska codec ids**: `avc1`/`avc3` → `V_MPEG4/ISO/AVC` (`avcC`),
+  `hvc1`/`hev1`/`dvh1`/`dvhe` → `V_MPEGH/ISO/HEVC` (`hvcC`; `dvcC`/`dvvC` → `dolbyVision`),
+  `av01` → `V_AV1`, `mp4a` → `A_AAC` (the AudioSpecificConfig out of `esds`) or `A_MPEG/L3`,
+  `ac-3`/`ec-3` → `A_AC3`/`A_EAC3` (no codec private, as in Matroska: the remuxer describes them
+  from a frame), `Opus` → `A_OPUS` (`dOps` rewritten as the Ogg `OpusHead` Matroska keeps), `fLaC`
+  → `A_FLAC` (`fLaC` + the `dfLa` blocks), `mlpa` → `A_TRUEHD`, `tx3g` → `S_TEXT/UTF8`. Anything
+  else keeps its four-character code (`V_MP4/encv`, `A_MP4/alac`…) so the refusal names it.
+- **Channel counts come from the codec records**, not the sample entry: ETSI TS 102 366 fixes
+  `channelcount` at 2 in `ac-3`/`ec-3` entries, so a 5.1 is read from `dac3`/`dec3`; AAC from its
+  AudioSpecificConfig.
+- **Language**: `mdhd`, and `und` is `null`. Not Matroska's "absent means English" rule — here the
+  field is always written, and `und` means unknown; ffmpeg (hence the server) reads it the same way.
+- **Default and enabled.** MP4 has no default flag; the `tkhd` "enabled" flag stands in for it (ffmpeg
+  only enables the default track of each type). It is **not** used as `isEnabled`, which would drop
+  every non-default subtitle track from the menu.
+- **One video track**: the one with the most samples. A single-picture track (a cover stored as a
+  track, a JPEG/PNG sample entry), a chapter text track (`tref/chap`, QuickTime `text`), a data or
+  timecode track become `other` and are never read.
+- **Timestamps** per track timescale: decode times from `stts`, composition offsets from `ctts`
+  (signed in both versions), and the edit list applied as ffmpeg and mediabunny apply it — empty
+  edits shift the start, the first media edit's `media_time` is subtracted. Presentation times
+  therefore match what ffprobe reports, and the audio mediabunny decodes for re-encoding lands on
+  the same instants as the samples copied beside it (verified to the microsecond on library files).
+  Only the first media edit is followed; a longer list is traced.
+- **The sample index** (`stsz`/`stz2`, `stco`/`co64`, `stsc`, `stss`, `stts`, `ctts`) is expanded into
+  typed arrays — about 25 bytes per sample, some 20 MB for a three-hour film with three quarters
+  of a million samples across its tracks.
+- **Access points** are the video track's sync samples. A point's position is the smallest file
+  offset among the samples (all tracks) decoded from its keyframe on — reading from there yields the
+  keyframe *and* the sound around it, which is what a Matroska cluster position means, and what the
+  kept byte zone (`keptRangeAt`) and seek warming (`warm`) use.
+- **`Mp4SampleReader` yields samples in decode-time order across tracks**, not file order. A
+  Matroska stores clusters by time; an MP4 stores chunks however its muxer chose, and nothing forces
+  sound to sit near the picture — some files put all the video, then all the audio. Read in byte
+  order, such a file would deliver minutes of picture with no sound, and MediaSource plays only the
+  intersection of its buffers. On a well-interleaved file the two orders are the same up to small
+  back-and-forth inside one cached megabyte.
+- **mov_text samples** lose their two-byte length prefix and trailing style boxes; an empty sample
+  (the gap between two lines) is empty text, ignored like an empty Matroska block.
+- **Fragmented MP4** (`moof`/`mvex`, or sample tables with no samples) is refused with a named
+  error before any path is tried, and goes to the server player.
 
 ### `decodeOrder` — reconstructing decode times
 
@@ -503,7 +578,7 @@ being correct for this player alone.
   comes from the browser, so it is **compared against those two**, never forwarded as-is.
 
 Intro skipping and next-episode come from the **Intro Skipper** plugin
-(`/Episode/{id}/Timestamps`), served to both players and working on all three paths; on the canvas
+(`/Episode/{id}/Timestamps`), served to both players and working on both paths; on the canvas
 path the control bar seeks through the façade's `currentTime`.
 
 ---
@@ -647,6 +722,8 @@ original defects lived.
 | **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
+| **Fragmented MP4 refused** | `moof`/`mvex` files carry no sample tables; the header read refuses them by name and the server player takes over. Only the first media edit of an edit list is followed |
+| **An MP4's index is read whole** | `moov` lists every sample, 2–14 MB on a feature film, fetched before the first frame — what a `<video>` given the URL reads too. Matroska's header and index are 0.2 MB |
 | **Bitmap subtitles not rendered** | PGS and VobSub, covered by external `.srt` in every affected file here |
 | **FLAC is carried where it is taken, decoded here where it is not** | Chrome and Firefox accept FLAC in a MediaSource and get it untouched. Safari refuses it, and since 2026-09-21 it is decoded by libFLAC compiled to WebAssembly (`@wasm-audio-decoders/flac`, `flacDecoder.ts`) and re-encoded like DTS. Verified against `ffmpeg astats` on 24-bit stereo, 16-bit mono and 24-bit 5.1 library tracks: every channel within 0.05 dB, dialogue in the centre |
 | **A pathological file is the normal case** | Six-audio-track files mixing FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K. Test player changes against a file like that before believing them |
@@ -665,6 +742,8 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `ebml.ts`, `matroskaIds.ts` | The EBML format, headers and identifiers |
 | `matroska.ts` | Header, tracks, index; cluster lookup by time |
 | `sampleReader.ts` | Raw samples, in decode order |
+| `mp4Demux.ts` | MP4 input: `moov` → the same description, and `Mp4SampleReader` |
+| `mediaFile.ts` | The one door: container detection, header, sample reader |
 | `decodeOrder.ts` | Decode-time and duration reconstruction |
 | `mp4Boxes.ts`, `mp4Muxer.ts`, `mp4SampleEntries.ts` | Writing the fMP4 |
 | `codecConfig.ts` | Codec strings, and what a keyframe actually is |

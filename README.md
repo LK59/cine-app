@@ -200,7 +200,7 @@ skip-intro and automatic next-episode advance, AirPlay and Chromecast.
 In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now works:
 
 - **The native player** is the ordinary path. It asks the server for nothing beyond the file
-  itself: the browser fetches the `.mkv` by byte ranges, repackages it into fragmented MP4 in the
+  itself: the browser fetches the file (MKV or MP4) by byte ranges, repackages it into fragmented MP4 in the
   tab, and hands it to a real `<video>` — hardware decoding, native HDR, no transcoding at all: a
   4K Dolby Vision HEVC film with E-AC3 Atmos plays on an iPhone with nothing running on the
   server. Where the codecs make that impossible it decodes with WebCodecs onto a canvas
@@ -215,7 +215,7 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
   turned off entirely (`PLAYER_SERVER_FALLBACK=false`) — a file the browser cannot play then ends
   on a plain error naming the reason, and nothing ever starts a transcode.
 
-**[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the three paths, how the remuxer
+**[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the two paths, how the remuxer
 reconstructs decode times, how random access points are verified, how audio is delivered or
 re-encoded, what the server is still told, and the file map. For a non-technical presentation
 of the player, in French: [PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md).

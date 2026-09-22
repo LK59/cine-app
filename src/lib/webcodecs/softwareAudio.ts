@@ -34,12 +34,15 @@ type MediabunnyInput = InstanceType<Mediabunny["Input"]>;
  */
 const inputs = new WeakMap<ByteSource, Promise<MediabunnyInput>>();
 
-function sharedInput(source: ByteSource, core: Mediabunny): Promise<MediabunnyInput> {
+function sharedInput(source: ByteSource, core: Mediabunny, iso: boolean): Promise<MediabunnyInput> {
   let input = inputs.get(source);
   if (!input) {
     const created = new core.Input({
-      // The class is the format; mediabunny wants an instance.
-      formats: [new core.MatroskaInputFormat()],
+      // The class is the format; mediabunny wants an instance. Le conteneur est celui que notre
+      // propre lecture a reconnu (mediaFile.ts) — un MP4 lu comme un Matroska ne donnait aucune
+      // piste, et un E-AC3 de MP4 restait muet sur Chrome faute de décodeur. Les numéros de piste
+      // concordent : mediabunny nomme une piste MP4 par le `track_ID` de son `tkhd`, comme nous.
+      formats: [iso ? new core.Mp4InputFormat() : new core.MatroskaInputFormat()],
       source: new core.CustomSource({
         getSize: () => source.size,
         // end is exclusive, and the engine's source clamps at EOF on its own.
@@ -107,7 +110,7 @@ export class SoftwareAudioTrack {
       throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
     }
     const { AudioSampleSink } = core;
-    const input = await sharedInput(source, core);
+    const input = await sharedInput(source, core, file?.mp4 !== undefined);
 
     const tracks = await input.getAudioTracks();
     const track = tracks.find((t) => t.id === trackNumber) ?? tracks[0];
