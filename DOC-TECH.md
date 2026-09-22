@@ -422,8 +422,11 @@ only re-syncs Safari's audio renderer to the picture if the audio hold happens t
 few tens of milliseconds. A viewer on iPad (built-in speakers) kept an audio offset after two
 same-format changes, cleared only by a seek. The rebuild starts from a clean state, like a seek,
 and was also the faster path on WebKit: 0.34 s median over 36 changes, against 3.1 s over 23 for
-the in-buffer change. Chrome and Firefox keep the in-buffer change. A rebuild caused by a track
-change does not spend the rebuild budget reserved for failures.
+the in-buffer change. The same day, on a slow network, Chrome's and Firefox's in-buffer change
+waited 1.6 to 4.7 s before starting (it waits for the fragment being built to finish; a rebuild
+drops it), so every engine now rebuilds — to be confirmed by the `via` field of the `audio` log
+lines; reverting means returning `isWebKit()` from `rebuildEveryAudioSwitch`. A rebuild caused by
+a track change does not spend the rebuild budget reserved for failures.
 
 Why: once TrueHD became decodable, 19 films mixing TrueHD and Dolby had their Dolby VF re-encoded
 — a second lossy generation, and work for the phone — and a re-encoded language change cost 2 to

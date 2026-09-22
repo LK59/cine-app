@@ -4,7 +4,6 @@
 // selection, same subtitle lookup — so the player component branches once on which path was
 // chosen and not again on every operation.
 
-import { isWebKit } from "@/lib/webkitEngine";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import type { EngineTrack } from "./engine";
@@ -180,8 +179,8 @@ export function openingAudio(
 }
 
 /**
- * Sur WebKit, tout changement de piste reconstruit le lecteur, même entre deux pistes du même
- * format.
+ * Tout changement de piste reconstruit le lecteur, même entre deux pistes du même format — sur
+ * WebKit d'abord, partout depuis.
  *
  * Le changement « dans le tampon » y vide le son pendant que l'image défile, le remplit avec
  * jusqu'à un intervalle d'images clés de son déjà passé, et ne recale le moteur audio de Safari
@@ -190,10 +189,15 @@ export function openingAudio(
  * après deux changements de piste sur *Die Hard*, que seul un saut effaçait. La reconstruction
  * repart d'un état propre — l'équivalent d'un saut —, et elle est aussi la plus rapide sur
  * WebKit : 0,34 s en médiane sur 36 changements, contre 3,1 s sur 23 pour le tampon.
- * Chrome et Firefox n'ont pas ce défaut ; ils gardent le changement dans le tampon.
+ *
+ * Chrome et Firefox n'ont pas ce décalage, mais le même jour leur changement dans le tampon a
+ * attendu 1,6 à 4,7 s avant de commencer, sur un réseau lent : il attend que le morceau de film
+ * en cours de préparation arrive avant de toucher au son, là où la reconstruction l'abandonne.
+ * Essayé partout, à comparer au journal (`via` des lignes `audio`) ; revenir en arrière, c'est
+ * rendre ici `isWebKit()`.
  */
 export function rebuildEveryAudioSwitch(): boolean {
-  return isWebKit();
+  return true;
 }
 
 /**

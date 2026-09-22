@@ -98,27 +98,28 @@ describe("changer de piste sur un fichier sans index", () => {
     expect(playback.currentAudioTrack).toBe(AAC.number);
   });
 
-  it("laisse faire au tout début du film, où lire depuis le début est la bonne réponse", async () => {
-    const { playback, remuxer, onWarning } = await start(0.5, false);
+  it("laisse faire au tout début du film, où repartir du début est la bonne réponse", async () => {
+    // La reconstruction rouvre au début : c'est justement là qu'on est.
+    const { playback, onWarning } = await start(0.5, false);
     expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
-    await playback.selectAudioTrack(AAC_ENG.number);
+    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
     expect(onWarning).not.toHaveBeenCalled();
-    expect(remuxer.setAudioTrack).toHaveBeenCalledWith(AAC_ENG.number);
-    expect(mse.refillAudio).toHaveBeenCalled();
   });
 
-  it("ne change rien pour un fichier indexé", async () => {
+  it("ne change rien pour un fichier indexé : la piste se change par reconstruction", async () => {
     const { playback, remuxer } = await start(600, true);
     expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
-    await playback.selectAudioTrack(AAC_ENG.number);
-    expect(remuxer.setAudioTrack).toHaveBeenCalledWith(AAC_ENG.number);
+    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
+    // Le changement dans le tampon refuse une piste qui se change par reconstruction.
+    await expect(playback.selectAudioTrack(AAC_ENG.number)).rejects.toThrow(/reconstruction/);
+    expect(remuxer.setAudioTrack).not.toHaveBeenCalled();
   });
 });
 
 /**
- * Sur WebKit, tout changement de piste reconstruit le lecteur (22/09/2026) : le changement dans
- * le tampon y laissait le son décalé de l'image jusqu'au saut suivant, et il y était le plus lent
- * des deux chemins. Chrome et Firefox gardent le changement dans le tampon.
+ * Tout changement de piste reconstruit le lecteur (22/09/2026) : sur WebKit, le changement dans
+ * le tampon laissait le son décalé de l'image jusqu'au saut suivant ; sur Chrome et Firefox, il
+ * attendait jusqu'à 4,7 s le morceau de film en cours avant de commencer.
  */
 describe("le chemin d'un changement de piste selon le moteur", () => {
   const SAFARI = "Mozilla/5.0 (iPad; CPU OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1";
@@ -132,11 +133,10 @@ describe("le chemin d'un changement de piste selon le moteur", () => {
     expect(playback.needsRebuildForAudio(AAC.number)).toBe(false);
   });
 
-  it("sur Chrome, garde le changement dans le tampon entre deux pistes du même format", async () => {
+  it("sur Chrome aussi, depuis que son changement dans le tampon attendait jusqu'à 4,7 s", async () => {
     vi.stubGlobal("navigator", { userAgent: CHROME });
     const { playback } = await start(600, true);
-    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(false);
-    // Un format différent reconstruit partout.
+    expect(playback.needsRebuildForAudio(AAC_ENG.number)).toBe(true);
     expect(playback.needsRebuildForAudio(EAC3.number)).toBe(true);
   });
 
