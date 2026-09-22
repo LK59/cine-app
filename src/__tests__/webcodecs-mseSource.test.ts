@@ -1399,7 +1399,10 @@ describe("l'échelle des reprises", () => {
     expect(onStall.mock.calls[0][0]).toMatchObject({ recoveries: 6, filling: false });
   });
 
-  it("ne laisse plus une horloge figée seule après trois poussées", async () => {
+  it("compte ses propres poussées : une horloge qui n'a bougé que d'elles reste figée", async () => {
+    // 22/09/2026, 1917 sur iPhone : douze poussées en quarante secondes, aucune reprise. Chaque
+    // poussée avance l'horloge de 0,08 s — plus que le seuil de mouvement — et remettait donc le
+    // compteur à zéro : le troisième barreau n'était jamais atteint.
     const video = fakeVideo();
     const remuxer = fakeRemuxer(200);
     const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
@@ -1407,25 +1410,47 @@ describe("l'échelle des reprises", () => {
     await until(() => video.buffered.length > 0 && video.buffered.end(0) > 5, "du média devant la tête");
     if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
 
-    const before = 0.25;
-    setTime(video, before);
+    setTime(video, 0.25);
     video.dispatchEvent(new Event("play"));
-    internals.watchForFrozenClock(before);
-    for (let i = 0; i < 3; i++) {
+    internals.watchForFrozenClock(video.currentTime);
+    for (let i = 0; i < 4; i++) {
       internals.frozenSince = Date.now() - 5000;
-      internals.watchForFrozenClock(before);
+      // L'horloge est là où la poussée l'a mise, et n'en bouge pas.
+      internals.watchForFrozenClock(video.currentTime);
     }
-    expect(internals.frozenNudges).toBe(3);
-    expect(remuxer.seeks).toEqual([]);
-
-    // La quatrième fois, ce n'était plus rien du tout. C'est désormais une vraie reprise : la
-    // position redemandée à la source, tampons vidés et relus.
-    internals.frozenSince = Date.now() - 5000;
-    internals.watchForFrozenClock(before);
     await flush();
+    // Trois poussées, puis une vraie reprise : la position redemandée à la source, tampons vidés
+    // et relus — là où l'horloge était, un pas plus loin.
     expect(remuxer.seeks).toHaveLength(1);
-    expect(remuxer.seeks[0]).toBeCloseTo(before + 0.08 - 0.2, 2);
+    expect(remuxer.seeks[0]).toBeCloseTo(0.25 + 4 * 0.08 - 0.2, 2);
     expect(traceText()).toContain("malgré 3 poussées");
+  });
+
+  it("laisse un saut en cours finir de décoder avant de le pousser", async () => {
+    // Même soirée : Safari restait `seeking` avec trente secondes en tampon. Un saut au milieu
+    // d'un groupe d'images oblige à décoder depuis l'image clé précédente — neuf secondes de 4K
+    // pour 1917 —, et la poussée arrivait au bout d'une seconde et demie : elle relançait le
+    // saut, qui repartait de l'image clé, et ainsi de suite. « Une seconde de lecture pour deux
+    // de chargement », jusqu'à ce qu'un saut finisse par passer entre deux poussées.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(200);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = internalsOf(mse);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 5, "du média devant la tête");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+
+    setTime(video, 0.25);
+    video.dispatchEvent(new Event("play"));
+    Object.assign(video, { seeking: true });
+    internals.watchForFrozenClock(0.25);
+    internals.frozenSince = Date.now() - 2000;
+    internals.watchForFrozenClock(0.25);
+    expect(video.currentTime).toBe(0.25);
+
+    // Un saut qui ne se résout vraiment jamais est poussé quand même, plus tard.
+    internals.frozenSince = Date.now() - 8000;
+    internals.watchForFrozenClock(0.25);
+    expect(video.currentTime).toBeGreaterThan(0.25);
   });
 
   it("écrit un blocage une fois, avec de quoi le comprendre, et pas davantage", async () => {

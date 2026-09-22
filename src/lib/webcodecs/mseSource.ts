@@ -26,6 +26,18 @@ const TARGET_BUFFER_SECONDS = 30;
 const FROZEN_CLOCK_MS = 1500;
 
 /**
+ * Et combien de temps quand l'élément est encore en train de sauter.
+ *
+ * Un saut au milieu d'un groupe d'images se décode depuis l'image clé précédente : neuf secondes
+ * de 4K avant d'arriver à la cible dans 1917, soit plus d'une seconde et demie sur un iPhone
+ * comme sur un PC. Poussé à 1,5 s, le saut repartait de l'image clé, et encore, et encore
+ * (22/09/2026, « une seconde de lecture pour deux de chargement »). Un saut qui ne se résout
+ * vraiment jamais — celui posé pile sur le bord du média, pour lequel la poussée existe — est
+ * toujours poussé, simplement plus tard.
+ */
+const FROZEN_SEEKING_MS = 6000;
+
+/**
  * How far it is pushed — inside the media rather than onto its edge, which is what froze it.
  *
  * Deliberately larger than the movement threshold above: a step exactly the size of it reads as
@@ -1083,7 +1095,7 @@ export class MseSource {
       if (moved) this.frozenNudges = 0;
       return;
     }
-    if (Date.now() - this.frozenSince < FROZEN_CLOCK_MS) return;
+    if (Date.now() - this.frozenSince < (this.video.seeking ? FROZEN_SEEKING_MS : FROZEN_CLOCK_MS)) return;
     // Only when there is plainly something to play: a clock that is not moving because the
     // buffer ran dry is an ordinary wait, and the fill loop is already on it.
     if (this.lead < 1) return;
@@ -1103,6 +1115,10 @@ export class MseSource {
     trace(`horloge figée à ${now.toFixed(2)} s avec ${this.lead.toFixed(1)} s en avance — on redemande la position`);
     this.guard.forgetPause();
     this.video.currentTime = now + FROZEN_STEP;
+    // Le mouvement se mesure depuis là où la poussée a mis l'horloge. Mesuré depuis `now`, les
+    // 0,08 s de la poussée passaient pour de la lecture et remettaient le compteur à zéro : douze
+    // poussées sur 1917, jamais une reprise.
+    this.lastClockAt = now + FROZEN_STEP;
   }
 
   /**
