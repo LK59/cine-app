@@ -12,6 +12,8 @@ import {
   decadesOf,
   BROWSE_ALL,
   BROWSE_SORTS,
+  BROWSE_DURATIONS,
+  type BrowseDuration,
   type BrowseSort,
   type BrowsableTitle,
 } from "@/lib/cinemaBrowse";
@@ -53,12 +55,15 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
   // bouton retour une machine à défaire des réglages.
   const [sort, setSort] = useState<BrowseSort>("added");
   const [decade, setDecade] = useState<number | null>(null);
+  const [duration, setDuration] = useState<BrowseDuration>("all");
+  // La durée n'est connue que des films — voir `BrowseDuration`.
+  const hasDurations = mediaType === "movies" && items.some((item) => (item.runtimeMinutes ?? 0) > 0);
   const [query, setQuery] = useState("");
 
   const decades = useMemo(() => decadesOf(items), [items]);
   const shown = useMemo(
-    () => browseTitles(items, { genre, decade, sort, query }),
-    [items, genre, decade, sort, query]
+    () => browseTitles(items, { genre, decade, sort, query, duration }),
+    [items, genre, decade, sort, query, duration]
   );
 
   // Les affiches des deux écrans suivants sont décodées d'avance : c'est leur arrivée pendant le
@@ -117,6 +122,20 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
                     {/* La même tournure que le palmarès du jour : l'application disait « années
                         1990 » à un endroit et « 1990s » à l'autre. */}
                     {t("cinema.decade", { decade: d })}
+                  </option>
+                ))}
+              </select>
+            )}
+            {hasDurations && (
+              <select
+                value={duration}
+                onChange={(e) => setDuration(e.target.value as BrowseDuration)}
+                aria-label={t("player.browse.duration")}
+                className="select h-9 shrink-0 text-sm"
+              >
+                {BROWSE_DURATIONS.map((key) => (
+                  <option key={key} value={key}>
+                    {t(`player.browse.durations.${key}`)}
                   </option>
                 ))}
               </select>

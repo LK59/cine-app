@@ -99,3 +99,37 @@ describe("browseTitles", () => {
     expect(kept.map((t) => t.title)).toEqual(["Alien", "Élève libre", "Rocky 2", "Rocky 10", "Zodiac"]);
   });
 });
+
+/**
+ * La durée, souvent le vrai critère d'un soir (23/09/2026). Des seuils, et un film dont la durée
+ * est inconnue n'en passe aucun : on ne peut pas affirmer qu'il tient dans la soirée.
+ */
+describe("browseTitles — la durée", () => {
+  const withRuntime = (title: string, runtimeMinutes: number | null) => ({ ...make(title, 2000, ["Drame"], null, null), runtimeMinutes });
+  const FILMS = [
+    withRuntime("Court", 85),
+    withRuntime("Moyen", 100),
+    withRuntime("Presque deux heures", 119),
+    withRuntime("Deux heures pile", 120),
+    withRuntime("Fleuve", 190),
+    withRuntime("Inconnu", null),
+  ];
+  const titles = (duration: Parameters<typeof browseTitles>[1]["duration"]) =>
+    browseTitles(FILMS, { ...DEFAULT_FILTERS, sort: "title", duration }).map((t) => t.title);
+
+  it("garde tout sans filtre de durée, durée inconnue comprise", () => {
+    expect(titles("all")).toHaveLength(6);
+    expect(titles(undefined)).toHaveLength(6);
+  });
+
+  it("applique chaque seuil, borne comprise de son côté", () => {
+    expect(titles("under90")).toEqual(["Court"]);
+    expect(titles("under105")).toEqual(["Court", "Moyen"]);
+    expect(titles("under120")).toEqual(["Court", "Moyen", "Presque deux heures"]);
+    expect(titles("over120")).toEqual(["Deux heures pile", "Fleuve"]);
+  });
+
+  it("ne laisse passer aucun film de durée inconnue dès qu'un seuil est choisi", () => {
+    for (const d of ["under90", "under105", "under120", "over120"] as const) expect(titles(d)).not.toContain("Inconnu");
+  });
+});

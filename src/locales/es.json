@@ -1352,6 +1352,14 @@
       "all": {
         "movies": "Ver todas las películas",
         "series": "Ver todas las series"
+      },
+      "duration": "Duración",
+      "durations": {
+        "all": "Cualquier duración",
+        "under90": "Menos de 1 h 30",
+        "under105": "Menos de 1 h 45",
+        "under120": "Menos de 2 h",
+        "over120": "2 h o más"
       }
     },
     "subtitleStyle": {
