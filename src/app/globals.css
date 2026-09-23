@@ -626,6 +626,12 @@
   }
 }
 
+/* Après un changement d'onglet du bureau, le panneau des rangées fond en entier : les rangées ne
+   rejouent pas leur propre entrée par-dessus (CinemaClient, `tabSwitched`). */
+.rows-switched [data-tv-rowroot] {
+  animation: none;
+}
+
 /* Le mouvement, quand on n'en veut pas : tout apparaît et disparaît sans transition.
  *
  * Une seule règle, et c'est elle qui décide. Deux blocs plus loin croyaient remplacer les entrées

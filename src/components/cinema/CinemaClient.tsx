@@ -460,6 +460,15 @@ export function CinemaClient() {
     [mediaType]
   );
 
+  // Vrai dès le premier changement d'onglet, et pour de bon : voir le panneau des rangées.
+  // Retenu pendant le rendu, comme ailleurs dans ce fichier, et non dans un effet.
+  const [tabSwitched, setTabSwitched] = useState(false);
+  const [seenMediaType, setSeenMediaType] = useState(mediaType);
+  if (mediaType !== seenMediaType) {
+    setSeenMediaType(mediaType);
+    setTabSwitched(true);
+  }
+
   // Whichever tab is actually showing drives the shared background wash below — a plain union,
   // not a new abstraction, since all it needs is backdropUrl + a stable id to key the crossfade.
   const activeHeroItem = heroKind === "movies" ? heroItem : seriesHeroItem;
@@ -998,8 +1007,13 @@ export function CinemaClient() {
               but it reads fine masked by the new content fading in over it at this duration).
               Opacity-only, no transform — this wraps every row below, so a transform here would
               hit the exact same containing-block pitfall as everywhere else in Cinema Mode if any
-              of them ever grew a position:fixed descendant (see globals.css's own note). */}
-          <div key={mediaType} className="animate-fade-in">
+              of them ever grew a position:fixed descendant (see globals.css's own note).
+              Une animation à la fois (23/09/2026) : ce fondu et l'entrée échelonnée de chaque
+              rangée jouaient ensemble, au premier affichage comme à chaque changement d'onglet —
+              opacités multipliées, près d'une demi-seconde avant que l'écran se pose. Le premier
+              affichage garde l'entrée des rangées, le changement d'onglet ce fondu seul
+              (`rows-switched`, globals.css). */}
+          <div key={mediaType} className={tabSwitched ? "animate-fade-in rows-switched" : undefined}>
           {mediaType === "movies" ? (
             <>
               {/* Première rangée, et celle que la bannière suit — voir CinemaSpotlight. */}
