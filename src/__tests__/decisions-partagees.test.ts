@@ -529,3 +529,31 @@ describe("« Ma liste » ne se propose qu'à un titre qui a un identifiant TMDB"
     expect(src).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
   });
 });
+
+describe("une seule animation de colonne pour les fiches du bureau", () => {
+  /**
+   * `closing ? "animate-fade-out-down" : "animate-fade-in-up"`, écrit deux fois, et une troisième
+   * sans sortie : au retour arrière, le texte des fiches remontait quand même. Voir
+   * `detailColumnMotion` (23/09/2026).
+   */
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ])("%s", (f) => {
+    const src = lire(f);
+    expect(src).toContain("detailColumnMotion(");
+    expect(src).not.toMatch(/closing \? "animate-fade-out-down" : "animate-fade-in-up"/);
+    expect(src).not.toContain("flex animate-fade-in-up flex-col");
+  });
+});
+
+describe("une seule hauteur de bannière pour l'écran du bureau et son squelette", () => {
+  // Le squelette était resté à 50 % quand l'écran est passé à 44 : les rangées remontaient d'un
+  // coup à chaque chargement à froid (23/09/2026). Voir `HERO_BASIS`.
+  it("aucune hauteur de bannière écrite en dur", () => {
+    const src = lire("src/components/cinema/CinemaClient.tsx");
+    expect(src).not.toMatch(/flexBasis: "\d+%"/);
+    expect(src.match(/flexBasis: HERO_BASIS/g)?.length).toBe(2);
+  });
+});

@@ -488,7 +488,21 @@ export function CinemaMobileClient() {
       >
         {loading && (
           <div className="px-4 pt-2">
-            <div className="skeleton aspect-2/3 w-full rounded-2xl" />
+            {/* La forme de la bannière qui va le remplacer : en paysage c'est une ligne compacte,
+                pas une affiche pleine largeur, et le squelette vertical faisait sauter toute la
+                page au moment où le contenu arrivait (relevé le 23/09/2026). */}
+            {short ? (
+              <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3">
+                <div className="skeleton aspect-2/3 w-24 shrink-0 rounded-lg" />
+                <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+                  <div className="skeleton h-6 w-40 rounded" />
+                  <div className="skeleton h-3 w-32 rounded" />
+                  <div className="skeleton mt-1 h-9 w-44 rounded-full" />
+                </div>
+              </div>
+            ) : (
+              <div className="skeleton aspect-2/3 w-full rounded-2xl" />
+            )}
             <div className="skeleton mt-6 h-4 w-32 rounded" />
             <div className="mt-3 flex gap-3">
               {Array.from({ length: 3 }, (_, i) => (

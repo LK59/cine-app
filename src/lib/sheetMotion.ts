@@ -44,3 +44,17 @@ export function sheetMotionClass({
   if (leaving) return swipe.dismissed ? "" : out;
   return swipe.touched || revealed ? "" : into;
 }
+
+/**
+ * La classe d'animation de la colonne de contenu d'une fiche du bureau — entrée, sortie, ou rien.
+ *
+ * La racine de ces fiches respectait déjà `arrivedByBack` (`revealed ? "" : "animate-fade-in"`),
+ * mais leur colonne jouait `animate-fade-in-up` sans condition : au retour arrière, la fiche se
+ * découvrait sans bouger et son texte remontait quand même de seize pixels, contre la règle du
+ * cycle de vie des fiches (CLAUDE.md). Trois fiches l'écrivaient, et la troisième — la fiche
+ * TMDB — n'avait même pas de sortie (relevé le 23/09/2026). Une fonction, pour les trois.
+ */
+export function detailColumnMotion({ leaving, revealed }: { leaving: boolean; revealed: boolean }): string {
+  if (leaving) return "animate-fade-out-down";
+  return revealed ? "" : "animate-fade-in-up";
+}

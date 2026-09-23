@@ -31,6 +31,19 @@ import { useIsTouch } from "@/lib/useIsMobile";
 import { useCentredCard } from "@/lib/useCentredCard";
 
 /** La durée de l'animation de sortie de la grille — celle de `--animate-fade-out`. */
+/**
+ * La part de l'écran que prend la bannière — pour le vrai écran *et* pour son squelette.
+ *
+ * 44 % et non 50 % : la première page doit montrer la bannière, la rangée « À la une » *entière*,
+ * puis le titre de « Reprendre » et le haut de ses affiches — c'est ce qui dit qu'on peut
+ * descendre. Six points de hauteur suffisent à l'obtenir.
+ *
+ * Une seule valeur pour les deux : le squelette était resté à 50 % quand l'écran est passé à 44,
+ * si bien qu'à chaque chargement à froid toutes les rangées remontaient d'un coup au moment où le
+ * contenu remplaçait le squelette (relevé le 23/09/2026).
+ */
+const HERO_BASIS = "44%";
+
 const BROWSE_EXIT_MS = 200;
 import { CinemaSpotlight } from "@/components/cinema/CinemaSpotlight";
 import { CinemaCard } from "@/components/cinema/CinemaCard";
@@ -720,7 +733,7 @@ export function CinemaClient() {
     // screen swapping for a full one.
     return createPortal(
       <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: "50%" }}>
+        <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: HERO_BASIS }}>
           <div className="flex h-full max-w-2xl flex-col justify-end gap-4 px-8 pb-10 sm:px-12">
             <div className="skeleton h-12 w-72 rounded-lg sm:h-16" />
             <div className="skeleton h-4 w-48 rounded" />
@@ -984,10 +997,8 @@ export function CinemaClient() {
             CinemaHero's own doc comment on why that's deliberate, not debounced); this key only
             changes on an actual Films/Séries switch, so the crossfade plays once per tab flip,
             not on every arrow-key scrub. */}
-        {/* 44 % et non 50 % : la première page doit montrer la bannière, la rangée « À la une »
-            *entière*, puis le titre de « Reprendre » et le haut de ses affiches — c'est ce qui
-            dit qu'on peut descendre. Six points de hauteur suffisent à l'obtenir. */}
-        <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: "44%" }}>
+        {/* La hauteur de la bannière : voir `HERO_BASIS`. */}
+        <div key={mediaType} className="relative min-h-0 shrink grow-0 animate-fade-in" style={{ flexBasis: HERO_BASIS }}>
           {heroKind === "movies"
             ? heroItem && <CinemaHero item={heroItem} />
             : seriesHeroItem && <CinemaSeriesHero item={seriesHeroItem} />}

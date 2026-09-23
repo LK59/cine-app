@@ -20,6 +20,7 @@ import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { detailColumnMotion } from "@/lib/sheetMotion";
 import { cinemaNavigate, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useIsTouch } from "@/lib/useIsMobile";
@@ -313,7 +314,7 @@ export function CinemaMovieDetail({
         <div
           key={item.radarrId}
           style={COLUMN_STYLE}
-          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: closing, revealed })}`}
         >
           {item.logoUrl && !logoErrored ? (
             <CinemaLogo

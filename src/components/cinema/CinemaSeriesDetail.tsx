@@ -10,6 +10,7 @@ import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
+import { detailColumnMotion } from "@/lib/sheetMotion";
 import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
@@ -290,7 +291,7 @@ export function CinemaSeriesDetail({
         <div
           key={item.sonarrId}
           style={COLUMN_STYLE}
-          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${closing ? "animate-fade-out-down" : "animate-fade-in-up"}`}
+          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: closing, revealed })}`}
         >
           {item.logoUrl && !logoErrored ? (
             <CinemaLogo

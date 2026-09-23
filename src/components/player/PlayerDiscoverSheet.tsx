@@ -10,7 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
-import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction } from "@/components/cinema/detailMenu";
 import {
@@ -350,7 +350,7 @@ export function PlayerDiscoverSheet({
       {data && (
         <div className="scrollbar-thin relative h-full overflow-y-auto">
           <div className={SECTION_CLASS}>
-            <div style={COLUMN_STYLE} className={`flex animate-fade-in-up flex-col ${COLUMN_GAP} px-8 sm:px-16`}>
+            <div style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving, revealed })}`}>
               <h1 className="font-display text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl">
                 {data.title}
               </h1>

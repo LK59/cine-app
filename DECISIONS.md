@@ -427,6 +427,25 @@ DOC-TECH, « `byteSource` — HTTP range reads »).
 
 ---
 
+## 13. L'animation de la colonne d'une fiche du bureau
+
+**Règle.** La colonne de contenu d'une fiche du bureau entre en montant à l'ouverture, ne bouge
+pas quand la fiche se découvre par un retour arrière (`arrivedByBack`), et sort en descendant.
+
+**Porteur.** `detailColumnMotion({ leaving, revealed })` (`src/lib/sheetMotion.ts`).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `PlayerDiscoverSheet` (bureau).
+
+**Tests.** `sheetMotion-column.test.ts`, `decisions-partagees.test.ts`.
+
+**Corrigé le 23/09.** La racine respectait le retour arrière, la colonne non : le texte remontait
+de seize pixels sous une fiche qui, elle, restait immobile. La fiche TMDB n'avait pas de sortie.
+
+**Voulu.** Les fiches du téléphone passent par `sheetMotionClass` : elles glissent en entier, sans
+animation propre à leur colonne.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits
