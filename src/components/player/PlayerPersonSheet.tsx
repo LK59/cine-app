@@ -335,9 +335,24 @@ export function PlayerPersonSheet({
    */
   const exit = useSheetExit(close, { leaving, listening: photoIndex === null && !underneath });
   const requestClose = exit.requestClose;
-  // Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer.
-  // La poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
-  const swipe = useSwipeToDismiss(requestClose);
+  /**
+   * Le même geste que sur les fiches de films : on tire la fiche vers le bas pour la refermer. La
+   * poignée est le bloc du portrait et du nom — il n'y a pas de bannière ici.
+   *
+   * Après un glissement, la fermeture attend deux images — pas davantage. Elle partait dans le même
+   * tour que le relâchement : l'accueil se redessinait (l'adresse change), la coquille et la barre
+   * du bas aussi, avant même que le navigateur ait lancé le glissement de la carte, qui restait
+   * figée le temps de ce travail — sur un lancer rapide, l'accrochage que les fiches de films
+   * n'avaient pas (23/09/2026). Deux images suffisent à ce que la carte, déjà sur son calque, glisse
+   * d'elle-même pendant ce travail.
+   *
+   * Pas `useDelayedClose` : ce serait un second mécanisme de sortie, que la note ci-dessus interdit
+   * — rien n'est gardé monté plus longtemps, l'appel est seulement décalé.
+   */
+  const closeAfterSlideStarts = useCallback(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => requestClose()));
+  }, [requestClose]);
+  const swipe = useSwipeToDismiss(closeAfterSlideStarts);
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
@@ -437,8 +452,10 @@ export function PlayerPersonSheet({
         // Le même couple que la pile des fiches de titre : 47 dessous, 48 dessus.
         zIndex: underneath ? 47 : 48,
         paddingLeft: isMobile ? undefined : "calc(1.5rem + var(--player-rail, 0px) + env(safe-area-inset-left, 0px))",
-        // Inerte pendant sa sortie : voile, croix et poignée restent sous le doigt 280 ms.
+        // Inerte pendant sa sortie : voile, croix et poignée restent sous le doigt 280 ms. Après un
+        // glissement, dès le relâchement — la fermeture part deux images plus tard.
         ...exit.style,
+        ...(swipe.dismissed ? { pointerEvents: "none" as const } : {}),
       }}
     >
       {/* Le voile : il laisse voir le film qu'on regardait, et le toucher referme la carte. */}
@@ -499,8 +516,8 @@ export function PlayerPersonSheet({
           // relâchement qu'on adoucit — le retour en place comme le reste du chemin vers le bas.
           transition: swipe.dragging ? "none" : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)",
           // Le calque est préparé dès que le doigt se pose, et gardé jusqu'au bout de la sortie :
-          // au relâchement, l'écran d'accueil se redessine (l'adresse change), et une carte sans
-          // calque à elle glissait au rythme de ce travail plutôt qu'à celui de l'écran.
+          // c'est ce qui laisse la carte glisser d'elle-même pendant que l'accueil se redessine
+          // (voir `closeAfterSlideStarts`).
           willChange: swipe.dragging || swipe.dismissed ? "transform" : undefined,
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}

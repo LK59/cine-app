@@ -288,5 +288,33 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     await runIdle();
     expect(cardCount()).toBe(18 + 24);
   });
+
+  it("après un lancer, ferme deux images plus tard — pas dans le tour du relâchement", async () => {
+    // 23/09/2026 : la fermeture partait avec le relâchement, et l'accueil se redessinait avant
+    // que le navigateur ait lancé le glissement de la carte. Un seul mécanisme de sortie malgré
+    // tout : l'appel est décalé, rien n'est gardé monté plus longtemps.
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => frames.push(cb));
+    try {
+      cinemaClose.mockClear();
+      draw({ tmdbId: 14 });
+      await screen.findByText("Film 0");
+      const handle = screen.getByRole("dialog").querySelector<HTMLElement>("[style*='touch-action']")!;
+      const pointer = (type: string, clientY: number) =>
+        act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
+      pointer("pointerdown", 100);
+      pointer("pointermove", 400);
+      pointer("pointerup", 400);
+      expect(cinemaClose).not.toHaveBeenCalled();
+      const flush = () => act(() => void frames.splice(0).forEach((cb) => cb(0)));
+      flush();
+      expect(cinemaClose).not.toHaveBeenCalled();
+      flush();
+      expect(cinemaClose).toHaveBeenCalledTimes(1);
+      expect(cinemaClose).toHaveBeenCalledWith({ person: null });
+    } finally {
+      raf.mockRestore();
+    }
+  });
 });
 

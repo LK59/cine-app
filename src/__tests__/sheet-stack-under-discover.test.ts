@@ -113,7 +113,15 @@ describe("la sortie des fiches TMDB n'a qu'un seul maître", () => {
     expect(src).not.toMatch(/useDelayedClose\(/);
     // Et l'état qu'il portait : la classe de sortie ne part plus que de `leaving`, donc du parent.
     expect(src).not.toMatch(/\bclosing\b/);
-    expect(src).toMatch(/useSwipeToDismiss\(requestClose\)/);
+    // Le geste aboutit à la fermeture du parent — directement, ou décalée de deux images pour
+    // que le glissement démarre avant que l'accueil se redessine (fiche personne, 23/09/2026).
+    // Décalée, jamais retenue : aucune minuterie, rien qui garde la fiche montée plus longtemps.
+    expect(src).toMatch(/useSwipeToDismiss\((requestClose|closeAfterSlideStarts)\)/);
+    if (src.includes("useSwipeToDismiss(closeAfterSlideStarts)")) {
+      expect(src).toMatch(
+        /const closeAfterSlideStarts = useCallback\(\(\) => \{\s*requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => requestClose\(\)\)\);\s*\}, \[requestClose\]\);/
+      );
+    }
   });
 
   // Et le sursis existe bel et bien, sinon la fiche disparaîtrait sous le doigt.
