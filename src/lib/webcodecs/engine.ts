@@ -920,6 +920,13 @@ export class PlaybackEngine {
     // that a seek was showing. thaw() starts it again on the first frame.
     this.starved = true;
     this.wallClock.stop();
+    // Le son aussi. Dès son premier bloc, c'est lui qui donne l'heure (`currentTime`), et son
+    // contexte continuait de tourner : le son repartait de la cible pendant que l'image se décodait
+    // encore depuis l'image clé, l'horloge filait devant, et chaque image arrivait en retard — le
+    // « saute, se fige, repart » que cette attente existe pour éviter. `freeze()` le suspend lors
+    // d'une attente, mais ne peut rien ici : `starved` est déjà vrai. `thaw()` le relance à la
+    // première image (relu le 24/09/2026).
+    void this.audio?.suspend();
 
     this.reader.seekTo(clusterOffsetForTime(this.file, targetUs) ?? this.file.firstClusterOffset ?? 0);
     // The software path is a separate producer and doesn't go through the reader — it gets its

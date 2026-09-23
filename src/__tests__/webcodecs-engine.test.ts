@@ -215,6 +215,18 @@ describe("PlaybackEngine — décodeur audio de la plateforme qui lâche", () =>
     player.destroy();
   });
 
+  // Pendant un saut, le son attend l'image : son horloge filait devant pendant le décodage depuis
+  // l'image clé, et chaque image arrivait en retard (relu le 24/09/2026).
+  it("suspend le son pendant un saut", async () => {
+    const player = await engine();
+    await player.load("http://x/film.mkv", { hdr: false });
+    const output = h.state.outputs.at(-1) as { suspend: () => Promise<void> };
+    const suspend = vi.spyOn(output, "suspend");
+    await player.seek(120);
+    expect(suspend).toHaveBeenCalled();
+    player.destroy();
+  });
+
   it("ne fait pas échouer un saut sur un décodeur que sa propre erreur a fermé", async () => {
     const player = await engine();
     await player.load("http://x/film.mkv", { hdr: false });
