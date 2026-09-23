@@ -27,7 +27,11 @@ vi.mock("@/lib/i18n", () => ({ LOCALE_COOKIE: "cine-lang" }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 
 function fakeReq(body: unknown): NextRequest {
-  return { json: async () => body } as unknown as NextRequest;
+  return {
+    json: async () => body,
+    // La signature du navigateur, pour l'appareil que retient la session (23/09/2026).
+    headers: new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" }),
+  } as unknown as NextRequest;
 }
 
 const originalFetch = global.fetch;
@@ -88,7 +92,8 @@ describe("POST /api/auth/jellyfin", () => {
     expect(body).toEqual({ ok: true, role: "admin" });
     expect(mockJellyseerrLogin).toHaveBeenCalledWith("louis", "x");
     expect(mockCreateSessionToken).toHaveBeenCalledWith("louis", "admin", "louis", "jf-1", "jf-token", undefined);
-    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1");
+    // L'appareil est retenu avec la session : c'est ce qui la rend reconnaissable dans Compte.
+    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1", "iPhone · Safari");
     expect(res.cookies.get("cine_session")?.value).toBe("signed-token");
   });
 

@@ -61,7 +61,9 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
       replaced={replaced}
       fromTab={fromTab}
       title={t("player.nav.account")}
-      subtitle={me?.jfUser || me?.username || undefined}
+      // Une majuscule à l'affichage seulement : le nom du compte, lui, reste tel que Jellyfin le
+      // connaît — c'est lui qu'on tape pour se connecter.
+      subtitle={displayName(me?.jfUser || me?.username)}
     >
       <div className="mx-auto w-full max-w-2xl">
         <LanguageSection />
@@ -374,9 +376,14 @@ function SessionsSection() {
         {sessions && sessions.length > 0 && (
           <ul className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
             {sessions.map((s) => (
-              <li key={s.id} className="flex items-baseline justify-between gap-3 text-xs text-subtle">
-                <span>{t("player.account.sessionOpened", { date: formatDay(s.createdAt) })}</span>
-                <span className="shrink-0">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt) })}</span>
+              <li key={s.id} className="flex items-baseline justify-between gap-3">
+                {/* L'appareil d'abord : c'est ce qui dit laquelle on déconnecterait. Les sessions
+                    ouvertes avant qu'on le retienne (23/09/2026) n'en ont pas. */}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-muted">{s.device ?? t("player.account.unknownDevice")}</span>
+                  <span className="block text-xs text-subtle">{t("player.account.sessionOpened", { date: formatDay(s.createdAt) })}</span>
+                </span>
+                <span className="shrink-0 text-xs text-subtle">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt) })}</span>
               </li>
             ))}
           </ul>
@@ -539,4 +546,10 @@ function MaintenanceSection() {
       </p>
     </Section>
   );
+}
+
+/** « louis » → « Louis ». Sans toucher au reste : « DeLuca » reste « DeLuca ». */
+function displayName(name: string | null | undefined): string | undefined {
+  if (!name) return undefined;
+  return name.charAt(0).toLocaleUpperCase() + name.slice(1);
 }

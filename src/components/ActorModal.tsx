@@ -1,5 +1,6 @@
 "use client";
 
+import { departmentLabel } from "@/lib/personDepartment";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -230,7 +231,7 @@ export function ActorModal({
           )}
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-white">{name}</p>
-            {data?.knownFor && <p className="mb-1 text-xs text-slate-500">{data.knownFor}</p>}
+            {departmentLabel(t, data?.knownFor) && <p className="mb-1 text-xs text-slate-500">{departmentLabel(t, data?.knownFor)}</p>}
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {data?.birthday && (
                 <span className="flex items-center gap-1.5 text-xs text-slate-400">

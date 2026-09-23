@@ -49,7 +49,7 @@ export function TranslationProvider({
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale ?? DEFAULT_LOCALE);
   const [t, setT] = useState<TFn>(() =>
-    initialDict ? createT(initialDict, fr) : defaultT
+    initialDict ? createT(initialDict, fr, initialLocale ?? DEFAULT_LOCALE) : defaultT
   );
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function TranslationProvider({
       } else {
         // Même filet que `setLocale` : un dictionnaire introuvable laisse le français, pas un
         // rejet non géré.
-        loadLocaleDict(l).then((dict) => setT(() => createT(dict, fr)), () => {});
+        loadLocaleDict(l).then((dict) => setT(() => createT(dict, fr, l)), () => {});
       }
     }
 
@@ -127,7 +127,7 @@ export function TranslationProvider({
       // suivant sert la page dans la bonne langue, dictionnaire compris, depuis le serveur.
       try {
         const dict = await loadLocaleDict(l);
-        setT(() => createT(dict, fr));
+        setT(() => createT(dict, fr, l));
       } catch {
         // Les textes restent dans la langue d'avant jusqu'au prochain chargement de page.
       }

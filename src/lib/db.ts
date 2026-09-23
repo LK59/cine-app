@@ -133,6 +133,8 @@ function migrate(db: Database.Database): void {
   // Additive migrations — safe to run multiple times
   try { db.exec("ALTER TABLE watchlist ADD COLUMN vote_average REAL"); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE maintenance ADD COLUMN expires_at INTEGER"); } catch { /* already exists */ }
+  // « iPhone · Safari » — de quoi reconnaître une session dans le panneau Compte (voir `deviceLabel`).
+  try { db.exec("ALTER TABLE sessions ADD COLUMN device TEXT"); } catch { /* already exists */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_preferences (
       user_id    TEXT    PRIMARY KEY,
@@ -653,6 +655,8 @@ export interface StoredSession {
   jti: string;
   createdAt: number;
   lastSeenAt: number;
+  /** « iPhone · Safari » ; `null` pour une session ouverte avant le 23/09/2026. */
+  device: string | null;
 }
 
 /** Les migrations de données déjà passées, pour qu'elles ne repassent pas. */
@@ -689,11 +693,11 @@ export const migrationDb = {
 };
 
 export const sessionDb = {
-  create(jti: string, userId: string): void {
+  create(jti: string, userId: string, device: string | null = null): void {
     const db = getDb();
     const now = Date.now();
-    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at) VALUES (?, ?, ?, ?)")
-      .run(jti, userId, now, now);
+    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at, device) VALUES (?, ?, ?, ?, ?)")
+      .run(jti, userId, now, now, device);
     // Opportunistic cleanup of expired sessions
     db.prepare("DELETE FROM sessions WHERE last_seen_at < ?").run(now - SESSION_MAX_AGE_MS);
   },
@@ -716,9 +720,9 @@ export const sessionDb = {
   /** Les autres sessions de cette personne, la plus récente d'abord. */
   listOthers(userId: string, currentJti: string): StoredSession[] {
     const rows = getDb()
-      .prepare("SELECT jti, created_at, last_seen_at FROM sessions WHERE user_id = ? AND jti != ? ORDER BY created_at DESC")
-      .all(userId, currentJti) as { jti: string; created_at: number; last_seen_at: number }[];
-    return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at }));
+      .prepare("SELECT jti, created_at, last_seen_at, device FROM sessions WHERE user_id = ? AND jti != ? ORDER BY last_seen_at DESC")
+      .all(userId, currentJti) as { jti: string; created_at: number; last_seen_at: number; device: string | null }[];
+    return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at, device: r.device ?? null }));
   },
 
   exists(jti: string): boolean {

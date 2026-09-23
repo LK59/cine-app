@@ -371,7 +371,7 @@
       "sectionTitle": "API route tests",
       "sectionSubtitle": "Checks each internal endpoint — authentication, latency and response shape",
       "ok": "{n} ok",
-      "errors": "{n} error(s)",
+      "errors": "{n} error|{n} errors",
       "running": "Test running…",
       "run": "Run tests",
       "rerun": "Re-run",
@@ -797,7 +797,7 @@
       "sessionsTitle": "Other connected devices",
       "loading": "Loading…",
       "noOtherSessions": "No other active sessions",
-      "otherSessions": "{n} other active session(s)",
+      "otherSessions": "{n} other active session|{n} other active sessions",
       "revokeAll": "Log out all others",
       "revoked": "Logged out",
       "revokeSuccess": "All other sessions have been revoked."
@@ -883,7 +883,22 @@
     "requested": "Requested",
     "age": "{n} years old",
     "died": "† {date} ({n} years old)",
-    "works": "{n} works"
+    "works": "{n} works",
+    "department": {
+      "acting": "Acting",
+      "directing": "Directing",
+      "writing": "Writing",
+      "production": "Production",
+      "sound": "Sound",
+      "camera": "Camera",
+      "editing": "Editing",
+      "art": "Art",
+      "costume": "Costume & make-up",
+      "crew": "Crew",
+      "visualEffects": "Visual effects",
+      "lighting": "Lighting",
+      "creator": "Creator"
+    }
   },
   "search": {
     "placeholder": "Title, actor, director… (e.g. with Brad Pitt)",
@@ -1187,7 +1202,7 @@
       "hint": "Search for a movie, a series or someone. Anything not in the library yet can be requested.",
       "noResults": "Nothing found for “{query}”.",
       "filterAll": "All",
-      "personTitles": "{n} title(s) here",
+      "personTitles": "{n} title here|{n} titles here",
       "recent": "Your recent searches",
       "forget": "Clear",
       "failed": "The search didn’t go through. Check your connection and try again."
@@ -1196,7 +1211,7 @@
       "requests": "Requests",
       "toWatch": "To watch",
       "watched": "Watched",
-      "arrivedBadge": "{n} title(s) arrived",
+      "arrivedBadge": "{n} title arrived|{n} titles arrived",
       "requestsHint": "Use search to request a title. It stays here until it becomes available.",
       "watchedHint": "Filled in automatically as you watch. You can correct it from a title’s page.",
       "empty": {
@@ -1295,7 +1310,7 @@
       "saved": "Saved",
       "devices": "Signed-in devices",
       "noOtherDevices": "No other device signed in.",
-      "otherDevices": "{n} other device(s) signed in.",
+      "otherDevices": "{n} other device signed in.|{n} other devices signed in.",
       "signOutOthers": "Sign the others out",
       "devicesRevoked": "The other devices have been signed out",
       "signOut": "Sign out",
@@ -1314,7 +1329,7 @@
         "copyFailed": "Could not copy — select the text by hand."
       },
       "sessionOpened": "Opened {date}",
-      "sessionSeen": "seen {date}",
+      "sessionSeen": "Seen {date}",
       "openManage": "Open management",
       "status": "Service status",
       "openStatus": "View service status",
@@ -1343,7 +1358,8 @@
       "notifDownloadStartedHint": "When a download starts",
       "notifTest": "Send a test",
       "notifTestHint": "In 5 seconds, time to leave the app",
-      "notifTestNoDevice": "Turn on notifications on this device first"
+      "notifTestNoDevice": "Turn on notifications on this device first",
+      "unknownDevice": "Unidentified device"
     },
     "browse": {
       "seeAll": "See all",
@@ -1467,11 +1483,11 @@
     "unmutePreview": "Unmute preview",
     "nextUpBadge": "Up next",
     "moreInfo": "More info",
-    "seasonCount": "{n} season(s)",
+    "seasonCount": "{n} season|{n} seasons",
     "searchPlaceholder": "Search a movie or series…",
     "searchHint": "Searches your library: title, genre, year…",
     "searchEmpty": "Nothing in your library matches this search.",
-    "searchResults": "{n} result(s)",
+    "searchResults": "{n} result|{n} results",
     "search": "Search",
     "myList": "My list",
     "recentlyAdded": "Recently added",
@@ -1489,14 +1505,15 @@
       "recommended": "Recommended for you"
     },
     "missing": {
-      "count": "{n} episode(s) missing",
+      "count": "{n} episode missing|{n} episodes missing",
       "requestSeason": "Request the season",
       "requested": "Requested",
       "notAired": "This episode hasn't aired yet.",
       "notAiredShort": "Upcoming",
       "seasonRequested": "Season {n} requested",
       "episodeRequested": "{label} requested",
-      "airsOn": "on {date}"
+      "airsOn": "on {date}",
+      "upcoming": "{n} upcoming episode|{n} upcoming episodes"
     },
     "reload": "Reload the page",
     "upNext": "Up next",
@@ -1567,7 +1584,7 @@
     "depthQuick": "Quick",
     "interactive": "With questions",
     "interactiveHint": "A few questions will appear during the tests.",
-    "estimate": "{n} film(s), about {min} min.",
+    "estimate": "{n} film, about {min} min.|{n} films, about {min} min.",
     "start": "Start the run",
     "running": "Run in progress…",
     "stop": "Stop",
@@ -1583,7 +1600,7 @@
     "savedHint": "Everything is saved on the server, with the player's trace for each failure.",
     "lastRuns": "Recent runs",
     "noRuns": "No run yet.",
-    "runLine": "{n} film(s), {fail} failed, {warn} to watch",
+    "runLine": "{n} film, {fail} failed, {warn} to watch|{n} films, {fail} failed, {warn} to watch",
     "unfinished": "interrupted",
     "question": {
       "sync": "Are picture and sound in sync?",

@@ -141,7 +141,7 @@ function ApiChecksSection() {
           {ranAt && results.length > 0 && !running && (
             <div className="flex items-center gap-2 text-[11px] text-slate-500">
               <span className="text-emerald-400">{t('health.apiTests.ok', { n: String(okCount) })}</span>
-              {errCount > 0 && <span className="text-red-400">{t('health.apiTests.errors', { n: String(errCount) })}</span>}
+              {errCount > 0 && <span className="text-red-400">{t('health.apiTests.errors', { n: errCount })}</span>}
               <span>· {ranAt}</span>
             </div>
           )}

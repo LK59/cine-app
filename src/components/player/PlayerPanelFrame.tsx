@@ -201,7 +201,7 @@ export function PlayerPanelFrame({
       }}
     >
       <header
-        className={`flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10 ${short ? "pb-2" : "pb-4"}`}
+        className="flex shrink-0 items-start gap-3 px-5 sm:gap-4 sm:px-10"
         // Un téléphone couché n'a que ~400 px de haut : un titre de trois rem et deux rems de
         // marge en mangeaient le quart avant la première affiche.
         style={{ paddingTop: `calc(${short ? "0.75rem" : "1.5rem"} + env(safe-area-inset-top))` }}
@@ -256,6 +256,14 @@ export function PlayerPanelFrame({
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))" }}
       >
+        {/* Un fondu sous l'en-tête, collé en haut de la zone qui défile.
+            Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026). Le
+            fondu occupe la marge qui séparait l'en-tête du contenu : au repos il ne recouvre que
+            du vide, et rien ne bouge ; au défilement, ce qui monte s'y efface. */}
+        <div
+          aria-hidden
+          className={`pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-ink to-transparent ${short ? "h-2" : "h-4"}`}
+        />
         {children}
       </div>
     </div>,

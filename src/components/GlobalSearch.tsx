@@ -1,5 +1,6 @@
 "use client";
 
+import { departmentLabel } from "@/lib/personDepartment";
 import { useClaraGalleryEnabled } from "@/lib/usePlayerEnabled";
 import { isVip as isVipPerson } from "@/lib/vip-persons";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -461,7 +462,7 @@ export function GlobalSearch() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`truncate text-sm font-medium ${isVip ? "text-yellow-400" : "text-white"}`}>{p.name}</p>
-                      <p className="truncate text-xs text-slate-500">{p.department}{p.knownFor.length > 0 ? ` · ${p.knownFor.slice(0, 2).join(", ")}` : ""}</p>
+                      <p className="truncate text-xs text-slate-500">{[departmentLabel(t, p.department), p.knownFor.slice(0, 2).join(", ")].filter(Boolean).join(" · ")}</p>
                       {p.libraryTitles.length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {p.libraryTitles.map((title) => (

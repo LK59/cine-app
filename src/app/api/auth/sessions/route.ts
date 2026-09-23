@@ -15,6 +15,7 @@ export interface OtherSession {
   id: string;
   createdAt: number;
   lastSeenAt: number;
+  device: string | null;
 }
 
 /**
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     count: others.length,
     // Jamais le `jti` : c'est lui qui identifie une session, et une page n'a besoin que de la
     // reconnaître, pas de la nommer.
-    sessions: others.map((s, i): OtherSession => ({ id: String(i), createdAt: s.createdAt, lastSeenAt: s.lastSeenAt })),
+    sessions: others.map((s, i): OtherSession => ({ id: String(i), createdAt: s.createdAt, lastSeenAt: s.lastSeenAt, device: s.device })),
   });
 }
 

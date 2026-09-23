@@ -371,7 +371,7 @@
       "sectionTitle": "Tests des routes API",
       "sectionSubtitle": "Vérifie chaque endpoint interne — authentification, latence et forme de réponse",
       "ok": "{n} ok",
-      "errors": "{n} erreur(s)",
+      "errors": "{n} erreur|{n} erreurs",
       "running": "Test en cours…",
       "run": "Lancer les tests",
       "rerun": "Relancer",
@@ -606,7 +606,7 @@
       "sat": "Sam",
       "sun": "Dim"
     },
-    "moreItems": "+{n} autre(s)",
+    "moreItems": "+{n} autre|+{n} autres",
     "todaySuffix": "aujourd'hui",
     "filters": {
       "all": "Tout",
@@ -797,7 +797,7 @@
       "sessionsTitle": "Autres appareils connectés",
       "loading": "Chargement…",
       "noOtherSessions": "Aucune autre session active",
-      "otherSessions": "{n} autre(s) session(s) active(s)",
+      "otherSessions": "{n} autre session active|{n} autres sessions actives",
       "revokeAll": "Déconnecter tous les autres",
       "revoked": "Déconnecté",
       "revokeSuccess": "Toutes les autres sessions ont été révoquées."
@@ -883,7 +883,22 @@
     "requested": "Demandé",
     "age": "{n} ans",
     "died": "† {date} ({n} ans)",
-    "works": "{n} œuvres"
+    "works": "{n} œuvres",
+    "department": {
+      "acting": "Interprétation",
+      "directing": "Réalisation",
+      "writing": "Scénario",
+      "production": "Production",
+      "sound": "Son",
+      "camera": "Image",
+      "editing": "Montage",
+      "art": "Décors",
+      "costume": "Costumes et maquillage",
+      "crew": "Équipe technique",
+      "visualEffects": "Effets visuels",
+      "lighting": "Lumière",
+      "creator": "Création"
+    }
   },
   "search": {
     "placeholder": "Titre, acteur, réalisateur… (ex: avec Brad Pitt)",
@@ -1187,7 +1202,7 @@
       "hint": "Cherchez un film, une série ou quelqu’un. Ce qui n’est pas encore dans la bibliothèque peut être demandé.",
       "noResults": "Rien trouvé pour « {query} ».",
       "filterAll": "Tout",
-      "personTitles": "{n} titre(s) ici",
+      "personTitles": "{n} titre ici|{n} titres ici",
       "recent": "Vos dernières recherches",
       "forget": "Effacer",
       "failed": "La recherche n’a pas abouti. Vérifiez la connexion et réessayez."
@@ -1196,7 +1211,7 @@
       "requests": "Demandes",
       "toWatch": "À voir",
       "watched": "Vu",
-      "arrivedBadge": "{n} titre(s) arrivé(s)",
+      "arrivedBadge": "{n} titre arrivé|{n} titres arrivés",
       "requestsHint": "Utilisez la recherche pour demander un titre. Il apparaîtra ici jusqu’à ce qu’il soit disponible.",
       "watchedHint": "Rempli automatiquement au fil de vos lectures. Vous pouvez corriger depuis la fiche d’un titre.",
       "empty": {
@@ -1295,7 +1310,7 @@
       "saved": "Enregistré",
       "devices": "Appareils connectés",
       "noOtherDevices": "Aucun autre appareil connecté.",
-      "otherDevices": "{n} autre(s) appareil(s) connecté(s).",
+      "otherDevices": "{n} autre appareil connecté.|{n} autres appareils connectés.",
       "signOutOthers": "Déconnecter les autres",
       "devicesRevoked": "Les autres appareils ont été déconnectés",
       "signOut": "Déconnexion",
@@ -1314,7 +1329,7 @@
         "copyFailed": "Copie impossible — sélectionnez le texte à la main."
       },
       "sessionOpened": "Ouverte le {date}",
-      "sessionSeen": "vue le {date}",
+      "sessionSeen": "Vue le {date}",
       "openManage": "Ouvrir la gestion",
       "status": "État des services",
       "openStatus": "Voir l'état des services",
@@ -1343,7 +1358,8 @@
       "notifDownloadStartedHint": "Quand un téléchargement commence",
       "notifTest": "Envoyer un test",
       "notifTestHint": "Dans 5 secondes, le temps de quitter l'application",
-      "notifTestNoDevice": "Activez d'abord les notifications sur cet appareil"
+      "notifTestNoDevice": "Activez d'abord les notifications sur cet appareil",
+      "unknownDevice": "Appareil non identifié"
     },
     "browse": {
       "seeAll": "Voir tout",
@@ -1467,11 +1483,11 @@
     "unmutePreview": "Activer le son de l'aperçu",
     "nextUpBadge": "À suivre",
     "moreInfo": "Plus d'infos",
-    "seasonCount": "{n} saison(s)",
+    "seasonCount": "{n} saison|{n} saisons",
     "searchPlaceholder": "Rechercher un film ou une série…",
     "searchHint": "Recherche dans votre bibliothèque : titre, genre, année…",
     "searchEmpty": "Rien dans votre bibliothèque pour cette recherche.",
-    "searchResults": "{n} résultat(s)",
+    "searchResults": "{n} résultat|{n} résultats",
     "search": "Rechercher",
     "myList": "Ma liste",
     "recentlyAdded": "Récemment ajoutés",
@@ -1489,14 +1505,15 @@
       "recommended": "Recommandé pour vous"
     },
     "missing": {
-      "count": "{n} épisode(s) manquant(s)",
+      "count": "{n} épisode manquant|{n} épisodes manquants",
       "requestSeason": "Demander la saison",
       "requested": "Demandé",
       "notAired": "Cet épisode n'est pas encore diffusé.",
       "notAiredShort": "À venir",
       "seasonRequested": "Saison {n} demandée",
       "episodeRequested": "{label} demandé",
-      "airsOn": "le {date}"
+      "airsOn": "le {date}",
+      "upcoming": "{n} épisode à venir|{n} épisodes à venir"
     },
     "reload": "Recharger la page",
     "upNext": "À suivre",
@@ -1567,7 +1584,7 @@
     "depthQuick": "Rapide",
     "interactive": "Avec questions",
     "interactiveHint": "Quelques questions s'afficheront pendant les tests.",
-    "estimate": "{n} film(s), environ {min} min.",
+    "estimate": "{n} film, environ {min} min.|{n} films, environ {min} min.",
     "start": "Lancer le banc",
     "running": "Banc en cours…",
     "stop": "Arrêter",
@@ -1583,7 +1600,7 @@
     "savedHint": "Tout est enregistré sur le serveur, avec la trace du lecteur pour chaque échec.",
     "lastRuns": "Derniers bancs",
     "noRuns": "Aucun banc pour l'instant.",
-    "runLine": "{n} film(s), {fail} en échec, {warn} à surveiller",
+    "runLine": "{n} film, {fail} en échec, {warn} à surveiller|{n} films, {fail} en échec, {warn} à surveiller",
     "unfinished": "interrompu",
     "question": {
       "sync": "L'image et le son sont-ils bien synchronisés ?",

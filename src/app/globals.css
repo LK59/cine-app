@@ -421,6 +421,12 @@
 @utility btn-primary {
   @apply btn bg-accent-600 text-white shadow-glow;
 }
+/* Désactivé, un bouton principal devient gris, pas violet éteint : à 45 % d'opacité, son texte
+   violet pâle sur fond violet se lisait à peine (« Changer le mot de passe », 23/09/2026) et il
+   gardait l'air d'un appel à l'action. Gris, il dit qu'il attend quelque chose. */
+.btn-primary:disabled {
+  @apply bg-white/8 text-subtle opacity-100 shadow-none;
+}
 @media (hover: hover) {
   .btn-primary:hover:not(:disabled) {
     @apply bg-accent-500;
@@ -507,7 +513,7 @@
 }
 
 @utility input {
-  @apply w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs placeholder:text-slate-500 focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
+  @apply w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs placeholder:text-subtle focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
 }
 
 /* Le champ qui dessine sa propre croix d'effacement doit demander à Chrome de ranger la sienne :

@@ -371,7 +371,7 @@
       "sectionTitle": "API-Routen testen",
       "sectionSubtitle": "Prüft jeden internen Endpunkt — Authentifizierung, Latenz und Antwortformat",
       "ok": "{n} ok",
-      "errors": "{n} Fehler",
+      "errors": "{n} Fehler|{n} Fehler",
       "running": "Test läuft…",
       "run": "Tests starten",
       "rerun": "Erneut starten",
@@ -797,7 +797,7 @@
       "sessionsTitle": "Andere angemeldete Geräte",
       "loading": "Laden…",
       "noOtherSessions": "Keine anderen aktiven Sitzungen",
-      "otherSessions": "{n} weitere aktive Sitzung(en)",
+      "otherSessions": "{n} weitere aktive Sitzung|{n} weitere aktive Sitzungen",
       "revokeAll": "Alle anderen abmelden",
       "revoked": "Abgemeldet",
       "revokeSuccess": "Alle anderen Sitzungen wurden widerrufen."
@@ -883,7 +883,22 @@
     "requested": "Angefragt",
     "age": "{n} Jahre",
     "died": "† {date} ({n} Jahre)",
-    "works": "{n} Werke"
+    "works": "{n} Werke",
+    "department": {
+      "acting": "Schauspiel",
+      "directing": "Regie",
+      "writing": "Drehbuch",
+      "production": "Produktion",
+      "sound": "Ton",
+      "camera": "Kamera",
+      "editing": "Schnitt",
+      "art": "Szenenbild",
+      "costume": "Kostüm und Maske",
+      "crew": "Crew",
+      "visualEffects": "Visuelle Effekte",
+      "lighting": "Beleuchtung",
+      "creator": "Idee"
+    }
   },
   "search": {
     "placeholder": "Titel, Schauspieler, Regisseur… (z. B. mit Brad Pitt)",
@@ -1295,7 +1310,7 @@
       "saved": "Gespeichert",
       "devices": "Angemeldete Geräte",
       "noOtherDevices": "Kein weiteres Gerät angemeldet.",
-      "otherDevices": "{n} weitere(s) Gerät(e) angemeldet.",
+      "otherDevices": "{n} weiteres Gerät angemeldet.|{n} weitere Geräte angemeldet.",
       "signOutOthers": "Andere abmelden",
       "devicesRevoked": "Die anderen Geräte wurden abgemeldet",
       "signOut": "Abmelden",
@@ -1314,7 +1329,7 @@
         "copyFailed": "Kopieren nicht möglich — Text bitte selbst markieren."
       },
       "sessionOpened": "Geöffnet am {date}",
-      "sessionSeen": "gesehen am {date}",
+      "sessionSeen": "Gesehen am {date}",
       "openManage": "Verwaltung öffnen",
       "status": "Dienststatus",
       "openStatus": "Dienststatus ansehen",
@@ -1343,7 +1358,8 @@
       "notifDownloadStartedHint": "Wenn ein Download startet",
       "notifTest": "Test senden",
       "notifTestHint": "In 5 Sekunden, Zeit genug, die App zu verlassen",
-      "notifTestNoDevice": "Aktiviere zuerst die Benachrichtigungen auf diesem Gerät"
+      "notifTestNoDevice": "Aktiviere zuerst die Benachrichtigungen auf diesem Gerät",
+      "unknownDevice": "Unbekanntes Gerät"
     },
     "browse": {
       "seeAll": "Alle anzeigen",
@@ -1467,11 +1483,11 @@
     "unmutePreview": "Ton der Vorschau aktivieren",
     "nextUpBadge": "Als Nächstes",
     "moreInfo": "Mehr Infos",
-    "seasonCount": "{n} Staffel(n)",
+    "seasonCount": "{n} Staffel|{n} Staffeln",
     "searchPlaceholder": "Film oder Serie suchen…",
     "searchHint": "Durchsucht deine Bibliothek: Titel, Genre, Jahr…",
     "searchEmpty": "Nichts in deiner Bibliothek passt zu dieser Suche.",
-    "searchResults": "{n} Ergebnis(se)",
+    "searchResults": "{n} Ergebnis|{n} Ergebnisse",
     "search": "Suchen",
     "myList": "Meine Liste",
     "recentlyAdded": "Kürzlich hinzugefügt",
@@ -1489,14 +1505,15 @@
       "recommended": "Für dich empfohlen"
     },
     "missing": {
-      "count": "{n} Folge(n) fehlen",
+      "count": "{n} Folge fehlt|{n} Folgen fehlen",
       "requestSeason": "Staffel anfragen",
       "requested": "Angefragt",
       "notAired": "Diese Folge ist noch nicht erschienen.",
       "notAiredShort": "Demnächst",
       "seasonRequested": "Staffel {n} angefragt",
       "episodeRequested": "{label} angefragt",
-      "airsOn": "am {date}"
+      "airsOn": "am {date}",
+      "upcoming": "{n} kommende Folge|{n} kommende Folgen"
     },
     "reload": "Seite neu laden",
     "upNext": "Als Nächstes",
@@ -1567,7 +1584,7 @@
     "depthQuick": "Schnell",
     "interactive": "Mit Fragen",
     "interactiveHint": "Während der Tests erscheinen einige Fragen.",
-    "estimate": "{n} Film(e), etwa {min} Min.",
+    "estimate": "{n} Film, etwa {min} Min.|{n} Filme, etwa {min} Min.",
     "start": "Testlauf starten",
     "running": "Testlauf läuft…",
     "stop": "Anhalten",
@@ -1583,7 +1600,7 @@
     "savedHint": "Alles wird auf dem Server gespeichert, mit dem Player-Protokoll zu jedem Fehler.",
     "lastRuns": "Letzte Testläufe",
     "noRuns": "Noch kein Testlauf.",
-    "runLine": "{n} Film(e), {fail} fehlgeschlagen, {warn} beobachten",
+    "runLine": "{n} Film, {fail} fehlgeschlagen, {warn} beobachten|{n} Filme, {fail} fehlgeschlagen, {warn} beobachten",
     "unfinished": "abgebrochen",
     "question": {
       "sync": "Sind Bild und Ton synchron?",

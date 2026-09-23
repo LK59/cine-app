@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { deviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { token, jti } = await createSessionToken(username, "admin");
-  sessionDb.create(jti, username);
+  sessionDb.create(jti, username, deviceLabel(req.headers.get("user-agent")));
   const lang = userPrefsDb.getLang(username, config.app.language);
   const res = NextResponse.json({ ok: true, role: "admin" });
   res.cookies.set(SESSION_COOKIE, token, {

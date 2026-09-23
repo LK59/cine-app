@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Check, CalendarClock } from "lucide-react";
+import { Download, Check } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import type { MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
 import { CinemaDownloading } from "@/components/cinema/CinemaDetailExtras";
@@ -38,13 +38,23 @@ export function CinemaMissingEpisodes({
   if (!season || season.episodes.length === 0) return null;
 
   const seasonAsked = asked.has(`s${season.seasonNumber}`);
+  const missing = season.episodes.filter((ep) => ep.released).length;
+  const upcoming = season.episodes.length - missing;
   const dateFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 
   return (
     <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        {/* Ce qui manque et ce qui n'est pas encore sorti ne sont pas la même chose. « 10 épisodes
+            manquants » pour une saison annoncée, dont aucun épisode n'était diffusé, laissait
+            croire à une bibliothèque incomplète (23/09/2026). */}
         <p className="text-sm font-medium text-muted">
-          {t("cinema.missing.count", { n: season.episodes.length })}
+          {[
+            missing > 0 ? t("cinema.missing.count", { n: missing }) : null,
+            upcoming > 0 ? t("cinema.missing.upcoming", { n: upcoming }) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
         {season.requestable && (
           <button
@@ -84,7 +94,9 @@ export function CinemaMissingEpisodes({
                   </span>
                 )}
               </span>
-              {ep.downloading != null ? (
+              {/* Pas encore sorti : rien à demander, et sa date, juste à côté, dit déjà quand. Le
+                  bouton grisé « À venir » la répétait. */}
+              {!ep.released && ep.downloading == null ? null : ep.downloading != null ? (
                 /* En route : ni « Demander », ni « Demandé » — ce qu'on veut savoir, c'est où il
                    en est. C'est aussi ce qui rend la demande visible d'une séance à l'autre. */
                 <CinemaDownloading progress={ep.downloading} className="shrink-0 px-2" />
@@ -100,13 +112,9 @@ export function CinemaMissingEpisodes({
                   <>
                     <Check size={13} /> {t("cinema.missing.requested")}
                   </>
-                ) : ep.released ? (
-                  <>
-                    <Download size={13} /> {t("player.discover.request")}
-                  </>
                 ) : (
                   <>
-                    <CalendarClock size={13} /> {t("cinema.missing.notAiredShort")}
+                    <Download size={13} /> {t("player.discover.request")}
                   </>
                 )}
               </button>

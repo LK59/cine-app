@@ -371,7 +371,7 @@
       "sectionTitle": "Tests de rutas API",
       "sectionSubtitle": "Verifica cada endpoint interno — autenticación, latencia y forma de respuesta",
       "ok": "{n} ok",
-      "errors": "{n} error(es)",
+      "errors": "{n} error|{n} errores",
       "running": "Test en curso…",
       "run": "Ejecutar tests",
       "rerun": "Volver a ejecutar",
@@ -797,7 +797,7 @@
       "sessionsTitle": "Otros dispositivos conectados",
       "loading": "Cargando…",
       "noOtherSessions": "Sin otras sesiones activas",
-      "otherSessions": "{n} sesión(es) activa(s)",
+      "otherSessions": "{n} sesión activa|{n} sesiones activas",
       "revokeAll": "Cerrar sesión en todos los demás",
       "revoked": "Sesión cerrada",
       "revokeSuccess": "Todas las demás sesiones han sido revocadas."
@@ -883,7 +883,22 @@
     "requested": "Solicitado",
     "age": "{n} años",
     "died": "† {date} ({n} años)",
-    "works": "{n} obras"
+    "works": "{n} obras",
+    "department": {
+      "acting": "Interpretación",
+      "directing": "Dirección",
+      "writing": "Guion",
+      "production": "Producción",
+      "sound": "Sonido",
+      "camera": "Fotografía",
+      "editing": "Montaje",
+      "art": "Dirección artística",
+      "costume": "Vestuario y maquillaje",
+      "crew": "Equipo técnico",
+      "visualEffects": "Efectos visuales",
+      "lighting": "Iluminación",
+      "creator": "Creación"
+    }
   },
   "search": {
     "placeholder": "Título, actor, director… (ej: con Brad Pitt)",
@@ -1187,7 +1202,7 @@
       "hint": "Busca una película, una serie o alguien. Lo que aún no está en la biblioteca se puede pedir.",
       "noResults": "No hay resultados para «{query}».",
       "filterAll": "Todo",
-      "personTitles": "{n} título(s) aquí",
+      "personTitles": "{n} título aquí|{n} títulos aquí",
       "recent": "Tus últimas búsquedas",
       "forget": "Borrar",
       "failed": "La búsqueda no se ha completado. Comprueba la conexión e inténtalo de nuevo."
@@ -1196,7 +1211,7 @@
       "requests": "Peticiones",
       "toWatch": "Por ver",
       "watched": "Visto",
-      "arrivedBadge": "{n} título(s) disponible(s)",
+      "arrivedBadge": "{n} título disponible|{n} títulos disponibles",
       "requestsHint": "Usa la búsqueda para pedir un título. Se queda aquí hasta que esté disponible.",
       "watchedHint": "Se rellena solo según lo que ves. Puedes corregirlo desde la ficha de un título.",
       "empty": {
@@ -1295,7 +1310,7 @@
       "saved": "Guardado",
       "devices": "Dispositivos conectados",
       "noOtherDevices": "Ningún otro dispositivo conectado.",
-      "otherDevices": "{n} otro(s) dispositivo(s) conectado(s).",
+      "otherDevices": "{n} otro dispositivo conectado.|{n} otros dispositivos conectados.",
       "signOutOthers": "Desconectar los demás",
       "devicesRevoked": "Los demás dispositivos se han desconectado",
       "signOut": "Cerrar sesión",
@@ -1314,7 +1329,7 @@
         "copyFailed": "No se pudo copiar — selecciona el texto a mano."
       },
       "sessionOpened": "Abierta el {date}",
-      "sessionSeen": "vista el {date}",
+      "sessionSeen": "Vista el {date}",
       "openManage": "Abrir la gestión",
       "status": "Estado de los servicios",
       "openStatus": "Ver el estado de los servicios",
@@ -1343,7 +1358,8 @@
       "notifDownloadStartedHint": "Cuando empieza una descarga",
       "notifTest": "Enviar una prueba",
       "notifTestHint": "En 5 segundos, el tiempo de salir de la aplicación",
-      "notifTestNoDevice": "Activa primero las notificaciones en este dispositivo"
+      "notifTestNoDevice": "Activa primero las notificaciones en este dispositivo",
+      "unknownDevice": "Dispositivo no identificado"
     },
     "browse": {
       "seeAll": "Ver todo",
@@ -1467,11 +1483,11 @@
     "unmutePreview": "Activar el sonido de la vista previa",
     "nextUpBadge": "A continuación",
     "moreInfo": "Más información",
-    "seasonCount": "{n} temporada(s)",
+    "seasonCount": "{n} temporada|{n} temporadas",
     "searchPlaceholder": "Buscar una película o serie…",
     "searchHint": "Busca en tu biblioteca: título, género, año…",
     "searchEmpty": "Nada en tu biblioteca coincide con esta búsqueda.",
-    "searchResults": "{n} resultado(s)",
+    "searchResults": "{n} resultado|{n} resultados",
     "search": "Buscar",
     "myList": "Mi lista",
     "recentlyAdded": "Añadidos recientemente",
@@ -1489,14 +1505,15 @@
       "recommended": "Recomendado para ti"
     },
     "missing": {
-      "count": "{n} episodio(s) que faltan",
+      "count": "{n} episodio que falta|{n} episodios que faltan",
       "requestSeason": "Pedir la temporada",
       "requested": "Pedido",
       "notAired": "Este episodio aún no se ha emitido.",
       "notAiredShort": "Próximamente",
       "seasonRequested": "Temporada {n} pedida",
       "episodeRequested": "{label} pedido",
-      "airsOn": "el {date}"
+      "airsOn": "el {date}",
+      "upcoming": "{n} episodio por estrenar|{n} episodios por estrenar"
     },
     "reload": "Recargar la página",
     "upNext": "A continuación",
@@ -1567,7 +1584,7 @@
     "depthQuick": "Rápida",
     "interactive": "Con preguntas",
     "interactiveHint": "Aparecerán algunas preguntas durante las pruebas.",
-    "estimate": "{n} película(s), unos {min} min.",
+    "estimate": "{n} película, unos {min} min.|{n} películas, unos {min} min.",
     "start": "Iniciar la prueba",
     "running": "Prueba en curso…",
     "stop": "Detener",
@@ -1583,7 +1600,7 @@
     "savedHint": "Todo se guarda en el servidor, con la traza del reproductor para cada fallo.",
     "lastRuns": "Últimas pruebas",
     "noRuns": "Aún no hay pruebas.",
-    "runLine": "{n} película(s), {fail} fallidas, {warn} a vigilar",
+    "runLine": "{n} película, {fail} fallidas, {warn} a vigilar|{n} películas, {fail} fallidas, {warn} a vigilar",
     "unfinished": "interrumpida",
     "question": {
       "sync": "¿Están sincronizados la imagen y el sonido?",

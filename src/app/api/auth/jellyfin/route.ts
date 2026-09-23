@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { deviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, type Role } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
     jellyseerrCookie ?? undefined
   );
   const userId = jellyfinId || jellyfinUsername;
-  sessionDb.create(jti, userId);
+  sessionDb.create(jti, userId, deviceLabel(req.headers.get("user-agent")));
   const lang = userPrefsDb.getLang(userId, config.app.language);
   const res = NextResponse.json({ ok: true, role });
   res.cookies.set(SESSION_COOKIE, token, {

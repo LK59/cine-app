@@ -1,5 +1,6 @@
 "use client";
 
+import { departmentLabel } from "@/lib/personDepartment";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
@@ -17,6 +18,9 @@ import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { SHEET_OUT_MS, sheetMotionClass } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
+
+const LINK_CHIP =
+  "flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-white/10 hover:text-white";
 
 interface PersonCredit {
   tmdbId: number;
@@ -566,7 +570,7 @@ export function PlayerPersonSheet({
 
               <div className="min-w-0 flex-1">
                 <h1 className="font-display text-2xl font-semibold text-white sm:text-3xl">{data.name}</h1>
-                {data.knownFor && <p className="mt-0.5 text-xs text-subtle">{data.knownFor}</p>}
+                {departmentLabel(t, data.knownFor) && <p className="mt-0.5 text-xs text-subtle">{departmentLabel(t, data.knownFor)}</p>}
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                   {data.birthday && (
                     <span className="flex items-center gap-1.5">
@@ -600,24 +604,24 @@ export function PlayerPersonSheet({
 
         {data && (
           <div className="px-5 pb-8 sm:px-8">
+            {/* Des blocs neutres, la couleur sur l'icône seule (23/09/2026) : en rose, jaune et
+                bleu pleins, ces trois liens étaient les seules taches de couleur d'une fiche par
+                ailleurs sobre, et tiraient l'œil avant le nom. */}
             {(links?.instagram || links?.imdb || links?.wikipedia) && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {links.instagram && (
-                  <a href={links.instagram} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-pink-500/10 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition hover:bg-pink-500/20">
-                    <InstagramIcon size={12} /> Instagram
+                  <a href={links.instagram} target="_blank" rel="noopener noreferrer" className={LINK_CHIP}>
+                    <InstagramIcon size={12} className="text-pink-400" /> Instagram
                   </a>
                 )}
                 {links.imdb && (
-                  <a href={links.imdb} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20">
-                    <Star size={12} /> IMDb
+                  <a href={links.imdb} target="_blank" rel="noopener noreferrer" className={LINK_CHIP}>
+                    <Star size={12} className="text-amber-400" /> IMDb
                   </a>
                 )}
                 {links.wikipedia && (
-                  <a href={links.wikipedia} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20">
-                    <Globe size={12} /> Wikipédia
+                  <a href={links.wikipedia} target="_blank" rel="noopener noreferrer" className={LINK_CHIP}>
+                    <Globe size={12} className="text-sky-400" /> Wikipédia
                   </a>
                 )}
               </div>

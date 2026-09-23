@@ -26,13 +26,28 @@ function interpolate(str: string, vars?: Record<string, string | number>): strin
   return str.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? `{${key}}`));
 }
 
+/**
+ * Le singulier ou le pluriel, choisis par la règle de la langue.
+ *
+ * Une traduction peut porter deux formes séparées par `|` — « {n} autre appareil|{n} autres
+ * appareils » — et `n` choisit. Avant (23/09/2026), onze chaînes écrivaient « appareil(s)
+ * connecté(s) » : un brouillon laissé à l'écran. La règle vient d'`Intl.PluralRules`, pas d'un
+ * `n === 1` : en français, zéro est singulier (« 0 autre appareil »), en anglais non.
+ */
+function pickPlural(str: string, locale: Locale, vars?: Record<string, string | number>): string {
+  if (!str.includes("|") || typeof vars?.n !== "number") return str;
+  const [one, other] = str.split("|");
+  return new Intl.PluralRules(locale).select(vars.n) === "one" ? one : (other ?? one);
+}
+
 export function createT(
   dict: Record<string, unknown>,
-  fallback: Record<string, unknown>
+  fallback: Record<string, unknown>,
+  locale: Locale = DEFAULT_LOCALE
 ) {
   return function t(key: string, vars?: Record<string, string | number>): string {
     const val = get(dict, key) ?? get(fallback, key) ?? key;
-    return interpolate(val, vars);
+    return interpolate(pickPlural(val, locale, vars), vars);
   };
 }
 
