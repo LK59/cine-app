@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { withCache } from "@/lib/server-cache";
+import { withPersistentCache } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +16,10 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   const personId = Number(params.id);
   if (!tmdb.isEnabled()) return NextResponse.json({ photos: [] });
 
-  const photos = await withCache<PersonPhoto[]>(`person:photos:${personId}`, 24 * 60 * 60_000, async () => {
-    const data = await tmdb.getPersonImages(personId).catch(() => ({ profiles: [] }));
+  // Une semaine, sur disque. L'échec n'est plus transformé en liste vide *dans* le cache : gardée
+  // une semaine, une coupure réseau aurait laissé l'acteur sans photos pendant sept jours.
+  const photos = await withPersistentCache<PersonPhoto[]>(`person:photos:${personId}`, 7 * 24 * 3600_000, async () => {
+    const data = await tmdb.getPersonImages(personId);
     return (data.profiles ?? [])
       .sort((a, b) => b.vote_average - a.vote_average)
       .slice(0, 24)
@@ -27,7 +29,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
         aspectRatio: p.width / p.height,
         voteAverage: p.vote_average,
       }));
-  });
+  }).catch(() => [] as PersonPhoto[]);
 
   return NextResponse.json({ photos });
 }

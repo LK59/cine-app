@@ -3,18 +3,28 @@ import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
 import { playableLibrary } from "@/lib/playerLibrary";
 import { withErrorHandling } from "@/lib/api-helpers";
+import { withPersistentCache } from "@/lib/server-cache";
+
+/**
+ * Une semaine, sur disque (23/09/2026) : une fiche personne coûtait deux appels à TMDB à chaque
+ * ouverture, et une filmographie ne change pas d'un jour à l'autre. Seules les réponses de TMDB
+ * sont gardées — ce qui est dans la bibliothèque est recalculé à chaque fois, pour qu'un film
+ * arrivé hier y apparaisse aujourd'hui. Un échec n'est pas gardé (voir `withPersistentCache`).
+ */
+const WEEK_MS = 7 * 24 * 3600_000;
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const tmdb = createTmdbClient(getTmdbLocale(req.cookies.get("cine-lang")?.value));
+  const locale = getTmdbLocale(req.cookies.get("cine-lang")?.value);
+  const tmdb = createTmdbClient(locale);
   const personId = Number(params.id);
   if (!personId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   if (!tmdb.isEnabled()) return NextResponse.json({ credits: [] });
 
   return withErrorHandling(async () => {
     const [personFr, { cast }, lib] = await Promise.all([
-      tmdb.getPersonDetails(personId).catch(() => null),
-      tmdb.getPersonCredits(personId),
+      withPersistentCache(`tmdb:person:details:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonDetails(personId)).catch(() => null),
+      withPersistentCache(`tmdb:person:credits:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonCredits(personId)),
       // Ouvrable, et pas seulement connu de Radarr/Sonarr : une filmographie est pleine de titres
       // surveillés sans fichier, et les annoncer comme présents menait à un clic qui ne faisait
       // rien. Voir playableLibrary.

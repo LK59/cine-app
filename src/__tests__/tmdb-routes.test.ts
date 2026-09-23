@@ -21,8 +21,16 @@ vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...a: unknown[]) => mockCachedMovies(...a),
   cachedSeries: (...a: unknown[]) => mockCachedSeries(...a),
   withCache: async (_key: string, _ttl: number, fn: () => unknown) => fn(),
+  // Comme le vrai : un succès est gardé, un échec ne l'est pas.
+  withPersistentCache: async (key: string, _ttl: number, fn: () => Promise<unknown>) => {
+    if (persisted.has(key)) return persisted.get(key);
+    const value = await fn();
+    persisted.set(key, value);
+    return value;
+  },
   TTL: { VERY_LONG: 999_999 },
 }));
+const persisted = new Map<string, unknown>();
 vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 
 function fakeReq(): NextRequest {
@@ -32,6 +40,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  persisted.clear();
   mockTmdb.isEnabled.mockReturnValue(true);
   mockCachedMovies.mockResolvedValue([]);
   mockCachedSeries.mockResolvedValue([]);
@@ -150,5 +159,49 @@ describe("GET /api/tmdb/person/[id]/enriched", () => {
     const body = await res.json();
     expect(body.instagram).toBe("https://www.instagram.com/actor/");
     expect(body.imdb).toBe("https://www.imdb.com/name/nm123");
+  });
+});
+
+// Une semaine de cache pour les fiches personne et les collections (23/09/2026). Seule la réponse
+// de TMDB est gardée : ce qui est dans la bibliothèque est recalculé à chaque requête.
+describe("le cache d'une semaine des fiches personne et des collections", () => {
+  it("ne redemande pas une filmographie, mais voit un film arrivé depuis", async () => {
+    mockTmdb.getPersonDetails.mockResolvedValue({ name: "Actor", biography: "Bio" });
+    mockTmdb.getPersonCredits.mockResolvedValue({
+      cast: [{ id: 603, media_type: "movie", title: "Matrix", release_date: "1999-03-31", popularity: 1, vote_average: 8, poster_path: null, character: "Neo" }],
+    });
+    const { GET } = await import("@/app/api/tmdb/person/[id]/route");
+    expect((await (await GET(fakeReq(), params("6384"))).json()).credits[0].inLibrary).toBe(false);
+
+    mockCachedMovies.mockResolvedValue([{ id: 42, tmdbId: 603, hasFile: true }]);
+    const second = await (await GET(fakeReq(), params("6384"))).json();
+    expect(mockTmdb.getPersonCredits).toHaveBeenCalledTimes(1);
+    expect(second.credits[0]).toMatchObject({ inLibrary: true, libraryId: 42 });
+  });
+
+  it("ne redemande pas une collection", async () => {
+    mockTmdb.getCollection.mockResolvedValue({ name: "Saga", overview: "", parts: [] });
+    const { GET } = await import("@/app/api/tmdb/collection/[id]/route");
+    await GET(fakeReq(), params("10"));
+    await GET(fakeReq(), params("10"));
+    expect(mockTmdb.getCollection).toHaveBeenCalledTimes(1);
+  });
+
+  // Gardée une semaine, une coupure réseau aurait laissé l'acteur sans photos pendant sept jours.
+  it("ne garde pas un échec comme une liste vide", async () => {
+    mockTmdb.getPersonImages.mockRejectedValueOnce(new Error("down"));
+    const { GET } = await import("@/app/api/tmdb/person/[id]/photos/route");
+    expect((await (await GET(fakeReq(), params("7"))).json()).photos).toEqual([]);
+    mockTmdb.getPersonImages.mockResolvedValueOnce({ profiles: [{ file_path: "/a.jpg", width: 2, height: 3, vote_average: 5 }] });
+    expect((await (await GET(fakeReq(), params("7"))).json()).photos).toHaveLength(1);
+  });
+
+  it("ne garde pas une fiche enrichie quand TMDB n'a rien répondu", async () => {
+    mockTmdb.getPersonImages.mockRejectedValue(new Error("down"));
+    mockTmdb.getPersonExternalIds.mockRejectedValue(new Error("down"));
+    mockTmdb.getPersonDetails.mockRejectedValue(new Error("down"));
+    const { GET } = await import("@/app/api/tmdb/person/[id]/enriched/route");
+    await GET(fakeReq(), params("8"));
+    expect(persisted.size).toBe(0);
   });
 });

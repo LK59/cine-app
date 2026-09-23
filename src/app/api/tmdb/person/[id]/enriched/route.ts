@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
-import { withCache, TTL } from "@/lib/server-cache";
+import { withPersistentCache } from "@/lib/server-cache";
 
 export interface EnrichedPersonData {
   photos: string[];          // TMDb profile image URLs (w342)
@@ -73,12 +73,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   }
 
   const cacheKey = `enriched:person:${personId}:${rawLang}`;
-  const data = await withCache<EnrichedPersonData>(cacheKey, TTL.VERY_LONG, async () => {
+  // Une semaine, sur disque (dix minutes en mémoire avant le 23/09/2026 : perdues à chaque
+  // déploiement). Sans aucune réponse de TMDB, rien n'est gardé : une coupure ne doit pas laisser
+  // une fiche sans photos ni liens pendant une semaine.
+  const data = await withPersistentCache<EnrichedPersonData>(cacheKey, 7 * 24 * 3600_000, async () => {
     const [imagesData, externalIds, personDetails] = await Promise.all([
       tmdb.getPersonImages(personId).catch(() => null),
       tmdb.getPersonExternalIds(personId).catch(() => null),
       tmdb.getPersonDetails(personId).catch(() => null),
     ]);
+    if (!imagesData && !externalIds && !personDetails) throw new Error("TMDB injoignable");
 
     const photos = (imagesData?.profiles ?? [])
       .sort((a, b) => b.vote_average - a.vote_average)
@@ -99,7 +103,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     );
 
     return { photos, instagram, imdb, wikipedia, wikiBio };
-  });
+  }).catch((): EnrichedPersonData => ({ photos: [], instagram: null, imdb: null, wikipedia: null, wikiBio: null }));
 
   return NextResponse.json(data);
 }
