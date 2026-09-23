@@ -23,6 +23,7 @@ watched and how far — see [Playback reporting](#playback-reporting).
   - [MSE delivery](#mse-delivery)
 - [Audio](#audio)
 - [Subtitles](#subtitles)
+- [Black bars baked into the file](#black-bars-baked-into-the-file)
 - [Track selection and account preferences](#track-selection-and-account-preferences)
 - [Playback reporting](#playback-reporting)
 - [User-facing messages](#user-facing-messages)
@@ -555,6 +556,43 @@ re-encoded. It buys a language change that cannot break playback.
 
 ---
 
+## Black bars baked into the file
+
+A 2.39:1 film is often delivered in a 16:9 frame, its bars part of every image (1920×1080 holding
+1920×872 of picture). The element fits the *frame* to the screen (`object-contain`), so on a
+screen wider than 16:9 — a phone in landscape — the film is boxed in black on all four sides.
+Measured on a sample of 222 titles coded 16:9: 90 carry bars at the top and bottom, 7 on the sides.
+
+**The measure is server-side and decodes no video** (`pictureFrame.ts`). It reads Jellyfin's
+trickplay thumbnails — one image every ten seconds over the whole file, already extracted for the
+scrubbing preview — decodes the JPEG sheets with `sharp` into greyscale, and finds in each
+thumbnail where the content starts (a row or column is picture once its mean luminance exceeds
+24/255, `cropdetect`'s 0.1). A few sheets per film: about 0.2 s, cached on disk for six months
+under a key that includes the thumbnail count, so a replaced file is measured again. No
+trickplay, or fewer than 30 informative thumbnails, means no answer and no enlargement.
+`PLAYER_AUTO_FRAME=false` turns the whole thing off.
+
+**It can only err on the safe side.** The result is the *union* of every thumbnail's content —
+the largest picture seen over the film. A dark scene narrows its own measure and never the union;
+for real picture to be taken for a bar, that edge would have to be black from one end of the film
+to the other. A film whose ratio changes (IMAX sequences) gives the whole frame, hence no
+enlargement. The first 3 % and last 8 % are skipped (studio logos, credits), the two outermost
+pixels of each thumbnail are not trusted (JPEG blocks bleed across neighbouring thumbnails in a
+sheet), the result is widened by a pixel on every side, and a bar under 1 % is ignored.
+Checked against `ffmpeg cropdetect` at twelve points on the same 222 titles: no title where the
+thumbnails claim more bar than ffmpeg, one where they see less.
+
+**The enlargement is client-side** (`frameFit.ts`): the scale that brings the *picture*, not the
+frame, to the first screen edge it meets — the smaller of the two ratios, so the other dimension
+keeps everything — and an offset that centres the picture when its bars are unequal. It is a CSS
+transform on a wrapper around the surfaces, inside a clipping box, recomputed on every resize; the
+surfaces keep their own opacity transitions. The request leaves at open, alongside everything
+else, and nothing waits for it: from the cache it lands before the first picture, measured for the
+first time it arrives a moment later and the picture glides into place. Not in the mini-player,
+which fills its window already. The server-side player is not affected.
+
+---
+
 ## Subtitles
 
 **Internal text tracks** are collected in one pass by the remuxer (see above) and filtered by
@@ -953,3 +991,5 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `src/lib/playerLog.ts` | The playback log: writing, bounds, rotation |
 | `src/lib/reportPlayback.ts` | What the browser sends to it |
 | `trace.ts` | The timestamped account |
+| `src/lib/pictureFrame.ts`, `src/app/api/player/frame/[itemId]` | Where the picture sits in the frame, measured from trickplay thumbnails |
+| `src/lib/frameFit.ts` | The enlargement to the nearest screen edge, and its hook |

@@ -40,6 +40,7 @@ import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
+import { useFrameFit } from "@/lib/frameFit";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -2212,6 +2213,11 @@ export function ExperimentalPlayerHost({
     });
   }, [session.bench, itemId]);
 
+  // Les bandes noires incrustées dans le fichier : l'image est agrandie jusqu'au bord le plus
+  // proche, sans rien couper — voir `frameFit`. Pas dans le mini-lecteur, qui remplit déjà sa
+  // fenêtre (`object-cover`).
+  const frameStyle = useFrameFit(itemId, !isMini, containerRef);
+
   // Après tous les hooks : le banc d'essai en a ajouté trois au-dessus, et un retour anticipé
   // avant eux en changeait le nombre d'un rendu à l'autre.
   if (typeof document === "undefined") return null;
@@ -2234,35 +2240,42 @@ export function ExperimentalPlayerHost({
           arrive rarement seule et proprement — il y a un battement entre l'élément qui se
           déclare prêt et l'image qui s'installe. Trois cents millisecondes de fondu couvrent
           ce battement et, surtout, donnent une intention à ce qui ressemblait à un à-coup. */}
-      <video
-        ref={videoElRef}
-        playsInline
-        hidden={!onElement}
-        // Sous une image figée, l'élément reste pleinement visible : s'il s'éteignait pendant que
-        // l'image figée s'efface, les deux passaient ensemble par la demi-transparence et le noir
-        // se voyait au travers — un creux sombre au lieu d'un fondu.
-        className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
-          ready || frozen ? "opacity-100" : "opacity-0"
-        }`}
-      />
-      <canvas
-        ref={canvasRef}
-        hidden={onElement}
-        className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
-          ready ? "opacity-100" : "opacity-0"
-        }`}
-      />
-      {/* L'image d'avant, le temps d'une reconstruction pour changement de piste : posée par-dessus,
-          elle s'efface en fondu pendant que la nouvelle apparaît dessous. Voir `freezeFrame`. */}
-      <canvas
-        ref={freezeRef}
-        aria-hidden
-        // Là d'un coup, partie en fondu : apparue en fondu, elle laissait voir le noir de l'élément
-        // qu'on démonte pendant ses premières centaines de millisecondes.
-        className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity ease-out ${
-          frozen ? "opacity-100 duration-0" : "opacity-0 duration-200"
-        }`}
-      />
+      {/* Deux cadres autour des surfaces : l'extérieur coupe ce qui déborde, l'intérieur porte
+          l'agrandissement (`frameStyle`). Posé sur un cadre plutôt que sur chaque surface, il ne
+          touche pas à leurs propres transitions d'opacité. */}
+      <div className="relative h-full w-full overflow-hidden">
+        <div className="relative h-full w-full" style={frameStyle}>
+          <video
+            ref={videoElRef}
+            playsInline
+            hidden={!onElement}
+            // Sous une image figée, l'élément reste pleinement visible : s'il s'éteignait pendant que
+            // l'image figée s'efface, les deux passaient ensemble par la demi-transparence et le noir
+            // se voyait au travers — un creux sombre au lieu d'un fondu.
+            className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
+              ready || frozen ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <canvas
+            ref={canvasRef}
+            hidden={onElement}
+            className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
+              ready ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          {/* L'image d'avant, le temps d'une reconstruction pour changement de piste : posée par-dessus,
+              elle s'efface en fondu pendant que la nouvelle apparaît dessous. Voir `freezeFrame`. */}
+          <canvas
+            ref={freezeRef}
+            aria-hidden
+            // Là d'un coup, partie en fondu : apparue en fondu, elle laissait voir le noir de l'élément
+            // qu'on démonte pendant ses premières centaines de millisecondes.
+            className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity ease-out ${
+              frozen ? "opacity-100 duration-0" : "opacity-0 duration-200"
+            }`}
+          />
+        </div>
+      </div>
 
       {subtitle && !isMini && (
         // En haut quand le fichier le demande (`{\an8}`) : un sous-titre forcé qui traduit un texte

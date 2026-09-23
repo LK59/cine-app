@@ -57,6 +57,10 @@ export const config = {
     // neither offered nor honoured. For an operator who wants a hard guarantee that no playback
     // can ever start a transcode.
     serverFallback: optional("PLAYER_SERVER_FALLBACK", "true") === "true",
+    // Whether the picture is enlarged to hide black bars baked into the file (see pictureFrame.ts).
+    // Measured on the server from Jellyfin's trickplay thumbnails — no video is decoded — so it
+    // needs trickplay images to exist; without them the picture is simply shown as it is.
+    autoFrame: optional("PLAYER_AUTO_FRAME", "true") === "true",
   },
   gallery: {
     // La galerie Clara Galle, option personnelle de l'installation de référence. Lue au

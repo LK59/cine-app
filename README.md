@@ -214,6 +214,9 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
   bitrate. This is the only case where a playback can cost your server CPU, which is why it can be
   turned off entirely (`PLAYER_SERVER_FALLBACK=false`) — a file the browser cannot play then ends
   on a plain error naming the reason, and nothing ever starts a transcode.
+- **Black bars baked into the file** are measured once per file on the server, from the trickplay
+  thumbnails Jellyfin already has, and the picture is enlarged to the nearest edge of the screen —
+  black is cropped, never picture. It needs trickplay images; `PLAYER_AUTO_FRAME=false` turns it off.
 
 **[Full technical documentation → DOC-TECH.md](DOC-TECH.md)** — the two paths, how the remuxer
 reconstructs decode times, how random access points are verified, how audio is delivered or
