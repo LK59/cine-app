@@ -1063,6 +1063,7 @@
   },
   "player": {
     "badConnection": "Connexion instable",
+    "subtitleSizeXSmall": "Très petite",
     "subtitleSizeSmall": "Petite",
     "subtitleSizeNormal": "Normale",
     "subtitleSizeLarge": "Grande",

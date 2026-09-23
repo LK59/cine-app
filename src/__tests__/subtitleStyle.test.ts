@@ -26,6 +26,17 @@ describe("cueCss", () => {
     const large = cueCss({ ...DEFAULT_SUBTITLE_STYLE, size: 1.6 });
     expect(small).not.toEqual(large);
   });
+
+  // Le plancher de 14 px était commun à toutes les tailles : sur un téléphone en portrait,
+  // « Petite » (0,75 × 4 vw ≈ 11,7 px) y tombait, et « Très petite » aurait été la même chose.
+  it("keeps each size distinct where the viewport would floor them", () => {
+    const floors = [0.6, 0.75, 1].map((size) => cueCss({ ...DEFAULT_SUBTITLE_STYLE, size }).match(/clamp\((\d+)px/)![1]);
+    expect(new Set(floors).size).toBe(3);
+    expect(Number(floors[0])).toBeLessThan(Number(floors[1]));
+    expect(overlayCss({ ...DEFAULT_SUBTITLE_STYLE, size: 0.6 }).fontSize).toBe(
+      cueCss({ ...DEFAULT_SUBTITLE_STYLE, size: 0.6 }).match(/font-size: ([^;]+);/)![1]
+    );
+  });
 });
 
 // Les deux façons de dessiner doivent dire la même chose : c'est tout l'objet de ce module.
@@ -52,6 +63,13 @@ async function freshStore() {
 describe("subtitleStyleStore", () => {
   it("starts on the defaults with nothing stored", async () => {
     expect((await freshStore()).snapshot()).toEqual(DEFAULT_SUBTITLE_STYLE);
+  });
+
+  // « Petite » par défaut (23/09/2026), sans toucher à qui avait choisi « Normale ».
+  it("defaults to small, and keeps a normal size someone chose", async () => {
+    expect(DEFAULT_SUBTITLE_STYLE.size).toBe(0.75);
+    window.localStorage.setItem("cine:subtitle-style", JSON.stringify({ ...DEFAULT_SUBTITLE_STYLE, size: 1 }));
+    expect((await freshStore()).snapshot().size).toBe(1);
   });
 
   // Le réglage de taille existait déjà, seul, sous une autre clé. Quelqu'un qui l'avait choisi ne

@@ -23,6 +23,7 @@ export interface SubtitleStyle {
 }
 
 export const SUBTITLE_SIZES = [
+  { labelKey: "subtitleSizeXSmall", value: 0.6 },
   { labelKey: "subtitleSizeSmall", value: 0.75 },
   { labelKey: "subtitleSizeNormal", value: 1 },
   { labelKey: "subtitleSizeLarge", value: 1.3 },
@@ -32,7 +33,23 @@ export const SUBTITLE_SIZES = [
 export const SUBTITLE_COLORS: SubtitleColor[] = ["white", "yellow"];
 export const SUBTITLE_BACKGROUNDS: SubtitleBackground[] = ["shadow", "box", "none"];
 
-export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = { size: 1, color: "white", background: "shadow" };
+/**
+ * « Petite » par défaut depuis le 23/09/2026 : « Normale » était jugée trop grosse sur téléphone dès
+ * le premier film. Seul le défaut change — une taille déjà choisie est gardée, « Normale » comprise.
+ */
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = { size: 0.75, color: "white", background: "shadow" };
+
+/**
+ * La taille du texte, pour les deux façons de le dessiner.
+ *
+ * Le plancher suit le facteur. Il était fixé à 14 px pour toutes les tailles, et sur un téléphone
+ * en portrait (4 vw ≈ 15,6 px) « Petite » tombait dessus : elle s'affichait presque comme
+ * « Normale », et une taille plus petite encore n'aurait rien changé du tout.
+ */
+function fontSize(size: number): string {
+  const floor = Math.max(10, Math.round(14 * size));
+  return `clamp(${floor}px, ${size * 4}vw, ${Math.round(size * 48)}px)`;
+}
 
 const HEX: Record<SubtitleColor, string> = { white: "#ffffff", yellow: "#f2e14c" };
 
@@ -48,7 +65,7 @@ const SHADOW = "0 2px 6px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,1)";
  */
 export function cueCss(style: SubtitleStyle): string {
   const parts = [
-    `font-size: clamp(14px, ${style.size * 4}vw, ${Math.round(style.size * 48)}px)`,
+    `font-size: ${fontSize(style.size)}`,
     `color: ${HEX[style.color]}`,
     // `::cue` a un fond noir par défaut : le retirer explicitement est ce qui rend l'ombre seule
     // possible, et l'oublier laisserait la boîte du navigateur sous notre propre traitement.
@@ -61,7 +78,7 @@ export function cueCss(style: SubtitleStyle): string {
 /** Les mêmes réglages, en style en ligne, pour les lignes que le lecteur dessine lui-même. */
 export function overlayCss(style: SubtitleStyle): React.CSSProperties {
   return {
-    fontSize: `clamp(14px, ${style.size * 4}vw, ${Math.round(style.size * 48)}px)`,
+    fontSize: fontSize(style.size),
     color: HEX[style.color],
     textShadow: style.background === "box" ? "none" : SHADOW,
     backgroundColor: style.background === "box" ? "rgba(0,0,0,0.72)" : undefined,
@@ -96,7 +113,7 @@ function read(): SubtitleStyle {
     const legacy = Number(window.localStorage.getItem(LEGACY_SIZE_KEY));
     if (SUBTITLE_SIZES.some((s) => s.value === legacy)) return { ...DEFAULT_SUBTITLE_STYLE, size: legacy };
   } catch {
-    // Stockage indisponible : les valeurs par défaut, qui sont celles d'avant ce réglage.
+    // Stockage indisponible : les valeurs par défaut.
   }
   return DEFAULT_SUBTITLE_STYLE;
 }
