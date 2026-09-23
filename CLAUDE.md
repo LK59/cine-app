@@ -88,7 +88,14 @@ day — so an error a viewer hit in the evening was gone before anyone went look
 rejections; signed-in accounts only). Before that, a crash on a phone left nothing anywhere, and
 the boundary around the root player made a film vanish without a word. The same day `stop` began
 to be sent — declared from the start, emitted by nothing: 444 `start` and not one `stop`, so a
-film watched to the end and one abandoned after thirty seconds read the same. Both files are one
+film watched to the end and one abandoned after thirty seconds read the same. Since 2026-09-23
+every native-player line carries a `session` id (a rebuild rewrites `start`, so lines are joined
+by that, never by account and time), and `stop` is the session's summary: `watched`, `waits` /
+`waitedMs` / `longestWaitMs` (stops of 250 ms or more mid-playback — `stall` only fires at 5 s),
+`seeks` / `seekWaitMs`, `audioSwitches`. A page iOS kills in the background never gets to send
+it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`)
+and sent on the next launch as `why: "lost"` with `lateByMs`; the weekly reading keeps the last
+line per `session`. Both files are one
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`) — `player.log` keeping five archives
 (`.1` newest … `.5`), `server.log` three — and read with `tail`/`jq`; `logGenerations` lists a log
 and its archives oldest first for any reader.

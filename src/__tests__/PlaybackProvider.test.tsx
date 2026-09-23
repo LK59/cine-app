@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
-import { renderHook, act, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { renderHook, act, cleanup, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import {
   PlaybackProvider,
@@ -152,5 +152,23 @@ describe("PlaybackProvider — fermeture d'une lecture précise", () => {
     const first = result.current.session?.openId;
     act(() => result.current.play({ itemId: "1", title: "Movie A", resumeAt: 0 }));
     expect(result.current.session?.openId).not.toBe(first);
+  });
+});
+
+/**
+ * Au lancement, le bilan d'une séance qu'iOS a tuée en arrière-plan part enfin (23/09/2026).
+ */
+describe("PlaybackProvider — bilans restés sur l'appareil", () => {
+  it("les envoie dès le lancement", async () => {
+    localStorage.setItem(
+      "cine:unsent-stop:abcd1234",
+      JSON.stringify({ savedAt: Date.now() - 10 * 60_000, fields: { itemId: "x", session: "abcd1234" } })
+    );
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderHook(() => usePlayback(), { wrapper });
+    await waitFor(() => expect(localStorage.getItem("cine:unsent-stop:abcd1234")).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith("/api/player/log", expect.objectContaining({ method: "POST" }));
+    vi.unstubAllGlobals();
   });
 });

@@ -11,10 +11,22 @@ import type { PlayerEventKind } from "@/lib/playerLog";
  */
 export function reportPlayback(kind: PlayerEventKind, fields: Record<string, unknown>): void {
   try {
+    const body = JSON.stringify({ kind, fields });
+    /**
+     * L'arrêt part par `sendBeacon` quand le navigateur le propose.
+     *
+     * C'est la ligne qui part le plus souvent pendant que la page s'en va — la croix, puis
+     * `pagehide` —, et c'est précisément le moment où WebKit abandonne le plus volontiers un
+     * `fetch`, `keepalive` ou non. Une balise est faite pour ça : le navigateur la garde en file
+     * après la page. Refusée (charge trop grosse, file pleine), elle retombe sur `fetch`.
+     */
+    if (kind === "stop" && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      if (navigator.sendBeacon("/api/player/log", new Blob([body], { type: "application/json" }))) return;
+    }
     void fetch("/api/player/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, fields }),
+      body,
       keepalive: true,
     }).catch(() => {});
   } catch {

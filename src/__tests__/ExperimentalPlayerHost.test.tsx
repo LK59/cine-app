@@ -1183,6 +1183,71 @@ describe("la fin d'une séance, au journal", () => {
     expect(typeof stops[0].fields.gaveUpAfterMs).toBe("number");
   });
 
+  /**
+   * Le bilan de la séance (23/09/2026) : les attentes d'une à quatre secondes, que la ligne
+   * `stall` (cinq secondes) ne voyait pas, les sauts et les changements de piste — et un
+   * identifiant de séance sur chaque ligne, pour les recoller sans deviner.
+   */
+  it("fait le bilan des attentes en pleine lecture, sans compter ni l'ouverture ni les sauts", async () => {
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(600);
+    const now = vi.spyOn(Date, "now");
+    let t = 1_000_000;
+    now.mockImplementation(() => t);
+
+    // Avant la première image : c'est l'ouverture, pas une attente.
+    act(() => void element.dispatchEvent(new Event("waiting")));
+    t += 3000;
+    act(() => void element.dispatchEvent(new Event("playing")));
+    // Une vraie attente en pleine lecture : 1,5 s.
+    act(() => void element.dispatchEvent(new Event("waiting")));
+    t += 1500;
+    act(() => void element.dispatchEvent(new Event("playing")));
+    // Une attente trop brève pour se voir.
+    act(() => void element.dispatchEvent(new Event("waiting")));
+    t += 100;
+    act(() => void element.dispatchEvent(new Event("playing")));
+    // Un saut : son attente est la sienne.
+    Object.defineProperty(element, "seeking", { value: true, configurable: true });
+    act(() => void element.dispatchEvent(new Event("seeking")));
+    act(() => void element.dispatchEvent(new Event("waiting")));
+    t += 2000;
+    Object.defineProperty(element, "seeking", { value: false, configurable: true });
+    act(() => void element.dispatchEvent(new Event("playing")));
+
+    unmount();
+    now.mockRestore();
+
+    const stop = logged("stop")[0].fields;
+    expect(stop).toMatchObject({ waits: 1, waitedMs: 1500, longestWaitMs: 1500, audioSwitches: 0 });
+    expect(typeof stop.session).toBe("string");
+    // La même séance sur la ligne d'ouverture.
+    expect(logged("start")[0].fields.session).toBe(stop.session);
+  });
+
+  /**
+   * Le filet d'une page tuée par iOS : le bilan attend sur l'appareil, et s'efface quand l'arrêt
+   * part normalement.
+   */
+  it("garde le bilan sur l'appareil pendant la séance, et l'efface quand l'arrêt part", async () => {
+    localStorage.clear();
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const kept = () => Object.keys(localStorage).filter((k) => k.startsWith("cine:unsent-stop:"));
+    act(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(kept()).toHaveLength(1);
+    expect(JSON.parse(localStorage.getItem(kept()[0])!).fields.why).toBe("lost");
+
+    unmount();
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    expect(kept()).toHaveLength(0);
+    expect(logged("stop")).toHaveLength(1);
+  });
+
   it("se tait après un repli, que la ligne `fallback` a déjà raconté", async () => {
     serverFallback = true;
     swr = { data: info({ refusedReason: "conteneur avi" }), error: undefined };

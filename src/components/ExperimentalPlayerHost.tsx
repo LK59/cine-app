@@ -55,6 +55,8 @@ import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
+import { SessionTally, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 
 /** Which of the pipeline's own readings belong under the sound rather than under the stream. */
 
@@ -381,6 +383,12 @@ export function ExperimentalPlayerHost({
 
   const steppedAside = useRef(false);
   /**
+   * Cette séance, de l'ouverture au démontage, reconstructions comprises : son identifiant, porté
+   * par chacune de ses lignes, et le décompte qui fait son bilan — voir `SessionTally`.
+   */
+  const [sessionId] = useState(newPlayerSessionId);
+  const [tally] = useState(() => new SessionTally());
+  /**
    * The record's view of what is playing, read through refs.
    *
    * `fallToStable` must stay stable for the life of the player — a caller passing an inline arrow
@@ -419,6 +427,8 @@ export function ExperimentalPlayerHost({
   const fallToStable = useCallback((reason: string, takeover?: StableTakeover) => {
     if (steppedAside.current) return;
     steppedAside.current = true;
+    // La ligne `fallback` dit comment la séance a fini ici : pas de bilan « perdu » en plus.
+    clearUnsentStop(sessionId);
     const file = describeFileRef.current();
     const path = pathRef.current ?? "non décidé";
     if (serverFallbackRef.current === false) {
@@ -438,7 +448,7 @@ export function ExperimentalPlayerHost({
     trace(`repli : passage au lecteur stable — ${reason}`);
     reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}) });
     onFallbackRef.current(reason, handover);
-  }, []);
+  }, [sessionId]);
   /**
    * A passing notice, with the moment it was raised.
    *
@@ -764,6 +774,7 @@ export function ExperimentalPlayerHost({
        */
       via: "reconstruction" | "refus"
     ) => {
+      tally.audioSwitched();
       reportPlayback("audio", {
         ...describeFileRef.current(),
         from: from ?? -1,
@@ -789,7 +800,7 @@ export function ExperimentalPlayerHost({
         steps: traceRecent(Date.now() - startedAt).join(" | "),
       });
     },
-    []
+    [tally]
   );
 
   /**
@@ -1012,10 +1023,11 @@ export function ExperimentalPlayerHost({
       video: `${info?.video?.codec ?? "?"} ${info?.video?.width ?? "?"}x${info?.video?.height ?? "?"} ${info?.video?.bitDepth ?? "?"}bit`,
       range: info?.video?.rangeType ?? "SDR",
       agent: typeof navigator === "undefined" ? "?" : navigator.userAgent,
+      session: sessionId,
       // Les lignes écrites pendant un banc d'essai, reconnaissables — voir `PlaybackSession.bench`.
       ...(session.bench ? { bench: session.bench } : {}),
     }),
-    [itemId, info, openedAs, session.bench]
+    [itemId, info, openedAs, session.bench, sessionId]
   );
 
   useEffect(() => {
@@ -1072,27 +1084,66 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     stopFactsRef.current = { ready, ended, error, audio: currentAudio, rebuilds: rebuildCount };
   }, [ready, ended, error, currentAudio, rebuildCount]);
-  const reportStop = useCallback((why: "close" | "next" | "page" | "unmount") => {
-    if (stopReportedRef.current || steppedAside.current) return;
-    stopReportedRef.current = true;
-    const facts = stopFactsRef.current;
-    const watched = watchedRef.current;
-    const watchedMs = watched.total + (watched.since !== null ? Date.now() - watched.since : 0);
-    reportPlayback("stop", {
-      ...describeFileRef.current(),
-      path: pathRef.current ?? "non décidé",
-      why,
-      at: positionRef.current,
-      watched: Math.round(watchedMs / 1000),
-      ended: facts.ended,
-      rebuild: facts.rebuilds,
-      ...(facts.audio !== null ? { audio: facts.audio } : {}),
-      // Fermé avant la première image : combien de temps le spectateur a attendu avant de renoncer.
-      ...(facts.ready ? {} : { gaveUpAfterMs: Date.now() - mountedAtRef.current }),
-      ...(facts.error ? { error: facts.error } : {}),
-      ...syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
-    });
-  }, []);
+  /**
+   * Le bilan de la séance à cet instant — ce que dit la ligne `stop`, et ce qui est gardé sur
+   * l'appareil au cas où elle ne pourrait pas partir (voir unsentStop.ts).
+   */
+  const stopFields = useCallback(
+    (why: "close" | "next" | "page" | "unmount" | "lost") => {
+      const now = Date.now();
+      const facts = stopFactsRef.current;
+      const watched = watchedRef.current;
+      const watchedMs = watched.total + (watched.since !== null ? now - watched.since : 0);
+      return {
+        ...describeFileRef.current(),
+        path: pathRef.current ?? "non décidé",
+        why,
+        at: positionRef.current,
+        watched: Math.round(watchedMs / 1000),
+        ended: facts.ended,
+        rebuild: facts.rebuilds,
+        ...(facts.audio !== null ? { audio: facts.audio } : {}),
+        // Fermé avant la première image : combien de temps le spectateur a attendu avant de renoncer.
+        ...(facts.ready ? {} : { gaveUpAfterMs: now - mountedAtRef.current }),
+        ...(facts.error ? { error: facts.error } : {}),
+        // Attentes, sauts, changements de piste : le confort de la séance en quelques chiffres.
+        ...tally.summary(now),
+        ...syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
+      };
+    },
+    [tally]
+  );
+  const reportStop = useCallback(
+    (why: "close" | "next" | "page" | "unmount") => {
+      if (stopReportedRef.current || steppedAside.current) return;
+      stopReportedRef.current = true;
+      reportPlayback("stop", stopFields(why));
+      clearUnsentStop(sessionId);
+    },
+    [stopFields, sessionId]
+  );
+  /**
+   * Le bilan gardé sur l'appareil, réécrit tant que la séance vit.
+   *
+   * Toutes les 30 s, et à chaque passage en arrière-plan — le dernier instant où une page qu'iOS
+   * va tuer peut encore écrire quoi que ce soit. Jamais une fois l'arrêt parti ou la main passée.
+   */
+  useEffect(() => {
+    const save = () => {
+      if (stopReportedRef.current || steppedAside.current) return;
+      saveUnsentStop(sessionId, stopFields("lost"));
+    };
+    save();
+    const timer = setInterval(save, 30_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") save();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [sessionId, stopFields]);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
     // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : son arrêt
@@ -1431,7 +1482,23 @@ export function ExperimentalPlayerHost({
         setEnded(false);
         showWarning(null);
       };
-      const onPause = () => setPlaying(false);
+      const onPause = () => {
+        setPlaying(false);
+        tally.waitEnded(Date.now());
+      };
+      /**
+       * Les attentes en pleine lecture — voir `SessionTally`. Ni celles d'un saut, qui a sa ligne,
+       * ni celle d'avant la première image de ce lecteur, qui est l'ouverture.
+       */
+      let playedOnce = false;
+      const onWaiting = () => {
+        if (playedOnce && !element.seeking && requestedSeekRef.current === null) tally.waitStarted(Date.now());
+      };
+      const onPlaying = () => {
+        playedOnce = true;
+        tally.waitEnded(Date.now());
+      };
+      const onSeeking = () => tally.waitAbandoned();
       const onEnded = () => {
         setPlaying(false);
         setEnded(true);
@@ -1458,6 +1525,7 @@ export function ExperimentalPlayerHost({
         const timing = seekTimingRef.current;
         if (timing && seekArrived(element.currentTime, timing.to)) {
           seekTimingRef.current = null;
+          tally.seekArrived(Date.now() - timing.startedAt);
           reportPlayback("seek", {
             ...describeFileRef.current(),
             path: "remux",
@@ -1477,12 +1545,18 @@ export function ExperimentalPlayerHost({
       element.addEventListener("pause", onPause);
       element.addEventListener("ended", onEnded);
       element.addEventListener("seeked", onSeeked);
+      element.addEventListener("waiting", onWaiting);
+      element.addEventListener("playing", onPlaying);
+      element.addEventListener("seeking", onSeeking);
       unsubscribes.push(() => {
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);
         element.removeEventListener("ended", onEnded);
         element.removeEventListener("seeked", onSeeked);
+        element.removeEventListener("waiting", onWaiting);
+        element.removeEventListener("playing", onPlaying);
+        element.removeEventListener("seeking", onSeeking);
       });
 
       // Reconstruit pour un changement de piste pendant une pause : il reste en pause.
@@ -1568,8 +1642,16 @@ export function ExperimentalPlayerHost({
         engine.on("playing", () => {
           engineStarted = true;
           setPlaying(true);
+          tally.waitEnded(Date.now());
         }),
-        engine.on("pause", () => setPlaying(false)),
+        engine.on("pause", () => {
+          setPlaying(false);
+          tally.waitEnded(Date.now());
+        }),
+        // Le moteur signale aussi ses sauts par `waiting` : ceux-là ont leur propre attente.
+        engine.on("waiting", () => {
+          if (engineStarted && requestedSeekRef.current === null) tally.waitStarted(Date.now());
+        }),
         engine.on("ended", () => {
           setPlaying(false);
           setEnded(true);
@@ -1782,11 +1864,12 @@ export function ExperimentalPlayerHost({
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  // `reportAudioSwitch` est un `useCallback` à dépendances vides : son identité ne change jamais,
+  // `reportAudioSwitch` ne dépend que de `tally`, fixé au montage : son identité ne change jamais,
   // donc l'ajouter ici ne peut pas relancer la construction du pipeline. C'est la seule raison
   // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`. Même
-  // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch]);
+  // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi, et
+  // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé.
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch, tally]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
