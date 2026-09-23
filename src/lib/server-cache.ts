@@ -1,3 +1,4 @@
+import { spreadTtl } from "@/lib/cacheSpread";
 import { radarr } from "@/lib/clients/radarr";
 import { sonarr } from "@/lib/clients/sonarr";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
@@ -123,7 +124,11 @@ export async function withCacheSafe<T>(
  * per-item caches fetched in bulk (TMDB credits/ratings for hundreds of movies/series) — that's
  * exactly the case where a restart used to mean refetching everything from scratch at once.
  */
-export async function withPersistentCache<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+// Chaque entrée expire à son heure — voir `spreadTtl`.
+export { spreadTtl };
+
+export async function withPersistentCache<T>(key: string, requestedTtlMs: number, fn: () => Promise<T>): Promise<T> {
+  const ttlMs = spreadTtl(key, requestedTtlMs);
   const memHit = store.get(key) as Entry<T> | undefined;
   if (memHit && Date.now() < memHit.exp) return memHit.v;
 

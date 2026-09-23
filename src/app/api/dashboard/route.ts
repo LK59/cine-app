@@ -9,6 +9,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { tmdb } from "@/lib/clients/tmdb";
+import { atMostEvery } from "@/lib/quotaGuard";
 import { omdb } from "@/lib/clients/omdb";
 import { withCacheSafe, cachedMovies, cachedSeries, TTL } from "@/lib/server-cache";
 import { getDiskStats, type DiskStats } from "@/lib/disk-stats";
@@ -179,13 +180,15 @@ async function probeServices(session: SessionPayload | null): Promise<ServiceSta
     }),
     probe("tmdb", async () => {
       if (!tmdb.isEnabled()) throw notConfigured("TMDB_API_KEY");
-      const auth = await tmdb.checkAuth();
+      // Au plus une fois par heure : cette vue se rafraîchit toutes les quinze secondes.
+      const auth = await atMostEvery("key:tmdb", () => tmdb.checkAuth(), { isOk: (a) => a.success });
       if (!auth.success) throw new Error("Clé API invalide");
       return { detail: "Clé API valide" };
     }),
     probe("omdb", async () => {
       if (!omdb.isEnabled()) throw notConfigured("OMDB_API_KEY");
-      const res = await omdb.checkKey();
+      // Au plus une fois par heure : quatre vérifications par minute épuisaient le quota d'OMDb.
+      const res = await atMostEvery("key:omdb", () => omdb.checkKey(), { isOk: (r) => r.Response === "True" });
       if (res.Response !== "True") throw new Error("Clé API invalide");
       return { detail: "Clé API valide" };
     }),

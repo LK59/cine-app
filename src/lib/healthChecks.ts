@@ -1,3 +1,4 @@
+import { atMostEvery } from "@/lib/quotaGuard";
 import fs from "fs/promises";
 import { config } from "@/lib/config";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -106,7 +107,20 @@ export async function pingReachable(name: string, url: string, path = "/"): Prom
 
 const TMDB_URL = "https://api.themoviedb.org";
 
-export async function pingTmdb(): Promise<ServiceHealth> {
+/**
+ * TMDB et MDBList comptent nos requêtes : le contrôle d'état, qui tourne chaque minute, ne les
+ * interroge qu'une fois par heure (voir `atMostEvery`). Un service en panne est revérifié au
+ * bout de cinq minutes.
+ */
+export function pingTmdb(): Promise<ServiceHealth> {
+  return atMostEvery("health:tmdb", pingTmdbNow, { isOk: (r) => r.status === "ok" });
+}
+
+export function pingMdblist(): Promise<ServiceHealth> {
+  return atMostEvery("health:mdblist", pingMdblistNow, { isOk: (r) => r.status === "ok" });
+}
+
+async function pingTmdbNow(): Promise<ServiceHealth> {
   const start = Date.now();
   const apiKey = config.tmdb.apiKey;
   if (!apiKey) return { name: "TMDB", url: TMDB_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };
@@ -125,7 +139,7 @@ const MDBLIST_URL = "https://mdblist.com";
 // API round-trip; the content returned is never used for anything.
 const MDBLIST_PROBE_IMDB_ID = "tt0111161";
 
-export async function pingMdblist(): Promise<ServiceHealth> {
+async function pingMdblistNow(): Promise<ServiceHealth> {
   const start = Date.now();
   const apiKey = process.env.MDBLIST_API_KEY;
   if (!apiKey) return { name: "mdblist", url: MDBLIST_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };

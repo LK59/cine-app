@@ -2,6 +2,13 @@ import { tmdb } from "@/lib/clients/tmdb";
 import { omdb } from "@/lib/clients/omdb";
 import { withPersistentCache } from "@/lib/server-cache";
 
+/**
+ * Une semaine. Une note IMDb bouge d'un dixième en un mois ; la redemander chaque jour coûtait
+ * une requête OMDb par série et par jour, soit l'essentiel de notre usage d'un quota limité à
+ * mille (23/09/2026).
+ */
+const RATING_TTL_MS = 7 * 24 * 3600_000;
+
 // Resolves TMDB id → IMDb rating string (e.g. "7.4"), cached 24h. Shared by the watchlist
 // ratings route and the dashboard's "recently added series" row — Sonarr's own `ratings` field
 // (unlike Radarr's) isn't IMDb-specific, so series need this TMDB→imdb_id→OMDb resolution;
@@ -16,7 +23,7 @@ import { withPersistentCache } from "@/lib/server-cache";
  */
 export async function getImdbRatingByTvdb(tvdbId: number): Promise<string | null> {
   if (!omdb.isEnabled()) return null;
-  return withPersistentCache(`imdb:rating:tvdb:${tvdbId}`, 24 * 3600_000, async () => {
+  return withPersistentCache(`imdb:rating:tvdb:${tvdbId}`, RATING_TTL_MS, async () => {
     const found = await tmdb.findTvByTvdbId(tvdbId);
     const tmdbId = found.tv_results[0]?.id;
     if (!tmdbId) return null;
@@ -29,7 +36,7 @@ export async function getImdbRating(tmdbId: number, mediaType: "movie" | "series
   // The fallback lives outside withCache: a transient TMDB/OMDb failure must not get cached as
   // "no rating" for 24h — better to just retry next time. A genuine "no IMDb id"/"no rating"
   // result is a real `null` returned normally below, so it still caches correctly.
-  return withPersistentCache(`imdb:rating:${mediaType}:${tmdbId}`, 24 * 3600_000, async () => {
+  return withPersistentCache(`imdb:rating:${mediaType}:${tmdbId}`, RATING_TTL_MS, async () => {
     let imdbId: string | null = null;
 
     if (mediaType === "movie") {

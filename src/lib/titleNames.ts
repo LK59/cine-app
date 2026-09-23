@@ -3,6 +3,7 @@ import { kvCacheDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 import { LOCALES, type Locale } from "@/lib/i18n";
 import { withSlot } from "@/lib/title-art";
+import { spreadTtl } from "@/lib/cacheSpread";
 
 /**
  * Le titre d'un film ou d'une série dans chacune des langues de l'interface.
@@ -103,7 +104,9 @@ function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | 
       memory.set(key, entry);
     }
   }
-  if (!entry || Date.now() - entry.fetchedAt >= TTL_MS) refresh(key, tmdbId, mediaType);
+  // Étalée comme le reste (voir `spreadTtl`) : les 860 titres remplis le même jour ne
+  // reviennent pas tous le même jour.
+  if (!entry || Date.now() - entry.fetchedAt >= spreadTtl(key, TTL_MS)) refresh(key, tmdbId, mediaType);
   return entry?.names ?? {};
 }
 
