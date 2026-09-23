@@ -27,15 +27,22 @@ export async function getImdbRatingByTvdb(tvdbId: number): Promise<string | null
     const found = await tmdb.findTvByTvdbId(tvdbId);
     const tmdbId = found.tv_results[0]?.id;
     if (!tmdbId) return null;
-    return getImdbRating(tmdbId, "series");
+    // La version qui lève : `getImdbRating` avale l'échec en `null`, et ce `null` était gardé ici
+    // une semaine comme « pas de note » — pendant la pause d'OMDb, toute série ouverte perdait
+    // sa note pour sept jours (23/09/2026).
+    return ratingOrThrow(tmdbId, "series");
   }).catch(() => null);
 }
 
 export async function getImdbRating(tmdbId: number, mediaType: "movie" | "series"): Promise<string | null> {
   if (!omdb.isEnabled()) return null;
   // The fallback lives outside withCache: a transient TMDB/OMDb failure must not get cached as
-  // "no rating" for 24h — better to just retry next time. A genuine "no IMDb id"/"no rating"
-  // result is a real `null` returned normally below, so it still caches correctly.
+  // "no rating" — better to just retry next time. A genuine "no IMDb id"/"no rating" result is a
+  // real `null` returned normally below, so it still caches correctly.
+  return ratingOrThrow(tmdbId, mediaType).catch(() => null);
+}
+
+function ratingOrThrow(tmdbId: number, mediaType: "movie" | "series"): Promise<string | null> {
   return withPersistentCache(`imdb:rating:${mediaType}:${tmdbId}`, RATING_TTL_MS, async () => {
     let imdbId: string | null = null;
 
@@ -52,5 +59,5 @@ export async function getImdbRating(tmdbId: number, mediaType: "movie" | "series
     const rating = await omdb.getRating(imdbId);
     if (rating.Response !== "True" || !rating.imdbRating || rating.imdbRating === "N/A") return null;
     return rating.imdbRating;
-  }).catch(() => null);
+  });
 }

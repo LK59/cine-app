@@ -1,3 +1,4 @@
+import { normalize } from "./search-natural-query";
 /**
  * Parcourir la bibliothèque en entier.
  *
@@ -12,6 +13,9 @@
 /** Le peu qu'il faut d'un titre pour le ranger. Films et séries le portent tous les deux. */
 export interface BrowsableTitle {
   title: string;
+  /** Le titre de Radarr/Sonarr quand on en affiche un autre, et le titre d'origine : cherchables aussi. */
+  aka?: string;
+  originalTitle?: string;
   year: number;
   genres: string[];
   addedAt: string | null;
@@ -125,11 +129,14 @@ export const DEFAULT_FILTERS: BrowseFilters = { genre: BROWSE_ALL, decade: null,
 
 /** Ce que la grille montre : filtrée puis triée, dans cet ordre. */
 export function browseTitles<T extends BrowsableTitle>(items: T[], filters: BrowseFilters): T[] {
-  const needle = filters.query.trim().toLowerCase();
+  // Sans accents ni casse, et sur les trois titres : « eleve » trouvait pas « Élève », et le titre
+  // anglais qu'on n'affiche plus depuis les titres traduits n'était plus cherchable ici, alors
+  // qu'il l'est dans la recherche (23/09/2026).
+  const needle = normalize(filters.query.trim());
   const kept = items.filter((item) => {
     if (filters.genre !== BROWSE_ALL && !item.genres.includes(filters.genre)) return false;
     if (filters.decade !== null && Math.floor(item.year / 10) * 10 !== filters.decade) return false;
-    if (needle && !item.title.toLowerCase().includes(needle)) return false;
+    if (needle && ![item.title, item.aka, item.originalTitle].some((t) => t && normalize(t).includes(needle))) return false;
     if (!matchesDuration(item, filters.duration ?? "all")) return false;
     return true;
   });

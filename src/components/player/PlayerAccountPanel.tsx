@@ -64,7 +64,10 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   // La connexion locale (celle de l'administrateur) n'a pas de compte Jellyfin derrière elle :
   // ni préférences de lecture, ni mot de passe à changer de ce côté. Le dire une fois vaut mieux
   // que trois listes déroulantes grisées sans explication.
-  const hasJellyfin = me?.jfUser != null;
+  // Tant que la réponse n'est pas là, on suppose un compte Jellyfin — le cas de presque tout le
+  // monde. Le « non » par défaut annonçait un instant « compte local » à chacun, puis la page
+  // sautait quand la lecture et le mot de passe apparaissaient (23/09/2026).
+  const hasJellyfin = me ? me.jfUser != null : true;
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
   const logout = () => signOut((path) => router.replace(path));

@@ -30,9 +30,11 @@ export function useLongPress(onLongPress: (() => void) | undefined) {
 
   return {
     onPointerDown: (e: React.PointerEvent) => {
+      // Remis à zéro pour tout pointeur, souris comprise : un appui long resté « déclenché »
+      // avalait sinon le prochain clic, même à la souris (23/09/2026).
+      fired.current = false;
       // La souris a son clic droit ; l'appui long est celui du doigt et du stylet.
       if (e.pointerType === "mouse") return;
-      fired.current = false;
       origin.current = { x: e.clientX, y: e.clientY };
       timer.current = setTimeout(() => {
         fired.current = true;
@@ -51,6 +53,9 @@ export function useLongPress(onLongPress: (() => void) | undefined) {
       // Le doigt déclenche aussi `contextmenu` sur certains navigateurs : une seule ouverture.
       if (fired.current) return;
       cancel();
+      // Déclenché, comme par le minuteur : sur Android, `contextmenu` arrive souvent avant nos
+      // 500 ms, et le clic qui suit le relâchement ouvrait la fiche en plus du menu.
+      fired.current = true;
       onLongPress();
     },
     onClickCapture: (e: React.MouseEvent) => {

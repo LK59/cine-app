@@ -1,6 +1,7 @@
 import { qbittorrent } from "@/lib/clients/qbittorrent";
 import { sendPushToAdmins } from "@/lib/push";
 import { logError } from "@/lib/logger";
+import { kvCacheDb } from "@/lib/db";
 
 /**
  * Les notifications « téléchargement démarré / terminé », surveillées par le serveur lui-même.
@@ -16,7 +17,10 @@ import { logError } from "@/lib/logger";
  */
 
 const ACTIVE = new Set(["downloading", "stalledDL", "metaDL", "forcedDL", "checkingDL", "allocating"]);
-const DONE = new Set(["uploading", "stalledUP", "forcedUP", "pausedUP", "completed"]);
+// qBittorrent 5 a renommé « paused » en « stopped » : un téléchargement terminé qui passe
+// directement à `stoppedUP` n'était jamais annoncé (23/09/2026, v5.2.3). `queuedUP` et
+// `checkingUP` sont aussi des états d'après le téléchargement.
+const DONE = new Set(["uploading", "stalledUP", "forcedUP", "pausedUP", "stoppedUP", "queuedUP", "checkingUP", "completed"]);
 const POLL_MS = 15_000;
 
 export interface TorrentWatchState {
@@ -134,12 +138,55 @@ export function takeDueDigest(digest: TorrentDigest, now: number): { started: st
   return due;
 }
 
+/**
+ * Ce que la surveillance savait, gardé sur disque d'un démarrage à l'autre.
+ *
+ * Le conteneur est recréé à chaque déploiement, plusieurs fois par jour. Tout vivait en mémoire :
+ * le lot en attente (jusqu'à dix minutes d'annonces) disparaissait, et le premier passage
+ * suivant, qui ne fait qu'apprendre ce qui existe, taisait les téléchargements finis pendant le
+ * redémarrage (23/09/2026). Relu s'il date de moins d'une heure : au-delà, l'état de qBittorrent
+ * a pu changer du tout au tout, et mieux vaut réapprendre en silence qu'annoncer n'importe quoi.
+ */
+const PERSIST_KEY = "torrent-watch:state";
+const PERSIST_MAX_AGE_MS = 3600_000;
+
+interface PersistedWatch {
+  downloading: [string, string][];
+  digest: TorrentDigest;
+}
+
+export function restoreTorrentWatch(state: TorrentWatchState, digest: TorrentDigest, now = Date.now()): void {
+  const saved = kvCacheDb.get(PERSIST_KEY);
+  if (!saved || now - saved.fetchedAt > PERSIST_MAX_AGE_MS) return;
+  const value = saved.value as PersistedWatch;
+  state.downloading = new Map(value.downloading ?? []);
+  // Déjà appris : ce qui a fini pendant le redémarrage sera annoncé au premier passage.
+  state.bootstrapped = true;
+  Object.assign(digest, value.digest ?? createTorrentDigest());
+}
+
+let lastPersisted = "";
+
+/** Écrit seulement quand quelque chose a changé : le passage a lieu toutes les quinze secondes. */
+function persistTorrentWatch(state: TorrentWatchState, digest: TorrentDigest): void {
+  const value: PersistedWatch = { downloading: [...state.downloading], digest };
+  const json = JSON.stringify(value);
+  if (json === lastPersisted) return;
+  kvCacheDb.set(PERSIST_KEY, value, Date.now());
+  lastPersisted = json;
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startTorrentWatch(): void {
   if (timer) return;
   const state = createTorrentWatchState();
   const digest = createTorrentDigest();
+  try {
+    restoreTorrentWatch(state, digest);
+  } catch (err) {
+    logError("notifications.torrents", err);
+  }
   timer = setInterval(async () => {
     try {
       addToDigest(digest, diffTorrents(state, await qbittorrent.getTorrents()), Date.now());
@@ -148,6 +195,11 @@ export function startTorrentWatch(): void {
     }
     // Hors du bloc précédent : un qBittorrent qui ne répond pas ne doit pas retenir un lot prêt.
     const due = takeDueDigest(digest, Date.now());
+    try {
+      persistTorrentWatch(state, digest);
+    } catch (err) {
+      logError("notifications.torrents", err);
+    }
     if (!due) return;
     try {
       if (due.started.length > 0) {

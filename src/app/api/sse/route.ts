@@ -6,7 +6,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ACTIVE = new Set(["downloading", "stalledDL", "metaDL", "forcedDL", "checkingDL", "allocating"]);
-const DONE = new Set(["uploading", "stalledUP", "forcedUP", "pausedUP", "completed"]);
+// qBittorrent 5 a renommé « paused » en « stopped » : un téléchargement terminé qui passe
+// directement à `stoppedUP` n'était jamais annoncé (23/09/2026, v5.2.3). `queuedUP` et
+// `checkingUP` sont aussi des états d'après le téléchargement.
+const DONE = new Set(["uploading", "stalledUP", "forcedUP", "pausedUP", "stoppedUP", "queuedUP", "checkingUP", "completed"]);
 
 const encoder = new TextEncoder();
 // All open SSE connections

@@ -54,6 +54,9 @@ describe("proxy — what a plain user may write", () => {
       // L'essai d'envoi, passé de la gestion au panneau Compte (23/09/2026) : il n'écrit qu'aux
       // appareils de l'appelant.
       ["POST", "/api/push/test"],
+      // La langue de l'app (23/09/2026) : refusée sans bruit, elle revenait au français au
+      // rechargement.
+      ["PUT", "/api/user/preferences"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

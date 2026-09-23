@@ -8,7 +8,7 @@ import { useSearchResults } from "@/lib/useSearchResults";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { useLocale, useT } from "@/components/TranslationProvider";
-import { recentSearches, rememberSearch, forgetSearches } from "@/lib/recentSearches";
+import { recentSearches, rememberSearch, rememberTitle, forgetSearches } from "@/lib/recentSearches";
 import { onSearchFocusRequest } from "@/lib/searchFocus";
 import { searchCinemaLibrary } from "@/lib/cinemaSearch";
 import { uniqueById } from "@/lib/cinemaRails";
@@ -169,12 +169,17 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * `rememberSearch` se charge du reste — une frappe en cours ne laisse plus qu'une seule ligne,
    * la plus complète.
    */
+  // Le minuteur est gardé à portée de main : ouvrir un résultat l'annule, sans quoi le fragment
+  // tapé s'enregistrait *après* le titre ouvert — « Le retour de » restait dans l'historique.
+  const rememberTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const term = query.trim();
     if (term.length < MIN_QUERY) return;
     const timer = setTimeout(() => rememberSearch(term), REMEMBER_MS);
+    rememberTimer.current = timer;
     return () => clearTimeout(timer);
   }, [query]);
+
 
   // Une erreur efface les résultats d'une frappe précédente au lieu de les laisser passer pour
   // ceux de celle-ci — voir `useSearchResults`.
@@ -301,12 +306,18 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
   // ramène sur les résultats, avec la requête tapée et le filtre choisi — au lieu de renvoyer à
   // l'accueil comme si l'on n'avait rien cherché.
+  // Ouvrir un résultat retient son titre, et annule l'enregistrement en attente du fragment tapé.
+  function rememberOpened(name: string) {
+    if (rememberTimer.current) clearTimeout(rememberTimer.current);
+    rememberTitle(name, typed);
+  }
+
   function openTitle(entry: Entry) {
     // Ouvrir un résultat est la preuve qu'on cherchait bien ça — et c'est son titre qu'on retient,
     // pas ce qui était tapé : « Le retour de » et « Arm » restaient dans l'historique, des débuts
     // de mots qu'on ne relancerait jamais (23/09/2026). Un début déjà retenu est remplacé par le
     // titre complet (voir `rememberSearch`).
-    rememberSearch(entry.title);
+    rememberOpened(entry.title);
     if (entry.libraryId !== null) openLibraryTitle(entry.kind, entry.libraryId);
     else if (entry.tmdbId !== null) cinemaNavigate({ discover: entry.tmdbId, discoverType: entry.kind });
   }
@@ -433,7 +444,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
                 onOpen={() => {
                   // Même raison que pour un titre : ouvrir une fiche prouve l'intention, et c'est
                   // son nom qu'on retient.
-                  rememberSearch(p.name);
+                  rememberOpened(p.name);
                   cinemaNavigate({ person: p.id });
                 }}
               />

@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultSeason, missingCount, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
@@ -50,10 +51,11 @@ export function CinemaEpisodeBrowser({
   const seasonNumbers = useMemo(() => {
     const all = new Set<number>(seasons.map((s) => s.seasonNumber));
     for (const s of missing.seasons) all.add(s.seasonNumber);
-    return [...all].sort((a, b) => a - b);
+    // Les spéciaux en dernier — voir `orderSeasons`.
+    return orderSeasons(all);
   }, [seasons, missing.seasons]);
 
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.seasonNumber ?? 0);
+  const [selectedSeason, setSelectedSeason] = useState(() => defaultSeason(seasons.map((s) => s.seasonNumber)) ?? 0);
 
   // Same debounce-before-crossfade pattern CinemaClient's own hero backdrop uses (see its doc
   // comment on "ghosting") — selectedSeason changes on every arrow-key press while scrubbing
@@ -119,7 +121,7 @@ export function CinemaEpisodeBrowser({
 
       if (e.key === "ArrowRight" && inSeasons) {
         e.preventDefault();
-        containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-item="true"]')?.focus();
+        containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-item="true"]:not(:disabled)')?.focus();
         return;
       }
       if (e.key === "ArrowLeft" && inEpisodes) {
@@ -129,7 +131,8 @@ export function CinemaEpisodeBrowser({
       }
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
-        const selector = inSeasons ? '[data-episode-season="true"]' : '[data-episode-item="true"]';
+        // Un bouton désactivé — une demande déjà faite — ne prend pas le focus : le sauter.
+        const selector = inSeasons ? '[data-episode-season="true"]' : '[data-episode-item="true"]:not(:disabled)';
         const items = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>(selector) ?? []);
         const idx = items.indexOf(active as HTMLButtonElement);
         const next = e.key === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
@@ -166,7 +169,7 @@ export function CinemaEpisodeBrowser({
           <p className="mb-3 truncate px-2 text-sm font-medium text-muted">{title}</p>
           {seasonNumbers.map((seasonNumber) => {
             const active = seasonNumber === selectedSeason;
-            const gap = missing.seasonOf(seasonNumber)?.episodes.length ?? 0;
+            const gap = missingCount(missing.seasonOf(seasonNumber));
             return (
               <button
                 key={seasonNumber}

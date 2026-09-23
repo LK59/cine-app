@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultSeason, missingCount, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -179,10 +180,11 @@ export function CinemaMobileDetail({
   const seasonNumbers = useMemo(() => {
     const all = new Set<number>(seasons.map((s) => s.seasonNumber));
     for (const s of missing.seasons) all.add(s.seasonNumber);
-    return [...all].sort((a, b) => a - b);
+    // Les spéciaux en dernier — voir `orderSeasons`.
+    return orderSeasons(all);
   }, [seasons, missing.seasons]);
 
-  const activeSeason = selectedSeason ?? seasonNumbers[0] ?? null;
+  const activeSeason = selectedSeason ?? defaultSeason(seasonNumbers);
   const episodes = seasons.find((s) => s.seasonNumber === activeSeason)?.episodes ?? [];
 
   // Escape still closes on the mobile layout — a hardware/bluetooth keyboard on a tablet, and
@@ -297,7 +299,10 @@ export function CinemaMobileDetail({
         zIndex: inert ? 47 : 48,
         // Inerte : elle ne fait que se laisser voir. Sans ça, le doigt qui tire la fiche du dessus
         // finirait par la traverser et atteindre celle d'en dessous.
-        pointerEvents: inert ? "none" : undefined,
+        // Et pendant sa propre sortie (règle 2 des fiches) : un appui sur un titre similaire au
+        // milieu de l'animation empilait une fiche par-dessus, et celle-ci, devenue « dessous »,
+        // ne se refermait plus jamais — invisible, mais toujours dans l'adresse (23/09/2026).
+        pointerEvents: inert || closing ? "none" : undefined,
         paddingTop: "env(safe-area-inset-top, 0px)",
         transform: !inert && swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
         // No transition while the finger is down: the sheet is not animating towards the finger,
@@ -477,7 +482,7 @@ export function CinemaMobileDetail({
               <div className="scrollbar-thin -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
                 {seasonNumbers.map((seasonNumber) => {
                   const active = seasonNumber === activeSeason;
-                  const gap = missing.seasonOf(seasonNumber)?.episodes.length ?? 0;
+                  const gap = missingCount(missing.seasonOf(seasonNumber));
                   return (
                     <button
                       key={seasonNumber}

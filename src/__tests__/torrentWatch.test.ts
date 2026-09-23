@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   diffTorrents,
   createTorrentWatchState,
@@ -93,5 +93,47 @@ describe("le lot de notifications", () => {
     addToDigest(digest, { started: ["A"], completed: [] }, 0);
     addToDigest(digest, { started: [], completed: [] }, DIGEST_QUIET_MS - 1);
     expect(takeDueDigest(digest, DIGEST_QUIET_MS)).not.toBeNull();
+  });
+});
+
+// Le conteneur est recréé à chaque déploiement : le lot en attente disparaissait, et ce qui avait
+// fini pendant le redémarrage n'était jamais annoncé (23/09/2026).
+describe("restoreTorrentWatch", () => {
+  it("reprend ce qu'il savait, et annonce ce qui a fini pendant le redémarrage", async () => {
+    const { restoreTorrentWatch } = await import("@/lib/torrentWatch");
+    const { kvCacheDb } = await import("@/lib/db");
+    const now = Date.now();
+    vi.spyOn(kvCacheDb, "get").mockReturnValue({
+      value: { downloading: [["h1", "Film A"]], digest: { first: 1, last: 1, started: ["Film B"], completed: [] } },
+      fetchedAt: now - 60_000,
+    });
+    const state = createTorrentWatchState();
+    const digest = createTorrentDigest();
+    restoreTorrentWatch(state, digest, now);
+    expect(digest.started).toEqual(["Film B"]);
+    expect(diffTorrents(state, [{ hash: "h1", name: "Film A", state: "stoppedUP" }]).completed).toEqual(["Film A"]);
+  });
+
+  it("repart de zéro, en silence, quand ce qu'il savait est trop vieux", async () => {
+    const { restoreTorrentWatch } = await import("@/lib/torrentWatch");
+    const { kvCacheDb } = await import("@/lib/db");
+    const now = Date.now();
+    vi.spyOn(kvCacheDb, "get").mockReturnValue({
+      value: { downloading: [["h1", "Film A"]], digest: createTorrentDigest() },
+      fetchedAt: now - 2 * 3600_000,
+    });
+    const state = createTorrentWatchState();
+    restoreTorrentWatch(state, createTorrentDigest(), now);
+    expect(state.bootstrapped).toBe(false);
+  });
+});
+
+// qBittorrent 5 : « stoppedUP » là où la v4 disait « pausedUP ».
+describe("diffTorrents — qBittorrent 5", () => {
+  it("annonce un téléchargement qui finit directement arrêté", () => {
+    const state = createTorrentWatchState();
+    diffTorrents(state, []);
+    diffTorrents(state, [{ hash: "a", name: "A", state: "downloading" }]);
+    expect(diffTorrents(state, [{ hash: "a", name: "A", state: "stoppedUP" }]).completed).toEqual(["A"]);
   });
 });

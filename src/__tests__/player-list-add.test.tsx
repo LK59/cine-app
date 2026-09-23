@@ -39,7 +39,8 @@ vi.mock("@/lib/usePlayerTitleActions", () => ({
 import { PlayerListAdd } from "@/components/player/PlayerListAdd";
 
 const MATRIX = {
-  tmdbId: 603, title: "Matrix", year: 1999, posterPath: "/m.jpg", type: "movie",
+  // Ce que `/api/search` renvoie vraiment : une adresse complète, pas un chemin.
+  tmdbId: 603, title: "Matrix", year: 1999, posterPath: "https://image.tmdb.org/t/p/w342/m.jpg", type: "movie",
   overview: "", rating: 8, radarrId: 42, sonarrId: null, inLibrary: true, sources: ["radarr"],
 };
 const DUNE = {
@@ -84,7 +85,12 @@ describe("PlayerListAdd", () => {
     expect(await screen.findByText("Matrix")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("player.lists.addToWatch"));
 
-    expect(mockSetStatus).toHaveBeenCalledWith("to_watch", expect.objectContaining({ tmdbId: 603, type: "movie" }));
+    // L'affiche telle que la recherche la donne — une adresse complète. Elle était préfixée une
+    // seconde fois (« …/w154https://… ») et enregistrée cassée dans la liste (23/09/2026).
+    expect(mockSetStatus).toHaveBeenCalledWith(
+      "to_watch",
+      expect.objectContaining({ tmdbId: 603, type: "movie", poster: "https://image.tmdb.org/t/p/w342/m.jpg" })
+    );
     // Et la ligne le dit dès que c'est fait.
     expect(await screen.findByLabelText("player.lists.alreadyInList")).toBeTruthy();
   });

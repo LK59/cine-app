@@ -41,12 +41,25 @@ describe("GET /api/jellyfin/resume", () => {
     mockJellyfin.getResumeItems.mockResolvedValue({
       Items: [{ Id: "m1", Type: "Movie", Name: "Dune", ProviderIds: { Tmdb: "42" }, RunTimeTicks: 100, UserData: { PlaybackPositionTicks: 50 } }],
     });
-    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, id: 7 }]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, id: 7, hasFile: true }]);
 
     const { GET } = await import("@/app/api/jellyfin/resume/route");
     const res = await GET(fakeReq());
     const body = await res.json();
     expect(body.items[0]).toMatchObject({ cinemaHref: "/radarr/7", progress: 50 });
+  });
+
+  // Un film dont Radarr n'a plus le fichier n'est pas dans le catalogue du cinéma : son lien menait
+  // à une fiche introuvable, et le clic ne faisait rien. Sans lien, la carte lance la lecture.
+  it("does not link a film Radarr has no file for", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    mockJellyfin.getResumeItems.mockResolvedValue({
+      Items: [{ Id: "m1", Type: "Movie", Name: "Dune", ProviderIds: { Tmdb: "42" }, RunTimeTicks: 100, UserData: { PlaybackPositionTicks: 50 } }],
+    });
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 42, id: 7, hasFile: false }]);
+    const { GET } = await import("@/app/api/jellyfin/resume/route");
+    const body = await (await GET(fakeReq())).json();
+    expect(body.items[0].cinemaHref).toBeNull();
   });
 
   it("resolves an episode's series link via getItemProviderIds on the parent series, not the episode itself", async () => {

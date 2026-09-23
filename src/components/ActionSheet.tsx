@@ -31,7 +31,19 @@ interface Props {
 
 const CLOSE_THRESHOLD = 80; // px dragged down to trigger close
 
-export function ActionSheet({ open, onClose, title, subtitle, poster, actions }: Props) {
+export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions }: Props) {
+  /**
+   * L'en-tête reste celui de l'ouverture pendant la sortie.
+   *
+   * Les appelants remettent leur sélection à `null` en refermant, et la feuille reste montée
+   * encore 300 ms pour glisser : elle perdait son titre et son affiche en partant, et rétrécissait
+   * sous le doigt (23/09/2026). Ajusté pendant le rendu, la forme que le compilateur accepte.
+   */
+  const [header, setHeader] = useState({ title: liveTitle, subtitle: liveSubtitle, poster: livePoster });
+  if (open && (header.title !== liveTitle || header.subtitle !== liveSubtitle || header.poster !== livePoster)) {
+    setHeader({ title: liveTitle, subtitle: liveSubtitle, poster: livePoster });
+  }
+  const { title, subtitle, poster } = header;
   const [mounted, setMounted] = useState(false);
   const [show, setShow] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -68,6 +80,18 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
       return () => clearTimeout(t);
     }
   }, [open]);
+
+  /**
+   * Le focus entre dans la feuille à son ouverture.
+   *
+   * Il restait sur ce qui l'avait ouverte, derrière : au clavier, Entrée rouvrait la carte sous le
+   * menu et les flèches déplaçaient la grille (23/09/2026). La première action le reçoit ; la
+   * feuille est un dialogue, et le dit.
+   */
+  useEffect(() => {
+    if (!show) return;
+    sheetRef.current?.querySelector<HTMLButtonElement>("button[data-sheet-action]:not(:disabled)")?.focus();
+  }, [show]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,6 +155,9 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
       {/* Sheet */}
       <div
         ref={sheetRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className={`glass-panel relative w-full max-w-lg mx-auto rounded-t-2xl border-x-0 border-b-0 shadow-glow transition-transform duration-300 ease-out ${show ? "translate-y-0" : "translate-y-full"}`}
       >
         {/* Drag handle — main swipe target */}
@@ -174,6 +201,7 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
               </p>
             )}
             <button
+              data-sheet-action
               disabled={action.disabled}
               onClick={() => { action.onClick(); onClose(); }}
               className={`flex w-full items-center gap-4 px-5 py-3.5 text-sm font-medium transition-colors active:bg-white/5 disabled:opacity-40 ${

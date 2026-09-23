@@ -19,7 +19,11 @@ export async function GET(req: NextRequest) {
     cachedSeries().catch(() => []),
   ]);
 
-  const moviesByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
+  // Seulement les films qui ont un fichier : le catalogue du cinéma ne contient qu'eux. Un film en
+  // cours dont Radarr n'a plus le fichier (en pleine mise à niveau, par exemple) menait à une fiche
+  // introuvable — l'adresse était effacée, et le clic ne faisait rien (23/09/2026). Sans lien, la
+  // carte lance la lecture directement, ce que Jellyfin sait encore faire.
+  const moviesByTmdb = new Map(movies.filter((m) => m.hasFile).map((m) => [m.tmdbId, m.id]));
   const seriesByTvdb = new Map(series.map((s) => [s.tvdbId, s.id]));
 
   // Jellyfin ne pose jamais d'identifiants externes sur un épisode, seulement sur sa série : la

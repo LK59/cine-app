@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
-import { SESSION_COOKIE } from "@/lib/auth";
-import { verifySessionFull } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -23,15 +21,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
   }
 
-  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
-
+  // L'état d'un titre est le même pour tout le monde : lu avec la clé d'API, et non avec le cookie
+  // de session, qui peut avoir expiré — Jellyseerr répondait alors 403 (23/09/2026).
   try {
     if (type === "movie") {
-      const data = await jellyseerr.getMovieMedia(Number(tmdbId), session?.jsCookie);
+      const data = await jellyseerr.getMovieMedia(Number(tmdbId));
       return NextResponse.json({ status: data.mediaInfo?.status ?? 1 });
     }
 
-    const data = await jellyseerr.getTvMedia(Number(tmdbId), session?.jsCookie);
+    const data = await jellyseerr.getTvMedia(Number(tmdbId));
     const statusBySeason = new Map((data.mediaInfo?.seasons ?? []).map((s) => [s.seasonNumber, s.status]));
     const seasons: SeasonInfo[] = (data.seasons ?? [])
       // Jellyseerr's own request modal excludes season 0 (specials) from "all" by convention —

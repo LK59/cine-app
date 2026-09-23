@@ -55,7 +55,9 @@ describe("GET /api/jellyseerr/media", () => {
     mockJellyseerr.getTvMedia.mockResolvedValue({ mediaInfo: { status: 4 } });
     const { GET } = await import("@/app/api/jellyseerr/media/route");
     const res = await GET(fakeReq({ params: { tmdbId: "7", type: "tv" } }));
-    expect(mockJellyseerr.getTvMedia).toHaveBeenCalledWith(7, undefined);
+    // Avec la clé d'API seule, même quand la session porte un cookie Jellyseerr : l'état d'un
+    // titre est commun à tous, et un cookie expiré faisait répondre 403 (23/09/2026).
+    expect(mockJellyseerr.getTvMedia).toHaveBeenCalledWith(7);
     const body = await res.json();
     expect(body.status).toBe(4);
     expect(body.seasons).toEqual([]);

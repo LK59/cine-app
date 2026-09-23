@@ -22,6 +22,7 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   onFocusItem,
   onSelectItem,
   onSeeAll,
+  seeAllKey,
   showNewBadge = true,
 }: {
   label: string;
@@ -33,7 +34,13 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
   onFocusItem: (item: CinemaSeries) => void;
   onSelectItem: (item: CinemaSeries) => void;
   /** Ouvre la grille complète de cette rangée, avec ses tris et ses filtres. */
-  onSeeAll?: () => void;
+  /**
+   * « Voir tout », appelé avec `seeAllKey`. Une fonction stable et une clé plutôt qu'une fonction
+   * écrite en ligne par l'appelant : neuve à chaque rendu, elle défaisait le `memo` de la rangée —
+   * chaque flèche redessinait vingt rangées et leurs cartes (23/09/2026).
+   */
+  onSeeAll?: (key: string) => void;
+  seeAllKey?: string;
 }) {
   const t = useT();
   if (items.length === 0) return null;
@@ -47,7 +54,7 @@ export const CinemaSeriesRow = memo(function CinemaSeriesRow({
         {onSeeAll && (
           <button
             type="button"
-            onClick={onSeeAll}
+            onClick={() => onSeeAll(seeAllKey ?? "")}
             className="shrink-0 text-xs font-medium text-subtle transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
           >
             {t("player.browse.seeAll")}

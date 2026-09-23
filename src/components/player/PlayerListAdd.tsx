@@ -10,7 +10,6 @@ import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import type { UnifiedSearchResult } from "@/app/api/search/route";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 
-const TMDB_POSTER = "https://image.tmdb.org/t/p/w154";
 
 /** En dessous de deux lettres, une recherche rend le catalogue entier et n'apprend rien. */
 const MIN_QUERY = 2;
@@ -58,6 +57,11 @@ export function PlayerListAdd({ existing, onClose }: { existing: Set<string>; on
         <input
           type="search"
           autoFocus
+          // Échap referme la recherche d'ajout, et elle seule — voir `data-owns-escape`.
+          data-owns-escape
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onClose();
+          }}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("player.lists.addPlaceholder")}
@@ -107,7 +111,9 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
     type: result.type,
     title: result.title,
     year: result.year,
-    poster: result.posterPath ? `${TMDB_POSTER}${result.posterPath}` : null,
+    // `posterPath` est déjà une adresse complète (voir `/api/search`) : la préfixer une seconde fois
+    // donnait « …/w154https://… », une affiche cassée — enregistrée telle quelle dans la liste.
+    poster: result.posterPath ?? null,
     rating: result.rating,
   });
   const [added, setAdded] = useState(false);
@@ -139,7 +145,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
       >
         <span className="h-14 w-10 shrink-0 overflow-hidden rounded bg-white/5">
           <PosterImage
-            src={result.posterPath ? `${TMDB_POSTER}${result.posterPath}` : null}
+            src={result.posterPath ?? null}
             alt={result.title}
             subtle
             unoptimized

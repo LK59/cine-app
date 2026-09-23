@@ -52,6 +52,10 @@ export function useHideOnScroll(enabled = true): boolean {
     function onScroll(e: Event) {
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
+      // Une rangée qui défile de côté n'a pas de hauteur à parcourir : son `scrollTop` vaut
+      // toujours zéro, ce qui se lisait « revenu en haut » — faire glisser une rangée d'affiches
+      // ramenait la barre (23/09/2026).
+      if (target.scrollHeight <= target.clientHeight) return;
       if (frame.current !== null) return;
       frame.current = requestAnimationFrame(() => {
         frame.current = null;

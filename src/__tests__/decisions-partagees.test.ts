@@ -622,3 +622,13 @@ describe("les notifications se règlent à un seul endroit", () => {
     expect(src).not.toMatch(/NOTIFICATION_CATEGORIES|\/api\/notifications\/settings|\/api\/push\/test/);
   });
 });
+
+describe("un titre similaire s'ouvre sans toucher à l'onglet, sur les deux écrans", () => {
+  // Le téléphone réécrivait l'onglet (`openLibraryTitle`) : la fiche du dessous se démontait et la
+  // grille changeait d'onglet sous la fiche — le défaut corrigé sur le bureau le 21/09/2026, resté
+  // entier sur le téléphone jusqu'au 23/09/2026.
+  it("le téléphone passe par openSimilarTitle", () => {
+    const src = lire("src/components/cinema/mobile/CinemaMobileClient.tsx");
+    expect(src).toMatch(/onSelectSimilar=\{\(next\) => openSimilarTitle\(/);
+  });
+});

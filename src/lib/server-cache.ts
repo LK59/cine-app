@@ -142,7 +142,25 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
       store.set(key, { v, exp: disk.fetchedAt + ttlMs });
       return v;
     }
-    const v = await fn();
+    let v: T;
+    try {
+      v = await fn();
+    } catch (err) {
+      /**
+       * Une valeur expirée vaut mieux que rien quand la source ne répond pas.
+       *
+       * Une note IMDb dont la semaine venait de s'écouler disparaissait pendant la pause d'OMDb,
+       * un logo pendant une panne de TMDB — alors que l'ancienne valeur était là, sur disque
+       * (23/09/2026). Elle est resservie sans être réécrite, et gardée cinq minutes en mémoire :
+       * la source sera redemandée ensuite, pas à chaque appel.
+       */
+      if (disk) {
+        const stale = disk.value as T;
+        store.set(key, { v: stale, exp: Date.now() + 5 * 60_000 });
+        return stale;
+      }
+      throw err;
+    }
     store.set(key, { v, exp: Date.now() + ttlMs });
     staleStore.set(key, { v, fetchedAt: Date.now() });
     kvCacheDb.set(key, v, Date.now());

@@ -117,3 +117,39 @@ describe("PlayerPanelFrame — arrivée depuis un autre onglet", () => {
     expect(root().className).toContain("animate-fade-in-side");
   });
 });
+
+// Échap revenait au panneau quoi qu'il y ait au-dessus : sous l'accueil, il refermait le panneau
+// Compte (l'accueil restait) ; dans la recherche d'ajout de « Ma liste », il quittait tout l'écran
+// (23/09/2026).
+describe("PlayerPanelFrame — Échap", () => {
+  it("referme le panneau quand rien d'autre ne le réclame", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    render(panel(false));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(cinemaClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("se tait sous une fenêtre de dialogue", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    render(panel(false));
+    const dialog = document.createElement("div");
+    dialog.setAttribute("aria-modal", "true");
+    document.body.appendChild(dialog);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(cinemaClose).not.toHaveBeenCalled();
+    dialog.remove();
+  });
+
+  it("laisse Échap à l'élément qui le gère lui-même", async () => {
+    const { cinemaClose } = await import("@/lib/cinemaRoute");
+    vi.mocked(cinemaClose).mockClear();
+    render(
+      <PlayerPanelFrame title="Titre">
+        <input data-owns-escape aria-label="ajout" />
+      </PlayerPanelFrame>
+    );
+    fireEvent.keyDown(screen.getByLabelText("ajout"), { key: "Escape" });
+    expect(cinemaClose).not.toHaveBeenCalled();
+  });
+});

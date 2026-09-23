@@ -78,6 +78,20 @@ describe("PlayerBottomBar", () => {
     expect(bar.style.transform).toBe("none");
   });
 
+  // Visible, mais pas encore touchable : l'adresse porte toujours le titre, et un onglet choisi à
+  // ce moment s'empilait au-dessus de la fiche — le retour suivant la rouvrait.
+  it("does not take a tap until the leaving sheet has left the address", () => {
+    route = { ...route, film: 42 };
+    leaving = true;
+    const { rerender } = render(<PlayerBottomBar />);
+    const bar = () => screen.getByLabelText("player.nav.label").firstElementChild as HTMLElement;
+    expect(bar().className).toContain("pointer-events-none");
+    route = { ...route, film: null };
+    leaving = false;
+    rerender(<PlayerBottomBar />);
+    expect(bar().className).toContain("pointer-events-auto");
+  });
+
   // Sous la fiche qui sort, une autre fiche : c'est elle qu'on découvre, et elle couvre l'écran.
   it("stays away when the leaving sheet uncovers another one", () => {
     route = { ...route, film: 42 };

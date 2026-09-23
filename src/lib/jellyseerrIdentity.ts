@@ -90,7 +90,10 @@ export async function ensureJellyseerrUserId(jfId: string | undefined, jfUser: s
   if (!jfId && !jfUser) return null;
 
   const cached = await listUsers(false);
-  const known = cached && findJellyseerrUser(cached, jfId, jfUser);
+  // Jellyseerr injoignable : le redemander aussitôt doublait l'attente (huit secondes par appel),
+  // et la liste « Ma liste » l'attendait (23/09/2026).
+  if (!cached) return null;
+  const known = findJellyseerrUser(cached, jfId, jfUser);
   if (known) return known.id;
 
   const fresh = await listUsers(true);

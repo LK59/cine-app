@@ -46,6 +46,10 @@ export function PlayerBottomBar() {
   const leaving = useSheetLeaving();
   const sheetBehind = useSheetBehind();
   const covered = sheetOpen && !(leaving && !sheetBehind);
+  // Visible pendant la sortie de la fiche, mais pas encore touchable : l'adresse porte toujours
+  // le titre, et un onglet choisi à ce moment empilait son entrée *au-dessus* de la fiche — le
+  // retour suivant la rouvrait (relevé le 23/09/2026, dû au retour anticipé de la barre).
+  const interactive = !sheetOpen;
   const short = useIsShortViewport();
   // Désactivée pendant qu'une fiche recouvre l'écran : sans ça, le défilement de la fiche la
   // laissait « cachée », et refermer la fiche découvrait une barre absente qu'il fallait aller
@@ -94,7 +98,7 @@ export function PlayerBottomBar() {
       }}
     >
       <div
-        className={`player-bar pointer-events-auto flex items-center gap-1 rounded-full ${
+        className={`player-bar ${interactive ? "pointer-events-auto" : "pointer-events-none"} flex items-center gap-1 rounded-full ${
           short ? "px-1.5 py-1" : "px-2 py-1.5"
         }`}
       >

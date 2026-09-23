@@ -22,8 +22,15 @@ function Bar({ enabled = true }: { enabled?: boolean }) {
   );
 }
 
+/** Une zone qui défile vraiment en hauteur — jsdom donne zéro à toutes les dimensions. */
+function tall(el: HTMLElement) {
+  Object.defineProperty(el, "scrollHeight", { value: 2000, configurable: true });
+  Object.defineProperty(el, "clientHeight", { value: 800, configurable: true });
+}
+
 async function scrollTo(top: number) {
   const scroller = screen.getByTestId("scroller");
+  tall(scroller);
   Object.defineProperty(scroller, "scrollTop", { value: top, configurable: true });
   fireEvent.scroll(scroller);
   await nextFrame();
@@ -72,6 +79,7 @@ describe("useHideOnScroll", () => {
     render(<Bar />);
     const stranger = document.createElement("div");
     document.body.appendChild(stranger);
+    tall(stranger);
     Object.defineProperty(stranger, "scrollTop", { value: 500, configurable: true });
     fireEvent.scroll(stranger);
     await nextFrame();
@@ -96,5 +104,23 @@ describe("useHideOnScroll", () => {
     render(<Bar enabled={false} />);
     await scrollTo(500);
     expect(state()).toBe("visible");
+  });
+});
+
+// Faire glisser une rangée d'affiches ramenait la barre : son `scrollTop` vaut toujours zéro, ce
+// qui se lisait « revenu en haut » (23/09/2026).
+describe("useHideOnScroll — une rangée qui défile de côté", () => {
+  it("ne ramène pas la barre", async () => {
+    render(<Bar />);
+    await scrollTo(300);
+    expect(state()).toBe("cachée");
+    const row = document.createElement("div");
+    document.body.appendChild(row);
+    Object.defineProperty(row, "scrollHeight", { value: 300, configurable: true });
+    Object.defineProperty(row, "clientHeight", { value: 300, configurable: true });
+    fireEvent.scroll(row);
+    await nextFrame();
+    expect(state()).toBe("cachée");
+    row.remove();
   });
 });

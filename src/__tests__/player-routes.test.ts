@@ -87,6 +87,17 @@ beforeEach(async () => {
 });
 
 describe("GET /api/player/title", () => {
+  // L'état du titre est le même pour tout le monde : lu avec la clé d'API. Avec le cookie de la
+  // session, expiré mais toujours présenté, Jellyseerr répondait 403 — avalé — et un titre déjà
+  // demandé s'affichait « à demander » (23/09/2026).
+  it("reads the title's request state with the API key, not the session cookie", async () => {
+    jellyseerr.getMovieMedia.mockResolvedValue({});
+    tmdbClient.getMovie.mockResolvedValue({ id: 603, title: "Matrix", release_date: "1999-03-31", overview: "", genres: [], runtime: 136 });
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) });
+    expect(jellyseerr.getMovieMedia).toHaveBeenCalledWith(603);
+  });
+
   it("refuses an anonymous caller", async () => {
     mockVerify.mockResolvedValue(null);
     const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");

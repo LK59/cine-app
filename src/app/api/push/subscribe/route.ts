@@ -22,10 +22,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Subscription invalide" }, { status: 400 });
   }
 
-  if (endpoint.startsWith("https://web.push.apple.com/")) {
-    pushDb.removeByUserEndpointPrefix(session.u, "https://web.push.apple.com/");
-  }
-
+  // Les autres abonnements Apple du compte ne sont plus effacés ici. L'effacement visait les
+  // anciens abonnements d'un même appareil, mais il ne savait pas distinguer les appareils : un
+  // iPhone et un Mac se désabonnaient l'un l'autre, et le panneau Compte renvoie l'abonnement à
+  // chaque ouverture (23/09/2026). Un abonnement périmé répond 410 au premier envoi, et il est
+  // alors supprimé (`shouldRemovePushSubscription`).
   pushDb.upsert(session.u, endpoint, p256dh, auth);
   return NextResponse.json({ ok: true });
 }

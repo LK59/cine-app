@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
-import { getTmdbLocale } from "@/lib/i18n";
+import { getTmdbLocale, LOCALES } from "@/lib/i18n";
 import { withPersistentCache } from "@/lib/server-cache";
 
 export interface EnrichedPersonData {
@@ -18,7 +18,12 @@ function wikiLangOrder(locale: string): string[] {
   return ["fr", "en"];
 }
 
-async function fetchWikipediaBio(name: string, wikidataId: string | null, locale: string): Promise<{ bio: string | null; url: string | null }> {
+async function fetchWikipediaBio(
+  name: string,
+  wikidataId: string | null,
+  locale: string,
+  outcome: { failed: boolean } = { failed: false }
+): Promise<{ bio: string | null; url: string | null }> {
   const langOrder = wikiLangOrder(locale);
 
   const tryLang = async (lang: string, title: string) => {
@@ -27,11 +32,16 @@ async function fetchWikipediaBio(name: string, wikidataId: string | null, locale
         `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
         { signal: AbortSignal.timeout(4000) }
       );
-      if (!res.ok) return null;
+      // Une page absente (404) est une réponse ; une erreur de serveur ou une coupure n'en est pas
+      // une, et ne doit pas finir gardée une semaine comme « pas de biographie ».
+      if (!res.ok) {
+        if (res.status >= 500 || res.status === 429) outcome.failed = true;
+        return null;
+      }
       const data = await res.json() as { extract?: string; content_urls?: { desktop?: { page?: string } }; type?: string };
       if (data.type === "disambiguation" || !data.extract) return null;
       return { bio: data.extract, url: data.content_urls?.desktop?.page ?? null };
-    } catch { return null; }
+    } catch { outcome.failed = true; return null; }
   };
 
   // If we have a Wikidata ID, resolve titles for all target languages at once
@@ -65,7 +75,10 @@ async function fetchWikipediaBio(name: string, wikidataId: string | null, locale
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const rawLang = req.cookies.get("cine-lang")?.value ?? "fr";
+  // Une langue connue ou le français : la valeur du cookie entre dans la clé de cache, et une
+  // valeur libre permettait de fabriquer autant d'entrées — et d'appels à TMDB — qu'on voulait.
+  const cookieLang = req.cookies.get("cine-lang")?.value ?? "fr";
+  const rawLang = (LOCALES as string[]).includes(cookieLang) ? cookieLang : "fr";
   const tmdb = createTmdbClient(getTmdbLocale(rawLang));
   const personId = Number(params.id);
   if (!personId || !tmdb.isEnabled()) {
@@ -74,15 +87,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
   const cacheKey = `enriched:person:${personId}:${rawLang}`;
   // Une semaine, sur disque (dix minutes en mémoire avant le 23/09/2026 : perdues à chaque
-  // déploiement). Sans aucune réponse de TMDB, rien n'est gardé : une coupure ne doit pas laisser
-  // une fiche sans photos ni liens pendant une semaine.
+  // déploiement). Le moindre échec — une des trois réponses de TMDB, ou Wikipédia injoignable —
+  // n'est pas gardé : une réponse partielle l'aurait été une semaine, une fiche sans photos ou
+  // sans biographie parce qu'un appel avait échoué ce jour-là.
   const data = await withPersistentCache<EnrichedPersonData>(cacheKey, 7 * 24 * 3600_000, async () => {
     const [imagesData, externalIds, personDetails] = await Promise.all([
-      tmdb.getPersonImages(personId).catch(() => null),
-      tmdb.getPersonExternalIds(personId).catch(() => null),
-      tmdb.getPersonDetails(personId).catch(() => null),
+      tmdb.getPersonImages(personId),
+      tmdb.getPersonExternalIds(personId),
+      tmdb.getPersonDetails(personId),
     ]);
-    if (!imagesData && !externalIds && !personDetails) throw new Error("TMDB injoignable");
 
     const photos = (imagesData?.profiles ?? [])
       .sort((a, b) => b.vote_average - a.vote_average)
@@ -96,11 +109,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       ? `https://www.imdb.com/name/${externalIds.imdb_id}`
       : null;
 
+    const wiki = { failed: false };
     const { bio: wikiBio, url: wikipedia } = await fetchWikipediaBio(
       personDetails?.name ?? "",
       externalIds?.wikidata_id ?? null,
-      rawLang
+      rawLang,
+      wiki
     );
+    if (!wikiBio && wiki.failed) throw new Error("Wikipédia injoignable");
 
     return { photos, instagram, imdb, wikipedia, wikiBio };
   }).catch((): EnrichedPersonData => ({ photos: [], instagram: null, imdb: null, wikipedia: null, wikiBio: null }));

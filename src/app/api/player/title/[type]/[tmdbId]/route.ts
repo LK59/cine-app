@@ -75,14 +75,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
   return withErrorHandling(async () => {
     const userId = session.jfId ?? session.u ?? null;
 
-    // Jellyseerr est interrogé avec le cookie de la personne quand il existe, pour que l'état
-    // rendu soit bien le sien. Sans Jellyseerr configuré, la fiche s'affiche quand même : elle
-    // perd la demande, pas le reste.
+    // L'état du titre chez Jellyseerr est le même pour tout le monde (`mediaInfo.status`) : il est
+    // lu avec la clé d'API. Il l'était avec le cookie de session, qui peut avoir expiré alors que la
+    // session cine-app, elle, glisse — Jellyseerr répondait alors 403, avalé en silence, et un titre
+    // déjà demandé s'affichait « à demander » (23/09/2026). Sans Jellyseerr configuré, la fiche
+    // s'affiche quand même : elle perd la demande, pas le reste.
     const media = config.jellyseerr.apiKey
-      ? await (type === "movie"
-          ? jellyseerr.getMovieMedia(tmdbId, session.jsCookie)
-          : jellyseerr.getTvMedia(tmdbId, session.jsCookie)
-        ).catch(() => null)
+      ? await (type === "movie" ? jellyseerr.getMovieMedia(tmdbId) : jellyseerr.getTvMedia(tmdbId)).catch(() => null)
       : null;
 
     if (type === "movie") {

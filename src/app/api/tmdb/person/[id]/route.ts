@@ -32,10 +32,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     ]);
 
     // If TMDB has no French biography, fall back to English
+    // Sans biographie dans la langue de qui regarde, celle en anglais. Le repli redemandait la même
+    // langue au même client — donc la même réponse vide, et un appel de plus à chaque ouverture
+    // (relevé le 23/09/2026).
     const person =
-      personFr?.biography
+      personFr?.biography || locale === "en-US"
         ? personFr
-        : await tmdb.getPersonDetails(personId).catch(() => personFr);
+        : await withPersistentCache(`tmdb:person:details:en-US:${personId}`, WEEK_MS, () =>
+            createTmdbClient("en-US").getPersonDetails(personId)
+          ).catch(() => personFr);
 
     const movieByTmdb = new Map([...lib.movies].map(([tmdbId, m]) => [tmdbId, m.id]));
     const seriesByTmdb = new Map([...lib.series].map(([tmdbId, s]) => [tmdbId, s.id]));

@@ -103,3 +103,20 @@ describe("localizedTitle", () => {
     expect(localizedTitle({ fr: "Le Prénom" }, "es", "What's in a Name")).toEqual({ title: "What's in a Name" });
   });
 });
+
+// Pendant une panne de TMDB, chaque ouverture du catalogue relançait la recherche de chaque titre.
+describe("getTitleNames — après un échec", () => {
+  it("attend une heure avant de redemander", async () => {
+    vi.useFakeTimers();
+    tmdb.getMovieTranslations.mockRejectedValue(new Error("down"));
+    getTitleNames(1, "movie");
+    await vi.waitFor(() => expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(0);
+    getTitleNames(1, "movie");
+    expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(3600_000);
+    getTitleNames(1, "movie");
+    expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+});

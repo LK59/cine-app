@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { fetcher } from "@/lib/swr";
 import { Clapperboard } from "lucide-react";
 import { useCinemaRoute } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
@@ -27,6 +29,10 @@ export function PlayerRail() {
   const router = useRouter();
   const t = useT();
   const active = activePanel(route);
+  // La gestion est à l'administrateur, et le panneau Compte ne la propose qu'à lui : le rail la
+  // montrait à tout le monde, vers des pages où chaque bouton répond 403 (23/09/2026).
+  const { data: me } = useSWR<{ role: string }>("/api/auth/me", fetcher);
+  const isAdmin = me?.role === "admin";
 
   /**
    * Les flèches, dans le rail.
@@ -110,6 +116,7 @@ export function PlayerRail() {
       {/* La porte vers la gestion : toujours là, jamais mise en avant. Une ligne de séparation,
           un corps plus petit, une couleur en retrait — celui qui la cherche la trouve, l'autre ne
           la lit jamais. */}
+      {isAdmin && (
       <div className="shrink-0 overflow-hidden border-t border-white/10 px-3 py-3">
         <button
           type="button"
@@ -124,6 +131,7 @@ export function PlayerRail() {
           </span>
         </button>
       </div>
+      )}
     </nav>
   );
 }

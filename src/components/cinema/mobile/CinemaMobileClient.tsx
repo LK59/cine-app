@@ -13,7 +13,7 @@ import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { top10Label, genreLabel } from "@/lib/top10Label";
 import { useCinemaRoute, useRouteBehind, cinemaNavigate, cinemaClose, openLibraryTitle } from "@/lib/cinemaRoute";
-import { openDiscoveryItem, openResumeTarget, openTitle } from "@/lib/cinemaOpen";
+import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { uniqueById } from "@/lib/cinemaRails";
 import { BROWSE_ALL } from "@/lib/cinemaBrowse";
 import { useExitDelay } from "@/lib/useExitDelay";
@@ -362,6 +362,13 @@ export function CinemaMobileClient() {
   const myList = isSeries ? myListSeries : myListMovies;
   const myListPending = useCinemaMyListPending();
 
+  // Stable : écrite en ligne, elle était neuve à chaque rendu et défaisait le `memo` des deux
+  // bannières — redessinées à chaque changement d'adresse et à chaque réponse (23/09/2026).
+  const resumeFor = useCallback(
+    (item: CinemaMovie | CinemaSeries) => ("sonarrId" in item ? null : resumeByItemId.get(item.jellyfinItemId) ?? null),
+    [resumeByItemId]
+  );
+
   const openDetail = useCallback((item: CinemaMovie | CinemaSeries, type: "movies" | "series") => {
     openTitle(type, type === "series" ? (item as CinemaSeries).sonarrId : (item as CinemaMovie).radarrId);
   }, []);
@@ -558,17 +565,24 @@ export function CinemaMobileClient() {
               // En pause dès qu'un écran la recouvre — l'autre onglet, les panneaux du rail, une
               // fiche : laisser une bande-annonce tourner derrière consomme des données mobiles
               // pour une image que personne ne voit.
+              // La grille complète et les fiches TMDB ou personne comptent aussi : elles la recouvrent
+              // entièrement, et la bannière continuait d'y tourner (23/09/2026).
               paused={
-                mediaType !== tab || selected !== null || searchOpen || route.list || route.account
+                mediaType !== tab ||
+                selected !== null ||
+                searchOpen ||
+                route.list ||
+                route.account ||
+                route.browse !== null ||
+                route.discover !== null ||
+                route.person !== null
               }
               short={short}
               onPlay={playHero}
               onOpen={openHero}
               // Pour que le bouton annonce « Reprendre — 40 min restantes » plutôt qu'un « Lire »
               // qui ne dit pas où il emmène.
-              resumeFor={(item) =>
-                "sonarrId" in item ? null : resumeByItemId.get(item.jellyfinItemId) ?? null
-              }
+              resumeFor={resumeFor}
             />
           </div>
         ))}
@@ -793,7 +807,10 @@ export function CinemaMobileClient() {
           const top = !covered && i === stack.length - 1;
           return (
             <CinemaMobileDetail
-              key={itemId(entry.item)}
+              // Le type dans la clé : un film et une série peuvent porter le même numéro chez Radarr
+              // et chez Sonarr, et une clé commune faisait réutiliser l'instance de l'un pour
+              // l'autre — son état, son geste, sa sortie en cours (règle 1 des fiches).
+              key={`${entry.mediaType}:${itemId(entry.item)}`}
               item={entry.item}
               mediaType={entry.mediaType}
               underneath={!top}
@@ -802,7 +819,11 @@ export function CinemaMobileClient() {
               // existe, et la retirer la démontait — on revenait sur une fiche intacte dont la
               // rangée, elle, se reconstruisait. La fiche du dessous est inerte, personne ne
               // peut la déclencher.
-              onSelectSimilar={(next) => openDetail(next, entry.mediaType)}
+              // Sans toucher à l'onglet, comme le bureau depuis le 21/09/2026 (voir
+              // `openSimilarTitle`) : réécrit, il démontait la fiche du dessous et changeait la
+              // grille d'onglet sous la fiche — un titre similaire ouvert depuis une série de
+              // « Reprendre » sur l'onglet Films (relevé le 23/09/2026).
+              onSelectSimilar={(next) => openSimilarTitle(entry.mediaType, itemId(next))}
             />
           );
         })}

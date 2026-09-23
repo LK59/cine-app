@@ -3,7 +3,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
 vi.mock("@/components/TranslationProvider", () => ({
-  useT: () => (key: string, vars?: Record<string, unknown>) => (vars?.n !== undefined ? `${key}:${vars.n}` : key),
+  useT: () => (key: string, vars?: Record<string, unknown>) =>
+    vars?.n !== undefined ? `${key}:${vars.n}` : key === "cinema.episodeShort" ? `S${vars?.season} · É${vars?.episode}` : key,
+  useLocale: () => ({ locale: "fr", setLocale: vi.fn() }),
 }));
 vi.mock("@/components/cinema/CinemaDetailExtras", () => ({ CinemaDownloading: () => <span>downloading</span> }));
 
@@ -39,5 +41,16 @@ describe("CinemaMissingEpisodes", () => {
     draw([ep(1, true), ep(2, false), ep(3, false)]);
     expect(screen.getByText("cinema.missing.count:1 · cinema.missing.upcoming:2")).toBeTruthy();
     expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+});
+
+// Relevé le 23/09/2026 : la date suivait la langue du navigateur (« le Sep 30, 2026 » dans une page
+// en français) et le code d'épisode était écrit en dur (« S02E01 »), là où le reste de l'app dit
+// « S2 · É1 », et « T2 · E1 » en espagnol.
+describe("CinemaMissingEpisodes — dans la langue de l'app", () => {
+  it("écrit la date et le code d'épisode comme le reste de la page", () => {
+    draw([{ ...ep(1, true), airDate: "2025-10-31" }]);
+    expect(screen.getByText("S2 · É1")).toBeTruthy();
+    expect(screen.getByText(/31 oct\. 2025/)).toBeTruthy();
   });
 });

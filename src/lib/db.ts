@@ -156,7 +156,11 @@ function migrate(db: Database.Database): void {
       /* Date du dernier avis « redémarrage imminent », en ms. C'est elle que les lecteurs
          comparent à ce qu'ils ont déjà montré : une date qui avance est un nouvel avis, ce qui
          permet d'en envoyer plusieurs sans jamais réafficher le précédent. */
-      notice_at INTEGER
+      notice_at INTEGER,
+      /* Dans la création, et pas seulement dans la migration : celle-ci tourne avant la création,
+         et sur une installation neuve elle échouait en silence — la maintenance ne répondait plus
+         jusqu'au démarrage suivant (23/09/2026). */
+      expires_at INTEGER
     )
   `);
   db.exec(`

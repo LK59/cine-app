@@ -33,11 +33,19 @@ const HOME_COUNTRY: Record<Locale, string> = { fr: "FR", en: "US", es: "ES", de:
 
 const memory = new Map<string, { names: TitleNames; fetchedAt: number }>();
 const refreshing = new Set<string>();
+/**
+ * Un titre dont la recherche vient d'échouer n'est pas redemandé avant une heure : pendant une
+ * panne de TMDB, ou pour un identifiant qu'il ne connaît plus, chaque ouverture du catalogue
+ * relançait l'appel — et écrivait une ligne d'erreur de plus.
+ */
+const RETRY_AFTER_FAILURE_MS = 3600_000;
+const failedAt = new Map<string, number>();
 
 /** Pour les tests. */
 export function resetTitleNames(): void {
   memory.clear();
   refreshing.clear();
+  failedAt.clear();
 }
 
 export function namesFromTranslations(data: TmdbTranslations): TitleNames {
@@ -77,7 +85,10 @@ function refresh(key: string, tmdbId: number, mediaType: "movie" | "series"): vo
       memory.set(key, entry);
       kvCacheDb.set(key, entry.names, entry.fetchedAt);
     })
-    .catch((err) => logError("title-names", err, { tmdbId, mediaType }))
+    .catch((err) => {
+      failedAt.set(key, Date.now());
+      logError("title-names", err, { tmdbId, mediaType });
+    })
     .finally(() => refreshing.delete(key));
 }
 
@@ -106,7 +117,9 @@ function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | 
   }
   // Étalée comme le reste (voir `spreadTtl`) : les 860 titres remplis le même jour ne
   // reviennent pas tous le même jour.
-  if (!entry || Date.now() - entry.fetchedAt >= spreadTtl(key, TTL_MS)) refresh(key, tmdbId, mediaType);
+  const expired = !entry || Date.now() - entry.fetchedAt >= spreadTtl(key, TTL_MS);
+  const recentlyFailed = Date.now() - (failedAt.get(key) ?? 0) < RETRY_AFTER_FAILURE_MS;
+  if (expired && !recentlyFailed) refresh(key, tmdbId, mediaType);
   return entry?.names ?? {};
 }
 

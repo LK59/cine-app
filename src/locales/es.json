@@ -1376,7 +1376,7 @@
       "decade": "Década",
       "allDecades": "Todas",
       "nothing": "Nada coincide.",
-      "count": "{n} títulos",
+      "count": "{n} título|{n} títulos",
       "sorts": {
         "added": "Añadidos recientemente",
         "title": "Título",

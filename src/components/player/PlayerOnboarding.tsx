@@ -249,6 +249,29 @@ export function PlayerOnboarding({
     <div
       role="dialog"
       aria-modal="true"
+      // Échap vaut « Passer », et Tab reste dans l'accueil : c'est une fenêtre par-dessus tout,
+      // et le panneau qui l'avait ouverte ne répond plus à ces touches tant qu'elle est là.
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onSkip();
+          return;
+        }
+        if (e.key !== "Tab") return;
+        const focusable = Array.from(
+          e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), select, input, a[href], [tabindex]:not([tabindex="-1"])')
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }}
       aria-label={t("player.account.welcome")}
       className="fixed inset-0 flex animate-fade-in items-stretch justify-center overflow-y-auto bg-ink sm:items-center"
       style={{ zIndex: 70 }}

@@ -149,6 +149,16 @@ export function PlayerPanelFrame({
     if (covered || leaving) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // Deux cas où Échap ne revient pas au panneau, relevés le 23/09/2026 :
+      //  - une fenêtre de dialogue est ouverte par-dessus (l'accueil, un menu d'actions) — Échap
+      //    refermait le panneau Compte *sous* l'accueil, qui restait à l'écran ;
+      //  - la touche vient d'un élément qui gère lui-même Échap (`data-owns-escape`) — dans la
+      //    recherche d'ajout de « Ma liste », Échap quittait tout l'écran au lieu de la seule
+      //    recherche.
+      // L'écoute se fait en capture sur la fenêtre, avant tout le monde : c'est donc ici qu'il
+      // faut s'effacer, un enfant n'a aucun moyen de passer devant.
+      if (document.querySelector('[aria-modal="true"]')) return;
+      if ((e.target as Element | null)?.closest?.("[data-owns-escape]")) return;
       e.stopPropagation();
       cinemaClose({ search: false, list: false, account: false, browse: null });
     };
@@ -254,7 +264,12 @@ export function PlayerPanelFrame({
         className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain px-5 pb-16 sm:px-10"
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))" }}
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))",
+          // Le fondu collé en haut recouvre ce qu'on y fait défiler : une carte atteinte aux flèches
+          // s'arrêtait dessous, son haut estompé. La réserve l'arrête juste après.
+          scrollPaddingTop: short ? "0.5rem" : "1rem",
+        }}
       >
         {/* Un fondu sous l'en-tête, collé en haut de la zone qui défile.
             Le contenu disparaissait net sous le titre, coupé à la ligne près (23/09/2026). Le

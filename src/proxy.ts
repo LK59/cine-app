@@ -68,6 +68,10 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/jellyfin/favorite",
   "POST /api/player/account/preferences",
   "POST /api/player/account/password",
+  // La langue de l'app (23/09/2026). Refusée à un compte ordinaire sans que rien ne le dise —
+  // `fetch` ne lève pas sur un 403 —, puis le rechargement relisait l'ancienne langue et la
+  // réécrivait : la page revenait en français. La route n'écrit que la préférence de l'appelant.
+  "PUT /api/user/preferences",
   // Trouvées à la revue précédant la bascule, et du même tonneau que les quatre précédentes : le
   // panneau « Compte » montre à tout le monde un interrupteur de notifications et un bouton
   // « déconnecter mes autres appareils », et les deux répondaient 403 à un compte ordinaire. Les

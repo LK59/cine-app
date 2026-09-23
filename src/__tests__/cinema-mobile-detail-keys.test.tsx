@@ -103,3 +103,14 @@ describe("CinemaMobileDetail — la sortie", () => {
     expect(root().className).toContain("sheet-out");
   });
 });
+
+// Règle 2 des fiches : un écran sur le départ n'a plus d'avis. Un appui sur un titre similaire
+// pendant la sortie empilait une fiche par-dessus, et celle-ci ne se refermait plus (23/09/2026).
+describe("CinemaMobileDetail — pendant sa sortie", () => {
+  it("ne répond plus au doigt", () => {
+    draw(vi.fn());
+    expect(root().style.pointerEvents).toBe("");
+    fireEvent.click(document.body.querySelector('[aria-label="cinema.back"]')!);
+    expect(root().style.pointerEvents).toBe("none");
+  });
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import useSWR, { preload, useSWRConfig } from "swr";
+import useSWR, { mutate, preload, useSWRConfig } from "swr";
 import { fetcher } from "@/lib/swr";
 import type { HeroInfo, HeroMediaType } from "@/lib/heroInfo";
 
@@ -27,7 +27,12 @@ export function heroInfoKey(type: HeroMediaType, tmdbId: number): string {
 
 /** Demande d'avance ce que la bannière affichera — à partir de son adresse (`heroInfoKey`). */
 export function preloadHeroInfo(key: string): void {
-  void Promise.resolve(preload(key, fetcher)).catch(() => {});
+  // La réponse est posée dans le cache, et pas seulement récupérée : `preload` de SWR la garde à
+  // part, pour le premier `useSWR` qui la demandera — la bannière, elle, lit le cache pour ne pas
+  // attendre ses deux cents millisecondes, et n'y trouvait rien (relevé le 23/09/2026).
+  void Promise.resolve(preload(key, fetcher))
+    .then((data) => mutate(key, data, { revalidate: false }))
+    .catch(() => {});
 }
 
 export function useHeroInfo(type: HeroMediaType, tmdbId: number | null | undefined): HeroInfo | undefined {

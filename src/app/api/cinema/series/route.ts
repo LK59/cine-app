@@ -143,7 +143,8 @@ export async function GET(req: Request) {
     };
     // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
     // entier, il demande seulement s'il a changé. Voir `cachedJson`.
-    return cachedJson(req, "cinema-series", payload);
+    // Une entrée par langue — voir la route des films.
+    return cachedJson(req, `cinema-series:${locale}`, payload);
   } catch (err) {
     // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
     return upstreamFailure(err, "cinema-series");

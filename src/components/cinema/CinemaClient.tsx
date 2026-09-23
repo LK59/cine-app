@@ -224,6 +224,9 @@ function ContinueCard({
 // hydration failures at the root hydrate() call happen outside a boundary's reach). Disabling SSR
 // for this page sidesteps the whole class of problem: nothing to mismatch against since there's
 // no server-rendered HTML for it at all.
+
+/** La clé de « Voir tout » qui ouvre « Ma liste » plutôt qu'une grille complète. */
+const SEE_ALL_LIST = "__ma-liste__";
 export function CinemaClient() {
   const t = useT();
 
@@ -252,7 +255,11 @@ export function CinemaClient() {
    * flèches, la carte centrée, « / », `inert`, la rotation des bannières, le focus rendu en
    * refermant. Voir `gridIsTop` pour les conditions qui divergeaient avant elle.
    */
-  const gridOnTop = gridIsTop(route, playback.mode);
+  // Le menu d'un film de « Reprendre » — voir `onMenu` sur ContinueCard. Il compte dans « la
+  // grille est-elle dessus ? » : ouvert, il la recouvre, et elle ne devait plus écouter les
+  // flèches ni Entrée derrière lui (23/09/2026).
+  const [resumeMenu, setResumeMenu] = useState<{ id: string; title: string; poster: string | null } | null>(null);
+  const gridOnTop = gridIsTop(route, playback.mode) && resumeMenu === null;
   // "replace": the tab is a filter on the screen you're already on, not a screen of its own —
   // Back from a title should return to the grid, not undo a tab switch.
   /**
@@ -333,11 +340,16 @@ export function CinemaClient() {
    */
   const { data: nextUp, error: nextUpError } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
   const continueSeries = nextUp?.items ?? [];
+  // « Voir tout », une seule fonction stable pour toutes les rangées — voir `onSeeAll` dans CinemaRow.
+  const openSeeAll = useCallback(
+    (key: string) => cinemaNavigate(key === SEE_ALL_LIST ? { list: true } : { browse: key }),
+    []
+  );
+
   const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
 
-  // « Retirer de Reprendre » : le menu d'un film de la rangée, et le geste lui-même — voir
-  // `useRemoveFromResume`. Les voisines glissent jusqu'à leur place quand une carte part.
-  const [resumeMenu, setResumeMenu] = useState<{ id: string; title: string; poster: string | null } | null>(null);
+  // « Retirer de Reprendre » : le geste lui-même — voir `useRemoveFromResume`. Les voisines
+  // glissent jusqu'à leur place quand une carte part. Le menu, lui, est déclaré plus haut.
   const removeFromResume = useRemoveFromResume();
   const continueTrack = useRef<HTMLDivElement>(null);
   useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)]);
@@ -686,11 +698,19 @@ export function CinemaClient() {
    * `focus()` y est ignoré sans bruit.
    */
   const restoreFocusOnReturn = useRef(false);
+  // Le menu de « Reprendre » recouvre la grille comme une fiche : le focus y revient à sa fermeture.
+  useEffect(() => {
+    if (resumeMenu) restoreFocusOnReturn.current = true;
+  }, [resumeMenu]);
   useEffect(() => {
     if (!gridOnTop || !restoreFocusOnReturn.current) return;
     restoreFocusOnReturn.current = false;
     const card = lastFocusedCard.current;
     if (card?.isConnected) card.focus();
+    // La carte n'est plus là — retirée de « Reprendre » depuis son menu : le focus tombait sur la
+    // page, et la flèche suivante repartait de la première carte de l'accueil. Il revient sur la
+    // rangée.
+    else continueTrack.current?.querySelector<HTMLElement>("button")?.focus();
   }, [gridOnTop]);
 
   const closeDetail = useCallback(() => {
@@ -1133,7 +1153,8 @@ export function CinemaClient() {
                 rowIndex={RAIL_COUNT}
                 items={myListMovies}
                 cardWidthClassName={CARD_WIDTH}
-                onSeeAll={() => cinemaNavigate({ list: true })}
+                onSeeAll={openSeeAll}
+                seeAllKey={SEE_ALL_LIST}
                 onFocusItem={focusMovie}
                 onSelectItem={openDetail}
               />
@@ -1148,7 +1169,8 @@ export function CinemaClient() {
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusMovie}
                   onSelectItem={openDetail}
-                  onSeeAll={() => cinemaNavigate({ browse: genre })}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={genre}
                 />
               ))}
 
@@ -1255,7 +1277,8 @@ export function CinemaClient() {
                 rowIndex={RAIL_COUNT}
                 items={myListSeries}
                 cardWidthClassName={CARD_WIDTH}
-                onSeeAll={() => cinemaNavigate({ list: true })}
+                onSeeAll={openSeeAll}
+                seeAllKey={SEE_ALL_LIST}
                 onFocusItem={focusSeries}
                 onSelectItem={openSeriesDetail}
               />
@@ -1270,7 +1293,8 @@ export function CinemaClient() {
                   cardWidthClassName={CARD_WIDTH}
                   onFocusItem={focusSeries}
                   onSelectItem={openSeriesDetail}
-                  onSeeAll={() => cinemaNavigate({ browse: genre })}
+                  onSeeAll={openSeeAll}
+                  seeAllKey={genre}
                 />
               ))}
 

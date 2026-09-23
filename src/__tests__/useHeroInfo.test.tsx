@@ -68,3 +68,23 @@ describe("useHeroInfo", () => {
     expect(fetched).toEqual([]);
   });
 });
+
+// Le préchargement récupérait la réponse sans la poser dans le cache que la bannière lit : le
+// synopsis attendait quand même ses deux cents millisecondes (relevé le 23/09/2026). Ce test passe
+// par le vrai `preload`, là où les autres remplissaient le cache à la main.
+describe("preloadHeroInfo", () => {
+  it("pose la réponse dans le cache, prête pour la bannière", async () => {
+    const { preloadHeroInfo } = await import("@/lib/useHeroInfo");
+    const key = heroInfoKey("movie", 777);
+    preloadHeroInfo(key);
+    const { result } = renderHook(() => useHeroInfo("movie", 777));
+    await waitFor(() => expect(result.current?.tmdb?.overview).toBe(`réponse de ${key}`));
+    // Et un second titre préchargé se lit aussitôt, sans attendre l'intervalle.
+    const key2 = heroInfoKey("movie", 778);
+    preloadHeroInfo(key2);
+    await waitFor(() => expect(fetched).toContain(key2));
+    await act(async () => {});
+    const { result: second } = renderHook(() => useHeroInfo("movie", 778));
+    expect(second.current?.tmdb?.overview).toBe(`réponse de ${key2}`);
+  });
+});

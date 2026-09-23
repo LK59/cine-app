@@ -225,7 +225,9 @@ export async function GET(req: Request) {
     };
     // Étiquetée et compressée : un retour sur l'onglet ne retélécharge plus le catalogue
     // entier, il demande seulement s'il a changé. Voir `cachedJson`.
-    return cachedJson(req, "cinema-movies", payload);
+    // Une entrée par langue : les titres et les affiches en dépendent, et deux spectateurs de
+    // langues différentes s'évinçaient l'un l'autre — une recompression complète à chaque fois.
+    return cachedJson(req, `cinema-movies:${locale}`, payload);
   } catch (err) {
     // Une panne amont se nomme, elle ne sort pas en 500 nu — voir `upstreamFailure`.
     return upstreamFailure(err, "cinema-movies");

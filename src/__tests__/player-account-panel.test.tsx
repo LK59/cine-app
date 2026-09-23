@@ -185,3 +185,14 @@ describe("PlayerAccountPanel — l'ordre de la page", () => {
     expect(screen.getByText("settings.language.reloadNotice")).toBeTruthy();
   });
 });
+
+// Tant que la réponse n'était pas là, le panneau annonçait « compte local » à tout le monde, puis
+// sautait quand la lecture et le mot de passe apparaissaient (23/09/2026).
+describe("PlayerAccountPanel — pendant le chargement", () => {
+  it("ne prétend pas que le compte est local avant de le savoir", () => {
+    payload = undefined as never;
+    render(<PlayerAccountPanel />);
+    expect(screen.queryByText("player.account.localAccountHint")).toBeNull();
+    expect(screen.getByText("player.account.changePassword")).toBeTruthy();
+  });
+});

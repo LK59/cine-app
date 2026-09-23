@@ -14,7 +14,7 @@ vi.mock("@/lib/clients/tmdb", () => ({
   tmdb: mockTmdb,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
-vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR" }));
+vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR", LOCALES: ["fr", "en", "es", "de"] }));
 const mockCachedMovies = vi.fn();
 const mockCachedSeries = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
@@ -203,5 +203,30 @@ describe("le cache d'une semaine des fiches personne et des collections", () => 
     const { GET } = await import("@/app/api/tmdb/person/[id]/enriched/route");
     await GET(fakeReq(), params("8"));
     expect(persisted.size).toBe(0);
+  });
+});
+
+// Une réponse partielle était gardée une semaine : une fiche sans photos parce qu'un seul des
+// trois appels avait échoué ce jour-là (23/09/2026).
+describe("la fiche enrichie — échecs partiels", () => {
+  it("ne garde rien quand un seul appel à TMDB échoue", async () => {
+    mockTmdb.getPersonImages.mockRejectedValue(new Error("429"));
+    mockTmdb.getPersonExternalIds.mockResolvedValue({ imdb_id: "nm1" });
+    mockTmdb.getPersonDetails.mockResolvedValue({ name: "Actor" });
+    const { GET } = await import("@/app/api/tmdb/person/[id]/enriched/route");
+    await GET(fakeReq(), params("9"));
+    expect(persisted.size).toBe(0);
+  });
+
+  it("n'accepte pas une langue inventée dans la clé du cache", async () => {
+    mockTmdb.getPersonImages.mockResolvedValue({ profiles: [] });
+    mockTmdb.getPersonExternalIds.mockResolvedValue({});
+    mockTmdb.getPersonDetails.mockResolvedValue({ name: "" });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+    const { GET } = await import("@/app/api/tmdb/person/[id]/enriched/route");
+    const req = { cookies: { get: () => ({ value: "zz-anything" }) } } as unknown as NextRequest;
+    await GET(req, params("10"));
+    expect([...persisted.keys()]).toEqual(["enriched:person:10:fr"]);
+    vi.unstubAllGlobals();
   });
 });

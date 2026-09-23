@@ -80,6 +80,31 @@ export function rememberSearch(query: string): void {
   }
 }
 
+/**
+ * Retenir un titre qu'on vient d'ouvrir — tel quel, sans fusion par le début.
+ *
+ * La fusion par le début est faite pour une frappe en cours (« Hannib », « Hannibal ») : appliquée
+ * à des titres, elle en effaçait de vrais — ouvrir « Alien: Romulus » supprimait « Alien », et
+ * ouvrir « Dune » faisait seulement remonter « Dune: Part Two » (relevé le 23/09/2026). Seuls
+ * disparaissent le même titre écrit autrement, et ce qui était tapé pour le trouver : c'est ce
+ * fragment que le titre remplace.
+ */
+export function rememberTitle(title: string, typed?: string): void {
+  const clean = title.trim();
+  if (clean.length < 2) return;
+  try {
+    const bas = clean.toLowerCase();
+    const tape = typed?.trim().toLowerCase();
+    const kept = recentSearches().filter((q) => {
+      const l = q.toLowerCase();
+      return l !== bas && l !== tape;
+    });
+    window.localStorage.setItem(KEY, JSON.stringify([clean, ...kept].slice(0, MAX)));
+  } catch {
+    // Stockage indisponible : on ne retient rien.
+  }
+}
+
 export function forgetSearches(): void {
   try {
     window.localStorage.removeItem(KEY);

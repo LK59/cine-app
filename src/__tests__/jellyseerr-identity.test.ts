@@ -92,6 +92,13 @@ describe("ensureJellyseerrUserId", () => {
     expect(logError).toHaveBeenCalledWith("jellyseerr-identity", expect.any(Error), expect.objectContaining({ step: "import" }));
   });
 
+  // Jellyseerr qui ne répond pas : le redemander aussitôt doublait l'attente de « Ma liste ».
+  it("ne redemande pas la liste quand Jellyseerr vient d'échouer", async () => {
+    jellyseerr.getUsers.mockRejectedValue(new Error("timeout"));
+    expect(await ensureJellyseerrUserId("906253c414114", "sarah")).toBeNull();
+    expect(jellyseerr.getUsers).toHaveBeenCalledTimes(1);
+  });
+
   // Sans liste, on ne sait pas si le compte existe déjà : importer ne dirait rien de plus.
   it("n'importe rien quand Jellyseerr ne répond pas", async () => {
     jellyseerr.getUsers.mockRejectedValue(new Error("down"));

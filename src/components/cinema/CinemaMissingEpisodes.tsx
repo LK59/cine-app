@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Check } from "lucide-react";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import type { MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
 import { CinemaDownloading } from "@/components/cinema/CinemaDetailExtras";
 
@@ -35,12 +35,14 @@ export function CinemaMissingEpisodes({
   onRequestEpisode: (episodeId: number, label: string) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   if (!season || season.episodes.length === 0) return null;
 
   const seasonAsked = asked.has(`s${season.seasonNumber}`);
   const missing = season.episodes.filter((ep) => ep.released).length;
   const upcoming = season.episodes.length - missing;
-  const dateFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
+  // La langue de l'app, pas celle du navigateur : « le Sep 30, 2026 » dans une page en français.
+  const dateFormat = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" });
 
   return (
     <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -61,6 +63,9 @@ export function CinemaMissingEpisodes({
             type="button"
             disabled={busy || seasonAsked}
             onClick={() => onRequestSeason(season.seasonNumber)}
+            // Dans le parcours aux flèches du navigateur d'épisodes, comme les épisodes : sans ça,
+            // « Demander la saison » n'était joignable qu'à la tabulation (23/09/2026).
+            data-episode-item="true"
             className="btn btn-sm btn-primary shrink-0 disabled:opacity-60"
           >
             {seasonAsked ? <Check size={14} /> : <Download size={14} />}
@@ -76,7 +81,11 @@ export function CinemaMissingEpisodes({
           const airs = ep.airDate ? dateFormat.format(new Date(ep.airDate)) : null;
           return (
             <li key={ep.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
-              <span className="w-14 shrink-0 font-mono text-xs text-subtle">{label}</span>
+              {/* Le code dit comme partout ailleurs (« S2 · É1 », « T2 · E1 » en espagnol) ; `label`
+                  reste la forme technique, celle du message de confirmation. */}
+              <span className="w-16 shrink-0 text-xs tabular-nums text-subtle">
+                {t("cinema.episodeShort", { season: ep.seasonNumber, episode: ep.episodeNumber })}
+              </span>
               {/* La date de diffusion se lit partout, y compris sur téléphone où elle était
                   masquée faute de largeur. Sur une saison en cours, c'est la seule information
                   qui répond à la question qu'on se pose vraiment : quand ?
@@ -105,6 +114,7 @@ export function CinemaMissingEpisodes({
                 type="button"
                 disabled={!ep.released || busy || episodeAsked}
                 onClick={() => onRequestEpisode(ep.id, label)}
+                data-episode-item="true"
                 title={ep.released ? undefined : t("cinema.missing.notAired")}
                 className="btn btn-ghost btn-sm shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
               >

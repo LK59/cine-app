@@ -27,7 +27,7 @@ export function openTitle(type: "movies" | "series", libraryId: number): void {
 }
 
 /**
- * Un titre ouvert depuis *l'intérieur* d'une fiche — titres similaires, saga — sur le bureau.
+ * Un titre ouvert depuis *l'intérieur* d'une fiche — titres similaires, saga — sur les deux écrans.
  *
  * **Sans toucher à l'onglet**, pour la raison même d'`openResumeTarget` : un film ouvert depuis
  * « Reprendre » sur l'onglet Séries laisse l'adresse sur `tab=series`. `openTitle` y réécrivait
@@ -36,8 +36,9 @@ export function openTitle(type: "movies" | "series", libraryId: number): void {
  * remontait de zéro, et la grille derrière changeait d'onglet sous la fiche. Relevé le 21/09/2026.
  *
  * Sûr pour la même raison qu'`openResumeTarget` : le bureau résout les fiches par champ, sans
- * regarder l'onglet, et l'autre champ est effacé. Le téléphone garde son propre chemin
- * (`openLibraryTitle` avec l'onglet), que sa pile lit autrement.
+ * regarder l'onglet, et l'autre champ est effacé. Le téléphone suivait son propre chemin
+ * (`openLibraryTitle`, qui réécrit l'onglet) en croyant que sa pile le lisait autrement : elle a
+ * la même garde d'onglet, et le même défaut s'y produisait (23/09/2026). Les deux passent ici.
  */
 export function openSimilarTitle(type: "movies" | "series", libraryId: number): void {
   const replaced = { person: null, discover: null };

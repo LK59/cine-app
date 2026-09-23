@@ -51,14 +51,16 @@ describe("POST /api/push/subscribe", () => {
     expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://push.example/ep", "p", "a");
   });
 
-  it("clears prior Apple Web Push subscriptions for the user before storing a new one", async () => {
+  // Un iPhone et un Mac du même compte se désabonnaient l'un l'autre : chaque abonnement Apple
+  // effaçait tous les autres, et le panneau Compte renvoie le sien à chaque ouverture (23/09/2026).
+  it("keeps the account's other Apple devices subscribed", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis" });
     const { POST } = await import("@/app/api/push/subscribe/route");
     await POST(fakeReq({
       cookie: "t",
       body: { endpoint: "https://web.push.apple.com/abc", keys: { p256dh: "p", auth: "a" } },
     }));
-    expect(mockPushDb.removeByUserEndpointPrefix).toHaveBeenCalledWith("louis", "https://web.push.apple.com/");
+    expect(mockPushDb.removeByUserEndpointPrefix).not.toHaveBeenCalled();
     expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/abc", "p", "a");
   });
 });
