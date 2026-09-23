@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
@@ -14,6 +14,7 @@ import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
 import { PlayerRequestCard } from "./PlayerRequestCard";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/route";
 
 type Segment = "toWatch" | "requests" | "watched";
@@ -169,6 +170,13 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
     [data, query, sort]
   );
 
+  // Retirer un titre, annuler une demande : les voisines glissent jusqu'à leur place au lieu de
+  // sauter d'un coup — voir `useFlipGrid`.
+  const requestsGrid = useRef<HTMLDivElement>(null);
+  const itemsGrid = useRef<HTMLDivElement>(null);
+  useFlipGrid(requestsGrid, segment === "requests" ? shownRequests.map((r) => String(r.id)) : []);
+  useFlipGrid(itemsGrid, segment !== "requests" ? items.map((item) => `${item.type}-${item.tmdbId ?? item.jellyfinId}`) : []);
+
   return (
     <PlayerPanelFrame
       leaving={leaving}
@@ -310,7 +318,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
         )}
 
         {segment === "requests" && counts.requests > 0 && (
-          <div className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={requestsGrid} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {shownRequests.map((r) => (
               <PlayerRequestCard
                 key={r.id}
@@ -324,7 +332,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
         )}
 
         {segment !== "requests" && items.length > 0 && (
-          <div className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+          <div ref={itemsGrid} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {items.map((item) => (
               <PlayerResultCard
                 key={`${item.type}-${item.tmdbId ?? item.jellyfinId}`}
