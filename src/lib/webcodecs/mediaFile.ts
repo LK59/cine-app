@@ -63,7 +63,8 @@ async function completeParameterSets(source: ByteSource, file: MatroskaFile): Pr
     try {
       const lengthSize = nalLengthSize(track.codecId, track.codecPrivate);
       const reader = createSampleReader(source, file, file.firstClusterOffset ?? file.segmentDataStart);
-      for (let n = 0; n < PARAMETER_SET_SEARCH; n++) {
+      let found = false;
+      for (let n = 0; n < PARAMETER_SET_SEARCH && !found; n++) {
         const sample = await reader.next();
         if (!sample) break;
         if (sample.trackNumber !== track.number) continue;
@@ -71,10 +72,14 @@ async function completeParameterSets(source: ByteSource, file: MatroskaFile): Pr
         if (!units) continue;
         track.codecPrivate = hevcRecordWithParameterSets(track.codecPrivate, units);
         trace(`en-tête HEVC sans jeux de paramètres : complété depuis la première image clé (${units.length} unités)`);
-        break;
+        found = true;
       }
-    } catch {
+      // Écrit dans les deux cas d'échec : sans cela, un fichier retombé dans « pas d'image » ne
+      // disait nulle part pourquoi.
+      if (!found) trace(`en-tête HEVC sans jeux de paramètres : aucun trouvé dans les ${PARAMETER_SET_SEARCH} premiers échantillons`);
+    } catch (error) {
       // Laissé tel quel : le fichier se comportera comme avant, et non pire.
+      trace(`en-tête HEVC sans jeux de paramètres : lecture impossible (${error instanceof Error ? error.message : String(error)})`);
     }
   }
 }

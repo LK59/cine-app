@@ -101,6 +101,24 @@ export const frameFitPreference = {
   },
 };
 
+/** Au-delà de cet écart, la mesure et la vidéo ne parlent pas du même fichier. */
+const ASPECT_TOLERANCE = 0.02;
+
+/**
+ * Si la mesure décrit bien la vidéo qui joue.
+ *
+ * La mesure est gardée par élément Jellyfin, et un fichier remplacé par Radarr ou Sonarr garde
+ * souvent son élément, son chemin et parfois ses vignettes : une mesure faite sur un 1920×1080 à
+ * bandes, appliquée à son remplaçant 1920×800 sans bandes, coupait 16 % de la largeur sur un
+ * téléphone (relu le 24/09/2026). Quand deux lectures d'un fichier se contredisent, on ne choisit
+ * pas : on n'agrandit pas. Les vignettes suivent le format d'affichage — vérifié sur 2 999
+ * éléments, DVD anamorphosés compris —, donc en temps normal les deux concordent.
+ */
+export function frameMatchesMedia(frame: PictureFrame, mediaAspect: number | null): boolean {
+  if (!mediaAspect || !(mediaAspect > 0)) return false;
+  return Math.abs(frame.aspect - mediaAspect) / mediaAspect <= ASPECT_TOLERANCE;
+}
+
 export interface FrameFitState {
   /** À poser sur le cadre qui porte les surfaces. */
   style: CSSProperties;
@@ -119,8 +137,15 @@ export interface FrameFitState {
  * pour la première fois, elle arrive une demi-seconde plus tard et l'image glisse à sa place.
  * Hors SWR à dessein : SWR est suspendu tant qu'un film occupe l'écran (voir CLAUDE.md).
  */
-export function useFrameFit(itemId: string, enabled: boolean, screenRef: RefObject<HTMLElement | null>): FrameFitState {
+export function useFrameFit(
+  itemId: string,
+  enabled: boolean,
+  screenRef: RefObject<HTMLElement | null>,
+  /** La vidéo qui joue : son propre format est ce à quoi la mesure est comparée. */
+  mediaRef: RefObject<HTMLVideoElement | null>
+): FrameFitState {
   const [measured, setMeasured] = useState<{ itemId: string; frame: PictureFrame | null } | null>(null);
+  const [mediaAspect, setMediaAspect] = useState<number | null>(null);
   const [screen, setScreen] = useState<{ width: number; height: number } | null>(null);
   // Un écran tactile a des coins arrondis — voir `TOUCH_MARGIN`. Lu une fois : on ne change pas
   // d'écran en cours de film.
@@ -149,13 +174,29 @@ export function useFrameFit(itemId: string, enabled: boolean, screenRef: RefObje
     return () => observer.disconnect();
   }, [screenRef]);
 
+  // Le format de l'image décodée, lu à chaque changement de dimensions. Le chemin canevas n'en
+  // donne pas — l'élément vidéo y reste vide —, et n'est donc jamais agrandi : c'est le chemin de
+  // secours, et ne rien couper y compte plus que de remplir l'écran.
+  useEffect(() => {
+    const video = mediaRef.current;
+    if (!video) return;
+    const read = () => setMediaAspect(video.videoWidth > 0 && video.videoHeight > 0 ? video.videoWidth / video.videoHeight : null);
+    read();
+    video.addEventListener("loadedmetadata", read);
+    video.addEventListener("resize", read);
+    return () => {
+      video.removeEventListener("loadedmetadata", read);
+      video.removeEventListener("resize", read);
+    };
+  }, [mediaRef]);
+
   const on = useSyncExternalStore(frameFitPreference.subscribe, frameFitPreference.snapshot, frameFitPreference.serverSnapshot);
   const setOn = useCallback((value: boolean) => frameFitPreference.set(value), []);
 
   const frame = measured?.itemId === itemId ? measured.frame : null;
   const fit = useMemo(
-    () => (enabled && frame && screen ? frameFit(frame, screen, margin) : null),
-    [enabled, frame, screen, margin]
+    () => (enabled && frame && screen && frameMatchesMedia(frame, mediaAspect) ? frameFit(frame, screen, margin) : null),
+    [enabled, frame, screen, margin, mediaAspect]
   );
   const applied = on ? fit : null;
   // Toujours un style, même sans agrandissement : c'est ce qui laisse la transition ramener

@@ -181,7 +181,11 @@ export async function measurePictureFrame(itemId: string, info: TrickplayInfo): 
       `${config.jellyfin.url}/Videos/${itemId}/Trickplay/${info.width}/${index}.jpg?MediaSourceId=${info.mediaSourceId}`,
       { headers: jellyfinAuthHeaders(config.jellyfin.apiKey), signal: AbortSignal.timeout(15_000) }
     );
-    if (!res.ok) return;
+    // Une planche qui manque fait échouer la mesure au lieu de la réduire : rendue avec moins de
+    // vignettes, elle finissait `null` et gardée six mois comme « rien à agrandir » — pour un
+    // Jellyfin qui redémarrait entre deux requêtes (relu le 24/09/2026). Une erreur, elle, n'est
+    // pas retenue : la question sera reposée à la prochaine ouverture.
+    if (!res.ok) throw new Error(`vignettes ${index} : ${res.status}`);
     const { data, info: image } = await sharp(Buffer.from(await res.arrayBuffer()))
       .greyscale()
       .raw()

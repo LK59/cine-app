@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { frameFit, TOUCH_MARGIN, type PictureFrame } from "@/lib/frameFit";
+import { frameFit, frameMatchesMedia, TOUCH_MARGIN, type PictureFrame } from "@/lib/frameFit";
 
 const frame = (over: Partial<PictureFrame>): PictureFrame => ({ left: 0, top: 0, right: 1, bottom: 1, aspect: 16 / 9, samples: 100, ...over });
 /** Un iPhone en paysage : plus large que 16:9. */
@@ -64,3 +64,23 @@ describe("frameFit", () => {
     expect(h).toBeCloseTo(PHONE.height * (1 - TOUCH_MARGIN), 0);
   });
 });
+
+// Une mesure gardée pour un élément dont le fichier a été remplacé : elle ne décrit plus la vidéo
+// qui joue, et l'appliquer coupait l'image (relu le 24/09/2026).
+describe("frameMatchesMedia", () => {
+  it("accepts the video the thumbnails were taken from", () => {
+    expect(frameMatchesMedia(frame({ aspect: 1.7778 }), 1920 / 1080)).toBe(true);
+    // Une vignette de 320×134 pour un 2,40 : un demi-point d'écart, c'est la même vidéo.
+    expect(frameMatchesMedia(frame({ aspect: 320 / 134 }), 1920 / 800)).toBe(true);
+  });
+
+  it("refuses a measure made on another encode", () => {
+    expect(frameMatchesMedia(frame({ aspect: 1.7778 }), 1920 / 800)).toBe(false);
+  });
+
+  it("refuses when the video has not said its size", () => {
+    expect(frameMatchesMedia(frame({}), null)).toBe(false);
+    expect(frameMatchesMedia(frame({}), 0)).toBe(false);
+  });
+});
+

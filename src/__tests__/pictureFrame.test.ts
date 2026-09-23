@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jellyfin", apiKey: "k" }, player: { enabled: true, autoFrame: true } } }));
 vi.mock("@/lib/server-cache", () => ({ withPersistentCache: (_k: string, _t: number, fn: () => unknown) => fn() }));
 
-import { contentBounds, unionFrame } from "@/lib/pictureFrame";
+import { contentBounds, measurePictureFrame, unionFrame } from "@/lib/pictureFrame";
 
 const W = 320;
 const H = 180;
@@ -78,3 +78,15 @@ describe("unionFrame", () => {
     expect(unionFrame(letterboxed(10), W, H)).toBeNull();
   });
 });
+
+// Une planche absente faisait une mesure incomplète, donc `null`, gardé six mois comme « rien à
+// agrandir ». Elle fait désormais échouer la mesure, qui n'est pas retenue.
+describe("measurePictureFrame", () => {
+  it("fails rather than concluding from missing tiles", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503 })));
+    const info = { mediaSourceId: "m", width: 320, height: 180, tileWidth: 10, tileHeight: 10, thumbnailCount: 300 };
+    await expect(measurePictureFrame("x", info)).rejects.toThrow(/503/);
+    vi.unstubAllGlobals();
+  });
+});
+
