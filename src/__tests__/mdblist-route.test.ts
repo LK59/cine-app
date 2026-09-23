@@ -7,7 +7,7 @@ vi.mock("@/lib/rateLimiter", () => ({
 }));
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 vi.mock("@/lib/server-cache", () => ({
-  withCache: async (_key: string, _ttl: number, fn: () => unknown) => fn(),
+  withPersistentCache: async (_key: string, _ttl: number, fn: () => unknown) => fn(),
 }));
 
 function fakeReq(): NextRequest {

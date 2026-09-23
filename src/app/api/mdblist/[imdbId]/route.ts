@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withCache } from "@/lib/server-cache";
+import { withPersistentCache } from "@/lib/server-cache";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { getClientIp } from "@/lib/api-helpers";
 
@@ -58,7 +58,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ imdbId: s
     return NextResponse.json({ ratings: null });
   }
   try {
-    const ratings = await withCache(`mdblist:${imdbId}`, 24 * 60 * 60_000, () => fetchRatings(imdbId));
+    // Une semaine, sur disque. Gardées un jour en mémoire seulement, ces notes étaient perdues à
+    // chaque déploiement — plusieurs par jour — et chaque fiche rouverte coûtait une requête d'un
+    // quota limité à mille (23/09/2026). Une note Rotten Tomatoes ne bouge pas en une semaine.
+    const ratings = await withPersistentCache(`mdblist:${imdbId}`, 7 * 24 * 3600_000, () => fetchRatings(imdbId));
     return NextResponse.json({ ratings });
   } catch {
     return NextResponse.json({ ratings: null });

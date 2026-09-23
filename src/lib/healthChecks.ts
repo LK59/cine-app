@@ -108,17 +108,13 @@ export async function pingReachable(name: string, url: string, path = "/"): Prom
 const TMDB_URL = "https://api.themoviedb.org";
 
 /**
- * TMDB et MDBList comptent nos requêtes : le contrôle d'état, qui tourne chaque minute, ne les
- * interroge qu'une fois par heure (voir `atMostEvery`). Un service en panne est revérifié au
- * bout de cinq minutes.
+ * TMDB compte nos requêtes : le contrôle d'état, qui tourne chaque minute, ne l'interroge qu'une
+ * fois par heure (voir `atMostEvery`). Un service en panne est revérifié au bout de cinq minutes.
  */
 export function pingTmdb(): Promise<ServiceHealth> {
   return atMostEvery("health:tmdb", pingTmdbNow, { isOk: (r) => r.status === "ok" });
 }
 
-export function pingMdblist(): Promise<ServiceHealth> {
-  return atMostEvery("health:mdblist", pingMdblistNow, { isOk: (r) => r.status === "ok" });
-}
 
 async function pingTmdbNow(): Promise<ServiceHealth> {
   const start = Date.now();
@@ -135,22 +131,20 @@ async function pingTmdbNow(): Promise<ServiceHealth> {
 }
 
 const MDBLIST_URL = "https://mdblist.com";
-// Shawshank Redemption — a fixed, permanently-valid IMDb id used purely to exercise the mdblist
-// API round-trip; the content returned is never used for anything.
-const MDBLIST_PROBE_IMDB_ID = "tt0111161";
 
-async function pingMdblistNow(): Promise<ServiceHealth> {
-  const start = Date.now();
-  const apiKey = process.env.MDBLIST_API_KEY;
-  if (!apiKey) return { name: "mdblist", url: MDBLIST_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };
-  try {
-    const res = await fetch(`${MDBLIST_URL}/api/?apikey=${apiKey}&i=${MDBLIST_PROBE_IMDB_ID}`, { signal: AbortSignal.timeout(5000) });
-    const latencyMs = Date.now() - start;
-    if (!res.ok) return { name: "mdblist", url: MDBLIST_URL, status: "degraded", latencyMs, version: null, error: `HTTP ${res.status}` };
-    return { name: "mdblist", url: MDBLIST_URL, status: "ok", latencyMs, version: null, error: null };
-  } catch (e: any) {
-    return { name: "mdblist", url: MDBLIST_URL, status: "down", latencyMs: Date.now() - start, version: null, error: e?.message ?? "Timeout" };
+/**
+ * MDBList n'est plus interrogé pour savoir s'il répond : seulement si sa clé est posée.
+ *
+ * Le contrôle d'état l'appelait chaque minute — 1 440 requêtes par jour pour un quota gratuit de
+ * 1 000, dépensées à vérifier le service plutôt qu'à s'en servir (23/09/2026). Les notes qu'il
+ * fournit (Rotten Tomatoes, Metacritic, Letterboxd) disent elles-mêmes s'il répond : une fiche
+ * sans ces notes, c'est lui.
+ */
+export async function pingMdblist(): Promise<ServiceHealth> {
+  if (!process.env.MDBLIST_API_KEY) {
+    return { name: "mdblist", url: MDBLIST_URL, status: "down", latencyMs: 0, version: null, error: "No API key configured" };
   }
+  return { name: "mdblist", url: MDBLIST_URL, status: "ok", latencyMs: 0, version: null, error: null };
 }
 
 // Not a network service — the watchlist lives in our own SQLite file, so "is it up" really means
