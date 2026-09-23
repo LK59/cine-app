@@ -319,6 +319,7 @@ export default function CalendarPage() {
     fetcher,
     { keepPreviousData: true }
   );
+  const firstLoad = isLoading && !data;
 
   const filtered = useMemo(() => {
     const evs = data?.events ?? [];
@@ -412,10 +413,13 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {isLoading && <LoadingState label={t('calendar.loading')} />}
+      {/* `keepPreviousData` ne suffit pas : SWR compte `isLoading` sur le cache du *nouveau* mois,
+          si bien que chaque changement de mois démontait le calendrier au profit de l'indicateur.
+          Seul un premier chargement, sans rien à montrer, y a droit (23/09/2026). */}
+      {firstLoad && <LoadingState label={t('calendar.loading')} />}
       {error && !data && <ErrorState message={t('errors.loadFailed')} onRetry={() => mutate()} />}
 
-      {!isLoading && view === "month" && (
+      {!firstLoad && view === "month" && (
         <MonthGrid
           year={navYear} month={navMonth}
           eventsByDate={eventsByDate} today={today}
@@ -423,7 +427,7 @@ export default function CalendarPage() {
           detailRef={detailRef}
         />
       )}
-      {!isLoading && !(error && !data) && view === "list" && (
+      {!firstLoad && !(error && !data) && view === "list" && (
         monthEvents.length === 0
           ? <EmptyState icon={<CalendarDays size={24} />} label={t('calendar.empty')} hint={t('calendar.emptyHint')} />
           : <ListView events={monthEvents} today={today} dateLocale={dateLocale} />

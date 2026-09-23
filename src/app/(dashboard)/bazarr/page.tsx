@@ -36,9 +36,14 @@ export default function BazarrPage() {
   const t = useT();
   const [movieLength, setMovieLength] = useState(PAGE_SIZE);
   const [episodeLength, setEpisodeLength] = useState(PAGE_SIZE);
-  const { data, error, isLoading, mutate } = useSWR<WantedResponse>(
+  // `keepPreviousData` : « Charger plus » change la clé, et sans lui la liste entière disparaissait
+  // le temps de la requête, remplacée par un indicateur, avant de revenir plus longue. Et SWR
+  // compte `isLoading` sur le cache de la *nouvelle* clé, données gardées ou non : seul un premier
+  // chargement, sans rien à montrer, a droit à l'indicateur (23/09/2026).
+  const { data, error, isLoading, isValidating, mutate } = useSWR<WantedResponse>(
     `/api/bazarr/wanted?movieLength=${movieLength}&episodeLength=${episodeLength}`,
-    fetcher
+    fetcher,
+    { keepPreviousData: true }
   );
   const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
 
@@ -48,7 +53,7 @@ export default function BazarrPage() {
     <div>
       <PageHeader title={t('bazarr.pageTitle')} subtitle={t('bazarr.subtitle')} />
 
-      {isLoading && <LoadingState />}
+      {isLoading && !data && <LoadingState />}
       {error && <ErrorState message={error.message || t('bazarr.serviceDown')} />}
 
       {data && (
@@ -97,6 +102,9 @@ export default function BazarrPage() {
               <button
                 className="btn-ghost mt-3 w-full justify-center text-xs"
                 onClick={() => setMovieLength((n) => n + PAGE_SIZE)}
+                // La suite arrive sous la liste gardée : le bouton dit qu'on l'attend.
+                disabled={isValidating}
+                aria-busy={isValidating}
               >
                 {t('bazarr.loadMore')}
               </button>
@@ -150,6 +158,9 @@ export default function BazarrPage() {
               <button
                 className="btn-ghost mt-3 w-full justify-center text-xs"
                 onClick={() => setEpisodeLength((n) => n + PAGE_SIZE)}
+                // La suite arrive sous la liste gardée : le bouton dit qu'on l'attend.
+                disabled={isValidating}
+                aria-busy={isValidating}
               >
                 {t('bazarr.loadMore')}
               </button>
