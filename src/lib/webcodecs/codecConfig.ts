@@ -504,3 +504,80 @@ export function av1CodecString(av1C: Uint8Array): string | null {
 
   return `av01.${profile}.${String(level).padStart(2, "0")}${tier}.${String(depth).padStart(2, "0")}`;
 }
+
+/** VPS, SPS, PPS : ce qu'un décodeur HEVC doit avoir reçu avant la première image. */
+const HEVC_PARAMETER_SETS = [32, 33, 34] as const;
+
+/**
+ * Si un enregistrement `hvcC` porte les trois jeux de paramètres — ou s'il est trop court pour le dire.
+ *
+ * Un `hvcC` peut n'être qu'un en-tête : profil, niveau, format, et zéro tableau. Le conteneur n'y
+ * est pour rien, c'est le multiplexeur qui a laissé les paramètres dans le flux seulement. *Peaky
+ * Blinders : L'Immortel* (24/09/2026) en a un de 23 octets. Recopié tel quel dans une entrée
+ * `hvc1` — où les paramètres doivent être dans l'en-tête —, Safari ne configure jamais son
+ * décodeur : 30 s de média dans le tampon, la tête posée dessus, et pas une image, à chaque essai.
+ */
+export function hevcRecordHasParameterSets(hvcC: Uint8Array): boolean {
+  if (hvcC.length < 23) return false;
+  const found = new Set<number>();
+  let at = 23;
+  for (let a = 0; a < hvcC[22] && at + 3 <= hvcC.length; a++) {
+    const type = hvcC[at] & 0x3f;
+    const count = (hvcC[at + 1] << 8) | hvcC[at + 2];
+    at += 3;
+    for (let n = 0; n < count && at + 2 <= hvcC.length; n++) {
+      const length = (hvcC[at] << 8) | hvcC[at + 1];
+      if (length > 0) found.add(type);
+      at += 2 + length;
+    }
+  }
+  return HEVC_PARAMETER_SETS.every((type) => found.has(type));
+}
+
+/**
+ * Les jeux de paramètres d'une image, dans l'ordre où ils y figurent, ou null s'il en manque un.
+ * Distincts : une image peut répéter le même SPS, un `hvcC` le porte une fois.
+ */
+export function hevcParameterSets(data: Uint8Array, lengthSize: number): Uint8Array[] | null {
+  const units: Uint8Array[] = [];
+  const seen = new Set<string>();
+  for (let at = 0; at + lengthSize + 1 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) break;
+    const unit = data.subarray(at + lengthSize, at + lengthSize + length);
+    const type = (unit[0] >> 1) & 0x3f;
+    if ((HEVC_PARAMETER_SETS as readonly number[]).includes(type)) {
+      const id = `${type}:${unit.join(",")}`;
+      if (!seen.has(id)) {
+        seen.add(id);
+        units.push(unit.slice());
+      }
+    }
+    at += lengthSize + length;
+  }
+  const types = new Set(units.map((u) => (u[0] >> 1) & 0x3f));
+  return HEVC_PARAMETER_SETS.every((type) => types.has(type)) ? units : null;
+}
+
+/**
+ * L'en-tête `hvcC` gardé tel quel — profil, niveau, taille des longueurs —, avec les jeux de
+ * paramètres pris dans le flux à la place de ses tableaux. Marqués complets : c'est ce que dit une
+ * entrée `hvc1`, et c'est vrai du flux qu'on livre, qui répète les siens à chaque image clé.
+ */
+export function hevcRecordWithParameterSets(hvcC: Uint8Array, units: Uint8Array[]): Uint8Array {
+  const arrays: number[] = [];
+  let count = 0;
+  for (const type of HEVC_PARAMETER_SETS) {
+    const ofType = units.filter((u) => ((u[0] >> 1) & 0x3f) === type);
+    if (ofType.length === 0) continue;
+    count += 1;
+    arrays.push(0x80 | type, ofType.length >> 8, ofType.length & 0xff);
+    for (const unit of ofType) arrays.push(unit.length >> 8, unit.length & 0xff, ...unit);
+  }
+  const record = new Uint8Array(23 + arrays.length);
+  record.set(hvcC.subarray(0, 22));
+  record[22] = count;
+  record.set(arrays, 23);
+  return record;
+}

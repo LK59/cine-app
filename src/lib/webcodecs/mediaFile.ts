@@ -14,6 +14,8 @@ import type { ByteSource } from "./byteSource";
 import { parseMatroska, type MatroskaFile, type MediaSample } from "./matroska";
 import { isIsoBaseMedia, Mp4SampleReader, parseMp4 } from "./mp4Demux";
 import { SampleReader } from "./sampleReader";
+import { hevcParameterSets, hevcRecordHasParameterSets, hevcRecordWithParameterSets, nalLengthSize } from "./codecConfig";
+import { trace } from "./trace";
 
 /** Ce que tout lecteur d'échantillons offre, quel que soit le conteneur. */
 export interface MediaSampleReader {
@@ -36,7 +38,45 @@ export async function openMediaFile(source: ByteSource, key?: string): Promise<M
     containers.set(key, mp4 ? "mp4" : "matroska");
     while (containers.size > REMEMBERED_CONTAINERS) containers.delete(containers.keys().next().value!);
   }
-  return mp4 ? parseMp4(source, key) : parseMatroska(source, key);
+  const file = mp4 ? await parseMp4(source, key) : await parseMatroska(source, key);
+  await completeParameterSets(source, file);
+  return file;
+}
+
+/** Combien d'échantillons lire au plus pour trouver la première image clé vidéo. */
+const PARAMETER_SET_SEARCH = 400;
+
+/**
+ * Remplit un `hvcC` vide avec les jeux de paramètres de la première image clé.
+ *
+ * Voir `hevcRecordHasParameterSets` : un fichier peut ne porter ses VPS/SPS/PPS que dans le flux,
+ * et Safari ne démarre alors jamais — sans erreur, sans image. Fait ici, une fois, pour que tout
+ * ce qui lit la piste — le remultiplexeur, le canevas, la chaîne de codec — voie le même en-tête.
+ * Écrit dans la description de la piste, qui est gardée en mémoire avec l'en-tête du fichier : une
+ * réouverture ne relit rien. Rien ne change pour un fichier dont l'en-tête est complet, c'est-à-dire
+ * presque tous : la vérification ne lit pas un octet de plus.
+ */
+async function completeParameterSets(source: ByteSource, file: MatroskaFile): Promise<void> {
+  for (const track of file.tracks) {
+    if (track.type !== "video" || track.codecId !== "V_MPEGH/ISO/HEVC" || !track.codecPrivate) continue;
+    if (track.codecPrivate.length < 23 || hevcRecordHasParameterSets(track.codecPrivate)) continue;
+    try {
+      const lengthSize = nalLengthSize(track.codecId, track.codecPrivate);
+      const reader = createSampleReader(source, file, file.firstClusterOffset ?? file.segmentDataStart);
+      for (let n = 0; n < PARAMETER_SET_SEARCH; n++) {
+        const sample = await reader.next();
+        if (!sample) break;
+        if (sample.trackNumber !== track.number) continue;
+        const units = hevcParameterSets(sample.data, lengthSize);
+        if (!units) continue;
+        track.codecPrivate = hevcRecordWithParameterSets(track.codecPrivate, units);
+        trace(`en-tête HEVC sans jeux de paramètres : complété depuis la première image clé (${units.length} unités)`);
+        break;
+      }
+    } catch {
+      // Laissé tel quel : le fichier se comportera comme avant, et non pire.
+    }
+  }
 }
 
 /**

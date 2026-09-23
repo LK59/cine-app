@@ -12,7 +12,20 @@ vi.mock("@/lib/webcodecs/mp4Demux", async (importOriginal) => ({
   parseMp4: (...a: unknown[]) => parseMp4(...(a as [])),
 }));
 
+// Le lecteur d'échantillons Matroska, remplacé par une file d'échantillons donnée par chaque cas.
+const queued: { trackNumber: number; data: Uint8Array }[] = [];
+vi.mock("@/lib/webcodecs/sampleReader", () => ({
+  SampleReader: class {
+    exhausted = false;
+    async next() {
+      return queued.shift() ?? null;
+    }
+    seekTo() {}
+  },
+}));
+
 import { openMediaFile } from "@/lib/webcodecs/mediaFile";
+import { hevcRecordHasParameterSets } from "@/lib/webcodecs/codecConfig";
 
 /** Une source qui compte ce qu'on lui demande. */
 function source(head: number[]) {
@@ -62,3 +75,60 @@ describe("openMediaFile", () => {
     expect(anonymous.reads).toHaveLength(1);
   });
 });
+
+/** Une unité NAL HEVC de ce type, précédée de sa longueur sur 4 octets. */
+function nal(type: number, body: number[] = [0xaa, 0xbb]): number[] {
+  const unit = [type << 1, 0x01, ...body];
+  return [0, 0, 0, unit.length, ...unit];
+}
+
+/** Un `hvcC` réduit à son en-tête : profil Main 10, niveau 4, longueurs sur 4 octets, zéro tableau. */
+const HEADER_ONLY = new Uint8Array([
+  0x01, 0x02, 0x20, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78, 0xf0, 0x00, 0xfe, 0xfd, 0xfa, 0xfa, 0x00, 0x00, 0x0f, 0x00,
+]);
+
+// Peaky Blinders : L'Immortel (24/09/2026) — un hvcC de 23 octets, les paramètres dans le flux
+// seulement, et Safari qui ne sortait jamais la première image.
+describe("un en-tête HEVC sans jeux de paramètres", () => {
+  const track = () => ({ number: 1, type: "video", codecId: "V_MPEGH/ISO/HEVC", codecPrivate: HEADER_ONLY.slice() });
+
+  it("est complété depuis la première image clé", async () => {
+    const video = track();
+    parseMatroska.mockResolvedValueOnce({ tracks: [video], firstClusterOffset: 100 } as never);
+    queued.push(
+      { trackNumber: 2, data: new Uint8Array([1, 2, 3]) },
+      { trackNumber: 1, data: new Uint8Array([...nal(32), ...nal(33), ...nal(34), ...nal(39), ...nal(19, [1, 2, 3, 4])]) }
+    );
+    await openMediaFile(source(MKV).src);
+
+    expect(hevcRecordHasParameterSets(video.codecPrivate)).toBe(true);
+    // L'en-tête d'origine est gardé : profil, niveau, taille des longueurs.
+    expect([...video.codecPrivate.subarray(0, 22)]).toEqual([...HEADER_ONLY.subarray(0, 22)]);
+    expect(video.codecPrivate[22]).toBe(3);
+  });
+
+  it("ne lit rien quand l'en-tête est déjà complet", async () => {
+    const video = track();
+    parseMatroska.mockResolvedValueOnce({ tracks: [video], firstClusterOffset: 100 } as never);
+    queued.push({ trackNumber: 1, data: new Uint8Array([...nal(32), ...nal(33), ...nal(34), ...nal(19)]) });
+    await openMediaFile(source(MKV).src);
+    const complete = video.codecPrivate;
+
+    parseMatroska.mockResolvedValueOnce({ tracks: [video], firstClusterOffset: 100 } as never);
+    queued.length = 0;
+    queued.push({ trackNumber: 1, data: new Uint8Array([9, 9, 9]) });
+    await openMediaFile(source(MKV).src);
+    expect(video.codecPrivate).toBe(complete);
+    expect(queued).toHaveLength(1);
+    queued.length = 0;
+  });
+
+  it("laisse le fichier tel quel s'il ne trouve rien", async () => {
+    const video = track();
+    parseMatroska.mockResolvedValueOnce({ tracks: [video], firstClusterOffset: 100 } as never);
+    queued.push({ trackNumber: 1, data: new Uint8Array([...nal(19)]) });
+    await openMediaFile(source(MKV).src);
+    expect([...video.codecPrivate]).toEqual([...HEADER_ONLY]);
+  });
+});
+
