@@ -54,6 +54,8 @@ vi.mock("swr", () => ({
   },
   mutate: vi.fn(),
   preload: vi.fn(),
+  // La bannière lit le cache pour rendre sans attendre un synopsis déjà là — voir `useHeroInfo`.
+  useSWRConfig: () => ({ cache: new Map() }),
 }));
 
 // ---- L'environnement ------------------------------------------------------------------------
@@ -64,7 +66,7 @@ vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "c
 vi.mock("@/lib/useWarmSeriesCatalogue", () => ({ useWarmSeriesCatalogue: () => false }));
 vi.mock("@/lib/useCinemaMyList", () => ({ useCinemaMyList: () => [], useCinemaMyListPending: () => false }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsTouch: () => false, useIsMobile: () => false }));
-vi.mock("@/lib/cinemaWarmup", () => ({ prefetchImages: () => () => {}, warmUpUrls: () => [] }));
+vi.mock("@/lib/cinemaWarmup", () => ({ prefetchImages: () => () => {}, prefetchInChunks: () => () => {}, warmUpUrls: () => [] }));
 vi.mock("@/components/PosterImage", () => ({ PosterImage: () => <span /> }));
 
 // ---- Les doublures ------------------------------------------------------------------------

@@ -65,7 +65,8 @@ import type { CinemaMoviesPayload, CinemaMovie } from "@/app/api/cinema/movies/r
 import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
-import { prefetchImages, warmUpUrls } from "@/lib/cinemaWarmup";
+import { prefetchImages, prefetchInChunks, warmUpUrls } from "@/lib/cinemaWarmup";
+import { heroInfoKey, preloadHeroInfo } from "@/lib/useHeroInfo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
@@ -341,6 +342,27 @@ export function CinemaClient() {
     if (!series) return;
     return prefetchImages(
       warmUpUrls(series.spotlight, series.rows, (s) => s.sonarrId, (s) => [s.backdropUrl, s.logoUrl])
+    );
+  }, [series]);
+
+  /**
+   * Et les synopsis de la bannière, pour les mêmes titres et dans le même ordre : la rotation
+   * d'abord, puis ce qu'on atteint en quelques appuis. Le logo et le visuel arrivaient avec le
+   * catalogue, le synopsis une seconde après ; demandé d'avance, il arrive avec eux (23/09/2026).
+   * Voir `useHeroInfo`, qui le rend sans attendre quand il est déjà là.
+   */
+  useEffect(() => {
+    if (!movies) return;
+    return prefetchInChunks(
+      warmUpUrls(movies.spotlight, movies.rows, (m) => m.radarrId, (m) => [m.tmdbId ? heroInfoKey("movie", m.tmdbId) : null]),
+      preloadHeroInfo
+    );
+  }, [movies]);
+  useEffect(() => {
+    if (!series) return;
+    return prefetchInChunks(
+      warmUpUrls(series.spotlight, series.rows, (s) => s.sonarrId, (s) => [s.tmdbId ? heroInfoKey("series", s.tmdbId) : null]),
+      preloadHeroInfo
     );
   }, [series]);
 

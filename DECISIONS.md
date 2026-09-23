@@ -446,6 +446,34 @@ animation propre à leur colonne.
 
 ---
 
+## 14. Ce que la bannière du bureau dit d'un titre
+
+**Règle.** La bannière affiche le synopsis traduit et cinq noms de la distribution, venus de TMDB
+seul par une requête légère, gardée une semaine par titre et par langue. Elle attend 200 ms avant
+de demander (un défilement aux flèches ne lance pas une requête par carte), sauf si la réponse est
+déjà en cache. Jamais la réponse du titre précédent. Sans identifiant TMDB : le synopsis du
+catalogue. Le synopsis s'arrête sur la dernière phrase entière qui tient dans deux lignes, et
+retombe sur un fondu vers la droite si ce qui tient est trop court.
+
+**Porteurs.** `useHeroInfo` / `heroInfoKey` / `preloadHeroInfo` (`src/lib/useHeroInfo.ts`) côté
+écran ; `heroInfo` (`src/lib/heroInfo.ts`) et `/api/cinema/hero/[type]/[tmdbId]` côté serveur ;
+`sentencesThatFit` (`src/lib/heroSynopsis.ts`) pour la coupure.
+
+**Appelants.** `CinemaHero`, `CinemaSeriesHero` ; le préchargement dans `CinemaClient` (mêmes titres
+et même ordre que les images : la rotation, puis les premiers de chaque rangée).
+
+**Tests.** `cinema-hero-route.test.ts`, `useHeroInfo.test.tsx`, `CinemaHero-previous-synopsis.test.tsx`,
+`heroSynopsis.test.ts`, `HeroOverview-fit.test.tsx`, `CinemaHeroOverview.test.tsx`.
+
+**Corrigé le 23/09.** Les deux bannières lisaient chacune la requête de la fiche complète (six
+services, le plus lent dictait le délai) ; le synopsis arrivait une seconde après le logo, et
+`keepPreviousData` faisait remonter celui du titre d'avant.
+
+**Voulu.** Les fiches gardent leur propre requête et leur « Voir plus » ; le téléphone, son texte
+entier.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits

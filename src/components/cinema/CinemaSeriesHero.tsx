@@ -1,54 +1,21 @@
 "use client";
 
-import useSWR from "swr";
-import { useEffect, useState } from "react";
-import { fetcher } from "@/lib/swr";
+import { useState } from "react";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { HeroOverview, HeroCastLine } from "@/components/cinema/CinemaHero";
+import { useHeroInfo } from "@/lib/useHeroInfo";
 
-interface SonarrCastMember {
-  tmdbId: number;
-  name: string;
-  character: string;
-  photoUrl: string | null;
-}
-
-interface SonarrInfo {
-  tmdb: { overview: string; cast: SonarrCastMember[] } | null;
-  trailerKey: string | null;
-}
-
-// Series-typed mirror of CinemaHero — see its own doc comment (text-only passive preview,
-// logo/backdrop + dwell-triggered trailer video live in CinemaClient's shared background,
-// debounced cast fetch, trailerKey lifted up via onTrailerKeyChange). Fetches
-// /api/sonarr/series/[id]/info — the standard (non-Cinema) series info route, already shaped as
-// {tmdb:{overview,cast}, trailerKey}, same as the movie one — no new endpoint needed for this.
-export function CinemaSeriesHero({
-  item,
-  onTrailerKeyChange,
-}: {
-  item: CinemaSeries;
-  onTrailerKeyChange?: (key: string | null) => void;
-}) {
+// Series-typed mirror of CinemaHero — see its own doc comment (text-only passive preview, the
+// backdrop lives in CinemaClient's shared background). Its synopsis and cast come from the same
+// light hero route as the movie banner (`useHeroInfo`).
+export function CinemaSeriesHero({ item }: { item: CinemaSeries }) {
   const t = useT();
-  const [debouncedId, setDebouncedId] = useState(item.sonarrId);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedId(item.sonarrId), 200);
-    return () => clearTimeout(timer);
-  }, [item.sonarrId]);
-  // Sans la réponse d'avant : `keepPreviousData` est réglé pour toute l'application (SWRProvider),
-  // et la bannière recevait le synopsis du titre précédent pendant que celui du nouveau arrivait —
-  // il fondait à nouveau, puis était remplacé (23/09/2026). Rien, plutôt que le texte d'un autre.
-  const { data: rawInfo } = useSWR<SonarrInfo>(`/api/sonarr/series/${debouncedId}/info`, fetcher, { keepPreviousData: false });
-  const info = debouncedId === item.sonarrId ? rawInfo : undefined;
-
-  useEffect(() => {
-    onTrailerKeyChange?.(info?.trailerKey ?? null);
-  }, [info?.trailerKey, onTrailerKeyChange]);
+  // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
+  const info = useHeroInfo("series", item.tmdbId);
 
   const [logoErrored, setLogoErrored] = useState(false);
   const [resetForId, setResetForId] = useState(item.sonarrId);

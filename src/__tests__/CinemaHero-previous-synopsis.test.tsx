@@ -28,23 +28,23 @@ afterEach(() => {
 });
 
 const film = (id: number) =>
-  ({ radarrId: id, title: `Film ${id}`, year: 2000, logoUrl: null, overview: "", genres: [], imdbRating: null, quality: null }) as unknown as CinemaMovie;
+  ({ radarrId: id, tmdbId: id + 1000, title: `Film ${id}`, year: 2000, logoUrl: null, overview: "", genres: [], imdbRating: null, quality: null }) as unknown as CinemaMovie;
 const serie = (id: number) =>
-  ({ sonarrId: id, title: `Série ${id}`, year: 2000, logoUrl: null, overview: "", genres: [], imdbRating: null }) as unknown as CinemaSeries;
+  ({ sonarrId: id, tmdbId: id + 2000, title: `Série ${id}`, year: 2000, logoUrl: null, overview: "", genres: [], imdbRating: null }) as unknown as CinemaSeries;
 
 // Les deux bannières, jumelles : la même erreur y vivait, la même garde doit y tenir.
+// L'adresse est celle de la requête légère de la bannière, par identifiant TMDB — voir `useHeroInfo`.
 const KINDS = [
-  ["films", "radarr/movies", (id: number) => <CinemaHero item={film(id)} />],
-  ["séries", "sonarr/series", (id: number) => <CinemaSeriesHero item={serie(id)} />],
+  ["films", (id: number) => `/api/cinema/hero/movie/${id + 1000}`, (id: number) => <CinemaHero item={film(id)} />],
+  ["séries", (id: number) => `/api/cinema/hero/series/${id + 2000}`, (id: number) => <CinemaSeriesHero item={serie(id)} />],
 ] as const;
 
-describe.each(KINDS)("la bannière des %s, d'un titre à l'autre", (_, path, banner) => {
+describe.each(KINDS)("la bannière des %s, d'un titre à l'autre", (_, url, banner) => {
   const hero = (id: number) => (
     <SWRConfig value={{ provider: () => new Map(), keepPreviousData: true, dedupingInterval: 0 }}>
       {banner(id)}
     </SWRConfig>
   );
-  const url = (id: number) => `/api/${path}/${id}/info`;
   const answer = (id: number, overview: string) =>
     pending.get(url(id))?.({ tmdb: { overview, cast: [] }, trailerKey: null });
 

@@ -11,7 +11,12 @@ import { render, screen, cleanup } from "@testing-library/react";
  */
 
 let info: unknown = undefined;
-vi.mock("swr", () => ({ default: () => ({ data: info }) }));
+vi.mock("swr", () => ({
+  default: () => ({ data: info }),
+  preload: vi.fn(),
+  // Un cache vide : chaque bannière passe par la réponse simulée ci-dessus — voir `useHeroInfo`.
+  useSWRConfig: () => ({ cache: new Map() }),
+}));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
 
 import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
@@ -43,6 +48,7 @@ const serie = {
 
 const film = {
   radarrId: 4,
+  tmdbId: 400,
   title: "Sunshine",
   year: 2007,
   logoUrl: null,

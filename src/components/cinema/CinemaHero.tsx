@@ -1,9 +1,7 @@
 "use client";
 
-import useSWR from "swr";
 import { formatMinutes } from "@/lib/format";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { useT } from "@/components/TranslationProvider";
@@ -11,18 +9,7 @@ import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { sentencesThatFit } from "@/lib/heroSynopsis";
-
-interface RadarrCastMember {
-  tmdbId: number;
-  name: string;
-  character: string;
-  photoUrl: string | null;
-}
-
-interface RadarrInfo {
-  tmdb: { overview: string; cast: RadarrCastMember[] } | null;
-  trailerKey: string | null;
-}
+import { useHeroInfo } from "@/lib/useHeroInfo";
 
 /**
  * Le synopsis d'une bannière — film ou série, écrit une fois.
@@ -155,34 +142,12 @@ export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }
 // what surfaces Lecture/Bande-annonce/Vu/À voir. Cast still fetched here (not just in the detail
 // overlay) since this pane already shows it, same lazy/debounced approach so fast arrow-key
 // scrubbing across a row doesn't fire a request per card it passes through.
-export function CinemaHero({
-  item,
-  onTrailerKeyChange,
-}: {
-  item: CinemaMovie;
-  // Reports this item's trailer key up to CinemaClient, which owns the dwell-triggered video
-  // backdrop and needs the same value this already fetches — a state-lifting callback rather
-  // than a second parallel fetch there, so the two never have their own independently-debounced
-  // (and therefore possibly briefly disagreeing) opinions about what the current trailer is.
-  onTrailerKeyChange?: (key: string | null) => void;
-}) {
+export function CinemaHero({ item }: { item: CinemaMovie }) {
   const t = useT();
-  const [debouncedId, setDebouncedId] = useState(item.radarrId);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedId(item.radarrId), 200);
-    return () => clearTimeout(timer);
-  }, [item.radarrId]);
-  // Sans la réponse d'avant : `keepPreviousData` est réglé pour toute l'application (SWRProvider),
-  // et la bannière recevait le synopsis du titre précédent pendant que celui du nouveau arrivait —
-  // il fondait à nouveau, puis était remplacé (23/09/2026). Rien, plutôt que le texte d'un autre.
-  const { data: rawInfo } = useSWR<RadarrInfo>(`/api/radarr/movies/${debouncedId}/info`, fetcher, { keepPreviousData: false });
-  // Guards against showing the PREVIOUS item's cast under the new title during the debounce
-  // window — SWR still has that data cached from before debouncedId catches up.
-  const info = debouncedId === item.radarrId ? rawInfo : undefined;
-
-  useEffect(() => {
-    onTrailerKeyChange?.(info?.trailerKey ?? null);
-  }, [info?.trailerKey, onTrailerKeyChange]);
+  // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
+  // (La bande-annonce que la bannière remontait autrefois au fond vidéo n'a plus d'écouteur : le
+  // fond vidéo a été retiré du grand écran.)
+  const info = useHeroInfo("movie", item.tmdbId);
 
   // item.logoUrl now comes bulk-included in the /api/cinema/movies payload (same as
   // poster/backdrop already were) instead of a separate per-item fetch — known synchronously

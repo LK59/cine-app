@@ -25,16 +25,25 @@ const PREFETCH_CHUNK_DELAY_MS = 300;
 // Fires the prefetches a few at a time instead of all at once, and hands back a cancel function
 // so a data refresh (or unmount) doesn't leave a queue running for a list that no longer applies.
 export function prefetchImages(urls: string[]): () => void {
+  return prefetchInChunks(urls, (url) => Object.assign(new Image(), { src: url }));
+}
+
+/**
+ * Le même débit, pour autre chose que des images : les synopsis de la bannière du bureau
+ * (`preloadHeroInfo`), demandés d'avance pour les mêmes titres et dans le même ordre — la rotation
+ * d'abord, puis ce qu'on atteint en quelques appuis (23/09/2026).
+ */
+export function prefetchInChunks(items: string[], fetchOne: (item: string) => void): () => void {
   let cancelled = false;
   let index = 0;
   let timer: ReturnType<typeof setTimeout>;
 
   function pump() {
     if (cancelled) return;
-    for (let n = 0; n < PREFETCH_CHUNK && index < urls.length; n++, index++) {
-      Object.assign(new Image(), { src: urls[index] });
+    for (let n = 0; n < PREFETCH_CHUNK && index < items.length; n++, index++) {
+      fetchOne(items[index]);
     }
-    if (index < urls.length) timer = setTimeout(pump, PREFETCH_CHUNK_DELAY_MS);
+    if (index < items.length) timer = setTimeout(pump, PREFETCH_CHUNK_DELAY_MS);
   }
 
   // Deferred by a beat so it doesn't compete with the initial screen's own critical images.
