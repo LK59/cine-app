@@ -1,44 +1,28 @@
 "use client";
 
-import { Download, Check } from "lucide-react";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import type { MissingSeason } from "@/app/api/player/series/[sonarrId]/missing/route";
 import { CinemaDownloading } from "@/components/cinema/CinemaDetailExtras";
 
 /**
- * Ce qui manque à une saison, et de quoi le demander.
+ * Ce qui manque à une saison, et ce qui va arriver — de l'information, pas de bouton.
  *
  * L'écran des épisodes se construit à partir de Jellyfin, donc uniquement à partir de ce qu'on
  * possède : un épisode absent n'existait tout simplement pas à l'écran, et une saison entière
  * manquante non plus. On voyait quatre saisons d'une série qui en compte cinq, sans rien qui le
  * dise.
  *
- * La demande n'est pas la même que celle d'un film absent : la série est déjà dans la
- * bibliothèque, il n'y a rien à ajouter. Ce qui manque, ce sont des fichiers — et le geste juste
- * est la recherche automatique de Sonarr, sur l'épisode ou la saison désignés. Personne ici n'a à
- * savoir ça : le bouton dit « Demander », comme partout ailleurs.
- *
- * Un épisode qui n'est pas encore diffusé garde son bouton, éteint, avec sa date : le supprimer
- * laisserait croire que la série s'arrête là.
+ * Il n'y a plus rien à demander d'ici (23/09/2026). Deux boutons proposaient de redemander un
+ * épisode ou une saison précise — une recherche Sonarr sur ce seul morceau. Une série se demande
+ * en entier, et Sonarr surveille déjà tout ce qui lui manque : pour un épisode que personne ne
+ * diffuse plus, la recherche ne trouvait rien, sans le dire, et le bouton passait pour cassé.
+ * Reste ce qu'on veut savoir : ce qui manque, ce qui arrive et quand, ce qui est en route.
  */
-export function CinemaMissingEpisodes({
-  season,
-  asked,
-  busy,
-  onRequestSeason,
-  onRequestEpisode,
-}: {
-  season: MissingSeason | undefined;
-  asked: Set<string>;
-  busy: boolean;
-  onRequestSeason: (seasonNumber: number) => void;
-  onRequestEpisode: (episodeId: number, label: string) => void;
-}) {
+export function CinemaMissingEpisodes({ season }: { season: MissingSeason | undefined }) {
   const t = useT();
   const { locale } = useLocale();
   if (!season || season.episodes.length === 0) return null;
 
-  const seasonAsked = asked.has(`s${season.seasonNumber}`);
   const missing = season.episodes.filter((ep) => ep.released).length;
   const upcoming = season.episodes.length - missing;
   // La langue de l'app, pas celle du navigateur : « le Sep 30, 2026 » dans une page en français.
@@ -58,31 +42,14 @@ export function CinemaMissingEpisodes({
             .filter(Boolean)
             .join(" · ")}
         </p>
-        {season.requestable && (
-          <button
-            type="button"
-            disabled={busy || seasonAsked}
-            onClick={() => onRequestSeason(season.seasonNumber)}
-            // Dans le parcours aux flèches du navigateur d'épisodes, comme les épisodes : sans ça,
-            // « Demander la saison » n'était joignable qu'à la tabulation (23/09/2026).
-            data-episode-item="true"
-            className="btn btn-sm btn-primary shrink-0 disabled:opacity-60"
-          >
-            {seasonAsked ? <Check size={14} /> : <Download size={14} />}
-            {seasonAsked ? t("cinema.missing.requested") : t("cinema.missing.requestSeason")}
-          </button>
-        )}
       </div>
 
       <ul className="flex flex-col gap-1">
         {season.episodes.map((ep) => {
-          const episodeAsked = asked.has(`e${ep.id}`) || seasonAsked;
-          const label = `S${String(ep.seasonNumber).padStart(2, "0")}E${String(ep.episodeNumber).padStart(2, "0")}`;
           const airs = ep.airDate ? dateFormat.format(new Date(ep.airDate)) : null;
           return (
             <li key={ep.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
-              {/* Le code dit comme partout ailleurs (« S2 · É1 », « T2 · E1 » en espagnol) ; `label`
-                  reste la forme technique, celle du message de confirmation. */}
+              {/* Le code dit comme partout ailleurs (« S2 · É1 », « T2 · E1 » en espagnol). */}
               <span className="w-16 shrink-0 text-xs tabular-nums text-subtle">
                 {t("cinema.episodeShort", { season: ep.seasonNumber, episode: ep.episodeNumber })}
               </span>
@@ -103,32 +70,8 @@ export function CinemaMissingEpisodes({
                   </span>
                 )}
               </span>
-              {/* Pas encore sorti : rien à demander, et sa date, juste à côté, dit déjà quand. Le
-                  bouton grisé « À venir » la répétait. */}
-              {!ep.released && ep.downloading == null ? null : ep.downloading != null ? (
-                /* En route : ni « Demander », ni « Demandé » — ce qu'on veut savoir, c'est où il
-                   en est. C'est aussi ce qui rend la demande visible d'une séance à l'autre. */
-                <CinemaDownloading progress={ep.downloading} className="shrink-0 px-2" />
-              ) : (
-              <button
-                type="button"
-                disabled={!ep.released || busy || episodeAsked}
-                onClick={() => onRequestEpisode(ep.id, label)}
-                data-episode-item="true"
-                title={ep.released ? undefined : t("cinema.missing.notAired")}
-                className="btn btn-ghost btn-sm shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {episodeAsked ? (
-                  <>
-                    <Check size={13} /> {t("cinema.missing.requested")}
-                  </>
-                ) : (
-                  <>
-                    <Download size={13} /> {t("player.discover.request")}
-                  </>
-                )}
-              </button>
-              )}
+              {/* En route : ce qu'on veut savoir, c'est où il en est. */}
+              {ep.downloading != null && <CinemaDownloading progress={ep.downloading} className="shrink-0 px-2" />}
             </li>
           );
         })}

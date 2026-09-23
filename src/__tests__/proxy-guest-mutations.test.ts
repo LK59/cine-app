@@ -63,10 +63,16 @@ describe("proxy — what a plain user may write", () => {
     }
   });
 
-  it("lets a user cancel their own request and ask for a missing episode", async () => {
+  it("lets a user cancel their own request", async () => {
     const { proxy } = await import("@/proxy");
     expect((await proxy(req("DELETE", "/api/player/requests/328"))).status).toBe(200);
-    expect((await proxy(req("POST", "/api/player/series/42/search"))).status).toBe(200);
+  });
+
+  // « Demander un épisode ou une saison » a été retiré du cinéma le 23/09/2026 : une série se
+  // demande en entier. La recherche Sonarr redevient une action d'administrateur.
+  it("no longer lets a user trigger a Sonarr search", async () => {
+    const { proxy } = await import("@/proxy");
+    expect((await proxy(req("POST", "/api/player/series/42/search"))).status).toBe(403);
   });
 
   // Les motifs restent étroits : un identifiant numérique, et rien qui puisse glisser vers un

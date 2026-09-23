@@ -249,10 +249,6 @@ export function CinemaEpisodeBrowser({
 
             <CinemaMissingEpisodes
               season={missing.seasonOf(displayedSeason)}
-              asked={missing.asked}
-              busy={missing.busy}
-              onRequestSeason={missing.requestSeason}
-              onRequestEpisode={missing.requestEpisode}
             />
           </div>
         </div>

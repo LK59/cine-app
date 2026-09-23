@@ -405,40 +405,4 @@ describe("a series that is only partly here", () => {
     expect(body.seasons[0].episodes).toHaveLength(2);
   });
 
-  // La demande n'est pas une demande Jellyseerr : la série est là, ce sont des fichiers qui
-  // manquent, et c'est Sonarr qui va les chercher.
-  it("monitors and searches a single episode, never touching Jellyseerr", async () => {
-    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
-    const res = await POST(jsonReq({ episodeId: 3 }), { params: Promise.resolve({ sonarrId: "151" }) });
-
-    expect((await res.json()).searched).toBe(1);
-    // Il n'était pas surveillé : Sonarr ne récupère pas ce qu'il ne surveille pas.
-    expect(sonarr.updateEpisode).toHaveBeenCalledWith(3, expect.objectContaining({ monitored: true }));
-    expect(sonarr.triggerEpisodeSearch).toHaveBeenCalledWith([3]);
-    expect(jellyseerr.createRequest).not.toHaveBeenCalled();
-  });
-
-  // Une saison part en une seule commande : Sonarr applique alors ses règles de lot plutôt que de
-  // ramener huit fichiers séparés.
-  it("asks Sonarr for the whole season in one command", async () => {
-    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
-    await POST(jsonReq({ seasonNumber: 5 }), { params: Promise.resolve({ sonarrId: "151" }) });
-
-    expect(sonarr.triggerSearch).toHaveBeenCalledWith(151, 5);
-    expect(sonarr.triggerEpisodeSearch).not.toHaveBeenCalled();
-  });
-
-  // Le garde-fou : c'est Sonarr qui dit ce qui est diffusé, pas ce que le client a envoyé.
-  it("refuses to search for an episode that has not aired", async () => {
-    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
-    const res = await POST(jsonReq({ episodeId: 4 }), { params: Promise.resolve({ sonarrId: "151" }) });
-
-    expect((await res.json()).searched).toBe(0);
-    expect(sonarr.triggerEpisodeSearch).not.toHaveBeenCalled();
-  });
-
-  it("rejects a body naming neither an episode nor a season", async () => {
-    const { POST } = await import("@/app/api/player/series/[sonarrId]/search/route");
-    expect((await POST(jsonReq({}), { params: Promise.resolve({ sonarrId: "151" }) })).status).toBe(400);
-  });
 });

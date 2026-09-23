@@ -1514,12 +1514,6 @@
     },
     "missing": {
       "count": "{n} episode missing|{n} episodes missing",
-      "requestSeason": "Request the season",
-      "requested": "Requested",
-      "notAired": "This episode hasn't aired yet.",
-      "notAiredShort": "Upcoming",
-      "seasonRequested": "Season {n} requested",
-      "episodeRequested": "{label} requested",
       "airsOn": "on {date}",
       "upcoming": "{n} upcoming episode|{n} upcoming episodes"
     },

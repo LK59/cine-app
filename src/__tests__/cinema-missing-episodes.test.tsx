@@ -19,10 +19,6 @@ const draw = (episodes: ReturnType<typeof ep>[]) =>
   render(
     <CinemaMissingEpisodes
       season={{ seasonNumber: 2, requestable: false, episodes } as never}
-      asked={new Set()}
-      busy={false}
-      onRequestSeason={() => {}}
-      onRequestEpisode={() => {}}
     />
   );
 
@@ -30,7 +26,7 @@ afterEach(cleanup);
 
 // Le 23/09/2026 : « 10 épisode(s) manquant(s) » pour une saison dont aucun épisode n'était sorti.
 describe("CinemaMissingEpisodes", () => {
-  it("dit « à venir » quand rien n'est encore sorti, sans bouton grisé qui répète la date", () => {
+  it("dit « à venir » quand rien n'est encore sorti", () => {
     draw([ep(1, false), ep(2, false)]);
     expect(screen.getByText("cinema.missing.upcoming:2")).toBeTruthy();
     expect(screen.queryByText(/cinema\.missing\.count/)).toBeNull();
@@ -40,7 +36,8 @@ describe("CinemaMissingEpisodes", () => {
   it("distingue ce qui manque de ce qui arrive", () => {
     draw([ep(1, true), ep(2, false), ep(3, false)]);
     expect(screen.getByText("cinema.missing.count:1 · cinema.missing.upcoming:2")).toBeTruthy();
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    // Plus aucun bouton : une série se demande en entier (23/09/2026).
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });
 

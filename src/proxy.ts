@@ -100,8 +100,6 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
 const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Retirer sa propre demande — côté Jellyseerr seulement, jamais côté Radarr.
   /^DELETE \/api\/player\/requests\/\d+$/,
-  // Demander un épisode ou une saison qui manque : une recherche Sonarr, et rien d'autre.
-  /^POST \/api\/player\/series\/\d+\/search$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {

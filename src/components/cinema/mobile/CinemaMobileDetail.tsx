@@ -564,10 +564,6 @@ export function CinemaMobileDetail({
 
             <CinemaMissingEpisodes
               season={activeSeason !== null ? missing.seasonOf(activeSeason) : undefined}
-              asked={missing.asked}
-              busy={missing.busy}
-              onRequestSeason={missing.requestSeason}
-              onRequestEpisode={missing.requestEpisode}
             />
           </>
         )}
