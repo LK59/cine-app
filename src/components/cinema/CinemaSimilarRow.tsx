@@ -76,15 +76,18 @@ export function useCinemaSimilar(
 export const CinemaSimilarRow = memo(function CinemaSimilarRow({
   items,
   onSelect,
+  className = "",
 }: {
   items: (CinemaMovie | CinemaSeries)[];
   onSelect: (item: CinemaMovie | CinemaSeries) => void;
+  /** L'espace au-dessus, que la fiche du bureau gère elle-même et que celle du téléphone demande. */
+  className?: string;
 }) {
   const t = useT();
   if (items.length === 0) return null;
 
   return (
-    <section className="w-full">
+    <section className={`w-full ${className}`}>
       <h2 className="mb-2 text-sm font-medium text-muted">{t("cinema.similar")}</h2>
       {/* py-4 + overflow-y-hidden: a focused poster scales up and needs room inside this box, or
           it gets clipped by the scroller's own edge (any element with overflow-x:auto computes

@@ -147,7 +147,10 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
   name,
   parts,
   onSelectOwned,
+  className = "",
 }: {
+  /** Voir la note jumelle de `CinemaSimilarRow`. */
+  className?: string;
   name: string;
   parts: ResolvedPart[];
   /**
@@ -175,7 +178,7 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
   }
 
   return (
-    <section className="w-full">
+    <section className={`w-full ${className}`}>
       <h2 className="mb-2 text-sm font-medium text-muted">{name || t("cinema.collection")}</h2>
       <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden py-4">
         {parts.map((part) => (
@@ -210,10 +213,12 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
 export const CinemaMovieCollectionRow = memo(function CinemaMovieCollectionRow({
   radarrId,
   onSelectOwned,
+  className,
 }: {
   radarrId: number;
   onSelectOwned?: (movie: CinemaMovie) => void;
+  className?: string;
 }) {
   const { name, parts } = useCinemaCollection(radarrId);
-  return <CinemaCollectionRow name={name} parts={parts} onSelectOwned={onSelectOwned} />;
+  return <CinemaCollectionRow name={name} parts={parts} onSelectOwned={onSelectOwned} className={className} />;
 });

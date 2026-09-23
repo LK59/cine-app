@@ -577,9 +577,11 @@ export function CinemaMobileDetail({
         {mediaType === "movies" && "radarrId" in item && (
           /* `onSelectOwned` est le rappel des titres similaires, volontairement : les deux rangées
              ouvrent une fiche de la même façon, et se referment donc de la même façon. */
-          <CinemaMovieCollectionRow radarrId={item.radarrId} onSelectOwned={onSelectSimilar} />
+          <CinemaMovieCollectionRow radarrId={item.radarrId} onSelectOwned={onSelectSimilar} className="mt-8" />
         )}
-        {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} />}
+        {/* `mt-8` : collées à ce qui précède, ces rangées suivaient les épisodes à venir sans le
+            moindre écart (relevé le 23/09/2026). La fiche du bureau espace ses blocs elle-même. */}
+        {onSelectSimilar && <CinemaSimilarRow items={similar} onSelect={onSelectSimilar} className="mt-8" />}
       </div>
 
       {showTrailer && info?.trailerKey && (

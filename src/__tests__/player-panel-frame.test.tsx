@@ -153,3 +153,13 @@ describe("PlayerPanelFrame — Échap", () => {
     expect(cinemaClose).not.toHaveBeenCalled();
   });
 });
+
+// Sur le bureau, la réserve de la barre du bas vaut zéro : « Se déconnecter » touchait le bord de
+// la fenêtre (23/09/2026).
+describe("PlayerPanelFrame — le bas", () => {
+  it("garde toujours un peu d'air sous le dernier élément", () => {
+    render(panel(false));
+    const body = screen.getByText("un").parentElement!;
+    expect(body.style.paddingBottom).toContain("max(var(--player-bar-space, 4rem), 2.5rem)");
+  });
+});

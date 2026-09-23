@@ -265,7 +265,9 @@ export function PlayerPanelFrame({
         // La barre du bas flotte par-dessus sur téléphone : sans cette réserve, la dernière rangée
         // d'un panneau finissait dessous. Nulle sur grand écran, où c'est le rail qui navigue.
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--player-bar-space, 4rem))",
+          // Au moins deux rems et demi : sur le bureau, la réserve de la barre du bas vaut zéro, et
+          // le dernier élément — « Se déconnecter » — touchait le bord de la fenêtre (23/09/2026).
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + max(var(--player-bar-space, 4rem), 2.5rem))",
           // Le fondu collé en haut recouvre ce qu'on y fait défiler : une carte atteinte aux flèches
           // s'arrêtait dessous, son haut estompé. La réserve l'arrête juste après.
           scrollPaddingTop: short ? "0.5rem" : "1rem",

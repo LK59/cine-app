@@ -128,3 +128,12 @@ describe("les décisions qui ne se voient qu'à la lecture du code", () => {
     expect(src).toMatch(/resumeFor=\{resumeFor\}/);
   });
 });
+
+// Sur le téléphone, « Titres similaires » et la saga suivaient les épisodes à venir sans écart.
+describe("la fiche du téléphone espace ses rangées du bas", () => {
+  it("saga et titres similaires ont leur marge", () => {
+    const src = readFileSync("src/components/cinema/mobile/CinemaMobileDetail.tsx", "utf8");
+    expect(src).toMatch(/<CinemaMovieCollectionRow[^>]*className="mt-8"/);
+    expect(src).toMatch(/<CinemaSimilarRow[^>]*className="mt-8"/);
+  });
+});
