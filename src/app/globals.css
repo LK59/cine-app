@@ -43,8 +43,9 @@
   --animate-fade-in-scale: fade-in-scale 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-slide-up: slide-up 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
-  /* Duration hardcoded to match ROTATE_MS in DashboardHero.tsx — kept in sync manually since
-     Tailwind's generated animate-* utility can't read a JS constant. */
+  /* Duration hardcoded to match ROTATE_MS (src/lib/useRotatingIndex.ts, shared by both heroes) —
+     kept in sync manually since Tailwind's generated animate-* utility can't read a JS constant.
+     `rotating-cadence.test.ts` compares the two. */
   --animate-hero-fill: hero-fill 8s linear forwards;
 
   /* Exit counterparts of fade-in/fade-in-up/fade-in-scale — entrances above all use ease-out
@@ -194,12 +195,17 @@
       transform: translateY(0);
     }
   }
+  /* Une échelle, et non une largeur : animer `width` recalculait la mise en page à chaque image,
+     huit secondes durant et en boucle (23/09/2026). La barre, pleine largeur, est étirée depuis
+     son bord gauche — même rendu, sans rien déplacer autour. */
   @keyframes hero-fill {
     0% {
-      width: 0%;
+      transform: scaleX(0);
+      transform-origin: left;
     }
     100% {
-      width: 100%;
+      transform: scaleX(1);
+      transform-origin: left;
     }
   }
 }
@@ -1047,8 +1053,8 @@
       d'opacité : sur une surface plein écran, l'opacité force la composition d'un calque et le
       mélange de tout ce qu'il y a dessous à chaque image, là où une translation ne coûte qu'un
       décalage de calque. Le résultat se lisait comme un sursaut, pas comme un glissement.
-   2. `will-change`, le temps de l'animation seulement — poser le calque à l'avance plutôt qu'au
-      premier pixel de mouvement, et le laisser repartir ensuite.
+   2. Un calque le temps du mouvement seulement : l'animation de `transform` le promeut d'elle-même,
+      et `will-change` n'est posé que sur la sortie, que suit le démontage (voir `sheet-in`).
 
    La courbe est celle du relâchement du geste (useSwipeToDismiss) : le doigt et l'animation
    doivent décélérer de la même façon, sinon les deux façons de fermer ne se ressemblent pas. */
@@ -1061,9 +1067,12 @@
   to   { transform: translateY(100%); }
 }
 
+/* Pas de `will-change` à l'entrée : la classe reste posée toute la vie de la fiche, et le calque
+   plein écran restait promu avec elle — deux quand les fiches s'empilent (relevé le 23/09/2026).
+   L'animation de `transform` promeut le calque d'elle-même, le temps qu'elle dure. La sortie, elle,
+   est suivie du démontage 280 ms plus tard : son `will-change` ne survit pas. */
 @utility sheet-in {
   animation: sheet-in 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
-  will-change: transform;
 }
 @utility sheet-out {
   animation: sheet-out 280ms cubic-bezier(0.32, 0.72, 0, 1) both;

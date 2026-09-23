@@ -70,7 +70,7 @@ export function CinemaSpotlight({
               className="group -my-2 py-2"
             >
               <span
-                className={`block h-[3px] rounded-full transition-all duration-300 group-hover:bg-white ${
+                className={`block h-[3px] rounded-full transition-[width,background-color] duration-300 group-hover:bg-white ${
                   i === activeIndex ? "w-6 bg-white" : "w-3 bg-white/30"
                 }`}
               />

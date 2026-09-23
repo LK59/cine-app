@@ -13,8 +13,13 @@
  * fois, par la variante qui la porte — ou par une variante d'état, dont la spécificité est
  * supérieure et l'emporte donc de façon prévisible.
  */
+/*
+ * Des transitions nommées, et non `transition-all` (23/09/2026) : celui-ci animait tout ce qui
+ * change, marges et tailles comprises quand la fenêtre franchit le seuil de 820 px de haut. Ne
+ * glissent que les couleurs, le fond, l'anneau d'une pastille et l'enfoncement d'une ligne.
+ */
 export const MENU_ROW =
-  "group relative flex w-full items-center gap-3 rounded-lg px-4 py-2 text-left transition-all duration-200 " +
+  "group relative flex w-full items-center gap-3 rounded-lg px-4 py-2 text-left transition-[color,background-color,transform] duration-200 " +
   "focus-visible:outline-none [@media(min-height:820px)]:py-2.5";
 
 /**
@@ -38,7 +43,7 @@ export const MENU_ROW_INACTIVE =
  * sur une ligne au repos et sombre sur le sélecteur blanc, sans que rien n'ait à le prévoir.
  */
 export const MENU_BADGE =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/15 transition-all duration-200 " +
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/15 transition-[color,background-color,box-shadow] duration-200 " +
   "[@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**
@@ -49,7 +54,7 @@ export const MENU_BADGE =
  */
 export const MENU_BADGE_ACTIVE =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-500/35 ring-1 ring-accent-400/40 " +
-  "transition-all duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
+  "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**
  * Rendre la main à la première action de la fiche.
