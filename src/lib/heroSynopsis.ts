@@ -50,14 +50,27 @@ export function splitSentences(text: string): string[] {
  * `fits` dit si un texte tient dans la place : c'est l'écran qui le sait, pas une longueur en
  * caractères, puisque la place dépend de la largeur de la fenêtre et de la police.
  */
+/**
+ * En dessous, ce qui tient n'est pas un résumé : c'est une amorce.
+ *
+ * « En 1963. » est une phrase complète — la première de *Dirty Dancing* —, et la suivante ne tient
+ * pas dans deux lignes : arrêtée là, la bannière aurait dit « En 1963. » et rien d'autre (relevé
+ * sur une capture le 23/09/2026). Quand les phrases entières qui tiennent sont si courtes alors
+ * qu'il reste du texte, le repli — le texte entier, estompé en bout de ligne — dit davantage.
+ */
+const MIN_SUMMARY = 60;
+
 export function sentencesThatFit(text: string, fits: (candidate: string) => boolean): string | null {
   const sentences = splitSentences(text);
   if (sentences.length === 0) return "";
   let kept: string | null = null;
+  let count = 0;
   for (let i = 1; i <= sentences.length; i++) {
     const candidate = sentences.slice(0, i).join(" ");
     if (!fits(candidate)) break;
     kept = candidate;
+    count = i;
   }
+  if (kept !== null && count < sentences.length && kept.length < MIN_SUMMARY) return null;
   return kept;
 }

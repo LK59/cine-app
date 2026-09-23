@@ -50,11 +50,23 @@ describe("sentencesThatFit", () => {
     expect(sentencesThatFit(text, within(95))).toBe(
       "Première phrase assez longue pour compter. Deuxième phrase tout aussi longue que la première."
     );
-    expect(sentencesThatFit(text, within(50))).toBe("Première phrase assez longue pour compter.");
+    // 42 caractères quand il reste du texte : une amorce, pas un résumé — le repli.
+    expect(sentencesThatFit(text, within(50))).toBeNull();
   });
 
   it("rend null quand même la première déborde — la bannière retombe sur le fondu", () => {
     expect(sentencesThatFit(text, within(10))).toBeNull();
+  });
+
+  it("préfère le repli à une amorce trop courte (« En 1963. »)", () => {
+    const dirty =
+      "En 1963. Bébé – de son vrai prénom Frédérique – fille d'une riche famille, passe ses vacances avec ses parents et sa sœur à la pension de la famille Kellerman.";
+    expect(splitSentences(dirty)[0]).toBe("En 1963.");
+    expect(sentencesThatFit(dirty, within(120))).toBeNull();
+  });
+
+  it("garde une phrase courte quand elle est tout le texte", () => {
+    expect(sentencesThatFit("Tout change.", within(120))).toBe("Tout change.");
   });
 
   it("un texte vide reste vide", () => {
