@@ -76,8 +76,10 @@ export function PlayerRail() {
     >
       <div className="flex h-16 shrink-0 items-center gap-3 overflow-hidden px-[1.35rem]">
         <Clapperboard size={22} className="shrink-0 text-accent-400" />
+        {/* Le nom entier, comme la barre latérale de la gestion et l'écran d'installation : « Cine »
+            seul était resté depuis la création du rail (relevé le 23/09/2026). */}
         <span className="player-rail-label whitespace-nowrap font-display text-base font-semibold text-white">
-          Cine
+          Cine App
         </span>
       </div>
 
