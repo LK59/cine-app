@@ -47,7 +47,7 @@ const EMPTY_ICON: Record<Segment, React.ElementType> = {
  * Chaque segment lit sa propre source (voir /api/player/lists), mais rien de tout ça ne se voit :
  * cinq onglets, la même carte partout, et deux phrases pour dire ce qui a besoin d'être dit.
  */
-export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
+export function PlayerListPanel({ leaving, replaced }: { leaving?: boolean; replaced?: boolean }) {
   const t = useT();
   const { data, isLoading, error, mutate } = useSWR<PlayerListsPayload>("/api/player/lists", fetcher, {
     revalidateOnFocus: false,
@@ -172,6 +172,7 @@ export function PlayerListPanel({ leaving }: { leaving?: boolean }) {
   return (
     <PlayerPanelFrame
       leaving={leaving}
+      replaced={replaced}
       title={t("player.nav.myList")}
       subtitle={t("player.lists.subtitle")}
     >

@@ -25,3 +25,19 @@ describe("changement d'onglet sur le bureau", () => {
     }
   });
 });
+
+describe("changement d'onglet sur le téléphone", () => {
+  // De la recherche à « Ma liste », l'accueil passait brièvement (23/09/2026) : fondu croisé au
+  // même niveau, ou panneau pas encore chargé. Voir PlayerPanelFrame (`replaced`).
+  it("la coquille dit à l'onglet qui part qu'un autre le remplace", () => {
+    const src = lire("src/components/player/PlayerShell.tsx");
+    for (const panel of ["PlayerSearchPanel", "PlayerListPanel", "PlayerAccountPanel"]) {
+      expect([panel, new RegExp(`<${panel} leaving=\\{\\w+\\.leaving\\} replaced=\\{`).test(src)]).toEqual([panel, true]);
+    }
+  });
+
+  it("un onglet pas encore chargé montre son fond, pas l'accueil", () => {
+    const src = lire("src/components/player/PlayerShell.tsx");
+    expect(src.match(/loading: PanelPlaceholder/g)?.length).toBe(3);
+  });
+});

@@ -43,7 +43,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
   );
 }
 
-export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
+export function PlayerAccountPanel({ leaving, replaced }: { leaving?: boolean; replaced?: boolean }) {
   const t = useT();
   const router = useRouter();
   const { data: me } = useSWR<{ username: string; jfUser: string | null; role: string }>("/api/auth/me", fetcher);
@@ -58,6 +58,7 @@ export function PlayerAccountPanel({ leaving }: { leaving?: boolean }) {
   return (
     <PlayerPanelFrame
       leaving={leaving}
+      replaced={replaced}
       title={t("player.nav.account")}
       subtitle={me?.jfUser || me?.username || undefined}
     >

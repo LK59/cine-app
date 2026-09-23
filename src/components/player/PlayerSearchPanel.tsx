@@ -103,7 +103,7 @@ export function forgetSearchQuery() {
  * d'avoir cherché oblige à savoir ce qu'on cherche, et la moitié du temps on ne sait pas si le
  * titre qu'on a en tête est un film ou une série.
  */
-export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
+export function PlayerSearchPanel({ leaving, replaced }: { leaving?: boolean; replaced?: boolean }) {
   const t = useT();
   const [query, setQuery] = useState(lastQuery);
   const [debounced, setDebounced] = useState(lastQuery.length >= MIN_QUERY ? lastQuery : "");
@@ -317,7 +317,7 @@ export function PlayerSearchPanel({ leaving }: { leaving?: boolean }) {
   ];
 
   return (
-    <PlayerPanelFrame title={t("player.nav.search")} leaving={leaving}>
+    <PlayerPanelFrame title={t("player.nav.search")} leaving={leaving} replaced={replaced}>
       <div className="mx-auto w-full max-w-5xl">
         <div className="relative">
           <SearchIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />

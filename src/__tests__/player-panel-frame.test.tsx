@@ -45,3 +45,38 @@ describe("PlayerPanelFrame — les flèches", () => {
     expect(document.activeElement).toBe(screen.getByText("un"));
   });
 });
+
+/**
+ * D'un onglet à l'autre, l'accueil ne passe plus (23/09/2026).
+ *
+ * Les deux panneaux se croisaient en fondu au même niveau : à mi-chemin, chacun à moitié
+ * transparent, l'accueil se voyait à travers les deux. Remplacé, celui qui part reste plein et
+ * passe dessous ; celui qui arrive fond par-dessus lui.
+ */
+describe("PlayerPanelFrame — d'un onglet à l'autre", () => {
+  const root = (leaving: boolean, replaced: boolean) => {
+    const { container } = render(
+      <PlayerPanelFrame title="Titre" leaving={leaving} replaced={replaced}>
+        <p>contenu</p>
+      </PlayerPanelFrame>
+    );
+    return container.ownerDocument.querySelector<HTMLElement>(".fixed.inset-0.bg-ink")!;
+  };
+
+  it("remplacé, il reste plein et passe dessous", () => {
+    const el = root(true, true);
+    expect(el.className).not.toContain("animate-fade-out");
+    expect(el.style.zIndex).toBe("45");
+  });
+
+  it("celui qui arrive est au-dessus", () => {
+    const el = root(false, false);
+    expect(el.className).toContain("animate-fade-in-side");
+    expect(el.style.zIndex).toBe("46");
+  });
+
+  it("revenir à l'accueil garde sa sortie", () => {
+    const el = root(true, false);
+    expect(el.className).toContain("animate-fade-out-scale");
+  });
+});

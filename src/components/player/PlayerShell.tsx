@@ -12,9 +12,16 @@ import { PlayerBottomBar } from "./PlayerBottomBar";
 
 // Chaque panneau est un écran entier qu'on n'ouvre pas forcément de la soirée : les charger à la
 // demande garde le premier rendu du lecteur à ce qu'il doit être — des affiches.
-const PlayerListPanel = dynamic(() => import("./PlayerListPanel").then((m) => m.PlayerListPanel), { ssr: false });
-const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m) => m.PlayerAccountPanel), { ssr: false });
-const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false });
+//
+// Tant que le morceau n'est pas arrivé, le fond du panneau à sa place : il n'y avait rien, et
+// l'accueil se voyait le temps du chargement — entre deux onglets comme à la première ouverture
+// (23/09/2026). Au niveau d'un panneau, sous la barre du bas et le rail.
+function PanelPlaceholder() {
+  return <div aria-hidden className="fixed inset-0 bg-ink" style={{ zIndex: 46 }} />;
+}
+const PlayerListPanel = dynamic(() => import("./PlayerListPanel").then((m) => m.PlayerListPanel), { ssr: false, loading: PanelPlaceholder });
+const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m) => m.PlayerAccountPanel), { ssr: false, loading: PanelPlaceholder });
+const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
 // L'écran d'accueil — chargé à part : la plupart des lancements ne l'affichent pas.
@@ -188,9 +195,10 @@ export function PlayerShell() {
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
           glissant. Voir useExitDelay. */}
-      {search.render && <PlayerSearchPanel leaving={search.leaving} />}
-      {list.render && <PlayerListPanel leaving={list.leaving} />}
-      {account.render && <PlayerAccountPanel leaving={account.leaving} />}
+      {/* `replaced` : un autre onglet prend la place de celui qui sort — voir PlayerPanelFrame. */}
+      {search.render && <PlayerSearchPanel leaving={search.leaving} replaced={search.leaving && (route.list || route.account)} />}
+      {list.render && <PlayerListPanel leaving={list.leaving} replaced={list.leaving && (route.search || route.account)} />}
+      {account.render && <PlayerAccountPanel leaving={account.leaving} replaced={account.leaving && (route.search || route.list)} />}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

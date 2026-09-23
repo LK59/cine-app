@@ -34,6 +34,7 @@ export function PlayerPanelFrame({
   subtitle,
   actions,
   leaving = false,
+  replaced = false,
   back = false,
   children,
 }: {
@@ -42,6 +43,15 @@ export function PlayerPanelFrame({
   actions?: React.ReactNode;
   /** Piloté par la coquille : l'écran est en train de sortir — voir useExitDelay. */
   leaving?: boolean;
+  /**
+   * Il sort parce qu'un autre onglet prend sa place, et non pour revenir à l'accueil.
+   *
+   * Les deux panneaux se croisaient alors en fondu, au même niveau : à mi-chemin, chacun était à
+   * moitié transparent et l'accueil se voyait à travers les deux — de la recherche à « Ma liste »,
+   * la page d'accueil passait brièvement (signalé le 23/09/2026). Remplacé, il ne s'efface plus :
+   * il reste plein, dessous, et celui qui arrive fond par-dessus lui, comme les onglets d'iOS.
+   */
+  replaced?: boolean;
   /**
    * Cet écran a été poussé depuis un autre, et non choisi dans le rail.
    *
@@ -160,10 +170,12 @@ export function PlayerPanelFrame({
          * après —, si bien que la dérive animait une boîte sans contenu et passait inaperçue. La
          * racine, elle, existe et se voit toujours : son fond porte le mouvement quoi qu'il arrive
          * au reste. Une seule transformation composée par bascule au lieu de deux, aussi. */
-        leaving ? "animate-fade-out-scale" : "animate-fade-in-side"
+        leaving ? (replaced ? "" : "animate-fade-out-scale") : "animate-fade-in-side"
       }`}
       style={{
-        zIndex: 46,
+        // Celui qui part passe dessous : celui qui arrive doit le recouvrir, quel que soit leur
+        // ordre dans la page (la recherche précède « Ma liste », qui précède le compte).
+        zIndex: leaving ? 45 : 46,
         // Inerte pendant qu'il s'en va. Sa croix reste sous le doigt le temps de l'animation, et
         // un second appui fermerait l'écran d'en dessous — celui qu'on vient d'ouvrir.
         pointerEvents: leaving ? "none" : undefined,
