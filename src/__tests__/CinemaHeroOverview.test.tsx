@@ -65,7 +65,7 @@ describe.each(HEROES)("la bannière des %s", (_, hero, english) => {
 
   it("réserve deux lignes, pour que la bannière ne saute pas à l'arrivée du texte", () => {
     const { container } = render(hero());
-    expect(container.querySelector("p.clamp-fade-2")?.className).toContain("min-h-[2lh]");
+    expect(container.querySelector("p[data-hero-overview]")?.className).toContain("min-h-[2lh]");
   });
 
   it("montre le texte traduit dès qu'il est là", () => {
@@ -92,7 +92,7 @@ describe.each(HEROES)("la bannière des %s", (_, hero, english) => {
   it("fait fondre le texte à son arrivée, sans animer une place vide", () => {
     // 23/09/2026 : le synopsis et la distribution surgissaient dans la place réservée.
     const { container, rerender } = render(hero());
-    expect(container.querySelector("p.clamp-fade-2 span")).toBeNull();
+    expect(container.querySelector("p[data-hero-overview] span:not([data-hero-probe])")).toBeNull();
     info = { tmdb: { overview: "Arrivé.", cast: [{ name: "Cillian Murphy" }] }, trailerKey: null };
     rerender(hero());
     expect(screen.getByText("Arrivé.").className).toContain("animate-fade-in");

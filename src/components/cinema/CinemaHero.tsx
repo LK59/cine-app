@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { formatMinutes } from "@/lib/format";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
@@ -10,6 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { sentencesThatFit } from "@/lib/heroSynopsis";
 
 interface RadarrCastMember {
   tmdbId: number;
@@ -45,15 +46,73 @@ export function HeroOverview({
   info: { tmdb: { overview: string } | null } | undefined;
   fallback: string | null | undefined;
 }) {
+  const text = info ? info.tmdb?.overview || fallback || "" : "";
+
+  /**
+   * Les phrases entières qui tiennent dans les deux lignes — voir `sentencesThatFit`.
+   *
+   * La place se mesure à l'écran, pas en caractères : elle dépend de la largeur de la fenêtre et
+   * de la police. Une sonde invisible, de la largeur du paragraphe et de sa police, reçoit chaque
+   * candidat ; ce qui dépasse deux lignes ne tient pas. `null` : même la première phrase déborde,
+   * et le texte entier s'affiche avec un fondu en bout de seconde ligne (`clamp-fade-end-2`).
+   */
+  const boxRef = useRef<HTMLParagraphElement>(null);
+  const probeRef = useRef<HTMLSpanElement>(null);
+  const [fitted, setFitted] = useState<{ source: string; shown: string | null } | null>(null);
+  const measure = useCallback(() => {
+    const box = boxRef.current;
+    const probe = probeRef.current;
+    if (!box || !probe) return;
+    const lineHeight = parseFloat(getComputedStyle(box).lineHeight);
+    // Rien de mesurable (pas encore en page) : le texte entier, sans rien trancher.
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0 || box.clientWidth === 0) {
+      setFitted({ source: text, shown: text });
+      return;
+    }
+    const fits = (candidate: string) => {
+      probe.textContent = candidate;
+      return probe.offsetHeight <= lineHeight * 2 + 1;
+    };
+    const shown = sentencesThatFit(text, fits);
+    probe.textContent = "";
+    setFitted({ source: text, shown });
+  }, [text]);
+  // Avant le premier dessin : le texte arrive déjà arrêté sur sa phrase, jamais entier puis coupé.
+  useLayoutEffect(measure, [measure]);
+  // Et de nouveau quand la largeur change : deux lignes ne contiennent plus les mêmes phrases.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || typeof ResizeObserver === "undefined") return;
+    let width = box.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (box.clientWidth === width) return;
+      width = box.clientWidth;
+      measure();
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [measure]);
+
+  const known = fitted?.source === text ? fitted : null;
+  const overflowing = known !== null && known.shown === null;
+  const shown = known?.shown ?? text;
+
   return (
-    <p /* Estompé et non tronqué par des points, comme la fiche : deux façons de couper le même
-           texte dans la même application, c'était une de trop. Le minimum de hauteur reste —
-           c'est lui qui empêche la mise en page de sauter quand le survol change de titre, et la
-           classe ne fixe qu'un maximum. */
-        className="clamp-fade-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
+    <p
+      ref={boxRef}
+      data-hero-overview
+      /* Deux lignes au plus, et leur hauteur réservée : c'est ce qui empêche la mise en page de
+         sauter quand le survol change de titre. Arrêté sur une phrase entière, le texte n'a
+         besoin d'aucune marque ; le fondu n'est qu'un repli, vers la droite et jamais vers le bas
+         — l'ancien fondu vertical se lisait comme une ombre sous le texte (23/09/2026). */
+      className={`relative min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base ${
+        overflowing ? "clamp-fade-end-2" : "max-h-[2lh] overflow-hidden"
+      }`}
+    >
       {/* Le texte fond dans la place qu'on lui gardait, au lieu d'y surgir ; un autre titre, un
           autre nœud, et le fondu repart (23/09/2026). */}
-      <HeroText text={info ? info.tmdb?.overview || fallback || "" : ""} />
+      <HeroText text={overflowing ? text : shown} />
+      <span ref={probeRef} aria-hidden data-hero-probe className="pointer-events-none invisible absolute inset-x-0 top-0" />
     </p>
   );
 }
