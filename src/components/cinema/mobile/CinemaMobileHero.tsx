@@ -145,7 +145,8 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   };
 
   return (
-    <section className="px-4 pt-2">
+    // Fond en remplaçant son squelette, au lieu de surgir (23/09/2026) — au montage seulement.
+    <section className="animate-fade-in px-4 pt-2">
       {/* Une piste, et non une affiche remplacée : toutes les affiches sont côte à côte et la
           piste est décalée d'une largeur par titre. Pendant le geste elle porte en plus le
           décalage du doigt, sans transition — elle n'anime pas vers une cible, elle est là où le

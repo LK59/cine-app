@@ -51,7 +51,9 @@ export function HeroOverview({
            c'est lui qui empêche la mise en page de sauter quand le survol change de titre, et la
            classe ne fixe qu'un maximum. */
         className="clamp-fade-2 min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base">
-      {info ? info.tmdb?.overview || fallback || "" : ""}
+      {/* Le texte fond dans la place qu'on lui gardait, au lieu d'y surgir ; un autre titre, un
+          autre nœud, et le fondu repart (23/09/2026). */}
+      <HeroText text={info ? info.tmdb?.overview || fallback || "" : ""} />
     </p>
   );
 }
@@ -65,11 +67,21 @@ export function HeroOverview({
  * 23/09/2026). La ligne reste donc toujours là, vide tant qu'il n'y a rien à dire. Partagée par
  * les films et les séries, comme `HeroOverview`, pour la même raison.
  */
+/** Un texte de bannière qui fond à son arrivée — voir `HeroOverview` et `HeroCastLine`. */
+function HeroText({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <span key={text} className="animate-fade-in">
+      {text}
+    </span>
+  );
+}
+
 export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }[] } | null } | undefined }) {
   const cast = info?.tmdb?.cast ?? [];
   return (
     <p className="min-h-[1lh] max-w-xl truncate text-xs text-white/60">
-      {cast.slice(0, 5).map((c) => c.name).join(", ")}
+      <HeroText text={cast.slice(0, 5).map((c) => c.name).join(", ")} />
     </p>
   );
 }

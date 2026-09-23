@@ -945,7 +945,11 @@ function MobileRow({
           </button>
         )}
       </div>
-      <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">{children}</div>
+      {/* Le contenu fond en arrivant — les cartes qui remplacent leur squelette, une rangée qui
+          apparaît — et le titre non : identique des deux côtés, il clignoterait pour rien. Le
+          bureau avait déjà cette entrée, le téléphone passait du squelette au contenu d'un coup
+          (23/09/2026). Au montage seulement : rien ne rejoue en faisant défiler. */}
+      <div className="scrollbar-thin flex animate-fade-in gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">{children}</div>
     </section>
   );
 }

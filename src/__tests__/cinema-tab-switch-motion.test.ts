@@ -41,3 +41,13 @@ describe("changement d'onglet sur le téléphone", () => {
     expect(src.match(/loading: PanelPlaceholder/g)?.length).toBe(3);
   });
 });
+
+describe("du squelette au contenu, sur téléphone", () => {
+  // Le bureau avait une entrée pour ses rangées ; le téléphone passait du squelette au contenu
+  // d'un coup (23/09/2026). Le contenu fond, pas le titre de la rangée — identique des deux côtés.
+  it("le contenu d'une rangée et la bannière fondent à leur arrivée", () => {
+    const rows = lire("src/components/cinema/mobile/CinemaMobileClient.tsx");
+    expect(rows).toMatch(/className="scrollbar-thin flex animate-fade-in gap-3 overflow-x-auto/);
+    expect(lire("src/components/cinema/mobile/CinemaMobileHero.tsx")).toContain('<section className="animate-fade-in px-4 pt-2">');
+  });
+});

@@ -89,6 +89,16 @@ describe.each(HEROES)("la bannière des %s", (_, hero, english) => {
     expect(container.querySelector("p.min-h-\\[1lh\\]")?.textContent).toBe("Cillian Murphy, Rose Byrne");
   });
 
+  it("fait fondre le texte à son arrivée, sans animer une place vide", () => {
+    // 23/09/2026 : le synopsis et la distribution surgissaient dans la place réservée.
+    const { container, rerender } = render(hero());
+    expect(container.querySelector("p.clamp-fade-2 span")).toBeNull();
+    info = { tmdb: { overview: "Arrivé.", cast: [{ name: "Cillian Murphy" }] }, trailerKey: null };
+    rerender(hero());
+    expect(screen.getByText("Arrivé.").className).toContain("animate-fade-in");
+    expect(screen.getByText("Cillian Murphy").className).toContain("animate-fade-in");
+  });
+
   it("se replie sur le catalogue une fois la réponse arrivée sans traduction", () => {
     info = { tmdb: null, trailerKey: null };
     render(hero());
