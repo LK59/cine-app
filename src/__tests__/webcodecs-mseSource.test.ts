@@ -942,6 +942,40 @@ describe("MseSource", () => {
       mse.destroy();
     });
 
+    it("rattrape quand même une tête restée en plein saut au-delà de six secondes", async () => {
+      // La garde du dessus ne doit pas désarmer le filet : un saut qui ne se pose jamais, la tête
+      // ailleurs que sa cible, est toujours ramené — seulement après l'attente d'une horloge figée
+      // pendant un saut.
+      onBrowser(CHROME);
+      const video = withRate(fakeVideo());
+      const remuxer = fakeRemuxer(200);
+      const onStall = vi.fn();
+      const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onStall });
+      const internals = mse as unknown as { watchdog: () => void; watchdogTimer: ReturnType<typeof setInterval> | null };
+      await until(() => video.buffered.length > 0 && video.buffered.end(0) > 20, "du média devant la tête");
+      if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+      const seeksBefore = remuxer.seeks.length;
+
+      const t0 = Date.now();
+      const clock = vi.spyOn(Date, "now").mockReturnValue(t0);
+      (video as unknown as { currentTime: number }).currentTime = 5;
+      video.dispatchEvent(new Event("seeking"));
+      (video as unknown as { currentTime: number }).currentTime = 20;
+      Object.assign(video, { seeking: true });
+
+      clock.mockReturnValue(t0 + 5_000);
+      internals.watchdog();
+      await flush();
+      expect(remuxer.seeks.length).toBe(seeksBefore);
+
+      clock.mockReturnValue(t0 + 6_500);
+      internals.watchdog();
+      await flush();
+      expect(remuxer.seeks.length).toBe(seeksBefore + 1);
+      expect(onStall).toHaveBeenCalledWith(expect.objectContaining({ runaway: true, seekTarget: 5 }));
+      mse.destroy();
+    });
+
     it("fait reconstruire à la cible, pas là où la tête s'est enfuie, quand les reprises n'y suffisent plus", async () => {
       // Audit du 22/09/2026 : la reconstruction partait de `position`, c'est-à-dire de la tête
       // partie ailleurs.

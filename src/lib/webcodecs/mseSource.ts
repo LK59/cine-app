@@ -1175,7 +1175,11 @@ export class MseSource {
       // du 22/09/2026, Titanic : cinq sauts en 0,4 s, et le détecteur ramenait la tête 935 s en
       // arrière — il défaisait le dernier saut demandé. Quand l'élément se posera, `seeked` dira
       // s'il est arrivé, et ce même détecteur tranchera alors avec la bonne cible.
-      if (this.video.seeking) return false;
+      //
+      // Borné, pour qu'un saut qui ne se pose jamais reste rattrapé : la même attente que pour une
+      // horloge figée pendant un saut (`FROZEN_SEEKING_MS`). L'intervalle qu'elle couvre se compte
+      // en millisecondes ; six secondes plus tard, `seeking` aurait déjà renouvelé la cible.
+      if (this.video.seeking && Date.now() - intent.since < FROZEN_SEEKING_MS) return false;
       this.seekState.drop();
       this.headAway(`saut parti ailleurs : visé ${intent.target.toFixed(1)} s, tête à ${now.toFixed(1)} s — on y retourne`, now, intent.target, {
         seekTarget: intent.target,
