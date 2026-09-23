@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { scrollBehavior } from "@/lib/reducedMotion";
 
 // Nothing on the detail sheet said a second screen existed below it — the two snap positions are
 // only discoverable by trying. This is the affordance: a small drifting chevron at the foot of
@@ -19,7 +20,7 @@ export function CinemaScrollHint() {
         aria-label={t("cinema.similar")}
         onClick={(e) => {
           const section = e.currentTarget.closest<HTMLElement>("[data-snap-section]");
-          section?.nextElementSibling?.scrollIntoView({ block: "start", behavior: "smooth" });
+          section?.nextElementSibling?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
         }}
         className="pointer-events-auto animate-scroll-hint rounded-full bg-black/40 p-2 text-white/90 backdrop-blur-xs transition-colors hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
       >

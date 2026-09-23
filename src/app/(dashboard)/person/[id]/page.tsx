@@ -29,6 +29,7 @@ import { apiAction } from "@/lib/apiAction";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { getDateLocale } from "@/lib/i18n";
 import { useToast } from "@/components/Toast";
+import { scrollBehavior } from "@/lib/reducedMotion";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -601,7 +602,7 @@ function VipPersonPage({ id, data }: { id: string; data: PersonData }) {
               {visibleFiles.map((file, i) => (
                 <button
                   key={file}
-                  onClick={(e) => { e.currentTarget.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" }); setLightboxIndex(i); }}
+                  onClick={(e) => { e.currentTarget.scrollIntoView({ block: "center", inline: "center", behavior: scrollBehavior() }); setLightboxIndex(i); }}
                   className={[
                     "group relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl ring-1 ring-white/10 transition duration-300 hover:-translate-y-1 hover:ring-amber-200/60",
                     i % 11 === 0 ? "col-span-2 row-span-2" : "",

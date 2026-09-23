@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { scrollBehavior } from "@/lib/reducedMotion";
 
 // TV-remote-style arrow-key navigation across the home page's poster carousels — deliberately
 // NOT built as a React-state-tracked cursor (compare useListKeyNav.ts, which drives a single
@@ -66,10 +67,10 @@ function focusCard(el: HTMLElement, movedRow = false): void {
   el.focus({ preventScroll: true });
   if (movedRow) {
     const row = el.closest<HTMLElement>("[data-tv-rowroot]") ?? el;
-    row.scrollIntoView({ behavior: "smooth", block: "start" });
+    row.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     return;
   }
-  el.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+  el.scrollIntoView({ behavior: scrollBehavior(), inline: "nearest", block: "nearest" });
 }
 
 // `enabled` lets a caller pause the hook without unmounting it (e.g. Cinema Mode's detail

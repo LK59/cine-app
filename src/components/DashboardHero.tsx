@@ -6,6 +6,9 @@ import { ChevronRight } from "lucide-react";
 import type { HeroItem } from "@/app/api/dashboard/route";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { useT } from "@/components/TranslationProvider";
+// La même cadence que les bannières du cinéma, par la même constante : une copie ici dérivait.
+import { ROTATE_MS } from "@/lib/useRotatingIndex";
+import { usePrefersReducedMotion } from "@/lib/reducedMotion";
 
 // Matches the fiche pages' own hero (radarr/[id], sonarr/[id]) — same full-bleed negative
 // margins, same mask-fade + left-vignette treatment on the backdrop, same height formula — so
@@ -13,7 +16,6 @@ import { useT } from "@/components/TranslationProvider";
 const BACKDROP_MASK =
   "linear-gradient(to bottom, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.82) 18%, rgba(0,0,0,0.50) 35%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.04) 65%, rgba(0,0,0,0) 72%)";
 
-const ROTATE_MS = 8000;
 const HERO_INDEX_KEY = "cine:hero-index";
 
 export function DashboardHero({ items }: { items: HeroItem[] }) {
@@ -72,11 +74,13 @@ export function DashboardHero({ items }: { items: HeroItem[] }) {
   // Re-armed on every index change — whether that came from this same timer firing or from a
   // manual segment click below — so a manual jump always gets its own full ROTATE_MS, instead
   // of inheriting whatever was left on a timer that started at the previous item.
+  // Pas de rotation automatique pour qui a demandé moins de mouvement — voir `useRotatingIndex`.
+  const reducedMotion = usePrefersReducedMotion();
   useEffect(() => {
-    if (items.length <= 1) return;
+    if (reducedMotion || items.length <= 1) return;
     const id = setTimeout(() => setIndex((i) => (i + 1) % items.length), ROTATE_MS);
     return () => clearTimeout(id);
-  }, [items.length, index]);
+  }, [items.length, index, reducedMotion]);
 
   if (items.length === 0) return null;
   const item = items[index];

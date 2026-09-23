@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { scrollBehavior } from "@/lib/reducedMotion";
 
 /**
  * La première rangée : celle que la bannière suit.
@@ -46,7 +47,7 @@ export function CinemaSpotlight({
     // de qui parcourait les rangées plus bas. Ici seul ce rail bouge, sur son seul axe.
     track.scrollTo({
       left: card.offsetLeft - (track.clientWidth - card.clientWidth) / 2,
-      behavior: "smooth",
+      behavior: scrollBehavior(),
     });
   }, [activeIndex]);
 

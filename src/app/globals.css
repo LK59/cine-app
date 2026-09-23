@@ -626,6 +626,16 @@
   }
 }
 
+/* Le mouvement, quand on n'en veut pas : tout apparaît et disparaît sans transition.
+ *
+ * Une seule règle, et c'est elle qui décide. Deux blocs plus loin croyaient remplacer les entrées
+ * par un fondu de 0,15 s ; ils perdaient toujours contre ces `!important`, et ils remplaçaient
+ * aussi les *sorties* par un fondu d'entrée — une fiche qui se fermait restait donc pleinement
+ * visible jusqu'à son démontage, 280 ms plus tard, puis disparaissait d'un coup. Retirés le
+ * 23/09/2026 : une sortie à 0,01 ms laisse l'élément dans son état final, c'est-à-dire parti.
+ *
+ * Seule exception, les indicateurs de chargement : figés par `iteration-count: 1`, ils ne disaient
+ * plus que quelque chose avance. Leur rotation est lente et c'est une information, pas un décor. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -634,6 +644,10 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
@@ -1005,23 +1019,6 @@
   .player-grid > * { contain-intrinsic-size: auto 333px; }
 }
 
-/* Le mouvement, quand on n'en veut pas.
-   Les animations d'entrée de cette application sont courtes et servent à situer les écrans les
-   uns par rapport aux autres ; pour qui a demandé moins de mouvement — et sur les appareils qui
-   peinent, où ce réglage est souvent activé — elles se contentent d'apparaître. */
-@media (prefers-reduced-motion: reduce) {
-  .animate-fade-in-up,
-  .animate-slide-up,
-  .animate-fade-in-scale,
-  .animate-slide-in-right,
-  .animate-fade-out-down,
-  .animate-fade-out-scale,
-  .animate-slide-out-right {
-    animation-name: fade-in;
-    animation-duration: 0.15s;
-  }
-}
-
 /* Les marges latérales sûres.
    `viewport-fit=cover` laisse le contenu s'étendre sous l'encoche et la Dynamic Island. Debout
    elles ne mordent que sur le haut, déjà traité partout ; couché, elles prennent une soixantaine
@@ -1067,6 +1064,3 @@
   will-change: transform;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sheet-in, .sheet-out { animation-name: fade-in; animation-duration: 0.15s; }
-}

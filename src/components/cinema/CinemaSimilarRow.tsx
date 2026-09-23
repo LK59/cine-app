@@ -11,6 +11,7 @@ import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import { useT } from "@/components/TranslationProvider";
 import type { CinemaMovie, CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries, CinemaSeriesPayload } from "@/app/api/cinema/series/route";
+import { scrollBehavior } from "@/lib/reducedMotion";
 
 // "Plus comme ça", at the bottom of a detail sheet — but only titles from your own library, so
 // everything it proposes can be started on the spot (see lib/cinemaSimilar for why not TMDB's
@@ -126,7 +127,7 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
   // Within the row, "nearest" is right: only the horizontal position needs adjusting.
   function focusInRow(el: HTMLElement) {
     el.focus();
-    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: scrollBehavior() });
   }
 
   // Crossing between the sheet's two sections is different: the scroller is snap-mandatory, so
@@ -138,7 +139,7 @@ export function similarRowKeyNav(e: KeyboardEvent, container: HTMLElement | null
   function focusInOtherSection(el: HTMLElement) {
     el.focus({ preventScroll: true });
     const section = el.closest<HTMLElement>("[data-snap-section]");
-    (section ?? el).scrollIntoView({ block: "start", behavior: "smooth" });
+    (section ?? el).scrollIntoView({ block: "start", behavior: scrollBehavior() });
   }
 
   if (index === -1) {

@@ -14,6 +14,7 @@ import { getDateLocale } from "@/lib/i18n";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
+import { scrollBehavior } from "@/lib/reducedMotion";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -303,7 +304,7 @@ export default function CalendarPage() {
     setSelectedEvent(ev);
     if (ev) {
       // Scroll to detail panel after render
-      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" }), 50);
     }
   }
 
