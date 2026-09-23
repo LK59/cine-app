@@ -1,5 +1,6 @@
 "use client";
 
+import { MIN_FLICK_PX } from "@/lib/useSwipeToDismiss";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -145,8 +146,9 @@ export function MobileNav() {
       const dy = e.changedTouches[0].clientY - startY;
       const velocity = dy / Math.max(1, Date.now() - startTime); // px/ms
 
-      // Close on quick flick OR substantial drag
-      if (velocity > 0.45 || dy > 150) {
+      // Close on quick flick OR substantial drag. Le seuil d'activation de 6 px ne suffit pas à
+      // distinguer un coup de doigt d'un appui un peu glissé : même règle que les autres feuilles.
+      if ((dy >= MIN_FLICK_PX && velocity > 0.45) || dy > 150) {
         sheet.style.transition = "transform 0.24s cubic-bezier(0.4, 0, 1, 1)";
         sheet.style.transform = "translateY(100%)";
         if (overlay) {

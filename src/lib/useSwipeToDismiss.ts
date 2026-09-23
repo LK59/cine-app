@@ -34,7 +34,7 @@ const VELOCITY_THRESHOLD = 0.5;
  * La distance seule garde son propre seuil, bien plus grand : celui-ci ne fait qu'interdire au
  * raccourci de la vitesse de s'appliquer à quelque chose qui n'a pas bougé.
  */
-const MIN_FLICK_PX = 24;
+export const MIN_FLICK_PX = 24;
 
 export interface SwipeToDismiss {
   /** Current downward offset in px. 0 when idle. */

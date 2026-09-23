@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { MIN_FLICK_PX } from "@/lib/useSwipeToDismiss";
 
 export function Modal({
   title,
@@ -18,6 +19,18 @@ export function Modal({
   const cardRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
+  /**
+   * La dernière fonction de fermeture donnée par le parent, lue au moment de fermer.
+   *
+   * Les appelants la passent en fonction fléchée, recréée à chaque rendu. Quand l'effet des gestes
+   * en dépendait, chaque rendu du parent — qBittorrent se rafraîchit toutes les cinq secondes — le
+   * démontait et le remontait : un glissement en cours perdait son doigt, et la carte restait à
+   * mi-hauteur (23/09/2026). Par une référence, l'effet ne se monte qu'une fois.
+   */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const closeAnimated = useCallback(() => {
     if (closingRef.current) return;
@@ -32,8 +45,8 @@ export function Modal({
       backdrop.style.transition = "opacity 0.24s ease-out";
       backdrop.style.opacity = "0";
     }
-    setTimeout(onClose, 240);
-  }, [onClose]);
+    setTimeout(() => onCloseRef.current(), 240);
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -60,13 +73,12 @@ export function Modal({
     card.addEventListener("animationend", dropAnimation);
     backdrop?.addEventListener("animationend", dropAnimation);
 
+    const dropListeners = () => {
+      card.removeEventListener("animationend", dropAnimation);
+      backdrop?.removeEventListener("animationend", dropAnimation);
+    };
     const handle = card.querySelector<HTMLElement>("[data-drag-handle]");
-    if (!handle) {
-      return () => {
-        card.removeEventListener("animationend", dropAnimation);
-        backdrop?.removeEventListener("animationend", dropAnimation);
-      };
-    }
+    if (!handle) return dropListeners;
 
     let startY = 0;
     let startTime = 0;
@@ -94,8 +106,10 @@ export function Modal({
       const dy = e.changedTouches[0].clientY - startY;
       const velocity = dy / Math.max(1, Date.now() - startTime); // px/ms
 
-      // Close on quick flick OR large drag
-      if (velocity > 0.45 || dy > 130) {
+      // Close on quick flick OR large drag. Un coup de doigt doit d'abord avoir bougé : un appui
+      // bref fait deux ou trois pixels en quelques millisecondes, soit une « vitesse » au-delà du
+      // seuil — même règle que `useSwipeToDismiss` (MIN_FLICK_PX).
+      if ((dy >= MIN_FLICK_PX && velocity > 0.45) || dy > 130) {
         closingRef.current = true;
         card.style.transition = "transform 0.24s cubic-bezier(0.4, 0, 1, 1)";
         card.style.transform = "translateY(120%)";
@@ -103,7 +117,7 @@ export function Modal({
           backdrop.style.transition = "opacity 0.24s ease-out";
           backdrop.style.opacity = "0";
         }
-        setTimeout(onClose, 240);
+        setTimeout(() => onCloseRef.current(), 240);
       } else {
         // Smooth spring-back — iOS-feel without overshoot
         card.style.transition = "transform 0.42s cubic-bezier(0.22, 1, 0.36, 1)";
@@ -119,11 +133,12 @@ export function Modal({
     handle.addEventListener("touchmove", onMove, { passive: false });
     handle.addEventListener("touchend", onEnd, { passive: true });
     return () => {
+      dropListeners();
       handle.removeEventListener("touchstart", onStart);
       handle.removeEventListener("touchmove", onMove);
       handle.removeEventListener("touchend", onEnd);
     };
-  }, [onClose]);
+  }, []);
 
   return createPortal(
     <div
