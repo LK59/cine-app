@@ -39,6 +39,7 @@ import { resumeAtFor } from "@/lib/resumePosition";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { FadeInImg } from "@/components/FadeInImg";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -328,8 +329,7 @@ export function CinemaMobileDetail({
             plein milieu de la bannière, ce qu'on voyait sur les fiches de séries dont le visuel
             manque. */}
         {item.backdropUrl && !backdropFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <FadeInImg
             src={item.backdropUrl}
             alt=""
             onError={() => setBackdropFailed(true)}

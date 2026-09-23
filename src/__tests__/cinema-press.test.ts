@@ -24,4 +24,19 @@ describe("appui pendant un défilement, sur téléphone", () => {
     expect(src).not.toContain('className="flex w-full gap-3 text-left active:scale-95"');
     expect(src).toMatch(/className="flex w-full gap-3 [^"]*active:transform-none active:bg-white\/10/);
   });
+
+  it("les lignes du rail et des épisodes du bureau s'allument sans s'enfoncer", () => {
+    // La règle est écrite dans globals.css (« Creux pour ce qu'on saisit, fond pour ce qu'on
+    // parcourt »), mais l'enfoncement de base des boutons s'appliquait quand même, et d'un coup :
+    // leur `transition-colors` n'anime pas la transformation (23/09/2026).
+    for (const f of ["src/components/player/PlayerRail.tsx", "src/components/cinema/CinemaEpisodeBrowser.tsx"]) {
+      const src = lire(f);
+      expect([f, src.includes("active:bg-white/15 active:delay-75")]).toEqual([f, true]);
+      expect([f, src.match(/active:transform-none active:bg-white\/15/g)?.length]).toEqual([
+        f,
+        src.match(/active:bg-white\/15 active:delay-75/g)?.length,
+      ]);
+    }
+  });
 });
+

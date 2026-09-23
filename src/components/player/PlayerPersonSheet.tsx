@@ -419,8 +419,11 @@ export function PlayerPersonSheet({
           swipe,
           leaving,
           revealed,
-          out: "sheet-out md:animate-fade-out",
-          into: "sheet-in md:animate-fade-in",
+          // Par la même décision que la mise en page, et non par la largeur : un téléphone couché
+          // dépasse 768 px et restait « mobile » pour tout le reste — la fiche s'y posait en bas,
+          // mais apparaissait en fondu au lieu de monter comme les autres (23/09/2026).
+          out: isMobile ? "sheet-out" : "animate-fade-out",
+          into: isMobile ? "sheet-in" : "animate-fade-in",
         })}`}
         style={{
           transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,

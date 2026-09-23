@@ -33,6 +33,7 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { nextEpisodeIn } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { FadeInImg } from "@/components/FadeInImg";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -249,8 +250,7 @@ export function CinemaSeriesDetail({
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
     >
       {item.backdropUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <FadeInImg src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       <div
         className="absolute inset-x-0 bottom-0 backdrop-blur-md"

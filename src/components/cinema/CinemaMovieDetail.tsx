@@ -33,6 +33,7 @@ import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, SECTION_CLASS
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
+import { FadeInImg } from "@/components/FadeInImg";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -262,8 +263,7 @@ export function CinemaMovieDetail({
       style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
     >
       {item.backdropUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <FadeInImg src={item.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       {/* Localized, gradually-eased blur — not a global filter on the image, and not a flat
           rectangle either (a plain backdrop-blur-md div has a hard visible seam where it starts,

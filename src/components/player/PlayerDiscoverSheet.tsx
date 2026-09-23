@@ -28,6 +28,7 @@ import type { PlayerTitlePayload } from "@/app/api/player/title/[type]/[tmdbId]/
 import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
 import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
+import { FadeInImg } from "@/components/FadeInImg";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
@@ -180,8 +181,7 @@ export function PlayerDiscoverSheet({
         style={{ maxHeight: "52svh", touchAction: "none" }}
       >
         {data?.backdrop ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <FadeInImg src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-slate-900" />
         )}
@@ -300,8 +300,7 @@ export function PlayerDiscoverSheet({
       }}
     >
       {data?.backdrop && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <FadeInImg src={data.backdrop} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       <div
         // Grand écran seulement : sur téléphone cette fiche arrive en glissant, souvent au milieu

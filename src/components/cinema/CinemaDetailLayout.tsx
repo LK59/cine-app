@@ -157,6 +157,9 @@ export function CinemaOverview({
   );
 }
 
+/** `animate-fade-out` (200 ms) et `animate-fade-out-scale` (180 ms), globals.css. */
+const DETAIL_MODAL_EXIT_MS = 200;
+
 /**
  * Le synopsis en entier, au centre de l'écran.
  *
@@ -164,9 +167,6 @@ export function CinemaOverview({
  * écran : ce que l'on venait lire chassait ce que l'on venait faire. Une fenêtre centrée ne
  * déplace rien et se referme d'un geste — Échap, un clic à côté, ou son propre bouton.
  */
-/** `animate-fade-out` (200 ms) et `animate-fade-out-scale` (180 ms), globals.css. */
-const DETAIL_MODAL_EXIT_MS = 200;
-
 export function CinemaDetailModal({
   title,
   children,
@@ -274,6 +274,9 @@ export function CinemaDetailModal({
   );
 }
 
+/** Le retour en place d'une fiche relâchée : la durée et la courbe du téléphone (`sheet-out`). */
+const GRIP_RETURN_MS = 280;
+
 /**
  * La poignée : de quoi refermer une fiche du bureau au doigt.
  *
@@ -294,7 +297,26 @@ export function CinemaDetailModal({
  */
 export function useSheetGrip(onDismiss: () => void, enabled: boolean) {
   const swipe = useSwipeToDismiss(onDismiss);
-  const held = enabled && (swipe.dragging || swipe.offset > 0);
+  /**
+   * Le temps du retour, le style reste posé.
+   *
+   * Relâchée sous le seuil, la fiche revenait d'un coup : `offset` repasse à 0 et `dragging` à
+   * faux dans le même rendu, et le style qui portait la transition disparaissait avec eux
+   * (23/09/2026). Il tient désormais la durée du retour, puis s'efface — au repos, toujours rien.
+   * Retenu pendant le rendu, et non dans un effet : c'est ce rendu-là qui pose la position zéro.
+   */
+  const [returning, setReturning] = useState(false);
+  const [wasDragging, setWasDragging] = useState(false);
+  if (swipe.dragging !== wasDragging) {
+    setWasDragging(swipe.dragging);
+    setReturning(!swipe.dragging && swipe.offset === 0 && !swipe.dismissed);
+  }
+  useEffect(() => {
+    if (!returning) return;
+    const timer = setTimeout(() => setReturning(false), GRIP_RETURN_MS);
+    return () => clearTimeout(timer);
+  }, [returning]);
+  const held = enabled && (swipe.dragging || swipe.offset > 0 || returning);
   return {
     /**
      * Aucun `transform` au repos, et c'est délibéré : sur cette fiche le bouton Retour est en
@@ -303,7 +325,10 @@ export function useSheetGrip(onDismiss: () => void, enabled: boolean) {
      * partant d'un bloc ; au repos, rien ne doit être posé.
      */
     style: held
-      ? { transform: `translateY(${swipe.offset}px)`, transition: swipe.dragging ? "none" : "transform 220ms ease-out" }
+      ? {
+          transform: `translateY(${swipe.offset}px)`,
+          transition: swipe.dragging ? "none" : `transform ${GRIP_RETURN_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+        }
       : undefined,
     grip: enabled ? (
       <div

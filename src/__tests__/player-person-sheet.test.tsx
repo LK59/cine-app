@@ -193,4 +193,16 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     act(() => voile().click());
     expect(cinemaClose).not.toHaveBeenCalled();
   });
+
+  it("monte comme les autres fiches dès que la mise en page est celle du téléphone", async () => {
+    // Téléphone couché (23/09/2026) : plus de 768 px de large, donc `md:` prenait la main sur
+    // l'animation alors que la mise en page, elle, restait celle du téléphone. `useIsMobile` est
+    // simulé vrai dans ce fichier : c'est l'écran à plus de 768 px qui le dit mobile.
+    draw({ tmdbId: 9 });
+    await screen.findByText("Film 0");
+    const card = screen.getByRole("dialog");
+    expect(card.className).toContain("sheet-in");
+    expect(card.className).not.toMatch(/\bmd:animate-/);
+  });
 });
+
