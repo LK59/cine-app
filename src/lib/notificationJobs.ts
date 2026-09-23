@@ -172,6 +172,14 @@ export async function checkNewEpisodes(): Promise<void> {
       following.set(user.Name, new Set(nextUp.map((item) => item.SeriesId).filter((id): id is string => !!id)));
     }
 
+    /**
+     * Une notification par série et par personne, et plus une par épisode.
+     *
+     * Une série qui arrive en entier — demandée d'un coup, ou rattrapée par Sonarr — importait ses
+     * épisodes l'un après l'autre, et chacun partait seul : quatorze notifications pour une série
+     * de quatorze épisodes (23/09/2026). Les épisodes d'un même passage sont donc réunis.
+     */
+    const pending = new Map<string, Map<string, typeof recentImports>>();
     for (const ev of recentImports) {
       const seriesId = jellyfinSeriesId(ev.tmdb_id);
       if (!seriesId) continue;
@@ -181,16 +189,26 @@ export async function checkNewEpisodes(): Promise<void> {
         // La clé porte le nom du compte : le même épisode s'annonce à plusieurs personnes, et une
         // seule fois à chacune. Sans ça, le premier averti faisait taire tous les autres.
         if (availabilityNotifDb.hasBeenNotified(`episode:${userName}`, ev.id)) continue;
+        const bySeries = pending.get(userName) ?? new Map<string, typeof recentImports>();
+        bySeries.set(seriesId, [...(bySeries.get(seriesId) ?? []), ev]);
+        pending.set(userName, bySeries);
+      }
+    }
 
+    for (const [userName, bySeries] of pending) {
+      for (const episodes of bySeries.values()) {
+        const [first] = episodes;
         await sendPushToUser(userName, {
           title: "📺 Nouvel épisode",
-          body: `${ev.title}${ev.detail ? ` — ${ev.detail}` : ""} est disponible`,
+          body:
+            episodes.length === 1
+              ? `${first.title}${first.detail ? ` — ${first.detail}` : ""} est disponible`
+              : `${first.title} — ${episodes.length} nouveaux épisodes sont disponibles`,
           url: "/",
           tag: "new-episode",
           category: "new-episode",
         });
-
-        availabilityNotifDb.markNotified(`episode:${userName}`, ev.id);
+        for (const ev of episodes) availabilityNotifDb.markNotified(`episode:${userName}`, ev.id);
       }
     }
   } catch (err) {

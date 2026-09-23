@@ -52,19 +52,109 @@ export function diffTorrents(
   return { started, completed };
 }
 
+/**
+ * Le titre qu'un nom de torrent désigne : ce qui précède l'épisode ou la saison, sinon l'année.
+ *
+ * Sert à regrouper, pas à afficher un titre exact : « THE CREEP TAPES S02E04 AVA 1080p… » et
+ * « The.Creep.Tapes.S01E05.1080p… » doivent tomber dans le même paquet.
+ */
+export function torrentTitle(name: string): string {
+  const cleaned = name.replace(/\[[^\]]*\]/g, " ").replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+  const match =
+    cleaned.match(/^(.+?)[\s-]+S\d{1,2}(?:E\d{1,3})?\b/i) ?? cleaned.match(/^(.+?)\s+\(?(?:19|20)\d{2}\b/);
+  let title = (match?.[1] ?? cleaned).replace(/[\s-]+$/, "").trim() || cleaned;
+  // Un nom tout en capitales se lit mieux en casse de titre ; les autres restent tels qu'écrits.
+  if (/\p{Lu}/u.test(title) && title === title.toUpperCase()) {
+    title = title.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, sep: string, c: string) => sep + c.toUpperCase());
+  }
+  return title;
+}
+
+/**
+ * Ce qu'une notification dit d'un lot de torrents.
+ *
+ * Un seul : son nom, tel quel, comme avant. Plusieurs : leur nombre, et leurs titres regroupés —
+ * « The Creep Tapes (14) » plutôt que quatorze notifications. Le 23/09/2026, une série demandée
+ * en entier est arrivée épisode par épisode : quatorze torrents, vingt-huit notifications.
+ */
+export function summarizeTorrents(names: string[], kind: "started" | "completed"): { title: string; body: string } {
+  if (names.length === 1) {
+    return { title: kind === "started" ? "Téléchargement démarré" : "Téléchargement terminé ✓", body: names[0] };
+  }
+  const groups = new Map<string, { title: string; count: number }>();
+  for (const name of names) {
+    const title = torrentTitle(name);
+    const key = title.toLowerCase();
+    const group = groups.get(key);
+    if (group) group.count++;
+    else groups.set(key, { title, count: 1 });
+  }
+  const body = [...groups.values()].map((g) => (g.count > 1 ? `${g.title} (${g.count})` : g.title)).join(" · ");
+  const title =
+    kind === "started" ? `${names.length} téléchargements démarrés` : `${names.length} téléchargements terminés ✓`;
+  return { title, body };
+}
+
+/**
+ * Le lot en attente : tout ce qui arrive rapproché part ensemble.
+ *
+ * Il part après deux minutes sans rien de neuf — une série qui arrive épisode par épisode tient
+ * dans un lot — et au plus tard dix minutes après son premier élément, pour qu'un flot continu ne
+ * retienne pas tout indéfiniment.
+ */
+export const DIGEST_QUIET_MS = 2 * 60_000;
+export const DIGEST_MAX_WAIT_MS = 10 * 60_000;
+
+export interface TorrentDigest {
+  first: number;
+  last: number;
+  started: string[];
+  completed: string[];
+}
+
+export function createTorrentDigest(): TorrentDigest {
+  return { first: 0, last: 0, started: [], completed: [] };
+}
+
+export function addToDigest(digest: TorrentDigest, found: { started: string[]; completed: string[] }, now: number): void {
+  if (found.started.length === 0 && found.completed.length === 0) return;
+  if (digest.started.length === 0 && digest.completed.length === 0) digest.first = now;
+  digest.last = now;
+  digest.started.push(...found.started);
+  digest.completed.push(...found.completed);
+}
+
+/** Ce qui doit partir maintenant, s'il y a lieu — et le lot est vidé. */
+export function takeDueDigest(digest: TorrentDigest, now: number): { started: string[]; completed: string[] } | null {
+  if (digest.started.length === 0 && digest.completed.length === 0) return null;
+  if (now - digest.last < DIGEST_QUIET_MS && now - digest.first < DIGEST_MAX_WAIT_MS) return null;
+  const due = { started: digest.started, completed: digest.completed };
+  digest.started = [];
+  digest.completed = [];
+  return due;
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startTorrentWatch(): void {
   if (timer) return;
   const state = createTorrentWatchState();
+  const digest = createTorrentDigest();
   timer = setInterval(async () => {
     try {
-      const { started, completed } = diffTorrents(state, await qbittorrent.getTorrents());
-      for (const name of started) {
-        await sendPushToAdmins({ title: "Téléchargement démarré", body: name, tag: "torrent-started", url: "/qbittorrent", category: "torrent-started" });
+      addToDigest(digest, diffTorrents(state, await qbittorrent.getTorrents()), Date.now());
+    } catch (err) {
+      logError("notifications.torrents", err);
+    }
+    // Hors du bloc précédent : un qBittorrent qui ne répond pas ne doit pas retenir un lot prêt.
+    const due = takeDueDigest(digest, Date.now());
+    if (!due) return;
+    try {
+      if (due.started.length > 0) {
+        await sendPushToAdmins({ ...summarizeTorrents(due.started, "started"), tag: "torrent-started", url: "/qbittorrent", category: "torrent-started" });
       }
-      for (const name of completed) {
-        await sendPushToAdmins({ title: "Téléchargement terminé ✓", body: name, tag: "torrent-complete", url: "/qbittorrent", category: "torrent-complete" });
+      if (due.completed.length > 0) {
+        await sendPushToAdmins({ ...summarizeTorrents(due.completed, "completed"), tag: "torrent-complete", url: "/qbittorrent", category: "torrent-complete" });
       }
     } catch (err) {
       logError("notifications.torrents", err);

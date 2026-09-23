@@ -301,6 +301,47 @@ describe("checkNewEpisodes", () => {
   });
 });
 
+describe("checkNewEpisodes — plusieurs épisodes d'un coup", () => {
+  // Le 23/09/2026 : une série demandée en entier a importé quatorze épisodes, et chacun est parti
+  // seul. Une série arrivée d'un coup s'annonce maintenant une fois.
+  it("réunit les épisodes d'une même série en une seule notification", async () => {
+    importsInSonarr([
+      severanceImport({ id: 101, episode: { seasonNumber: 1, episodeNumber: 1 } }),
+      severanceImport({ id: 102, episode: { seasonNumber: 1, episodeNumber: 2 } }),
+      severanceImport({ id: 103, episode: { seasonNumber: 1, episodeNumber: 3 } }),
+    ]);
+    mockCachedSeries.mockResolvedValue([{ tmdbId: 7, tvdbId: 700, title: "Severance", year: 2022 }]);
+    mockCachedJellyfinSeries.mockResolvedValue([{ Id: "jf-severance" }]);
+    mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
+    mockNextUp.mockResolvedValue([{ SeriesId: "jf-severance" }]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
+
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    expect(mockSendPushToUser).toHaveBeenCalledWith(
+      "louis",
+      expect.objectContaining({ body: "Severance — 3 nouveaux épisodes sont disponibles" }),
+    );
+    // Chacun reste marqué : aucun ne repartira seul au passage suivant.
+    for (const id of [101, 102, 103]) expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("episode:louis", id);
+  });
+
+  it("ne compte pas ce qui a déjà été annoncé", async () => {
+    importsInSonarr([severanceImport({ id: 101 }), severanceImport({ id: 102, episode: { seasonNumber: 2, episodeNumber: 2 } })]);
+    mockCachedSeries.mockResolvedValue([{ tmdbId: 7, tvdbId: 700, title: "Severance", year: 2022 }]);
+    mockCachedJellyfinSeries.mockResolvedValue([{ Id: "jf-severance" }]);
+    mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
+    mockNextUp.mockResolvedValue([{ SeriesId: "jf-severance" }]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((_k: string, id: number) => id === 101);
+
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+    expect(mockSendPushToUser).toHaveBeenCalledWith("louis", expect.objectContaining({ body: "Severance — S02E02 est disponible" }));
+  });
+});
+
 describe("isRequestedSeriesAvailable", () => {
   // 74 séries sur 137 ont une saison 0 sans épisode suivi : demandées en entier, elles n'auraient
   // jamais été annoncées disponibles.
