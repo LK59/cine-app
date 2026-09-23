@@ -8,7 +8,7 @@ import { BookmarkCheck, Check, ChevronDown, CircleCheck, Play, Plus, RotateCcw, 
 import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { arrivedByBack, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
+import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
@@ -117,6 +117,10 @@ export function CinemaMobileDetail({
   const behindIsDrawn = useRouteBehind() !== null;
   const swapsInPlace = useSheetBehind() && !behindIsDrawn;
   const { closing, requestClose } = useDelayedClose(onClose, swapsInPlace ? 0 : SHEET_OUT_MS);
+  // La barre du bas attendait que l'adresse change, donc la fin de cette sortie, pour revenir.
+  useEffect(() => {
+    if (closing) markSheetLeaving();
+  }, [closing]);
   const similar = useCinemaSimilar(item, mediaType);
   // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
   // a handle; everything from the Lire button down scrolls as usual.

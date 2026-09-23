@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personBehind } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose, openLibraryTitle, useSheetBehind, arrivedByBack, useRouteBehind, personBehind, markSheetLeaving, useSheetLeaving } from "@/lib/cinemaRoute";
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/cinema");
@@ -423,5 +423,38 @@ describe("personBehind", () => {
     act(() => openLibraryTitle("movie", 42));
 
     expect(personBehind(result.current)).toBeNull();
+  });
+});
+
+// La barre du téléphone revient pendant que la fiche sort, et non après : le signal part au début
+// de la sortie. Il doit tomber au premier changement d'adresse, sans quoi rouvrir le même titre
+// plus tard le retrouverait debout — et la barre flotterait par-dessus la fiche.
+describe("useSheetLeaving", () => {
+  it("se lève quand une fiche commence à sortir", () => {
+    cinemaNavigate({ film: 7 });
+    const { result } = renderHook(() => useSheetLeaving());
+    expect(result.current).toBe(false);
+    act(() => markSheetLeaving());
+    expect(result.current).toBe(true);
+  });
+
+  it("tombe dès que l'adresse change, et ne revient pas avec le même titre", () => {
+    cinemaNavigate({ film: 7 });
+    const { result } = renderHook(() => useSheetLeaving());
+    act(() => markSheetLeaving());
+    act(() => cinemaNavigate({ film: null }, "replace"));
+    expect(result.current).toBe(false);
+    act(() => cinemaNavigate({ film: 7 }));
+    expect(result.current).toBe(false);
+  });
+
+  it("tombe sur un retour", () => {
+    cinemaNavigate({ film: 7 });
+    const { result } = renderHook(() => useSheetLeaving());
+    act(() => markSheetLeaving());
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(result.current).toBe(false);
   });
 });

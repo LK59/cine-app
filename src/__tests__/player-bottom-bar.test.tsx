@@ -7,7 +7,13 @@ let route = {
   episodes: false, search: false, list: false, account: false,
   discover: null as number | null, discoverType: "movie" as const, person: null as number | null, browse: null as string | null,
 };
-vi.mock("@/lib/cinemaRoute", () => ({ useCinemaRoute: () => route }));
+let leaving = false;
+let sheetBehind = false;
+vi.mock("@/lib/cinemaRoute", () => ({
+  useCinemaRoute: () => route,
+  useSheetLeaving: () => leaving,
+  useSheetBehind: () => sheetBehind,
+}));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsShortViewport: () => false }));
 let scrolledAway = false;
@@ -23,6 +29,8 @@ import { PlayerBottomBar } from "@/components/player/PlayerBottomBar";
 beforeEach(() => {
   vi.clearAllMocks();
   scrolledAway = false;
+  leaving = false;
+  sheetBehind = false;
   route = { ...route, search: false, list: false, account: false, film: null, discover: null, person: null };
 });
 afterEach(cleanup);
@@ -55,6 +63,26 @@ describe("PlayerBottomBar", () => {
   // commande pas.
   it("gets out of the way while a sheet is open", () => {
     route = { ...route, film: 42 };
+    render(<PlayerBottomBar />);
+    expect(screen.getByLabelText("player.nav.label").style.visibility).toBe("hidden");
+  });
+
+  // L'adresse garde le titre pendant toute l'animation de sortie de la fiche : attendre qu'elle
+  // change mettait le retour de la barre *après* la sortie, deux mouvements bout à bout.
+  it("comes back while the sheet is leaving, not after it", () => {
+    route = { ...route, film: 42 };
+    leaving = true;
+    render(<PlayerBottomBar />);
+    const bar = screen.getByLabelText("player.nav.label");
+    expect(bar.style.visibility).toBe("visible");
+    expect(bar.style.transform).toBe("none");
+  });
+
+  // Sous la fiche qui sort, une autre fiche : c'est elle qu'on découvre, et elle couvre l'écran.
+  it("stays away when the leaving sheet uncovers another one", () => {
+    route = { ...route, film: 42 };
+    leaving = true;
+    sheetBehind = true;
     render(<PlayerBottomBar />);
     expect(screen.getByLabelText("player.nav.label").style.visibility).toBe("hidden");
   });

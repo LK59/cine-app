@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { useCinemaRoute } from "@/lib/cinemaRoute";
+import { useCinemaRoute, useSheetBehind, useSheetLeaving } from "@/lib/cinemaRoute";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useHideOnScroll } from "@/lib/useHideOnScroll";
 import { useT } from "@/components/TranslationProvider";
@@ -39,7 +39,13 @@ export function PlayerBottomBar() {
   const route = useCinemaRoute();
   // Effacée pendant qu'une fiche est ouverte : elle recouvre l'écran entier, et la barre y
   // flotterait au-dessus d'un contenu qu'elle ne commande pas.
-  const covered = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+  const sheetOpen = route.film !== null || route.serie !== null || route.discover !== null || route.person !== null;
+  // Mais elle revient *avec* la fiche qui sort, pas après : l'adresse ne lâche le titre qu'à la
+  // fin de l'animation de sortie, et attendre ce moment mettait les deux mouvements bout à bout.
+  // Sauf s'il reste une fiche dessous — c'est elle qu'on découvre, et elle recouvre l'écran.
+  const leaving = useSheetLeaving();
+  const sheetBehind = useSheetBehind();
+  const covered = sheetOpen && !(leaving && !sheetBehind);
   const short = useIsShortViewport();
   // Désactivée pendant qu'une fiche recouvre l'écran : sans ça, le défilement de la fiche la
   // laissait « cachée », et refermer la fiche découvrait une barre absente qu'il fallait aller

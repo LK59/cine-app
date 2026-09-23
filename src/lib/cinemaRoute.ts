@@ -195,9 +195,12 @@ function getSnapshot(): CinemaRoute {
  * pour ne concerner que les montages provoqués par ce retour-là.
  */
 let cameBack = false;
+/** L'adresse dont une fiche est en train de sortir — voir `markSheetLeaving`. */
+let leavingHash: string | null = null;
 
 if (typeof window !== "undefined") {
   window.addEventListener("popstate", () => {
+    leavingHash = null;
     cameBack = true;
     requestAnimationFrame(() => {
       cameBack = false;
@@ -352,6 +355,7 @@ export function cinemaNavigate(patch: Partial<CinemaRoute>, mode: "push" | "repl
   // Une navigation volontaire n'est jamais un retour : le drapeau retombe avant que qui que ce
   // soit ne se monte.
   cameBack = false;
+  leavingHash = null;
   if (mode === "push") window.history.pushState(state, "", url);
   else window.history.replaceState(state, "", url);
   emit();
@@ -435,4 +439,30 @@ export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   } else {
     cinemaNavigate(fallback, "replace");
   }
+}
+
+/**
+ * Une fiche a commencé à sortir : ce qu'elle recouvre peut déjà revenir.
+ *
+ * Refermer une fiche est une demande (voir `useDelayedClose`) : l'adresse garde le titre le temps
+ * de l'animation de sortie, et ne change qu'à la fin. La barre du téléphone, qui s'efface tant
+ * qu'une fiche est dans l'adresse, n'entamait donc son retour qu'après — deux mouvements bout à
+ * bout, plus d'une demi-seconde en tout, là où la fiche et la barre peuvent bouger ensemble.
+ *
+ * Le signal est attaché à l'adresse de ce moment-là, et tombe au premier changement : une
+ * navigation l'efface (`cinemaNavigate`, `popstate`), et la lecture le refuse si l'adresse a
+ * bougé autrement. Rouvrir le même titre plus tard ne peut donc pas le retrouver debout.
+ */
+export function markSheetLeaving(): void {
+  if (typeof window === "undefined") return;
+  leavingHash = window.location.hash;
+  emit();
+}
+
+function readSheetLeaving(): boolean {
+  return leavingHash !== null && leavingHash === window.location.hash;
+}
+
+export function useSheetLeaving(): boolean {
+  return useSyncExternalStore(subscribe, readSheetLeaving, () => false);
 }
