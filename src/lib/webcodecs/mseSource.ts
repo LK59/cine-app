@@ -501,11 +501,48 @@ export class MseSource {
 
   private readonly onElementError = () => {
     trace(`l'élément a échoué : ${this.elementState()}`);
+    this.noteLoss();
   };
 
   private readonly onSourceClosed = () => {
     trace(`la MediaSource s'est fermée — ${this.elementState()}`);
+    this.noteLoss();
   };
+
+  /**
+   * L'état au moment où la plateforme a lâché la source, gardé pour la ligne `rebuild`.
+   *
+   * Pris ici et pas au moment d'écrire la ligne : l'hôte ne l'apprend qu'au prochain envoi refusé,
+   * quand les tampons sont déjà détachés et illisibles. Le 23/09/2026, trois « Media failed to
+   * decode » sur un iPhone 12 (Love Story, 4K) n'ont laissé que leur motif — ni les tampons, ni ce
+   * qui venait d'être envoyé —, et rien ne permettait de dire si nos données y étaient pour
+   * quelque chose. Le premier des deux événements l'emporte : c'est lui qui a vu les tampons.
+   */
+  private lossSnapshot: Record<string, unknown> | null = null;
+
+  private noteLoss(): void {
+    if (this.lossSnapshot) return;
+    try {
+      this.lossSnapshot = this.stateFacts(this.video.currentTime);
+    } catch {
+      /* le journal ne vaut pas un lecteur */
+    }
+  }
+
+  /**
+   * Ce qu'une ligne `rebuild` porte en plus de son motif : l'état relevé à la perte, et les vingt
+   * dernières secondes de la trace — les envois, les sauts, l'erreur de l'élément, dans l'ordre.
+   */
+  lossReport(): Record<string, unknown> {
+    try {
+      return {
+        ...(this.lossSnapshot ?? this.stateFacts(this.video.currentTime)),
+        steps: traceRecent(STALL_TRACE_MS).join(" | "),
+      };
+    } catch {
+      return {};
+    }
+  }
 
 
 
@@ -1284,9 +1321,25 @@ export class MseSource {
    */
   private stallReport(now: number, stalledMs: number): Record<string, unknown> {
     const managed = (this.source as ManagedMediaSource).streaming;
+    const { position, ...state } = this.stateFacts(now);
+    return {
+      position,
+      stalledMs,
+      ...state,
+      filling: this.fillTask !== null,
+      recoveryStreak: this.recoveryStreak,
+      frozenNudges: this.frozenNudges,
+      recoveries: this.recoveries,
+      // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
+      streaming: typeof managed === "boolean" ? managed : "sans objet",
+      steps: traceRecent(STALL_TRACE_MS).join(" | "),
+    };
+  }
+
+  /** L'élément et ses tampons, en peu de champs — commun au blocage et à la perte. */
+  private stateFacts(now: number): Record<string, unknown> {
     return {
       position: now,
-      stalledMs,
       readyState: this.video.readyState,
       networkState: this.video.networkState,
       seeking: this.video.seeking,
@@ -1294,14 +1347,7 @@ export class MseSource {
       videoBuffered: this.spansNear(this.videoBuffer, now),
       audioBuffered: this.audioBuffer ? this.spansNear(this.audioBuffer, now) : "aucun",
       lead: Math.round(this.lead * 100) / 100,
-      filling: this.fillTask !== null,
-      recoveryStreak: this.recoveryStreak,
-      frozenNudges: this.frozenNudges,
-      recoveries: this.recoveries,
       sinceAppendMs: Date.now() - this.lastAppendAt,
-      // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
-      streaming: typeof managed === "boolean" ? managed : "sans objet",
-      steps: traceRecent(STALL_TRACE_MS).join(" | "),
     };
   }
 

@@ -488,6 +488,11 @@ export class RemuxPlayback {
     return this.mse?.lost ?? false;
   }
 
+  /** Voir `MseSource.lossReport` : ce que la ligne `rebuild` dit de la perte. */
+  lossReport(): Record<string, unknown> {
+    return this.mse?.lossReport() ?? {};
+  }
+
   get position(): number {
     return this.mse?.position ?? 0;
   }

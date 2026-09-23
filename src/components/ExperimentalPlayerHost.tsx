@@ -1793,6 +1793,9 @@ export function ExperimentalPlayerHost({
             at,
             attempt: rebuildsRef.current,
             skipped: again,
+            // Les tampons et la trace au moment de la perte : sans eux, un « Media failed to
+            // decode » ne disait pas si c'étaient nos données ou l'appareil (23/09/2026).
+            ...remuxRef.current?.lossReport(),
           });
           restart(
             at,

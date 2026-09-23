@@ -192,6 +192,7 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     diagnostics: {},
     destroy: vi.fn(),
     lost: false,
+    lossReport: vi.fn(() => ({ videoBuffered: "10.00–14.00", steps: "+0 ms l'élément a échoué" })),
     position: 0,
     ...over,
   };
@@ -628,6 +629,14 @@ describe("une source perdue", () => {
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1].startSeconds).toBeCloseTo(100, 1);
     expect(onFallback).not.toHaveBeenCalled();
+    // La ligne porte l'état relevé à la perte (23/09/2026 : trois pertes sans rien d'autre que
+    // leur motif, impossibles à attribuer).
+    const rebuilt = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .find((entry) => entry.kind === "rebuild");
+    expect(rebuilt?.fields).toMatchObject({ reason: "la source est morte", videoBuffered: "10.00–14.00" });
+    expect(String(rebuilt?.fields.steps)).toContain("l'élément a échoué");
   });
 
   it("reprend au-delà du passage qui vient d'échouer plutôt que de le relire", async () => {

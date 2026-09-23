@@ -2032,3 +2032,40 @@ describe("MseSource sur un élément qui refuse srcObject", () => {
   });
 });
 
+
+// Trois « Media failed to decode » sur un iPhone 12 (23/09/2026) n'ont laissé au journal que leur
+// motif : la ligne `rebuild` est écrite au prochain envoi refusé, quand les tampons sont déjà
+// détachés. L'état est donc relevé à l'erreur de l'élément, et c'est celui-là qu'on rapporte.
+describe("lossReport", () => {
+  it("rapporte les tampons tels qu'ils étaient à l'erreur, et la trace qui y mène", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(40), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 4, "du média devant la tête");
+
+    video.dispatchEvent(new Event("error"));
+    // Puis la plateforme ferme la source : les tampons ne se lisent plus.
+    const source = FakeSource.instances.at(-1)!;
+    source.readyState = "closed";
+    for (const buffer of source.buffers) {
+      Object.defineProperty(buffer, "buffered", {
+        get: () => {
+          throw new DOMException("removed", "InvalidStateError");
+        },
+      });
+    }
+
+    const report = mse.lossReport();
+    expect(report.videoBuffered).toMatch(/^0\.00–/);
+    expect(report.source).toBe("open");
+    expect(String(report.steps)).toContain("l'élément a échoué");
+    mse.destroy();
+  });
+
+  it("se contente de l'état présent quand aucune erreur n'a été vue", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(40), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    expect(mse.lossReport()).toEqual(expect.objectContaining({ position: expect.any(Number), steps: expect.any(String) }));
+    mse.destroy();
+  });
+});
