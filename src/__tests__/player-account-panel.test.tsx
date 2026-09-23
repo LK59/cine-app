@@ -24,7 +24,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
-  useLocale: () => ["fr", vi.fn()],
+  useLocale: () => ({ locale: "fr", setLocale: vi.fn() }),
 }));
 const errorToast = vi.fn();
 vi.mock("@/components/Toast", () => ({ useToast: () => ({ error: errorToast, success: vi.fn() }) }));
@@ -140,5 +140,48 @@ describe("PlayerAccountPanel — la porte vers l'état des services", () => {
     const link = screen.getByRole("link", { name: /player\.account\.openStatus/ });
     expect(link.getAttribute("href")).toBe("/status?from=compte");
     expect(link.getAttribute("data-client-nav")).toBe("1");
+  });
+});
+
+// La réorganisation du 23/09/2026 : quatre groupes au lieu de douze sections à plat, l'outillage de
+// l'administrateur rassemblé à la fin au lieu d'être intercalé, « Se déconnecter » en dernier.
+describe("PlayerAccountPanel — l'ordre de la page", () => {
+  const groups = () => screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+
+  it("range la page en groupes, sans l'administration pour un compte ordinaire", () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    render(<PlayerAccountPanel />);
+    expect(groups()).toEqual([
+      "player.account.groups.preferences",
+      "player.account.groups.account",
+      "player.account.groups.help",
+    ]);
+  });
+
+  it("rassemble l'outillage de l'administrateur à la fin, et la déconnexion après tout le reste", () => {
+    payload = { username: "louis", jfUser: "louis", role: "admin" };
+    render(<PlayerAccountPanel />);
+    expect(groups().at(-1)).toBe("player.account.groups.admin");
+    const admin = screen.getByText("player.account.groups.admin");
+    const logout = screen.getByText("player.account.signOutAction");
+    expect(admin.compareDocumentPosition(logout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // Trois champs ouverts en permanence occupaient un écran de téléphone pour un geste annuel.
+  it("replie le mot de passe jusqu'à ce qu'on le demande", () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    render(<PlayerAccountPanel />);
+    expect(screen.queryByPlaceholderText("player.account.currentPassword")).toBeNull();
+    fireEvent.click(screen.getByText("player.account.changePassword"));
+    expect(screen.getByPlaceholderText("player.account.currentPassword")).toBeTruthy();
+    fireEvent.click(screen.getByText("common.cancel"));
+    expect(screen.queryByPlaceholderText("player.account.currentPassword")).toBeNull();
+  });
+
+  it("choisit la langue dans une liste, et prévient du rechargement", () => {
+    payload = { username: "sarah", jfUser: "sarah", role: "user" };
+    render(<PlayerAccountPanel />);
+    fireEvent.change(screen.getByLabelText("player.account.appLanguage"), { target: { value: "en" } });
+    expect(screen.getByText("settings.language.reloadNotice")).toBeTruthy();
   });
 });

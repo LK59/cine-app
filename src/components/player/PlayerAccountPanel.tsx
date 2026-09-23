@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { signOut } from "@/lib/signOut";
@@ -34,12 +34,26 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
     // `py-7` debout, moitié moins couché : cinq sections à sept rems d'écart font descendre
     // « Déconnexion » très loin sur un écran de 390 px.
     <section className="border-t border-white/10 py-7 first:border-t-0 first:pt-0 [@media(max-height:500px)]:py-4">
-      <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
+      <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
         <Icon size={16} className="text-subtle" />
         {title}
-      </h2>
+      </h3>
       {children}
     </section>
+  );
+}
+
+/**
+ * Un groupe de sections, titré en petites capitales.
+ *
+ * La première section d'un groupe perd son filet : le titre du groupe sépare déjà.
+ */
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-10 first:mt-0 [@media(max-height:500px)]:mt-6 [&>section:first-of-type]:border-t-0 [&>section:first-of-type]:pt-4">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-subtle">{title}</h2>
+      {children}
+    </div>
   );
 }
 
@@ -65,89 +79,64 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
       // connaît — c'est lui qu'on tape pour se connecter.
       subtitle={displayName(me?.jfUser || me?.username)}
     >
+      {/* Quatre groupes, et plus douze sections à plat (23/09/2026) : les réglages de la personne,
+          son compte, l'aide, puis l'outillage de l'administrateur — qui était intercalé au milieu,
+          entre les appareils connectés et l'écran d'accueil. « Se déconnecter » ferme la page,
+          seul, là où on le cherche. */}
       <div className="mx-auto w-full max-w-2xl">
-        <LanguageSection />
-        {hasJellyfin && <PlaybackSection />}
-
-        <Section icon={Bell} title={t("player.account.notifications")}>
-          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div>
-              <p className="text-sm text-white">{t("player.account.notificationsLabel")}</p>
-              <p className="mt-0.5 text-xs text-subtle">{t("player.account.notificationsHint")}</p>
+        <Group title={t("player.account.groups.preferences")}>
+          <LanguageSection />
+          {hasJellyfin && <PlaybackSection />}
+          <Section icon={Bell} title={t("player.account.notifications")}>
+            <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div>
+                <p className="text-sm text-white">{t("player.account.notificationsLabel")}</p>
+                <p className="mt-0.5 text-xs text-subtle">{t("player.account.notificationsHint")}</p>
+              </div>
+              <PushToggle />
             </div>
-            <PushToggle />
-          </div>
-          <NotificationChoices admin={me?.role === "admin"} />
-          <NotificationTest />
-        </Section>
-
-        {hasJellyfin ? (
-          <PasswordSection />
-        ) : (
-          <Section icon={KeyRound} title={t("player.account.password")}>
-            <p className="text-sm text-muted">{t("player.account.localAccountHint")}</p>
+            <NotificationChoices admin={me?.role === "admin"} />
+            <NotificationTest />
           </Section>
-        )}
-        <SessionsSection />
-        <KnownIssuesSection />
+        </Group>
 
-        {me?.role === "admin" && <MaintenanceSection />}
-        {me?.role === "admin" && <BenchSection />}
+        <Group title={t("player.account.groups.account")}>
+          {hasJellyfin ? (
+            <PasswordSection />
+          ) : (
+            <Section icon={KeyRound} title={t("player.account.password")}>
+              <p className="text-sm text-muted">{t("player.account.localAccountHint")}</p>
+            </Section>
+          )}
+          <SessionsSection />
+        </Group>
 
-        {/* « Gestion » vivait tout en bas du tiroir, qui n'existe plus. Elle atterrit ici, et
-            seulement pour l'administrateur : rien n'est bloqué au-delà de l'affichage — le proxy
-            refuse déjà toute écriture à un compte ordinaire — mais proposer une porte qui ne
+        <Group title={t("player.account.groups.help")}>
+          <HelpSection />
+        </Group>
+
+        {/* Montré à l'administrateur seulement : rien n'est bloqué au-delà de l'affichage — le
+            proxy refuse déjà toute écriture à un compte ordinaire — mais proposer une porte qui ne
             s'ouvre pas est une promesse qu'on ne tient pas. */}
-        {/* L'écran d'accueil, à revoir quand on veut — sans toucher au marqueur du compte :
-            c'est le bouton de fin de l'accueil qui l'éteint, pas son ouverture. */}
-        <Section icon={Sparkles} title={t("player.account.welcome")}>
-          <button type="button" onClick={openOnboarding} className="btn btn-ghost w-full justify-center sm:w-auto">
-            <Sparkles size={16} />
-            {t("player.account.redoOnboarding")}
-          </button>
-        </Section>
-
         {me?.role === "admin" && (
-          <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
-            <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
-              <SlidersHorizontal size={16} />
-              {t("player.account.openManage")}
-            </a>
-          </Section>
+          <Group title={t("player.account.groups.admin")}>
+            <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
+              <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
+                <SlidersHorizontal size={16} />
+                {t("player.account.openManage")}
+              </a>
+            </Section>
+            <MaintenanceSection />
+            <BenchSection />
+          </Group>
         )}
 
-        {/* L'état des services, pour tout le monde.
-            
-            La page est publique — c'est tout l'intérêt d'une page d'état : elle doit répondre le
-            jour où le reste ne répond plus, y compris avant d'être connecté. Mais il faut aussi
-            pouvoir y aller depuis l'intérieur quand on est déjà là et que quelque chose cloche,
-            sans avoir à se déconnecter pour retrouver le lien de l'écran de connexion.
-
-            `from=compte` dit à la page d'état par où l'on est entré, pour que son « Retour »
-            ramène ici. Sans lui, il ramenait à la connexion — la seule autre porte — et consulter
-            l'état des services ressemblait à se faire déconnecter.
-
-            `Link` et non `<a>` : un `<a>` nu est une navigation de document, donc le déchargement
-            de la page — et avec elle la séance de lecture, qui ne vit que dans `PlaybackProvider`,
-            en mémoire. Aller voir si le serveur va bien coupait le film qu'on était en train de
-            regarder, mini-lecteur compris, et rien ne le rouvrait au retour : la seule séance
-            qu'un rechargement sait restaurer est celle du changement de piste sous WebKit
-            (`PLAYER_RELOAD_INTENT_KEY`). En navigation client, le film continue de jouer pendant
-            qu'on lit l'état des services, et le « Retour » ramène dessus. */}
-        <Section icon={Activity} title={t("player.account.status")}>
-          <Link href="/status?from=compte" className="btn btn-ghost w-full justify-center sm:w-auto">
-            <Activity size={16} />
-            {t("player.account.openStatus")}
-          </Link>
-          <p className="mt-2 text-xs text-subtle">{t("player.account.statusHint")}</p>
-        </Section>
-
-        <Section icon={LogOut} title={t("player.account.signOut")}>
-          <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-danger sm:w-auto">
+        <div className="mt-10 border-t border-white/10 pt-7 [@media(max-height:500px)]:mt-6 [@media(max-height:500px)]:pt-4">
+          <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-danger">
             <LogOut size={16} />
             {t("player.account.signOutAction")}
           </button>
-        </Section>
+        </div>
       </div>
     </PlayerPanelFrame>
   );
@@ -168,21 +157,26 @@ function LanguageSection() {
 
   return (
     <Section icon={Languages} title={t("player.account.language")}>
-      {/* Une grille plutôt qu'un enroulement : quatre langues qui se répartissent au fil de la
-          largeur laissaient la dernière seule sur son rang, en bas à gauche d'un bloc en escalier.
-          Deux colonnes sur téléphone, une ligne dès qu'il y a la place. */}
-      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
-        {LOCALES.map((l) => (
-          <button
-            key={l}
-            type="button"
-            onClick={() => l !== locale && setPending(l)}
-            className={`chip justify-center px-5 py-2 ${active === l ? "chip-on" : ""}`}
-          >
-            {LOCALE_LABELS[l]}
-          </button>
-        ))}
-      </div>
+      {/* Une liste déroulante, comme les réglages de lecture juste en dessous (23/09/2026). La
+          grille de quatre gros boutons était la seule autre forme de réglage de la page, pour
+          celui qu'on touche le moins. */}
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted">{t("player.account.appLanguage")}</span>
+        <select
+          className="select"
+          value={active}
+          onChange={(e) => {
+            const l = e.target.value as Locale;
+            setPending(l === locale ? null : l);
+          }}
+        >
+          {LOCALES.map((l) => (
+            <option key={l} value={l}>
+              {LOCALE_LABELS[l]}
+            </option>
+          ))}
+        </select>
+      </label>
       {pending && pending !== locale && (
         <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3">
           <p className="text-xs text-warning">{t("settings.language.reloadNotice", { lang: LOCALE_LABELS[pending] })}</p>
@@ -252,6 +246,9 @@ function PasswordSection() {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
+  // Replié tant qu'on ne le demande pas : trois champs toujours ouverts occupaient un écran
+  // entier de téléphone pour un geste qu'on fait une fois par an (23/09/2026).
+  const [open, setOpen] = useState(false);
 
   const mismatch = confirm.length > 0 && next !== confirm;
   const canSubmit = current.length > 0 && next.length >= 8 && !mismatch && !saving;
@@ -269,6 +266,7 @@ function PasswordSection() {
       setCurrent("");
       setNext("");
       setConfirm("");
+      setOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.unknown"));
     } finally {
@@ -278,6 +276,12 @@ function PasswordSection() {
 
   return (
     <Section icon={KeyRound} title={t("player.account.password")}>
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost w-full justify-center sm:w-auto">
+          <KeyRound size={16} />
+          {t("player.account.changePassword")}
+        </button>
+      ) : (
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
         <input
           className="input sm:col-span-2"
@@ -307,11 +311,15 @@ function PasswordSection() {
           <button type="submit" disabled={!canSubmit} className="btn btn-primary btn-sm">
             {saving ? t("player.account.saving") : t("player.account.changePassword")}
           </button>
+          <button type="button" onClick={() => setOpen(false)} className="btn btn-ghost btn-sm">
+            {t("common.cancel")}
+          </button>
           <p className="text-xs text-subtle">
             {mismatch ? t("player.account.passwordMismatch") : t("player.account.passwordRule")}
           </p>
         </div>
       </form>
+      )}
     </Section>
   );
 }
@@ -394,17 +402,19 @@ function SessionsSection() {
 }
 
 /**
- * Les problèmes qu'on connaît et qu'on ne peut pas corriger d'ici.
+ * L'aide : revoir l'accueil, l'état des services, les problèmes connus — une carte, trois lignes.
+ *
+ * C'étaient trois sections à elles seules, dont une fiche Firefox dépliée pour tout le monde en
+ * permanence. Le problème connu se replie maintenant sous sa ligne : il reste là pour qui le
+ * cherche, sans occuper l'écran de ceux qu'il ne concerne pas.
  *
  * Il n'y en a qu'un pour l'instant, et il est réel : Firefox sous Linux n'affiche pas encore le
  * HDR correctement, les films sortent gris et délavés. Firefox sait le faire — l'option existe,
- * elle est simplement désactivée par défaut le temps que le travail se termine.
- *
- * Aucune détection : la fiche est là pour qui la cherche, sans dire à personne qu'il a un
- * problème qu'il n'a peut-être pas. Elle nomme Firefox et non « votre navigateur » — quelqu'un
- * qui lit ça sur un téléphone comprend en une seconde que ça ne le concerne pas.
+ * elle est simplement désactivée par défaut le temps que le travail se termine. Aucune détection :
+ * la fiche nomme Firefox et non « votre navigateur », et quelqu'un qui la lit sur un téléphone
+ * comprend en une seconde que ça ne le concerne pas.
  */
-function KnownIssuesSection() {
+function HelpSection() {
   const t = useT();
   const toast = useToast();
   const [copied, setCopied] = useState(false);
@@ -423,41 +433,87 @@ function KnownIssuesSection() {
   }
 
   return (
-    <Section icon={LifeBuoy} title={t("player.account.help.title")}>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-        <p className="text-sm font-medium text-white">{t("player.account.help.hdrTitle")}</p>
-        <p className="mt-1.5 text-xs leading-5 text-muted">{t("player.account.help.hdrIntro")}</p>
-        <ol className="mt-3 space-y-2 text-xs leading-5 text-muted">
-          <li className="flex gap-2.5">
-            <span className="shrink-0 text-subtle">1.</span>
-            <span>{t("player.account.help.hdrStep1")}</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="shrink-0 text-subtle">2.</span>
-            <span className="min-w-0">
-              {t("player.account.help.hdrStep2")}
-              <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-white">
-                  {FIREFOX_HDR_PREF}
-                </code>
-                <button type="button" onClick={copyPref} className="btn btn-ghost btn-sm shrink-0">
-                  {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
-                  {copied ? t("player.account.help.copied") : t("player.account.help.copy")}
-                </button>
+    <section className="pt-4">
+      <ul className="flex flex-col divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5 px-4">
+        {/* L'écran d'accueil, à revoir quand on veut — sans toucher au marqueur du compte :
+            c'est le bouton de fin de l'accueil qui l'éteint, pas son ouverture. */}
+        <li className="flex items-center justify-between gap-4 py-3">
+          <p className="flex items-center gap-2.5 text-sm text-white">
+            <Sparkles size={16} className="shrink-0 text-subtle" />
+            {t("player.account.redoOnboarding")}
+          </p>
+          <button type="button" onClick={openOnboarding} className="btn btn-ghost btn-sm shrink-0">
+            {t("player.account.open")}
+          </button>
+        </li>
+        {/* L'état des services, pour tout le monde.
+
+            La page est publique — c'est tout l'intérêt d'une page d'état : elle doit répondre le
+            jour où le reste ne répond plus, y compris avant d'être connecté. `from=compte` dit à
+            la page par où l'on est entré, pour que son « Retour » ramène ici et non à la
+            connexion.
+
+            `Link` et non `<a>` : un `<a>` nu est une navigation de document, donc le déchargement
+            de la page — et avec elle la séance de lecture, qui ne vit qu'en mémoire. Aller voir si
+            le serveur va bien coupait le film qu'on regardait, mini-lecteur compris. En navigation
+            client, le film continue pendant qu'on lit l'état des services. */}
+        <li className="flex items-center justify-between gap-4 py-3">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2.5 text-sm text-white">
+              <Activity size={16} className="shrink-0 text-subtle" />
+              {t("player.account.status")}
+            </p>
+            <p className="mt-0.5 pl-[26px] text-xs text-subtle">{t("player.account.statusHint")}</p>
+          </div>
+          <Link href="/status?from=compte" aria-label={t("player.account.openStatus")} className="btn btn-ghost btn-sm shrink-0">
+            {t("player.account.open")}
+          </Link>
+        </li>
+        <li className="py-3">
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+              <span className="flex min-w-0 items-center gap-2.5 text-sm text-white">
+                <LifeBuoy size={16} className="shrink-0 text-subtle" />
+                <span className="min-w-0">{t("player.account.help.hdrTitle")}</span>
               </span>
-            </span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="shrink-0 text-subtle">3.</span>
-            <span>{t("player.account.help.hdrStep3")}</span>
-          </li>
-        </ol>
-        {/* La phrase qui compte le plus : sans elle, on conclut que le lecteur est cassé. */}
-        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-subtle">
-          {t("player.account.help.hdrNote")}
-        </p>
-      </div>
-    </Section>
+              <ChevronDown size={16} className="shrink-0 text-subtle transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-3 pl-[26px]">
+              <p className="mt-1.5 text-xs leading-5 text-muted">{t("player.account.help.hdrIntro")}</p>
+              <ol className="mt-3 space-y-2 text-xs leading-5 text-muted">
+                <li className="flex gap-2.5">
+                  <span className="shrink-0 text-subtle">1.</span>
+                  <span>{t("player.account.help.hdrStep1")}</span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="shrink-0 text-subtle">2.</span>
+                  <span className="min-w-0">
+                    {t("player.account.help.hdrStep2")}
+                    <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-white">
+                        {FIREFOX_HDR_PREF}
+                      </code>
+                      <button type="button" onClick={copyPref} className="btn btn-ghost btn-sm shrink-0">
+                        {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                        {copied ? t("player.account.help.copied") : t("player.account.help.copy")}
+                      </button>
+                    </span>
+                  </span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="shrink-0 text-subtle">3.</span>
+                  <span>{t("player.account.help.hdrStep3")}</span>
+                </li>
+              </ol>
+              {/* La phrase qui compte le plus : sans elle, on conclut que le lecteur est cassé. */}
+              <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-subtle">
+                {t("player.account.help.hdrNote")}
+              </p>
+            </div>
+          </details>
+        </li>
+      </ul>
+    </section>
   );
 }
 

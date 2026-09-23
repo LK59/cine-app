@@ -45,10 +45,10 @@ export function BenchSection() {
 
   return (
     <section className="border-t border-white/10 py-7 [@media(max-height:500px)]:py-4">
-      <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
+      <h3 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
         <FlaskConical size={16} className="text-subtle" />
         {t("bench.title")}
-      </h2>
+      </h3>
       <p className="mb-3 text-xs text-subtle">{t("bench.hint")}</p>
       {!open ? (
         <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost w-full justify-center sm:w-auto">

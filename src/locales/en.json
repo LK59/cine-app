@@ -1359,7 +1359,15 @@
       "notifTest": "Send a test",
       "notifTestHint": "In 5 seconds, time to leave the app",
       "notifTestNoDevice": "Turn on notifications on this device first",
-      "unknownDevice": "Unidentified device"
+      "unknownDevice": "Unidentified device",
+      "groups": {
+        "preferences": "Preferences",
+        "account": "Account",
+        "help": "Help",
+        "admin": "Administration"
+      },
+      "appLanguage": "App language",
+      "open": "Open"
     },
     "browse": {
       "seeAll": "See all",

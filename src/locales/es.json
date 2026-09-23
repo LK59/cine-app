@@ -1359,7 +1359,15 @@
       "notifTest": "Enviar una prueba",
       "notifTestHint": "En 5 segundos, el tiempo de salir de la aplicación",
       "notifTestNoDevice": "Activa primero las notificaciones en este dispositivo",
-      "unknownDevice": "Dispositivo no identificado"
+      "unknownDevice": "Dispositivo no identificado",
+      "groups": {
+        "preferences": "Preferencias",
+        "account": "Cuenta",
+        "help": "Ayuda",
+        "admin": "Administración"
+      },
+      "appLanguage": "Idioma de la aplicación",
+      "open": "Abrir"
     },
     "browse": {
       "seeAll": "Ver todo",

@@ -1359,7 +1359,15 @@
       "notifTest": "Test senden",
       "notifTestHint": "In 5 Sekunden, Zeit genug, die App zu verlassen",
       "notifTestNoDevice": "Aktiviere zuerst die Benachrichtigungen auf diesem Gerät",
-      "unknownDevice": "Unbekanntes Gerät"
+      "unknownDevice": "Unbekanntes Gerät",
+      "groups": {
+        "preferences": "Einstellungen",
+        "account": "Konto",
+        "help": "Hilfe",
+        "admin": "Verwaltung"
+      },
+      "appLanguage": "App-Sprache",
+      "open": "Öffnen"
     },
     "browse": {
       "seeAll": "Alle anzeigen",
