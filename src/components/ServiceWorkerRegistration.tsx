@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { forgetChunkReload } from "@/lib/chunkError";
+import { clearDeliveredNotifications } from "@/lib/clearDeliveredNotifications";
 
 export function ServiceWorkerRegistration() {
   useEffect(() => {
@@ -15,6 +16,17 @@ export function ServiceWorkerRegistration() {
       const build = encodeURIComponent(process.env.NEXT_PUBLIC_APP_BUILD ?? "dev");
       navigator.serviceWorker.register(`/sw.js?v=${build}`).catch(() => {});
     }
+  }, []);
+
+  // À l'ouverture et à chaque retour au premier plan : la pastille et les notifications affichées
+  // sont lues — voir `clearDeliveredNotifications`.
+  useEffect(() => {
+    void clearDeliveredNotifications();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void clearDeliveredNotifications();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   return null;

@@ -196,9 +196,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(title, options),
-      // Badging API: not supported on iOS Safari today, but feature-detected
-      // so this stays inert there and picks up support automatically if/when
-      // Apple ships it, plus it already works on Android/desktop Chrome.
+      // Badging API — feature-detected. iOS applies it to home-screen apps since 16.4, Android and
+      // desktop Chrome too. The page clears it on open (clearDeliveredNotifications): nothing here
+      // did, and the "1" stayed on the icon for good.
       self.navigator.setAppBadge
         ? self.registration.getNotifications().then((n) => self.navigator.setAppBadge(n.length))
         : Promise.resolve(),
