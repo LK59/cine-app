@@ -1788,3 +1788,69 @@ describe("ce que la fiche a préparé avant Lire", () => {
   });
 });
 
+// Chasse aux bugs du 24/09/2026 : la fin d'une lecture, et ce qui vient après.
+describe("après la fin", () => {
+  // Un épisode reste jouable après sa fin (la carte de l'épisode suivant écartée) : la seconde
+  // lecture doit rouvrir la séance que la fin avait close, sans quoi rien n'était plus enregistré.
+  it("rouvre la séance quand la lecture reprend après la fin", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(10), new Event("play")));
+    expect(resumePlaybackSession).not.toHaveBeenCalled();
+
+    await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
+    expect(stopPlaybackNow).toHaveBeenCalled();
+    await act(async () => void fireEvent(videoElement(0), new Event("play")));
+    expect(resumePlaybackSession).toHaveBeenCalledTimes(1);
+    // Une fois : une pause puis une reprise ne rouvrent rien de plus.
+    await act(async () => void fireEvent(videoElement(20), new Event("play")));
+    expect(resumePlaybackSession).toHaveBeenCalledTimes(1);
+  });
+
+  // Le chemin canevas n'annonçait la fin qu'à la fermeture : une app tuée sur l'écran de fin
+  // laissait le film non vu.
+  it("annonce la fin tout de suite sur le chemin canevas", async () => {
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    emit("playing");
+    expect(stopPlaybackNow).not.toHaveBeenCalled();
+    emit("ended");
+    expect(stopPlaybackNow).toHaveBeenCalled();
+    emit("playing");
+    expect(resumePlaybackSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+// L'ancien fichier restait affiché pendant le chargement du nouveau, et pour de bon si celui-ci
+// échouait — du français sous un menu qui disait anglais.
+describe("passer d'un fichier de sous-titres à un autre", () => {
+  it("retire le premier sans attendre le second", async () => {
+    swr = {
+      data: info({
+        externalSubtitles: [
+          { id: -1, language: "fra", title: "Français", url: "/fr.vtt" },
+          { id: -2, language: "eng", title: "English", url: "/en.vtt" },
+        ],
+      }),
+      error: undefined,
+    };
+    stubFetch((url) =>
+      url === "/fr.vtt" ? { ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:09.000\nBonjour." } : { ok: false, status: 404 }
+    );
+    mount();
+    await waitFor(() => expect(screen.getByText(/^st:Français.*\(external\)/)).toBeTruthy());
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Français.*\(external\)/)));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/fr.vtt", expect.anything()));
+    await act(async () => void fireEvent(videoElement(2), new Event("timeupdate")));
+    await waitFor(() => expect(screen.getByText("Bonjour.")).toBeTruthy());
+
+    // Seule du fichier dans sa langue, son étiquette ne porte pas de précision (voir trackLabel).
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Anglais/)));
+    await waitFor(() => expect(screen.getByText("externalSubtitlesUnavailable")).toBeTruthy());
+    await act(async () => void fireEvent(videoElement(3), new Event("timeupdate")));
+    expect(screen.queryByText("Bonjour.")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
+

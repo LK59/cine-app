@@ -701,10 +701,11 @@ export function ExperimentalPlayerHost({
       remuxRef.current?.selectSubtitleTrack(external ? null : id);
       engineRef.current?.setSubtitleTrack(external ? null : id);
 
-      if (!external) {
-        externalSubtitleRef.current = null;
-        return;
-      }
+      // Retiré tout de suite, y compris pour un autre fichier : l'ancien restait affiché pendant le
+      // chargement du nouveau, et pour de bon si ce chargement échouait — du français sous un menu
+      // qui disait anglais (relu le 24/09/2026).
+      externalSubtitleRef.current = null;
+      if (!external) return;
       const source = sources.find((candidate) => candidate.id === id);
       if (!source) return;
       // Fetched on being chosen rather than up front: a film may carry half a dozen of these
@@ -1187,9 +1188,25 @@ export function ExperimentalPlayerHost({
   );
   // Lu par une référence depuis les écouteurs de l'élément, posés une fois pour toutes.
   const stopPlaybackRef = useRef(stopPlaybackNow);
+  const resumePlaybackRef = useRef(resumePlaybackSession);
   useEffect(() => {
     stopPlaybackRef.current = stopPlaybackNow;
-  }, [stopPlaybackNow]);
+    resumePlaybackRef.current = resumePlaybackSession;
+  }, [stopPlaybackNow, resumePlaybackSession]);
+  /**
+   * La séance a été close par la fin du fichier, et rien ne l'a rouverte depuis.
+   *
+   * « Revoir » la rouvrait, mais il n'existe que pour les films. Un épisode reste jouable après sa
+   * fin — la carte de l'épisode suivant écartée, on revient en arrière ou on relance —, et cette
+   * seconde lecture ne battait plus et n'enregistrait plus rien : Jellyfin gardait l'épisode « vu à
+   * la fin » (relu le 24/09/2026). Toute reprise de la lecture rouvre donc la séance.
+   */
+  const endStoppedRef = useRef(false);
+  const reopenAfterEnd = useCallback(() => {
+    if (!endStoppedRef.current) return;
+    endStoppedRef.current = false;
+    resumePlaybackRef.current();
+  }, []);
 
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
 
@@ -1487,6 +1504,7 @@ export function ExperimentalPlayerHost({
         setPlaying(true);
         setEnded(false);
         showWarning(null);
+        reopenAfterEnd();
       };
       const onPause = () => {
         setPlaying(false);
@@ -1513,6 +1531,7 @@ export function ExperimentalPlayerHost({
         // la position de la seconde vision, et une application tuée en arrière-plan sur l'écran
         // de fin ne l'envoyait jamais (relevé le 23/09/2026).
         void stopPlaybackRef.current();
+        endStoppedRef.current = true;
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
@@ -1649,6 +1668,7 @@ export function ExperimentalPlayerHost({
           engineStarted = true;
           setPlaying(true);
           tally.waitEnded(Date.now());
+          reopenAfterEnd();
         }),
         engine.on("pause", () => {
           setPlaying(false);
@@ -1661,6 +1681,10 @@ export function ExperimentalPlayerHost({
         engine.on("ended", () => {
           setPlaying(false);
           setEnded(true);
+          // Comme sur l'élément : la fin annoncée tout de suite, c'est elle qui marque le film vu.
+          // Ce chemin ne l'envoyait qu'à la fermeture (relu le 24/09/2026).
+          void stopPlaybackRef.current();
+          endStoppedRef.current = true;
         }),
         engine.on("subtitle", (payload) => {
           // Silenced while a file beside the film is showing, which the engine knows nothing of.
@@ -1877,8 +1901,9 @@ export function ExperimentalPlayerHost({
   // donc l'ajouter ici ne peut pas relancer la construction du pipeline. C'est la seule raison
   // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`. Même
   // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi, et
-  // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch, tally]);
+  // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, et pour
+  // `reopenAfterEnd`, sans dépendance (`useCallback([])`).
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch, tally, reopenAfterEnd]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure
@@ -2216,7 +2241,7 @@ export function ExperimentalPlayerHost({
   // Les bandes noires incrustées dans le fichier : l'image est agrandie jusqu'au bord le plus
   // proche, sans rien couper — voir `frameFit`. Pas dans le mini-lecteur, qui remplit déjà sa
   // fenêtre (`object-cover`).
-  const frameFitState = useFrameFit(itemId, !isMini, containerRef);
+  const frameFitState = useFrameFit(itemId, !isMini, containerRef, videoElRef);
 
   // Après tous les hooks : le banc d'essai en a ajouté trois au-dessus, et un retour anticipé
   // avant eux en changeait le nombre d'un rendu à l'autre.

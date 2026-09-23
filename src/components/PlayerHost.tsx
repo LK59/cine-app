@@ -1163,15 +1163,22 @@ function ActivePlayer({
   }, [castSession, onCastEnded, videoKey]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
+  //
+  // Sauf s'il y a un épisode suivant : la carte et son décompte (PlayerControls) s'affichent à la
+  // toute dernière seconde quand l'épisode n'a pas de repère de générique, et la fermeture à
+  // `ended` les coupait net — l'épisode suivant ne venait jamais sur ce lecteur, alors que le
+  // lecteur natif, lui, reste ouvert et laisse le décompte finir (relu le 24/09/2026). Pas dans le
+  // mini-lecteur, qui n'a pas de commandes et donc pas de carte : il se ferme comme avant.
+  const hasNextEpisode = nextEpisode !== null && mode !== "mini";
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || hasNextEpisode) return;
     function onEnded() {
       handleClose();
     }
     video.addEventListener("ended", onEnded);
     return () => video.removeEventListener("ended", onEnded);
-  }, [handleClose, videoKey]);
+  }, [handleClose, videoKey, hasNextEpisode]);
 
   // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
   // so the mini player's play/pause icon stays correct without threading state through props.
