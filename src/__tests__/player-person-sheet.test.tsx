@@ -18,6 +18,18 @@ vi.mock("@/components/TranslationProvider", () => ({
 }));
 // eslint-disable-next-line @next/next/no-img-element
 vi.mock("@/components/PosterImage", () => ({ PosterImage: ({ alt }: { alt: string }) => <img alt={alt} /> }));
+// La vraie carte, rendus comptés — voir « ne redessine pas la filmographie pendant un glissement ».
+const cardRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/player/PlayerResultCard", async (importOriginal) => {
+  const { memo, createElement } = await import("react");
+  const original = await importOriginal<typeof import("@/components/player/PlayerResultCard")>();
+  // Même mémorisation que l'original : c'est elle que la fiche doit laisser jouer.
+  const Counted = memo(function Counted(props: Parameters<typeof original.PlayerResultCard>[0]) {
+    cardRenders.count += 1;
+    return createElement(original.PlayerResultCard, props);
+  });
+  return { ...original, PlayerResultCard: Counted };
+});
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => true, useIsShortViewport: () => false }));
 
 const credits = Array.from({ length: 60 }, (_, i) => ({
@@ -203,6 +215,24 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     const card = screen.getByRole("dialog");
     expect(card.className).toContain("sheet-in");
     expect(card.className).not.toMatch(/\bmd:animate-/);
+  });
+
+  it("ne redessine pas la filmographie pendant un glissement", async () => {
+    // 23/09/2026 : la fermeture au doigt des fiches personne saccadait. La position de la carte
+    // vit dans l'état du geste, donc chaque mouvement redessinait la fiche — et la filmographie,
+    // recréée à chaque rendu, reconstruisait toutes ses cartes à chaque pixel.
+    draw({ tmdbId: 11 });
+    await screen.findByText("Film 0");
+    const handle = screen.getByRole("dialog").querySelector<HTMLElement>("[style*='touch-action']")!;
+    const pointer = (type: string, clientY: number) =>
+      act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
+    pointer("pointerdown", 100);
+    const before = cardRenders.count;
+    expect(before).toBeGreaterThan(0);
+    for (let y = 110; y <= 200; y += 10) pointer("pointermove", y);
+    expect(screen.getByRole("dialog").style.transform).toBe("translateY(100px)");
+    expect(cardRenders.count).toBe(before);
+    pointer("pointerup", 200);
   });
 });
 

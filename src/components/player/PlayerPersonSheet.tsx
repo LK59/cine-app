@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Calendar, ChevronLeft, ChevronRight, Globe, MapPin, Star, User, X } from "lucide-react";
@@ -62,7 +62,10 @@ function ageAt(birthday: string, deathday: string | null, now: number): number |
  * part, en chargement différé : la fiche s'affiche sans les attendre, et la rangée apparaît quand
  * elles sont là — plutôt que de retarder la filmographie, qui est ce qu'on vient voir.
  */
-function PhotoRow({ photos, onOpen, label }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string }) {
+const NO_PHOTOS: PersonPhoto[] = [];
+
+// Mémorisée : voir `PersonFilmography`, pour la même raison.
+const PhotoRow = memo(function PhotoRow({ photos, onOpen, label }: { photos: PersonPhoto[]; onOpen: (i: number) => void; label: string }) {
   if (photos.length === 0) return null;
   return (
     <div className="mt-8">
@@ -89,7 +92,7 @@ function PhotoRow({ photos, onOpen, label }: { photos: PersonPhoto[]; onOpen: (i
       </div>
     </div>
   );
-}
+});
 
 /**
  * Une photo en grand.
@@ -198,6 +201,72 @@ const SETTLE_FALLBACK_MS = 450;
  * qu'on le possède ou non, au lieu de renvoyer vers une page d'outillage. C'est ce qui fait que
  * l'on ne sort jamais de l'interface.
  */
+function openCredit(c: PersonCredit) {
+  const type = c.mediaType === "movie" ? "movie" : "series";
+  /* La fiche prend la place de celle-ci, et le retour y ramène — voir `openLibraryTitle`, qui
+     referme ce qui la couvre ; la fiche découverte ne passe pas par elle, d'où `person: null`.
+     L'onglet suit le type, sans quoi une série ouverte depuis un acteur ne se résout pas. */
+  if (c.libraryId !== null) openLibraryTitle(type, c.libraryId);
+  else cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null });
+}
+
+function creditCard(c: PersonCredit) {
+  return (
+    <PlayerResultCard
+      key={`${c.mediaType}-${c.tmdbId}`}
+      kind={c.mediaType === "movie" ? "movie" : "series"}
+      title={c.title}
+      subtitle={c.character || (c.year ? String(c.year) : null)}
+      poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
+      missing={!c.inLibrary}
+      onOpen={() => openCredit(c)}
+    />
+  );
+}
+
+/**
+ * La filmographie en deux temps : ce qui se regarde ce soir, puis le reste — qui ouvre sa fiche
+ * découverte, d'où l'on peut le demander.
+ *
+ * Mémorisée, et c'est tout son rôle (23/09/2026). Un glissement de fermeture redessine la fiche à
+ * chaque mouvement du doigt — la position de la carte vit dans l'état de `useSwipeToDismiss` —, et
+ * la filmographie, recréée à chaque rendu, reconstruisait ses centaines de cartes à chaque pixel :
+ * la fermeture des fiches personne était saccadée, là où celles des films, plus légères, restaient
+ * fluides. Ses entrées ne changent pas pendant un geste ni pendant une sortie : React la saute.
+ */
+const PersonFilmography = memo(function PersonFilmography({
+  owned,
+  elsewhere,
+  inLibraryLabel,
+  elsewhereLabel,
+}: {
+  owned: PersonCredit[];
+  elsewhere: PersonCredit[];
+  inLibraryLabel: string;
+  elsewhereLabel: string;
+}) {
+  return (
+    <>
+      {owned.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-4 font-display text-lg font-semibold text-white">{inLibraryLabel}</h2>
+          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
+            {owned.map(creditCard)}
+          </div>
+        </section>
+      )}
+      {elsewhere.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-4 font-display text-lg font-semibold text-white">{elsewhereLabel}</h2>
+          <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
+            {elsewhere.map(creditCard)}
+          </div>
+        </section>
+      )}
+    </>
+  );
+});
+
 export function PlayerPersonSheet({
   tmdbId,
   leaving = false,
@@ -232,7 +301,7 @@ export function PlayerPersonSheet({
   const { data: photoData } = useSWR<{ photos: PersonPhoto[] }>(`/api/tmdb/person/${tmdbId}/photos`, fetcher, {
     revalidateOnFocus: false,
   });
-  const photos = photoData?.photos ?? [];
+  const photos = photoData?.photos ?? NO_PHOTOS;
   // Les liens et la biographie de Wikipédia — la partie de la fiche de gestion qui manquait ici.
   // À part, et en différé comme les photos : la fiche s'affiche sans attendre Wikipédia.
   const { data: enriched } = useSWR<EnrichedPersonData>(`/api/tmdb/person/${tmdbId}/enriched`, fetcher, {
@@ -331,7 +400,10 @@ export function PlayerPersonSheet({
     return () => clearTimeout(timer);
   }, [underneath, data, settled, shown, credits.length]);
 
-  const shownCredits = credits.slice(0, shown);
+  // Mémorisées : ce sont les entrées de `PersonFilmography`, qui doivent garder leur identité
+  // tant que rien ne change — un glissement, une sortie ne changent ni l'une ni l'autre.
+  const owned = useMemo(() => credits.slice(0, shown).filter((c) => c.inLibrary), [credits, shown]);
+  const elsewhere = useMemo(() => credits.slice(0, shown).filter((c) => !c.inLibrary), [credits, shown]);
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
   // `document` n'existe pas et où `createPortal` fait échouer la page entière.
@@ -343,27 +415,6 @@ export function PlayerPersonSheet({
   const links = settled ? enriched : undefined;
   const bio = settled ? selectBio(data?.biography, enriched?.wikiBio) : null;
   const age = data?.birthday ? ageAt(data.birthday, data.deathday, now) : null;
-  const owned = shownCredits.filter((c) => c.inLibrary);
-  const elsewhere = shownCredits.filter((c) => !c.inLibrary);
-  const openCredit = (c: PersonCredit) => {
-    const type = c.mediaType === "movie" ? "movie" : "series";
-    /* La fiche prend la place de celle-ci, et le retour y ramène — voir `openLibraryTitle`, qui
-       referme ce qui la couvre ; la fiche découverte ne passe pas par elle, d'où `person: null`.
-       L'onglet suit le type, sans quoi une série ouverte depuis un acteur ne se résout pas. */
-    if (c.libraryId !== null) openLibraryTitle(type, c.libraryId);
-    else cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null });
-  };
-  const creditCard = (c: PersonCredit) => (
-    <PlayerResultCard
-      key={`${c.mediaType}-${c.tmdbId}`}
-      kind={c.mediaType === "movie" ? "movie" : "series"}
-      title={c.title}
-      subtitle={c.character || (c.year ? String(c.year) : null)}
-      poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
-      missing={!c.inLibrary}
-      onOpen={() => openCredit(c)}
-    />
-  );
 
   return createPortal(
     /**
@@ -560,24 +611,12 @@ export function PlayerPersonSheet({
               </div>
             )}
 
-            {/* La filmographie en deux temps : ce qui se regarde ce soir, puis le reste — qui
-                ouvre sa fiche découverte, d'où l'on peut le demander. */}
-            {owned.length > 0 && (
-              <section className="mt-8">
-                <h2 className="mb-4 font-display text-lg font-semibold text-white">{t("modals.actor.inLibrary")}</h2>
-                <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
-                  {owned.map(creditCard)}
-                </div>
-              </section>
-            )}
-            {elsewhere.length > 0 && (
-              <section className="mt-8">
-                <h2 className="mb-4 font-display text-lg font-semibold text-white">{t("player.person.elsewhere")}</h2>
-                <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
-                  {elsewhere.map(creditCard)}
-                </div>
-              </section>
-            )}
+            <PersonFilmography
+              owned={owned}
+              elsewhere={elsewhere}
+              inLibraryLabel={t("modals.actor.inLibrary")}
+              elsewhereLabel={t("player.person.elsewhere")}
+            />
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
@@ -124,6 +124,14 @@ export function PlayerDiscoverSheet({
   }, [data, isMobile]);
 
   const inList = data?.watchlistStatus === "to_watch";
+  /**
+   * La distribution, construite une fois par réponse et non à chaque rendu.
+   *
+   * `CinemaCastRow` est mémorisée, mais recevait `castFromTitle(data.cast)` — un tableau neuf à
+   * chaque rendu, donc jamais le même. Or un glissement de fermeture redessine la fiche à chaque
+   * mouvement du doigt : les douze portraits aussi, et la fermeture accrochait (23/09/2026).
+   */
+  const cast = useMemo(() => (data ? castFromTitle(data.cast) : []), [data]);
   const StateIcon = data?.requestState ? STATE_ICON[data.requestState] : Clock;
 
   // Même garde que les fiches du mode cinéma : ce composant peut être rendu côté serveur, où
@@ -275,7 +283,7 @@ export function PlayerDiscoverSheet({
           <CinemaTagline text={data.tagline} className="mb-1.5" />
           {data.overview && <p className="mb-4 text-sm leading-6 text-white/90">{data.overview}</p>}
 
-          <CinemaCastRow cast={castFromTitle(data.cast)} />
+          <CinemaCastRow cast={cast} />
         </div>
       )}
     </div>
@@ -433,7 +441,7 @@ export function PlayerDiscoverSheet({
 
               </div>
 
-              <CinemaCastRow cast={castFromTitle(data.cast)} className="mt-4" />
+              <CinemaCastRow cast={cast} className="mt-4" />
             </div>
           </div>
         </div>

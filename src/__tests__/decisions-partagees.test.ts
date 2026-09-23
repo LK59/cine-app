@@ -341,7 +341,9 @@ describe("la fiche découverte montre la même distribution que les autres", () 
   // changeait d'aspect à chaque cran selon que le film était dans la bibliothèque ou non.
   it("passe par `CinemaCastRow`", () => {
     const src = lire("src/components/player/PlayerDiscoverSheet.tsx");
-    expect(src).toContain("<CinemaCastRow cast={castFromTitle(data.cast)}");
+    // La même conversion, faite une fois par réponse (voir « ne reconstruit pas ses rangées »).
+    expect(src).toContain("castFromTitle(data.cast)");
+    expect(src).toContain("<CinemaCastRow cast={cast}");
     expect(src).not.toMatch(/function CastRow\(/);
   });
 });
@@ -555,5 +557,19 @@ describe("une seule hauteur de bannière pour l'écran du bureau et son squelett
     const src = lire("src/components/cinema/CinemaClient.tsx");
     expect(src).not.toMatch(/flexBasis: "\d+%"/);
     expect(src.match(/flexBasis: HERO_BASIS/g)?.length).toBe(2);
+  });
+});
+
+describe("une fiche qu'on tire ne reconstruit pas ses rangées", () => {
+  /**
+   * Un glissement de fermeture redessine la fiche à chaque mouvement du doigt. Ce qui est lourd y
+   * est mémorisé, mais une mémorisation ne sert à rien si on lui passe un tableau construit en
+   * ligne : il est neuf à chaque rendu (23/09/2026, fermeture des fiches découverte saccadée). La
+   * filmographie des fiches personne a son propre test de rendu (player-person-sheet.test.tsx).
+   */
+  it("la distribution n'est pas reconstruite à chaque rendu", () => {
+    for (const f of ["src/components/player/PlayerDiscoverSheet.tsx"]) {
+      expect([f, /cast=\{castFromTitle\(/.test(lire(f))]).toEqual([f, false]);
+    }
   });
 });
