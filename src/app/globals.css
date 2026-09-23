@@ -1053,9 +1053,15 @@
    Le petit délai au survol n'est pas de la coquetterie : la souris traverse forcément le rail
    pour atteindre la première affiche de chaque ligne, et sans lui, le menu se dépliait pour
    recouvrir exactement ce qu'on visait. Au clavier, l'ouverture reste immédiate — d'où la règle
-   `focus-within` posée après, qui l'emporte quand les deux s'appliquent. */
+   du focus posée après, qui l'emporte quand les deux s'appliquent.
+
+   Le focus du *clavier* seulement (`:focus-visible`), pas n'importe quel focus (`:focus-within`,
+   jusqu'au 23/09/2026). Un clic à la souris donne aussi le focus au bouton cliqué : « Ma liste »,
+   « Compte » ou « Recherche » ouvrent un panneau qui le reprend, et le rail se repliait en sortant
+   la souris ; « Accueil » ferme les panneaux et le laisse au bouton, et le rail restait déplié
+   jusqu'à un clic ailleurs. Un clic de souris n'est pas `:focus-visible` : le survol décide seul. */
 .player-rail:hover,
-.player-rail:focus-within {
+.player-rail:has(:focus-visible) {
   width: 15rem;
   /* Déployé, il recouvre des affiches et porte du texte : la transparence qui l'allège au repos
      rendrait les libellés illisibles. Il se densifie donc en s'ouvrant. */
@@ -1072,8 +1078,8 @@
 .player-rail:hover .player-rail-label {
   transition-delay: 140ms;
 }
-.player-rail:focus-within,
-.player-rail:focus-within .player-rail-label {
+.player-rail:has(:focus-visible),
+.player-rail:has(:focus-visible) .player-rail-label {
   transition-delay: 0ms;
 }
 .player-rail-label {
@@ -1082,7 +1088,7 @@
   transition: opacity 200ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .player-rail:hover .player-rail-label,
-.player-rail:focus-within .player-rail-label {
+.player-rail:has(:focus-visible) .player-rail-label {
   opacity: 1;
   transform: none;
 }
