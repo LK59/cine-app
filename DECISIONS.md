@@ -527,6 +527,30 @@ les droits de demander, eux, restent ceux de la personne.
 
 ---
 
+## 17. Où se règlent les notifications
+
+**Règle.** Les notifications se règlent à un seul endroit : le panneau Compte du cinéma. Chacun y
+choisit ses trois annonces de spectateur ; l'administrateur y voit en plus les annonces de
+téléchargement ; tout le monde peut s'y envoyer un essai. La gestion ne garde qu'un renvoi vers
+ce panneau.
+
+Deux écrans réglaient les mêmes choix, rangés au même endroit, sous des libellés différents — et
+l'un décrivait encore une règle qui n'était plus la bonne (« série suivie » pour « série
+commencée »).
+
+**Porteurs.** `NotificationChoices` et `NotificationTest` (`src/components/player/accountControls.tsx`),
+`VIEWER_NOTIFICATION_CATEGORIES` / `ADMIN_NOTIFICATION_CATEGORIES` (`src/lib/notifications.ts`).
+
+**Appelants.** `PlayerAccountPanel` (tout), `PlayerOnboarding` (les choix de spectateur seulement).
+
+**Tests.** `player-notification-choices.test.tsx`, `proxy-guest-mutations.test.ts`,
+`decisions-partagees.test.ts`.
+
+**Voulu.** Les annonces de téléchargement arrivent groupées (`torrentWatch.ts` : un lot après deux
+minutes de calme, au plus dix minutes) ; les nouveaux épisodes, une fois par série et par passage.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits

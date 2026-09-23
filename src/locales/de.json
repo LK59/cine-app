@@ -819,7 +819,9 @@
       "debugSearchDesc": "Zeigt im Modal an, warum jedes Ergebnis erscheint: lokaler Fuzzy, klassische TMDb-Suche oder natürliche Anfrage."
     },
     "notifications": {
-      "subtitle": "Push-Benachrichtigungen pro Gerät und Kategorie"
+      "subtitle": "Push-Benachrichtigungen pro Gerät und Kategorie",
+      "moved": "Benachrichtigungen werden im Tab Konto des Kinos eingestellt, für alle Geräte.",
+      "open": "Öffnen"
     },
     "language": {
       "title": "Sprache",
@@ -1333,7 +1335,15 @@
       "notifList": "Meine Liste",
       "notifListHint": "Wenn ein Titel aus deiner Liste ankommt",
       "redoOnboarding": "Willkommensbildschirm erneut anzeigen",
-      "welcome": "Willkommen"
+      "welcome": "Willkommen",
+      "notifDownloads": "Downloads",
+      "notifDownloadDone": "Abgeschlossen",
+      "notifDownloadDoneHint": "Wenn ein Download abgeschlossen ist",
+      "notifDownloadStarted": "Gestartet",
+      "notifDownloadStartedHint": "Wenn ein Download startet",
+      "notifTest": "Test senden",
+      "notifTestHint": "In 5 Sekunden, Zeit genug, die App zu verlassen",
+      "notifTestNoDevice": "Aktiviere zuerst die Benachrichtigungen auf diesem Gerät"
     },
     "browse": {
       "seeAll": "Alle anzeigen",

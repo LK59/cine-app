@@ -613,3 +613,12 @@ describe("une seule façon de savoir qui l'on est pour Jellyseerr", () => {
     expect(fautifs).toEqual([]);
   });
 });
+
+describe("les notifications se règlent à un seul endroit", () => {
+  // La gestion et le panneau Compte réglaient les mêmes choix sous des libellés différents
+  // (23/09/2026). Il n'en reste qu'un : le panneau Compte.
+  it("la gestion ne dessine plus ses propres interrupteurs de notification", () => {
+    const src = lire("src/app/(dashboard)/parametres/page.tsx");
+    expect(src).not.toMatch(/NOTIFICATION_CATEGORIES|\/api\/notifications\/settings|\/api\/push\/test/);
+  });
+});

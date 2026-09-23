@@ -57,9 +57,13 @@ export function isNotificationCategory(value: string): value is NotificationCate
  * Ce qu'un spectateur peut recevoir, et donc régler depuis le cinéma.
  *
  * Les deux autres parlent de téléchargements : elles ne partent qu'aux administrateurs (voir
- * `sendPushToAdmins`) et se règlent dans la gestion. Un compte ordinaire ne peut pas les écrire.
+ * `sendPushToAdmins`), qui les règlent au même endroit, sous les leurs. Un compte ordinaire ne
+ * peut pas les écrire.
  */
 export const VIEWER_NOTIFICATION_CATEGORIES = ["new-episode", "request-available", "watchlist-available"] as const satisfies readonly NotificationCategory[];
+
+/** Les annonces de téléchargement, qui ne partent qu'aux administrateurs (`sendPushToAdmins`). */
+export const ADMIN_NOTIFICATION_CATEGORIES = ["torrent-complete", "torrent-started"] as const satisfies readonly NotificationCategory[];
 
 export function isViewerNotificationCategory(value: string): boolean {
   return (VIEWER_NOTIFICATION_CATEGORIES as readonly string[]).includes(value);

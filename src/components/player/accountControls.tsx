@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
@@ -7,7 +8,7 @@ import { toJellyfinLanguage } from "@/lib/trackPreferences";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { Toggle } from "@/components/Toggle";
-import { VIEWER_NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notifications";
+import { ADMIN_NOTIFICATION_CATEGORIES, VIEWER_NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notifications";
 
 /**
  * Les réglages d'un compte, écrits une fois : le panneau Compte et l'écran d'accueil s'en servent
@@ -108,21 +109,26 @@ export function SubtitleModeSelect({
 }
 
 /**
- * Ce que chacun veut recevoir — les trois annonces d'un spectateur.
+ * Ce que chacun veut recevoir — les trois annonces d'un spectateur, et pour l'administrateur
+ * celles des téléchargements.
  *
  * L'interrupteur du dessus abonne *cet appareil* ; ces choix-là appartiennent au *compte* et valent
  * sur tous ses appareils. Ils n'existaient que dans la gestion : un spectateur ne pouvait que tout
  * couper — ce qui compte depuis que « nouvel épisode », qui n'était jamais parti, part vraiment.
+ * Depuis le 23/09/2026 c'est le seul endroit où ils se règlent : la gestion en avait une seconde
+ * copie, avec d'autres libellés pour les mêmes choix.
  *
  * Basculé tout de suite, remis en place et dit si le serveur refuse.
  */
-const CHOICE_LABELS: Record<(typeof VIEWER_NOTIFICATION_CATEGORIES)[number], [string, string]> = {
+const CHOICE_LABELS: Record<NotificationCategory, [string, string]> = {
   "new-episode": ["player.account.notifNewEpisode", "player.account.notifNewEpisodeHint"],
   "request-available": ["player.account.notifRequest", "player.account.notifRequestHint"],
   "watchlist-available": ["player.account.notifList", "player.account.notifListHint"],
+  "torrent-complete": ["player.account.notifDownloadDone", "player.account.notifDownloadDoneHint"],
+  "torrent-started": ["player.account.notifDownloadStarted", "player.account.notifDownloadStartedHint"],
 };
 
-export function NotificationChoices() {
+export function NotificationChoices({ admin = false }: { admin?: boolean }) {
   const t = useT();
   const toast = useToast();
   const { data, mutate } = useSWR<{ preferences: Record<NotificationCategory, boolean> }>("/api/notifications/settings", fetcher);
@@ -145,9 +151,10 @@ export function NotificationChoices() {
 
   // Pas de préférences lisibles, pas de cases : mieux vaut rien qu'un interrupteur qui ment.
   if (!data?.preferences) return null;
-  return (
+  const preferences = data.preferences;
+  const list = (categories: readonly NotificationCategory[]) => (
     <ul className="mt-3 flex flex-col divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5 px-4">
-      {VIEWER_NOTIFICATION_CATEGORIES.map((category) => {
+      {categories.map((category) => {
         const [label, hint] = CHOICE_LABELS[category];
         return (
           <li key={category} className="flex items-center justify-between gap-4 py-3">
@@ -155,10 +162,92 @@ export function NotificationChoices() {
               <p className="text-sm text-white">{t(label)}</p>
               <p className="mt-0.5 text-xs text-subtle">{t(hint)}</p>
             </div>
-            <Toggle checked={data.preferences[category] === true} onChange={(value) => void set(category, value)} ariaLabel={t(label)} />
+            <Toggle checked={preferences[category] === true} onChange={(value) => void set(category, value)} ariaLabel={t(label)} />
           </li>
         );
       })}
     </ul>
+  );
+  return (
+    <>
+      {list(VIEWER_NOTIFICATION_CATEGORIES)}
+      {/* Montré à l'administrateur seulement : le serveur refuse ces choix à un compte ordinaire, et
+          ces annonces ne lui parviendraient jamais. */}
+      {admin && (
+        <>
+          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-subtle">{t("player.account.notifDownloads")}</p>
+          {list(ADMIN_NOTIFICATION_CATEGORIES)}
+        </>
+      )}
+    </>
+  );
+}
+
+/** Le temps de verrouiller le téléphone ou de quitter l'application : au premier plan, iOS ne montre rien. */
+const TEST_DELAY_S = 5;
+
+/**
+ * Envoyer une notification d'essai à ses propres appareils.
+ *
+ * C'est la seule façon de savoir qu'un appareil est bien abonné — l'interrupteur dit ce que le
+ * navigateur a accepté, pas ce qui arrive. Il ne vivait que dans la gestion.
+ */
+export function NotificationTest() {
+  const t = useT();
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "noDevice" | "error">("idle");
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearInterval(timer.current);
+  }, []);
+
+  function start() {
+    if (timer.current || state === "sending") return;
+    setState("idle");
+    let remaining = TEST_DELAY_S;
+    setCountdown(remaining);
+    timer.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0) {
+        setCountdown(remaining);
+        return;
+      }
+      if (timer.current) clearInterval(timer.current);
+      timer.current = null;
+      setCountdown(null);
+      setState("sending");
+      fetch("/api/push/test", { method: "POST" })
+        .then(async (res) => {
+          const json = (await res.json().catch(() => ({}))) as { ok?: boolean };
+          // 404 : aucun appareil abonné pour ce compte — l'interrupteur du dessus est à activer.
+          setState(res.status === 404 ? "noDevice" : res.ok && json.ok ? "sent" : "error");
+        })
+        .catch(() => setState("error"));
+    }, 1000);
+  }
+
+  const busy = countdown !== null || state === "sending";
+  return (
+    <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-sm text-white">{t("player.account.notifTest")}</p>
+        <p className="mt-0.5 text-xs text-subtle" aria-live="polite">
+          {state === "sent"
+            ? t("notifications.sent")
+            : state === "noDevice"
+              ? t("player.account.notifTestNoDevice")
+              : state === "error"
+                ? t("notifications.sendError")
+                : t("player.account.notifTestHint")}
+        </p>
+      </div>
+      <button type="button" onClick={start} disabled={busy} className="btn btn-ghost btn-sm shrink-0">
+        {countdown !== null
+          ? t("notifications.sendingIn", { n: countdown })
+          : state === "sending"
+            ? t("notifications.sending")
+            : t("notifications.testButton")}
+      </button>
+    </div>
   );
 }

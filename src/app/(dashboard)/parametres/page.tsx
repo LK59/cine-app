@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Palette, RefreshCw, History, Send, Settings, Shield, Smartphone, CircleX } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Bell, CircleCheckBig, Globe, Loader2, LogOut, Palette, RefreshCw, History, Settings, Shield, Smartphone } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { PageHeader } from "@/components/PageHeader";
-import { PushToggle } from "@/components/PushToggle";
 import { Toggle } from "@/components/Toggle";
-import { NOTIFICATION_CATEGORIES, getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
 import { useTheme } from "@/components/ThemeProvider";
 import { ACCENT_PRESETS } from "@/lib/theme";
 import { useRole } from "@/lib/useRole";
@@ -18,29 +17,12 @@ import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 
-type TestState = "idle" | "sending" | "sent" | "error";
-
 export default function ParametresPage() {
   const { accent, setAccent } = useTheme();
   const { role } = useRole();
   const t = useT();
-  const toast = useToast();
 
-  // Notification state
-  const [preferences, setPreferences] = useState<Record<NotificationCategory, boolean>>(getDefaultNotificationPreferences);
-  const [loadingPrefs, setLoadingPrefs] = useState(true);
-  const [saving, setSaving] = useState<NotificationCategory | null>(null);
-  const [testState, setTestState] = useState<TestState>("idle");
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [searchDebug, setSearchDebug] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/notifications/settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => { if (json?.preferences) setPreferences(json.preferences); })
-      .finally(() => setLoadingPrefs(false));
-  }, []);
 
   // localStorage is unavailable during SSR — must be read post-mount. State starts at the
   // fixed `false`, matching SSR output, so this doesn't cause a hydration mismatch.
@@ -54,51 +36,6 @@ export default function ParametresPage() {
     localStorage.setItem("cine:search-debug", enabled ? "1" : "0");
     window.dispatchEvent(new Event("search-debug-change"));
   }, []);
-
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
-
-  // L'interrupteur bascule tout de suite ; si le serveur refuse, il revient et le dit. Il restait
-  // basculé sans rien dire : on croyait avoir coupé une notification qui continuait d'arriver.
-  const savePreference = useCallback(async (category: NotificationCategory, enabled: boolean) => {
-    setPreferences((prev) => ({ ...prev, [category]: enabled }));
-    setSaving(category);
-    try {
-      const json = (await apiAction("/api/notifications/settings", {
-        method: "PUT",
-        body: JSON.stringify({ preferences: { [category]: enabled } }),
-      })) as { preferences?: Record<NotificationCategory, boolean> } | null;
-      if (json?.preferences) setPreferences(json.preferences);
-    } catch (error) {
-      setPreferences((prev) => ({ ...prev, [category]: !enabled }));
-      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
-    } finally {
-      setSaving(null);
-    }
-  }, [toast, t]);
-
-  const startTest = useCallback(() => {
-    if (countdown !== null) return;
-    setTestState("idle");
-    setCountdown(5);
-    let remaining = 5;
-    timerRef.current = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearInterval(timerRef.current!);
-        timerRef.current = null;
-        setCountdown(null);
-        setTestState("sending");
-        fetch("/api/push/test", { method: "POST" })
-          .then(async (res) => {
-            const json = await res.json().catch(() => ({}));
-            setTestState(res.ok && json.ok ? "sent" : "error");
-          })
-          .catch(() => setTestState("error"));
-      } else {
-        setCountdown(remaining);
-      }
-    }, 1000);
-  }, [countdown]);
 
   return (
     <div>
@@ -163,7 +100,10 @@ export default function ParametresPage() {
           </div>
         </section>
 
-        {/* ── Notifications ── */}
+        {/* ── Notifications ──
+            Elles se réglaient ici *et* dans le panneau Compte du cinéma, avec des libellés
+            différents pour les mêmes choix. Il n'en reste qu'un endroit depuis le 23/09/2026 :
+            le panneau Compte, où l'administrateur voit aussi les annonces de téléchargement. */}
         <section>
           <div className="mb-4 flex items-center gap-3">
             <div className="text-slate-500">
@@ -171,79 +111,11 @@ export default function ParametresPage() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-white">{t('notifications.pageTitle')}</h2>
-              <p className="text-xs text-slate-500">{t('settings.notifications.subtitle')}</p>
             </div>
           </div>
-
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-4">
-              <div className="card p-5">
-                <div className="mb-5 flex items-start gap-3">
-                  <div className="text-slate-500">
-                    <Settings size={16} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{t('notifications.thisDevice')}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{t('notifications.deviceNotice')}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-white">{t('notifications.pushNotifications')}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{t('notifications.pushDescription')}</p>
-                  </div>
-                  <PushToggle />
-                </div>
-              </div>
-
-              <div className="card p-5">
-                <div className="mb-5">
-                  <p className="text-sm font-semibold text-white">{t('notifications.categories')}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{t('notifications.categoriesDescription')}</p>
-                </div>
-                <div className="divide-y divide-white/5">
-                  {NOTIFICATION_CATEGORIES.map((category) => (
-                    <div key={category.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white">{t(category.labelKey)}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{t(category.descKey)}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {saving === category.id && <Loader2 size={13} className="animate-spin text-slate-500" />}
-                        <Toggle
-                          checked={loadingPrefs ? category.enabledByDefault : preferences[category.id]}
-                          onChange={(enabled) => savePreference(category.id, enabled)}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="card h-fit p-5">
-              <div className="mb-5">
-                <p className="text-sm font-semibold text-white">{t('notifications.test')}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{t('notifications.testDescription')}</p>
-              </div>
-              <button
-                onClick={startTest}
-                disabled={countdown !== null || testState === "sending"}
-                className="btn btn-ghost btn-lg w-full"
-              >
-                {countdown !== null || testState === "sending" ? (
-                  <><Loader2 size={15} className="animate-spin" />{countdown !== null ? t('notifications.sendingIn', { n: countdown }) : t('notifications.sending')}</>
-                ) : (
-                  <><Send size={15} />{t('notifications.testButton')}</>
-                )}
-              </button>
-              {testState === "sent" && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400"><CircleCheckBig size={13} /> {t('notifications.sent')}</p>
-              )}
-              {testState === "error" && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-red-400"><CircleX size={13} /> {t('notifications.sendError')}</p>
-              )}
-            </div>
+          <div className="card flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <p className="text-sm text-slate-300">{t('settings.notifications.moved')}</p>
+            <Link href="/#compte=1" className="btn btn-ghost btn-sm shrink-0">{t('settings.notifications.open')}</Link>
           </div>
         </section>
 

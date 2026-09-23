@@ -819,7 +819,9 @@
       "debugSearchDesc": "Shows in the modal why each result appears: local fuzzy, classic TMDb search or natural language query."
     },
     "notifications": {
-      "subtitle": "Push alerts by device and by category"
+      "subtitle": "Push alerts by device and by category",
+      "moved": "Notifications are set in the Account tab of the cinema, for every device.",
+      "open": "Open"
     },
     "language": {
       "title": "Language",
@@ -1333,7 +1335,15 @@
       "notifList": "My list",
       "notifListHint": "When a title from your list arrives",
       "redoOnboarding": "See the welcome screen again",
-      "welcome": "Welcome"
+      "welcome": "Welcome",
+      "notifDownloads": "Downloads",
+      "notifDownloadDone": "Finished",
+      "notifDownloadDoneHint": "When a download finishes",
+      "notifDownloadStarted": "Started",
+      "notifDownloadStartedHint": "When a download starts",
+      "notifTest": "Send a test",
+      "notifTestHint": "In 5 seconds, time to leave the app",
+      "notifTestNoDevice": "Turn on notifications on this device first"
     },
     "browse": {
       "seeAll": "See all",

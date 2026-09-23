@@ -15,7 +15,7 @@ import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { BenchSection } from "./BenchSection";
-import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
+import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
 import { openOnboarding } from "./onboardingEvents";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
@@ -75,7 +75,8 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
             </div>
             <PushToggle />
           </div>
-          <NotificationChoices />
+          <NotificationChoices admin={me?.role === "admin"} />
+          <NotificationTest />
         </Section>
 
         {hasJellyfin ? (

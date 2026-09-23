@@ -17,6 +17,8 @@ vi.mock("@/components/player/PlayerPanelFrame", () => ({
 
 let prefs = { "new-episode": true, "request-available": true, "watchlist-available": false, "torrent-complete": true, "torrent-started": false };
 let putOk = true;
+let role = "user";
+let testStatus = 200;
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   if (url === "/api/notifications/settings" && init?.method === "PUT") {
     if (!putOk) return new Response(JSON.stringify({ error: "refusé" }), { status: 403 });
@@ -24,7 +26,8 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     return new Response(JSON.stringify({ preferences: prefs }));
   }
   if (url === "/api/notifications/settings") return new Response(JSON.stringify({ preferences: prefs }));
-  if (url === "/api/auth/me") return new Response(JSON.stringify({ username: "mathis", jfUser: null, role: "user" }));
+  if (url === "/api/auth/me") return new Response(JSON.stringify({ username: "mathis", jfUser: null, role }));
+  if (url === "/api/push/test") return new Response(JSON.stringify({ ok: testStatus === 200 }), { status: testStatus });
   return new Response(JSON.stringify({}));
 });
 vi.stubGlobal("fetch", fetchMock);
@@ -43,6 +46,9 @@ afterEach(() => {
   fetchMock.mockClear();
   errorToast.mockClear();
   putOk = true;
+  role = "user";
+  testStatus = 200;
+  vi.useRealTimers();
 });
 
 describe("les notifications qu'on choisit, depuis le cinéma", () => {
@@ -72,5 +78,39 @@ describe("les notifications qu'on choisit, depuis le cinéma", () => {
     await screen.findByText("player.account.notifNewEpisode");
     fireEvent.click(screen.getByRole("switch", { name: "player.account.notifNewEpisode" }));
     await waitFor(() => expect(errorToast).toHaveBeenCalledWith("refusé"));
+  });
+});
+
+// Le 23/09/2026 : tout se règle ici, et la gestion n'en a plus de copie.
+describe("le panneau Compte, seul endroit où se règlent les notifications", () => {
+  it("montre à l'administrateur les annonces de téléchargement, sous les siennes", async () => {
+    role = "admin";
+    draw();
+    expect(await screen.findByText("player.account.notifDownloads")).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "player.account.notifDownloadStarted" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/notifications/settings",
+        expect.objectContaining({ method: "PUT", body: JSON.stringify({ preferences: { "torrent-started": true } }) })
+      )
+    );
+  });
+
+  it("ne les montre pas à un compte ordinaire", async () => {
+    draw();
+    await screen.findByText("player.account.notifList");
+    expect(screen.queryByText("player.account.notifDownloads")).toBeNull();
+  });
+
+  // Sans appareil abonné, l'essai ne peut rien envoyer : il faut le dire, pas « échec ».
+  it("envoie un essai après le délai, et dit quand aucun appareil n'est abonné", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    testStatus = 404;
+    draw();
+    await screen.findByText("player.account.notifTest");
+    fireEvent.click(screen.getByText("notifications.testButton"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchMock).toHaveBeenCalledWith("/api/push/test", { method: "POST" });
+    expect(await screen.findByText("player.account.notifTestNoDevice")).toBeTruthy();
   });
 });

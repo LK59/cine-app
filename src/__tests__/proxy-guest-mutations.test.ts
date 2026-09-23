@@ -51,6 +51,9 @@ describe("proxy — what a plain user may write", () => {
       // Retirer un film de sa propre rangée « Reprendre » (23/09/2026) : sans cette entrée, le
       // geste aurait marché pour l'administrateur et échoué pour tous les autres.
       ["DELETE", "/api/jellyfin/resume"],
+      // L'essai d'envoi, passé de la gestion au panneau Compte (23/09/2026) : il n'écrit qu'aux
+      // appareils de l'appelant.
+      ["POST", "/api/push/test"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

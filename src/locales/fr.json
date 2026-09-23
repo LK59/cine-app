@@ -819,7 +819,9 @@
       "debugSearchDesc": "Affiche dans la modale pourquoi chaque résultat apparaît : fuzzy local, recherche TMDb classique ou requête naturelle."
     },
     "notifications": {
-      "subtitle": "Alertes push par appareil et par catégorie"
+      "subtitle": "Alertes push par appareil et par catégorie",
+      "moved": "Les notifications se règlent dans l'onglet Compte du cinéma, pour tous les appareils.",
+      "open": "Ouvrir"
     },
     "language": {
       "title": "Langue",
@@ -1333,7 +1335,15 @@
       "notifList": "Ma liste",
       "notifListHint": "Quand un titre de votre liste arrive",
       "redoOnboarding": "Revoir l'écran d'accueil",
-      "welcome": "Accueil"
+      "welcome": "Accueil",
+      "notifDownloads": "Téléchargements",
+      "notifDownloadDone": "Terminés",
+      "notifDownloadDoneHint": "Quand un téléchargement se termine",
+      "notifDownloadStarted": "Démarrés",
+      "notifDownloadStartedHint": "Quand un téléchargement commence",
+      "notifTest": "Envoyer un test",
+      "notifTestHint": "Dans 5 secondes, le temps de quitter l'application",
+      "notifTestNoDevice": "Activez d'abord les notifications sur cet appareil"
     },
     "browse": {
       "seeAll": "Voir tout",
