@@ -56,6 +56,24 @@ export function HeroOverview({
   );
 }
 
+/**
+ * La ligne de distribution des deux bannières du bureau — hauteur réservée.
+ *
+ * Elle n'existait qu'une fois la réponse `info` arrivée, dans une colonne calée en bas : à chaque
+ * changement de titre elle disparaissait, puis revenait deux cents millisecondes plus tard, et le
+ * titre, les métadonnées et le synopsis descendaient d'une ligne avant de remonter (relevé le
+ * 23/09/2026). La ligne reste donc toujours là, vide tant qu'il n'y a rien à dire. Partagée par
+ * les films et les séries, comme `HeroOverview`, pour la même raison.
+ */
+export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }[] } | null } | undefined }) {
+  const cast = info?.tmdb?.cast ?? [];
+  return (
+    <p className="min-h-[1lh] max-w-xl truncate text-xs text-white/60">
+      {cast.slice(0, 5).map((c) => c.name).join(", ")}
+    </p>
+  );
+}
+
 // Text only — the backdrop image/gradients (and, once focus dwells long enough, the trailer
 // video that takes over from them — see CinemaTrailerBackdrop) live in CinemaClient now, as one
 // continuous full-screen background layer shared with the rows pane beneath (see its own doc
@@ -130,11 +148,7 @@ export function CinemaHero({
 
       <HeroOverview info={info} fallback={item.overview} />
 
-      {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-        <p className="max-w-xl truncate text-xs text-white/60">
-          {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
-        </p>
-      )}
+      <HeroCastLine info={info} />
     </div>
   );
 }

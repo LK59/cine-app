@@ -8,7 +8,7 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { HeroOverview } from "@/components/cinema/CinemaHero";
+import { HeroOverview, HeroCastLine } from "@/components/cinema/CinemaHero";
 
 interface SonarrCastMember {
   tmdbId: number;
@@ -71,11 +71,7 @@ export function CinemaSeriesHero({
       {/* Le même synopsis que la bannière des films, par le même composant — voir HeroOverview. */}
       <HeroOverview info={info} fallback={item.overview} />
 
-      {info?.tmdb?.cast && info.tmdb.cast.length > 0 && (
-        <p className="max-w-xl truncate text-xs text-white/60">
-          {info.tmdb.cast.slice(0, 5).map((c) => c.name).join(", ")}
-        </p>
-      )}
+      <HeroCastLine info={info} />
     </div>
   );
 }

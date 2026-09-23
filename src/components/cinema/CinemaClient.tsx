@@ -1,5 +1,6 @@
 "use client";
 
+import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -901,44 +902,11 @@ export function CinemaClient() {
           overlapping text/labels (an earlier -mt-16 overlap trick pulled row labels into literal
           collision with the hero's own synopsis/cast line). */}
       <div className="absolute inset-0 overflow-hidden">
-        {debouncedHeroItem?.backdropUrl && (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              key={`blur-${debouncedHeroKey}`}
-              src={debouncedHeroItem.backdropUrl}
-              alt=""
-              className="absolute inset-0 h-full w-full scale-110 animate-fade-in object-cover object-top blur-2xl"
-            />
-            <div className="absolute inset-0 bg-ink/55" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              key={debouncedHeroKey}
-              src={debouncedHeroItem.backdropUrl}
-              alt=""
-              className="absolute inset-0 h-full w-full animate-fade-in object-cover object-top"
-              style={{ maskImage: BACKDROP_MASK, WebkitMaskImage: BACKDROP_MASK }}
-            />
-            {/* Takes over from the still image above once its own dwell timer + confirmed
-                "now playing" state clear — same mask, same role, later in DOM order so it
-                naturally paints on top (see the z-index note elsewhere in this file for that
-                convention) with no z-index of its own needed. The image never unmounts
-                underneath it: nothing to do if there's no trailer, or before it's ready.
-                Unmounted outright (not just hidden) whenever something opaque is over it: a
-                detail sheet or the real player. Hiding alone would leave a YouTube player running
-                behind a full-screen overlay — burning CPU on frames nobody sees, and, if the user
-                had unmuted the preview, still audible underneath the film they just started. */}
-            {/* La bande-annonce de fond est désactivée sur grand écran, à la demande.
-                
-                Retirée d'ici plutôt que mise en pause : c'est ce qui garantit que l'API YouTube
-                n'est jamais chargée et qu'aucune image n'est décodée pour un fond que personne ne
-                regardait. Le visuel du titre reste, et c'est lui que la page est venue montrer.
-                
-                Tout ce qui l'alimentait — la clé de la bande-annonce remontée par la bannière, le
-                calcul de sa suspension — a disparu avec elle ; il faudra le refaire pour la
-                rallumer, et ce sera plus propre que de garder un composant mort en réserve. */}
-          </>
-        )}
+        {/* Le visuel du titre retenu, en fondu enchaîné — voir `HeroBackdrop`. La bande-annonce
+            de fond qui prenait le relais ici est désactivée sur grand écran, à la demande :
+            retirée plutôt que mise en pause, ce qui garantit que l'API YouTube n'est jamais
+            chargée ; il faudra refaire ce qui l'alimentait pour la rallumer. */}
+        <HeroBackdrop src={debouncedHeroItem?.backdropUrl ?? null} id={debouncedHeroItem ? debouncedHeroKey : null} mask={BACKDROP_MASK} />
         <div className="absolute inset-0 bg-linear-to-r from-ink/85 via-ink/35 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b from-transparent to-ink" />
       </div>

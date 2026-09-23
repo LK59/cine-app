@@ -74,6 +74,21 @@ describe.each(HEROES)("la bannière des %s", (_, hero, english) => {
     expect(screen.getByText("Une saga traduite.")).toBeInTheDocument();
   });
 
+  it("garde la ligne de distribution en place avant l'arrivée de la réponse", () => {
+    // Elle apparaissait deux cents millisecondes après le titre, dans une colonne calée en bas :
+    // tout le texte de la bannière descendait d'une ligne puis remontait (23/09/2026).
+    const { container } = render(hero());
+    const line = container.querySelector("p.min-h-\\[1lh\\]");
+    expect(line).not.toBeNull();
+    expect(line?.textContent).toBe("");
+  });
+
+  it("remplit la même ligne quand la distribution arrive", () => {
+    info = { tmdb: { overview: "x", cast: [{ name: "Cillian Murphy" }, { name: "Rose Byrne" }] }, trailerKey: null };
+    const { container } = render(hero());
+    expect(container.querySelector("p.min-h-\\[1lh\\]")?.textContent).toBe("Cillian Murphy, Rose Byrne");
+  });
+
   it("se replie sur le catalogue une fois la réponse arrivée sans traduction", () => {
     info = { tmdb: null, trailerKey: null };
     render(hero());
