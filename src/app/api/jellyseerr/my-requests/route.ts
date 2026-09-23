@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
+import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -21,22 +22,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    // Own id via the session's own cookie when available — doesn't require admin-gated access
-    // to the full user list, just a valid session for whoever is asking about themselves.
-    let jsUserId: number | undefined;
-    if (session.jsCookie) {
-      jsUserId = (await jellyseerr.getMe(session.jsCookie).catch(() => null))?.id;
-    }
-    if (!jsUserId) {
-      const usersData = await jellyseerr.getUsers(session.jsCookie).catch(() => ({ results: [] }));
-      jsUserId = usersData.results.find(
-        (u) => u.jellyfinUsername?.toLowerCase() === session.jfUser!.toLowerCase()
-      )?.id;
-    }
+    // Who "mine" is — see `jellyseerrIdentity.ts`.
+    const { userId, cookie } = await resolveJellyseerrIdentity(session);
+    if (userId == null) return NextResponse.json({ results: [] });
 
-    if (!jsUserId) return NextResponse.json({ results: [] });
-
-    const data = await jellyseerr.getRequestsByUser(jsUserId, session.jsCookie);
+    const data = await jellyseerr.getRequestsByUser(userId, cookie);
     const enriched = await enrichRequests(data.results);
     return NextResponse.json({ results: enriched });
   } catch {

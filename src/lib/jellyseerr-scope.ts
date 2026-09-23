@@ -1,17 +1,15 @@
 import { jellyseerr, type JellyseerrRequest } from "@/lib/clients/jellyseerr";
 import type { SessionPayload } from "@/lib/auth";
+import { resolveJellyseerrIdentity, type JellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 
 // Jellyseerr's own Request.status enum (distinct from the Media-level status used elsewhere in
 // this app — e.g. MediaStatus on mediaInfo): 1=pending approval, 2=approved, 3=declined.
 const REQUEST_PENDING = 1;
 
-// Resolves the caller's own Jellyseerr numeric id via their session cookie — needed to scope "my
-// own requests" for a non-admin user. Listing every user's requests (like an admin can) is
-// itself gated on this fork, so there's no other way to find "mine" for an ordinary account.
-async function resolveOwnJellyseerrId(session: SessionPayload | null): Promise<number | null> {
-  if (!session?.jsCookie) return null;
-  const me = await jellyseerr.getMe(session.jsCookie).catch(() => null);
-  return me?.id ?? null;
+// Who "mine" is — see `jellyseerrIdentity.ts`. This used to need the session cookie, and read
+// "nothing" for anyone whose session had none.
+async function ownIdentity(session: SessionPayload | null): Promise<JellyseerrIdentity> {
+  return session ? resolveJellyseerrIdentity(session) : { userId: null };
 }
 
 // Admin: the instance-wide count of requests still needing a decision — what they're actually
@@ -23,9 +21,9 @@ export async function getJellyseerrPendingCount(session: SessionPayload | null):
     const pending = await jellyseerr.getRequests("pending", session.jsCookie);
     return pending.pageInfo?.results ?? pending.results.length;
   }
-  const ownId = await resolveOwnJellyseerrId(session);
-  if (ownId == null) return 0;
-  const mine = await jellyseerr.getRequestsByUser(ownId, session?.jsCookie);
+  const { userId, cookie } = await ownIdentity(session);
+  if (userId == null) return 0;
+  const mine = await jellyseerr.getRequestsByUser(userId, cookie);
   return mine.results.filter((r) => r.status === REQUEST_PENDING).length;
 }
 
@@ -40,8 +38,8 @@ export async function getJellyseerrActivityItems(
     const all = await jellyseerr.getRequests("all", session.jsCookie).catch(() => ({ results: [] }));
     return all.results.slice(0, limit);
   }
-  const ownId = await resolveOwnJellyseerrId(session);
-  if (ownId == null) return [];
-  const mine = await jellyseerr.getRequestsByUser(ownId, session?.jsCookie).catch(() => ({ results: [] }));
+  const { userId, cookie } = await ownIdentity(session);
+  if (userId == null) return [];
+  const mine = await jellyseerr.getRequestsByUser(userId, cookie).catch(() => ({ results: [] }));
   return mine.results.slice(0, limit);
 }

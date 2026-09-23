@@ -16,6 +16,8 @@ const jellyseerr = {
   getMe: vi.fn(),
   getRequestsByUser: vi.fn(),
   getUsers: vi.fn(),
+  getRequest: vi.fn(),
+  importFromJellyfin: vi.fn(),
 };
 vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr }));
 
@@ -73,9 +75,12 @@ function jsonReq(body: unknown, cookie: string | null = "t"): NextRequest {
   return { ...req(cookie), json: async () => body } as unknown as NextRequest;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  (await import("@/lib/jellyseerrIdentity")).resetJellyseerrIdentityCache();
   mockVerify.mockResolvedValue({ u: "louis", jfId: "jf-louis", jfUser: "louis", role: "user", jsCookie: "s%3Amine" });
+  // Le cookie de la session est encore accepté par Jellyseerr — le cas courant.
+  jellyseerr.getMe.mockResolvedValue({ id: 5 });
   watchlistDb.get.mockReturnValue(undefined);
   watchlistDb.getAll.mockReturnValue([]);
 });
@@ -191,6 +196,39 @@ describe("POST /api/player/requests", () => {
     await POST(jsonReq({ type: "series", tmdbId: 1399 }));
     expect(jellyseerr.createRequest).toHaveBeenCalledWith("tv", 1399, undefined, "s%3Amine", [1, 2, 3]);
   });
+
+  // Le 23/09/2026 : une session ouverte avant l'import du compte dans Jellyseerr n'avait pas de
+  // cookie, et la demande partait avec la clé seule — signée du propriétaire de la clé.
+  it("names the person when the session has no Jellyseerr cookie", async () => {
+    mockVerify.mockResolvedValue({ u: "sarah", jfId: "jf-sarah", jfUser: "sarah", role: "user" });
+    jellyseerr.getUsers.mockResolvedValue({ results: [{ id: 23, displayName: "sarah", jellyfinUserId: "jf-sarah" }] });
+    jellyseerr.createRequest.mockResolvedValue({ id: 12 });
+    const { POST } = await import("@/app/api/player/requests/route");
+    await POST(jsonReq({ type: "movie", tmdbId: 603 }));
+    expect(jellyseerr.createRequest).toHaveBeenCalledWith("movie", 603, 23, undefined, undefined);
+  });
+
+  // Un cookie que Jellyseerr ne reconnaît plus ne doit pas faire échouer la demande.
+  it("names the person when the session's cookie is no longer accepted", async () => {
+    jellyseerr.getMe.mockRejectedValue(new Error("403"));
+    jellyseerr.getUsers.mockResolvedValue({ results: [{ id: 5, displayName: "louis", jellyfinUserId: "jf-louis" }] });
+    jellyseerr.createRequest.mockResolvedValue({ id: 13 });
+    const { POST } = await import("@/app/api/player/requests/route");
+    await POST(jsonReq({ type: "movie", tmdbId: 603 }));
+    expect(jellyseerr.createRequest).toHaveBeenCalledWith("movie", 603, 5, undefined, undefined);
+  });
+
+  // Dernier recours, choisi : la demande part quand même, au nom du propriétaire de la clé.
+  it("still requests, under the key's owner, when nobody can be named", async () => {
+    mockVerify.mockResolvedValue({ u: "sarah", jfId: "jf-sarah", jfUser: "sarah", role: "user" });
+    jellyseerr.getUsers.mockResolvedValue({ results: [] });
+    jellyseerr.importFromJellyfin.mockRejectedValue(new Error("500"));
+    jellyseerr.createRequest.mockResolvedValue({ id: 14 });
+    const { POST } = await import("@/app/api/player/requests/route");
+    const res = await POST(jsonReq({ type: "movie", tmdbId: 603 }));
+    expect(res.status).toBe(200);
+    expect(jellyseerr.createRequest).toHaveBeenCalledWith("movie", 603, undefined, undefined, undefined);
+  });
 });
 
 describe("DELETE /api/player/requests/[id]", () => {
@@ -210,6 +248,22 @@ describe("DELETE /api/player/requests/[id]", () => {
     expect(res.status).toBe(200);
     expect(jellyseerr.deleteRequest).toHaveBeenCalledWith(328, "s%3Amine");
     expect(jellyseerr.deleteMedia).not.toHaveBeenCalled();
+  });
+
+  // Sans cookie, l'annulation part avec la clé d'API, qui peut tout supprimer : la demande doit
+  // d'abord être celle de la personne.
+  it("without a cookie, cancels only the person's own request", async () => {
+    mockVerify.mockResolvedValue({ u: "sarah", jfId: "jf-sarah", jfUser: "sarah", role: "user" });
+    jellyseerr.getUsers.mockResolvedValue({ results: [{ id: 23, displayName: "sarah", jellyfinUserId: "jf-sarah" }] });
+    const { DELETE } = await import("@/app/api/player/requests/[id]/route");
+
+    jellyseerr.getRequest.mockResolvedValue({ id: 40, requestedBy: { id: 1 } });
+    expect((await DELETE(req(), { params: Promise.resolve({ id: "40" }) })).status).toBe(404);
+    expect(jellyseerr.deleteRequest).not.toHaveBeenCalled();
+
+    jellyseerr.getRequest.mockResolvedValue({ id: 41, requestedBy: { id: 23 } });
+    expect((await DELETE(req(), { params: Promise.resolve({ id: "41" }) })).status).toBe(200);
+    expect(jellyseerr.deleteRequest).toHaveBeenCalledWith(41, undefined);
   });
 });
 

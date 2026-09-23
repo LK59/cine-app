@@ -496,6 +496,37 @@ de vérité.
 
 ---
 
+## 16. Au nom de qui cine-app parle à Jellyseerr
+
+**Règle.** Une action faite pour quelqu'un — demander, lister ses demandes, en annuler une — part :
+avec le cookie Jellyseerr de sa session, s'il est encore accepté ; sinon avec la clé d'API **en
+nommant son compte** (`userId`), retrouvé par son identifiant Jellyfin ; sinon après avoir importé
+ce compte depuis Jellyfin ; sinon au nom du propriétaire de la clé. Ce dernier recours est voulu :
+l'attribution sert au suivi, et une demande mal signée vaut mieux qu'une demande refusée. À la
+connexion, un compte que Jellyseerr ne connaît pas est importé et la connexion réessayée une fois.
+
+Le cookie ne s'obtient qu'à la connexion, et la session le garde des semaines : un compte connecté
+avant d'exister dans Jellyseerr restait sans cookie, et ses demandes partaient au nom du
+propriétaire de la clé — même une fois le compte importé. Quatre endroits résolvaient « mon
+compte Jellyseerr », de trois façons, dont une qui ne savait lire que le cookie.
+
+**Porteur.** `resolveJellyseerrIdentity`, `ensureJellyseerrUserId` et `loginToJellyseerr`
+(`src/lib/jellyseerrIdentity.ts`).
+
+**Appelants.** `/api/player/requests` (demander), `/api/player/requests/[id]` (annuler),
+`getPlayerRequests`, `jellyseerr-scope.ts`, `/api/jellyseerr/requests`, `/api/jellyseerr/my-requests`,
+`/api/auth/jellyfin` (connexion).
+
+**Tests.** `jellyseerr-identity.test.ts`, `player-routes.test.ts`, `jellyseerr-routes.test.ts`,
+`decisions-partagees.test.ts`.
+
+**Voulu.** Sans cookie, l'annulation part avec la clé, qui peut tout supprimer : la demande est
+relue d'abord, et refusée si elle n'est pas à la personne (l'administrateur excepté). Une demande
+faite à la clé au nom de quelqu'un est approuvée comme le propriétaire de la clé l'approuverait ;
+les droits de demander, eux, restent ceux de la personne.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits

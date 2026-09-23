@@ -2,40 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { withErrorHandling } from "@/lib/api-helpers";
-import { SESSION_COOKIE, type SessionPayload } from "@/lib/auth"
+import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
-import { withCache } from "@/lib/server-cache";
 import { pendingRequestDb } from "@/lib/db";
-
-const USERS_TTL = 5 * 60_000; // 5 min — user list rarely changes
-
-async function getJellyseerrUsers(cookie?: string) {
-  return withCache("jellyseerr:users", USERS_TTL, () => jellyseerr.getUsers(cookie));
-}
-
-// Legacy fallback (no session cookie — local-admin login, or the Jellyseerr login at sign-in
-// failed): resolves via the master API key's own user list, which this Jellyseerr fork may or
-// may not still permit depending on the calling key's own account permissions.
-async function resolveJellyseerrUserId(jfUser: string): Promise<number | undefined> {
-  try {
-    const usersData = await getJellyseerrUsers();
-    return usersData.results.find(
-      (u) => u.jellyfinUsername?.toLowerCase() === jfUser.toLowerCase()
-    )?.id;
-  } catch {
-    return undefined;
-  }
-}
-
-// Own id via the session's own cookie — doesn't require the admin-gated full user list, just a
-// valid session for whoever is asking about themselves.
-async function resolveOwnUserId(session: SessionPayload): Promise<number | undefined> {
-  if (session.jsCookie) {
-    const me = await jellyseerr.getMe(session.jsCookie).catch(() => null);
-    if (me?.id) return me.id;
-  }
-  return session.jfUser ? resolveJellyseerrUserId(session.jfUser) : undefined;
-}
+import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 
 export async function GET(req: NextRequest) {
   const filter = (req.nextUrl.searchParams.get("filter") as "pending" | "approved" | "all") || "pending";
@@ -44,9 +14,10 @@ export async function GET(req: NextRequest) {
 
   if (session && session.role !== "admin" && session.jfUser) {
     return withErrorHandling(async () => {
-      const jellyseerrUserId = await resolveOwnUserId(session);
-      if (!jellyseerrUserId) return { results: [], pageInfo: { results: 0 } };
-      const data = await jellyseerr.getRequestsByUser(jellyseerrUserId, session.jsCookie);
+      // Who "mine" is — see `jellyseerrIdentity.ts`.
+      const { userId, cookie } = await resolveJellyseerrIdentity(session);
+      if (userId == null) return { results: [], pageInfo: { results: 0 } };
+      const data = await jellyseerr.getRequestsByUser(userId, cookie);
       return { ...data, results: await enrichRequests(data.results) };
     });
   }
@@ -84,23 +55,18 @@ export async function POST(req: NextRequest) {
     pendingRequestDb.add(session.u, mediaType === "tv" ? "series" : "movie", mediaId!, seasons ?? null);
   }
 
-  // With a session cookie, Jellyseerr already knows who's asking — no userId override needed
-  // (that override was itself the admin-only "request on behalf of" path this fork now blocks
-  // for anything but a genuinely authenticated session).
-  if (session?.jsCookie) {
-    return withErrorHandling(async () => {
-      const result = await jellyseerr.createRequest(mediaType, mediaId, undefined, session.jsCookie, seasons);
-      trackForAvailability();
-      return result;
-    });
-  }
-
-  const jellyseerrUserId = session?.jfUser
-    ? await resolveJellyseerrUserId(session.jfUser)
-    : undefined;
+  // Au nom de qui — see `jellyseerrIdentity.ts`. The local-admin login has no identity at all,
+  // and its requests go out under the key's owner, which is that same administrator.
+  const identity = session ? await resolveJellyseerrIdentity(session) : { userId: null };
 
   return withErrorHandling(async () => {
-    const result = await jellyseerr.createRequest(mediaType, mediaId, jellyseerrUserId, undefined, seasons);
+    const result = await jellyseerr.createRequest(
+      mediaType,
+      mediaId,
+      identity.cookie ? undefined : identity.userId ?? undefined,
+      identity.cookie,
+      seasons,
+    );
     trackForAvailability();
     return result;
   });

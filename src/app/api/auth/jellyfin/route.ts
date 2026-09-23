@@ -6,7 +6,7 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
-import { jellyseerr } from "@/lib/clients/jellyseerr";
+import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -80,9 +80,10 @@ export async function POST(req: NextRequest) {
   // specifically, since Jellyseerr auto-links an account to this exact Jellyfin identity the
   // first time it sees it (same mechanism as logging into Jellyseerr's own web UI). Best-effort:
   // a Jellyseerr outage or misconfiguration must not block signing into cine-app itself, whose
-  // own auth is against Jellyfin, not Jellyseerr.
+  // own auth is against Jellyfin, not Jellyseerr. A Jellyfin account Jellyseerr doesn't know yet
+  // is imported and retried — see `loginToJellyseerr`.
   const jellyseerrCookie = config.jellyseerr.apiKey
-    ? await jellyseerr.login(username, password).catch(() => null)
+    ? await loginToJellyseerr(username, password, jellyfinId || undefined, jellyfinUsername).catch(() => null)
     : null;
 
   const { token, jti } = await createSessionToken(

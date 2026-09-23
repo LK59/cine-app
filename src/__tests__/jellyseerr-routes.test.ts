@@ -11,6 +11,7 @@ const mockJellyseerr = {
   approveRequest: vi.fn(),
   declineRequest: vi.fn(),
   createRequest: vi.fn(),
+  importFromJellyfin: vi.fn(),
 };
 vi.mock("@/lib/clients/jellyseerr", () => ({ jellyseerr: mockJellyseerr }));
 vi.mock("@/lib/jellyseerr-enrich", () => ({ enrichRequests: async (r: unknown[]) => r }));
@@ -30,7 +31,11 @@ function fakeReq(opts: { params?: Record<string, string>; body?: unknown; cookie
   } as unknown as NextRequest;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(async () => {
+  vi.clearAllMocks();
+  // La liste des comptes Jellyseerr est gardée en mémoire par le module d'identité.
+  (await import("@/lib/jellyseerrIdentity")).resetJellyseerrIdentityCache();
+});
 
 describe("GET /api/jellyseerr/media", () => {
   it("returns 400 when tmdbId or type is missing", async () => {
@@ -172,6 +177,7 @@ describe("POST /api/jellyseerr/requests", () => {
   it("prefers the session's own Jellyseerr cookie over resolving a userId", async () => {
     mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis", jsCookie: "s%3Asecret" });
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
+    mockJellyseerr.getMe.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "movie", mediaId: 42 } }));
     expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("movie", 42, undefined, "s%3Asecret", undefined);
@@ -188,6 +194,7 @@ describe("POST /api/jellyseerr/requests", () => {
   it("passes seasons through for a tv request", async () => {
     mockVerifySessionFull.mockResolvedValue({ role: "user", jfUser: "louis", jsCookie: "s%3Asecret" });
     mockJellyseerr.createRequest.mockResolvedValue({ id: 1 });
+    mockJellyseerr.getMe.mockResolvedValue({ id: 1 });
     const { POST } = await import("@/app/api/jellyseerr/requests/route");
     await POST(fakeReq({ body: { mediaType: "tv", mediaId: 7, seasons: [1, 2] } }));
     expect(mockJellyseerr.createRequest).toHaveBeenCalledWith("tv", 7, undefined, "s%3Asecret", [1, 2]);

@@ -3,6 +3,7 @@ import { cachedMovieInfo, cachedTvInfo } from "@/lib/server-cache";
 import { playableLibrary, playableId } from "@/lib/playerLibrary";
 import { resolveRequestState, isReleased, type PlayerRequestState } from "@/lib/playerRequestState";
 import type { SessionPayload } from "@/lib/auth";
+import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 
 export interface PlayerRequest {
   /** L'identifiant de la demande chez Jellyseerr — ce qu'il faut pour l'annuler. */
@@ -42,23 +43,11 @@ export interface PlayerRequest {
  * requête suivante, sans synchronisation à écrire ni à débuguer.
  */
 export async function getPlayerRequests(session: SessionPayload): Promise<PlayerRequest[]> {
-  const ownId = await resolveOwnJellyseerrId(session);
-  if (ownId == null) return [];
+  const { userId, cookie } = await resolveJellyseerrIdentity(session);
+  if (userId == null) return [];
 
-  const data = await jellyseerr.getRequestsByUser(ownId, session.jsCookie).catch(() => ({ results: [] }));
+  const data = await jellyseerr.getRequestsByUser(userId, cookie).catch(() => ({ results: [] }));
   return decorate(data.results);
-}
-
-async function resolveOwnJellyseerrId(session: SessionPayload): Promise<number | null> {
-  if (session.jsCookie) {
-    const me = await jellyseerr.getMe(session.jsCookie).catch(() => null);
-    if (me?.id) return me.id;
-  }
-  if (!session.jfUser) return null;
-  // Repli sans cookie de session (connexion admin locale, ou la connexion Jellyseerr de
-  // l'ouverture de session a échoué) : la liste des comptes, via la clé maîtresse.
-  const users = await jellyseerr.getUsers().catch(() => ({ results: [] }));
-  return users.results.find((u) => u.jellyfinUsername?.toLowerCase() === session.jfUser!.toLowerCase())?.id ?? null;
 }
 
 /** Sept jours : au-delà, un titre arrivé n'est plus une nouvelle, c'est la bibliothèque. */

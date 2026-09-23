@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
+import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale, LOCALE_COOKIE } from "@/lib/i18n";
 import { withErrorHandling } from "@/lib/api-helpers";
@@ -46,9 +47,12 @@ export async function POST(req: NextRequest) {
   }
 
   return withErrorHandling(async () => {
+    // Au nom de qui : le cookie s'il tient encore, sinon le compte de la personne nommé à la clé
+    // d'API. Sans les deux, la demande part au nom du propriétaire de la clé — voir le module.
+    const identity = await resolveJellyseerrIdentity(session);
     let seasons: number[] | undefined;
     if (type === "series") {
-      const media = await jellyseerr.getTvMedia(tmdbId, session.jsCookie).catch(() => null);
+      const media = await jellyseerr.getTvMedia(tmdbId, identity.cookie).catch(() => null);
       seasons = (media?.seasons ?? []).map((s) => s.seasonNumber).filter((n) => n > 0);
       if (seasons.length === 0) {
         // Jellyseerr n'a pas répondu : TMDB sait aussi combien de saisons existent, et une série
@@ -63,8 +67,8 @@ export async function POST(req: NextRequest) {
     const result = await jellyseerr.createRequest(
       type === "movie" ? "movie" : "tv",
       tmdbId,
-      undefined,
-      session.jsCookie,
+      identity.cookie ? undefined : identity.userId ?? undefined,
+      identity.cookie,
       seasons
     );
 

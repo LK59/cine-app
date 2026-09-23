@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
+import { resolveJellyseerrIdentity } from "@/lib/jellyseerrIdentity";
 import { withErrorHandling } from "@/lib/api-helpers";
 import { config } from "@/lib/config";
 
@@ -18,6 +19,10 @@ export const dynamic = "force-dynamic";
  *
  * L'appel part avec le cookie de session de la personne : Jellyseerr applique alors ses propres
  * droits, et refusera de lui-même la demande de quelqu'un d'autre.
+ *
+ * Sans cookie valable, il part avec la clé d'API — qui, elle, peut tout supprimer. La demande
+ * est donc d'abord relue, et refusée si elle n'est pas à cette personne. Avant ce contrôle, une
+ * session sans cookie pouvait retirer la demande de n'importe qui en devinant son numéro.
  */
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
@@ -31,8 +36,17 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: "Demande introuvable" }, { status: 400 });
   }
 
+  const identity = await resolveJellyseerrIdentity(session);
+  // L'administrateur peut retirer n'importe quelle demande : c'est déjà ce que lui permet la clé.
+  if (!identity.cookie && session.role !== "admin") {
+    const request = await jellyseerr.getRequest(id).catch(() => null);
+    if (!request || identity.userId == null || request.requestedBy?.id !== identity.userId) {
+      return NextResponse.json({ error: "Demande introuvable" }, { status: 404 });
+    }
+  }
+
   return withErrorHandling(async () => {
-    await jellyseerr.deleteRequest(id, session.jsCookie);
+    await jellyseerr.deleteRequest(id, identity.cookie);
     return { ok: true };
   }, "player-request-cancel");
 }

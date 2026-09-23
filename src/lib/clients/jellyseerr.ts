@@ -4,14 +4,14 @@ import { fetchJson } from "@/lib/http";
 const { url, apiKey } = config.jellyseerr;
 const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
 
-// This fork (seerr-team/seerr, confirmed live against this instance — even /api/v1/settings/main
-// and /api/v1/user 403 with the master key alone) restricts several endpoints to a genuine
-// session cookie; the admin X-Api-Key is no longer sufficient by itself for user-attributed
-// actions like creating a request. `cookie`, when provided, is the raw connect.sid value
-// obtained via login() at cine-app sign-in time (see /api/auth/jellyfin) and takes priority over
-// the API key. Falling back to the API key when no cookie is available (local-admin login, which
-// has no Jellyfin identity to authenticate to Jellyseerr with, or a failed Jellyseerr login at
-// sign-in time) keeps the previous best-effort behavior instead of a hard failure.
+// `cookie`, when provided, is the raw connect.sid value obtained via login() at cine-app sign-in
+// time (see /api/auth/jellyfin) and takes priority over the API key: Jellyseerr then applies that
+// person's own permissions. Without it, the API key acts as Jellyseerr's owner account.
+//
+// An earlier note here said this fork refused /api/v1/user and /api/v1/settings/main to the key
+// alone. Re-checked live on 2026-09-23: both answer, and so does `userId` on a request (the
+// "request on behalf of" path). Who a call is made *as* is decided in `jellyseerrIdentity.ts`,
+// and nowhere else.
 function authHeaders(cookie?: string): Record<string, string> {
   if (cookie) return { Cookie: `connect.sid=${cookie}`, "Content-Type": "application/json" };
   return headers;
@@ -41,6 +41,8 @@ export interface JellyseerrUser {
   id: number;
   displayName: string;
   jellyfinUsername?: string;
+  /** L'identifiant Jellyfin du compte lié — c'est par lui qu'on reconnaît quelqu'un. */
+  jellyfinUserId?: string;
 }
 
 export const jellyseerr = {
@@ -92,13 +94,27 @@ export const jellyseerr = {
       `${url}/api/v1/user?take=200&skip=0`,
       { headers: authHeaders(cookie) }
     ),
+  /** Une demande seule — de quoi vérifier à qui elle appartient avant d'y toucher avec la clé. */
+  getRequest: (id: number, cookie?: string) =>
+    fetchJson<JellyseerrRequest>(`${url}/api/v1/request/${id}`, { headers: authHeaders(cookie) }),
+  /**
+   * Le bouton « Importer depuis Jellyfin » de Jellyseerr, pour les comptes nommés seulement.
+   * Un compte déjà présent est laissé tel quel ; un nouveau reçoit les permissions par défaut de
+   * Jellyseerr, et son nom d'utilisateur en guise d'adresse (voir `jellyseerrIdentity.ts`).
+   */
+  importFromJellyfin: (jellyfinUserIds: string[]) =>
+    fetchJson<JellyseerrUser[]>(`${url}/api/v1/user/import-from-jellyfin`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jellyfinUserIds }),
+    }),
   approveRequest: (id: number, cookie?: string) =>
     fetchJson<void>(`${url}/api/v1/request/${id}/approve`, { method: "POST", headers: authHeaders(cookie) }),
   declineRequest: (id: number, cookie?: string) =>
     fetchJson<void>(`${url}/api/v1/request/${id}/decline`, { method: "POST", headers: authHeaders(cookie) }),
-  // No `userId` when a cookie is supplied — the session already identifies the requester to
-  // Jellyseerr, so passing one would be redundant (and userId-as-another-user is itself the
-  // admin-only "request on behalf of" path this whole change moves away from).
+  // No `userId` when a cookie is supplied — the session already identifies the requester.
+  // Without one, `userId` names the person the key is asking on behalf of; Jellyseerr checks that
+  // person's own request permissions, and approves as the key's owner would.
   // `seasons` is what a TV request was missing entirely before (root cause of the "Cannot read
   // properties of undefined (reading 'filter')" crash reported live) — Jellyseerr's own request
   // handler processes it as an array of season numbers for a `mediaType: "tv"` request; omitted

@@ -588,3 +588,28 @@ describe("« Retirer de Reprendre », sur les deux écrans et pour les films seu
     expect(src).toContain("useRemoveFromResume()");
   });
 });
+
+describe("une seule façon de savoir qui l'on est pour Jellyseerr", () => {
+  // Quatre endroits le résolvaient, de trois façons, dont une qui ne savait lire que le cookie de
+  // session : un compte sans cookie y devenait « personne », ou signait au nom du propriétaire de
+  // la clé (23/09/2026). La réponse vit dans jellyseerrIdentity.ts, et nulle part ailleurs.
+  it("ni getMe ni recherche par nom en dehors du module d'identité", () => {
+    const racines = ["src/app", "src/lib", "src/components"];
+    const fichiers: string[] = [];
+    const parcourir = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = `${dir}/${e.name}`;
+        if (e.isDirectory()) parcourir(p);
+        else if (/\.tsx?$/.test(e.name)) fichiers.push(p);
+      }
+    };
+    racines.forEach(parcourir);
+    const fautifs = fichiers.filter(
+      (f) =>
+        !f.endsWith("jellyseerrIdentity.ts") &&
+        !f.endsWith("clients/jellyseerr.ts") &&
+        /jellyseerr\.getMe\(|jellyfinUsername\?\.toLowerCase\(\)/.test(lire(f)),
+    );
+    expect(fautifs).toEqual([]);
+  });
+});
