@@ -221,6 +221,23 @@ describe("runBench", () => {
     expect(reports).toHaveLength(1);
   });
 
+  it("ne juge pas non plus un film confié au lecteur serveur pendant l'ouverture", async () => {
+    // Disclosure Day, 23/09/2026 : Dolby Vision sans couche HDR10, refusé exprès sur Chrome. Le
+    // banc attendait 45 s une image qui ne pouvait pas venir, et concluait « échec ».
+    const { deps } = simulated();
+    let opened = false;
+    const [result] = await runBench(CONFIG, {
+      ...deps,
+      open: () => void (opened = true),
+      bridge: () => null,
+      handedOver: () => opened,
+    });
+    expect(result.verdict).toBe("skip");
+    expect(result.checks).toHaveLength(1);
+    expect(result.checks[0]).toMatchObject({ id: "handed-over", verdict: "skip" });
+    expect(result.checks[0].detail).toMatch(/pendant|à l'ouverture/);
+  });
+
   it("trouve l'horloge qui court sans image, sur la première lecture franche", async () => {
     // Le saut lui-même ne peut pas le dire : le compteur d'images est celui du décodage, qui court
     // en avance et rattrape après un saut (22/09/2026 — voir `ReadOptions.frames`). Une image

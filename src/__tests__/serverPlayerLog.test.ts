@@ -71,3 +71,10 @@ describe("arrêt du lecteur serveur", () => {
     expect(isPlayerEventKind("stop")).toBe(true);
   });
 });
+
+describe("lecteur serveur pendant un banc", () => {
+  it("marque ses lignes du banc, pour qu'elles restent hors du journal des spectateurs", () => {
+    expect(serverStartFields({ ...CTX, bench: "banc-1" }, { directPlay: false, nativeHls: true, resumeAt: 0, audioStreamIndex: undefined })).toMatchObject({ bench: "banc-1" });
+    expect(serverStopFields(CTX, "close", 10)).not.toHaveProperty("bench");
+  });
+});

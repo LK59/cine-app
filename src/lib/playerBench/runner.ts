@@ -93,6 +93,15 @@ class ExtremeDone extends Error {}
 /** Le lecteur n'est plus le nôtre : erreur affichée, ou passage au lecteur serveur. */
 class Lost extends Error {}
 
+/**
+ * Le lecteur natif a confié le film au lecteur serveur *pendant* l'ouverture.
+ *
+ * Le cas d'avant l'ouverture était déjà reconnu ; celui-ci non. Un Dolby Vision sans couche HDR10
+ * sur Chrome (*Disclosure Day*, 23/09/2026) est refusé exprès — les couleurs seraient fausses — et
+ * le banc attendait 45 s une première image qui ne pouvait pas venir, puis concluait « échec ».
+ */
+class HandedOver extends Error {}
+
 const SAMPLE_MS = 250;
 const OPEN_TIMEOUT_MS = 45_000;
 const ARRIVAL_TIMEOUT_MS = 15_000;
@@ -512,6 +521,7 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     deps.open(item);
     const opened = await waitFor(() => {
       if (deps.cancelled()) throw new Cancelled();
+      if (deps.handedOver?.(item.itemId)) throw new HandedOver();
       const b = deps.bridge();
       if (b?.itemId === item.itemId && b.error()) throw new Lost(`erreur à l'ouverture : ${b.error()}`);
       return b?.itemId === item.itemId && b.ready();
@@ -713,6 +723,12 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
       // Fini : rien à noter.
     } else if (error instanceof Cancelled) {
       checks.push({ id: "cancelled", verdict: "skip", detail: "banc arrêté" });
+    } else if (error instanceof HandedOver) {
+      checks.push({
+        id: "handed-over",
+        verdict: "skip",
+        detail: `confié au lecteur serveur à l'ouverture, au bout de ${deps.now() - startedAt} ms : rien à mesurer ici`,
+      });
     } else {
       const b = deps.bridge();
       checks.push({
@@ -731,7 +747,11 @@ async function runItem(config: BenchConfig, deps: BenchDeps, index: number): Pro
     /* rien à ajouter */
   }
   result.elapsedMs = deps.now() - startedAt;
-  result.verdict = checks.reduce<Verdict>((acc, c) => (c.verdict === "skip" ? acc : worst(acc, c.verdict)), "ok");
+  // Rien de mesuré — confié au lecteur serveur, ou banc arrêté avant : ni réussite ni échec.
+  result.verdict =
+    checks.length > 0 && checks.every((c) => c.verdict === "skip")
+      ? "skip"
+      : checks.reduce<Verdict>((acc, c) => (c.verdict === "skip" ? acc : worst(acc, c.verdict)), "ok");
 
   return result;
 }

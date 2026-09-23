@@ -18,6 +18,12 @@ export interface ServerPlayerContext {
   title: string | null | undefined;
   /** La lecture a été ouverte pour un téléviseur (AirPlay, Remote Playback). */
   cast: boolean;
+  /**
+   * La séance d'un banc d'essai, s'il y en a une : ses lignes vont alors dans `bench-player.log`,
+   * comme celles du lecteur natif. Un film confié au lecteur serveur pendant un banc écrivait son
+   * `start` dans le journal des spectateurs (23/09/2026).
+   */
+  bench?: string;
 }
 
 /** Le lecteur serveur a obtenu son flux et le pose sur l'élément. */
@@ -58,5 +64,11 @@ export function serverStopFields(ctx: ServerPlayerContext, why: "close" | "next"
 }
 
 function base(ctx: ServerPlayerContext): Record<string, unknown> {
-  return { itemId: ctx.itemId, ...(ctx.title ? { title: ctx.title } : {}), player: "serveur", cast: ctx.cast };
+  return {
+    itemId: ctx.itemId,
+    ...(ctx.title ? { title: ctx.title } : {}),
+    player: "serveur",
+    cast: ctx.cast,
+    ...(ctx.bench ? { bench: ctx.bench } : {}),
+  };
 }

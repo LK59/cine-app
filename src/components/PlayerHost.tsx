@@ -398,10 +398,10 @@ function ActivePlayer({
   // Ce que chaque ligne du journal de ce lecteur porte — voir `serverPlayerLog`. Tenu dans une
   // référence : `startPlayback` a des dépendances volontairement figées, et y lire `title` ou
   // `castSession` directement nommerait l'épisode d'avant.
-  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession });
+  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench });
   useEffect(() => {
-    logContext.current = { itemId, title, cast: castSession };
-  }, [itemId, title, castSession]);
+    logContext.current = { itemId, title, cast: castSession, bench: session.bench };
+  }, [itemId, title, castSession, session.bench]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
