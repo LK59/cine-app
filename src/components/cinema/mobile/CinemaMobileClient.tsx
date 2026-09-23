@@ -584,7 +584,7 @@ export function CinemaMobileClient() {
                     })
                   )
                 }
-                className={`${CONTINUE_WIDTH} shrink-0 text-left active:scale-95`}
+                className={`${CONTINUE_WIDTH} pressable shrink-0 text-left`}
               >
                 <div className="relative overflow-hidden rounded-lg">
                   <PosterImage
@@ -624,7 +624,7 @@ export function CinemaMobileClient() {
                     })
                   )
                 }
-                className={`${CONTINUE_WIDTH} shrink-0 text-left active:scale-95`}
+                className={`${CONTINUE_WIDTH} pressable shrink-0 text-left`}
               >
                 <div className="relative overflow-hidden rounded-lg">
                   <PosterImage src={entry.thumbnailUrl} alt={entry.title} aspectRatio="aspect-video" unoptimized subtle />
@@ -846,7 +846,7 @@ function PosterRowInner<T extends { title: string; posterUrl: string | null; add
           key={itemId(item)}
           type="button"
           onClick={() => onSelect(item)}
-          className={`${POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
+          className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.posterUrl} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
           {showNewBadge && <CinemaNewBadge addedAt={item.addedAt} />}
@@ -886,7 +886,7 @@ const DiscoveryRow = memo(function DiscoveryRow({
           key={`${item.type}-${item.tmdbId}`}
           type="button"
           onClick={() => onSelect(item)}
-          className={`${POSTER_WIDTH} relative shrink-0 overflow-hidden rounded-lg transition-transform active:scale-95`}
+          className={`${POSTER_WIDTH} pressable relative shrink-0 overflow-hidden rounded-lg`}
         >
           <PosterImage src={item.poster} alt={item.title} subtle unoptimized sizes="(max-width: 640px) 112px, 128px" />
           {item.libraryId === null && (

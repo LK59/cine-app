@@ -503,7 +503,10 @@ export function CinemaMobileDetail({
                   key={episode.jellyfinItemId}
                   type="button"
                   onClick={() => playEpisode(episode)}
-                  className="flex w-full gap-3 text-left active:scale-95"
+                  // Une ligne pleine largeur s'allume, elle ne s'enfonce pas : à 0,95 elle glissait
+                  // d'une quinzaine de pixels sous le doigt — voir `pressable` dans globals.css.
+                  // `active:transform-none` écarte aussi l'enfoncement de base des boutons.
+                  className="flex w-full gap-3 rounded-lg text-left transition-colors active:transform-none active:bg-white/10 active:delay-75"
                 >
                   <div className="relative w-32 shrink-0">
                     <PosterImage src={episode.thumbnailUrl} alt={episode.title} aspectRatio="aspect-video" unoptimized subtle />
