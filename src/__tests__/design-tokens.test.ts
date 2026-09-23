@@ -92,3 +92,12 @@ describe("une couleur par état", () => {
     expect(used).toEqual([]);
   });
 });
+
+// Chrome dessine les listes des menus déroulants lui-même : sans `color-scheme: dark`, il les
+// ouvrait sur fond clair avec le texte blanc du champ — des options blanches sur blanc (23/09/2026).
+describe("les contrôles natifs sont sombres", () => {
+  it("le document déclare son thème sombre au navigateur", () => {
+    const css = readFileSync("src/app/globals.css", "utf8");
+    expect(css).toMatch(/html\s*\{[^}]*color-scheme:\s*dark/);
+  });
+});

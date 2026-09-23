@@ -645,6 +645,19 @@
        triggers Safari's native pull-to-refresh, which reloads the whole app
        and wipes in-memory state (filters, scroll position, etc). */
     overscroll-behavior-y: contain;
+    /* L'app est toujours sombre, et le navigateur doit le savoir : c'est lui qui dessine les
+       contrôles natifs. Sans ça, Chrome ouvrait la liste d'un menu déroulant sur son fond clair
+       par défaut, avec le texte blanc du champ — des options blanches sur blanc (23/09/2026).
+       Safari sur iOS dessine son propre sélecteur et n'était pas touché. Vaut aussi pour les
+       barres de défilement et les sélecteurs de date. */
+    color-scheme: dark;
+  }
+
+  /* Firefox sous Windows n'applique pas toujours `color-scheme` aux options d'une liste : leur
+     fond et leur texte sont donc posés explicitement. */
+  select option {
+    background-color: var(--color-surface);
+    color: #fff;
   }
 
   /* Les petits portables : l'interface, dessinée pour un écran de bureau, y était trop grande —
