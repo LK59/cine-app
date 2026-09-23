@@ -72,7 +72,24 @@ class FlacDecoder extends CustomAudioDecoder {
     }
   }
 
+  /**
+   * Une erreur est signalée, jamais levée.
+   *
+   * mediabunny enchaîne chaque appel au décodeur sur le précédent : une promesse rejetée laissait la
+   * chaîne rejetée pour de bon, les appels suivants ne s'exécutaient plus — `close()` compris.
+   * L'erreur ressortait en rejet non géré, et l'instance libFLAC n'était jamais libérée : une de
+   * plus en mémoire WebAssembly à chaque tentative (relevé le 23/09/2026). `onError` porte l'échec
+   * jusqu'au lecteur ; la chaîne, elle, continue, et la fermeture a lieu.
+   */
   async decode(packet: EncodedPacket): Promise<void> {
+    try {
+      await this.decodeOrThrow(packet);
+    } catch (error) {
+      this.onError(error);
+    }
+  }
+
+  private async decodeOrThrow(packet: EncodedPacket): Promise<void> {
     if (!this.decoder) throw new Error("décodeur FLAC non initialisé");
     const decoded = await this.decoder.decodeFrames([packet.data]);
     if (decoded.samplesDecoded === 0) {

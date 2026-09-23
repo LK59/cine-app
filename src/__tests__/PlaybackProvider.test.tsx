@@ -30,7 +30,7 @@ describe("PlaybackProvider / usePlayback", () => {
     act(() => result.current.play({ itemId: "1", title: "Movie A" }));
 
     expect(result.current.mode).toBe("full");
-    expect(result.current.session).toEqual({ itemId: "1", title: "Movie A" });
+    expect(result.current.session).toEqual({ itemId: "1", title: "Movie A", openId: expect.any(Number) });
   });
 
   it("minimize()/expand() switch mode without touching the session", () => {
@@ -116,5 +116,41 @@ describe("PlaybackProvider / usePlayback", () => {
 
     expect(result.current.mode).toBe("closed");
     expect(result.current.session).toBeNull();
+  });
+});
+
+/**
+ * Une fermeture ne vaut que pour la lecture qui l'a demandée.
+ *
+ * Le lecteur se ferme deux cents millisecondes après le geste, le temps de son fondu. Un film
+ * lancé pendant ce délai — « Lire » sur une autre fiche, l'épisode suivant — était refermé par la
+ * fermeture de l'ancien, et l'écran revenait à la fiche sans rien jouer (relevé le 23/09/2026).
+ */
+describe("PlaybackProvider — fermeture d'une lecture précise", () => {
+  it("ignore la fermeture d'une lecture déjà remplacée", () => {
+    const { result } = renderHook(() => usePlayback(), { wrapper });
+    act(() => result.current.play({ itemId: "1", title: "Movie A" }));
+    const first = result.current.session?.openId;
+
+    act(() => result.current.play({ itemId: "2", title: "Movie B" }));
+    act(() => result.current.close(first));
+
+    expect(result.current.mode).toBe("full");
+    expect(result.current.session?.itemId).toBe("2");
+  });
+
+  it("ferme la lecture en cours quand c'est bien elle", () => {
+    const { result } = renderHook(() => usePlayback(), { wrapper });
+    act(() => result.current.play({ itemId: "1", title: "Movie A" }));
+    act(() => result.current.close(result.current.session?.openId));
+    expect(result.current.mode).toBe("closed");
+  });
+
+  it("donne un nouveau numéro à chaque ouverture, même du même film", () => {
+    const { result } = renderHook(() => usePlayback(), { wrapper });
+    act(() => result.current.play({ itemId: "1", title: "Movie A" }));
+    const first = result.current.session?.openId;
+    act(() => result.current.play({ itemId: "1", title: "Movie A", resumeAt: 0 }));
+    expect(result.current.session?.openId).not.toBe(first);
   });
 });

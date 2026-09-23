@@ -946,7 +946,8 @@
       "download": "Télécharger",
       "downloaded": "Téléchargé",
       "sending": "...",
-      "forced": "Forcé"
+      "forced": "Forcé",
+      "unknownRelease": "version inconnue"
     },
     "actor": {
       "loadingFilmography": "Chargement de la filmographie…",
@@ -1466,6 +1467,12 @@
       "native": "Natif",
       "auto": "Auto",
       "hint": "Change la luminosité des films HDR sur cet écran. La valeur Auto devrait convenir."
+    },
+    "chapterN": "Chapitre {n}",
+    "report": {
+      "details": "Détails techniques",
+      "copy": "Copier",
+      "copied": "Copié"
     }
   },
   "cinema": {

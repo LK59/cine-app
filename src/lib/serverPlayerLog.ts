@@ -47,6 +47,16 @@ export function castEstablishedFields(ctx: ServerPlayerContext, at: number): Rec
   return { ...base(ctx), path: "serveur", reason: "diffusion établie", at: Math.round(at) };
 }
 
+/**
+ * Le lecteur serveur s'arrête — fermé, ou passé à l'épisode suivant.
+ *
+ * Il notait son démarrage et jamais sa fin : chacune de ses séances se lisait « commencée, jamais
+ * finie » dans le journal, comme un lecteur disparu (relevé le 23/09/2026).
+ */
+export function serverStopFields(ctx: ServerPlayerContext, why: "close" | "next", at: number): Record<string, unknown> {
+  return { ...base(ctx), path: "serveur", why, at: Math.round(at) };
+}
+
 function base(ctx: ServerPlayerContext): Record<string, unknown> {
   return { itemId: ctx.itemId, ...(ctx.title ? { title: ctx.title } : {}), player: "serveur", cast: ctx.cast };
 }

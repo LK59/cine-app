@@ -407,6 +407,12 @@ export function playableAudio(track: MatroskaTrack): boolean {
   return audioDelivery(track) !== "none";
 }
 
+/** La grappe où la lecture va commencer — voir `describeAudio`. */
+function probeOffset(file: MatroskaFile, startSeconds: number, videoTrackNumber: number, start: number): number {
+  if (startSeconds <= 0) return start;
+  return clusterOffsetForTime(file, Math.round(startSeconds * 1e6), videoTrackNumber) ?? start;
+}
+
 /**
  * Builds the box that tells a decoder how to read this audio track.
  *
@@ -421,15 +427,25 @@ async function describeAudio(
   source: ByteSource,
   file: MatroskaFile,
   start: number,
-  track: MatroskaTrack
+  track: MatroskaTrack,
+  /**
+   * Où chercher d'abord : là où la lecture va commencer. Une reprise à une heure lisait la tête
+   * du fichier pour une seule trame — des mégaoctets sur un téléphone en itinérance, alors que
+   * la même trame se trouve dans la grappe que la lecture va de toute façon charger (relu le
+   * 23/09/2026). Le début du fichier reste le repli.
+   */
+  preferred: number = start
 ): Promise<MuxTrackInfo> {
   let firstFrame: Uint8Array | null = null;
   if (track.codecId === "A_AC3" || track.codecId === "A_EAC3") {
-    const probe = createSampleReader(source, file, start);
-    for (let i = 0; i < 20_000 && !firstFrame; i++) {
-      const sample = await probe.next();
-      if (!sample) break;
-      if (sample.trackNumber === track.number) firstFrame = sample.data;
+    for (const from of preferred === start ? [start] : [preferred, start]) {
+      const probe = createSampleReader(source, file, from);
+      for (let i = 0; i < 20_000 && !firstFrame; i++) {
+        const sample = await probe.next();
+        if (!sample) break;
+        if (sample.trackNumber === track.number) firstFrame = sample.data;
+      }
+      if (firstFrame) break;
     }
     if (!firstFrame) throw new Error("Aucune trame audio trouvée pour décrire la piste AC-3.");
   }
@@ -669,7 +685,7 @@ export class Remuxer {
     const audioInfo = audioTrack
       ? transcoder
         ? transcodedAudioInfo(transcoder, audioTrack)
-        : await describeAudio(source, file, start, audioTrack)
+        : await describeAudio(source, file, start, audioTrack, probeOffset(file, startSeconds, videoTrack.number, start))
       : null;
     const reader = createSampleReader(source, file, start);
 

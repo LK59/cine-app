@@ -42,11 +42,21 @@ function ac3Frame(f: { fscod: number; frmsizecod: number; bsid: number; bsmod: n
   return w.bytes();
 }
 
-function eac3Frame(f: { frmsiz: number; fscod: number; numblkscod: number; acmod: number; lfeon: number; bsid: number }) {
+function eac3Frame(f: {
+  frmsiz: number;
+  fscod: number;
+  numblkscod: number;
+  acmod: number;
+  lfeon: number;
+  bsid: number;
+  fscod2?: number;
+}) {
   const w = new BitWriter();
   w.write(0x0b77, 16);
   w.write(0, 2).write(0, 3).write(f.frmsiz, 11).write(f.fscod, 2);
-  if (f.fscod !== 3) w.write(f.numblkscod, 2);
+  // ETSI TS 102 366 E.1.2.2 : fscod 3 met fscod2 à la place de numblkscod — pas après bsid, là où
+  // le lecteur le cherchait et où cette fabrique ne l'écrivait pas non plus (23/09/2026).
+  w.write(f.fscod === 3 ? (f.fscod2 ?? 0) : f.numblkscod, 2);
   w.write(f.acmod, 3).write(f.lfeon, 1).write(f.bsid, 5);
   return w.bytes();
 }
@@ -105,9 +115,10 @@ describe("dec3 — E-AC-3 description", () => {
   it("halves the rate when fscod selects the reduced sample rates", () => {
     // fscod 3 means the real rate is in fscod2 and the block count is fixed at six rather than
     // coded — reading a numblkscod field here would shift every field after it.
-    const payload = dec3(eac3Frame({ frmsiz: 639, fscod: 3, numblkscod: 0, acmod: 2, lfeon: 0, bsid: 16 }));
+    // fscod2 = 1 : 44,1 kHz divisé par deux. Placé ailleurs, il décale acmod, lfeon et bsid.
+    const payload = dec3(eac3Frame({ frmsiz: 639, fscod: 3, fscod2: 1, numblkscod: 0, acmod: 2, lfeon: 0, bsid: 16 }));
     const read = bits(payload.subarray(8));
-    expect(read(13)).toBe(160); // 1280 bytes over 1536 samples at 24 kHz
+    expect(read(13)).toBe(147); // 1280 bytes over 1536 samples at 22.05 kHz
     read(3);
     expect(read(2)).toBe(3);
     expect(read(5)).toBe(16);

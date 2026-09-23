@@ -65,6 +65,15 @@ interface PlayerControlsProps {
   subtitleTracks: Track[];
   currentSubtitleId: number | null;
   onChangeSubtitle: (id: number | null) => void;
+  /**
+   * Le décalage des sous-titres, quand c'est l'hôte qui les dessine.
+   *
+   * Sans lui, le réglage déplace les lignes du `<video>` — ce que le lecteur serveur affiche. Le
+   * lecteur natif dessine les siennes lui-même, sous l'image : les boutons ±0,5 s y déplaçaient
+   * des lignes que personne n'affichait, et le chiffre bougeait sans que rien d'autre ne bouge
+   * (relevé le 23/09/2026).
+   */
+  subtitleOffset?: { seconds: number; onShift: (deltaSeconds: number) => void };
   hidden: boolean;
   loading: boolean;
   introSkip: { start: number; end: number } | null;
@@ -130,6 +139,7 @@ export function PlayerControls({
   subtitleTracks,
   currentSubtitleId,
   onChangeSubtitle,
+  subtitleOffset: hostSubtitleOffset,
   hidden,
   loading,
   introSkip,
@@ -220,7 +230,7 @@ export function PlayerControls({
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [castSupported, setCastSupported] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [chapters, setChapters] = useState<{ start: number; name: string }[]>([]);
+  const [chapters, setChapters] = useState<{ start: number; name: string | null }[]>([]);
   const [bufferedEnd, setBufferedEnd] = useState(0);
   // Préférence générale, gardée d'une session à l'autre comme le volume : une taille de
   // sous-titres dont on a besoin ne dépend pas du film. Elle vit dans un magasin partagé, parce
@@ -234,12 +244,17 @@ export function PlayerControls({
   // Deliberately NOT persisted, and reset per item (below) rather than per session: a
   // desync is a property of one specific file's subtitle track, meaningless carried over to a
   // different file that likely isn't desynced at all.
-  const [subtitleOffset, setSubtitleOffset] = useState(0);
+  //
+  // Un décalage par piste : il est appliqué aux lignes de cette piste-là, et changer de piste
+  // affichait encore celui de la précédente sur des lignes qui n'avaient pas bougé.
+  const [cueOffsets, setCueOffsets] = useState<Record<number, number>>({});
   const [resetOffsetForItemId, setResetOffsetForItemId] = useState(itemId);
   if (itemId !== resetOffsetForItemId) {
     setResetOffsetForItemId(itemId);
-    setSubtitleOffset(0);
+    setCueOffsets({});
   }
+  const subtitleOffset =
+    hostSubtitleOffset?.seconds ?? (currentSubtitleId === null ? 0 : (cueOffsets[currentSubtitleId] ?? 0));
   const [nextUpDismissed, setNextUpDismissed] = useState(false);
   const [nextUpCountdown, setNextUpCountdown] = useState(NEXT_UP_COUNTDOWN_S);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,13 +297,34 @@ export function PlayerControls({
     setNextUpCountdown(NEXT_UP_COUNTDOWN_S);
   }
 
-  const showNextUp = creditsStart != null && currentTime >= creditsStart && !!nextEpisode && !nextUpDismissed;
+  /**
+   * Quand proposer l'épisode suivant : au générique de fin, ou à la toute fin faute de générique.
+   *
+   * Sans repère de générique, la carte ne venait jamais — et l'écran de fin, réservé aux films, non
+   * plus : l'épisode s'arrêtait sur sa dernière image sans rien proposer (23/09/2026, quand les
+   * repères ont manqué à tous les épisodes). La dernière seconde tient lieu de générique.
+   */
+  const atEnd = duration > 0 && currentTime >= duration - 1;
+  const nextUpFrom = creditsStart ?? (duration > 0 ? duration - 1 : null);
+  const showNextUp = nextUpFrom != null && currentTime >= nextUpFrom && !!nextEpisode && !nextUpDismissed;
 
+  // Le décompte repart de zéro quand la carte s'en va — un retour en arrière avant le générique —,
+  // sans quoi il reprenait là où il en était, à trois secondes au lieu de dix.
+  const [nextUpWasShown, setNextUpWasShown] = useState(showNextUp);
+  if (showNextUp !== nextUpWasShown) {
+    setNextUpWasShown(showNextUp);
+    if (!showNextUp) setNextUpCountdown(NEXT_UP_COUNTDOWN_S);
+  }
+
+  // Le décompte ne court que pendant la lecture — ou une fois l'épisode fini, où l'élément est
+  // arrêté. Mettre en pause pendant le générique passait sinon à l'épisode suivant dix secondes
+  // plus tard.
+  const nextUpRunning = showNextUp && (playing || atEnd);
   useEffect(() => {
-    if (!showNextUp) return;
+    if (!nextUpRunning) return;
     const id = setInterval(() => setNextUpCountdown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(id);
-  }, [showNextUp]);
+  }, [nextUpRunning]);
 
   /**
    * L'écran « vous êtes toujours là ? ».
@@ -464,19 +500,28 @@ export function PlayerControls({
     // apply.
     const castVideo = video as CastVideoElement;
     let remoteWatchId: number | undefined;
+    // La promesse d'abonnement peut se résoudre après le démontage : l'identifiant arrivait alors
+    // trop tard pour être annulé, et l'abonnement survivait au lecteur (23/09/2026).
+    let unmounted = false;
     if (typeof castVideo.webkitShowPlaybackTargetPicker === "function") {
       setCastSupported(true);
     } else if (castVideo.remote) {
       const remote = castVideo.remote;
       remote
-        .watchAvailability((available) => setCastSupported(available))
-        .then((id) => {
-          remoteWatchId = id;
+        .watchAvailability((available) => {
+          if (!unmounted) setCastSupported(available);
         })
-        .catch(() => setCastSupported(false)); // NotSupportedError — no cast receivers reachable at all
+        .then((id) => {
+          if (unmounted) remote.cancelWatchAvailability(id).catch(() => {});
+          else remoteWatchId = id;
+        })
+        .catch(() => {
+          if (!unmounted) setCastSupported(false); // NotSupportedError — no cast receivers reachable at all
+        });
     }
 
     return () => {
+      unmounted = true;
       if (remoteWatchId !== undefined) castVideo.remote?.cancelWatchAvailability(remoteWatchId).catch(() => {});
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
@@ -545,6 +590,15 @@ export function PlayerControls({
   useEffect(() => {
     playingRef.current = playing;
   }, [playing]);
+  /**
+   * Un menu ouvert suspend la disparition.
+   *
+   * Le pointeur qui bougeait dans une liste de pistes relançait le minuteur ordinaire de trois
+   * secondes, qui refermait le menu en pleine lecture de la liste ; au clavier, les flèches ne le
+   * relançaient pas du tout, et le menu partait au bout de dix secondes (relevé le 23/09/2026).
+   * Tant qu'un menu est ouvert, rien ne se cache ; sa fermeture relance le décompte normal.
+   */
+  const menuOpenRef = useRef(false);
   const showControls = useCallback(
     (delayMs: number = 3000) => {
       // Un geste vaut présence, et c'est ici qu'ils passent tous — un clic, une touche, un
@@ -553,7 +607,7 @@ export function PlayerControls({
       noteViewerPresent();
       setVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
-      if (playingRef.current) {
+      if (playingRef.current && !menuOpenRef.current) {
         hideTimer.current = setTimeout(() => {
           setVisible(false);
           setMenu(null);
@@ -562,6 +616,17 @@ export function PlayerControls({
     },
     []
   );
+
+  // Voir `menuOpenRef` : ouvert, le minuteur est suspendu ; refermé, le décompte normal reprend.
+  useEffect(() => {
+    const wasOpen = menuOpenRef.current;
+    menuOpenRef.current = menu !== null;
+    if (menu !== null) {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    } else if (wasOpen) {
+      showControls();
+    }
+  }, [menu, showControls]);
 
   function hideControls() {
     setVisible(false);
@@ -880,6 +945,10 @@ export function PlayerControls({
   // that same DOM/source order — so position can be found here without PlayerHost needing to
   // expose that mapping directly.
   function shiftSubtitles(deltaSeconds: number) {
+    if (hostSubtitleOffset) {
+      hostSubtitleOffset.onShift(deltaSeconds);
+      return;
+    }
     const video = videoRef.current;
     if (!video || currentSubtitleId === null) return;
     const position = subtitleTracks.findIndex((t) => t.id === currentSubtitleId);
@@ -894,7 +963,8 @@ export function PlayerControls({
       cue.startTime += deltaSeconds;
       cue.endTime += deltaSeconds;
     }
-    setSubtitleOffset((o) => Math.round((o + deltaSeconds) * 10) / 10);
+    const id = currentSubtitleId;
+    setCueOffsets((all) => ({ ...all, [id]: Math.round(((all[id] ?? 0) + deltaSeconds) * 10) / 10 }));
   }
 
   // Directional control nav — a fixed adjacency map, not a generic geometric grid solver, since
@@ -956,7 +1026,20 @@ export function PlayerControls({
 
     function onKeyDown(e: KeyboardEvent) {
       if (suspendedRef.current) return;
+      // Ctrl+F cherche dans la page, Cmd+← revient en arrière, Alt+↑ appartient au système : aucun
+      // n'est un raccourci du lecteur. Ils sautaient de dix secondes ou agrandissaient l'écran en
+      // plus de faire ce qu'on leur demandait (23/09/2026).
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const active = document.activeElement;
+      // Un champ où l'on écrit garde ses touches — la recherche de sous-titres en a un, et une
+      // espace y mettait le film en pause au lieu d'écrire.
+      if (
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable) ||
+        (active instanceof HTMLInputElement && !["range", "checkbox", "radio", "button"].includes(active.type))
+      ) {
+        return;
+      }
       const navName = active instanceof HTMLElement ? active.getAttribute("data-player-nav") : null;
       const navGroup = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-player-navgroup]") : null;
 
@@ -1177,6 +1260,8 @@ export function PlayerControls({
 
       {showNextUp && !askStillThere && nextEpisode && (
         <div
+          // Ses boutons ne doivent pas atteindre le fond, dont l'appui montre ou cache les commandes.
+          onClick={(e) => e.stopPropagation()}
           className="player-panel pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] animate-fade-in-scale rounded-2xl p-4"
           style={{
             bottom: "max(6rem, calc(env(safe-area-inset-bottom) + 5rem))",
@@ -1205,6 +1290,10 @@ export function PlayerControls({
         </div>
       )}
 
+      {/* Cachées, les commandes ne prennent plus les appuis : l'opacité ne change rien à ce qu'on
+          touche, et un appui au milieu de l'écran pour les faire revenir mettait le film en pause —
+          en haut à droite, il le fermait (relevé le 23/09/2026). Leurs trois groupes passent en
+          `pointer-events-none` avec elles, et l'appui retombe sur le fond, qui les rappelle. */}
       <div
         className={`pointer-events-none absolute inset-0 flex flex-col justify-between transition-opacity duration-300 ${
           visible ? "opacity-100" : "opacity-0"
@@ -1222,7 +1311,7 @@ export function PlayerControls({
             plus extra clearance for the Dynamic Island / translucent status
             bar in portrait, which sits below the strict safe-area edge. */}
         <div
-          className={`pointer-events-auto flex items-center justify-between p-4 transition-transform duration-300 ease-out ${
+          className={`${visible ? "pointer-events-auto" : "pointer-events-none"} flex items-center justify-between p-4 transition-transform duration-300 ease-out ${
             visible ? "translate-y-0" : "-translate-y-2"
           }`}
           // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
@@ -1573,7 +1662,7 @@ export function PlayerControls({
                         )}
                       </div>
                     )}
-                    <span className="min-w-0 flex-1 truncate">{ch.name}</span>
+                    <span className="min-w-0 flex-1 truncate">{ch.name ?? t("player.chapterN", { n: i + 1 })}</span>
                     <span className="shrink-0 tabular-nums text-white/50">{formatTime(ch.start)}</span>
                   </button>
                 );
@@ -1586,7 +1675,7 @@ export function PlayerControls({
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
         {!loading && !buffering && (
-          <div data-player-navgroup="center" className="pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6">
+          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-6`}>
             <button
               data-player-nav="skip-back"
               onClick={(e) => {
@@ -1624,7 +1713,7 @@ export function PlayerControls({
 
         {/* Bottom bar */}
         <div
-          className={`pointer-events-auto flex flex-col gap-2 p-4 transition-transform duration-300 ease-out ${
+          className={`${visible ? "pointer-events-auto" : "pointer-events-none"} flex flex-col gap-2 p-4 transition-transform duration-300 ease-out ${
             visible ? "translate-y-0" : "translate-y-2"
           }`}
           onClick={(e) => e.stopPropagation()}
@@ -1738,7 +1827,9 @@ export function PlayerControls({
               <div
                 className="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 overflow-hidden rounded-md bg-black shadow-xl ring-1 ring-white/20"
                 style={{
-                  left: `${previewFraction * 100}%`,
+                  // Bornée aux bords de la barre : au début ou à la fin du film, la moitié de la
+                  // vignette sortait de l'écran, heure comprise.
+                  left: `clamp(${previewDisplayWidth / 2}px, ${previewFraction * 100}%, calc(100% - ${previewDisplayWidth / 2}px))`,
                   width: previewDisplayWidth,
                   height: previewDisplayHeight,
                   WebkitTouchCallout: "none",
@@ -1770,7 +1861,7 @@ export function PlayerControls({
                   {/* Discreet — a smaller, dimmer line above the time, not competing with it.
                       Only shown once the item actually has chapters. */}
                   {chapters.length > 0 && chapterIndexAt(previewTime) >= 0 && (
-                    <p className="truncate text-[10px] text-white/60">{chapters[chapterIndexAt(previewTime)].name}</p>
+                    <p className="truncate text-[10px] text-white/60">{chapters[chapterIndexAt(previewTime)].name ?? t("player.chapterN", { n: chapterIndexAt(previewTime) + 1 })}</p>
                   )}
                   <p className="text-[11px] tabular-nums">{formatTime(previewTime)}</p>
                 </div>

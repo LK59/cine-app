@@ -372,7 +372,18 @@ export class PlaybackGuard {
      * 1049 s, puis la reprise après pause y voyait un saut de dix-sept minutes à annuler et
      * ramenait le film au début. Une lecture qui n'a jamais commencé ne doit rien décider.
      */
-    this.pauseAnchor = abortedStart ? null : this.video.currentTime;
+    /**
+     * Ni une pause qui arrive en plein saut.
+     *
+     * Mettre en pause puis sauter dans la même tâche (le raccourci clavier sur un film arrêté, la
+     * barre relâchée pendant la pause) livre l'événement `pause` *avant* `seeking`. La tête est
+     * déjà sur la cible ; l'ancrer là et la « réaffirmer » marquait la cible comme un pas de ce
+     * lecteur, et le saut du spectateur, pris pour ce pas-là, n'allait jamais chercher son média :
+     * image figée sur un endroit non chargé (relevé le 23/09/2026). Le saut décide de la position ;
+     * la file de son déjà envoyée, il la vide lui-même.
+     */
+    const seeking = this.video.seeking;
+    this.pauseAnchor = abortedStart || seeking ? null : this.video.currentTime;
     this.resumeTrace = {
       paused: this.video.currentTime,
       settled: this.video.currentTime,

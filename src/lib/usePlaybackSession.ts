@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useMemo } from "react";
 import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
 
 interface PlaybackSessionInfo {
@@ -65,7 +65,7 @@ export function usePlaybackSession(
   getPositionSeconds: () => number,
   session: PlaybackSessionInfo | null,
   getPaused?: () => boolean
-): () => Promise<void> {
+): { stop: () => Promise<void>; resume: () => void } {
   const sessionRef = useRef(session);
   const stoppedRef = useRef(false);
   const positionRef = useRef(getPositionSeconds);
@@ -146,11 +146,28 @@ export function usePlaybackSession(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.itemId, session?.playSessionId, session?.mediaSourceId, session?.announce, session?.client]);
 
-  return useCallback(() => {
+  const stop = useCallback(() => {
     if (stoppedRef.current) return Promise.resolve();
     stoppedRef.current = true;
     const s = sessionRef.current;
     if (!s) return Promise.resolve();
     return report("stop", s, Math.floor(positionRef.current() * TICKS_PER_SECOND));
   }, []);
+
+  /**
+   * Rouvrir la séance après un arrêt — « Revoir » à la fin d'un film.
+   *
+   * La fin d'un film est maintenant annoncée à Jellyfin dès qu'elle arrive (voir le lecteur) : c'est
+   * cet arrêt, avec sa position en fin de fichier, qui marque le film « vu ». Revoir le film dans
+   * la même séance doit donc la redéclarer, sans quoi les battements se taisaient et la nouvelle
+   * position n'était plus jamais enregistrée.
+   */
+  const resume = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s || !stoppedRef.current) return;
+    stoppedRef.current = false;
+    report("playing", s, Math.floor(positionRef.current() * TICKS_PER_SECOND));
+  }, []);
+
+  return useMemo(() => ({ stop, resume }), [stop, resume]);
 }

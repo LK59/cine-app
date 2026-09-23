@@ -27,3 +27,25 @@ describe("nextEpisodeIn", () => {
     expect(nextEpisodeIn([])("s1e1")).toBeNull();
   });
 });
+
+/**
+ * Les spéciaux ne sont pas la suite de la série.
+ *
+ * La route range la saison 0 en dernier : aplatie avec le reste, elle faisait du premier spécial
+ * l'« épisode suivant » du final de la série (relevé le 23/09/2026).
+ */
+describe("nextEpisodeIn — spéciaux", () => {
+  const withSpecials: CinemaSeason[] = [
+    ...seasons,
+    { seasonNumber: 0, episodes: [episode("s0e1", 0, 1), episode("s0e2", 0, 2)] },
+  ];
+
+  it("ne propose rien après le dernier épisode ordinaire", () => {
+    expect(nextEpisodeIn(withSpecials)("s2e1")).toBeNull();
+  });
+
+  it("enchaîne un spécial sur le spécial suivant", () => {
+    expect(nextEpisodeIn(withSpecials)("s0e1")?.itemId).toBe("s0e2");
+    expect(nextEpisodeIn(withSpecials)("s0e2")).toBeNull();
+  });
+});

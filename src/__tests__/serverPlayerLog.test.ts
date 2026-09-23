@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { serverStartFields, serverFailureFields, castEstablishedFields } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, serverStopFields } from "@/lib/serverPlayerLog";
 import { isPlayerEventKind } from "@/lib/playerLog";
 
 // Le lecteur serveur n'écrivait rien : l'AirPlay figé du 22/09/2026 ne s'est compris qu'au journal
@@ -54,5 +54,20 @@ describe("journal du lecteur serveur", () => {
   it("est accepté par le journal", () => {
     // Un genre refusé par la route serait une ligne perdue sans un mot, côté navigateur.
     expect(isPlayerEventKind("cast")).toBe(true);
+  });
+});
+
+/**
+ * La fin d'une séance du lecteur serveur.
+ *
+ * Il écrivait son départ et jamais son arrêt : une séance passée par lui se lisait sans fin dans
+ * le journal, et un film regardé jusqu'au bout ne se distinguait pas d'un abandon (23/09/2026).
+ */
+describe("arrêt du lecteur serveur", () => {
+  it("dit pourquoi et où il s'est arrêté", () => {
+    const line = serverStopFields(CTX, "close", 1834.6);
+    expect(line).toMatchObject({ player: "serveur", path: "serveur", why: "close", at: 1835, itemId: CTX.itemId });
+    expect(serverStopFields(CTX, "next", 2400).why).toBe("next");
+    expect(isPlayerEventKind("stop")).toBe(true);
   });
 });

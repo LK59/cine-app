@@ -946,7 +946,8 @@
       "download": "Herunterladen",
       "downloaded": "Heruntergeladen",
       "sending": "...",
-      "forced": "Erzwungen"
+      "forced": "Erzwungen",
+      "unknownRelease": "unbekannte Version"
     },
     "actor": {
       "loadingFilmography": "Filmografie wird geladen…",
@@ -1466,6 +1467,12 @@
       "native": "Nativ",
       "auto": "Auto",
       "hint": "Ändert die Helligkeit von HDR-Filmen auf diesem Bildschirm. Auto sollte passen."
+    },
+    "chapterN": "Kapitel {n}",
+    "report": {
+      "details": "Technische Details",
+      "copy": "Kopieren",
+      "copied": "Kopiert"
     }
   },
   "cinema": {

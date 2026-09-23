@@ -86,7 +86,7 @@ export function SubtitleSearchModal({
                     <span className="badge bg-accent-600/15 text-accent-400">Score {c.score}</span>
                   </div>
                   <p className="mt-1 truncate text-xs text-slate-500" title={c.release_info?.join(", ")}>
-                    {c.provider} · {c.release_info?.join(", ") || "release inconnue"}
+                    {c.provider} · {c.release_info?.join(", ") || t('modals.subtitles.unknownRelease')}
                   </p>
                 </div>
                 <button

@@ -53,7 +53,7 @@ describe("usePlaybackSession", () => {
     // battement tombé là rouvrait chez Jellyfin la séance qu'on venait de clore.
     const { result } = renderHook(() => usePlaybackSession(() => 42, session));
     await act(async () => {
-      await result.current();
+      await result.current.stop();
     });
     expect(bodies("stop")).toHaveLength(1);
     act(() => void vi.advanceTimersByTime(30_000));
@@ -172,11 +172,44 @@ describe("usePlaybackSession", () => {
     // behind the close transition.
     let at = 55;
     const { result, unmount } = renderHook(() => usePlaybackSession(() => at, session));
-    act(() => result.current());
+    act(() => void result.current.stop());
     expect(bodies("stop")).toEqual([expect.objectContaining({ positionTicks: 55 * TICKS })]);
 
     at = 999;
     act(() => unmount());
     expect(bodies("stop")).toHaveLength(1);
+  });
+});
+
+/**
+ * « Revoir » après la fin d'un film rouvre la séance.
+ *
+ * La fin d'un film est annoncée à Jellyfin à l'instant où elle arrive — c'est elle qui le marque
+ * vu. Revoir dans le même lecteur laissait la séance close : plus aucun battement, et la nouvelle
+ * position n'était jamais enregistrée (23/09/2026).
+ */
+describe("usePlaybackSession — reprise après l'arrêt", () => {
+  it("redéclare la séance, puis bat de nouveau", async () => {
+    let at = 7200;
+    const { result } = renderHook(() => usePlaybackSession(() => at, session));
+    await act(async () => {
+      await result.current.stop();
+    });
+    const openings = bodies("playing").length;
+
+    at = 0;
+    act(() => result.current.resume());
+    expect(bodies("playing")).toHaveLength(openings + 1);
+
+    at = 12;
+    act(() => void vi.advanceTimersByTime(10_000));
+    expect(bodies("progress").at(-1)).toMatchObject({ positionTicks: 12 * TICKS });
+  });
+
+  it("ne fait rien sur une séance qui n'a pas été arrêtée", () => {
+    const { result } = renderHook(() => usePlaybackSession(() => 0, session));
+    const openings = bodies("playing").length;
+    act(() => result.current.resume());
+    expect(bodies("playing")).toHaveLength(openings);
   });
 });

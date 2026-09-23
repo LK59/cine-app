@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { AudioSample } from "mediabunny";
 import { __testing, streamInfoHeader } from "@/lib/webcodecs/flacDecoder";
 
@@ -96,5 +96,24 @@ describe("streamInfoHeader", () => {
     expect(Array.from(streamInfoHeader(odd))).toEqual(Array.from(odd));
     const cut = STREAMINFO.subarray(0, 20);
     expect(Array.from(streamInfoHeader(cut))).toEqual(Array.from(cut));
+  });
+});
+
+/**
+ * Une trame illisible est signalée, pas levée.
+ *
+ * mediabunny enchaîne les appels d'un décodeur maison les uns derrière les autres : une promesse
+ * rejetée empoisonnait la chaîne, et plus aucune trame n'était décodée — le son s'arrêtait pour
+ * le reste du film, sans message (relevé le 23/09/2026). L'erreur passe par `onError`, que
+ * mediabunny sait remonter.
+ */
+describe("FlacDecoder — trame refusée", () => {
+  it("prévient par onError au lieu de rejeter", async () => {
+    const { instance } = await decoder(STREAMINFO);
+    const onError = vi.fn();
+    Object.assign(instance, { onError });
+    await expect(instance.decode({ data: new Uint8Array([0xff, 0xf8, 0, 0, 0, 0]), timestamp: 0 } as never)).resolves.toBeUndefined();
+    expect(onError).toHaveBeenCalled();
+    await instance.close();
   });
 });

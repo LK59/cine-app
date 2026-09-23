@@ -12,6 +12,7 @@
 // Failures are surfaced, never worked around: this player exists to find out whether a file can
 // be decoded directly, so a silent fallback to another pipeline would defeat the purpose.
 
+import { transcodableAudio } from "./audioTranscode";
 import { playerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
 import { stripSubtitleMarkup } from "./subtitleMarkup";
@@ -314,7 +315,11 @@ export class PlaybackEngine {
    * own demuxing (through the engine's byte cache, so the file is still read once) and hands back
    * decoded samples directly, so there is nothing for the demux loop to route.
    */
-  private async startSoftwareAudio(track: MatroskaTrack, fromSeconds: number): Promise<boolean> {
+  private async startSoftwareAudio(
+    track: MatroskaTrack,
+    fromSeconds: number,
+    superseded: () => boolean = () => false
+  ): Promise<boolean> {
     if (!this.source) return false;
     let software: SoftwareAudioTrack;
     try {
@@ -326,8 +331,9 @@ export class PlaybackEngine {
       return false;
     }
     // Détruit pendant l'ouverture : ce décodeur (pour le TrueHD, un contexte WebAssembly) n'a plus
-    // de propriétaire, et une sortie audio créée maintenant ne serait jamais fermée.
-    if (this.destroyed) {
+    // de propriétaire, et une sortie audio créée maintenant ne serait jamais fermée. De même si un
+    // changement de piste plus récent a pris la place pendant l'ouverture.
+    if (this.destroyed || superseded()) {
       software.close();
       return false;
     }
@@ -436,7 +442,12 @@ export class PlaybackEngine {
     if (!this.audioTrack && options.chooseAudioTrack) {
       const wanted = options.chooseAudioTrack(audioCandidates.map(fromMatroskaTrack));
       const track = audioCandidates.find((t) => t.number === wanted) ?? null;
-      if (track && (await this.firstDecodable([track]))) this.audioTrack = track;
+      // Le décodeur du navigateur, ou le nôtre : une piste AC-3, DTS, TrueHD ou FLAC que seul le
+      // décodeur logiciel lit est tout aussi jouable ici (voir `startSoftwareAudio`). Seul le
+      // premier était demandé, et le choix du compte était écarté : l'ouverture se faisait sur une
+      // autre piste, puis basculait — et après une reconstruction, le choix du spectateur était
+      // perdu pour de bon (relevé le 23/09/2026).
+      if (track && ((await this.firstDecodable([track])) || transcodableAudio(track))) this.audioTrack = track;
       if (this.abandoned()) return;
     }
     if (!this.audioTrack) {
@@ -657,6 +668,16 @@ export class PlaybackEngine {
   }
 
   /**
+   * Le numéro de la dernière configuration demandée.
+   *
+   * Deux changements de piste rapprochés s'entrelaçaient sur les attentes ci-dessous : le premier
+   * posait sa sortie et son décodeur, le second les remplaçait sans les fermer — un contexte audio
+   * et un élément caché restaient dans la page (relevé le 23/09/2026). Une configuration dépassée
+   * s'arrête à la première attente, avant d'avoir rien créé.
+   */
+  private audioConfigGeneration = 0;
+
+  /**
    * Sets up whatever can decode this track: the platform first, the software decoder second.
    *
    * Both paths end at the same AudioOutput, so everything downstream — the clock, the volume,
@@ -664,6 +685,8 @@ export class PlaybackEngine {
    * a silent picture rather than a failure.
    */
   private async configureAudioFor(track: MatroskaTrack, fromSeconds: number): Promise<boolean> {
+    const generation = ++this.audioConfigGeneration;
+    const superseded = () => generation !== this.audioConfigGeneration;
     // Whatever was running has to go first: two decoders feeding one output would interleave
     // two soundtracks.
     // The software loop is an `for await` over mediabunny's sink; disposing its Input while it is
@@ -682,11 +705,12 @@ export class PlaybackEngine {
     await this.audio?.close();
     this.audio = null;
     this.audioConfig = null;
-    // Détruit entre-temps : rien de ce qui suit n'aurait de propriétaire.
-    if (this.destroyed) return false;
+    // Détruit entre-temps, ou dépassé par un changement plus récent : rien de ce qui suit n'aurait
+    // de propriétaire.
+    if (this.destroyed || superseded()) return false;
 
     const config = await this.supportedAudioConfig(track);
-    if (this.destroyed) return false;
+    if (this.destroyed || superseded()) return false;
     if (config) {
       this.audioConfig = config;
       this.audioPath = "native";
@@ -705,7 +729,7 @@ export class PlaybackEngine {
       return true;
     }
 
-    return this.startSoftwareAudio(track, fromSeconds);
+    return this.startSoftwareAudio(track, fromSeconds, superseded);
   }
 
   /**
@@ -726,6 +750,9 @@ export class PlaybackEngine {
     // refuses is exactly the case this player exists to handle, and refusing it here while the
     // same codec plays fine at startup would be incoherent.
     const configured = await this.configureAudioFor(track, resumeAt);
+    // Un changement plus récent a pris la main : c'est à lui de conclure, pas d'avertir d'un
+    // décodeur manquant qui ne l'est pas.
+    if (this.audioTrack !== track) return;
     if (!configured) {
       this.emit(
         "warning",
@@ -1113,8 +1140,18 @@ export class PlaybackEngine {
     else frame.close();
   }
 
+  /** Le réglage « décalage des sous-titres » : positif, les lignes arrivent plus tard. */
+  private subtitleOffsetSeconds = 0;
+
+  setSubtitleOffset(seconds: number): void {
+    this.subtitleOffsetSeconds = seconds;
+    this.activeCue = null;
+    this.updateSubtitle(this.currentTime);
+  }
+
   /** Emits only on change, so the overlay isn't re-rendered sixty times a second. */
-  private updateSubtitle(seconds: number): void {
+  private updateSubtitle(playerSeconds: number): void {
+    const seconds = playerSeconds - this.subtitleOffsetSeconds;
     // Expired lines are dropped on every track, not just the selected one, or an unwatched track
     // would accumulate a film's worth of text.
     for (const queue of this.pendingCues.values()) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { HttpByteSource, forgetHandover } from "@/lib/webcodecs/byteSource";
+import { HttpByteSource, forgetHandover, SessionEnded } from "@/lib/webcodecs/byteSource";
 
 // The transport under a demuxer that asks for four bytes at a time. What matters here is not what
 // comes back — it is how many round trips it took and whether they overlapped, because on a real
@@ -587,5 +587,36 @@ describe("HttpByteSource — après la fermeture", () => {
     first.close();
     await HttpByteSource.open("/film.mkv");
     expect(heads).toBe(headsBefore);
+  });
+});
+
+/**
+ * Une session de connexion expirée arrête la lecture des octets tout de suite.
+ *
+ * Chaque plage refusée pour ce motif était redemandée quatre fois, avec des pauses entre les
+ * essais, puis présentée comme une panne réseau : « connexion perdue » et une reconstruction, là
+ * où il fallait simplement se reconnecter (relevé le 23/09/2026).
+ */
+describe("HttpByteSource — session expirée", () => {
+  it("ne redemande pas une plage refusée faute de session", async () => {
+    let ranges = 0;
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      if (init?.method === "HEAD") {
+        return { ok: true, headers: { get: (name: string) => (name === "Content-Length" ? String(SIZE) : null) } };
+      }
+      ranges += 1;
+      return {
+        status: 401,
+        ok: false,
+        headers: { get: (name: string) => (name.toLowerCase() === "x-session-expired" ? "1" : null) },
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    const source = await HttpByteSource.open("/film.mkv");
+    await expect(source.read(4 * CHUNK, 4)).rejects.toBeInstanceOf(SessionEnded);
+    await settle();
+    // Une demande par plage — celles des deux bouts et celle-ci —, jamais les quatre essais.
+    expect(ranges).toBeLessThanOrEqual(3);
+    source.close();
   });
 });

@@ -9,6 +9,9 @@ import { forEachChild, readElementAt, readUint } from "./ebml";
 import { ID } from "./matroskaIds";
 import { parseBlock, type MatroskaFile, type MediaSample } from "./matroska";
 
+/** The segment's own children: none of them can appear inside a cluster. */
+const TOP_LEVEL = new Set<number>([ID.Cluster, ID.Cues, ID.SeekHead, ID.Info, ID.Tracks, 0x1254c367 /* Tags */, 0x1043a770 /* Chapters */, 0x1941a469 /* Attachments */]);
+
 export class SampleReader {
   private cursor: number;
   private queue: MediaSample[] = [];
@@ -65,11 +68,25 @@ export class SampleReader {
     }
 
     // An unknown-size cluster runs until the next cluster starts; capping at the segment end is
-    // the safe reading, and the walk below stops on its own at the first child that doesn't fit.
+    // the safe reading, and the walk below stops at the first element that belongs to the
+    // segment rather than to a cluster.
     const end = element.size === null ? this.file.segmentEnd : Math.min(element.offset + element.size, this.file.segmentEnd);
     let clusterTime = 0;
+    /**
+     * Where the next top-level element starts, when an unknown-size cluster ran into it.
+     *
+     * The walk used to read the next cluster as one more child of this one — an unknown element,
+     * stepped over whole — and every cluster after it the same way, then jump to the segment's
+     * end: a file muxed live (unknown sizes everywhere) played its first cluster and then
+     * nothing (found on 23/09/2026).
+     */
+    let nextTopLevel: number | null = null;
 
     await forEachChild(this.source, element.offset, end, async (child) => {
+      if (element.size === null && TOP_LEVEL.has(child.id)) {
+        nextTopLevel = child.offset - child.headerSize;
+        return "stop";
+      }
       switch (child.id) {
         case ID.Timestamp:
           clusterTime = readUint(await this.source.read(child.offset, child.size ?? 0));
@@ -109,6 +126,6 @@ export class SampleReader {
       return "continue";
     });
 
-    this.cursor = element.size === null ? this.file.segmentEnd : element.offset + element.size;
+    this.cursor = element.size !== null ? element.offset + element.size : (nextTopLevel ?? this.file.segmentEnd);
   }
 }

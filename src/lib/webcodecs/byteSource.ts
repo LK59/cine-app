@@ -1,3 +1,4 @@
+import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
 // Random access over a media file, for the experimental WebCodecs player.
 //
@@ -297,6 +298,14 @@ export function serverTimingApp(header: string | null): number | null {
  * Tout ce qui attendait cette lecture doit s'effacer sans rien réparer : ni nouvelle tentative, ni
  * reprise, ni reconstruction de l'encodeur. Le saut qui l'a causée repositionne tout derrière.
  */
+/** La session de connexion a expiré : rien à redemander, voir la lecture des plages. */
+export class SessionEnded extends Error {
+  constructor() {
+    super("Session expirée");
+    this.name = "SessionEnded";
+  }
+}
+
 export class ReadAbandoned extends Error {
   readonly abandoned = true;
   constructor() {
@@ -572,6 +581,18 @@ export class HttpByteSource implements ByteSource {
         if (res.status === 200) {
           throw new Error("Le serveur n'honore pas les requêtes de plage (statut 200).");
         }
+        /**
+         * La session de connexion a expiré pendant le film : ni le réseau, ni le serveur de médias.
+         *
+         * Traité comme une coupure, ce 401 donnait « connexion perdue » et des reconstructions
+         * sans fin, jamais le chemin de la reconnexion (relevé le 23/09/2026). Seul l'en-tête du
+         * proxy dit que c'est la session — voir `SESSION_EXPIRED_HEADER` : renvoyer à la connexion,
+         * et ne plus rien redemander.
+         */
+        if (res.status === 401 && res.headers.get(SESSION_EXPIRED_HEADER) === "1") {
+          noteUnauthorized(res);
+          throw new SessionEnded();
+        }
         if (res.status !== 206) throw new Error(`Le serveur a refusé la plage demandée (statut ${res.status}).`);
         this.checkTotal(res);
         const headersAt = performance.now();
@@ -585,6 +606,7 @@ export class HttpByteSource implements ByteSource {
         // Abandonné pour un saut : ce n'est pas un échec, et le redemander irait contre le saut.
         if (own.aborted) throw new ReadAbandoned();
         if (error instanceof Error && error.message.includes("statut 200")) throw error;
+        if (error instanceof SessionEnded) throw error;
         last = error;
         if (muted) trace(`réseau : aucun octet en ${SEEK_FIRST_BYTE_MS / 1000} s après un saut, plage ${start}-${end} redemandée`);
         else if (attempt === 0) trace(`réseau : plage ${start}-${end} refusée, nouvelle tentative`);

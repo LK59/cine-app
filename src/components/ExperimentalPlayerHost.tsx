@@ -658,6 +658,13 @@ export function ExperimentalPlayerHost({
    * survive a rebuild after a network cut exactly as the chosen language does.
    */
   const externalSubtitleRef = useRef<ExternalSubtitleTrack | null>(null);
+  /**
+   * Le décalage des sous-titres réglé par le spectateur, en secondes — ce lecteur dessine ses
+   * lignes lui-même, c'est donc à lui de l'appliquer (voir `subtitleOffset` sur PlayerControls).
+   * Une référence pour l'horloge, un état pour le chiffre affiché.
+   */
+  const subtitleOffsetRef = useRef(0);
+  const [subtitleOffset, setSubtitleOffset] = useState(0);
   /** Abandons a subtitle file still in flight when the player closes, or another is chosen. */
   const subtitleFetchRef = useRef<AbortController | null>(null);
 
@@ -670,6 +677,10 @@ export function ExperimentalPlayerHost({
   const chooseSubtitle = useCallback(
     (id: number | null, sources: ExternalSubtitleSource[]) => {
       wantedSubtitleRef.current = id;
+      // Un décalage corrige une piste, pas la suivante.
+      subtitleOffsetRef.current = 0;
+      setSubtitleOffset(0);
+      engineRef.current?.setSubtitleOffset(0);
       setCurrentSubtitle(id);
       setSubtitle(null);
 
@@ -711,10 +722,15 @@ export function ExperimentalPlayerHost({
    * asking it would only ever produce null, and letting it answer at all would mean two sources
    * racing to set the same line.
    */
-  const showSubtitleAt = useCallback((seconds: number, fromContainer: () => string | null) => {
-    const external = externalSubtitleRef.current;
-    setSubtitle(external ? external.textAt(seconds) : fromContainer());
-  }, []);
+  const showSubtitleAt = useCallback(
+    (playerSeconds: number, fromContainer: (at: number) => string | null, fileDelay = 0) => {
+      const at = playerSeconds - subtitleOffsetRef.current;
+      const external = externalSubtitleRef.current;
+      // Un fichier à côté du film est daté sur l'horloge du fichier, pas sur celle du lecteur.
+      setSubtitle(external ? external.textAt(at - fileDelay) : fromContainer(at));
+    },
+    []
+  );
 
   // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
   // the mount the wait was instantly minutes long — so a rebuild that takes half a second
@@ -1079,14 +1095,21 @@ export function ExperimentalPlayerHost({
   }, []);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
+    // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : son arrêt
+    // réel, plus tard, doit être noté lui aussi — il ne l'était jamais (23/09/2026).
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) stopReportedRef.current = false;
+    };
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
       reportStop("unmount");
     };
   }, [reportStop]);
 
-  const stopPlaybackNow = usePlaybackSession(
+  const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
     useCallback(() => positionRef.current, []),
     // The engine talks to the file directly, so there is no Jellyfin transcode session — but
     // progress still has to be reported, or resume points would stop updating for this player.
@@ -1105,6 +1128,11 @@ export function ExperimentalPlayerHost({
       : null,
     useCallback(() => !playing, [playing])
   );
+  // Lu par une référence depuis les écouteurs de l'élément, posés une fois pour toutes.
+  const stopPlaybackRef = useRef(stopPlaybackNow);
+  useEffect(() => {
+    stopPlaybackRef.current = stopPlaybackNow;
+  }, [stopPlaybackNow]);
 
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
 
@@ -1113,11 +1141,13 @@ export function ExperimentalPlayerHost({
     reportStop("close");
     const reported = stopPlaybackNow();
     setClosing(true);
-    setTimeout(() => playback.close(), 200);
+    // Cette lecture-ci seulement : voir `close(openId)`.
+    const openId = session.openId;
+    setTimeout(() => playback.close(openId), 200);
     // Voir PlayerHost : la fiche et la rangée « Reprendre » sont fausses dès qu'on quitte le film,
     // et les deux lecteurs doivent les relire de la même façon.
     void refreshAfterPlayback(reported, itemId);
-  }, [playback, stopPlaybackNow, itemId, reportStop]);
+  }, [playback, stopPlaybackNow, itemId, reportStop, session.openId]);
 
   const nextEpisode = session.getNextEpisode?.(itemId) ?? null;
 
@@ -1220,7 +1250,9 @@ export function ExperimentalPlayerHost({
        * logiciel et n'a pas les mêmes limites, donc lui prêter les réponses de l'autre serait une
        * supposition. Sans elle, le classement est exactement celui d'avant.
        */
-      carriable?: (track: EngineTrack) => boolean
+      carriable?: (track: EngineTrack) => boolean,
+      /** La piste sur laquelle ce chemin s'est ouvert — celle qu'on entend faute de préférence. */
+      openedAudio: number | null = null
     ): number | null => {
       const preferences = playbackState?.preferences ?? null;
       if (!preferences || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
@@ -1230,7 +1262,10 @@ export function ExperimentalPlayerHost({
       // bascule vers l'autre — ou, pire, on cède la place au lecteur serveur alors qu'une piste
       // de la même langue joue très bien ici. Voir `preferredAudio` et `rank`.
       const wantedAudio = chooseAudioTrack(audio, preferences, carriable);
-      const spoken = trackLanguage(wantedAudio ?? audio.find((track) => track.isDefault) ?? audio[0] ?? {
+      // La langue qu'on entend vraiment : sans préférence, celle de la piste ouverte, et non celle
+      // que le fichier marque par défaut — une VO japonaise marquée par défaut sous une piste
+      // française ouverte donnait des sous-titres complets en français sur du français (23/09/2026).
+      const spoken = trackLanguage(wantedAudio ?? audio.find((track) => track.number === openedAudio) ?? audio.find((track) => track.isDefault) ?? audio[0] ?? {
         language: null,
         name: null,
         isDefault: false,
@@ -1328,8 +1363,11 @@ export function ExperimentalPlayerHost({
       // subtitles gone, has not really come back.
       // What the viewer chose, if this pipeline replaces one that had it — and otherwise what
       // their account asks for, which is what a first opening gets.
-      const preferred = applyPreferences(playback.audioTracks, playback.subtitleTracks, (track) =>
-        playback.canCarryAudio(track.number)
+      const preferred = applyPreferences(
+        playback.audioTracks,
+        playback.subtitleTracks,
+        (track) => playback.canCarryAudio(track.number),
+        playback.currentAudioTrack
       );
       const wantedAudio = wantedAudioRef.current ?? preferred;
       const wantedSubtitle = wantedSubtitleRef.current;
@@ -1350,6 +1388,19 @@ export function ExperimentalPlayerHost({
       // pour tout changement de piste. Rare — l'ouverture et l'écran choisissent avec la même
       // fonction. Sur un fichier sans index en cours de film, la demande est refusée (avertissement
       // compris) et la piste ouverte continue.
+      // Une piste que ce chemin ne portera jamais : la même réponse que depuis le menu — le
+      // lecteur serveur, qui sait la porter. Demandée comme un changement de piste, elle
+      // reconstruisait sur la piste d'avant, puis redemandait, sans fin (relevé le 23/09/2026 :
+      // un compte réglé sur le japonais, une piste Opus 3.0 sur iPhone).
+      if (wantedAudio !== null && wantedAudio !== playback.currentAudioTrack && !playback.canCarryAudio(wantedAudio)) {
+        const wanted = playback.audioTracks.find((track) => track.number === wantedAudio);
+        fallToStable(`la piste ${wanted?.codecId ?? "demandée"} ne peut pas être portée ici`, {
+          // À l'ouverture, là où le film s'ouvre — voir `PlaybackSession.resumeAt`.
+          resumeAt: startSeconds,
+          audioStreamIndex: jellyfinAudioIndex(playback.audioTracks, info?.audio, wantedAudio),
+        });
+        return;
+      }
       const openingSwitch =
         wantedAudio !== null && wantedAudio !== playback.currentAudioTrack
           ? playback.requestAudioTrack(wantedAudio)
@@ -1371,7 +1422,7 @@ export function ExperimentalPlayerHost({
 
       const onTime = () => {
         positionRef.current = element.currentTime;
-        showSubtitleAt(element.currentTime, () => playback.subtitleAt(element.currentTime));
+        showSubtitleAt(element.currentTime, (at) => playback.subtitleAt(at), playback.presentationDelay);
       };
       // A warning about not being able to reach a position is obsolete the instant pictures are
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
@@ -1384,6 +1435,11 @@ export function ExperimentalPlayerHost({
       const onEnded = () => {
         setPlaying(false);
         setEnded(true);
+        // La fin est annoncée à Jellyfin tout de suite : c'est cet arrêt, en fin de fichier, qui
+        // marque le film « vu ». Il ne partait qu'à la fermeture — « Revoir » le remplaçait par
+        // la position de la seconde vision, et une application tuée en arrière-plan sur l'écran
+        // de fin ne l'envoyait jamais (relevé le 23/09/2026).
+        void stopPlaybackRef.current();
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
@@ -1468,6 +1524,8 @@ export function ExperimentalPlayerHost({
 
       const engine = new PlaybackEngine(canvasRef.current!);
       engineRef.current = engine;
+      // Un moteur reconstruit garde le décalage réglé sur le précédent.
+      engine.setSubtitleOffset(subtitleOffsetRef.current);
       pathRef.current = "webcodecs";
       setPath("webcodecs");
       announceStart("webcodecs", reason);
@@ -1560,7 +1618,7 @@ export function ExperimentalPlayerHost({
       facadeRef.current = built;
       setFacade(built);
       setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
-      const preferred = applyPreferences(engine.audioTracks, engine.subtitleTracks);
+      const preferred = applyPreferences(engine.audioTracks, engine.subtitleTracks, undefined, engine.currentAudioTrack);
       if (preferred !== null && preferred !== engine.currentAudioTrack) {
         wantedAudioRef.current = preferred;
         await engine.setAudioTrack(preferred).catch(() => {});
@@ -1803,13 +1861,18 @@ export function ExperimentalPlayerHost({
     // lost and nothing about this file or this browser is wrong; giving up into the stable
     // player — which needs the very same network — would abandon hardware decoding for a reason
     // that has nothing to do with it, and after thirty-five seconds of an outage, silently.
-    if (ready || runtimeError || networkLost) return;
+    //
+    // Ni quand une erreur est déjà à l'écran — le serveur de médias injoignable, par exemple, qui
+    // refuse exprès de passer la main : le minuteur la passait quand même trente-cinq secondes
+    // plus tard, au lecteur serveur qui échouait de la même façon, et le titre y restait pour
+    // toute la séance (relevé le 23/09/2026).
+    if (ready || runtimeError || networkLost || error) return;
     const id = setTimeout(
       () => fallToStable(`aucune image après ${GIVE_UP_AFTER_MS / 1000} s`),
       Math.max(0, openedAt + GIVE_UP_AFTER_MS - Date.now())
     );
     return () => clearTimeout(id);
-  }, [ready, runtimeError, networkLost, openedAt, fallToStable]);
+  }, [ready, runtimeError, networkLost, error, openedAt, fallToStable]);
 
 
   // Below the threshold nothing is shown, and a resume that takes a moment reads as instant
@@ -2171,6 +2234,8 @@ export function ExperimentalPlayerHost({
               media.currentTime = 0;
               void media.play().catch(() => {});
             }
+            // La séance a été close à la fin du film : la seconde vision la rouvre.
+            resumePlaybackSession();
             setEnded(false);
           }}
           onClose={handleClose}
@@ -2325,6 +2390,15 @@ export function ExperimentalPlayerHost({
             }))}
             currentSubtitleId={currentSubtitle}
             onChangeSubtitle={(id) => chooseSubtitle(id, info?.externalSubtitles ?? [])}
+            subtitleOffset={{
+              seconds: subtitleOffset,
+              onShift: (delta) => {
+                const next = Math.round((subtitleOffsetRef.current + delta) * 10) / 10;
+                subtitleOffsetRef.current = next;
+                setSubtitleOffset(next);
+                engineRef.current?.setSubtitleOffset(next);
+              },
+            }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}
             hidden={false}
             // The controls already answer this by swapping the button for a spinner, so restarting
@@ -2338,7 +2412,9 @@ export function ExperimentalPlayerHost({
             nextEpisode={nextEpisode}
             onAdvance={handleAdvance}
             // Et pas de clavier non plus : l'écouteur est posé sur la fenêtre, `inert` ne l'arrête pas.
-            suspended={!ready}
+            // Ni sous l'écran de fin : la barre d'espace y relançait le film par-dessous, sans
+            // rouvrir la séance que la fin avait close — « Revoir » le fait, pas le clavier.
+            suspended={!ready || (ended && !nextEpisode && !isMini && !error)}
             hdrCap={
               path === "remux" && hdrCapContext.relevant && info?.video?.rangeType && info.video.rangeType !== "SDR"
                 ? {

@@ -462,7 +462,8 @@ describe("MseSource", () => {
   it("drops played media when the buffer is full rather than reporting a failure", async () => {
     const video = fakeVideo();
     const onError = vi.fn();
-    await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError });
+    const remuxer = fakeRemuxer(200);
+    await MseSource.attach(video, remuxer, PLAN, { onError });
     await flush();
 
     const buffer = FakeSource.instances[0].buffers[0];
@@ -476,6 +477,28 @@ describe("MseSource", () => {
     // A full buffer is a condition to manage, not a fault to surface.
     expect(onError).not.toHaveBeenCalled();
     expect(buffer.removed.some(([start, end]) => start === 0 && end === 70)).toBe(true);
+    // Et le segment refusé est redemandé, depuis la tête : il était perdu, et le tampon gardait un
+    // trou que la lecture trouvait plus tard (relu le 23/09/2026).
+    expect(remuxer.seeks.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * Une piste audio qui s'arrête avant l'image n'est pas un navigateur qui ne retient rien.
+   *
+   * La profondeur jouable est l'intersection des deux tampons : le son fini, elle ne grandit plus,
+   * et huit segments plus tard la boucle déclarait le navigateur défaillant — le film était
+   * reconstruit au lieu de finir (relu le 23/09/2026).
+   */
+  it("continue de remplir quand seule l'image avance encore", async () => {
+    const video = fakeVideo();
+    const onError = vi.fn();
+    const remuxer = fakeRemuxer(40);
+    await MseSource.attach(video, remuxer, PLAN, { onError });
+    FakeSource.instances[0].buffers[1].secondsPerAppend = 0;
+    for (let i = 0; i < 10; i++) await flush();
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(remuxer.seeks).toEqual([]);
   });
 
   it("recovers from a rejected segment instead of declaring playback over", async () => {

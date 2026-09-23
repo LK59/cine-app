@@ -398,6 +398,10 @@ export class RemuxPlayback {
   requestAudioTrack(trackNumber: number): "rebuild" | "refused" | null {
     const track = this.file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
     if (!track || this.destroyed || track.number === this.audioTrack?.number) return null;
+    // Jamais une reconstruction vers une piste que ce chemin ne porte pas : elle rouvrirait sur la
+    // piste d'avant, et l'appelant la redemanderait — une boucle (23/09/2026). À lui de passer la
+    // main (voir `canCarryAudio`).
+    if (!playableAudio(track)) return "refused";
     if (this.switchNeedsIndex) {
       this.options.onWarning?.(playerWarning("noIndexAudio"));
       return "refused";
@@ -442,6 +446,17 @@ export class RemuxPlayback {
    * prunes its argument as it goes, so the pruning was thrown away with the copy. A direct scan
    * allocates nothing and does not care that seeking leaves the lines out of order.
    */
+  /**
+   * Où l'horloge du lecteur se tient par rapport à celle du fichier.
+   *
+   * Les lignes du conteneur sont déjà posées sur l'horloge du lecteur ; un fichier de sous-titres
+   * à côté du film, lui, est daté sur celle du fichier, et lu tel quel il arrivait d'autant en
+   * avance — un quart de seconde sur un film HEVC (23/09/2026).
+   */
+  get presentationDelay(): number {
+    return this.mse?.presentationDelay ?? 0;
+  }
+
   subtitleAt(seconds: number): string | null {
     const track = this.currentSubtitle;
     if (track === null) return null;

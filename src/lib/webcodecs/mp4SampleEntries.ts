@@ -283,13 +283,16 @@ export function dec3(frame: Uint8Array): Uint8Array {
   const frmsiz = reader.read(11);
   const fscod = reader.read(2);
   // At the lowest sample rates the field is reused to select a half rate, and the block count is
-  // then fixed at six rather than being coded.
+  // then fixed at six rather than being coded. The half-rate selector (fscod2) sits exactly where
+  // numblkscod would: it was read after bsid instead, which shifted acmod, lfeon and bsid by two
+  // bits on every 24/22.05/16 kHz stream (ETSI TS 102 366 E.1.2.2).
+  const fscod2 = fscod === 3 ? reader.read(2) : null;
   const numblkscod = fscod === 3 ? 3 : reader.read(2);
   const acmod = reader.read(3);
   const lfeon = reader.read(1);
   const bsid = reader.read(5);
 
-  const sampleRate = fscod === 3 ? AC3_SAMPLE_RATES[reader.read(2)] / 2 : AC3_SAMPLE_RATES[fscod];
+  const sampleRate = fscod2 !== null ? AC3_SAMPLE_RATES[fscod2] / 2 : AC3_SAMPLE_RATES[fscod];
   const blocks = [1, 2, 3, 6][numblkscod];
   const frameBytes = (frmsiz + 1) * 2;
   // The box wants a rate in kbit/s, which the frame size and its duration give directly.

@@ -29,8 +29,10 @@ const VIDEO = track({ number: 1, type: "video", codecId: "V_MPEGH/ISO/HEVC" });
 const AAC = track({ number: 2, type: "audio", codecId: "A_AAC", codecPrivate: new Uint8Array([0x11, 0x90]), audio: { sampleRate: 48000, channels: 2 } });
 const EAC3 = track({ number: 3, type: "audio", codecId: "A_EAC3", language: "eng", audio: { sampleRate: 48000, channels: 6 } });
 const AAC_ENG = track({ ...AAC, number: 4, language: "eng" });
+/** Un codec que rien ici ne sait porter, ni tel quel ni réencodé. */
+const COOK = track({ number: 5, type: "audio", codecId: "A_REAL/COOK", language: "ita", audio: { sampleRate: 44100, channels: 2 } });
 const FILE = {
-  timestampScaleNs: 1_000_000, durationSeconds: 5400, tracks: [VIDEO, AAC, EAC3, AAC_ENG], cues: [],
+  timestampScaleNs: 1_000_000, durationSeconds: 5400, tracks: [VIDEO, AAC, EAC3, AAC_ENG, COOK], cues: [],
   segmentDataStart: 0, segmentEnd: 1000, firstClusterOffset: 0,
 } as MatroskaFile;
 
@@ -51,7 +53,7 @@ async function start(at: number, seekable: boolean) {
   const remuxer = {
     seekable,
     plan: () => PLAN,
-    audioTracks: () => [AAC, EAC3, AAC_ENG],
+    audioTracks: () => [AAC, EAC3, AAC_ENG, COOK],
     subtitleTracks: () => [],
     close: vi.fn(),
   };
@@ -113,5 +115,20 @@ describe("un seul chemin pour changer de piste : la reconstruction", () => {
     const { playback } = await start(600, true);
     expect(playback.requestAudioTrack(AAC.number)).toBeNull();
     expect(playback.requestAudioTrack(99)).toBeNull();
+  });
+});
+
+/**
+ * Une piste que ce chemin ne porte pas est refusée tout de suite.
+ *
+ * Elle était acceptée comme une autre : le lecteur se reconstruisait dessus, échouait, se
+ * reconstruisait sur la piste d'avant — une seconde d'écran noir pour revenir au même point, et
+ * rien ne disait pourquoi (relevé le 23/09/2026).
+ */
+describe("une piste qu'aucun chemin ne porte", () => {
+  it("est refusée sans reconstruction", async () => {
+    const { playback } = await start(600, true);
+    expect(playback.requestAudioTrack(COOK.number)).toBe("refused");
+    expect(playback.currentAudioTrack).toBe(AAC.number);
   });
 });

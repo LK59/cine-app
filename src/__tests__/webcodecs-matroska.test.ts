@@ -83,7 +83,13 @@ function simpleBlock(track: number, relative: number, isKey: boolean, data: Uint
 
 const CODEC_PRIVATE = new Uint8Array([1, 2, 3, 4]);
 
-function buildFile(): Uint8Array {
+/** An element whose size is written as "unknown" — what a live muxer writes for a cluster. */
+function elUnknownSize(id: number, payload: Uint8Array): Uint8Array {
+  return concat(idBytes(id), new Uint8Array([0xff]), payload);
+}
+
+function buildFile(options: { unknownSizeClusters?: boolean } = {}): Uint8Array {
+  const cluster = options.unknownSizeClusters ? elUnknownSize : el;
   const ebmlHeader = el(0x1a45dfa3, el(0x4286, uint(1)));
 
   const info = el(
@@ -119,7 +125,7 @@ function buildFile(): Uint8Array {
   );
   const tracks = el(0x1654ae6b, concat(videoTrack, audioTrack));
 
-  const cluster0 = el(
+  const cluster0 = cluster(
     0x1f43b675,
     concat(
       el(0xe7, uint(0)),
@@ -128,7 +134,7 @@ function buildFile(): Uint8Array {
       simpleBlock(1, 40, false, new Uint8Array([0xcc]))
     )
   );
-  const cluster1 = el(
+  const cluster1 = cluster(
     0x1f43b675,
     concat(el(0xe7, uint(5000, 2)), simpleBlock(1, 0, true, new Uint8Array([0xdd])))
   );
@@ -276,6 +282,32 @@ describe("SampleReader", () => {
       [1, 5_000_000, true],
     ]);
     expect(Array.from(samples[0].data)).toEqual([0xaa]);
+  });
+
+  /**
+   * Des grappes de taille inconnue, comme les écrit un multiplexeur en direct.
+   *
+   * La lecture prenait la grappe suivante pour un enfant inconnu de la première, l'enjambait —
+   * elle et toutes les autres —, puis sautait à la fin du segment : seule la première grappe était
+   * lue (relevé le 23/09/2026).
+   */
+  it("lit chaque grappe d'un fichier aux tailles inconnues", async () => {
+    const source = new MemoryByteSource(buildFile({ unknownSizeClusters: true }));
+    const file = await parseMatroska(source);
+    const reader = new SampleReader(source, file, file.firstClusterOffset!);
+
+    const samples = [];
+    for (;;) {
+      const s = await reader.next();
+      if (!s) break;
+      samples.push(s);
+    }
+    expect(samples.map((s) => [s.trackNumber, s.timestampUs])).toEqual([
+      [1, 0],
+      [2, 0],
+      [1, 40_000],
+      [1, 5_000_000],
+    ]);
   });
 
   it("resumes at a cue offset when seeking", async () => {

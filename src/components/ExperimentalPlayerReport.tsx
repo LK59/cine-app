@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardCheck, Copy } from "lucide-react";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { traceText } from "@/lib/webcodecs/trace";
+import { useT } from "@/components/TranslationProvider";
 
 export interface ReportInput {
   /** What went wrong, or null when nothing has yet and the wait is simply long. */
@@ -70,6 +71,7 @@ export function buildReport(input: ReportInput, capabilities: Record<string, str
 }
 
 export function ExperimentalPlayerReport({ input }: { input: ReportInput }) {
+  const t = useT();
   const [capabilities, setCapabilities] = useState<Record<string, string> | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -102,14 +104,14 @@ export function ExperimentalPlayerReport({ input }: { input: ReportInput }) {
   return (
     <div className="mt-2 w-full max-w-lg text-left">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-xs uppercase tracking-wide text-slate-500">Détails techniques</p>
+        <p className="text-xs uppercase tracking-wide text-slate-500">{t("player.report.details")}</p>
         <button
           type="button"
           onClick={copy}
           className="btn btn-ghost btn-sm"
         >
           {copied ? <ClipboardCheck size={14} /> : <Copy size={14} />}
-          {copied ? "Copié" : "Copier"}
+          {copied ? t("player.report.copied") : t("player.report.copy")}
         </button>
       </div>
       {/* Read-only rather than disabled: a disabled textarea cannot be selected, and selecting it

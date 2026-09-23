@@ -121,6 +121,8 @@ const STALL_TIMEOUT_MS = 700;
 
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
+/** Voir `open` : l'attente de `sourceopen` ne peut pas durer toujours. */
+const SOURCE_OPEN_TIMEOUT_MS = 15_000;
 
 /**
  * How far the media being read may sit from the playhead before the reader is judged misplaced.
@@ -336,8 +338,22 @@ export class MseSource {
     this.video.disableRemotePlayback = true;
 
     trace("attente de sourceopen");
-    const opened = new Promise<void>((resolve) => {
+    /**
+     * Borné dans le temps.
+     *
+     * `sourceopen` n'arrive jamais quand l'élément a été repris entre-temps — une autre source
+     * posée dessus, une page mise en arrière-plan qui le vide. L'ouverture attendait alors pour
+     * toujours, et le lecteur avec elle, sans erreur à montrer ni reconstruction à tenter (relu le
+     * 23/09/2026). L'événement arrive en quelques millisecondes quand il arrive : quinze secondes
+     * ne coupent rien de légitime, et changent une attente sans fin en échec qui se rattrape.
+     */
+    let openTimer: ReturnType<typeof setTimeout> | undefined;
+    const opened = new Promise<void>((resolve, reject) => {
       this.source.addEventListener("sourceopen", () => resolve(), { once: true });
+      openTimer = setTimeout(
+        () => reject(new Error(`MediaSource jamais ouverte en ${SOURCE_OPEN_TIMEOUT_MS / 1000} s. ${this.elementState()}`)),
+        SOURCE_OPEN_TIMEOUT_MS
+      );
     });
 
     try {
@@ -352,7 +368,14 @@ export class MseSource {
       this.video.src = this.objectUrl;
     }
 
-    await opened;
+    try {
+      await opened;
+    } catch (error) {
+      this.destroy();
+      throw error;
+    } finally {
+      clearTimeout(openTimer);
+    }
     if (this.destroyed) return;
 
     // From here on the element holds the source: the object URL keeps the MediaSource alive and
@@ -389,6 +412,10 @@ export class MseSource {
       // pendant que le chien de garde redemandait la position toutes les 1,8 s sans effet. Un saut
       // *pendant* la lecture n'a jamais eu ce défaut — là, le média et le décodeur existent déjà,
       // et c'est toute la différence.
+      // Jamais au-delà du dernier instant du film : une reprise enregistrée tout au bout — une
+      // séance fermée pendant le générique de fin — attendait un média qui n'existe pas, et
+      // l'ouverture restait sur son chargement.
+      if (this.plan.durationSeconds > 0) startSeconds = Math.min(startSeconds, Math.max(0, this.plan.durationSeconds - 2));
       if (startSeconds > NO_INDEX_REACH_SECONDS && reachable(this.remuxer.seekable, startSeconds)) {
         this.remuxer.seekTo(startSeconds);
         this.seekState.moved(startSeconds);
@@ -569,6 +596,33 @@ export class MseSource {
   }
 
   /**
+   * Jusqu'où chaque tampon, pris seul, couvre la tête — additionné.
+   *
+   * La profondeur jouable est l'*intersection* des deux tampons. Quand la piste audio s'arrête
+   * avant l'image — un générique muet, une piste plus courte que le film —, cette intersection ne
+   * grandit plus alors que l'image, elle, continue d'arriver sous la tête : huit segments plus
+   * tard, la boucle concluait que le navigateur ne retenait rien, et le film était reconstruit au
+   * lieu de finir (relu le 23/09/2026). Seule la plage *sous la tête* compte, tampon par tampon :
+   * du média posé ailleurs n'est pas un progrès, et reste ce que la garde doit attraper.
+   */
+  private laneProgress(): number {
+    const now = this.anchor;
+    let total = 0;
+    for (const ops of [this.videoOps, this.audioOps]) {
+      try {
+        const ranges = ops?.buffer.buffered;
+        if (!ranges) continue;
+        for (let i = 0; i < ranges.length; i++) {
+          if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) total += ranges.end(i);
+        }
+      } catch {
+        // Tampon retiré de sa source : il ne progresse plus.
+      }
+    }
+    return total;
+  }
+
+  /**
    * How far the media runs on from the playhead without a gap.
    *
    * The range containing the playhead, not simply the last one. After a seek backwards there can
@@ -603,6 +657,7 @@ export class MseSource {
     // change nothing is a browser quietly discarding what it is given, and reading the rest of
     // the film to find that out is the worst possible answer.
     let deepestSoFar = this.bufferedEnd();
+    let furthestLanes = this.laneProgress();
     let fruitless = 0;
 
     try {
@@ -700,8 +755,10 @@ export class MseSource {
         // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
         // À chaque envoi, et non plus au rythme de la trace : les deux étaient liés par accident.
         this.guard.mediaArrived();
-        if (depth > deepestSoFar + 0.01) {
-          deepestSoFar = depth;
+        const lanes = this.laneProgress();
+        if (depth > deepestSoFar + 0.01 || lanes > furthestLanes + 0.01) {
+          deepestSoFar = Math.max(deepestSoFar, depth);
+          furthestLanes = Math.max(furthestLanes, lanes);
           fruitless = 0;
         } else if (++fruitless >= FRUITLESS_APPENDS) {
           throw new Error(
@@ -778,12 +835,14 @@ export class MseSource {
       await queue.enqueue(() => queue.buffer.appendBuffer(data as BufferSource));
       this.appendFailures = 0;
     } catch (error) {
-      // The buffer is full rather than broken: drop what is behind the playhead and try again
-      // on the next pass.
-      if (error instanceof DOMException && error.name === "QuotaExceededError") {
-        this.quotaHit();
-        return;
-      }
+      // The buffer is full rather than broken: drop what is behind the playhead and try again.
+      //
+      // « Again » ne se faisait pas : le segment refusé était perdu, le lecteur passait au suivant,
+      // et le tampon gardait un trou que la lecture trouvait plus tard — un arrêt sur image sans
+      // cause visible (relu le 23/09/2026). L'erreur remonte donc, une fois la place faite, jusqu'à
+      // la reprise de la boucle, qui relit depuis la tête : le segment perdu est demandé à nouveau,
+      // et une série de refus finit comme n'importe quelle série de segments refusés.
+      if (error instanceof DOMException && error.name === "QuotaExceededError") this.quotaHit();
       throw error;
     }
   }

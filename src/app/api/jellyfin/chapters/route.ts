@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
     const item = (await res.json()) as { Chapters?: JellyfinChapter[] };
     const chapters = (item.Chapters ?? []).map((c, i) => ({
       start: c.StartPositionTicks / TICKS_PER_SECOND,
-      name: c.Name?.trim() || `Chapitre ${i + 1}`,
+      // Sans nom, c'est au lecteur de le nommer, dans la langue de l'app : « Chapitre 3 » écrit ici
+      // s'affichait en français sur un compte réglé en anglais.
+      name: c.Name?.trim() || null,
     }));
     return NextResponse.json(chapters);
   } catch {

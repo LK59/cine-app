@@ -285,3 +285,28 @@ describe("PlaybackGuard", () => {
   });
 });
 
+
+/**
+ * Une pause qui arrive en plein saut ne s'approprie pas le saut.
+ *
+ * Mettre en pause puis sauter dans la même tâche livre `pause` avant `seeking`. La pause
+ * « réaffirmait » alors la position — la cible du saut — et la déclarait comme un pas de ce
+ * lecteur : le gestionnaire de saut, y reconnaissant son propre pas, ne chargeait jamais le média
+ * de la cible (relevé le 23/09/2026).
+ */
+describe("PlaybackGuard — pause pendant un saut", () => {
+  it("ne déclare pas la cible du spectateur comme son propre pas", () => {
+    const { guard, video, targets } = build({ at: 1800 });
+    Object.assign(video, { paused: true, seeking: true });
+    guard.paused();
+    expect(targets).toEqual([]);
+    expect(guard.debug["Dernière pause"]).not.toContain("recalé");
+  });
+
+  it("garde son ancre pour une pause ordinaire", () => {
+    const { guard, video, targets } = build({ at: 12 });
+    Object.assign(video, { paused: true, seeking: false });
+    guard.paused();
+    expect(targets).toEqual([12]);
+  });
+});

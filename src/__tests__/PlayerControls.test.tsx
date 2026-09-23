@@ -571,6 +571,8 @@ describe("PlayerControls", () => {
     );
 
     Object.defineProperty(video, "currentTime", { value: 55, configurable: true });
+    // Le compte à rebours ne court que pendant la lecture — voir le test suivant.
+    act(() => video.dispatchEvent(new Event("play")));
     act(() => video.dispatchEvent(new Event("timeupdate")));
     expect(screen.getByText("Next Ep")).toBeInTheDocument();
 
@@ -579,6 +581,36 @@ describe("PlayerControls", () => {
     });
 
     expect(onAdvance).toHaveBeenCalled();
+  });
+
+  /**
+   * Une pause pendant le générique suspend le compte à rebours.
+   *
+   * Il courait film arrêté : mettre en pause pour aller répondre à la porte, et l'épisode suivant
+   * démarrait tout seul pendant qu'on n'était pas là (relevé le 23/09/2026).
+   */
+  it("ne passe pas à l'épisode suivant pendant une pause", async () => {
+    stubMediaFetches();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let video!: HTMLVideoElement;
+    const onAdvance = vi.fn();
+    render(
+      <Harness
+        creditsStart={50}
+        nextEpisode={{ itemId: "next-1", title: "Next Ep" }}
+        onAdvance={onAdvance}
+        onVideoRef={(v) => { video = v; }}
+      />
+    );
+
+    Object.defineProperty(video, "currentTime", { value: 55, configurable: true });
+    act(() => video.dispatchEvent(new Event("timeupdate")));
+    expect(screen.getByText("Next Ep")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+    });
+    expect(onAdvance).not.toHaveBeenCalled();
   });
 
   it("dismissing the next-up prompt hides it without calling onAdvance", async () => {
@@ -784,3 +816,165 @@ describe("PlayerControls — suspendues pendant une reconstruction", () => {
   });
 });
 
+
+/**
+ * Relu le 23/09/2026 : ce que le clavier ne doit pas prendre.
+ *
+ * Ctrl+F cherche dans la page et Cmd+← revient en arrière : le lecteur sautait de dix secondes en
+ * plus. Et un champ où l'on écrit garde ses touches — une espace y mettait le film en pause.
+ */
+describe("PlayerControls — clavier, relu le 23/09/2026", () => {
+  async function mounted() {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const play = vi.fn();
+    render(
+      <Harness
+        onVideoRef={(v) => {
+          video = v;
+          video.play = play;
+        }}
+      />
+    );
+    await act(async () => {});
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    Object.defineProperty(video, "paused", { value: true, configurable: true });
+    video.currentTime = 100;
+    return { video, play };
+  }
+
+  it("laisse passer les raccourcis du navigateur et du système", async () => {
+    const { video } = await mounted();
+    for (const modifier of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight", ...modifier })));
+    }
+    expect(video.currentTime).toBe(100);
+    // La même touche, seule, reste un saut.
+    act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight" })));
+    expect(video.currentTime).toBe(110);
+  });
+
+  it("laisse ses touches à un champ de saisie", async () => {
+    const { play } = await mounted();
+    const input = document.createElement("input");
+    input.type = "text";
+    document.body.appendChild(input);
+    input.focus();
+    act(() => void input.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true })));
+    expect(play).not.toHaveBeenCalled();
+    input.remove();
+  });
+});
+
+describe("PlayerControls — relu le 23/09/2026", () => {
+  /**
+   * Le décalage des sous-titres, quand l'hôte les dessine lui-même.
+   *
+   * Le lecteur natif écrit ses lignes sous l'image, sans passer par les pistes du `<video>` :
+   * les boutons ±0,5 s déplaçaient des lignes que personne n'affichait.
+   */
+  it("confie le décalage des sous-titres à l'hôte qui les dessine", async () => {
+    stubMediaFetches();
+    const onShift = vi.fn();
+    render(
+      <Harness
+        subtitleTracks={[{ id: 3, label: "Français" }]}
+        currentSubtitleId={3}
+        subtitleOffset={{ seconds: 1.5, onShift }}
+      />
+    );
+    await act(async () => {});
+    fireEvent.click(document.querySelector('[data-player-nav="more"]')!);
+    // Le chiffre affiché est celui de l'hôte, pas un compte tenu à part.
+    expect(screen.getByText((_, el) => el?.tagName === "SPAN" && el.textContent === "+1.5s")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("+0.5s"));
+    expect(onShift).toHaveBeenCalledWith(0.5);
+  });
+
+  /** « Chapitre 3 » s'écrivait côté serveur, en français, quelle que soit la langue du compte. */
+  it("nomme un chapitre sans nom dans la langue de l'app", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/chapters")
+          ? { ok: true, json: async () => [{ start: 0, name: null }, { start: 60, name: "La fin" }] }
+          : { ok: false, json: async () => null }
+      )
+    );
+    render(<Harness />);
+    await act(async () => {});
+    fireEvent.click(document.querySelector('[data-player-nav="more"]')!);
+    fireEvent.click(await screen.findByText("player.chapters"));
+    expect(screen.getByText('player.chapterN:{"n":1}')).toBeInTheDocument();
+    expect(screen.getByText("La fin")).toBeInTheDocument();
+  });
+
+  /**
+   * Des commandes effacées ne se touchent pas.
+   *
+   * Invisibles, elles restaient sous le doigt : un toucher pour faire réapparaître les commandes
+   * pressait le bouton caché dessous — fermer le film, en haut à droite (relevé le 23/09/2026).
+   */
+  it("ne laisse pas presser un bouton effacé", async () => {
+    stubMediaFetches();
+    vi.useFakeTimers();
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    act(() => void video.dispatchEvent(new Event("play")));
+    await act(async () => void vi.advanceTimersByTime(4000));
+    const close = container.querySelector('[data-player-nav="close"]')!;
+    // Le plus proche des deux décide : un groupe `pointer-events-auto` sous un calque
+    // `pointer-events-none` rend ses boutons de nouveau touchables.
+    const decides = close.closest(".pointer-events-none, .pointer-events-auto");
+    expect(decides?.classList.contains("pointer-events-none")).toBe(true);
+  });
+});
+
+describe("PlayerControls — relu le 23/09/2026, suite", () => {
+  /**
+   * Sans générique connu, la carte « Épisode suivant » arrive à la dernière seconde.
+   *
+   * Elle n'apparaissait qu'au début du générique — et Jellyfin 12 n'en donnait plus aucun : le
+   * lecteur restait figé sur la dernière image, sans rien proposer.
+   */
+  it("propose l'épisode suivant à la fin quand aucun générique n'est connu", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    render(
+      <Harness nextEpisode={{ itemId: "next-1", title: "Next Ep" }} onVideoRef={(v) => (video = v)} />
+    );
+    await act(async () => {});
+    Object.defineProperty(video, "duration", { value: 1500, configurable: true });
+    act(() => void video.dispatchEvent(new Event("durationchange")));
+    Object.defineProperty(video, "currentTime", { value: 1000, configurable: true });
+    act(() => void video.dispatchEvent(new Event("timeupdate")));
+    expect(screen.queryByText("Next Ep")).toBeNull();
+
+    Object.defineProperty(video, "currentTime", { value: 1499.5, configurable: true });
+    act(() => void video.dispatchEvent(new Event("timeupdate")));
+    expect(screen.getByText("Next Ep")).toBeInTheDocument();
+  });
+
+  /**
+   * Un menu ouvert garde les commandes à l'écran.
+   *
+   * Elles s'effaçaient au bout de trois secondes avec le menu dedans, pendant qu'on lisait la
+   * liste des pistes.
+   */
+  it("ne retire pas les commandes pendant qu'un menu est ouvert", async () => {
+    stubMediaFetches();
+    vi.useFakeTimers();
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "paused", { value: false, configurable: true });
+    act(() => void video.dispatchEvent(new Event("play")));
+    fireEvent.click(container.querySelector('[data-player-nav="more"]')!);
+    await act(async () => void vi.advanceTimersByTime(10_000));
+    expect(screen.getByText("player.playbackInfo")).toBeInTheDocument();
+    const overlay = container.querySelector(".absolute.inset-0.z-10 > div") as HTMLElement;
+    expect(overlay.className.includes("opacity-0")).toBe(false);
+  });
+});

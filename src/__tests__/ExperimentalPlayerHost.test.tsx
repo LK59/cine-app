@@ -52,12 +52,13 @@ vi.mock("@/lib/webcodecs/mediaFacade", () => ({
 }));
 
 const stopPlaybackNow = vi.fn();
+const resumePlaybackSession = vi.fn();
 /** Ce que le lecteur annonce à Jellyfin, rendu après rendu : `null` veut dire « pas de séance ». */
 const announcedSessions: unknown[] = [];
 vi.mock("@/lib/usePlaybackSession", () => ({
   usePlaybackSession: (_position: unknown, session: unknown) => {
     announcedSessions.push(session);
-    return stopPlaybackNow;
+    return { stop: stopPlaybackNow, resume: resumePlaybackSession };
   },
 }));
 vi.mock("@/components/player/PlayerEndScreen", () => ({
@@ -77,6 +78,7 @@ vi.mock("@/components/PlayerControls", () => ({
     onChangeSubtitle: (id: number | null) => void;
     onSeekRequest?: (seconds: number) => void;
     suspended?: boolean;
+    subtitleOffset?: { seconds: number; onShift: (delta: number) => void };
     hdrCap?: { current: string | number; autoNits: number | null; onPick: (choice: string | number) => void };
   }) => (
     <div data-testid="controls" data-loading={String(props.loading)} data-suspended={String(!!props.suspended)}>
@@ -90,6 +92,9 @@ vi.mock("@/components/PlayerControls", () => ({
       >
         saut:600
       </button>
+      {props.subtitleOffset && (
+        <button onClick={() => props.subtitleOffset!.onShift(0.5)}>{`décalage:${props.subtitleOffset.seconds}`}</button>
+      )}
       {props.hdrCap && <button onClick={() => props.hdrCap!.onPick(150)}>{`hdr:${props.hdrCap.current}:${props.hdrCap.autoNits}`}</button>}
       {props.audioTracks.map((track) => (
         <button key={track.id} onClick={() => props.onChangeAudio(track.id)}>{`audio:${track.label}`}</button>
@@ -240,6 +245,7 @@ vi.mock("@/lib/webcodecs/engine", () => ({
     destroy = vi.fn();
     resumeAudio = vi.fn();
     setSubtitleTrack = vi.fn();
+    setSubtitleOffset = vi.fn();
     setAudioTrack = vi.fn(async () => {});
   },
 }));
@@ -337,6 +343,26 @@ describe("une piste que ce chemin ne portera jamais", () => {
     expect(onFallback.mock.calls[0][0]).toContain("A_TRUEHD");
     // Et surtout : pas de reconstruction sur une piste que ce chemin refuserait. Le verdict était
     // connu d'avance.
+    expect(remux.requestAudioTrack).not.toHaveBeenCalled();
+    expect(probes).toHaveLength(1);
+  });
+
+  /**
+   * Relu le 23/09/2026 : la langue du compte, enfermée dans un codec que ce chemin ne porte pas.
+   *
+   * Le lecteur voulait s'ouvrir sur elle, se reconstruisait dessus, échouait, repartait sur la
+   * piste du fichier, la voulait de nouveau… Le verdict était connu d'avance : c'est le lecteur
+   * serveur qui la porte, dès l'ouverture, à la position d'ouverture.
+   */
+  it("confie dès l'ouverture la langue du compte au lecteur serveur", async () => {
+    swr = { data: info({ audio: [{ index: 1 }, { index: 2 }] }), error: undefined };
+    viewerState = {
+      resumeSeconds: 0,
+      preferences: { audioLanguage: "eng", subtitleLanguage: null, subtitleMode: "Default", playDefaultAudioTrack: false },
+    };
+    mount();
+    await waitFor(() => expect(onFallback).toHaveBeenCalledTimes(1));
+    expect(onFallback.mock.calls[0][1]).toMatchObject({ audioStreamIndex: 2 });
     expect(remux.requestAudioTrack).not.toHaveBeenCalled();
     expect(probes).toHaveLength(1);
   });
@@ -1240,6 +1266,43 @@ describe("relu le 22/09/2026", () => {
     act(() => probes[0].onError("morte"));
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(announcedSessions.slice(before).every((session) => session !== null)).toBe(true);
+  });
+
+  /**
+   * Relu le 23/09/2026 : sous l'écran de fin, le clavier se tait.
+   *
+   * La barre d'espace y relançait le film par-dessous sans rouvrir la séance que la fin avait
+   * close ; « Revoir » le fait, et c'est le seul chemin.
+   */
+  it("suspend le clavier sous l'écran de fin, et « Revoir » rouvre la séance", async () => {
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    emit("playing");
+    expect(screen.getByTestId("controls").dataset.suspended).toBe("false");
+    emit("ended");
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("true"));
+
+    await act(async () => void fireEvent.click(screen.getByText("revoir")));
+    expect(resumePlaybackSession).toHaveBeenCalled();
+  });
+
+  /**
+   * Le décalage des sous-titres atteint ce qui les dessine.
+   *
+   * Ce lecteur écrit ses lignes lui-même : le réglage des commandes déplaçait les répliques du
+   * `<video>`, que personne n'affiche ici (relevé le 23/09/2026).
+   */
+  it("applique le décalage des sous-titres au moteur canevas", async () => {
+    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
+    emit("playing");
+    const engine = engineInstances[0] as unknown as { setSubtitleOffset: ReturnType<typeof vi.fn> };
+
+    await act(async () => void fireEvent.click(screen.getByText("décalage:0")));
+    expect(engine.setSubtitleOffset).toHaveBeenLastCalledWith(0.5);
+    expect(screen.getByText("décalage:0.5")).toBeTruthy();
   });
 
   it("« Revoir » rejoue le film sur le chemin canevas", async () => {

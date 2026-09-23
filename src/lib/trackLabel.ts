@@ -1,4 +1,4 @@
-import { normaliseLanguage, isAudioDescription, isForcedTrack, titleSaysHearingImpaired, type NamedTrack } from "@/lib/trackPreferences";
+import { normaliseLanguage, trackLanguage, isAudioDescription, isForcedTrack, titleSaysHearingImpaired, type NamedTrack } from "@/lib/trackPreferences";
 
 /**
  * L'étiquette d'une piste, écrite **une seule fois** pour toute l'application.
@@ -174,9 +174,12 @@ export interface LabelOptions {
 
 /** La partie stable de l'étiquette — celle qui sert aussi à repérer les doublons. */
 function base(track: AudioTrackFacts, options: LabelOptions): string {
-  const langue = languageName(track.language, options.locale);
+  // La langue que le choix de piste lui prête, pas seulement son code : une piste sans code mais
+  // titrée « French » était choisie comme française et affichée « Piste 2 » (23/09/2026).
+  const code = trackLanguage(track);
+  const langue = languageName(code, options.locale);
   const vo =
-    langue && options.originalLanguage && normaliseLanguage(track.language) === normaliseLanguage(options.originalLanguage)
+    langue && options.originalLanguage && code === normaliseLanguage(options.originalLanguage)
       ? " (VO)"
       : "";
   // « AD » colle à la langue : c'est une variante de cette langue, pas un format.
@@ -287,7 +290,7 @@ export function labelSubtitleTracks(
   options: SubtitleLabelOptions
 ): { number: number; label: string }[] {
   const bases = tracks.map((track) => {
-    const langue = languageName(track.language, options.locale);
+    const langue = languageName(trackLanguage(track), options.locale);
     const type = typeSousTitre(track, options);
     return langue ? `${langue} — ${type}` : `${options.piste(track.number)} — ${type}`;
   });

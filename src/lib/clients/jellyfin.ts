@@ -537,12 +537,54 @@ export const jellyfin = {
       { headers }
     ),
 
-  // From the "Intro Skipper" plugin — not core Jellyfin API, so this 404s
-  // (or has Valid:false segments) for movies and for episodes it hasn't
-  // analyzed yet. Callers must treat failures as "no data", not an error.
-  getEpisodeTimestamps: (itemId: string) =>
-    fetchJson<{
-      Introduction?: { Start: number; End: number; Valid: boolean };
-      Credits?: { Start: number; End: number; Valid: boolean };
-    }>(`${url}/Episode/${itemId}/Timestamps`, { headers }),
+  /**
+   * Le générique d'ouverture et celui de fin d'un épisode — « Passer l'intro », « Épisode suivant ».
+   *
+   * Lus dans les segments de Jellyfin (`/MediaSegments`), où Jellyfin 12 et Intro Skipper 12 les
+   * rangent. L'ancienne adresse du greffon (`/Episode/{id}/Timestamps`) répond 404 pour tous les
+   * épisodes depuis la montée de version : aucune intro à passer, aucune carte « épisode suivant »,
+   * et un lecteur figé sur la dernière image en fin d'épisode (relevé le 23/09/2026). Elle reste en
+   * repli, pour un serveur qui n'aurait que l'ancien greffon. Un échec vaut « pas de repères ».
+   */
+  getEpisodeTimestamps: async (itemId: string): Promise<EpisodeTimestamps | null> => {
+    const segments = await fetchJson<{ Items?: MediaSegment[] }>(`${url}/MediaSegments/${itemId}`, { headers }).catch(
+      () => null
+    );
+    if (segments?.Items) return timestampsFromSegments(segments.Items);
+    return fetchJson<EpisodeTimestamps>(`${url}/Episode/${itemId}/Timestamps`, { headers });
+  },
 };
+
+export interface EpisodeTimestamps {
+  Introduction?: { Start: number; End: number; Valid: boolean };
+  Credits?: { Start: number; End: number; Valid: boolean };
+}
+
+export interface MediaSegment {
+  Type: string;
+  StartTicks: number;
+  EndTicks: number;
+}
+
+/** Un segment plus court que ça n'est pas un générique : « Intro 3 s – 3 s » existe bel et bien. */
+const MIN_SEGMENT_S = 5;
+/**
+ * Un générique de fin qui commence dans la première minute est une erreur d'analyse — vu sur
+ * *Bref* : « Outro 3 s – 129 s » à côté du vrai, à 115 s. Pris tel quel, il lançait l'épisode
+ * suivant au bout de trois secondes.
+ */
+const MIN_CREDITS_START_S = 60;
+
+/** Les segments de Jellyfin, ramenés à la forme qu'attend le lecteur (secondes). */
+export function timestampsFromSegments(items: MediaSegment[]): EpisodeTimestamps {
+  const spans = items
+    .map((s) => ({ type: s.Type, start: s.StartTicks / 10_000_000, end: s.EndTicks / 10_000_000 }))
+    .filter((s) => s.end - s.start >= MIN_SEGMENT_S)
+    .sort((a, b) => a.start - b.start);
+  const intro = spans.find((s) => s.type === "Intro");
+  const credits = spans.find((s) => s.type === "Outro" && s.start >= MIN_CREDITS_START_S);
+  return {
+    ...(intro ? { Introduction: { Start: intro.start, End: intro.end, Valid: true } } : {}),
+    ...(credits ? { Credits: { Start: credits.start, End: credits.end, Valid: true } } : {}),
+  };
+}

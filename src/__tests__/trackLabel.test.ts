@@ -320,3 +320,27 @@ describe("originalLanguageCode", () => {
     expect(originalLanguageCode("  FRENCH ")).toBe("fr");
   });
 });
+
+/**
+ * Une piste sans code de langue, mais titrée : l'étiquette dit la langue que le choix lui prête.
+ *
+ * Le choix de piste lit le titre quand le code manque (`trackLanguage`) ; l'étiquette ne lisait
+ * que le code. Une piste « French » sans code était donc ouverte comme la piste française du
+ * compte, et affichée « Piste 2 » dans le menu (23/09/2026).
+ */
+describe("une langue lue dans le titre", () => {
+  it("nomme la piste audio comme le choix la comprend", () => {
+    const [a] = labelAudioTracks([piste({ number: 2, name: "French", codecId: "A_AC3", channels: 6 })], options);
+    expect(a.label).toBe("Français — 5.1");
+  });
+
+  it("nomme aussi le sous-titre", () => {
+    const [s] = labelSubtitleTracks([st({ number: 5, name: "English" })], stOptions);
+    expect(s.label).toBe("Anglais — Complets");
+  });
+
+  it("le code l'emporte toujours sur le titre", () => {
+    const [a] = labelAudioTracks([piste({ number: 2, language: "eng", name: "French commentary", channels: 2 })], options);
+    expect(a.label).toMatch(/^Anglais/);
+  });
+});

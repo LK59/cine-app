@@ -25,7 +25,7 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
-import { serverStartFields, serverFailureFields, castEstablishedFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
 import { resolveResumeAt } from "@/lib/resumePosition";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
@@ -204,7 +204,8 @@ export function PlayerHost() {
         // had chosen — which on another file may well be another language — the subtitle file
         // fetched for the episode before, the position, the count of rebuilds already spent, and
         // a readiness left true while the new one was still opening.
-        key={session.itemId}
+        // Et une nouvelle ouverture du même film aussi — voir `PlaybackSession.openId`.
+        key={`${session.itemId}:${session.openId ?? 0}`}
         session={playing}
         mode={mode === "mini" ? "mini" : "full"}
         onFallback={handOver}
@@ -215,6 +216,10 @@ export function PlayerHost() {
   return (
     <>
       <ActivePlayer
+        // Le numéro d'ouverture seul, pas l'épisode : ce lecteur-ci enchaîne lui-même les épisodes
+        // sur le changement d'identifiant, avec son propre compte rendu d'arrêt. Le remonter à
+        // chaque épisode l'aurait rendu deux fois.
+        key={session.openId ?? 0}
         session={session}
         mode={mode === "mini" ? "mini" : "full"}
         fallbackReason={fallbackReason}
@@ -408,7 +413,7 @@ function ActivePlayer({
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
-  const stopPlaybackNow = usePlaybackSession(
+  const { stop: stopPlaybackNow } = usePlaybackSession(
     useCallback(() => lastKnownTime.current, []),
     // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
     // is what the server's own dashboard should show.
@@ -423,6 +428,7 @@ function ActivePlayer({
   // close/unmount fade since the player stays open for the new episode.
   const handleAdvance = useCallback(() => {
     if (!nextEpisode) return;
+    reportPlayback("stop", serverStopFields(logContext.current, "next", lastKnownTime.current));
     stopPlaybackNow();
     playback.advance(nextEpisode);
   }, [nextEpisode, playback, stopPlaybackNow]);
@@ -435,14 +441,17 @@ function ActivePlayer({
   const CLOSE_MS = 200;
   const handleClose = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    reportPlayback("stop", serverStopFields(logContext.current, "close", lastKnownTime.current));
     const reported = stopPlaybackNow();
     setClosing(true);
-    setTimeout(() => playback.close(), CLOSE_MS);
+    // Cette lecture-ci seulement : voir `close(openId)`.
+    const openId = session.openId;
+    setTimeout(() => playback.close(openId), CLOSE_MS);
     // La fiche et la rangée « Reprendre » décrivent ce film : elles sont fausses dès l'instant
     // où on le quitte, et rien ne les relisait. Volontairement hors du chemin de la fermeture —
     // l'écran doit partir tout de suite, la relecture peut attendre son tour.
     void refreshAfterPlayback(reported, itemId);
-  }, [playback, stopPlaybackNow, itemId]);
+  }, [playback, stopPlaybackNow, itemId, session.openId]);
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
@@ -870,7 +879,9 @@ function ActivePlayer({
   const changeAudio = useCallback(
     (id: number) => {
       const video = videoRef.current;
-      const resumeAt = video?.currentTime ?? 0;
+      // La position connue, pas celle de l'élément : pendant un chargement, il est encore à 0, et
+      // changer de piste à ce moment relançait le film depuis le début (23/09/2026).
+      const resumeAt = video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA ? video.currentTime : lastKnownTime.current;
       // WebKit only: switching audio in-place reliably fails there with MediaError
       // SRC_NOT_SUPPORTED — a genuine, reproducible WebKit limitation on loading a second HLS
       // session within the same page. Verified this isn't about DOM element reuse (fails
@@ -1195,6 +1206,10 @@ function ActivePlayer({
     const video = videoRef.current;
     if (!video) return;
     const onTimeUpdate = () => {
+      // Pas tant que rien n'est chargé : un changement de source remet l'élément à zéro et émet
+      // un `timeupdate` à 0 — qui écrasait la position connue, puis celle de Jellyfin au premier
+      // battement (relevé le 23/09/2026). La position semée par `startPlayback` tient jusque-là.
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       lastKnownTime.current = video.currentTime;
     };
     video.addEventListener("timeupdate", onTimeUpdate);
@@ -1500,8 +1515,11 @@ function ActivePlayer({
               et proposer « Réessayer » ici ne voudrait rien dire — il n'y a plus de route à
               reprendre, seulement une bascule à refaire. */}
           {/* La conséquence, dite avant le geste. Voir `requestAudioChange`. */}
+          {/* `z-30`, au-dessus des contrôles (`z-10`, peints après) : à égalité, ils recouvraient ces
+              deux écrans et prenaient chaque appui — aucun de leurs boutons ne répondait, le film
+              restait sous un voile noir pendant une diffusion (relevé le 23/09/2026). */}
           {pendingAudioTrack !== null && !isMini && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 px-6 text-center">
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-6 text-center">
               <div className="max-w-md">
                 <p className="mb-4 text-sm text-white">{t("player.castAudioWarning")}</p>
                 <div className="flex justify-center gap-3">
@@ -1528,7 +1546,7 @@ function ActivePlayer({
             </div>
           )}
           {castInterrupted && !isMini && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-6 text-center">
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-6 text-center">
               <div>
                 <p className="mb-4 text-sm text-white">{t("player.castInterrupted")}</p>
                 <div className="flex justify-center gap-3">

@@ -9,6 +9,15 @@ import { NEXT_UP_KEY, RESUME_KEY } from "@/lib/swr";
 export interface PlaybackSession {
   itemId: string;
   title: string;
+  /**
+   * Le numéro de cette ouverture, posé par `play()`.
+   *
+   * Il fait partie de la clé des lecteurs : relancer le film déjà ouvert — « Recommencer » sur la
+   * fiche d'un film réduit en mini-lecteur — réutilisait le lecteur en place, qui gardait sa
+   * position et ignorait le « depuis le début » demandé ; le lecteur serveur ne faisait rien du
+   * tout (relevé le 23/09/2026). Chaque appui sur Lire est une lecture neuve.
+   */
+  openId?: number;
   /** Resume position in seconds, if reopening a partially-watched item. */
   /**
    * Où ouvrir le film, en secondes.
@@ -66,7 +75,12 @@ interface PlaybackContextValue {
   session: PlaybackSession | null;
   mode: PlaybackMode;
   play: (session: PlaybackSession) => void;
-  close: () => void;
+  /**
+   * Fermer le lecteur. Avec un numéro d'ouverture, seulement si c'est encore cette lecture-là :
+   * les deux lecteurs ferment au bout de leur fondu, et un film lancé pendant ces 200 ms était
+   * refermé à sa place (relevé le 23/09/2026).
+   */
+  close: (openId?: number) => void;
   minimize: () => void;
   expand: () => void;
   advance: (next: { itemId: string; title: string }) => void;
@@ -85,6 +99,9 @@ export function usePlayback(): PlaybackContextValue {
 // layout) so play() can be called from anywhere (movie sheets, episode rows, dashboard cards)
 // without each caller owning its own player instance. That's what lets playback survive
 // navigating to a different page while minimized.
+/** Voir `PlaybackSession.openId`. */
+let openCounter = 0;
+
 export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PlaybackSession | null>(null);
   const [mode, setMode] = useState<PlaybackMode>("closed");
@@ -186,16 +203,29 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const play = useCallback((s: PlaybackSession) => {
-    setSession(s);
+    openCounter += 1;
+    setSession({ ...s, openId: openCounter });
     setMode("full");
   }, []);
 
-  const close = useCallback(() => {
+  const currentOpenId = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    currentOpenId.current = session?.openId;
+  }, [session]);
+  const close = useCallback((openId?: number) => {
+    if (openId !== undefined && currentOpenId.current !== openId) return;
     setMode("closed");
     setSession(null);
   }, []);
 
-  const minimize = useCallback(() => setMode("mini"), []);
+  // Réduire quitte d'abord le plein écran : l'élément y restait, dans la couche du dessus, et les
+  // règles `:fullscreen` du navigateur l'emportaient sur la position du mini-lecteur — une vidéo
+  // plein écran habillée en mini-lecteur, qu'on ne pouvait ni déplacer ni quitter autrement
+  // qu'avec Échap (relevé le 23/09/2026).
+  const minimize = useCallback(() => {
+    if (typeof document !== "undefined" && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    setMode("mini");
+  }, []);
   const expand = useCallback(() => setMode("full"), []);
 
   // Resets resumeAt — an advance always starts the new episode from 0, matching the previous

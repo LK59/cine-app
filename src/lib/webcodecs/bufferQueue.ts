@@ -58,7 +58,19 @@ export class BufferQueue {
       const onEnd = () => finish();
       const onFail = () => finish(new Error(`Le navigateur a refusé une opération sur le tampon. ${this.why()}`));
       // A browser that answers neither must not hold the queue for the rest of the session.
-      const timer = setTimeout(() => finish(), BUFFER_OPERATION_TIMEOUT_MS);
+      //
+      // Mais l'échéance ne vaut réussite que si le tampon est vraiment libre — un événement
+      // manqué. Encore occupé, il l'aurait fait passer pour fini : l'opération suivante partait sur
+      // un tampon en cours de mise à jour, et le navigateur la refusait (InvalidStateError) avec
+      // un message qui accusait le mauvais segment (relu le 23/09/2026). C'est un échec, dit comme
+      // tel, que l'appelant traite comme un envoi refusé.
+      const timer = setTimeout(() => {
+        if (this.buffer.updating) {
+          finish(new Error(`Le tampon n'a pas répondu en ${BUFFER_OPERATION_TIMEOUT_MS / 1000} s. ${this.why()}`));
+        } else {
+          finish();
+        }
+      }, BUFFER_OPERATION_TIMEOUT_MS);
 
       this.buffer.addEventListener("updateend", onEnd);
       this.buffer.addEventListener("error", onFail);
