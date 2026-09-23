@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { cinemaClose, cinemaNavigate, useCinemaRoute, useSheetBehind, useRouteBehind, personBehind } from "@/lib/cinemaRoute";
-import { SHEET_OUT_MS } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS } from "@/lib/sheetMotion";
 import { preloadQuietly } from "@/lib/prefetch";
 import { useExitDelay } from "@/lib/useExitDelay";
 import { PlayerRail } from "./PlayerRail";
@@ -131,7 +131,7 @@ export function PlayerShell() {
   const covering = route.film !== null || route.serie !== null || route.discover !== null;
   const personUnder = isMobile && covering && route.person === null ? personBehind(behind) : null;
   const sheetExitMs =
-    useSheetBehind() && !behindIsLibrarySheet ? 0 : isMobile ? SHEET_OUT_MS : EXIT_MS;
+    useSheetBehind() && !behindIsLibrarySheet ? 0 : isMobile ? SHEET_OUT_MS + SHEET_UNMOUNT_SLACK_MS : EXIT_MS;
   const person = useExitDelay(route.person !== null, sheetExitMs);
   const discover = useExitDelay(route.discover !== null, sheetExitMs);
 

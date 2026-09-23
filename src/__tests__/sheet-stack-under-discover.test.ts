@@ -76,9 +76,11 @@ describe("les fiches TMDB s'animent comme les fiches de bibliothèque", () => {
     expect(src).not.toMatch(/"animate-fade-out-down/);
   });
 
-  it("leur sursis de sortie vaut la durée de sheet-out sur téléphone", () => {
+  it("leur sursis de sortie couvre sheet-out sur téléphone, plus une marge avant le démontage", () => {
+    // La durée exacte ne suffisait pas : le démontage tombait sur les dernières images de la
+    // sortie (23/09/2026). Voir `SHEET_UNMOUNT_SLACK_MS`.
     const src = readFileSync("src/components/player/PlayerShell.tsx", "utf8");
-    expect(src).toMatch(/isMobile \? SHEET_OUT_MS : EXIT_MS/);
+    expect(src).toMatch(/isMobile \? SHEET_OUT_MS \+ SHEET_UNMOUNT_SLACK_MS : EXIT_MS/);
   });
 });
 

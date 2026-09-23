@@ -77,11 +77,21 @@ const draw = (props: { tmdbId: number; underneath?: boolean }) =>
 let idleCallbacks: (() => void)[] = [];
 beforeEach(() => {
   idleCallbacks = [];
+  // Des poignées réelles, pour qu'une annulation annule : un rappel programmé avant un geste ne
+  // doit pas s'exécuter après, comme dans un navigateur.
+  const handles = new Map<number, () => void>();
+  let next = 0;
   vi.stubGlobal("requestIdleCallback", (cb: () => void) => {
+    const handle = ++next;
+    handles.set(handle, cb);
     idleCallbacks.push(cb);
-    return 1;
+    return handle;
   });
-  vi.stubGlobal("cancelIdleCallback", () => {});
+  vi.stubGlobal("cancelIdleCallback", (handle: number) => {
+    const cb = handles.get(handle);
+    if (cb) idleCallbacks = idleCallbacks.filter((c) => c !== cb);
+    handles.delete(handle);
+  });
 });
 /**
  * Tous les temps morts, jusqu'au dernier : la filmographie arrive maintenant par paquets, chacun
@@ -251,6 +261,32 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     expect(scrim().style.opacity).toBe("0");
     expect(scrim().style.transition).toContain("opacity 280ms");
     expect(scrim().className).not.toContain("animate-fade-out");
+  });
+
+  it("ne pose aucun paquet de cartes pendant qu'on tire la fiche", async () => {
+    // 23/09/2026 : un temps mort entre deux mouvements du doigt suffisait à poser vingt-quatre
+    // cartes en plein glissement — la saccade « à certains moments ».
+    draw({ tmdbId: 13 });
+    await screen.findByText("Film 0");
+    await finishEntry();
+    const runIdle = () =>
+      act(async () => {
+        const pending = idleCallbacks;
+        idleCallbacks = [];
+        pending.forEach((cb) => cb());
+      });
+    const handle = screen.getByRole("dialog").querySelector<HTMLElement>("[style*='touch-action']")!;
+    const pointer = (type: string, clientY: number) =>
+      act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
+    pointer("pointerdown", 100);
+    pointer("pointermove", 130);
+    await runIdle();
+    expect(cardCount()).toBe(18);
+    // Revenue en place, elle reprend.
+    pointer("pointermove", 100);
+    pointer("pointerup", 100);
+    await runIdle();
+    expect(cardCount()).toBe(18 + 24);
   });
 });
 

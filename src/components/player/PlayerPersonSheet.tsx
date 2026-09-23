@@ -388,8 +388,12 @@ export function PlayerPersonSheet({
    * de l'effet (règle du compilateur React) ; le minuteur couvre Safari, sans `requestIdleCallback`.
    */
   const [shown, setShown] = useState(FIRST_PAINT);
+  // Et jamais pendant un geste ni une sortie (23/09/2026) : les temps morts existent aussi entre
+  // deux mouvements du doigt, et un paquet de vingt-quatre cartes posé à ce moment-là se sentait
+  // comme une saccade « à certains moments » du glissement. Une fiche revenue en place reprend.
+  const holding = swipe.dragging || swipe.dismissed || leaving;
   useEffect(() => {
-    if (underneath || !data || !settled || shown >= credits.length) return;
+    if (holding || underneath || !data || !settled || shown >= credits.length) return;
     const grow = () => setShown((n) => n + FILL_CHUNK);
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
     if (idle) {
@@ -398,7 +402,7 @@ export function PlayerPersonSheet({
     }
     const timer = window.setTimeout(grow, 32);
     return () => clearTimeout(timer);
-  }, [underneath, data, settled, shown, credits.length]);
+  }, [holding, underneath, data, settled, shown, credits.length]);
 
   // Mémorisées : ce sont les entrées de `PersonFilmography`, qui doivent garder leur identité
   // tant que rien ne change — un glissement, une sortie ne changent ni l'une ni l'autre.

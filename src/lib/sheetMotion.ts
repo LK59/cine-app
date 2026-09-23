@@ -12,6 +12,17 @@
 export const SHEET_OUT_MS = 280;
 
 /**
+ * Le temps de plus qu'une fiche reste montée après sa sortie, invisible, avant d'être démontée.
+ *
+ * Le démontage était programmé à la durée exacte de l'animation : le moindre retard du fil
+ * principal le faisait tomber sur ses dernières images, et une fiche personne — une filmographie
+ * de plusieurs centaines de cartes à défaire — accrochait « quand l'animation se termine »
+ * (23/09/2026), au moment même où la barre du bas finissait de revenir. La fiche est déjà hors de
+ * l'écran et n'accepte plus aucun appui : la garder un instant de plus ne coûte rien.
+ */
+export const SHEET_UNMOUNT_SLACK_MS = 120;
+
+/**
  * La classe d'animation d'une fiche qu'on peut tirer vers le bas — entrée, sortie, ou rien.
  *
  * Trois fiches l'écrivaient chacune, dans les mêmes termes :
