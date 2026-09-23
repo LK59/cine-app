@@ -978,3 +978,42 @@ describe("PlayerControls — relu le 23/09/2026, suite", () => {
     expect(overlay.className.includes("opacity-0")).toBe(false);
   });
 });
+
+/**
+ * Sous le doigt, la barre suit le doigt et rien d'autre.
+ *
+ * Sur iOS, un doigt posé sur la pastille fait aussi glisser l'input natif, en relatif. Ses
+ * valeurs se mêlaient à celles du doigt : sauts, saccades, tremblement (signalé le 23/09/2026).
+ */
+describe("PlayerControls — glisser au doigt sur la barre", () => {
+  async function mountedBar() {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideoRef={(v) => (video = v)} />);
+    await act(async () => {});
+    Object.defineProperty(video, "duration", { value: 3600, configurable: true });
+    await act(async () => void video.dispatchEvent(new Event("durationchange")));
+    const input = container.querySelector('input[data-player-nav="seek"]') as HTMLInputElement;
+    const bar = input.parentElement as HTMLElement;
+    bar.getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 20, right: 200, bottom: 20, x: 0, y: 0, toJSON: () => ({}) });
+    return { input };
+  }
+
+  it("ignore la valeur que l'input natif se donne pendant le glisser", async () => {
+    const { input } = await mountedBar();
+    fireEvent.touchStart(input, { touches: [{ clientX: 100 }] });
+    fireEvent.touchMove(input, { touches: [{ clientX: 102 }] });
+    // L'input natif, parti de sa pastille, annonce autre chose que le doigt.
+    fireEvent.change(input, { target: { value: "300" } });
+    expect(Number(input.value)).toBeCloseTo(1836, 0);
+  });
+
+  it("ne bouge pas pour un tremblement de moins d'un pixel", async () => {
+    const { input } = await mountedBar();
+    fireEvent.touchStart(input, { touches: [{ clientX: 100 }] });
+    fireEvent.touchMove(input, { touches: [{ clientX: 100.4 }] });
+    expect(Number(input.value)).toBeCloseTo(1800, 0);
+    fireEvent.touchMove(input, { touches: [{ clientX: 101.5 }] });
+    expect(Number(input.value)).toBeCloseTo(1827, 0);
+  });
+});

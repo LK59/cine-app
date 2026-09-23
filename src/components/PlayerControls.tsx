@@ -114,6 +114,8 @@ const SEEK_SPINNER_MS = 150;
  * après un doigt.
  */
 const TOUCH_ECHO_MS = 800;
+/** En dessous, un déplacement du doigt est son tremblement, pas un geste — voir `lastTouchXRef`. */
+const TOUCH_JITTER_PX = 1;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -271,6 +273,18 @@ export function PlayerControls({
    * 6:48 », systématiquement, sur Chrome et Firefox.
    */
   const mouseDragRef = useRef(false);
+  /**
+   * Un doigt glisse sur la barre : même règle que la souris, la position vient du doigt.
+   *
+   * Sur iOS, un doigt posé sur la pastille (invisible, mais toujours là) fait aussi glisser
+   * l'input natif — en relatif, depuis la pastille et non depuis le doigt. Les deux écrivaient
+   * tour à tour une position différente, et chaque rendu remettait la valeur de l'input, ce qui
+   * relançait son propre glisser : la barre et la vignette sautaient, saccadaient et tremblaient
+   * sous un doigt immobile (signalé sur iPhone le 23/09/2026).
+   */
+  const touchDragRef = useRef(false);
+  /** Le dernier point du doigt pris en compte — voir `TOUCH_JITTER_PX`. */
+  const lastTouchXRef = useRef<number | null>(null);
   /**
    * L'instant du dernier doigt levé de la barre — pour reconnaître la souris que le navigateur
    * rejoue ensuite.
@@ -1753,12 +1767,20 @@ export function PlayerControls({
               if (!seekingRef.current) showControls(5000);
             }}
             onTouchStart={(e) => {
+              touchDragRef.current = true;
+              lastTouchXRef.current = e.touches[0].clientX;
               holdControls();
               updatePreview(e.touches[0].clientX);
             }}
             onTouchMove={(e) => {
               holdControls();
-              updatePreview(e.touches[0].clientX);
+              // Un doigt immobile n'est pas immobile au dixième de pixel près, et sur un
+              // téléphone un pixel de barre vaut une vingtaine de secondes de film : sans ce
+              // seuil, la vignette hésitait entre deux images sous un doigt posé.
+              const x = e.touches[0].clientX;
+              if (lastTouchXRef.current !== null && Math.abs(x - lastTouchXRef.current) < TOUCH_JITTER_PX) return;
+              lastTouchXRef.current = x;
+              updatePreview(x);
             }}
             /**
              * Le saut est décidé ici, à partir de l'endroit où le doigt était — et non de la
@@ -1773,6 +1795,8 @@ export function PlayerControls({
              */
             onTouchEnd={() => {
               seekingRef.current = false;
+              touchDragRef.current = false;
+              lastTouchXRef.current = null;
               lastTouchEndRef.current = performance.now();
               if (previewTime !== null) commitSeek(previewTime);
               setPreviewTime(null);
@@ -1783,6 +1807,8 @@ export function PlayerControls({
             // nothing on it. Rien n'est validé : le doigt n'a pas été relâché, il a été repris.
             onTouchCancel={() => {
               seekingRef.current = false;
+              touchDragRef.current = false;
+              lastTouchXRef.current = null;
               setPreviewTime(null);
               showControls(5000);
             }}
@@ -1882,7 +1908,7 @@ export function PlayerControls({
               // Sauf sous la souris, où l'action par défaut de l'input passe après le mousemove
               // du conteneur et remettrait sa propre valeur par-dessus (voir mouseDragRef).
               onChange={(e) => {
-                if (!mouseDragRef.current) previewSeek(Number(e.target.value));
+                if (!mouseDragRef.current && !touchDragRef.current) previewSeek(Number(e.target.value));
               }}
               onMouseDown={(e) => {
                 // L'écho d'un toucher que le conteneur a déjà validé (voir lastTouchEndRef).
