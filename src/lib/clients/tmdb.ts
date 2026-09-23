@@ -196,6 +196,11 @@ function createTmdbClient(lang = "fr-FR") {
       fetchJson<{ tv_results: { id: number }[] }>(
         `${BASE}/find/${tvdbId}?api_key=${apiKey}&external_source=tvdb_id&language=${lang}`
       ),
+    /** Les épisodes d'une saison, dans la langue du client — de quoi combler un résumé absent. */
+    getTvSeason: (tmdbTvId: number, seasonNumber: number) =>
+      fetchJson<{ episodes?: { episode_number: number; name?: string; overview?: string }[] }>(
+        `${BASE}/tv/${tmdbTvId}/season/${seasonNumber}?api_key=${apiKey}&language=${lang}`
+      ),
     getTv: (tmdbTvId: number) =>
       fetchJson<TmdbTv>(
         `${BASE}/tv/${tmdbTvId}?api_key=${apiKey}&language=${lang}&append_to_response=credits,external_ids`

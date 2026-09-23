@@ -4,6 +4,9 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { fillEpisodeText } from "@/lib/episodeFallback";
+import { cachedItemProviderIds, getProviderIdCI } from "@/lib/server-cache";
+import { localeOf } from "@/lib/i18n";
 
 export interface CinemaEpisode {
   jellyfinItemId: string;
@@ -69,9 +72,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
   const session = await verifySessionFull(token);
   if (!session?.jfId) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  const [items, nextUp] = await Promise.all([
+  const [items, nextUp, series] = await Promise.all([
     jellyfin.getSeriesEpisodes(session.jfId, jellyfinId).catch(() => []),
     jellyfin.getNextUp(session.jfId, jellyfinId).catch(() => null),
+    cachedItemProviderIds(session.jfId, jellyfinId).catch(() => null),
   ]);
 
   const bySeasonNumber = new Map<number, CinemaEpisode[]>();
@@ -80,6 +84,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ jellyfinI
     (bySeasonNumber.get(ep.seasonNumber) ?? bySeasonNumber.set(ep.seasonNumber, []).get(ep.seasonNumber)!).push(ep);
   }
   for (const episodes of bySeasonNumber.values()) episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+  // Un résumé absent, un titre de remplissage : comblés depuis TMDB, dans la langue de qui regarde
+  // puis en anglais — voir `fillEpisodeText`. Jamais bloquant pour le reste de la réponse.
+  const tmdbRaw = getProviderIdCI(series?.ProviderIds as Record<string, string> | undefined, "tmdb");
+  await fillEpisodeText([...bySeasonNumber.values()].flat(), tmdbRaw ? Number.parseInt(tmdbRaw, 10) : null, localeOf(req)).catch(
+    () => {}
+  );
 
   // Season 0 (specials) sorts last, like Netflix/Jellyfin's own season pickers, not first —
   // everything else ascending.
