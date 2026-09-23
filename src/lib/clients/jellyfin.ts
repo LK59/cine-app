@@ -386,6 +386,21 @@ export const jellyfin = {
   markUnplayed: (userId: string, itemId: string) =>
     fetchJson<void>(`${url}/Users/${userId}/PlayedItems/${itemId}`, { method: "DELETE", headers }),
 
+  /**
+   * Oublie où l'on en était d'un titre, sans rien toucher d'autre — ce qui le retire de « Reprendre ».
+   *
+   * Pas `markUnplayed` : il remet aussi à zéro le nombre de visionnages et l'état « Vu », si bien
+   * qu'un film déjà vu puis recommencé aurait perdu son « Vu » en quittant la rangée. Cette route
+   * (Jellyfin 10.9 et suivants) ne met à jour que les champs envoyés — vérifiée en direct sur le
+   * serveur le 23/09/2026.
+   */
+  resetPlaybackPosition: (userId: string, itemId: string) =>
+    fetchJson<unknown>(`${url}/UserItems/${itemId}/UserData?userId=${encodeURIComponent(userId)}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ PlaybackPositionTicks: 0 }),
+    }),
+
   // Les favoris vivent chez Jellyfin, pas dans la base locale : c'est ce qui les fait apparaître
   // aussi dans les applications Jellyfin de la personne, sur sa télé comme sur son téléphone. Ils
   // ne concernent donc que des titres présents dans la bibliothèque — sans identifiant Jellyfin,

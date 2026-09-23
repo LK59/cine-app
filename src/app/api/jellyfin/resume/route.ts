@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { sonarrIdsBySeriesId } from "@/lib/sonarrLink";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -67,4 +68,28 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({ items });
+}
+
+/**
+ * Retirer un titre de « Reprendre » : sa position est oubliée, rien d'autre (voir
+ * `resetPlaybackPosition`). N'agit que sur le compte de l'appelant — l'identifiant Jellyfin vient
+ * de la session, jamais de la requête.
+ */
+export async function DELETE(req: NextRequest) {
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  const session = await verifySessionFull(token);
+  if (!session?.jfId) {
+    return NextResponse.json({ error: "Compte Jellyfin requis" }, { status: 403 });
+  }
+  const body = await req.json().catch(() => null);
+  const itemId = body?.itemId;
+  if (!isJellyfinId(itemId)) {
+    return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
+  }
+  try {
+    await jellyfin.resetPlaybackPosition(session.jfId, itemId);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Erreur Jellyfin" }, { status: 502 });
+  }
 }

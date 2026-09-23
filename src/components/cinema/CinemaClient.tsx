@@ -1,10 +1,14 @@
 "use client";
 
 import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
+import { ActionSheet } from "@/components/ActionSheet";
+import { useLongPress } from "@/lib/useLongPress";
+import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Play } from "lucide-react";
+import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
@@ -131,6 +135,7 @@ function ContinueCard({
   index,
   onOpen,
   onFocus,
+  onMenu,
 }: {
   itemId: string;
   title: string;
@@ -158,18 +163,27 @@ function ContinueCard({
    * que ce qu'on désigne.
    */
   onFocus: () => void;
+  /**
+   * Le menu de la carte — « Retirer de Reprendre » —, au clic droit, à la touche menu du clavier
+   * ou à l'appui long d'un doigt (tablette). Absent pour un épisode : « À suivre » ne se retire pas
+   * d'une série sans la marquer vue.
+   */
+  onMenu?: () => void;
 }) {
   const t = useT();
+  const menu = useLongPress(onMenu);
   return (
     <button
       type="button"
       data-tv-card
       data-tv-row={rowKey}
       data-tv-col={index}
+      {...menu}
       onClick={onOpen}
       onFocus={onFocus}
       onMouseEnter={onFocus}
-      className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 overflow-visible rounded-lg text-left transition-transform duration-200 hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
+      // Ni loupe ni sélection sous un doigt qui appuie longuement : c'est le geste du menu.
+      className={`group relative ${CONTINUE_CARD_WIDTH} shrink-0 select-none overflow-visible rounded-lg text-left transition-transform duration-200 [-webkit-touch-callout:none] hover:z-10 hover:scale-105 focus-visible:z-10 focus-visible:scale-105 ${TV_NAV_RING}`}
     >
       <div className="relative overflow-hidden rounded-lg">
         <PosterImage
@@ -320,6 +334,13 @@ export function CinemaClient() {
   const { data: nextUp, error: nextUpError } = useSWR<CinemaNextUpPayload>(NEXT_UP_KEY, fetcher, liveFeedOptions);
   const continueSeries = nextUp?.items ?? [];
   const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
+
+  // « Retirer de Reprendre » : le menu d'un film de la rangée, et le geste lui-même — voir
+  // `useRemoveFromResume`. Les voisines glissent jusqu'à leur place quand une carte part.
+  const [resumeMenu, setResumeMenu] = useState<{ id: string; title: string; poster: string | null } | null>(null);
+  const removeFromResume = useRemoveFromResume();
+  const continueTrack = useRef<HTMLDivElement>(null);
+  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)]);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const myListPending = useCinemaMyListPending();
@@ -846,7 +867,7 @@ export function CinemaClient() {
   const continueRow = hasContinue && (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
-      <div className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
+      <div ref={continueTrack} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {resumeMovies.map((item, i) => (
           <ContinueCard
             key={item.id}
@@ -858,6 +879,13 @@ export function CinemaClient() {
             runtimeTicks={item.runtimeTicks}
             rowKey="continue"
             index={i}
+            onMenu={() =>
+              setResumeMenu({
+                id: item.id,
+                title: item.name,
+                poster: item.imageTag ? `/api/jellyfin/image?itemId=${item.id}&tag=${item.imageTag}` : null,
+              })
+            }
             onFocus={() => {
               const inLibrary = matchRadarr(item.cinemaHref);
               if (inLibrary) focusMovie(inLibrary);
@@ -1321,6 +1349,23 @@ export function CinemaClient() {
             />
           );
         })}
+      {/* Le menu d'un film de « Reprendre » — voir `onMenu` sur ContinueCard. */}
+      <ActionSheet
+        open={resumeMenu !== null}
+        onClose={() => setResumeMenu(null)}
+        title={resumeMenu?.title}
+        poster={resumeMenu?.poster}
+        actions={[
+          {
+            label: t("cinema.removeFromContinue"),
+            icon: <X size={18} />,
+            variant: "danger",
+            onClick: () => {
+              if (resumeMenu) void removeFromResume(resumeMenu.id);
+            },
+          },
+        ]}
+      />
     </div>,
     document.body
   );

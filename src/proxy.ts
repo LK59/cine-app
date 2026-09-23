@@ -43,6 +43,9 @@ function isPublicClaraPhoto(pathname: string): boolean {
 const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/auth/logout",
   "POST /api/jellyfin/played",
+  // Retirer un titre de sa propre rangée « Reprendre » : la route n'oublie que la position, et que
+  // celle du compte de la session (23/09/2026).
+  "DELETE /api/jellyfin/resume",
   "POST /api/jellyfin/playback/start",
   "POST /api/player/log",
   // Une erreur du navigateur, remontée au journal du serveur : la route n'écrit que sur l'appelant

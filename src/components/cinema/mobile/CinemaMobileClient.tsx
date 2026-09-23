@@ -3,7 +3,11 @@
 import useSWR from "swr";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Clapperboard, Info, Play, Plus, Search } from "lucide-react";
+import { Clapperboard, Info, Play, Plus, Search, X } from "lucide-react";
+import { ActionSheet } from "@/components/ActionSheet";
+import { useLongPress } from "@/lib/useLongPress";
+import { useRemoveFromResume } from "@/lib/useRemoveFromResume";
+import { useFlipGrid } from "@/lib/useFlipGrid";
 import { fetcher, liveFeedOptions, NEXT_UP_KEY, RESUME_KEY, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
@@ -213,6 +217,12 @@ export function CinemaMobileClient() {
   );
   const continueSeries = nextUp?.items ?? [];
   const hasContinue = resumeMovies.length > 0 || continueSeries.length > 0;
+
+  // « Retirer de Reprendre » : l'appui long sur un film de la rangée — voir `useRemoveFromResume`.
+  const [resumeMenu, setResumeMenu] = useState<{ id: string; title: string; poster: string | null } | null>(null);
+  const removeFromResume = useRemoveFromResume();
+  const continueTrack = useRef<HTMLDivElement>(null);
+  useFlipGrid(continueTrack, [...resumeMovies.map((m) => m.id), ...continueSeries.map((e) => e.jellyfinItemId)]);
   // La place tenue tant que l'une des deux réponses n'est pas arrivée — voir `CinemaSkeletonCards`.
   const continuePending = !hasContinue && (isRowPending(resume, resumeError) || isRowPending(nextUp, nextUpError));
   const isSeries = mediaType === "series";
@@ -571,11 +581,17 @@ export function CinemaMobileClient() {
           </MobileRow>
         )}
         {hasContinue && (
-          <MobileRow label={t("cinema.continueWatching")}>
+          <MobileRow label={t("cinema.continueWatching")} trackRef={continueTrack}>
             {resumeMovies.map((entry) => (
-              <button
+              <LongPressButton
                 key={entry.id}
-                type="button"
+                onLongPress={() =>
+                  setResumeMenu({
+                    id: entry.id,
+                    title: entry.name,
+                    poster: entry.imageTag ? `/api/jellyfin/image?itemId=${entry.id}&tag=${entry.imageTag}` : null,
+                  })
+                }
                 onClick={() =>
                   openResume(entry.cinemaHref, () =>
                     playback.play({
@@ -585,7 +601,7 @@ export function CinemaMobileClient() {
                     })
                   )
                 }
-                className={`${CONTINUE_WIDTH} pressable shrink-0 text-left`}
+                className={`${CONTINUE_WIDTH} pressable shrink-0 select-none text-left [-webkit-touch-callout:none]`}
               >
                 <div className="relative overflow-hidden rounded-lg">
                   <PosterImage
@@ -608,7 +624,7 @@ export function CinemaMobileClient() {
                 <p className="truncate text-xs text-white/50">
                   {formatContinueLabel(t, entry.positionTicks, entry.runtimeTicks)}
                 </p>
-              </button>
+              </LongPressButton>
             ))}
             {continueSeries.map((entry) => (
               <button
@@ -636,10 +652,7 @@ export function CinemaMobileClient() {
                   </span>
                   {entry.resumeTicks && entry.runtimeTicks ? (
                     <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
-                      <div
-                        className="h-full bg-accent-500"
-                        style={{ width: `${Math.min((entry.resumeTicks / entry.runtimeTicks) * 100, 99)}%` }}
-                      />
+                      <ProgressFill percent={Math.min((entry.resumeTicks / entry.runtimeTicks) * 100, 99)} />
                     </div>
                   ) : null}
                 </div>
@@ -793,6 +806,23 @@ export function CinemaMobileClient() {
             />
           );
         })}
+      {/* Le menu d'un film de « Reprendre » — l'appui long sur sa carte. */}
+      <ActionSheet
+        open={resumeMenu !== null}
+        onClose={() => setResumeMenu(null)}
+        title={resumeMenu?.title}
+        poster={resumeMenu?.poster}
+        actions={[
+          {
+            label: t("cinema.removeFromContinue"),
+            icon: <X size={18} />,
+            variant: "danger",
+            onClick: () => {
+              if (resumeMenu) void removeFromResume(resumeMenu.id);
+            },
+          },
+        ]}
+      />
     </div>,
     document.body
   );
@@ -904,13 +934,36 @@ const DiscoveryRow = memo(function DiscoveryRow({
   );
 });
 
+/** Un bouton qui ouvre aussi un menu à l'appui long — voir `useLongPress`. */
+function LongPressButton({
+  onLongPress,
+  onClick,
+  className,
+  children,
+}: {
+  onLongPress: () => void;
+  onClick: () => void;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const press = useLongPress(onLongPress);
+  return (
+    <button type="button" {...press} onClick={onClick} className={className}>
+      {children}
+    </button>
+  );
+}
+
 function MobileRow({
   label,
   eyebrow,
   onSeeAll,
+  trackRef,
   children,
 }: {
   label: string;
+  /** La piste des cartes, pour qui veut suivre leurs déplacements — voir « Reprendre ». */
+  trackRef?: React.Ref<HTMLDivElement>;
   /**
    * Pourquoi cette rangée est là, au-dessus de son titre.
    *
@@ -949,7 +1002,9 @@ function MobileRow({
           apparaît — et le titre non : identique des deux côtés, il clignoterait pour rien. Le
           bureau avait déjà cette entrée, le téléphone passait du squelette au contenu d'un coup
           (23/09/2026). Au montage seulement : rien ne rejoue en faisant défiler. */}
-      <div className="scrollbar-thin flex animate-fade-in gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">{children}</div>
+      <div ref={trackRef} className="scrollbar-thin flex animate-fade-in gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1">
+        {children}
+      </div>
     </section>
   );
 }

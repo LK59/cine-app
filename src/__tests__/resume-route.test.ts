@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const mockVerifySessionFull = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...args: unknown[]) => mockVerifySessionFull(...args) }));
-const mockJellyfin = { getResumeItems: vi.fn(), getItemProviderIds: vi.fn() };
+const mockJellyfin = { getResumeItems: vi.fn(), getItemProviderIds: vi.fn(), resetPlaybackPosition: vi.fn() };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
 const mockCachedMovies = vi.fn();
 const mockCachedSeries = vi.fn();
@@ -105,5 +105,45 @@ describe("GET /api/jellyfin/resume", () => {
     const res = await GET(fakeReq());
     const body = await res.json();
     expect(body.items[0].cinemaHref).toBeNull();
+  });
+});
+
+/**
+ * Retirer un titre de « Reprendre » (23/09/2026) : la position seule est oubliée — pas l'état
+ * « Vu » ni le nombre de visionnages, que `markUnplayed` aurait effacés — et seulement sur le
+ * compte de la session.
+ */
+describe("DELETE /api/jellyfin/resume", () => {
+  const ITEM = "a".repeat(32);
+  const del = async (body: unknown, cookie = "t") => {
+    const { DELETE } = await import("@/app/api/jellyfin/resume/route");
+    const req = { ...fakeReq(cookie), json: async () => body } as unknown as NextRequest;
+    return DELETE(req);
+  };
+
+  it("oublie la position, sur le compte de la session", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    mockJellyfin.resetPlaybackPosition.mockResolvedValue({});
+    const res = await del({ itemId: ITEM });
+    expect(res.status).toBe(200);
+    expect(mockJellyfin.resetPlaybackPosition).toHaveBeenCalledWith("jf-1", ITEM);
+  });
+
+  it("refuse sans compte Jellyfin", async () => {
+    mockVerifySessionFull.mockResolvedValue(null);
+    expect((await del({ itemId: ITEM })).status).toBe(403);
+    expect(mockJellyfin.resetPlaybackPosition).not.toHaveBeenCalled();
+  });
+
+  it.each([[{}], [{ itemId: "../x" }], [{ itemId: 42 }], [null]])("refuse un identifiant invalide (%j)", async (body) => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    expect((await del(body)).status).toBe(400);
+    expect(mockJellyfin.resetPlaybackPosition).not.toHaveBeenCalled();
+  });
+
+  it("dit l'échec de Jellyfin au lieu de le taire", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1" });
+    mockJellyfin.resetPlaybackPosition.mockRejectedValue(new Error("Jellyfin injoignable"));
+    expect((await del({ itemId: ITEM })).status).toBe(502);
   });
 });

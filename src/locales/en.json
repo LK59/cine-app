@@ -1494,7 +1494,9 @@
     "markedWatched": "Marked as watched",
     "markedUnwatched": "Marked as unwatched",
     "seriesMarkedWatched": "Series marked as watched",
-    "seriesMarkedUnwatched": "Series marked as unwatched"
+    "seriesMarkedUnwatched": "Series marked as unwatched",
+    "removeFromContinue": "Remove from Continue watching",
+    "removeFromContinueFailed": "This title couldn't be removed from Continue watching."
   },
   "services": {
     "notConfigured": "{name} is not configured.",

@@ -573,3 +573,18 @@ describe("une fiche qu'on tire ne reconstruit pas ses rangées", () => {
     }
   });
 });
+
+describe("« Retirer de Reprendre », sur les deux écrans et pour les films seulement", () => {
+  // Un geste présent d'un côté et absent de l'autre est une moitié de correctif (CLAUDE.md). Et
+  // « À suivre » ne se retire pas d'une série sans la marquer vue : pas de menu sur un épisode.
+  it("le bureau : sur les films de la rangée", () => {
+    const src = lire("src/components/cinema/CinemaClient.tsx");
+    expect(src.match(/onMenu=\{\(\) =>\s*setResumeMenu\(/g)?.length).toBe(1);
+    expect(src).toContain("useRemoveFromResume()");
+  });
+  it("le téléphone : sur les films de la rangée", () => {
+    const src = lire("src/components/cinema/mobile/CinemaMobileClient.tsx");
+    expect(src.match(/<LongPressButton\b/g)?.length).toBe(1);
+    expect(src).toContain("useRemoveFromResume()");
+  });
+});

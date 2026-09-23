@@ -33,6 +33,8 @@ describe("ProgressFill", () => {
   ])("%s passe par ProgressFill", (f) => {
     const src = lire(f);
     expect(src).toContain("<ProgressFill percent={");
-    expect(src).not.toMatch(/className="h-full bg-accent-500" style=\{\{ width:/);
+    // Sur une ou plusieurs lignes : l'écriture éclatée avait échappé à la première version de
+    // cette garde, et une barre des séries sur téléphone était restée sans remplissage.
+    expect(src).not.toMatch(/className="h-full bg-accent-500"\s*style=\{\{\s*width:/);
   });
 });

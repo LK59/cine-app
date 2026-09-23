@@ -48,6 +48,9 @@ describe("proxy — what a plain user may write", () => {
       ["PUT", "/api/notifications/settings"],
       // La fin de l'écran d'accueil : n'éteint que le marqueur de l'appelant.
       ["POST", "/api/onboarding"],
+      // Retirer un film de sa propre rangée « Reprendre » (23/09/2026) : sans cette entrée, le
+      // geste aurait marché pour l'administrateur et échoué pour tous les autres.
+      ["DELETE", "/api/jellyfin/resume"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

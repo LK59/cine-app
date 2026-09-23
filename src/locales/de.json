@@ -1494,7 +1494,9 @@
     "markedWatched": "Als gesehen markiert",
     "markedUnwatched": "Als ungesehen markiert",
     "seriesMarkedWatched": "Serie als gesehen markiert",
-    "seriesMarkedUnwatched": "Serie als ungesehen markiert"
+    "seriesMarkedUnwatched": "Serie als ungesehen markiert",
+    "removeFromContinue": "Aus „Weiterschauen“ entfernen",
+    "removeFromContinueFailed": "Dieser Titel konnte nicht aus „Weiterschauen“ entfernt werden."
   },
   "services": {
     "notConfigured": "{name} ist nicht konfiguriert.",

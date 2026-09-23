@@ -1494,7 +1494,9 @@
     "markedWatched": "Marcado como visto",
     "markedUnwatched": "Marcado como no visto",
     "seriesMarkedWatched": "Serie marcada como vista",
-    "seriesMarkedUnwatched": "Serie marcada como no vista"
+    "seriesMarkedUnwatched": "Serie marcada como no vista",
+    "removeFromContinue": "Quitar de Continuar viendo",
+    "removeFromContinueFailed": "No se pudo quitar este título de Continuar viendo."
   },
   "services": {
     "notConfigured": "{name} no está configurado.",

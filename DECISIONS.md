@@ -474,6 +474,28 @@ entier.
 
 ---
 
+## 15. Retirer un film de « Reprendre »
+
+**Règle.** Un appui long (doigt), un clic droit ou la touche menu (bureau) sur un **film** de la
+rangée « Reprendre » ouvre un menu avec « Retirer de Reprendre ». La carte part tout de suite ; la
+position seule est oubliée dans Jellyfin — ni l'état « Vu » ni le nombre de visionnages, que
+« marquer non vu » effacerait. Un échec se dit, et la carte revient.
+
+**Porteurs.** `useLongPress` (`src/lib/useLongPress.ts`), `useRemoveFromResume`
+(`src/lib/useRemoveFromResume.ts`), `DELETE /api/jellyfin/resume` et `jellyfin.resetPlaybackPosition`
+(`POST /UserItems/{id}/UserData`, Jellyfin 10.9+).
+
+**Appelants.** `CinemaClient` (`ContinueCard`, `onMenu`), `CinemaMobileClient` (`LongPressButton`).
+
+**Tests.** `useLongPress.test.tsx`, `useRemoveFromResume.test.tsx`, `resume-route.test.ts`,
+`proxy-guest-mutations.test.ts` (la route est ouverte aux comptes ordinaires), `decisions-partagees.test.ts`.
+
+**Voulu.** Pas de menu sur un épisode : « À suivre » est l'épisode suivant non vu, que Jellyfin ne
+permet pas de masquer sans marquer la série vue. Une liste masquée locale serait une seconde source
+de vérité.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits
