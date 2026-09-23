@@ -584,7 +584,9 @@ thumbnails claim more bar than ffmpeg, one where they see less.
 
 **The enlargement is client-side** (`frameFit.ts`): the scale that brings the *picture*, not the
 frame, to the first screen edge it meets — the smaller of the two ratios, so the other dimension
-keeps everything — and an offset that centres the picture when its bars are unequal. It is a CSS
+keeps everything — and an offset that centres the picture when its bars are unequal. On a touch
+screen (rounded corners) the picture stops 2 % short of the edge; the Dynamic Island is left to
+float over it, as in every iOS video app. It is a CSS
 transform on a wrapper around the surfaces, inside a clipping box, recomputed on every resize; the
 surfaces keep their own opacity transitions. The request leaves at open, alongside everything
 else, and nothing waits for it: from the cache it lands before the first picture, measured for the

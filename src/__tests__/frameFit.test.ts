@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { frameFit, type PictureFrame } from "@/lib/frameFit";
+import { frameFit, TOUCH_MARGIN, type PictureFrame } from "@/lib/frameFit";
 
 const frame = (over: Partial<PictureFrame>): PictureFrame => ({ left: 0, top: 0, right: 1, bottom: 1, aspect: 16 / 9, samples: 100, ...over });
 /** Un iPhone en paysage : plus large que 16:9. */
@@ -52,5 +52,15 @@ describe("frameFit", () => {
 
   it("says nothing before the screen has a size", () => {
     expect(frameFit(frame({ top: 0.1, bottom: 0.9 }), { width: 0, height: 0 })).toBeNull();
+  });
+
+  // Les coins arrondis d'un téléphone : l'image s'arrête un peu avant le bord (24/09/2026).
+  it("leaves a margin on a touch screen, and only asked for", () => {
+    const f = frame({ top: 0.0889, bottom: 0.9167 });
+    const exact = frameFit(f, PHONE)!;
+    const touch = frameFit(f, PHONE, TOUCH_MARGIN)!;
+    expect(touch.scale).toBeCloseTo(exact.scale * (1 - TOUCH_MARGIN), 5);
+    const h = PHONE.height * (f.bottom - f.top) * touch.scale;
+    expect(h).toBeCloseTo(PHONE.height * (1 - TOUCH_MARGIN), 0);
   });
 });
