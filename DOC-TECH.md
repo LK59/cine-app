@@ -645,9 +645,22 @@ being correct for this player alone.
   that hands the file to Jellyfin, `CineEngine By CineApp` for the one that reads it here. The name
   comes from the browser, so it is **compared against those two**, never forwarded as-is.
 
-Intro skipping and next-episode come from the **Intro Skipper** plugin
-(`/Episode/{id}/Timestamps`), served to both players and working on both paths; on the canvas
-path the control bar seeks through the façade's `currentTime`.
+Intro skipping and next-episode come from Jellyfin's **media segments** (`/MediaSegments/{id}`,
+Jellyfin 12), with the old Intro Skipper endpoint (`/Episode/{id}/Timestamps`) as a fallback — on
+Jellyfin 12 it answers 404 for every episode. `timestampsFromSegments` keeps the earliest `Intro`
+and the earliest `Outro` starting after the first minute, and ignores segments shorter than 5 s:
+some analyses produce a 3-second "intro" or an "outro" at 3 s next to the real one. Both players
+use it, on both paths; on the canvas path the control bar seeks through the façade's `currentTime`.
+
+The next-episode card appears at the credits, or **in the last second** when no credits are known,
+so an episode never freezes on its final frame with nothing offered. Its countdown only runs while
+playing (or at the very end): pausing during the credits no longer starts the next episode behind
+the viewer's back. Specials (season 0) are chained among themselves, never after a series' finale.
+
+A film's end is reported to Jellyfin **when it ends**, not when the player closes — that stop is
+what marks it watched, and a page killed on the end screen used to never send it. *Watch again*
+re-declares the session. A close only applies to the playback that asked for it (`openId` on the
+session): a film opened during the previous one's 200 ms fade is no longer closed by it.
 
 ---
 
@@ -721,11 +734,24 @@ unwitnessed.
 | `error` | An error shown to the viewer |
 | `seek` | A seek from the controls: from, to, already buffered or not, how long, and `steps` — the trace since the request |
 | `stall` | The element says it is playing and the clock has covered under a second in 5 s — once per stall, at most one a minute. Position, `readyState`/`networkState`/`seeking`, source state, video and audio ranges near the head, lead, whether a read is running, `recoveryStreak`/`frozenNudges`/`recoveries`, ms since the last append, `streaming` (ManagedMediaSource only), and `steps`: the last 20 s of trace. Emitted by `MseSource.watchForStall` on the watchdog tick |
-| `stop` | The player went away; carries `recoveries`, `frozenNudges` and, when any, `escalations` over the session |
+| `audio` | A track change: both tracks described, copied or re-encoded, `applied`, how long, and `steps` |
+| `cast` | Server player only: a television has actually taken the route |
+| `stop` | The session's summary. `why` (`close`, `next`, `page`, `unmount`, or `lost` — see below), `watched` seconds, `ended`, `rebuild`; `waits` / `waitedMs` / `longestWaitMs` — stops of 250 ms or more mid-playback, excluding opening and seeks (`stall` only fires at 5 s); `seeks` / `seekWaitMs`; `audioSwitches`; `recoveries`, `frozenNudges`, `escalations` when any; `audioSync` and `frames` (presented / dropped). The server player writes `why` and `at` |
 
 Each line carries the time, **the account taken from the session** (never from the request body:
 the one field that says who this is must not be the one anybody can invent), the file, its
-container, video codec, resolution, bit depth and range, plus the browser.
+container, video codec, resolution, bit depth and range, plus the browser — and, on the native
+player, a **`session`** id. A rebuild rewrites `start` (with `rebuild` > 0), so lines are joined by
+`session`, never by account and time: two devices on one account used to be read as one viewer.
+
+**A stop that could not be sent.** A page iOS kills in the background never receives `pagehide`:
+before this, about one session in fourteen had no `stop`. While a session lives, its summary is
+kept in `localStorage` (`src/lib/unsentStop.ts`), rewritten every 30 s and when the page is hidden,
+and removed once the real `stop` leaves. A summary left untouched for two minutes is sent on the
+next launch (and every minute after) as `why: "lost"` with `lateByMs`, and removed only once the
+server accepts it — the app also opens on the login screen, where it would be refused. A tab woken
+after being declared lost still sends its real `stop`: keep the last line per `session`. The
+`stop` itself leaves through `navigator.sendBeacon`, which the browser keeps queued after the page.
 
 Three guardrails, since a browser decides what gets written: fields are **bounded** (24 at most,
 500 characters each — 4 000 for `steps` —, objects flattened one level and no deeper), the file **rotates** at 5 MB keeping five generations (`player.log.1` newest … `.5`), and a
@@ -738,6 +764,8 @@ instead — same format, two generations — so a bench never rotates real viewe
 tail -f data/logs/player.log | jq .
 jq -c 'select(.kind == "fallback")' data/logs/player.log   # fallbacks only
 jq -r '.kind' data/logs/player.log | sort | uniq -c        # the distribution
+# one summary per session: last stop line per session id
+jq -s 'map(select(.kind == "stop" and .session)) | group_by(.session) | map(last)' data/logs/player.log
 ```
 
 ---
@@ -831,7 +859,13 @@ or computer to be tested, and it plays real films through the real player while 
   `noteSeekRequest` + `currentTime` pair as the controls, track changes through the same
   `changeAudioTrack` as the menu. Bench sessions report nothing to Jellyfin (a bench seeks to the
   end of films, which would mark them watched), and every player line they cause carries
-  `bench: <run id>` and goes to `data/logs/bench-player.log`, not `player.log`.
+  `bench: <run id>` and goes to `data/logs/bench-player.log`, not `player.log` — the server
+  player's lines included, when a film is handed to it during a bench.
+- **A film handed to the server player is not judged.** Whether it was handed over before the
+  bench reached it (a cast, an earlier refusal) or during its opening (Dolby Vision without an
+  HDR10 base layer on a browser with no Dolby Vision decoder), it is marked `skip` — "nothing to
+  measure here" — rather than waited on for 45 s and failed. A film where nothing was measured is
+  `skip`, never `ok`.
 - **Which films.** `/api/player/bench/plan` reads `player.log` and all its archives — real viewers
   only, lines carrying `bench` ignored even in archives written before the split: the files that stalled, erred, fell
   back or seeked slowly first, then enough to cover Dolby Vision, HDR10, SDR, MP4, 4K and an episode.

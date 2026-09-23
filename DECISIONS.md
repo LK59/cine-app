@@ -52,8 +52,10 @@ s'ouvrir, et rare.
 
 ## 2. L'épisode suivant
 
-**Règle.** Ordre des saisons puis des épisodes, spéciaux (saison 0) en dernier ; la fin d'une saison
-enchaîne sur la suivante ; après le dernier, rien.
+**Règle.** Ordre des saisons puis des épisodes ; la fin d'une saison enchaîne sur la suivante ;
+après le dernier, rien. Les spéciaux (saison 0) forment leur propre suite : un spécial enchaîne sur
+le spécial suivant, et le final de la série n'enchaîne jamais sur un spécial (corrigé le 23/09 —
+la route les rangeant en dernier, le premier spécial passait pour l'épisode suivant du final).
 
 **Porteur.** `nextEpisodeIn(seasons)` — `src/lib/nextEpisode.ts`. L'ordre des saisons est celui de
 la route `cinema/series/[id]/episodes`, qui le fixe.
@@ -132,6 +134,10 @@ fichier à Jellyfin, qui le lit toujours. C'est un choix de robustesse, pas l'ou
 (`src/lib/webcodecs/engineTrack.ts`), pour le remux et le canevas.
 
 **Tests.** `trackLabel.test.ts`, `fileTracks.test.ts`, `webcodecs-engineTrack.test.ts`.
+
+**La langue nommée est celle que le choix de piste retient** : `trackLanguage`, qui lit le titre
+quand le code manque. L'étiquette ne lisait que le code, si bien qu'une piste « French » sans code
+était ouverte comme la piste française du compte et affichée « Piste 2 » (corrigé le 23/09).
 
 **Corrigé le 21/09.**
 - Le lecteur natif perdait le drapeau « malentendants » du conteneur : il n'étiquetait SDH que les
