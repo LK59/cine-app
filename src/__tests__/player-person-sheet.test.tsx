@@ -234,5 +234,23 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     expect(cardRenders.count).toBe(before);
     pointer("pointerup", 200);
   });
+
+  it("au relâchement, le voile s'efface d'où il en est, sans repartir de plein", async () => {
+    // 23/09/2026 : 0,6 → 0,2 → 1 → 0 en quelques images. L'opacité tombait d'un coup quand la
+    // carte partait hors de l'écran, puis `fade-out` repartait de 1.
+    draw({ tmdbId: 12 });
+    await screen.findByText("Film 0");
+    const handle = screen.getByRole("dialog").querySelector<HTMLElement>("[style*='touch-action']")!;
+    const scrim = () => document.body.querySelector<HTMLElement>("[data-person-scrim]")!;
+    const pointer = (type: string, clientY: number) =>
+      act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
+    pointer("pointerdown", 100);
+    pointer("pointermove", 400);
+    expect(scrim().style.transition).toBe("none");
+    pointer("pointerup", 400);
+    expect(scrim().style.opacity).toBe("0");
+    expect(scrim().style.transition).toContain("opacity 280ms");
+    expect(scrim().className).not.toContain("animate-fade-out");
+  });
 });
 

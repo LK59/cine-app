@@ -446,9 +446,22 @@ export function PlayerPersonSheet({
         // image de ce qui bouge dessous ou dessus — et sur téléphone, dans une cascade, il y a
         // toujours quelque chose qui bouge : c'est ce qui a déjà fait saccader iOS ailleurs ici.
         className={`absolute inset-0 ${isMobile ? "bg-black/75" : "bg-black/70 backdrop-blur-sm"} ${
-          leaving ? "animate-fade-out" : revealed ? "" : "animate-fade-in"
+          // Après un geste, la sortie du voile est la suite de ce geste — voir `style`.
+          leaving && !swipe.dismissed ? "animate-fade-out" : leaving || revealed ? "" : "animate-fade-in"
         }`}
-        style={{ opacity: swipe.offset > 0 ? Math.max(0.2, 1 - swipe.offset / 400) : undefined }}
+        /**
+         * Le voile suit le doigt, puis s'efface d'où il en est.
+         *
+         * Au relâchement, la carte part d'un coup « hors de l'écran » : l'opacité calculée tombait
+         * à 0,2 sans transition, puis la sortie démarrait `fade-out`, qui repart de 1. Le voile
+         * faisait 0,6 → 0,2 → 1 → 0 en quelques images — la micro-saccade de la fermeture au doigt
+         * (23/09/2026), propre à cette fiche : c'est la seule qui a un voile. Il glisse désormais
+         * vers 0, depuis sa valeur, avec la courbe de la carte.
+         */
+        style={{
+          opacity: swipe.dismissed ? 0 : swipe.offset > 0 ? Math.max(0.2, 1 - swipe.offset / 400) : undefined,
+          transition: swipe.dragging ? "none" : "opacity 280ms cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
       />
 
       <div
@@ -481,6 +494,10 @@ export function PlayerPersonSheet({
           // Pas de transition pendant que le doigt est posé : la carte *est* où il est. C'est le
           // relâchement qu'on adoucit — le retour en place comme le reste du chemin vers le bas.
           transition: swipe.dragging ? "none" : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)",
+          // Le calque est préparé dès que le doigt se pose, et gardé jusqu'au bout de la sortie :
+          // au relâchement, l'écran d'accueil se redessine (l'adresse change), et une carte sans
+          // calque à elle glissait au rythme de ce travail plutôt qu'à celui de l'écran.
+          willChange: swipe.dragging || swipe.dismissed ? "transform" : undefined,
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}
       >
