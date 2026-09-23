@@ -51,7 +51,7 @@ export function LanguageSelect({
   const current = toJellyfinLanguage(value);
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs text-slate-400">{label}</span>
+      <span className="text-xs text-muted">{label}</span>
       <select
         className="select"
         disabled={disabled}
@@ -95,7 +95,7 @@ export function SubtitleModeSelect({
   const t = useT();
   return (
     <label className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-xs text-slate-400">{t("player.account.subtitleMode")}</span>
+      <span className="text-xs text-muted">{t("player.account.subtitleMode")}</span>
       <select className="select" disabled={disabled} value={value ?? "Default"} onChange={(e) => onChange(e.target.value)}>
         {SUBTITLE_MODES.map((mode) => (
           <option key={mode} value={mode}>
@@ -153,7 +153,7 @@ export function NotificationChoices() {
           <li key={category} className="flex items-center justify-between gap-4 py-3">
             <div>
               <p className="text-sm text-white">{t(label)}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{t(hint)}</p>
+              <p className="mt-0.5 text-xs text-subtle">{t(hint)}</p>
             </div>
             <Toggle checked={data.preferences[category] === true} onChange={(value) => void set(category, value)} ariaLabel={t(label)} />
           </li>

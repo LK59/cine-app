@@ -76,7 +76,7 @@ const PhotoRow = memo(function PhotoRow({ photos, onOpen, label }: { photos: Per
             key={photo.filePath}
             type="button"
             onClick={() => onOpen(i)}
-            className="h-44 shrink-0 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition hover:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:h-56"
+            className="h-44 shrink-0 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition hover:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:h-56"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -162,9 +162,9 @@ function PhotoViewer({
         alt=""
         decoding="async"
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] max-w-full rounded-xl object-contain"
+        className="max-h-[85vh] max-w-full rounded-lg object-contain"
       />
-      <span className="absolute bottom-5 rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+      <span className="absolute bottom-5 rounded-full bg-white/10 px-3 py-1 text-xs text-muted">
         {index + 1} / {photos.length}
       </span>
     </div>,
@@ -499,7 +499,7 @@ export function PlayerPersonSheet({
          * et la sortie saccadait. Même raison, même traitement que sur les fiches de titre.
          */
         className={`scrollbar-thin relative w-full overflow-y-auto overscroll-contain bg-ink shadow-2xl ring-1 ring-white/10 ${
-          isMobile ? "max-h-[92dvh] rounded-t-3xl" : "max-h-[88vh] max-w-4xl rounded-2xl"
+          isMobile ? "max-h-[92dvh] rounded-t-2xl" : "max-h-[88vh] max-w-4xl rounded-2xl"
         } ${sheetMotionClass({
           swipe,
           leaving,
@@ -558,7 +558,7 @@ export function PlayerPersonSheet({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={`${TMDB_PROFILE}${data.profilePath}`} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-slate-600">
+                  <div className="flex h-full w-full items-center justify-center text-subtle">
                     <User size={32} />
                   </div>
                 )}
@@ -566,14 +566,14 @@ export function PlayerPersonSheet({
 
               <div className="min-w-0 flex-1">
                 <h1 className="font-display text-2xl font-semibold text-white sm:text-3xl">{data.name}</h1>
-                {data.knownFor && <p className="mt-0.5 text-xs text-slate-500">{data.knownFor}</p>}
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                {data.knownFor && <p className="mt-0.5 text-xs text-subtle">{data.knownFor}</p>}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                   {data.birthday && (
                     <span className="flex items-center gap-1.5">
-                      <Calendar size={12} className="shrink-0 text-slate-500" />
+                      <Calendar size={12} className="shrink-0 text-subtle" />
                       {formatDate(data.birthday, dateLocale)}
                       {age !== null && (
-                        <span className="text-slate-500">
+                        <span className="text-subtle">
                           {data.deathday
                             ? `— ${t("modals.actor.died", { date: formatDate(data.deathday, dateLocale), n: age })}`
                             : `(${t("modals.actor.age", { n: age })})`}
@@ -583,13 +583,13 @@ export function PlayerPersonSheet({
                   )}
                   {data.placeOfBirth && (
                     <span className="flex items-center gap-1.5">
-                      <MapPin size={12} className="shrink-0 text-slate-500" />
+                      <MapPin size={12} className="shrink-0 text-subtle" />
                       {data.placeOfBirth}
                     </span>
                   )}
                 </div>
                 {credits.length > 0 && (
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-subtle">
                     {t("modals.actor.works", { n: credits.length })} · {t("player.person.ownedCount", { owned: ownedTotal, total: credits.length })}
                   </p>
                 )}
@@ -631,18 +631,18 @@ export function PlayerPersonSheet({
                 complète que celle de TMDB, souvent vide ou en anglais. Voir `selectBio`. */}
             {bio && (
               <div className="mt-5 rounded-xl bg-white/5 p-4">
-                <p className={`select-text text-sm leading-7 text-slate-300 ${expanded ? "" : short ? "line-clamp-3" : "line-clamp-5"}`}>
+                <p className={`select-text text-sm leading-7 text-muted ${expanded ? "" : short ? "line-clamp-3" : "line-clamp-5"}`}>
                   {bio.text}
                 </p>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <button
                     type="button"
                     onClick={() => setExpanded((v) => !v)}
-                    className="text-xs font-medium text-slate-400 hover:text-white"
+                    className="text-xs font-medium text-muted hover:text-white"
                   >
                     {expanded ? t("player.person.less") : t("cinema.readMore")}
                   </button>
-                  <span className="text-[10px] text-slate-600">
+                  <span className="text-[11px] text-subtle">
                     {bio.source === "wikipedia" ? t("modals.actor.sourceWikipedia") : t("modals.actor.sourceTmdb")}
                   </span>
                 </div>

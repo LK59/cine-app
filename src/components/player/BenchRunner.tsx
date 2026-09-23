@@ -108,7 +108,7 @@ function BenchRunner() {
             <FlaskConical size={14} className="shrink-0 text-accent-400" />
             <span className="min-w-0 truncate">
               {t("bench.progress", { n: Math.min(state.itemIndex + 1, total), total })} · {current?.title ?? ""} ·{" "}
-              <span className="text-white/60">{state.step}</span>
+              <span className="text-muted">{state.step}</span>
             </span>
             <button type="button" onClick={cancelBench} className="flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20">
               <Square size={12} /> {t("bench.stop")}
@@ -135,7 +135,7 @@ function BenchRunner() {
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 <button type="button" onClick={() => benchAnswer("yes")} className="btn btn-primary justify-center">{t("bench.yes")}</button>
-                <button type="button" onClick={() => benchAnswer("no")} className="btn btn-ghost justify-center text-red-300">{t("bench.no")}</button>
+                <button type="button" onClick={() => benchAnswer("no")} className="btn btn-ghost justify-center text-danger">{t("bench.no")}</button>
                 <button type="button" onClick={() => benchAnswer("skip")} className="btn btn-ghost justify-center">{t("bench.skip")}</button>
               </div>
             )}
@@ -150,10 +150,10 @@ function BenchRunner() {
 }
 
 const ICONS = {
-  ok: <CircleCheckBig size={14} className="shrink-0 text-emerald-400" />,
-  warn: <CircleAlert size={14} className="shrink-0 text-amber-300" />,
-  fail: <CircleX size={14} className="shrink-0 text-red-400" />,
-  skip: <CircleMinus size={14} className="shrink-0 text-slate-500" />,
+  ok: <CircleCheckBig size={14} className="shrink-0 text-success" />,
+  warn: <CircleAlert size={14} className="shrink-0 text-warning" />,
+  fail: <CircleX size={14} className="shrink-0 text-danger" />,
+  skip: <CircleMinus size={14} className="shrink-0 text-subtle" />,
 };
 
 /** « seek-random-3 » → la clé « seek-random » et le numéro 3 ; « question:sync » → « question ». */
@@ -191,7 +191,7 @@ function BenchResults({ results, elapsedMs }: { results: ItemResult[]; elapsedMs
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <FlaskConical size={16} className="text-accent-400" /> {t("bench.done")}
             </h2>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-muted">
               {t("bench.summary", { ok: count("ok"), warn: count("warn"), fail: count("fail") })} ·{" "}
               {t("bench.elapsed", { min: Math.max(1, Math.round(elapsedMs / 60000)) })}
             </p>
@@ -205,22 +205,22 @@ function BenchResults({ results, elapsedMs }: { results: ItemResult[]; elapsedMs
             <details key={r.itemId + r.elapsedMs} className="mb-3 rounded-xl border border-white/10 bg-white/5" open={r.verdict !== "ok" && r.verdict !== "skip"}>
               <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm">
                 {ICONS[r.verdict]} <span className="min-w-0 truncate">{r.title}</span>
-                <span className="ml-auto shrink-0 text-xs text-slate-500">{r.path ?? "—"} · {Math.round(r.elapsedMs / 1000)} s</span>
+                <span className="ml-auto shrink-0 text-xs text-subtle">{r.path ?? "—"} · {Math.round(r.elapsedMs / 1000)} s</span>
               </summary>
               <ul className="space-y-1.5 px-3 pb-3">
                 {r.checks.map((c, i) => (
                   <li key={i} className="flex gap-2">
                     {ICONS[c.verdict]}
                     <div className="min-w-0">
-                      <span className="text-slate-200">{label(c)}</span>
-                      <span className="block break-words text-slate-500">{c.detail}</span>
+                      <span className="text-white">{label(c)}</span>
+                      <span className="block break-words text-subtle">{c.detail}</span>
                     </div>
                   </li>
                 ))}
               </ul>
             </details>
           ))}
-          <p className="text-slate-500">{t("bench.savedHint")}</p>
+          <p className="text-subtle">{t("bench.savedHint")}</p>
         </div>
       </div>
     </div>

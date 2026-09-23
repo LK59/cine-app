@@ -265,7 +265,7 @@ export function CinemaTrailerBackdrop({
         type="button"
         onClick={toggleMute}
         aria-label={muted ? t("cinema.unmutePreview") : t("cinema.mutePreview")}
-        className="pointer-events-auto absolute right-4 top-20 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/70 backdrop-blur-xs transition-colors hover:bg-black/60 hover:text-white"
+        className="pointer-events-auto absolute right-4 top-20 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-muted backdrop-blur-xs transition-colors hover:bg-black/60 hover:text-white"
         style={{ top: "max(5rem, calc(env(safe-area-inset-top) + 4rem))" }}
       >
         {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}

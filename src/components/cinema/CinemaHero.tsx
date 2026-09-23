@@ -92,7 +92,7 @@ export function HeroOverview({
          sauter quand le survol change de titre. Arrêté sur une phrase entière, le texte n'a
          besoin d'aucune marque ; le fondu n'est qu'un repli, vers la droite et jamais vers le bas
          — l'ancien fondu vertical se lisait comme une ombre sous le texte (23/09/2026). */
-      className={`relative min-h-[2lh] max-w-xl text-sm text-white/90 drop-shadow-sm sm:text-base ${
+      className={`relative min-h-[2lh] max-w-xl text-sm text-white drop-shadow-sm sm:text-base ${
         overflowing ? "clamp-fade-end-2" : "max-h-[2lh] overflow-hidden"
       }`}
     >
@@ -126,7 +126,7 @@ function HeroText({ text }: { text: string }) {
 export function HeroCastLine({ info }: { info: { tmdb: { cast?: { name: string }[] } | null } | undefined }) {
   const cast = info?.tmdb?.cast ?? [];
   return (
-    <p className="min-h-[1lh] max-w-xl truncate text-xs text-white/60">
+    <p className="min-h-[1lh] max-w-xl truncate text-xs text-muted">
       <HeroText text={cast.slice(0, 5).map((c) => c.name).join(", ")} />
     </p>
   );
@@ -173,7 +173,7 @@ export function CinemaHero({ item }: { item: CinemaMovie }) {
         <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
         <span>{item.year}</span>
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
         {/* La durée au survol, et non seulement dans la fiche : c'est elle qui décide si on lance

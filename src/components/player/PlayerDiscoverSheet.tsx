@@ -214,7 +214,7 @@ export function PlayerDiscoverSheet({
       )}
 
       {error && !data && (
-        <p className="px-4 py-10 text-center text-sm text-red-400">
+        <p className="px-4 py-10 text-center text-sm text-danger">
           {error instanceof Error ? error.message : t("common.unknown")}
         </p>
       )}
@@ -229,7 +229,7 @@ export function PlayerDiscoverSheet({
         <div className="relative -mt-6 px-4 pb-16">
           <h1 className="mb-3 font-display text-2xl font-bold leading-tight text-white">{data.title}</h1>
 
-          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
             {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}
             {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
             {runtimeLabel(data.runtime, data.type === "series") && <span>{runtimeLabel(data.runtime, data.type === "series")}</span>}
@@ -242,13 +242,13 @@ export function PlayerDiscoverSheet({
             <button
               type="button"
               onClick={() => openLibraryTitle(mediaType, data.libraryId!, { discover: null })}
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
             >
               <Play size={18} fill="currentColor" />
               {t("player.discover.open")}
             </button>
           ) : data.requestState ? (
-            <div className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white/80">
+            <div className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-muted">
               {data.downloading != null ? (
                 <CinemaDownloading progress={data.downloading} className="text-sm" />
               ) : (
@@ -263,7 +263,7 @@ export function PlayerDiscoverSheet({
               type="button"
               disabled={busy}
               onClick={() => void request()}
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95 disabled:opacity-60"
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95 disabled:opacity-60"
             >
               <Plus size={18} />
               {t("player.discover.request")}
@@ -274,7 +274,7 @@ export function PlayerDiscoverSheet({
             type="button"
             disabled={busy}
             onClick={() => void setStatus(inList ? null : "to_watch")}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
           >
             <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Bookmark size={16} />} />
             {inList ? t("player.discover.inList") : t("player.discover.addToList")}
@@ -282,7 +282,7 @@ export function PlayerDiscoverSheet({
 
 
           <CinemaTagline text={data.tagline} className="mb-1.5" />
-          {data.overview && <p className="mb-4 text-sm leading-6 text-white/90">{data.overview}</p>}
+          {data.overview && <p className="mb-4 text-sm leading-6 text-white">{data.overview}</p>}
 
           <CinemaCastRow cast={cast} />
         </div>
@@ -351,7 +351,7 @@ export function PlayerDiscoverSheet({
 
       {error && !data && (
         <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
-          <p className="text-sm text-red-400">{error instanceof Error ? error.message : t("common.unknown")}</p>
+          <p className="text-sm text-danger">{error instanceof Error ? error.message : t("common.unknown")}</p>
         </div>
       )}
 
@@ -363,7 +363,7 @@ export function PlayerDiscoverSheet({
                 {data.title}
               </h1>
 
-              <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
                 {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}
                 {data.rating > 0 && <span>{data.rating.toFixed(1)}</span>}
                 {runtimeLabel(data.runtime, data.type === "series") && <span>{runtimeLabel(data.runtime, data.type === "series")}</span>}
@@ -402,7 +402,7 @@ export function PlayerDiscoverSheet({
                     <span className="text-sm font-medium">{t("player.discover.open")}</span>
                   </button>
                 ) : data.requestState ? (
-                  <div className={`${MENU_ROW} text-white/70`}>
+                  <div className={`${MENU_ROW} text-muted`}>
                     <span className={MENU_BADGE}>
                       <StateIcon size={14} />
                     </span>

@@ -371,7 +371,7 @@ export function CinemaMobileDetail({
           <h1 className="mb-3 text-2xl font-bold leading-tight text-white font-display">{item.title}</h1>
         )}
 
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-white/70">
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
           <span>{item.year}</span>
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
           {isSeries && seasons.length > 0 && (
@@ -389,7 +389,7 @@ export function CinemaMobileDetail({
           <button
             type="button"
             onClick={() => play()}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-base font-semibold text-ink transition-transform active:scale-95"
           >
             <Play size={18} fill="currentColor" />
             {formatContinueLabel(
@@ -407,7 +407,7 @@ export function CinemaMobileDetail({
           <button
             type="button"
             onClick={() => play(true)}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
           >
             <RotateCcw size={16} />
             {t("cinema.restartFromBeginning")}
@@ -418,7 +418,7 @@ export function CinemaMobileDetail({
           <button
             type="button"
             onClick={() => setShowTrailer(true)}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95"
           >
             <Video size={16} />
             {t("cinema.trailer")}
@@ -427,7 +427,7 @@ export function CinemaMobileDetail({
 
         {/* Avec le synopsis plutôt qu'avec l'année : placée plus haut, elle repoussait « Lire ». */}
         <CinemaTagline text={info?.tmdb?.tagline} className="mb-1.5" />
-        <p className="mb-3 text-sm leading-6 text-white/90">{info?.tmdb?.overview || item.overview}</p>
+        <p className="mb-3 text-sm leading-6 text-white">{info?.tmdb?.overview || item.overview}</p>
 
 
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing
@@ -439,7 +439,7 @@ export function CinemaMobileDetail({
           {canJoinWatchlist(tmdbId) && (
             <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
               <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={22} className="text-accent-400" />} offIcon={<Plus size={22} className="text-white" />} />
-              <span className="text-center text-xs leading-tight text-white/70">
+              <span className="text-center text-xs leading-tight text-muted">
                 {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
               </span>
             </button>
@@ -454,7 +454,7 @@ export function CinemaMobileDetail({
             className={`flex w-16 flex-col items-center gap-1.5 active:scale-95 ${watchedKnown ? "" : "opacity-40"}`}
           >
             <ToggleGlyph on={watched} onIcon={<CircleCheck size={22} className="text-accent-400" />} offIcon={<Check size={22} className="text-white" />} />
-            <span className="text-center text-xs leading-tight text-white/70">
+            <span className="text-center text-xs leading-tight text-muted">
               {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
             </span>
           </button>
@@ -484,14 +484,14 @@ export function CinemaMobileDetail({
                       type="button"
                       onClick={() => setSelectedSeason(seasonNumber)}
                       className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                        active ? "bg-white text-ink font-medium" : "bg-white/10 text-white/80"
+                        active ? "bg-white text-ink font-medium" : "bg-white/10 text-muted"
                       }`}
                     >
                       {seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: seasonNumber })}
                       {/* Ce qui manque, dit sur la pastille elle-même : c'est ce qu'on cherche en
                           parcourant cette rangée. */}
                       {gap > 0 && (
-                        <span className={`tabular-nums text-[11px] ${active ? "text-ink/50" : "text-white/40"}`}>
+                        <span className={`tabular-nums text-[11px] ${active ? "text-ink/50" : "text-subtle"}`}>
                           {gap}
                         </span>
                       )}
@@ -535,7 +535,7 @@ export function CinemaMobileDetail({
                     <p className="text-sm font-medium text-white">
                       {episode.episodeNumber}. {episode.title}
                       {episode.jellyfinItemId === nextEpisode?.itemId && (
-                        <span className="ml-2 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-300">
+                        <span className="ml-2 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400">
                           {t("cinema.nextUpBadge")}
                         </span>
                       )}
@@ -543,15 +543,15 @@ export function CinemaMobileDetail({
                     {/* Remaining time on a started episode, runtime otherwise — same rule as the
                         desktop season browser. */}
                     {episode.resumeTicks && episode.runtimeTicks && !episode.watched ? (
-                      <p className="mt-0.5 text-xs text-accent-300">
+                      <p className="mt-0.5 text-xs text-accent-400">
                         {t("cinema.timeRemaining", { time: formatDurationShort(episode.runtimeTicks - episode.resumeTicks) })}
                       </p>
                     ) : (
                       episode.runtimeMinutes && (
-                        <p className="mt-0.5 text-xs text-white/50">{formatMinutes(episode.runtimeMinutes)}</p>
+                        <p className="mt-0.5 text-xs text-subtle">{formatMinutes(episode.runtimeMinutes)}</p>
                       )
                     )}
-                    {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-white/60">{episode.overview}</p>}
+                    {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted">{episode.overview}</p>}
                   </div>
                 </button>
               ))}

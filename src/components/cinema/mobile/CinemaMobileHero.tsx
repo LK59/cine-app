@@ -123,7 +123,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
       <button
         type="button"
         onClick={() => onPlay(item)}
-        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-ink transition-transform active:scale-95"
       >
         <Play size={16} fill="currentColor" />
         {/* La même formule que les fiches et les rangées : « Reprendre — 40 min restantes ». Un
@@ -135,7 +135,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
       <button
         type="button"
         onClick={() => onOpen(item)}
-        className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-white/15 px-3 py-2.5 text-sm font-medium text-white transition-transform active:scale-95"
       >
         <Info size={16} />
         {t("cinema.moreInfo")}
@@ -194,7 +194,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                         19/09/2026, visible seulement en paysage — c'est la seule branche qui les
                         portait. Elles rejoignent les genres sur la même ligne, comme sur la
                         bannière du bureau. */}
-                    <div className="mb-3 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-white/70">
+                    <div className="mb-3 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted">
                       <QualityBadges quality={"quality" in item ? item.quality : undefined} />
                       {item.genres.length > 0 && (
                         <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>
@@ -221,7 +221,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                       <h1 className="mb-2 text-center text-2xl font-bold text-white drop-shadow-lg font-display">{item.title}</h1>
                     )}
                     {item.genres.length > 0 && (
-                      <p className="mb-3 text-center text-xs text-white/70">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>
+                      <p className="mb-3 text-center text-xs text-muted">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>
                     )}
                     {actions(item)}
                   </div>

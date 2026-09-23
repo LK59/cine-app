@@ -306,7 +306,7 @@ export function CinemaSeriesDetail({
             <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg sm:text-4xl font-display">{item.title}</h1>
           )}
 
-          <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
             {runtimeLabel(info?.tmdb?.runtime, true) && <span>{runtimeLabel(info?.tmdb?.runtime, true)}</span>}
@@ -357,7 +357,7 @@ export function CinemaSeriesDetail({
                 <button
                   type="button"
                   onClick={() => setShowCast(true)}
-                  className="shrink-0 rounded text-xs font-medium text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                  className="shrink-0 rounded text-xs font-medium text-muted transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
                 >
                   +{info.tmdb.cast.length - CAST_SHOWN}
                 </button>

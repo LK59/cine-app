@@ -145,7 +145,7 @@ export function CinemaBrowseSheet<T extends BrowsableTitle>({
         </div>
 
         {shown.length === 0 ? (
-          <p className="py-16 text-center text-sm text-slate-500">{t("player.browse.nothing")}</p>
+          <p className="py-16 text-center text-sm text-subtle">{t("player.browse.nothing")}</p>
         ) : (
           // `player-grid` : c'est lui qui porte `content-visibility`, et sans lui le navigateur
           // met en page et dessine les six cent soixante-dix cartes d'un coup — la grille

@@ -35,7 +35,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
     // « Déconnexion » très loin sur un écran de 390 px.
     <section className="border-t border-white/10 py-7 first:border-t-0 first:pt-0 [@media(max-height:500px)]:py-4">
       <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
-        <Icon size={16} className="text-slate-500" />
+        <Icon size={16} className="text-subtle" />
         {title}
       </h2>
       {children}
@@ -71,7 +71,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
           <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <p className="text-sm text-white">{t("player.account.notificationsLabel")}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{t("player.account.notificationsHint")}</p>
+              <p className="mt-0.5 text-xs text-subtle">{t("player.account.notificationsHint")}</p>
             </div>
             <PushToggle />
           </div>
@@ -82,7 +82,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
           <PasswordSection />
         ) : (
           <Section icon={KeyRound} title={t("player.account.password")}>
-            <p className="text-sm text-slate-400">{t("player.account.localAccountHint")}</p>
+            <p className="text-sm text-muted">{t("player.account.localAccountHint")}</p>
           </Section>
         )}
         <SessionsSection />
@@ -136,11 +136,11 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
             <Activity size={16} />
             {t("player.account.openStatus")}
           </Link>
-          <p className="mt-2 text-xs text-slate-500">{t("player.account.statusHint")}</p>
+          <p className="mt-2 text-xs text-subtle">{t("player.account.statusHint")}</p>
         </Section>
 
         <Section icon={LogOut} title={t("player.account.signOut")}>
-          <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-red-400 sm:w-auto">
+          <button type="button" onClick={logout} className="btn btn-ghost w-full justify-center text-danger sm:w-auto">
             <LogOut size={16} />
             {t("player.account.signOutAction")}
           </button>
@@ -181,9 +181,9 @@ function LanguageSection() {
         ))}
       </div>
       {pending && pending !== locale && (
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
-          <p className="text-xs text-amber-300">{t("settings.language.reloadNotice", { lang: LOCALE_LABELS[pending] })}</p>
-          <button onClick={apply} className="btn btn-sm shrink-0 bg-amber-500 text-black hover:bg-amber-400">
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3">
+          <p className="text-xs text-warning">{t("settings.language.reloadNotice", { lang: LOCALE_LABELS[pending] })}</p>
+          <button onClick={apply} className="btn btn-sm shrink-0 bg-warning text-black hover:bg-warning/85">
             {t("settings.language.apply")}
           </button>
         </div>
@@ -237,7 +237,7 @@ function PlaybackSection() {
           onChange={(mode) => void save({ subtitleMode: mode })}
         />
       </div>
-      <p className="mt-3 text-xs text-slate-500">{t("player.account.playbackHint")}</p>
+      <p className="mt-3 text-xs text-subtle">{t("player.account.playbackHint")}</p>
     </Section>
   );
 }
@@ -304,7 +304,7 @@ function PasswordSection() {
           <button type="submit" disabled={!canSubmit} className="btn btn-primary btn-sm">
             {saving ? t("player.account.saving") : t("player.account.changePassword")}
           </button>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-subtle">
             {mismatch ? t("player.account.passwordMismatch") : t("player.account.passwordRule")}
           </p>
         </div>
@@ -350,7 +350,7 @@ function SessionsSection() {
     <Section icon={MonitorSmartphone} title={t("player.account.devices")}>
       <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-muted">
             {count === null
               ? t("settings.security.loading")
               : count === 0
@@ -361,7 +361,7 @@ function SessionsSection() {
             type="button"
             onClick={revoke}
             disabled={revoking || count === 0 || count === null}
-            className="btn btn-ghost btn-sm shrink-0 text-red-400"
+            className="btn btn-ghost btn-sm shrink-0 text-danger"
           >
             {t("player.account.signOutOthers")}
           </button>
@@ -373,7 +373,7 @@ function SessionsSection() {
         {sessions && sessions.length > 0 && (
           <ul className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
             {sessions.map((s) => (
-              <li key={s.id} className="flex items-baseline justify-between gap-3 text-xs text-slate-500">
+              <li key={s.id} className="flex items-baseline justify-between gap-3 text-xs text-subtle">
                 <span>{t("player.account.sessionOpened", { date: formatDay(s.createdAt) })}</span>
                 <span className="shrink-0">{t("player.account.sessionSeen", { date: formatDay(s.lastSeenAt) })}</span>
               </li>
@@ -418,34 +418,34 @@ function KnownIssuesSection() {
     <Section icon={LifeBuoy} title={t("player.account.help.title")}>
       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
         <p className="text-sm font-medium text-white">{t("player.account.help.hdrTitle")}</p>
-        <p className="mt-1.5 text-xs leading-5 text-slate-400">{t("player.account.help.hdrIntro")}</p>
-        <ol className="mt-3 space-y-2 text-xs leading-5 text-slate-400">
+        <p className="mt-1.5 text-xs leading-5 text-muted">{t("player.account.help.hdrIntro")}</p>
+        <ol className="mt-3 space-y-2 text-xs leading-5 text-muted">
           <li className="flex gap-2.5">
-            <span className="shrink-0 text-slate-600">1.</span>
+            <span className="shrink-0 text-subtle">1.</span>
             <span>{t("player.account.help.hdrStep1")}</span>
           </li>
           <li className="flex gap-2.5">
-            <span className="shrink-0 text-slate-600">2.</span>
+            <span className="shrink-0 text-subtle">2.</span>
             <span className="min-w-0">
               {t("player.account.help.hdrStep2")}
               <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-slate-200">
+                <code className="break-all rounded bg-black/40 px-2 py-1 font-mono text-[11px] text-white">
                   {FIREFOX_HDR_PREF}
                 </code>
                 <button type="button" onClick={copyPref} className="btn btn-ghost btn-sm shrink-0">
-                  {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                  {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
                   {copied ? t("player.account.help.copied") : t("player.account.help.copy")}
                 </button>
               </span>
             </span>
           </li>
           <li className="flex gap-2.5">
-            <span className="shrink-0 text-slate-600">3.</span>
+            <span className="shrink-0 text-subtle">3.</span>
             <span>{t("player.account.help.hdrStep3")}</span>
           </li>
         </ol>
         {/* La phrase qui compte le plus : sans elle, on conclut que le lecteur est cassé. */}
-        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-slate-500">
+        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-subtle">
           {t("player.account.help.hdrNote")}
         </p>
       </div>
@@ -509,7 +509,7 @@ function MaintenanceSection() {
           type="button"
           disabled={busy !== null}
           onClick={() => void send({ active: !active }, "toggle")}
-          className={`btn w-full justify-center sm:w-auto ${active ? "btn-ghost text-amber-300" : "btn-ghost"}`}
+          className={`btn w-full justify-center sm:w-auto ${active ? "btn-ghost text-warning" : "btn-ghost"}`}
         >
           <Wrench size={16} />
           {active ? t("player.account.maintenanceOff") : t("player.account.maintenanceOn")}
@@ -524,7 +524,7 @@ function MaintenanceSection() {
           {t("player.account.maintenanceNotify")}
         </button>
       </div>
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-subtle">
         {active
           ? // L'heure d'extinction plutôt qu'une durée : « dans 4 heures » oblige à calculer, et
             // se périme à la seconde où on le lit. Une heure se compare d'un coup d'œil à celle

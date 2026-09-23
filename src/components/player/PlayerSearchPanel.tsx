@@ -320,7 +320,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
     <PlayerPanelFrame title={t("player.nav.search")} leaving={leaving} replaced={replaced} fromTab={fromTab}>
       <div className="mx-auto w-full max-w-5xl">
         <div className="relative">
-          <SearchIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+          <SearchIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-subtle" />
           <input
             ref={inputRef}
             value={query}
@@ -345,7 +345,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
             autoComplete="off"
             placeholder={t("player.search.placeholder")}
             aria-label={t("player.nav.search")}
-            className="search-no-native-clear w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-12 text-base text-white placeholder:text-slate-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+            className="search-no-native-clear w-full rounded-xl border border-white/10 bg-white/5 py-4 pl-12 pr-12 text-base text-white placeholder:text-subtle focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           />
           {/* Effacer sans viser la touche retour arrière trente fois.
               `type="search"` dessine bien une croix native, mais pas sur iOS — et c'est
@@ -365,7 +365,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
                 inputRef.current?.focus();
               }}
               aria-label={t("common.clear")}
-              className="absolute right-0 top-0 flex h-full w-12 items-center justify-center text-slate-500 transition-colors hover:text-white"
+              className="absolute right-0 top-0 flex h-full w-12 items-center justify-center text-subtle transition-colors hover:text-white"
             >
               <X size={18} />
             </button>
@@ -401,11 +401,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
         {!searching && <SearchStart onPick={setQuery} />}
 
         {empty && (
-          <p className="mt-10 text-sm text-slate-400">{t("player.search.noResults", { query: typed })}</p>
+          <p className="mt-10 text-sm text-muted">{t("player.search.noResults", { query: typed })}</p>
         )}
 
         {unreachable && (
-          <p role="alert" className="mt-6 text-sm text-amber-300/90">{t("player.search.failed")}</p>
+          <p role="alert" className="mt-6 text-sm text-warning/90">{t("player.search.failed")}</p>
         )}
 
         {(shownTitles.length > 0 || shownPersons.length > 0) && (
@@ -490,7 +490,7 @@ function SearchStart({ onPick }: { onPick: (query: string) => void }) {
                 forgetSearches();
                 setForgotten(true);
               }}
-              className="shrink-0 text-xs text-slate-500 transition-colors hover:text-white"
+              className="shrink-0 text-xs text-subtle transition-colors hover:text-white"
             >
               {t("player.search.forget")}
             </button>
@@ -525,7 +525,7 @@ function SearchStart({ onPick }: { onPick: (query: string) => void }) {
       )}
 
       {recent.length === 0 && fresh.length === 0 && (
-        <p className="text-sm text-slate-500">{t("player.search.hint")}</p>
+        <p className="text-sm text-subtle">{t("player.search.hint")}</p>
       )}
     </div>
   );

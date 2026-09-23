@@ -57,7 +57,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
       data-nav-item
       className="pressable group flex flex-col text-left focus-visible:outline-none"
     >
-      <div className="relative overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition duration-200 group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-accent-500">
+      <div className="relative overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition duration-200 group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-accent-500">
         <div className={kind === "person" ? "aspect-[2/3]" : "aspect-[2/3]"}>
           {poster ? (
             /* `unoptimized` : ces adresses sont déjà des images TMDB demandées à la taille de la
@@ -73,7 +73,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
               sizes="(max-width: 640px) 30vw, (max-width: 1024px) 18vw, 150px"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-slate-600">
+            <div className="flex h-full w-full items-center justify-center text-subtle">
               <Icon size={26} />
             </div>
           )}
@@ -89,7 +89,7 @@ export const PlayerResultCard = memo(function PlayerResultCard({
             complète, six cent soixante-dix cartes en portaient une chacune, pour répéter « Film »
             six cent soixante-dix fois sous l'onglet Films. */}
         {showKind && (
-          <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white/85">
+          <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white">
             <Icon size={10} />
             {kindLabel}
           </span>
@@ -103,16 +103,16 @@ export const PlayerResultCard = memo(function PlayerResultCard({
             travers de six affiches sur huit. Réduite à une pastille de coin sans fond plein, le
             violet reste disponible pour ce qui le mérite — un titre qui vient d'arriver. */}
         {missing && (
-          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40">
+          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-accent-400 ring-1 ring-accent-400/40">
             {t("player.notInLibrary")}
           </span>
         )}
       </div>
 
-      <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-snug text-slate-100 transition-colors group-hover:text-white">
+      <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-snug text-white">
         {title}
       </p>
-      {subtitle && <p className="mt-0.5 truncate text-[11px] text-slate-500">{subtitle}</p>}
+      {subtitle && <p className="mt-0.5 truncate text-[11px] text-subtle">{subtitle}</p>}
     </button>
   );
 });

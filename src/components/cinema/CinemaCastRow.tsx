@@ -43,7 +43,7 @@ export const CinemaCastRow = memo(function CinemaCastRow({
 
   return (
     <section className={`w-full ${className}`}>
-      <h2 className="mb-2 text-sm font-medium text-white/70">{t("cinema.castTitle")}</h2>
+      <h2 className="mb-2 text-sm font-medium text-muted">{t("cinema.castTitle")}</h2>
       {/* py-4 + overflow-y-hidden, comme la rangée des titres similaires : un visage qui grandit
           au focus a besoin de place dans la boîte, et la molette revient à la page. */}
       <div className="scrollbar-thin flex gap-4 overflow-x-auto overflow-y-hidden py-4">
@@ -60,7 +60,7 @@ export const CinemaCastRow = memo(function CinemaCastRow({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={member.photoUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
               ) : (
-                <span className="flex h-full w-full items-center justify-center text-slate-600">
+                <span className="flex h-full w-full items-center justify-center text-subtle">
                   <User size={24} />
                 </span>
               )}
@@ -68,7 +68,7 @@ export const CinemaCastRow = memo(function CinemaCastRow({
             <span className="w-full">
               <span className="line-clamp-2 text-xs font-medium leading-tight text-white">{member.name}</span>
               {member.character && (
-                <span className="mt-0.5 line-clamp-1 text-[11px] leading-tight text-white/50">{member.character}</span>
+                <span className="mt-0.5 line-clamp-1 text-[11px] leading-tight text-subtle">{member.character}</span>
               )}
             </span>
           </button>

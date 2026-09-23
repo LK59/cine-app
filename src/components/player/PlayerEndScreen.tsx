@@ -53,7 +53,7 @@ export function PlayerEndScreen({
   return (
     <div className="absolute inset-0 z-30 flex flex-col justify-end bg-linear-to-t from-black via-black/85 to-black/40">
       <div className="mx-auto w-full max-w-4xl px-6 pb-10 sm:px-10">
-        <p className="text-xs uppercase tracking-wide text-white/40">{t("player.end.finished")}</p>
+        <p className="text-xs uppercase tracking-wide text-subtle">{t("player.end.finished")}</p>
         <h2 className="mt-1 truncate font-display text-2xl font-semibold text-white sm:text-3xl">{title}</h2>
 
         <div className="mt-5 flex flex-wrap gap-2.5">
@@ -69,7 +69,7 @@ export function PlayerEndScreen({
 
         {similar.length > 0 && (
           <section className="mt-8">
-            <h3 className="mb-2 text-sm font-medium text-white/70">{t("cinema.similar")}</h3>
+            <h3 className="mb-2 text-sm font-medium text-muted">{t("cinema.similar")}</h3>
             <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
               {similar.map((movie) => (
                 <button

@@ -223,7 +223,7 @@ export function PlayerPanelFrame({
           >
             {title}
           </h1>
-          {subtitle && !short && <div className="mt-1 text-sm text-slate-400">{subtitle}</div>}
+          {subtitle && !short && <div className="mt-1 text-sm text-muted">{subtitle}</div>}
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {actions}
@@ -238,7 +238,7 @@ export function PlayerPanelFrame({
               type="button"
               onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
               aria-label={t("common.close")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
             >
               <X size={20} />
             </button>

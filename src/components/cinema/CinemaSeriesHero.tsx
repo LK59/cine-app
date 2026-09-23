@@ -32,7 +32,7 @@ export function CinemaSeriesHero({ item }: { item: CinemaSeries }) {
         <h1 className="text-3xl font-bold leading-tight text-white drop-shadow-lg sm:text-5xl font-display">{item.title}</h1>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 text-sm text-white/80">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
         <span>{item.year}</span>
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}

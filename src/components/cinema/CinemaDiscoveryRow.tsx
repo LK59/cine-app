@@ -52,7 +52,7 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
       className="mb-6 animate-fade-in-up snap-start"
       style={{ animationDelay: `${Math.min(rowIndex, 6) * 40}ms` }}
     >
-      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{label}</h2>
+      <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{label}</h2>
       <div
         className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12"
         style={EDGE_FADE}
@@ -81,7 +81,7 @@ export const CinemaDiscoveryRow = memo(function CinemaDiscoveryRow({
               <span
                 aria-label={missingLabel}
                 title={missingLabel}
-                className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white/80 backdrop-blur-sm"
+                className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-muted backdrop-blur-sm"
               >
                 <Plus size={12} />
               </span>

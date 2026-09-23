@@ -163,7 +163,7 @@ export function CinemaEpisodeBrowser({
           transform, unlike the outer root (see globals.css's own note on this pitfall). */}
       <div className={`flex h-full pt-20 ${closing ? "animate-slide-out-right" : revealed ? "" : "animate-slide-in-right"}`}>
         <div className="scrollbar-thin w-56 shrink-0 overflow-y-auto border-r border-white/10 px-3 pb-8 sm:w-64">
-          <p className="mb-3 truncate px-2 text-sm font-medium text-white/60">{title}</p>
+          <p className="mb-3 truncate px-2 text-sm font-medium text-muted">{title}</p>
           {seasonNumbers.map((seasonNumber) => {
             const active = seasonNumber === selectedSeason;
             const gap = missing.seasonOf(seasonNumber)?.episodes.length ?? 0;
@@ -175,7 +175,7 @@ export function CinemaEpisodeBrowser({
                 onFocus={() => setSelectedSeason(seasonNumber)}
                 onMouseEnter={() => setSelectedSeason(seasonNumber)}
                 className={`mb-1 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none ${
-                  active ? "bg-accent-600/25 text-white ring-1 ring-accent-500/50" : "text-white/80 hover:bg-white/10"
+                  active ? "bg-accent-600/25 text-white ring-1 ring-accent-500/50" : "text-muted hover:bg-white/10"
                 }`}
               >
                 <span className="truncate">
@@ -184,7 +184,7 @@ export function CinemaEpisodeBrowser({
                 {/* Le compte de ce qui manque, à côté de la saison : c'est ce qu'on cherche à
                     savoir en parcourant cette colonne. */}
                 {gap > 0 && (
-                  <span className="shrink-0 rounded-full bg-white/10 px-1.5 text-[11px] tabular-nums text-white/50">
+                  <span className="shrink-0 rounded-full bg-white/10 px-1.5 text-[11px] tabular-nums text-subtle">
                     {gap}
                   </span>
                 )}
@@ -223,23 +223,23 @@ export function CinemaEpisodeBrowser({
                       {ep.episodeNumber}. {ep.title}
                     </span>
                     {ep.jellyfinItemId === nextEpisodeId && (
-                      <span className="shrink-0 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-300 ring-1 ring-accent-500/40">
+                      <span className="shrink-0 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400 ring-1 ring-accent-500/40">
                         {t("cinema.nextUpBadge")}
                       </span>
                     )}
                     {/* A started episode says what's LEFT, not how long it is — the number you
                         actually want before pressing play. Untouched ones keep the runtime. */}
                     {ep.resumeTicks && ep.runtimeTicks && !ep.watched ? (
-                      <span className="shrink-0 text-xs text-accent-300">
+                      <span className="shrink-0 text-xs text-accent-400">
                         {t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks - ep.resumeTicks) })}
                       </span>
                     ) : (
                       ep.runtimeMinutes && (
-                        <span className="shrink-0 text-xs text-white/50">{formatMinutes(ep.runtimeMinutes)}</span>
+                        <span className="shrink-0 text-xs text-subtle">{formatMinutes(ep.runtimeMinutes)}</span>
                       )
                     )}
                   </div>
-                  {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-white/60">{ep.overview}</p>}
+                  {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</p>}
                 </div>
               </button>
             ))}

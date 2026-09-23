@@ -21,10 +21,10 @@ export function PlayerEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-slate-600 ring-1 ring-white/10">
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-subtle ring-1 ring-white/10">
         <Icon size={24} />
       </span>
-      <p className="max-w-sm text-sm leading-6 text-slate-400">{message}</p>
+      <p className="max-w-sm text-sm leading-6 text-muted">{message}</p>
       {action && (
         <button type="button" onClick={action.onClick} className="btn btn-ghost">
           {action.label}

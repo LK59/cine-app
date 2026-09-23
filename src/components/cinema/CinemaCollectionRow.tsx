@@ -176,7 +176,7 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
 
   return (
     <section className="w-full">
-      <h2 className="mb-2 text-sm font-medium text-white/70">{name || t("cinema.collection")}</h2>
+      <h2 className="mb-2 text-sm font-medium text-muted">{name || t("cinema.collection")}</h2>
       <div className="scrollbar-thin flex gap-3 overflow-x-auto overflow-y-hidden py-4">
         {parts.map((part) => (
           <button
@@ -190,7 +190,7 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
             {/* Le même signe discret que partout ailleurs pour « on ne l'a pas » — voir la grille
                 de Ma liste, où la pastille pleine largeur écrasait les affiches. */}
             {!part.movie && (
-              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-200 ring-1 ring-accent-400/40">
+              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-accent-400 ring-1 ring-accent-400/40">
                 {t("player.notInLibrary")}
               </span>
             )}

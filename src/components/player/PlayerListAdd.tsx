@@ -74,15 +74,15 @@ export function PlayerListAdd({ existing, onClose }: { existing: Set<string>; on
       </div>
 
       {debounced.length < MIN_QUERY ? (
-        <p className="px-1 py-10 text-center text-sm text-slate-500">{t("player.lists.addHint")}</p>
+        <p className="px-1 py-10 text-center text-sm text-subtle">{t("player.lists.addHint")}</p>
       ) : failed ? (
-        <p role="alert" className="px-1 py-10 text-center text-sm text-amber-300/90">{t("player.search.failed")}</p>
+        <p role="alert" className="px-1 py-10 text-center text-sm text-warning/90">{t("player.search.failed")}</p>
       ) : isLoading && results.length === 0 ? (
         <div className="flex justify-center py-10">
-          <Loader2 size={20} className="animate-spin text-slate-500" />
+          <Loader2 size={20} className="animate-spin text-subtle" />
         </div>
       ) : results.length === 0 ? (
-        <p className="px-1 py-10 text-center text-sm text-slate-500">{t("player.lists.addNothing")}</p>
+        <p className="px-1 py-10 text-center text-sm text-subtle">{t("player.lists.addNothing")}</p>
       ) : (
         <ul className="mt-3 divide-y divide-white/5">
           {results.slice(0, 30).map((result) => (
@@ -148,7 +148,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm text-white">{result.title}</span>
-          <span className="block truncate text-xs text-slate-500">
+          <span className="block truncate text-xs text-subtle">
             {[result.year, t(`player.kind.${result.type === "series" ? "series" : "movie"}`)].filter(Boolean).join(" · ")}
             {!result.inLibrary && ` · ${t("player.notInLibrary")}`}
           </span>
@@ -168,7 +168,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
         aria-label={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}
         title={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
-          done ? "text-emerald-400" : "bg-white/10 text-white hover:bg-white/20 active:scale-95"
+          done ? "text-success" : "bg-white/10 text-white hover:bg-white/20 active:scale-95"
         }`}
       >
         <ToggleGlyph on={done} onIcon={<Check size={17} />} offIcon={<Plus size={18} />} />

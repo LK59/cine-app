@@ -452,7 +452,7 @@ export function CinemaMobileClient() {
           onClick={() => window.location.reload()}
           aria-label={t("cinema.reload")}
           title={t("cinema.reload")}
-          className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white/90 transition-opacity active:opacity-60"
+          className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white transition-opacity active:opacity-60"
         >
           <Clapperboard size={16} className="shrink-0 text-accent-400" />
           <span className="truncate font-display text-sm font-semibold tracking-tight">Ciné App</span>
@@ -469,7 +469,7 @@ export function CinemaMobileClient() {
               className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
                 mediaType === type
                   ? "border-white bg-white text-ink font-medium"
-                  : "border-white/25 text-white/80"
+                  : "border-white/25 text-muted"
               }`}
             >
               {t(type === "movies" ? "cinema.moviesTab" : "cinema.seriesTab")}
@@ -523,9 +523,9 @@ export function CinemaMobileClient() {
           </div>
         )}
 
-        {moviesError && <p className="px-4 pt-6 text-sm text-red-400">{errorMessage(moviesError, t, t("common.unknown"))}</p>}
+        {moviesError && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(moviesError, t, t("common.unknown"))}</p>}
         {!loading && payload && payload.spotlight.length === 0 && (
-          <p className="px-4 pt-6 text-sm text-slate-400">{t("cinema.empty")}</p>
+          <p className="px-4 pt-6 text-sm text-muted">{t("cinema.empty")}</p>
         )}
 
         {/* Hero: portrait key art with the title treatment and its two actions inline, the shape
@@ -620,8 +620,8 @@ export function CinemaMobileClient() {
                     <ProgressFill percent={entry.progress} />
                   </div>
                 </div>
-                <p className="mt-1.5 truncate text-xs font-medium text-white/90">{entry.name}</p>
-                <p className="truncate text-xs text-white/50">
+                <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.name}</p>
+                <p className="truncate text-xs text-subtle">
                   {formatContinueLabel(t, entry.positionTicks, entry.runtimeTicks)}
                 </p>
               </LongPressButton>
@@ -656,8 +656,8 @@ export function CinemaMobileClient() {
                     </div>
                   ) : null}
                 </div>
-                <p className="mt-1.5 truncate text-xs font-medium text-white/90">{entry.title}</p>
-                <p className="truncate text-xs text-white/50">
+                <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.title}</p>
+                <p className="truncate text-xs text-subtle">
                   {formatContinueLabel(t, entry.resumeTicks, entry.runtimeTicks, entry.seasonNumber, entry.episodeNumber)}
                 </p>
               </button>
@@ -923,7 +923,7 @@ const DiscoveryRow = memo(function DiscoveryRow({
           {item.libraryId === null && (
             <span
               aria-label={missingLabel}
-              className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white/80"
+              className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-muted"
             >
               <Plus size={12} />
             </span>
@@ -985,14 +985,14 @@ function MobileRow({
           qu'il y avait une suite. Ici il se voit avant qu'on commence. */}
       <div className="mb-2 flex items-baseline justify-between gap-3 px-4 [@media(max-height:500px)]:mb-1.5">
         <div className="min-w-0">
-          {eyebrow && <p className="truncate text-[11px] leading-4 text-slate-500">{eyebrow}</p>}
+          {eyebrow && <p className="truncate text-[11px] leading-4 text-subtle">{eyebrow}</p>}
           <h2 className="min-w-0 truncate text-sm font-semibold text-white">{label}</h2>
         </div>
         {onSeeAll && (
           <button
             type="button"
             onClick={onSeeAll}
-            className="shrink-0 text-xs font-medium text-slate-400 transition-colors active:text-white"
+            className="shrink-0 text-xs font-medium text-muted transition-colors active:text-white"
           >
             {t("player.browse.seeAll")}
           </button>

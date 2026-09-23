@@ -85,7 +85,7 @@ export const CinemaSimilarRow = memo(function CinemaSimilarRow({
 
   return (
     <section className="w-full">
-      <h2 className="mb-2 text-sm font-medium text-white/70">{t("cinema.similar")}</h2>
+      <h2 className="mb-2 text-sm font-medium text-muted">{t("cinema.similar")}</h2>
       {/* py-4 + overflow-y-hidden: a focused poster scales up and needs room inside this box, or
           it gets clipped by the scroller's own edge (any element with overflow-x:auto computes
           overflow-y to auto too, so the box really does clip). Hidden rather than auto on the

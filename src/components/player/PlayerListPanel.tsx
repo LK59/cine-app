@@ -204,7 +204,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
                 fait peindre le champ *par-dessus* une icône absolue sans plan. La loupe était
                 donc invisible — un creux à gauche du texte, qu'on prend pour un emplacement
                 oublié. Même correction partout où ce motif est copié. */}
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-subtle" />
             <input
               type="search"
               value={query}
@@ -274,7 +274,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
                 {key === "requests" && arrived > 0 && (
                   <span
                     aria-label={t("player.lists.arrivedBadge", { n: arrived })}
-                    className="ml-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                    className="ml-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-success"
                   />
                 )}
               </button>
@@ -285,10 +285,10 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
 
         {/* Une phrase par segment qui en a besoin, à l'endroit où la question se pose. */}
         {segment === "requests" && (
-          <p className="mt-5 text-sm text-slate-400">{t("player.lists.requestsHint")}</p>
+          <p className="mt-5 text-sm text-muted">{t("player.lists.requestsHint")}</p>
         )}
         {segment === "watched" && (
-          <p className="mt-5 text-sm text-slate-400">{t("player.lists.watchedHint")}</p>
+          <p className="mt-5 text-sm text-muted">{t("player.lists.watchedHint")}</p>
         )}
 
         {isLoading && (
@@ -369,15 +369,15 @@ function StatCard({ value, ready, label, highlight = false }: { value: number; r
   return (
     <div
       className={`rounded-xl border px-3 py-3 ${
-        highlight && value > 0 ? "border-emerald-500/25 bg-emerald-500/5" : "border-white/10 bg-white/5"
+        highlight && value > 0 ? "border-success/25 bg-success/5" : "border-white/10 bg-white/5"
       }`}
     >
-      <p className={`text-2xl font-semibold tabular-nums ${highlight && value > 0 ? "text-emerald-400" : "text-white"}`}>
+      <p className={`text-2xl font-semibold tabular-nums ${highlight && value > 0 ? "text-success" : "text-white"}`}>
         {/* Repart à l'arrivée des données : sinon le zéro d'avant défilait jusqu'au vrai compte,
             une liste qui semblait vide un instant. Ne défile qu'ensuite, sur un ajout ou un retrait. */}
         <AnimatedNumber key={ready ? "ready" : "loading"} value={value} />
       </p>
-      <p className="mt-0.5 truncate text-xs text-slate-500">{label}</p>
+      <p className="mt-0.5 truncate text-xs text-subtle">{label}</p>
     </div>
   );
 }

@@ -80,7 +80,7 @@ export const BELOW_SECTION_CLASS =
   "pt-[calc(5rem+env(safe-area-inset-top))]";
 
 /** La distribution reste, quelle que soit la hauteur : elle tient sur une ligne tronquée. */
-export const CAST_CLASS = "truncate text-xs text-white/60";
+export const CAST_CLASS = "truncate text-xs text-muted";
 
 /**
  * Combien de noms tiennent avant qu'un décompte prenne le relais.
@@ -144,12 +144,12 @@ export function CinemaOverview({
       <p
         ref={bodyRef}
         // Sélectionnable : c'est du texte, on doit pouvoir le copier même s'il est dans un bouton.
-        className="clamp-fade-2 select-text text-sm text-white/90 drop-shadow-sm sm:text-base"
+        className="clamp-fade-2 select-text text-sm text-white drop-shadow-sm sm:text-base"
       >
         {text}
       </p>
       {(clamped || alwaysOpenable) && (
-        <span className="mt-0.5 inline-block text-xs font-medium text-white/60 group-hover:text-white/90">
+        <span className="mt-0.5 inline-block text-xs font-medium text-muted group-hover:text-white">
           {readMore}
         </span>
       )}
@@ -265,7 +265,7 @@ export function CinemaDetailModal({
             <X size={16} />
           </button>
         </div>
-        <div className="scrollbar-thin max-h-[60vh] select-text overflow-y-auto pr-1 text-sm leading-7 text-white/90">
+        <div className="scrollbar-thin max-h-[60vh] select-text overflow-y-auto pr-1 text-sm leading-7 text-white">
           {children}
         </div>
       </div>

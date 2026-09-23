@@ -95,7 +95,7 @@ export function PlayerRail() {
               className={`relative flex h-11 shrink-0 items-center gap-4 overflow-hidden rounded-lg pl-[0.85rem] pr-3 text-left text-sm font-medium transition-colors active:transform-none active:bg-white/15 active:delay-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
                 isActive
                   ? "text-white before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent-500"
-                  : "text-slate-400 hover:bg-white/10 hover:text-white"
+                  : "text-muted hover:bg-white/10 hover:text-white"
               }`}
             >
               <Icon size={21} className="shrink-0" />
@@ -116,7 +116,7 @@ export function PlayerRail() {
           onClick={() => router.push(MANAGE_ITEM.href)}
           onMouseEnter={() => prefetchRoute(MANAGE_ITEM.href)}
           onFocus={() => prefetchRoute(MANAGE_ITEM.href)}
-          className="flex h-9 w-full items-center gap-4 overflow-hidden rounded-lg pl-[0.95rem] pr-3 text-left text-[11px] text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          className="flex h-9 w-full items-center gap-4 overflow-hidden rounded-lg pl-[0.95rem] pr-3 text-left text-[11px] text-subtle transition-colors hover:bg-white/5 hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
         >
           <MANAGE_ITEM.icon size={17} className="shrink-0" />
           <span className="player-rail-label whitespace-nowrap">

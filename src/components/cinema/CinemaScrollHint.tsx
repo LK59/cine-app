@@ -22,7 +22,7 @@ export function CinemaScrollHint() {
           const section = e.currentTarget.closest<HTMLElement>("[data-snap-section]");
           section?.nextElementSibling?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
         }}
-        className="pointer-events-auto animate-scroll-hint rounded-full bg-black/40 p-2 text-white/90 backdrop-blur-xs transition-colors hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        className="pointer-events-auto animate-scroll-hint rounded-full bg-black/40 p-2 text-white backdrop-blur-xs transition-colors hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
       >
         <ChevronDown size={20} />
       </button>

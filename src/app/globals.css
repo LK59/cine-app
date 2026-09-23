@@ -16,6 +16,22 @@
      fond sans changer ceux-là aurait laissé deux noirs différents se toucher. */
   --color-ink: #0a0a0c;
 
+  /* Trois niveaux de texte, et pas un de plus : `text-white`, puis ces deux-là.
+     Il y en avait quinze — neuf opacités de blanc (35 à 90 %) et six gris « slate » pleins, deux
+     systèmes côte à côte — et deux textes du même rang ne portaient presque jamais le même gris.
+     Le plus discret s'arrête à 50 % : en dessous, sur ce noir, un petit texte passe sous le
+     contraste de lecture courant (4,5:1). `design-tokens.test.ts` refuse le retour des autres. */
+  --color-muted: rgb(255 255 255 / 0.7);
+  --color-subtle: rgb(255 255 255 / 0.5);
+
+  /* Une couleur par état, nommée une fois : le rouge d'erreur existait en trois teintes, le vert
+     et l'ambre en deux chacun. Les fonds et bordures teintés en dérivent (`bg-danger/15`). Ce qui
+     n'est pas un état garde sa couleur : le rouge du badge « Nouveau », les couleurs des sites
+     liés depuis une fiche personne. L'information, elle, parle déjà avec l'accent. */
+  --color-danger: #f87171;
+  --color-warning: #fcd34d;
+  --color-success: #34d399;
+
   /* Une ombre, pas une lueur.
      Une lueur colorée sous chaque carte et chaque bouton primaire est la
      signature du tableau de bord générique : elle teinte le noir autour d'elle

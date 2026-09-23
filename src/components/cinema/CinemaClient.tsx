@@ -206,11 +206,11 @@ function ContinueCard({
           <ProgressFill percent={progress} />
         </div>
       </div>
-      <p className="mt-1.5 truncate text-xs font-medium text-white/90">{title}</p>
+      <p className="mt-1.5 truncate text-xs font-medium text-white">{title}</p>
       {/* text-xs, not an arbitrary text-[11px] — arbitrary-value Tailwind classes don't make it
           into this project's production CSS bundle (see CinemaClient's z-index note for the same
           pitfall hit before). */}
-      <span className="mt-1 block w-fit max-w-full truncate rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/70">
+      <span className="mt-1 block w-fit max-w-full truncate rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-muted">
         {formatContinueLabel(t, resumeTicks, runtimeTicks, seasonNumber, episodeNumber)}
       </span>
     </button>
@@ -813,7 +813,7 @@ export function CinemaClient() {
   if (moviesError) {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <p className="max-w-sm text-sm text-red-400">{errorMessage(moviesError, t, t("common.unknown"))}</p>
+        <p className="max-w-sm text-sm text-danger">{errorMessage(moviesError, t, t("common.unknown"))}</p>
         {exitButton}
       </div>,
       document.body
@@ -823,7 +823,7 @@ export function CinemaClient() {
   if (movies && movies.spotlight.length === 0) {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <p className="max-w-sm text-sm text-slate-400">{t("cinema.empty")}</p>
+        <p className="max-w-sm text-sm text-muted">{t("cinema.empty")}</p>
         {exitButton}
       </div>,
       document.body
@@ -849,7 +849,7 @@ export function CinemaClient() {
    */
   const continueSkeleton = continuePending && (
     <div className="mb-6 snap-start">
-      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+      <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.continueWatching")}</h2>
       <div className="flex gap-3 overflow-hidden px-8 pb-4 pt-3 sm:px-12">
         <CinemaSkeletonCards cardClassName={CONTINUE_CARD_WIDTH} shape="still" count={6} />
       </div>
@@ -857,7 +857,7 @@ export function CinemaClient() {
   );
   const myListSkeleton = myListPending && (
     <div className="mb-6 snap-start">
-      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.myList")}</h2>
+      <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.myList")}</h2>
       <div className="flex gap-3 overflow-hidden px-8 pb-4 pt-3 sm:px-12">
         <CinemaSkeletonCards cardClassName={CARD_WIDTH} shape="poster" count={10} />
       </div>
@@ -866,7 +866,7 @@ export function CinemaClient() {
 
   const continueRow = hasContinue && (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
-      <h2 className="mb-2 px-8 text-sm font-medium text-white/70 sm:px-12">{t("cinema.continueWatching")}</h2>
+      <h2 className="mb-2 px-8 text-sm font-medium text-muted sm:px-12">{t("cinema.continueWatching")}</h2>
       <div ref={continueTrack} className="scrollbar-thin flex scroll-smooth gap-3 overflow-x-auto overflow-y-hidden px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
         {resumeMovies.map((item, i) => (
           <ContinueCard
@@ -1216,10 +1216,10 @@ export function CinemaClient() {
                 </div>
               )}
               {seriesError && (
-                <p className="px-8 text-sm text-red-400 sm:px-12">{seriesError.message || t("common.unknown")}</p>
+                <p className="px-8 text-sm text-danger sm:px-12">{seriesError.message || t("common.unknown")}</p>
               )}
               {series && series.spotlight.length === 0 && (
-                <p className="px-8 text-sm text-slate-400 sm:px-12">{t("cinema.empty")}</p>
+                <p className="px-8 text-sm text-muted sm:px-12">{t("cinema.empty")}</p>
               )}
               {/* Same three rails as the movies tab — see its own note above. */}
               {series && (

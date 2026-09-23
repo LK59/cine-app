@@ -264,7 +264,7 @@ export function PlayerOnboarding({
       />
 
       <div
-        className="relative flex w-full max-w-md flex-col px-6 sm:my-10 sm:rounded-3xl sm:border sm:border-white/10 sm:bg-white/[0.03] sm:px-8 sm:py-8 sm:shadow-2xl"
+        className="relative flex w-full max-w-md flex-col px-6 sm:my-10 sm:rounded-2xl sm:border sm:border-white/10 sm:bg-white/[0.03] sm:px-8 sm:py-8 sm:shadow-2xl"
         style={{
           // Un vrai écart sous la zone sûre, et non la zone sûre seule : dans l'application installée,
           // iOS voile et floute le haut de l'écran sous la barre d'état, et la progression comme
@@ -284,7 +284,7 @@ export function PlayerOnboarding({
             ))}
           </div>
           {step !== "done" && (
-            <button type="button" onClick={onSkip} className="text-sm font-medium text-white/50 transition-colors hover:text-white">
+            <button type="button" onClick={onSkip} className="text-sm font-medium text-subtle transition-colors hover:text-white">
               {t("player.onboarding.skip")}
             </button>
           )}
@@ -299,8 +299,8 @@ export function PlayerOnboarding({
               <h1 className="font-display text-3xl font-semibold leading-tight text-white">
                 {t("player.onboarding.welcomeTitle", { name })}
               </h1>
-              <p className="mt-3 text-base leading-relaxed text-white/60">{t("player.onboarding.welcomeText")}</p>
-              <p className="mb-2.5 mt-8 text-xs font-medium uppercase tracking-wider text-white/40">
+              <p className="mt-3 text-base leading-relaxed text-muted">{t("player.onboarding.welcomeText")}</p>
+              <p className="mb-2.5 mt-8 text-xs font-medium uppercase tracking-wider text-subtle">
                 {t("player.onboarding.languageLabel")}
               </p>
               <div className="grid grid-cols-2 gap-2.5">
@@ -322,7 +322,7 @@ export function PlayerOnboarding({
           {step === "playback" && (
             <>
               <h1 className="font-display text-3xl font-semibold leading-tight text-white">{t("player.onboarding.playbackTitle")}</h1>
-              <p className="mt-3 text-base leading-relaxed text-white/60">{t("player.onboarding.playbackText")}</p>
+              <p className="mt-3 text-base leading-relaxed text-muted">{t("player.onboarding.playbackText")}</p>
               <div className="mt-8 flex flex-col gap-4">
                 <LanguageSelect
                   label={t("player.account.audioLanguage")}
@@ -342,14 +342,14 @@ export function PlayerOnboarding({
                   onChange={(mode) => setEdits((e) => ({ ...e, subtitleMode: mode }))}
                 />
               </div>
-              <p className="mt-4 text-xs leading-relaxed text-white/40">{t("player.onboarding.playbackNote")}</p>
+              <p className="mt-4 text-xs leading-relaxed text-subtle">{t("player.onboarding.playbackNote")}</p>
             </>
           )}
 
           {step === "notifications" && (
             <>
               <h1 className="font-display text-3xl font-semibold leading-tight text-white">{t("player.onboarding.notifTitle")}</h1>
-              <p className="mt-3 text-base leading-relaxed text-white/60">{t("player.onboarding.notifText")}</p>
+              <p className="mt-3 text-base leading-relaxed text-muted">{t("player.onboarding.notifText")}</p>
               <div className="mt-8">
                 {pushSupported ? (
                   <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5">
@@ -358,7 +358,7 @@ export function PlayerOnboarding({
                 ) : (
                   // Sur iPhone, une page ouverte dans Safari ne peut pas s'abonner : il faut
                   // l'application installée. On le dit, et on laisse passer.
-                  <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm leading-relaxed text-white/70">
+                  <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm leading-relaxed text-muted">
                     {t("player.onboarding.notifInstall")}
                   </p>
                 )}
@@ -369,11 +369,11 @@ export function PlayerOnboarding({
 
           {step === "done" && (
             <div className="flex flex-col items-center text-center">
-              <span className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-accent-500/20 text-accent-200 ring-1 ring-accent-400/40">
+              <span className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-accent-500/20 text-accent-400 ring-1 ring-accent-400/40">
                 <Check size={30} />
               </span>
               <h1 className="font-display text-3xl font-semibold leading-tight text-white">{t("player.onboarding.doneTitle")}</h1>
-              <p className="mt-3 max-w-xs text-base leading-relaxed text-white/60">{t("player.onboarding.doneText")}</p>
+              <p className="mt-3 max-w-xs text-base leading-relaxed text-muted">{t("player.onboarding.doneText")}</p>
             </div>
           )}
         </div>
@@ -383,7 +383,7 @@ export function PlayerOnboarding({
             type="button"
             onClick={() => void next()}
             disabled={busy || (step === "playback" && !playback)}
-            className="flex w-full items-center justify-center rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-ink transition-transform active:scale-[0.98] disabled:opacity-60"
+            className="flex w-full items-center justify-center rounded-lg bg-white px-4 py-3.5 text-base font-semibold text-ink transition-transform active:scale-[0.98] disabled:opacity-60"
           >
             {step === "done" ? t("player.onboarding.finish") : t("player.onboarding.next")}
           </button>
@@ -391,7 +391,7 @@ export function PlayerOnboarding({
             <button
               type="button"
               onClick={() => setIndex((i) => Math.max(0, i - 1))}
-              className="py-2 text-sm font-medium text-white/50 transition-colors hover:text-white"
+              className="py-2 text-sm font-medium text-subtle transition-colors hover:text-white"
             >
               {t("player.onboarding.back")}
             </button>

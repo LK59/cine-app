@@ -43,7 +43,7 @@ export function CinemaMissingEpisodes({
   return (
     <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-white/80">
+        <p className="text-sm font-medium text-muted">
           {t("cinema.missing.count", { n: season.episodes.length })}
         </p>
         {season.requestable && (
@@ -66,7 +66,7 @@ export function CinemaMissingEpisodes({
           const airs = ep.airDate ? dateFormat.format(new Date(ep.airDate)) : null;
           return (
             <li key={ep.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
-              <span className="w-14 shrink-0 font-mono text-xs text-white/40">{label}</span>
+              <span className="w-14 shrink-0 font-mono text-xs text-subtle">{label}</span>
               {/* La date de diffusion se lit partout, y compris sur téléphone où elle était
                   masquée faute de largeur. Sur une saison en cours, c'est la seule information
                   qui répond à la question qu'on se pose vraiment : quand ?
@@ -75,10 +75,10 @@ export function CinemaMissingEpisodes({
                   et elle est mise en avant sur ce qui n'est pas encore sorti, où « Pas encore
                   diffusé » ne disait pas la moitié de ce qu'on voulait savoir. */}
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-                <span className="min-w-0 truncate text-sm text-white/70">{ep.title}</span>
+                <span className="min-w-0 truncate text-sm text-muted">{ep.title}</span>
                 {airs && (
                   <span
-                    className={`shrink-0 text-xs ${ep.released ? "text-white/35" : "text-accent-300/80"} sm:ml-auto`}
+                    className={`shrink-0 text-xs ${ep.released ? "text-subtle" : "text-accent-400/80"} sm:ml-auto`}
                   >
                     {ep.released ? airs : t("cinema.missing.airsOn", { date: airs })}
                   </span>

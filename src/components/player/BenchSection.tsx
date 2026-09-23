@@ -46,19 +46,19 @@ export function BenchSection() {
   return (
     <section className="border-t border-white/10 py-7 [@media(max-height:500px)]:py-4">
       <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-white [@media(max-height:500px)]:mb-2.5">
-        <FlaskConical size={16} className="text-slate-500" />
+        <FlaskConical size={16} className="text-subtle" />
         {t("bench.title")}
       </h2>
-      <p className="mb-3 text-xs text-slate-500">{t("bench.hint")}</p>
+      <p className="mb-3 text-xs text-subtle">{t("bench.hint")}</p>
       {!open ? (
         <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost w-full justify-center sm:w-auto">
           <FlaskConical size={16} />
           {t("bench.prepare")}
         </button>
       ) : !plan ? (
-        <p className="text-sm text-slate-400">{t("bench.loading")}</p>
+        <p className="text-sm text-muted">{t("bench.loading")}</p>
       ) : plan.candidates.length === 0 ? (
-        <p className="text-sm text-slate-400">{t("bench.empty")}</p>
+        <p className="text-sm text-muted">{t("bench.empty")}</p>
       ) : (
         <div className="space-y-4">
           <ul className="max-h-80 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-2">
@@ -69,7 +69,7 @@ export function BenchSection() {
                   <span className="min-w-0 flex-1 truncate text-sm text-white">{c.title}</span>
                   <span className="flex shrink-0 flex-wrap justify-end gap-1">
                     {c.tags.map((tag) => (
-                      <span key={tag} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-300">
+                      <span key={tag} className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-muted">
                         {tag}
                       </span>
                     ))}
@@ -85,17 +85,17 @@ export function BenchSection() {
                 key={d}
                 type="button"
                 onClick={() => setDepth(d)}
-                className={`rounded-full px-3 py-1.5 text-xs ${depth === d ? "bg-accent-500 text-white" : "bg-white/10 text-slate-300"}`}
+                className={`rounded-full px-3 py-1.5 text-xs ${depth === d ? "bg-accent-500 text-white" : "bg-white/10 text-muted"}`}
               >
                 {t(d === "full" ? "bench.depthFull" : d === "quick" ? "bench.depthQuick" : "bench.depthExtreme")}
               </button>
             ))}
-            <label className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-slate-300">
+            <label className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-muted">
               <input type="checkbox" checked={interactive} onChange={(e) => setInteractive(e.target.checked)} />
               {t("bench.interactive")}
             </label>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-subtle">
             {t("bench.estimate", { n: selection.length, min: minutes })} {interactive ? t("bench.interactiveHint") : ""}
           </p>
 
@@ -105,11 +105,11 @@ export function BenchSection() {
           </button>
 
           <div>
-            <h3 className="mb-2 text-xs font-semibold text-slate-400">{t("bench.lastRuns")}</h3>
+            <h3 className="mb-2 text-xs font-semibold text-muted">{t("bench.lastRuns")}</h3>
             {!history?.runs.length ? (
-              <p className="text-xs text-slate-500">{t("bench.noRuns")}</p>
+              <p className="text-xs text-subtle">{t("bench.noRuns")}</p>
             ) : (
-              <ul className="space-y-1 text-xs text-slate-400">
+              <ul className="space-y-1 text-xs text-muted">
                 {history.runs.map((run) => {
                   const fails = run.items.filter((i) => i.verdict === "fail").length;
                   const warns = run.items.filter((i) => i.verdict === "warn").length;

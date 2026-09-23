@@ -23,7 +23,7 @@ import { useTweenedNumber } from "@/lib/useTweenedNumber";
  */
 export function CinemaTagline({ text, className = "" }: { text: string | null | undefined; className?: string }) {
   if (!text?.trim()) return null;
-  return <p className={`text-sm italic leading-snug text-white/55 ${className}`}>{text.trim()}</p>;
+  return <p className={`text-sm italic leading-snug text-subtle ${className}`}>{text.trim()}</p>;
 }
 
 /**
@@ -55,7 +55,7 @@ export function CinemaDownloading({ progress, className = "" }: { progress: numb
   // Défile d'une relecture à la suivante au lieu d'y sauter — voir `useTweenedNumber`.
   const pct = Math.round(useTweenedNumber(downloadPercent(progress)));
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums text-accent-300 ${className}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums text-accent-400 ${className}`}>
       <ArrowDown size={12} className="shrink-0" />
       {t("cinema.downloading", { pct })}
     </span>
@@ -81,7 +81,7 @@ export function CinemaRatingsLine({ imdbId }: { imdbId: string | null | undefine
   });
   const parts = ratingParts(data?.ratings ?? null, locale, (pct) => t("cinema.ratingsAudience", { pct }));
   if (parts.length === 0) return null;
-  return <p className="mt-4 border-t border-white/10 pt-3 text-sm text-white/60">{parts.join(" · ")}</p>;
+  return <p className="mt-4 border-t border-white/10 pt-3 text-sm text-muted">{parts.join(" · ")}</p>;
 }
 
 /** Les morceaux de la ligne, dans cet ordre — exportée pour être testée sans réseau. */

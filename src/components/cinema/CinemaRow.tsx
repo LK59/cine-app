@@ -59,12 +59,12 @@ export const CinemaRow = memo(function CinemaRow({
       {/* « Voir tout » vit à côté du titre : sur une rangée, tout ce qui est au bout du
           défilement demande de faire défiler pour être découvert. */}
       <div className="mb-2 flex items-baseline justify-between gap-4 px-8 sm:px-12">
-        <h2 className="min-w-0 truncate text-sm font-medium text-white/70">{label}</h2>
+        <h2 className="min-w-0 truncate text-sm font-medium text-muted">{label}</h2>
         {onSeeAll && (
           <button
             type="button"
             onClick={onSeeAll}
-            className="shrink-0 text-xs font-medium text-white/40 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            className="shrink-0 text-xs font-medium text-subtle transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
           >
             {t("player.browse.seeAll")}
           </button>

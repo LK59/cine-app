@@ -26,7 +26,7 @@ export function QualityBadges({ quality, className = "" }: { quality: VideoQuali
       {badges.map((badge) => (
         <span
           key={badge}
-          className={`rounded border border-white/25 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white/80 ${className}`}
+          className={`rounded border border-white/25 px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide text-muted ${className}`}
         >
           {badge}
         </span>

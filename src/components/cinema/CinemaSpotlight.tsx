@@ -56,7 +56,7 @@ export function CinemaSpotlight({
   return (
     <div data-tv-rowroot className="mb-6 animate-fade-in-up snap-start">
       <div className="mb-2 flex items-center gap-4 px-8 sm:px-12">
-        <h2 className="text-sm font-medium text-white/70">{label}</h2>
+        <h2 className="text-sm font-medium text-muted">{label}</h2>
         {/* Des barres, pas des points : elles disent aussi la place occupée dans la série, et
             elles offrent une cible qu'un doigt ou un curseur atteint sans viser. */}
         <div className="flex items-center gap-1.5">
