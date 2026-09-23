@@ -33,6 +33,7 @@ import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { ProgressFill } from "@/components/cinema/ProgressFill";
 
 // Roughly a third of a phone's width, so a row always shows "two and a bit" posters — the visual
 // cue that it scrolls, without a card so small the artwork stops being readable.
@@ -600,7 +601,7 @@ export function CinemaMobileClient() {
                     </span>
                   </span>
                   <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
-                    <div className="h-full bg-accent-500" style={{ width: `${entry.progress}%` }} />
+                    <ProgressFill percent={entry.progress} />
                   </div>
                 </div>
                 <p className="mt-1.5 truncate text-xs font-medium text-white/90">{entry.name}</p>

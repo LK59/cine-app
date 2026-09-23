@@ -666,6 +666,18 @@
   animation: toggle-settle 200ms ease-out both;
 }
 
+/* Le remplissage d'une barre de progression — voir ProgressFill. À l'arrivée, il se remplit depuis
+   la gauche jusqu'à sa valeur (une échelle : rien ne se recalcule autour) ; quand la valeur change
+   après une lecture, sa largeur glisse vers la nouvelle au lieu de sauter. */
+@keyframes progress-fill {
+  from { transform: scaleX(0); }
+}
+.progress-fill {
+  transform-origin: left;
+  animation: progress-fill 700ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+  transition: width 400ms ease-out;
+}
+
 /* Le mouvement, quand on n'en veut pas : tout apparaît et disparaît sans transition.
  *
  * Une seule règle, et c'est elle qui décide. Deux blocs plus loin croyaient remplacer les entrées

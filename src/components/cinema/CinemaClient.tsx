@@ -66,6 +66,7 @@ import type { CinemaSeriesPayload, CinemaSeries } from "@/app/api/cinema/series/
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/discover/route";
 import { prefetchImages, warmUpUrls } from "@/lib/cinemaWarmup";
+import { ProgressFill } from "@/components/cinema/ProgressFill";
 
 // The lightweight resume feed — /api/dashboard also carries these, but only alongside a full
 // sweep of every service, the torrent client and disk stats, which is a lot of upstream work to
@@ -187,7 +188,7 @@ function ContinueCard({
           </span>
         </span>
         <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
-          <div className="h-full bg-accent-500" style={{ width: `${progress}%` }} />
+          <ProgressFill percent={progress} />
         </div>
       </div>
       <p className="mt-1.5 truncate text-xs font-medium text-white/90">{title}</p>

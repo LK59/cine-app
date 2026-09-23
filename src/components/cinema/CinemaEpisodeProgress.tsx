@@ -1,5 +1,7 @@
 "use client";
 
+import { ProgressFill } from "@/components/cinema/ProgressFill";
+
 // Where you are in an episode you started, shown on the episode itself.
 //
 // Every other surface in Cinema Mode says where you stopped — the Continue rail, the sheet's own
@@ -25,7 +27,7 @@ export function CinemaEpisodeProgress({
   // episode title, and a screen reader shouldn't hear it twice.
   return (
     <div className="absolute inset-x-0 bottom-0 h-1 bg-black/60">
-      <div className="h-full bg-accent-500" style={{ width: `${percent}%` }} />
+      <ProgressFill percent={percent} />
     </div>
   );
 }
