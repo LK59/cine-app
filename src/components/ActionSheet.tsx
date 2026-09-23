@@ -44,6 +44,15 @@ export function ActionSheet({ open, onClose, title, subtitle, poster, actions }:
   // must be effect-driven.
   useEffect(() => {
     if (open) {
+      // Ce qu'une fermeture au doigt a écrit sur l'élément, effacé avant de rouvrir : la feuille
+      // reste montée 300 ms pour sa sortie, et rouverte dans ce délai elle gardait
+      // `translateY(100%)` en ligne, plus fort que `translate-y-0` — le fond s'affichait, pas
+      // elle (23/09/2026). Même geste que la feuille « Plus » à son ouverture.
+      const sheet = sheetRef.current;
+      if (sheet) {
+        sheet.style.transform = "";
+        sheet.style.transition = "";
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted(true);
       // A single rAF often fires before the browser has painted the initial

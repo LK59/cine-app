@@ -93,11 +93,15 @@ export function MobileNav() {
     return () => window.removeEventListener("popstate", handler);
   }, [open]);
 
-  // Reset inline styles when sheet reopens (cleanup from previous drag-close)
+  // Reset inline styles when sheet reopens (cleanup from previous drag-close) — the overlay too:
+  // a drag-close leaves `opacity: 0` written on it, and it now stays mounted.
   useEffect(() => {
-    if (open && sheetRef.current) {
-      sheetRef.current.style.transform = "";
-      sheetRef.current.style.transition = "";
+    if (!open) return;
+    for (const el of [sheetRef.current, overlayRef.current]) {
+      if (!el) continue;
+      el.style.transform = "";
+      el.style.transition = "";
+      el.style.opacity = "";
     }
   }, [open]);
 
@@ -247,15 +251,19 @@ export function MobileNav() {
         </div>
       </nav>
 
-      {/* Overlay */}
-      {open && (
-        <div
-          ref={overlayRef}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs md:hidden"
-          onClick={() => setOpen(false)}
-          style={{ touchAction: "none" }}
-        />
-      )}
+      {/* Overlay — toujours monté, pour fondre avec la feuille au lieu d'apparaître et de
+          disparaître d'un coup pendant qu'elle glisse (23/09/2026). Caché (`invisible`) une fois
+          son fondu fini : un voile transparent garderait sinon son flou sur tout l'écran, et ses
+          clics. */}
+      <div
+        ref={overlayRef}
+        aria-hidden
+        className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-xs transition-[opacity,visibility] duration-300 md:hidden ${
+          open ? "visible opacity-100" : "pointer-events-none invisible opacity-0"
+        }`}
+        onClick={() => setOpen(false)}
+        style={{ touchAction: "none" }}
+      />
 
       {/* Bottom sheet */}
       <div

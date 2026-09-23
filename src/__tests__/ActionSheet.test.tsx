@@ -90,4 +90,27 @@ describe("ActionSheet", () => {
     });
     expect(screen.queryByText("Do thing")).not.toBeInTheDocument();
   });
+
+  it("rouverte juste après une fermeture au doigt, elle remonte bien", () => {
+    // 23/09/2026 : la fermeture au doigt laissait `translateY(100%)` écrit sur l'élément, qui
+    // reste monté 300 ms pour sa sortie. Rouverte dans ce délai, la feuille gardait ce style en
+    // ligne, plus fort que la classe qui devait la faire remonter : le fond s'affichait, pas elle.
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const { rerender } = render(<ActionSheet open onClose={onClose} actions={actions()} />);
+    const sheet = document.querySelector<HTMLElement>(".glass-panel")!;
+    const handle = sheet.firstElementChild as HTMLElement;
+    const pointer = (type: string, clientY: number) =>
+      act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
+    pointer("pointerdown", 100);
+    pointer("pointermove", 300);
+    pointer("pointerup", 300);
+    expect(sheet.style.transform).toBe("translateY(100%)");
+    act(() => void vi.advanceTimersByTime(220));
+    expect(onClose).toHaveBeenCalled();
+    rerender(<ActionSheet open={false} onClose={onClose} actions={actions()} />);
+    act(() => void vi.advanceTimersByTime(100));
+    rerender(<ActionSheet open onClose={onClose} actions={actions()} />);
+    expect(document.querySelector<HTMLElement>(".glass-panel")!.style.transform).toBe("");
+  });
 });

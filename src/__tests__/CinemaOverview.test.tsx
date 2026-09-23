@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
@@ -97,7 +97,8 @@ describe("la fenêtre du synopsis", () => {
     const onClose = open();
 
     await userEvent.keyboard("{Escape}");
-    expect(onClose).toHaveBeenCalled();
+    // Après sa sortie (23/09/2026) — et c'est bien elle seule qui se ferme.
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(behind).not.toHaveBeenCalled();
     window.removeEventListener("keydown", behind);
   });
@@ -126,7 +127,7 @@ describe("la fenêtre du synopsis", () => {
    * dépendait reprenait le focus à chaque fois : on parcourait la distribution au clavier, et le
    * focus revenait sur la croix — Entrée refermait alors la fenêtre au lieu d'ouvrir l'acteur.
    */
-  it("ne reprend pas le focus quand la fiche se redessine", () => {
+  it("ne reprend pas le focus quand la fiche se redessine", async () => {
     const { rerender } = render(
       <CinemaDetailModal title="Distribution" closeLabel="Fermer" onClose={() => {}}>
         <button type="button">Cillian Murphy</button>
@@ -147,7 +148,7 @@ describe("la fenêtre du synopsis", () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(onClose).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 
   it("se ferme aussi d'un clic à côté, mais pas d'un clic dedans", async () => {
@@ -158,6 +159,22 @@ describe("la fenêtre du synopsis", () => {
     expect(onClose).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("dialog").parentElement!);
-    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  /**
+   * Elle entrait en fondu mais se fermait d'un coup, quand la bande-annonce voisine sortait
+   * (23/09/2026). La sortie se joue d'abord ; la fermeture suit, une seule fois, et rien ne la
+   * traverse entre-temps.
+   */
+  it("joue sa sortie avant de se fermer, et n'accepte plus de clic pendant", async () => {
+    const onClose = open();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Fermer" }));
+    const dialog = screen.getByRole("dialog");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialog.className).toContain("animate-fade-out-scale");
+    expect(dialog.parentElement!.className).toContain("pointer-events-none");
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 });

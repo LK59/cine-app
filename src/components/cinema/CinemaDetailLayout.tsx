@@ -1,5 +1,6 @@
 "use client";
 
+import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -163,6 +164,9 @@ export function CinemaOverview({
  * écran : ce que l'on venait lire chassait ce que l'on venait faire. Une fenêtre centrée ne
  * déplace rien et se referme d'un geste — Échap, un clic à côté, ou son propre bouton.
  */
+/** `animate-fade-out` (200 ms) et `animate-fade-out-scale` (180 ms), globals.css. */
+const DETAIL_MODAL_EXIT_MS = 200;
+
 export function CinemaDetailModal({
   title,
   children,
@@ -186,19 +190,17 @@ export function CinemaDetailModal({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   /**
-   * Le dernier `onClose` reçu, lu au moment de la touche.
+   * La fermeture, jouée avant d'être faite.
    *
-   * Les deux fiches le passent en fonction fléchée, donc neuve à chaque rendu — et l'effet qui en
-   * dépendait se rejouait avec lui, focus compris. Or l'écran du dessous se redessine tout seul
-   * (la bannière tournait toutes les huit secondes) : le focus revenait sur la croix pendant qu'on
-   * parcourait la distribution au clavier, et Entrée refermait la fenêtre au lieu d'ouvrir l'acteur.
+   * La fenêtre entrait en fondu mais se fermait d'un coup — sa voisine, la bande-annonce, sortait,
+   * elle (relevé le 23/09/2026). `useDelayedClose` garde aussi le dernier `onClose` reçu, et
+   * `requestClose` est stable : les deux fiches passent une fonction fléchée, neuve à chaque
+   * rendu, et un effet qui en dépendait se rejouait avec elle, focus compris — l'écran du dessous
+   * se redessine tout seul, et Entrée refermait la fenêtre au lieu d'ouvrir l'acteur.
    */
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+  const { closing, requestClose } = useDelayedClose(onClose, DETAIL_MODAL_EXIT_MS);
 
-  // Le focus une fois, à l'ouverture — et plus jamais ensuite. Voir `onCloseRef`.
+  // Le focus une fois, à l'ouverture — et plus jamais ensuite. Voir `useDelayedClose` ci-dessus.
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
@@ -226,31 +228,37 @@ export function CinemaDetailModal({
       if (e.key !== "Escape" && e.key !== "Backspace") return;
       e.preventDefault();
       e.stopPropagation();
-      onCloseRef.current();
+      requestClose();
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  }, [requestClose]);
 
   return createPortal(
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/70 p-6 animate-fade-in"
+      // Sur le départ, elle n'a plus d'avis : aucun clic ne la traverse ni ne la rouvre (règle 2
+      // du cycle de vie des fiches, CLAUDE.md).
+      className={`fixed inset-0 flex items-center justify-center bg-black/70 p-6 ${
+        closing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
+      }`}
       style={{ zIndex: 49, backdropFilter: "blur(6px)" }}
-      onClick={onClose}
+      onClick={requestClose}
     >
       <div
         role="dialog"
         aria-modal
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className="glass-panel animate-fade-in-scale w-full max-w-xl rounded-2xl p-6 shadow-2xl"
+        className={`glass-panel w-full max-w-xl rounded-2xl p-6 shadow-2xl ${
+          closing ? "animate-fade-out-scale" : "animate-fade-in-scale"
+        }`}
       >
         <div className="mb-3 flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold text-white font-display">{title}</h2>
           <button
             ref={closeRef}
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label={closeLabel}
             className="btn btn-ghost btn-icon shrink-0"
           >
