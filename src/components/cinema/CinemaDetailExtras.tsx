@@ -6,6 +6,7 @@ import { fetcher } from "@/lib/swr";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import type { MdbRatings } from "@/app/api/mdblist/[imdbId]/route";
 import { formatMinutes } from "@/lib/format";
+import { useTweenedNumber } from "@/lib/useTweenedNumber";
 
 /**
  * Trois détails légers, repris de la gestion le 21/09/2026 — et écrits une fois pour toutes les
@@ -51,10 +52,12 @@ export function downloadPercent(progress: number): number {
 
 export function CinemaDownloading({ progress, className = "" }: { progress: number; className?: string }) {
   const t = useT();
+  // Défile d'une relecture à la suivante au lieu d'y sauter — voir `useTweenedNumber`.
+  const pct = Math.round(useTweenedNumber(downloadPercent(progress)));
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums text-accent-300 ${className}`}>
       <ArrowDown size={12} className="shrink-0" />
-      {t("cinema.downloading", { pct: downloadPercent(progress) })}
+      {t("cinema.downloading", { pct })}
     </span>
   );
 }

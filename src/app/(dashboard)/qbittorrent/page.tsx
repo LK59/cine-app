@@ -300,8 +300,10 @@ export default function QbittorrentPage() {
                   <span className="capitalize">{torrent.state}</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800">
+                  {/* Glisse d'un rafraîchissement au suivant (toutes les cinq secondes) au lieu de
+                      sauter — une poignée de barres, la largeur suffit. */}
                   <div
-                    className="h-1.5 rounded-full bg-accent-500"
+                    className="h-1.5 rounded-full bg-accent-500 transition-[width] duration-700 ease-out"
                     style={{ width: `${Math.round(torrent.progress * 100)}%` }}
                   />
                 </div>

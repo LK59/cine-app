@@ -30,6 +30,7 @@ import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 
 import { fmtSize, formatResumeTicks } from "@/lib/format";
 import { RelativeTime } from "@/components/RelativeTime";
+import { AnimatedNumber } from "@/lib/useTweenedNumber";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -539,7 +540,7 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
                 <div className="hidden min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 sm:flex">
                   {entries.map(([label, value]) => (
                     <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
-                      <span className="text-[13px] font-semibold tabular-nums text-white">{value}</span>
+                      <span className="text-[13px] font-semibold tabular-nums text-white">{typeof value === "number" ? <AnimatedNumber value={value} /> : value}</span>
                       <span className="text-[11px] text-slate-500">{label}</span>
                     </span>
                   ))}
@@ -571,7 +572,7 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
               </span>
               {Object.entries(service.stats ?? {}).map(([label, value]) => (
                 <span key={label} className="flex items-baseline gap-1.5 whitespace-nowrap">
-                  <span className="text-[13px] font-semibold tabular-nums text-white">{value}</span>
+                  <span className="text-[13px] font-semibold tabular-nums text-white">{typeof value === "number" ? <AnimatedNumber value={value} /> : value}</span>
                   <span className="text-[11px] text-slate-500">{label}</span>
                 </span>
               ))}

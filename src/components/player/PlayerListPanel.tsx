@@ -16,6 +16,7 @@ import { PlayerResultCard } from "./PlayerResultCard";
 import { PlayerRequestCard } from "./PlayerRequestCard";
 import { useFlipGrid } from "@/lib/useFlipGrid";
 import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/route";
+import { AnimatedNumber } from "@/lib/useTweenedNumber";
 
 type Segment = "toWatch" | "requests" | "watched";
 
@@ -188,9 +189,9 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
       <div className="mx-auto w-full max-w-6xl">
         {/* Trois chiffres avant tout le reste : on sait ce qu'on a avant de savoir où le trouver. */}
         <div className="mb-4 grid grid-cols-3 gap-2.5">
-          <StatCard value={stats.total} label={t("player.lists.stats.inList")} />
-          <StatCard value={stats.available} label={t("player.lists.stats.available")} highlight />
-          <StatCard value={stats.watched} label={t("player.lists.stats.watched")} />
+          <StatCard value={stats.total} ready={!!data} label={t("player.lists.stats.inList")} />
+          <StatCard value={stats.available} ready={!!data} label={t("player.lists.stats.available")} highlight />
+          <StatCard value={stats.watched} ready={!!data} label={t("player.lists.stats.watched")} />
         </div>
 
         {/* Chercher, trier, ajouter — sur une ligne. Cette recherche-ci ne fouille que la liste ;
@@ -260,7 +261,12 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
                 className={`shrink-0 whitespace-nowrap ${segment === key ? "chip chip-on" : "chip"}`}
               >
                 {t(`player.lists.${key}`)}
-                <span className="ml-1.5 tabular-nums opacity-60">{counts[key]}</span>
+                {/* Défile quand on ajoute ou retire un titre ; change d'un coup quand on filtre — un
+                    nombre qui défile à chaque lettre tapée distrairait — et à l'arrivée des
+                    données, où le zéro d'avant n'était pas un compte. D'où la clé. */}
+                <span className="ml-1.5 tabular-nums opacity-60">
+                  <AnimatedNumber key={`${query}:${data ? 1 : 0}`} value={counts[key]} />
+                </span>
                 {/* Un point, plus un second nombre. « Demandes 47 · 1 » posait deux chiffres côte à
                     côte sans dire lequel était quoi ; le point ne dit qu'une chose — il y a du
                     nouveau — et laisse le compte être le seul nombre de l'onglet. Combien de
@@ -359,7 +365,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
 
 
 /** Un chiffre et ce qu'il compte. Le seul actionnable — ce qu'on peut lancer — porte la couleur. */
-function StatCard({ value, label, highlight = false }: { value: number; label: string; highlight?: boolean }) {
+function StatCard({ value, ready, label, highlight = false }: { value: number; ready: boolean; label: string; highlight?: boolean }) {
   return (
     <div
       className={`rounded-xl border px-3 py-3 ${
@@ -367,7 +373,9 @@ function StatCard({ value, label, highlight = false }: { value: number; label: s
       }`}
     >
       <p className={`text-2xl font-semibold tabular-nums ${highlight && value > 0 ? "text-emerald-400" : "text-white"}`}>
-        {value}
+        {/* Repart à l'arrivée des données : sinon le zéro d'avant défilait jusqu'au vrai compte,
+            une liste qui semblait vide un instant. Ne défile qu'ensuite, sur un ajout ou un retrait. */}
+        <AnimatedNumber key={ready ? "ready" : "loading"} value={value} />
       </p>
       <p className="mt-0.5 truncate text-xs text-slate-500">{label}</p>
     </div>
