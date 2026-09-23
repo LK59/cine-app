@@ -75,6 +75,11 @@ trace, and the `rebuild` lines that look like it are network recoveries. It carr
 time, both tracks described, whether the sound was copied or re-encoded, and `applied` — a track
 the browser refuses leaves the previous one playing, and without that field a refusal reads as
 slowness.
+The server player writes there too since 2026-09-23 (`player: "serveur"`, `src/lib/serverPlayerLog.ts`):
+its `start`, a refused negotiation or a missing first picture as `error`, and **`cast`** once a
+television has actually taken the route. It used to write nothing, so a handover to it read as the
+end of the session, and a television stuck loading was indistinguishable from one playing — an
+AirPlay stall was diagnosed from the reverse proxy's access log instead.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Since

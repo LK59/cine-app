@@ -25,6 +25,7 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
+import { serverStartFields, serverFailureFields, castEstablishedFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
 import { resolveResumeAt } from "@/lib/resumePosition";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
@@ -389,6 +390,13 @@ function ActivePlayer({
   // the caller passed stands until it arrives, so the title never blinks in empty.
   const [serverTitle, setServerTitle] = useState<string | null>(null);
   const title = serverTitle ?? openedAs;
+  // Ce que chaque ligne du journal de ce lecteur porte — voir `serverPlayerLog`. Tenu dans une
+  // référence : `startPlayback` a des dépendances volontairement figées, et y lire `title` ou
+  // `castSession` directement nommerait l'épisode d'avant.
+  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession });
+  useEffect(() => {
+    logContext.current = { itemId, title, cast: castSession };
+  }, [itemId, title, castSession]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -545,6 +553,7 @@ function ActivePlayer({
       if (res.status === 401) {
         const body = await res.json().catch(() => null);
         if (body?.code === "jellyfin_reauth_required") {
+          reportPlayback("error", serverFailureFields(logContext.current, "reconnexion à Jellyfin demandée", { status: 401 }));
           setNeedsReauth(true);
           setLoading(false);
           return;
@@ -552,6 +561,10 @@ function ActivePlayer({
       }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
+        reportPlayback(
+          "error",
+          serverFailureFields(logContext.current, "négociation refusée", { status: res.status, code: body?.code ?? body?.error ?? "" })
+        );
         // La même phrase que le lecteur natif pour la même panne : un serveur média absent n'est
         // pas une lecture impossible, c'est une lecture à retenter plus tard. Le code vient de la
         // réponse, comme `jellyfin_reauth_required` juste au-dessus.
@@ -564,6 +577,16 @@ function ActivePlayer({
         return;
       }
       const data = await res.json();
+      reportPlayback("start", {
+        ...serverStartFields(logContext.current, {
+          directPlay: !!data.isDirectPlay,
+          nativeHls,
+          resumeAt: opts?.resumeAt,
+          audioStreamIndex: opts?.audioStreamIndex,
+        }),
+        // Une reprise de l'échelle audio rejoue la négociation : la ligne dit laquelle.
+        ...(nativeErrorRetryCount.current > 0 ? { retry: nativeErrorRetryCount.current } : {}),
+      });
 
       setPlaySession({ itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId });
       /**
@@ -650,6 +673,7 @@ function ActivePlayer({
       // ever firing a native error OR an hls.js fatal — nothing to recover from, so this just
       // turns a silent infinite spinner into an actionable error with a retry button.
       loadWatchdog.current = setTimeout(() => {
+        reportPlayback("error", serverFailureFields(logContext.current, "pas de première image en 20 s"));
         setReconnecting(false);
         setLoading(false);
         setError(t('player.loadingTooLong'));
@@ -745,6 +769,7 @@ function ActivePlayer({
       // branch is only reached when canPlayType said there is no native HLS.
       const { default: Hls } = await hlsModule!;
       if (!Hls.isSupported()) {
+        reportPlayback("error", serverFailureFields(logContext.current, "hls.js non pris en charge par ce navigateur"));
         setError(t('player.unsupportedBrowser'));
         setLoading(false);
         return;
@@ -1090,6 +1115,9 @@ function ActivePlayer({
       onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
     };
     const setActive = (active: boolean) => {
+      // Établie, et pas seulement demandée : sans cette ligne, un téléviseur resté en chargement
+      // ne se distinguait pas d'un téléviseur qui jouait (22/09/2026).
+      if (active && !castActiveRef.current) reportPlayback("cast", castEstablishedFields(logContext.current, video.currentTime || 0));
       castActiveRef.current = active;
       setCastActive(active);
     };

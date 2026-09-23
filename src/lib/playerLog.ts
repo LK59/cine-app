@@ -49,7 +49,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -69,7 +69,12 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * figé dix-neuf secondes sous un indicateur de chargement, et le journal n'en gardait que la ligne
  * `seek` d'avant : ni les tampons, ni les reprises tentées, ni la trace. Voir `MseSource.watchForStall`.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall";
+/**
+ * `cast` (23/09/2026) : le téléviseur a pris la route. Une diffusion *demandée* était déjà écrite
+ * (le `fallback` du lecteur natif), sa fin aussi ; qu'elle se soit établie ne l'était pas, si bien
+ * qu'un téléviseur resté en chargement ne se distinguait pas d'un téléviseur qui jouait.
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast";
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);
