@@ -1854,3 +1854,22 @@ describe("passer d'un fichier de sous-titres à un autre", () => {
   });
 });
 
+// Un film fini dont iOS ferme la source en arrière-plan : au retour, il ne rejoue pas sa fin.
+describe("retour d'arrière-plan sur l'écran de fin", () => {
+  it("reconstruit à l'arrêt", async () => {
+    const setVisibility = (state: "visible" | "hidden") => {
+      Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
+    act(() => setVisibility("hidden"));
+    remux.lost = true;
+    remux.position = 5400;
+    act(() => setVisibility("visible"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1]).toMatchObject({ startPaused: true });
+  });
+});
+

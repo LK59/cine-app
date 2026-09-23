@@ -1926,6 +1926,10 @@ export function ExperimentalPlayerHost({
         at,
         hiddenMs: tally.lastBackgroundMs,
       });
+      // Un film fini attend sur son écran de fin : reconstruit en lecture, il rejouait tout seul
+      // ses deux dernières secondes, son compris, et annonçait sa fin une seconde fois (relu le
+      // 24/09/2026). Reconstruit à l'arrêt, « Revoir » le relance comme avant.
+      if (endStoppedRef.current) keepPausedRef.current = true;
       restart(at, "la plateforme a fermé la source");
     };
     const onVisible = () => {

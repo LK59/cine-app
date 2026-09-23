@@ -2069,3 +2069,50 @@ describe("lossReport", () => {
     mse.destroy();
   });
 });
+
+// Chasse aux bugs du 24/09/2026.
+describe("relu le 24/09/2026", () => {
+  type Internals = {
+    watchdogTimer: ReturnType<typeof setInterval> | null;
+    watchForStall: () => void;
+    pendingStart: number | null;
+  };
+
+  // Une ouverture en cours de film attend son premier média la tête à zéro : ce n'est pas un
+  // blocage, c'est le réseau (Love Story, 23/09 : un « stall » à 0 s pour une ouverture lente).
+  it("n'écrit pas de blocage pendant qu'une ouverture attend son média", async () => {
+    const video = fakeVideo();
+    Object.assign(video, { readyState: 0, networkState: 2, seeking: false });
+    const onStall = vi.fn();
+    // Rien n'arrive : le lecteur est pointé sur 1200 s et n'a encore rien envoyé.
+    const remuxer = Object.assign(fakeRemuxer(500), { nextSegment: () => new Promise<null>(() => {}) });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onStall }, 1200);
+    const internals = mse as unknown as Internals;
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    expect(internals.pendingStart).toBe(1200);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    internals.watchForStall();
+    for (let i = 0; i < 10; i++) {
+      vi.setSystemTime(Date.now() + 1000);
+      internals.watchForStall();
+    }
+    expect(onStall).not.toHaveBeenCalled();
+    vi.useRealTimers();
+    mse.destroy();
+  });
+
+  // Un saut qui attend une lecture réseau pendant qu'une reconstruction détruit la source : il ne
+  // doit plus toucher l'élément, que le lecteur suivant est en train d'ouvrir.
+  it("ne déplace plus l'élément une fois détruite", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(500, 0.2, true, 30), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    const seeking = mse.seek(900);
+    // Le saut attend la lecture en cours (30 ms) : c'est pendant cette attente que la source part.
+    await flush();
+    mse.destroy();
+    await seeking;
+    expect(video.currentTime).not.toBeCloseTo(900, 0);
+  });
+});
+

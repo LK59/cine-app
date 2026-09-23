@@ -1030,6 +1030,10 @@ export class MseSource {
     // The loop breaks on the generation check, but only once whatever read it is awaiting comes
     // back. Moving the reader before then would corrupt it.
     await this.fillTask?.catch(() => {});
+    // Détruite pendant l'attente — une reconstruction pour un changement de piste, une passe au
+    // lecteur serveur : cette source n'a plus rien à dire à l'élément, que le lecteur suivant est
+    // en train d'ouvrir, et y écrire son ancienne cible le déplaçait (relu le 24/09/2026).
+    if (this.destroyed) return;
 
     // Pendant cette attente — une lecture réseau qui finit, deux secondes sur un serveur lointain —
     // d'autres sauts ont pu arriver : un doigt qui glisse sur la barre. Servir celui-ci lirait une
@@ -1044,6 +1048,7 @@ export class MseSource {
     for (const queue of [this.videoOps, this.audioOps]) {
       if (queue) await this.clear(queue);
     }
+    if (this.destroyed) return;
 
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     this.seekNetworkPending = true;
@@ -1222,6 +1227,13 @@ export class MseSource {
     // Un saut resté `seeking` alors que le média est là, lui, reste compté — c'est le WebKit qui
     // ne résout pas son saut (1917 sur iPhone).
     if (this.video.seeking && !this.isBufferedAt(now)) {
+      this.stallSince = null;
+      return;
+    }
+    // Même chose pour une ouverture en cours de film qui attend son premier média : la tête est
+    // encore à zéro, la cible plus loin, et la ligne écrivait un « blocage » à 0 s pour ce qui
+    // n'était que le réseau (Love Story, 23/09/2026 : 5,8 s d'ouverture, un stall à 0 s).
+    if (this.pendingStart !== null && !this.isBufferedAt(this.pendingStart)) {
       this.stallSince = null;
       return;
     }
