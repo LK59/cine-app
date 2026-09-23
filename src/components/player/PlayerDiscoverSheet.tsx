@@ -29,6 +29,7 @@ import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
 import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
+import { ToggleGlyph } from "@/components/ToggleGlyph";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
@@ -275,7 +276,7 @@ export function PlayerDiscoverSheet({
             onClick={() => void setStatus(inList ? null : "to_watch")}
             className="mb-2 flex w-full items-center justify-center gap-2 rounded-md bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
           >
-            {inList ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+            <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Bookmark size={16} />} />
             {inList ? t("player.discover.inList") : t("player.discover.addToList")}
           </button>
 
@@ -432,7 +433,7 @@ export function PlayerDiscoverSheet({
                   className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
                 >
                   <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                    {inList ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                    <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={14} />} offIcon={<Bookmark size={14} />} />
                   </span>
                   <span className="text-sm font-medium">
                     {inList ? t("player.discover.inList") : t("player.discover.addToList")}

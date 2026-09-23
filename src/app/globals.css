@@ -638,6 +638,34 @@
   animation: none;
 }
 
+/* L'icône d'un bouton à deux états qui confirme le geste — voir ToggleGlyph.
+   Actif : un léger rebond, et le tracé qui se dessine (la coche, le signet). La longueur du tiret
+   couvre le plus long tracé d'une icône de 24 unités — le cercle de « Vu » fait environ 63.
+   Repos : l'icône se repose, sans rebond ni tracé — revenir en arrière n'a rien à célébrer. */
+@keyframes toggle-pop {
+  0% { transform: scale(0.6); opacity: 0.4; }
+  55% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes toggle-draw {
+  from { stroke-dashoffset: 70; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes toggle-settle {
+  from { transform: scale(0.8); opacity: 0.5; }
+  to { transform: scale(1); opacity: 1; }
+}
+.toggle-on {
+  animation: toggle-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.toggle-on svg :is(path, circle, polyline, line) {
+  stroke-dasharray: 70;
+  animation: toggle-draw 360ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both;
+}
+.toggle-off {
+  animation: toggle-settle 200ms ease-out both;
+}
+
 /* Le mouvement, quand on n'en veut pas : tout apparaît et disparaît sans transition.
  *
  * Une seule règle, et c'est elle qui décide. Deux blocs plus loin croyaient remplacer les entrées

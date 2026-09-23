@@ -34,6 +34,7 @@ import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
+import { ToggleGlyph } from "@/components/ToggleGlyph";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -451,7 +452,7 @@ export function CinemaMovieDetail({
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${flagsKnown ? "" : "opacity-50"}`}
             >
               <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                {watched ? <CircleCheck size={16} /> : <Check size={14} />}
+                <ToggleGlyph on={watched} onIcon={<CircleCheck size={16} />} offIcon={<Check size={14} />} />
               </span>
               <span className="text-sm font-medium">
                 {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
@@ -471,7 +472,7 @@ export function CinemaMovieDetail({
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
             >
               <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                {inList ? <BookmarkCheck size={16} /> : <Plus size={14} />}
+                <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Plus size={14} />} />
               </span>
               {/* Le libellé dit l'état, pas le geste : « À voir » ne distinguait pas un titre
                   déjà enregistré d'un titre qui ne l'était pas. L'icône, elle, dit le geste. */}

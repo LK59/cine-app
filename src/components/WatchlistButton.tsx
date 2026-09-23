@@ -6,6 +6,7 @@ import { fetcher } from "@/lib/swr";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import type { WatchlistItem, WatchlistStatus } from "@/lib/db";
 import { useT } from "@/components/TranslationProvider";
+import { ToggleGlyph } from "@/components/ToggleGlyph";
 
 interface Props {
   mediaType: "movie" | "series";
@@ -62,7 +63,6 @@ export function WatchlistButton({
     }
   }
 
-  const Icon = inList ? BookmarkCheck : Bookmark;
   const label = inList ? t('search.removeFromList') : t('search.addToList');
   const iconSize = size === "sm" ? 13 : 16;
 
@@ -81,7 +81,7 @@ export function WatchlistButton({
       // le reste de l'app dit « c'est l'option retenue » — ici, « ce titre est dans la liste ».
       className={`btn btn-ghost ${inList ? "btn-on" : ""} ${size === "sm" ? "btn-icon" : ""} ${className}`}
     >
-      <Icon size={iconSize} />
+      <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={iconSize} />} offIcon={<Bookmark size={iconSize} />} />
       {/* Le libellé court : la rangée d'actions d'une fiche en porte déjà quatre autres, et
           « Ajouter à la liste » l'y ferait passer à la ligne. L'intitulé complet est dans
           l'infobulle et dans le nom accessible. */}

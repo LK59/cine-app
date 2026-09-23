@@ -40,6 +40,7 @@ import { nextEpisodeIn } from "@/lib/nextEpisode";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
+import { ToggleGlyph } from "@/components/ToggleGlyph";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
 
@@ -433,7 +434,7 @@ export function CinemaMobileDetail({
               devient un marque-page coché se lit d'un coup d'œil, et le libellé dit l'état. */}
           {canJoinWatchlist(tmdbId) && (
             <button type="button" onClick={toggleInList} aria-pressed={inList} className="flex w-16 flex-col items-center gap-1.5 active:scale-95">
-              {inList ? <BookmarkCheck size={22} className="text-accent-400" /> : <Plus size={22} className="text-white" />}
+              <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={22} className="text-accent-400" />} offIcon={<Plus size={22} className="text-white" />} />
               <span className="text-center text-xs leading-tight text-white/70">
                 {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
               </span>
@@ -448,7 +449,7 @@ export function CinemaMobileDetail({
             aria-pressed={watched}
             className={`flex w-16 flex-col items-center gap-1.5 active:scale-95 ${watchedKnown ? "" : "opacity-40"}`}
           >
-            {watched ? <CircleCheck size={22} className="text-accent-400" /> : <Check size={22} className="text-white" />}
+            <ToggleGlyph on={watched} onIcon={<CircleCheck size={22} className="text-accent-400" />} offIcon={<Check size={22} className="text-white" />} />
             <span className="text-center text-xs leading-tight text-white/70">
               {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
             </span>

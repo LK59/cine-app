@@ -8,6 +8,7 @@ import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import { PosterImage } from "@/components/PosterImage";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import type { UnifiedSearchResult } from "@/app/api/search/route";
+import { ToggleGlyph } from "@/components/ToggleGlyph";
 
 const TMDB_POSTER = "https://image.tmdb.org/t/p/w154";
 
@@ -170,7 +171,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
           done ? "text-emerald-400" : "bg-white/10 text-white hover:bg-white/20 active:scale-95"
         }`}
       >
-        {done ? <Check size={17} /> : <Plus size={18} />}
+        <ToggleGlyph on={done} onIcon={<Check size={17} />} offIcon={<Plus size={18} />} />
       </button>
     </li>
   );
