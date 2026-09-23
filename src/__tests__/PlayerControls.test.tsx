@@ -1017,3 +1017,31 @@ describe("PlayerControls — glisser au doigt sur la barre", () => {
     expect(Number(input.value)).toBeCloseTo(1827, 0);
   });
 });
+
+// L'ajustement aux bandes noires du fichier (24/09/2026) : un interrupteur, et seulement quand il y
+// a un agrandissement à défaire.
+describe("ajuster à l'écran", () => {
+  async function openMore(props: Record<string, unknown>) {
+    stubMediaFetches();
+    const { container } = render(<Harness {...props} />);
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="more"]')!));
+  }
+
+  it("n'apparaît pas sans agrandissement", async () => {
+    await openMore({});
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("dit son état et le bascule sans fermer le menu", async () => {
+    const onChange = vi.fn();
+    await openMore({ frameFit: { on: true, onChange } });
+    const toggle = screen.getByRole("switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.textContent).toContain("player.frameFit");
+    fireEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith(false);
+    expect(screen.getByRole("switch")).toBeTruthy();
+  });
+});
+

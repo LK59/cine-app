@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, ChevronDown, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -99,6 +99,11 @@ interface PlayerControlsProps {
    * Il s'applique en reconstruisant le lecteur, comme un changement de piste.
    */
   hdrCap?: { current: HdrCapChoice; autoNits: number | null; onPick: (choice: HdrCapChoice) => void };
+  /**
+   * L'ajustement de l'image aux bandes noires du fichier (`frameFit.ts`), quand il y en a un à
+   * défaire sur cet écran. Absent, rien n'est proposé : un film sans bandes n'a pas d'interrupteur.
+   */
+  frameFit?: { on: boolean; onChange: (on: boolean) => void };
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -154,6 +159,7 @@ export function PlayerControls({
   onSeekRequest,
   suspended = false,
   hdrCap,
+  frameFit,
 }: PlayerControlsProps) {
   const t = useT();
   const [playing, setPlaying] = useState(false);
@@ -1465,6 +1471,28 @@ export function PlayerControls({
                 >
                   <Gauge size={16} /> {t('player.speed')}{speed !== 1 ? ` · ${speed}x` : ""}
                 </button>
+                {frameFit && (
+                  // Le menu reste ouvert : l'image glisse derrière, et c'est ce qu'on veut voir.
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={frameFit.on}
+                    onClick={() => frameFit.onChange(!frameFit.on)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                  >
+                    <span className="flex items-center gap-3">
+                      <Scan size={16} /> {t("player.frameFit")}
+                    </span>
+                    <span
+                      aria-hidden
+                      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${frameFit.on ? "bg-accent-600" : "bg-white/20"}`}
+                    >
+                      <span
+                        className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${frameFit.on ? "translate-x-4" : ""}`}
+                      />
+                    </span>
+                  </button>
+                )}
                 {hdrCap && (
                   <button
                     onClick={() => setMenu("hdrCap")}

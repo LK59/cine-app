@@ -1063,6 +1063,7 @@
   },
   "player": {
     "badConnection": "Instabile Verbindung",
+    "frameFit": "An Bildschirm anpassen",
     "subtitleSizeXSmall": "Sehr klein",
     "subtitleSizeSmall": "Klein",
     "subtitleSizeNormal": "Normal",

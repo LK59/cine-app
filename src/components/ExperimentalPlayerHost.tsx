@@ -2216,7 +2216,7 @@ export function ExperimentalPlayerHost({
   // Les bandes noires incrustées dans le fichier : l'image est agrandie jusqu'au bord le plus
   // proche, sans rien couper — voir `frameFit`. Pas dans le mini-lecteur, qui remplit déjà sa
   // fenêtre (`object-cover`).
-  const frameStyle = useFrameFit(itemId, !isMini, containerRef);
+  const frameFitState = useFrameFit(itemId, !isMini, containerRef);
 
   // Après tous les hooks : le banc d'essai en a ajouté trois au-dessus, et un retour anticipé
   // avant eux en changeait le nombre d'un rendu à l'autre.
@@ -2241,10 +2241,10 @@ export function ExperimentalPlayerHost({
           déclare prêt et l'image qui s'installe. Trois cents millisecondes de fondu couvrent
           ce battement et, surtout, donnent une intention à ce qui ressemblait à un à-coup. */}
       {/* Deux cadres autour des surfaces : l'extérieur coupe ce qui déborde, l'intérieur porte
-          l'agrandissement (`frameStyle`). Posé sur un cadre plutôt que sur chaque surface, il ne
+          l'agrandissement (`frameFitState`). Posé sur un cadre plutôt que sur chaque surface, il ne
           touche pas à leurs propres transitions d'opacité. */}
       <div className="relative h-full w-full overflow-hidden">
-        <div className="relative h-full w-full" style={frameStyle}>
+        <div className="relative h-full w-full" style={frameFitState.style}>
           <video
             ref={videoElRef}
             playsInline
@@ -2531,6 +2531,8 @@ export function ExperimentalPlayerHost({
             // Ni sous l'écran de fin : la barre d'espace y relançait le film par-dessous, sans
             // rouvrir la séance que la fin avait close — « Revoir » le fait, pas le clavier.
             suspended={!ready || (ended && !nextEpisode && !isMini && !error)}
+            // L'interrupteur n'apparaît que s'il y a un agrandissement à défaire — voir `useFrameFit`.
+            frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
             hdrCap={
               path === "remux" && hdrCapContext.relevant && info?.video?.rangeType && info.video.rangeType !== "SDR"
                 ? {

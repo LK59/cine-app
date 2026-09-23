@@ -7,7 +7,7 @@
  * de l'écran qu'elle touche : seul du noir sort de l'écran, jamais une ligne d'image.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type RefObject } from "react";
 
 /** Le rectangle de l'image dans le cadre, en fractions de sa largeur et de sa hauteur. */
 export interface PictureFrame {
@@ -63,6 +63,53 @@ export function frameFit(
   return { scale, x: -centreX * scale, y: -centreY * scale };
 }
 
+const PREFERENCE_KEY = "cine:frame-fit";
+let preferenceCached: boolean | null = null;
+const preferenceListeners = new Set<() => void>();
+
+/**
+ * L'ajustement voulu sur cet appareil : oui par défaut, non si la personne l'a coupé.
+ *
+ * Par appareil, comme l'apparence des sous-titres : qui préfère voir l'image entière — par exemple
+ * pour qu'elle ne passe pas sous la Dynamic Island — le préfère pour tous ses films, et pas sur son
+ * ordinateur, qui n'en a pas. Stockage indisponible : l'ajustement, qui est le défaut.
+ */
+export const frameFitPreference = {
+  subscribe(listener: () => void): () => void {
+    preferenceListeners.add(listener);
+    return () => preferenceListeners.delete(listener);
+  },
+  snapshot(): boolean {
+    if (preferenceCached === null) {
+      try {
+        preferenceCached = window.localStorage.getItem(PREFERENCE_KEY) !== "off";
+      } catch {
+        preferenceCached = true;
+      }
+    }
+    return preferenceCached;
+  },
+  serverSnapshot: (): boolean => true,
+  set(on: boolean): void {
+    preferenceCached = on;
+    try {
+      window.localStorage.setItem(PREFERENCE_KEY, on ? "on" : "off");
+    } catch {
+      // Voir plus haut : le réglage vaut pour cette séance.
+    }
+    for (const listener of preferenceListeners) listener();
+  },
+};
+
+export interface FrameFitState {
+  /** À poser sur le cadre qui porte les surfaces. */
+  style: CSSProperties;
+  /** Un agrandissement existe pour ce film sur cet écran — l'interrupteur n'a de sens qu'alors. */
+  available: boolean;
+  on: boolean;
+  setOn: (on: boolean) => void;
+}
+
 /**
  * Le style à poser sur la vidéo pour un élément donné, recalculé quand l'écran change de taille
  * (rotation, fenêtre redimensionnée).
@@ -72,7 +119,7 @@ export function frameFit(
  * pour la première fois, elle arrive une demi-seconde plus tard et l'image glisse à sa place.
  * Hors SWR à dessein : SWR est suspendu tant qu'un film occupe l'écran (voir CLAUDE.md).
  */
-export function useFrameFit(itemId: string, enabled: boolean, screenRef: RefObject<HTMLElement | null>): CSSProperties | undefined {
+export function useFrameFit(itemId: string, enabled: boolean, screenRef: RefObject<HTMLElement | null>): FrameFitState {
   const [measured, setMeasured] = useState<{ itemId: string; frame: PictureFrame | null } | null>(null);
   const [screen, setScreen] = useState<{ width: number; height: number } | null>(null);
   // Un écran tactile a des coins arrondis — voir `TOUCH_MARGIN`. Lu une fois : on ne change pas
@@ -102,14 +149,23 @@ export function useFrameFit(itemId: string, enabled: boolean, screenRef: RefObje
     return () => observer.disconnect();
   }, [screenRef]);
 
+  const on = useSyncExternalStore(frameFitPreference.subscribe, frameFitPreference.snapshot, frameFitPreference.serverSnapshot);
+  const setOn = useCallback((value: boolean) => frameFitPreference.set(value), []);
+
   const frame = measured?.itemId === itemId ? measured.frame : null;
-  return useMemo(() => {
-    const fit = enabled && frame && screen ? frameFit(frame, screen, margin) : null;
-    // Toujours un style, même sans agrandissement : c'est ce qui laisse la transition ramener
-    // l'image à sa taille en douceur quand on passe au mini-lecteur ou qu'on tourne l'écran.
-    return {
-      transform: fit ? `translate(${fit.x.toFixed(1)}px, ${fit.y.toFixed(1)}px) scale(${fit.scale.toFixed(4)})` : "none",
+  const fit = useMemo(
+    () => (enabled && frame && screen ? frameFit(frame, screen, margin) : null),
+    [enabled, frame, screen, margin]
+  );
+  const applied = on ? fit : null;
+  // Toujours un style, même sans agrandissement : c'est ce qui laisse la transition ramener
+  // l'image à sa taille en douceur — à l'interrupteur, au passage en mini-lecteur, à la rotation.
+  const style = useMemo<CSSProperties>(
+    () => ({
+      transform: applied ? `translate(${applied.x.toFixed(1)}px, ${applied.y.toFixed(1)}px) scale(${applied.scale.toFixed(4)})` : "none",
       transition: "transform 700ms cubic-bezier(0.32, 0.72, 0, 1)",
-    };
-  }, [enabled, frame, screen, margin]);
+    }),
+    [applied]
+  );
+  return { style, available: fit !== null, on, setOn };
 }
