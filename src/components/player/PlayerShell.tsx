@@ -196,9 +196,28 @@ export function PlayerShell() {
           suffit — et sans ce sursis ils disparaissaient d'un coup, alors qu'ils arrivent en
           glissant. Voir useExitDelay. */}
       {/* `replaced` : un autre onglet prend la place de celui qui sort — voir PlayerPanelFrame. */}
-      {search.render && <PlayerSearchPanel leaving={search.leaving} replaced={search.leaving && (route.list || route.account)} />}
-      {list.render && <PlayerListPanel leaving={list.leaving} replaced={list.leaving && (route.search || route.account)} />}
-      {account.render && <PlayerAccountPanel leaving={account.leaving} replaced={account.leaving && (route.search || route.list)} />}
+      {/* `fromTab` : il arrive d'un autre onglet, encore en train de partir. */}
+      {search.render && (
+        <PlayerSearchPanel
+          leaving={search.leaving}
+          replaced={search.leaving && (route.list || route.account)}
+          fromTab={list.leaving || account.leaving}
+        />
+      )}
+      {list.render && (
+        <PlayerListPanel
+          leaving={list.leaving}
+          replaced={list.leaving && (route.search || route.account)}
+          fromTab={search.leaving || account.leaving}
+        />
+      )}
+      {account.render && (
+        <PlayerAccountPanel
+          leaving={account.leaving}
+          replaced={account.leaving && (route.search || route.list)}
+          fromTab={search.leaving || list.leaving}
+        />
+      )}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

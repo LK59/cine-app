@@ -35,6 +35,7 @@ export function PlayerPanelFrame({
   actions,
   leaving = false,
   replaced = false,
+  fromTab = false,
   back = false,
   children,
 }: {
@@ -52,6 +53,16 @@ export function PlayerPanelFrame({
    * il reste plein, dessous, et celui qui arrive fond par-dessus lui, comme les onglets d'iOS.
    */
   replaced?: boolean;
+  /**
+   * Il arrive d'un autre onglet, et non de l'accueil : il apparaît d'un coup, comme un onglet d'iOS.
+   *
+   * Même remplacé proprement (voir `replaced`), un fondu croisé montrait deux pages l'une sur
+   * l'autre pendant un cinquième de seconde, leurs titres presque au même endroit et l'un décalé
+   * de vingt-huit pixels : l'écran semblait clignoter, puis sauter sur la page voulue (signalé le
+   * 23/09/2026). Lu à chaque entrée, pas à chaque rendu : la valeur retombe quand l'onglet d'avant
+   * a fini de partir, et une classe d'animation ajoutée à ce moment-là jouerait en retard.
+   */
+  fromTab?: boolean;
   /**
    * Cet écran a été poussé depuis un autre, et non choisi dans le rail.
    *
@@ -82,9 +93,13 @@ export function PlayerPanelFrame({
    */
   const [entrance, setEntrance] = useState(0);
   const [wasLeaving, setWasLeaving] = useState(leaving);
+  const [instantEntry, setInstantEntry] = useState(fromTab);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
-    if (!leaving) setEntrance((n) => n + 1);
+    if (!leaving) {
+      setEntrance((n) => n + 1);
+      setInstantEntry(fromTab);
+    }
   }
 
   const route = useCinemaRoute();
@@ -170,7 +185,7 @@ export function PlayerPanelFrame({
          * après —, si bien que la dérive animait une boîte sans contenu et passait inaperçue. La
          * racine, elle, existe et se voit toujours : son fond porte le mouvement quoi qu'il arrive
          * au reste. Une seule transformation composée par bascule au lieu de deux, aussi. */
-        leaving ? (replaced ? "" : "animate-fade-out-scale") : "animate-fade-in-side"
+        leaving ? (replaced ? "" : "animate-fade-out-scale") : instantEntry ? "" : "animate-fade-in-side"
       }`}
       style={{
         // Celui qui part passe dessous : celui qui arrive doit le recouvrir, quel que soit leur
@@ -231,10 +246,8 @@ export function PlayerPanelFrame({
         </div>
       </header>
 
-      {/* L'animation est portée par le contenu et non par la racine : `fade-in-up` laisse un
-          `transform` en place une fois terminée, ce qui ferait de la racine le bloc conteneur de
-          tout descendant `fixed` — le piège exact qui a coûté un portage dans document.body à
-          l'écran cinéma. Ici, rien de fixe n'en descend, mais la règle vaut d'être tenue. */}
+      {/* Le corps n'a pas d'animation à lui : c'est la racine qui entre et sort (voir plus haut).
+          Il est re-clé à chaque entrée pour que l'écouteur des flèches suive le nœud neuf. */}
       <div
         ref={bodyRef}
         key={entrance}
