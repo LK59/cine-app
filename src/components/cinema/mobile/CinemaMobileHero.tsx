@@ -171,7 +171,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   mémoire, plus huit logos. Trois suffisent — celle qu'on voit, celle d'où l'on
                   vient, celle où l'on va. */}
               {Math.abs(i - index) > 1 ? null : short ? (
-                <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3 shadow-xl shadow-black/50">
+                <div className="flex gap-4 rounded-2xl bg-surface/70 p-3 shadow-xl shadow-black/50">
                   <div className="w-24 shrink-0 overflow-hidden rounded-lg">
                     <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="120px" />
                   </div>
@@ -204,7 +204,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
                   </div>
                 </div>
               ) : (
-                <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl shadow-black/50">
+                <div className="relative overflow-hidden rounded-2xl bg-surface shadow-xl shadow-black/50">
                   <PosterImage src={heroPoster(item)} alt={item.title} subtle unoptimized priority={i === index} sizes="100vw" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink via-ink/70 to-transparent p-4 pt-16">
                     {item.logoUrl ? (

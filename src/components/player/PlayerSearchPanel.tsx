@@ -302,9 +302,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   // ramène sur les résultats, avec la requête tapée et le filtre choisi — au lieu de renvoyer à
   // l'accueil comme si l'on n'avait rien cherché.
   function openTitle(entry: Entry) {
-    // Ouvrir un résultat est la preuve qu'on cherchait bien ça : on retient sans attendre le
-    // minuteur, et la recherche est de toute façon complète à cet instant.
-    rememberSearch(typed);
+    // Ouvrir un résultat est la preuve qu'on cherchait bien ça — et c'est son titre qu'on retient,
+    // pas ce qui était tapé : « Le retour de » et « Arm » restaient dans l'historique, des débuts
+    // de mots qu'on ne relancerait jamais (23/09/2026). Un début déjà retenu est remplacé par le
+    // titre complet (voir `rememberSearch`).
+    rememberSearch(entry.title);
     if (entry.libraryId !== null) openLibraryTitle(entry.kind, entry.libraryId);
     else if (entry.tmdbId !== null) cinemaNavigate({ discover: entry.tmdbId, discoverType: entry.kind });
   }
@@ -429,8 +431,9 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
                 subtitle={p.libraryCount > 0 ? t("player.search.personTitles", { n: p.libraryCount }) : null}
                 poster={p.profilePath}
                 onOpen={() => {
-                  // Même raison que pour un titre : ouvrir une fiche prouve l'intention.
-                  rememberSearch(typed);
+                  // Même raison que pour un titre : ouvrir une fiche prouve l'intention, et c'est
+                  // son nom qu'on retient.
+                  rememberSearch(p.name);
                   cinemaNavigate({ person: p.id });
                 }}
               />

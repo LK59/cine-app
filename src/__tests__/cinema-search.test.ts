@@ -111,3 +111,13 @@ describe("searchCinemaLibrary — le titre d'origine", () => {
     expect(r.map((x) => x.item.title)).toEqual(["Piège de cristal"]);
   });
 });
+
+// Le titre de Radarr, remplacé à l'écran par celui de la langue de qui regarde (23/09/2026), reste
+// une façon de trouver le film : c'est souvent sous ce nom-là qu'on s'en souvient.
+describe("searchCinemaLibrary — le titre remplacé", () => {
+  it("trouve un film sous le titre de Radarr qu'on n'affiche plus", () => {
+    const prenom = { ...MOVIES[0], radarrId: 999, tmdbId: 77338, title: "Le Prénom", aka: "What's in a Name", genres: [] };
+    const r = searchCinemaLibrary("what's in a name", [prenom], [], "fr");
+    expect(r.map((x) => x.item.title)).toEqual(["Le Prénom"]);
+  });
+});

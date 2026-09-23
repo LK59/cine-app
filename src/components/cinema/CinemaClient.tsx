@@ -19,7 +19,7 @@ import { useCinemaRoute, useRouteBehind, sheetIsBehind, readCinemaRoute, cinemaN
 import { openDiscoveryItem, openResumeTarget, openSimilarTitle, openTitle } from "@/lib/cinemaOpen";
 import { closeUncoversGrid, coversGrid, gridCardInFocus, gridIsTop } from "@/lib/cinemaGridTop";
 import { uniqueById } from "@/lib/cinemaRails";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { formatContinueCaption } from "@/lib/cinemaContinueLabel";
 import { BACKDROP_MASK } from "@/lib/cinemaBackdropMask";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { errorMessage } from "@/lib/upstreamError";
@@ -211,7 +211,7 @@ function ContinueCard({
           into this project's production CSS bundle (see CinemaClient's z-index note for the same
           pitfall hit before). */}
       <span className="mt-1 block w-fit max-w-full truncate rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-muted">
-        {formatContinueLabel(t, resumeTicks, runtimeTicks, seasonNumber, episodeNumber)}
+        {formatContinueCaption(t, resumeTicks, runtimeTicks, seasonNumber, episodeNumber)}
       </span>
     </button>
   );

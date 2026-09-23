@@ -76,7 +76,7 @@ const SPLASH_SCREENS: { width: number; height: number; dpr: number }[] = [
 ];
 
 export const metadata: Metadata = {
-  title: "Ciné App",
+  title: "Cine App",
   // Ce que voit quelqu'un à qui on partage le lien, et ce que l'écran de connexion dit déjà.
   description: "Vos films et vos séries.",
   manifest: "/manifest.json",
@@ -90,7 +90,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Ciné App",
+    title: "Cine App",
   },
 };
 

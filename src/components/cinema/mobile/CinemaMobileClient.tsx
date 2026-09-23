@@ -22,7 +22,7 @@ import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useWarmSeriesCatalogue } from "@/lib/useWarmSeriesCatalogue";
 import { errorMessage } from "@/lib/upstreamError";
 import { usePlaySeriesNextEpisode } from "@/lib/playSeriesNextEpisode";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { formatContinueCaption } from "@/lib/cinemaContinueLabel";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
@@ -455,7 +455,7 @@ export function CinemaMobileClient() {
           className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-white transition-opacity active:opacity-60"
         >
           <Clapperboard size={16} className="shrink-0 text-accent-400" />
-          <span className="truncate font-display text-sm font-semibold tracking-tight">Ciné App</span>
+          <span className="truncate font-display text-sm font-semibold tracking-tight">Cine App</span>
         </button>
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
@@ -503,7 +503,7 @@ export function CinemaMobileClient() {
                 pas une affiche pleine largeur, et le squelette vertical faisait sauter toute la
                 page au moment où le contenu arrivait (relevé le 23/09/2026). */}
             {short ? (
-              <div className="flex gap-4 rounded-2xl bg-slate-900/70 p-3">
+              <div className="flex gap-4 rounded-2xl bg-surface/70 p-3">
                 <div className="skeleton aspect-2/3 w-24 shrink-0 rounded-lg" />
                 <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
                   <div className="skeleton h-6 w-40 rounded" />
@@ -622,7 +622,7 @@ export function CinemaMobileClient() {
                 </div>
                 <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.name}</p>
                 <p className="truncate text-xs text-subtle">
-                  {formatContinueLabel(t, entry.positionTicks, entry.runtimeTicks)}
+                  {formatContinueCaption(t, entry.positionTicks, entry.runtimeTicks)}
                 </p>
               </LongPressButton>
             ))}
@@ -658,7 +658,7 @@ export function CinemaMobileClient() {
                 </div>
                 <p className="mt-1.5 truncate text-xs font-medium text-white">{entry.title}</p>
                 <p className="truncate text-xs text-subtle">
-                  {formatContinueLabel(t, entry.resumeTicks, entry.runtimeTicks, entry.seasonNumber, entry.episodeNumber)}
+                  {formatContinueCaption(t, entry.resumeTicks, entry.runtimeTicks, entry.seasonNumber, entry.episodeNumber)}
                 </p>
               </button>
             ))}

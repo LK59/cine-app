@@ -22,6 +22,12 @@ vi.mock("@/lib/server-cache", () => ({
     items.find((i) => i.ProviderIds?.Tmdb === String(tmdbId)) ?? null,
 }));
 
+// Les traductions de TMDB, sans TMDB : un seul film en a une ici. `localizedTitle` reste le vrai.
+vi.mock("@/lib/titleNames", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/titleNames")>()),
+  getTitleNames: (tmdbId: number) => (tmdbId === 77338 ? { fr: "Le Prénom", en: "What's in a Name" } : {}),
+}));
+
 function radarrMovie(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
@@ -192,5 +198,32 @@ describe("la charge utile ne répète plus les titres", () => {
     expect(body.rows.Drama).toEqual([1]);
     // Et la sérialisation ne contient qu'un seul exemplaire du titre.
     expect(JSON.stringify(body).split(radarrMovie({}).title).length - 1).toBe(1);
+  });
+});
+
+// Le 23/09/2026 : « What's in a Name » pour *Le Prénom*, le titre de Radarr, toujours en anglais.
+describe("GET /api/cinema/movies — le titre dans la langue de qui regarde", () => {
+  async function body(cookie: string) {
+    mockCachedMovies.mockResolvedValue([
+      radarrMovie({ id: 5, tmdbId: 77338, title: "What's in a Name", originalTitle: "Le Prénom" }),
+    ]);
+    mockCachedJellyfinMoviesAdmin.mockResolvedValue([{ Id: "jf-5", ProviderIds: { Tmdb: "77338" } }]);
+    const { GET } = await import("@/app/api/cinema/movies/route");
+    return (await GET(fakeReq({ cookie }))).json();
+  }
+
+  it("montre le titre français, et garde celui de Radarr pour la recherche", async () => {
+    const { items } = await body("cine-lang=fr");
+    expect(items[0].title).toBe("Le Prénom");
+    expect(items[0].aka).toBe("What's in a Name");
+    // Le titre d'origine est celui qu'on affiche : inutile de le répéter.
+    expect(items[0].originalTitle).toBeUndefined();
+  });
+
+  it("montre le titre anglais à qui lit en anglais", async () => {
+    const { items } = await body("cine-lang=en");
+    expect(items[0].title).toBe("What's in a Name");
+    expect(items[0].aka).toBeUndefined();
+    expect(items[0].originalTitle).toBe("Le Prénom");
   });
 });

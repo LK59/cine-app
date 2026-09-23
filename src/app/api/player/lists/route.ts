@@ -8,6 +8,7 @@ import { playableLibrary } from "@/lib/playerLibrary";
 import { getPlayerRequests, type PlayerRequest } from "@/lib/playerRequests";
 import { posterUrl, libraryPoster } from "@/lib/images";
 import { getTitleArt } from "@/lib/title-art";
+import { getTitleNames } from "@/lib/titleNames";
 import { localeOf } from "@/lib/i18n";
 import { TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { withErrorHandling } from "@/lib/api-helpers";
@@ -139,7 +140,9 @@ export async function GET(req: NextRequest) {
           return {
             tmdbId: w.tmdbId,
             type: w.mediaType === "series" ? ("series" as const) : ("movie" as const),
-            title: w.title,
+            // Le titre enregistré est celui de l'écran d'où on l'a rangé — souvent celui de
+            // Radarr, donc en anglais. La langue de qui regarde d'abord (voir `titleNames`).
+            title: getTitleNames(w.tmdbId, w.mediaType === "series" ? "series" : "movie")[locale] || w.title,
             year: w.year,
             // L'affiche de la bibliothèque quand on l'a : c'est celle que le reste de l'interface
             // montre, et elle est à jour. Celle enregistrée dans la liste sert de repli — pour un
@@ -163,7 +166,7 @@ export async function GET(req: NextRequest) {
         return {
           tmdbId,
           type,
-          title: item.Name,
+          title: (tmdbId ? getTitleNames(tmdbId, type)[locale] : undefined) || item.Name,
           year: item.ProductionYear ?? null,
           // L'image passe par notre propre route : celle de Jellyfin demande un jeton, et
           // l'optimiseur de Next ne transmet pas les cookies.

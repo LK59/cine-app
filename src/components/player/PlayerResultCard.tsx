@@ -88,10 +88,17 @@ export const PlayerResultCard = memo(function PlayerResultCard({
             qu'il y a derrière bouge — c'est-à-dire à chaque image d'un défilement. Sur la grille
             complète, six cent soixante-dix cartes en portaient une chacune, pour répéter « Film »
             six cent soixante-dix fois sous l'onglet Films. */}
+        {/* Le pictogramme seul, depuis le 23/09/2026 : le mot « Film » ou « Série » couvrait le
+            haut de l'affiche — souvent le titre qui y est imprimé. Le nom reste dit aux lecteurs
+            d'écran, qui ne voient pas l'icône. */}
         {showKind && (
-          <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white">
-            <Icon size={10} />
-            {kindLabel}
+          <span
+            role="img"
+            aria-label={kindLabel}
+            title={kindLabel}
+            className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/65 text-white"
+          >
+            <Icon size={11} aria-hidden />
           </span>
         )}
 

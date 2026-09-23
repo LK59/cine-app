@@ -51,7 +51,7 @@ const MAX_CONCURRENT = 12;
 let running = 0;
 const waiting: (() => void)[] = [];
 
-async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
+export async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
   if (running >= MAX_CONCURRENT) await new Promise<void>((resolve) => waiting.push(resolve));
   running++;
   try {

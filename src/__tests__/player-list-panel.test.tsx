@@ -185,9 +185,9 @@ describe("PlayerListPanel", () => {
     expect(screen.getByText(/player\.lists\.toWatch/).textContent).toContain("1");
   });
 
-  // Les trois chiffres du haut décrivent la liste, pas l'onglet ouvert : « disponibles » est le
-  // seul actionnable, et c'est celui qu'on vient chercher.
-  it("counts what is in the list, what can be played now, and what has been seen", async () => {
+  // Les trois cartes de chiffres répétaient les compteurs des onglets (23/09/2026) : deux fois 9
+  // et deux fois 12 sur le même écran. Les onglets gardent les leurs, et eux seuls.
+  it("counts once, in the tabs", async () => {
     renderWith({
       ...EMPTY_LISTS,
       toWatch: [
@@ -197,11 +197,10 @@ describe("PlayerListPanel", () => {
       watched: [{ tmdbId: 3, type: "movie", title: "Déjà vu", year: 1999, poster: null, libraryId: 9, jellyfinId: "j", addedAt: null }],
     });
 
-    await screen.findByText("player.lists.stats.inList");
-    const stat = (label: string) => screen.getByText(label).previousElementSibling?.textContent;
-    expect(stat("player.lists.stats.inList")).toBe("2");
-    expect(stat("player.lists.stats.available")).toBe("1");
-    expect(stat("player.lists.stats.watched")).toBe("1");
+    await screen.findByText("Ici");
+    expect(screen.queryByText("player.lists.stats.inList")).toBeNull();
+    expect(screen.queryByText("player.lists.stats.available")).toBeNull();
+    expect(screen.getByText(/player\.lists\.toWatch/).textContent).toContain("2");
   });
 
   // Le « + » ouvre une recherche *ici*, et non l'écran de recherche générale : ajouter un titre
@@ -228,7 +227,7 @@ describe("PlayerListPanel", () => {
       ],
     });
 
-    await screen.findByText("player.lists.stats.inList");
+    await screen.findAllByText(/player\.lists\.requests/);
     fireEvent.click(screen.getAllByText(/player\.lists\.requests/)[0]);
     const shown = () => screen.getAllByText(/Ancienne|Récente/).map((n) => n.textContent);
     expect(shown()).toEqual(["Récente", "Ancienne"]);

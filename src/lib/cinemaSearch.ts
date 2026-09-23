@@ -101,7 +101,7 @@ export function searchCinemaLibrary(
     // `bestTitleMatchScore` prend déjà le meilleur des deux, et la carte, elle, continue
     // d'afficher le titre traduit : on cherche par ce dont on se souvient, on lit ce qu'on connaît.
     const score = title
-      ? bestTitleMatchScore(["originalTitle" in item ? item.originalTitle : undefined, item.title], title)
+      ? bestTitleMatchScore(["originalTitle" in item ? item.originalTitle : undefined, item.aka, item.title], title)
       : 50;
     if (score <= 0) return;
     results.push({ kind, item, score } as CinemaSearchResult);

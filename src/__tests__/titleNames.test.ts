@@ -1,0 +1,90 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+/**
+ * Les titres dans la langue de qui regarde.
+ *
+ * Le 23/09/2026, le catalogue montrait « What's in a Name » pour *Le Prénom* et « The Return of
+ * Martin Guerre » pour *Le Retour de Martin Guerre* : le titre de Radarr, toujours en anglais.
+ */
+
+const { tmdb, kv } = vi.hoisted(() => ({
+  tmdb: { isEnabled: vi.fn(() => true), getMovieTranslations: vi.fn(), getTvTranslations: vi.fn() },
+  kv: new Map<string, { value: unknown; fetchedAt: number }>(),
+}));
+vi.mock("@/lib/clients/tmdb", () => ({ tmdb }));
+vi.mock("@/lib/db", () => ({
+  kvCacheDb: {
+    get: (k: string) => kv.get(k) ?? null,
+    set: (k: string, value: unknown, fetchedAt: number) => kv.set(k, { value, fetchedAt }),
+  },
+}));
+vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
+
+import { getTitleNames, localizedTitle, namesFromTranslations, resetTitleNames } from "@/lib/titleNames";
+
+const PRENOM = {
+  translations: [
+    { iso_639_1: "en", iso_3166_1: "US", data: { title: "What's in a Name" } },
+    { iso_639_1: "fr", iso_3166_1: "CA", data: { title: "Le Prénom (Québec)" } },
+    { iso_639_1: "fr", iso_3166_1: "FR", data: { title: "Le Prénom" } },
+    { iso_639_1: "de", iso_3166_1: "DE", data: { title: "" } },
+  ],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  kv.clear();
+  resetTitleNames();
+});
+
+describe("namesFromTranslations", () => {
+  it("prend la traduction du pays de la langue, et ignore une traduction vide", () => {
+    expect(namesFromTranslations(PRENOM)).toEqual({ en: "What's in a Name", fr: "Le Prénom" });
+  });
+
+  it("lit `name` pour une série", () => {
+    expect(namesFromTranslations({ translations: [{ iso_639_1: "fr", iso_3166_1: "FR", data: { name: "Le Bureau des légendes" } }] }))
+      .toEqual({ fr: "Le Bureau des légendes" });
+  });
+});
+
+describe("getTitleNames", () => {
+  // Le catalogue entier est construit à chaque requête : attendre TMDB pour chaque titre inconnu
+  // aurait bloqué la première ouverture après un déploiement.
+  it("ne bloque jamais : rien d'abord, la traduction à la requête suivante", async () => {
+    tmdb.getMovieTranslations.mockResolvedValue(PRENOM);
+    expect(getTitleNames(77338, "movie")).toEqual({});
+    await vi.waitFor(() => expect(getTitleNames(77338, "movie")).toEqual({ en: "What's in a Name", fr: "Le Prénom" }));
+    expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1);
+  });
+
+  it("relit le cache disque sans rappeler TMDB", () => {
+    kv.set("tmdb:titles:v1:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: Date.now() });
+    expect(getTitleNames(77338, "movie")).toEqual({ fr: "Le Prénom" });
+    expect(tmdb.getMovieTranslations).not.toHaveBeenCalled();
+  });
+
+  it("ressert une traduction périmée pendant qu'il la rafraîchit", () => {
+    tmdb.getMovieTranslations.mockResolvedValue(PRENOM);
+    kv.set("tmdb:titles:v1:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: 0 });
+    expect(getTitleNames(77338, "movie")).toEqual({ fr: "Le Prénom" });
+    expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne demande qu'une fois un titre en cours de recherche", () => {
+    tmdb.getTvTranslations.mockReturnValue(new Promise(() => {}));
+    getTitleNames(1, "series");
+    getTitleNames(1, "series");
+    expect(tmdb.getTvTranslations).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("localizedTitle", () => {
+  it("montre le titre de la langue, et garde l'ancien pour la recherche", () => {
+    expect(localizedTitle({ fr: "Le Prénom" }, "fr", "What's in a Name")).toEqual({ title: "Le Prénom", aka: "What's in a Name" });
+  });
+
+  it("garde le titre d'origine quand la langue n'a pas de traduction", () => {
+    expect(localizedTitle({ fr: "Le Prénom" }, "es", "What's in a Name")).toEqual({ title: "What's in a Name" });
+  });
+});

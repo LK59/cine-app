@@ -94,7 +94,7 @@ function LoginForm() {
           <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600/15 text-accent-400 ring-1 ring-accent-500/25">
             <Clapperboard size={28} />
           </span>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-white">Ciné App</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-white">Cine App</h1>
           <p className="mt-2 text-sm text-slate-400">{t("auth.tagline")}</p>
         </div>
 

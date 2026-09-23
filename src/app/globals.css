@@ -21,6 +21,12 @@
      systèmes côte à côte — et deux textes du même rang ne portaient presque jamais le même gris.
      Le plus discret s'arrête à 50 % : en dessous, sur ce noir, un petit texte passe sous le
      contraste de lecture courant (4,5:1). `design-tokens.test.ts` refuse le retour des autres. */
+  /* La surface opaque posée sur ce noir — le fond d'une image qui charge, une carte pleine. Elle
+     était `slate-900`, un gris bleuté hérité de l'ancien fond « noir bleu ». Les champs et les
+     listes déroulantes, eux, prennent le voile blanc des autres blocs (`bg-white/5`) : en
+     `slate-900/60`, ils paraissaient bleu marine sur le noir neutre (23/09/2026). */
+  --color-surface: #17171b;
+
   --color-muted: rgb(255 255 255 / 0.7);
   --color-subtle: rgb(255 255 255 / 0.5);
 
@@ -501,7 +507,7 @@
 }
 
 @utility input {
-  @apply w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs placeholder:text-slate-500 focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
+  @apply w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs placeholder:text-slate-500 focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
 }
 
 /* Le champ qui dessine sa propre croix d'effacement doit demander à Chrome de ranger la sienne :
@@ -520,7 +526,7 @@
 }
 
 @utility select {
-  @apply rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
+  @apply rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 backdrop-blur-xs focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500;
 }
 
 @utility poster-grid {

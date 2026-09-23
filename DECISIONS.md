@@ -551,6 +551,29 @@ minutes de calme, au plus dix minutes) ; les nouveaux épisodes, une fois par s�
 
 ---
 
+## 18. Le titre d'un film ou d'une série
+
+**Règle.** Un titre s'affiche dans la langue de qui regarde, pris dans les traductions de TMDB ;
+à défaut, celui de Radarr ou de Sonarr. Le titre remplacé reste cherchable (`aka`). La traduction
+n'est jamais attendue : un titre inconnu part sous son ancien nom, et sa traduction est cherchée en
+arrière-plan (et au démarrage du serveur, pour toute la bibliothèque).
+
+Radarr et Sonarr ne connaissent que l'anglais : un film français s'affichait sous son titre
+anglais, juste sous une affiche qui portait le titre français.
+
+**Porteur.** `getTitleNames` et `localizedTitle` (`src/lib/titleNames.ts`).
+
+**Appelants.** `/api/cinema/movies`, `/api/cinema/series`, `/api/player/lists`, `instrumentation.ts`
+(préchauffage).
+
+**Tests.** `titleNames.test.ts`, `cinema-movies-route.test.ts`, `cinema-search.test.ts`.
+
+**Voulu.** Les titres venus de Jellyfin (Reprendre, À suivre, le lecteur) restent ceux de Jellyfin,
+dans la langue de ses métadonnées. Les notifications gardent le titre de Radarr : elles sont
+écrites par le serveur, pour tout le monde à la fois.
+
+---
+
 ## Ce qui n'est pas une dette
 
 Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : ce sont deux produits

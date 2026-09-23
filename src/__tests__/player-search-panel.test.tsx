@@ -158,6 +158,8 @@ describe("PlayerSearchPanel — clearing the field", () => {
   // tapant, et le contraire de ce qu'on veut en effaçant — le champ redevenait vide, l'invitation
   // réapparaissait, et la grille précédente restait affichée dessous.
   it("empties the grid when the query is cleared", async () => {
+    // Un historique posé ici, et non hérité des tests d'avant : l'écran de départ le montre.
+    window.localStorage.setItem("cine.player.recentSearches", JSON.stringify(["keanu"]));
     payload = { library: [OWNED], tmdb: [], persons: [] };
     await type("matrix");
     expect(await screen.findByText("Matrix")).toBeTruthy();
@@ -293,6 +295,20 @@ describe("PlayerSearchPanel — du champ aux résultats", () => {
   });
 
   // Rien à viser : la touche range quand même le clavier plutôt que de ne rien faire.
+  // « Le retour de », « Arm » : des débuts de mots restés dans l'historique (23/09/2026). Ouvrir un
+  // résultat retient son titre, qui remplace le début tapé.
+  it("retient le titre ouvert, pas le début tapé", async () => {
+    window.localStorage.clear();
+    payload = { library: [OWNED], tmdb: [], persons: [PERSON] };
+    await type("matr");
+    fireEvent.click(await screen.findByText("Matrix"));
+    expect(JSON.parse(window.localStorage.getItem("cine.player.recentSearches") ?? "[]")).toEqual(["Matrix"]);
+    fireEvent.click(screen.getByText("Keanu Reeves"));
+    expect(JSON.parse(window.localStorage.getItem("cine.player.recentSearches") ?? "[]")).toEqual(["Keanu Reeves", "Matrix"]);
+    // Rendu propre : un historique laissé là dessinerait ses boutons dans les tests suivants.
+    window.localStorage.clear();
+  });
+
   it("range le clavier quand il n'y a rien à viser", async () => {
     payload = { library: [], tmdb: [], persons: [] };
     await type("zzzzqqq");

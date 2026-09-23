@@ -160,6 +160,10 @@ function enabled(): boolean {
   return Boolean(apiKey);
 }
 
+export interface TmdbTranslations {
+  translations?: { iso_639_1: string; iso_3166_1: string; data?: { title?: string; name?: string } }[];
+}
+
 /** Les quatre langues de l'interface, plus les visuels sans texte. Voir `getMovieImages`. */
 const IMAGE_LANGS = "fr,en,es,de,null";
 
@@ -236,6 +240,11 @@ function createTmdbClient(lang = "fr-FR") {
      * foyer — c'est au moment de l'afficher qu'on choisit la langue, pas au moment de la
      * demander. Une seule liste, mise en cache une semaine, et chacun y lit la sienne.
      */
+    /** Le titre dans chaque langue où il a été traduit — voir `titleNames`. */
+    getMovieTranslations: (tmdbId: number) =>
+      fetchJson<TmdbTranslations>(`${BASE}/movie/${tmdbId}/translations?api_key=${apiKey}`),
+    getTvTranslations: (tmdbTvId: number) =>
+      fetchJson<TmdbTranslations>(`${BASE}/tv/${tmdbTvId}/translations?api_key=${apiKey}`),
     getMovieImages: (tmdbId: number) =>
       fetchJson<TmdbImages>(
         `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${IMAGE_LANGS}`

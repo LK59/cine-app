@@ -52,6 +52,14 @@ describe("le texte a trois niveaux", () => {
   });
 });
 
+describe("les surfaces sont neutres", () => {
+  // `slate` est un gris bleuté, hérité de l'ancien fond : sur le noir neutre de l'app, il faisait
+  // des champs et des cartes bleu marine (23/09/2026). La surface s'appelle `surface`.
+  it("aucun fond slate", () => {
+    expect(offenders(/bg-slate-\d{3}/g)).toEqual([]);
+  });
+});
+
 describe("les arrondis ont un rôle chacun", () => {
   // Pilule : `rounded-full`. Pastille sur une image : `rounded`. Affiche, vignette, bouton,
   // ligne de liste : `rounded-lg`. Bloc et champ : `rounded-xl`. Fiche, panneau, fenêtre :

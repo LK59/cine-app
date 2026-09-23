@@ -37,9 +37,13 @@ export async function register() {
 
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
-      import("./lib/server-cache").then(({ cachedMovies, cachedSeries }) => {
-        cachedMovies().catch(() => {});
-        cachedSeries().catch(() => {});
+      import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {
+        // Les titres traduits aussi (voir `titleNames`) : demander chaque titre lance sa
+        // recherche en arrière-plan, et la première ouverture après un déploiement les trouve
+        // prêts au lieu de montrer les titres de Radarr une fois.
+        const { getTitleNames } = await import("./lib/titleNames");
+        cachedMovies().then((movies) => movies.forEach((m) => getTitleNames(m.tmdbId, "movie"))).catch(() => {});
+        cachedSeries().then((series) => series.forEach((s) => getTitleNames(s.tmdbId, "series"))).catch(() => {});
       }).catch(() => {});
     }, 0);
   }

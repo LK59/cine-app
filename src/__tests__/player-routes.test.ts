@@ -34,6 +34,7 @@ vi.mock("@/lib/clients/radarr", () => ({ radarr }));
 
 const tmdbClient = { isEnabled: () => true, getMovie: vi.fn(), getTv: vi.fn() };
 vi.mock("@/lib/clients/tmdb", () => ({
+  tmdb: { isEnabled: () => false },
   createTmdbClient: () => tmdbClient,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));

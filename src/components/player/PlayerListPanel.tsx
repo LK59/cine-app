@@ -134,22 +134,6 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
     if (item.tmdbId) cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
   }
 
-  /**
-   * Les trois chiffres du haut.
-   *
-   * Ce qu'on veut savoir en arrivant : combien j'en ai mis de côté, combien je peux lancer tout
-   * de suite, combien j'ai déjà vu. Le deuxième est le seul actionnable — c'est lui qui a droit à
-   * la couleur.
-   */
-  const stats = useMemo(
-    () => ({
-      total: data?.toWatch.length ?? 0,
-      available: data?.toWatch.filter((i) => i.libraryId !== null).length ?? 0,
-      watched: data?.watched.length ?? 0,
-    }),
-    [data]
-  );
-
   const items: PlayerListItem[] = useMemo(() => {
     const source = segment === "requests" ? [] : (data?.[segment] ?? []);
     return sortList(filterByTitle(source, query), sort);
@@ -187,13 +171,10 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
       subtitle={t("player.lists.subtitle")}
     >
       <div className="mx-auto w-full max-w-6xl">
-        {/* Trois chiffres avant tout le reste : on sait ce qu'on a avant de savoir où le trouver. */}
-        <div className="mb-4 grid grid-cols-3 gap-2.5">
-          <StatCard value={stats.total} ready={!!data} label={t("player.lists.stats.inList")} />
-          <StatCard value={stats.available} ready={!!data} label={t("player.lists.stats.available")} highlight />
-          <StatCard value={stats.watched} ready={!!data} label={t("player.lists.stats.watched")} />
-        </div>
-
+        {/* Il y avait trois cartes de chiffres ici — en liste, disponibles, vus — qui répétaient les
+            compteurs des onglets juste en dessous : deux fois 9 et deux fois 12 sur le même écran
+            (23/09/2026). Les onglets gardent les leurs ; ce qui manque se lit sur les cartes, qui
+            disent « Pas encore là ». */}
         {/* Chercher, trier, ajouter — sur une ligne. Cette recherche-ci ne fouille que la liste ;
             le « + » en ouvre une autre, qui cherche partout pour y ajouter. La ligne s'efface
             pendant ce temps : deux champs à l'écran, on ne saurait plus lequel filtre quoi. */}
@@ -363,21 +344,3 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
   );
 }
 
-
-/** Un chiffre et ce qu'il compte. Le seul actionnable — ce qu'on peut lancer — porte la couleur. */
-function StatCard({ value, ready, label, highlight = false }: { value: number; ready: boolean; label: string; highlight?: boolean }) {
-  return (
-    <div
-      className={`rounded-xl border px-3 py-3 ${
-        highlight && value > 0 ? "border-success/25 bg-success/5" : "border-white/10 bg-white/5"
-      }`}
-    >
-      <p className={`text-2xl font-semibold tabular-nums ${highlight && value > 0 ? "text-success" : "text-white"}`}>
-        {/* Repart à l'arrivée des données : sinon le zéro d'avant défilait jusqu'au vrai compte,
-            une liste qui semblait vide un instant. Ne défile qu'ensuite, sur un ajout ou un retrait. */}
-        <AnimatedNumber key={ready ? "ready" : "loading"} value={value} />
-      </p>
-      <p className="mt-0.5 truncate text-xs text-subtle">{label}</p>
-    </div>
-  );
-}

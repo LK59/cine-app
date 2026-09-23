@@ -70,10 +70,10 @@ describe("où les nombres défilent", () => {
     expect(await lire("src/components/cinema/CinemaDetailExtras.tsx")).toMatch(/useTweenedNumber\(downloadPercent\(progress\)\)/);
   });
 
+  // Les cartes de chiffres du haut ont été retirées le 23/09/2026 : elles répétaient ces compteurs.
   it("les compteurs de « Ma liste » — mais ni quand on filtre, ni à l'arrivée des données", async () => {
     const src = await lire("src/components/player/PlayerListPanel.tsx");
     expect(src).toContain("<AnimatedNumber key={`${query}:${data ? 1 : 0}`} value={counts[key]} />");
-    expect(src).toContain('<AnimatedNumber key={ready ? "ready" : "loading"} value={value} />');
   });
 
   it("les chiffres de la gestion, quand ce sont des nombres", async () => {

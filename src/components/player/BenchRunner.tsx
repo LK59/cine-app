@@ -185,7 +185,7 @@ function BenchResults({ results, elapsedMs }: { results: ItemResult[]; elapsedMs
   };
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 p-3 sm:items-center" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-white/15 bg-ink text-white shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-white/10 p-4">
           <div>
             <h2 className="flex items-center gap-2 text-sm font-semibold">

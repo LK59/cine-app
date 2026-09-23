@@ -5,6 +5,7 @@ import { cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } fro
 import { posterUrl, backdropUrl, tmdbResize, libraryPoster } from "@/lib/images";
 import { localeOf, type Locale } from "@/lib/i18n";
 import { getTitleArt } from "@/lib/title-art";
+import { getTitleNames, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { recentlyAddedRail, dailyTop10, type Top10Theme } from "@/lib/cinemaRails";
 import { dailyTop10Db } from "@/lib/db";
@@ -17,6 +18,8 @@ export interface CinemaSeries {
   tvdbId: number;
   tmdbId: number | null;
   title: string;
+  /** Le titre de Sonarr, quand on en affiche un autre. Voir la note jumelle des films. */
+  aka?: string;
   year: number;
   posterUrl: string | null;
   backdropUrl: string | null;
@@ -60,12 +63,14 @@ async function toCinemaSeries(s: SonarrSeries, jellyfinItemId: string, locale: L
     getTitleArt(s.tmdbId ?? 0, "series"),
     s.tmdbId ? getImdbRating(s.tmdbId, "series") : Promise.resolve(null),
   ]);
+  const { title, aka } = localizedTitle(getTitleNames(s.tmdbId, "series"), locale, s.title);
   return {
     sonarrId: s.id,
     jellyfinItemId,
     tvdbId: s.tvdbId,
     tmdbId: s.tmdbId ?? null,
-    title: s.title,
+    title,
+    ...(aka ? { aka } : {}),
     year: s.year,
     // Voir `libraryPoster` : la langue de qui regarde, l'affiche de Sonarr sinon.
     posterUrl: libraryPoster(art.posterByLang, s.images, locale),
