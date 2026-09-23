@@ -70,6 +70,14 @@ function reportRemoteImageFailure(src: string): void {
   );
 }
 
+/** Voir le `ref` de l'image dans `PosterImage`. */
+function showIfAlreadyLoaded(img: HTMLImageElement | null): void {
+  if (img && img.complete && img.naturalWidth > 0) {
+    img.style.transition = "none";
+    img.style.opacity = "1";
+  }
+}
+
 export function PosterImage({
   src,
   alt,
@@ -108,6 +116,18 @@ export function PosterImage({
         sizes={sizes}
         priority={priority}
         className="object-cover opacity-0 transition-opacity duration-500"
+        /**
+         * Déjà en mémoire : elle est là, pas en train d'arriver.
+         *
+         * Le fondu de 500 ms dit « cette image vient d'arriver ». Il se rejouait pourtant à chaque
+         * remontage d'une affiche que le navigateur avait déjà — chaque retour sur une page, chaque
+         * rangée revenue à l'écran —, une demi-seconde de gris pour une image disponible
+         * (23/09/2026). Une image que le navigateur a déjà est `complete` dès son insertion : elle
+         * s'affiche sans transition. Next déclenche `onLoad` dans les deux cas, d'où la lecture ici.
+         * Une fonction de module, donc stable : React ne l'appelle qu'au montage, et un rendu du
+         * parent pendant un vrai fondu ne vient pas le couper.
+         */
+        ref={showIfAlreadyLoaded}
         /**
          * L'apparition se joue sur le nœud, pas dans un état React.
          *
