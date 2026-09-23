@@ -26,6 +26,14 @@ export interface TallySummary {
   /** Le temps total passé à attendre l'arrivée des sauts. */
   seekWaitMs: number;
   audioSwitches: number;
+  /**
+   * Les passages en arrière-plan : combien, combien de temps en tout, et combien ont coûté une
+   * reconstruction au retour (la plateforme avait fermé la source). Une reconstruction au retour
+   * n'était écrite que dans la trace — au journal, elle ressemblait à une ouverture de plus.
+   */
+  backgrounds: number;
+  backgroundMs: number;
+  backgroundRebuilds: number;
 }
 
 export class SessionTally {
@@ -36,6 +44,11 @@ export class SessionTally {
   private seekWaitMs = 0;
   private audioSwitches = 0;
   private waitingSince: number | null = null;
+  private backgrounds = 0;
+  private backgroundMs = 0;
+  private backgroundRebuilds = 0;
+  private hiddenSince: number | null = null;
+  private lastHiddenMs = 0;
 
   /** Le film s'arrête de lui-même. Un second signal pendant la même attente ne la redouble pas. */
   waitStarted(now: number): void {
@@ -64,6 +77,33 @@ export class SessionTally {
     this.audioSwitches += 1;
   }
 
+  /** La page passe en arrière-plan. Une attente en cours n'en est plus une : c'est l'absence. */
+  hidden(now: number): void {
+    if (this.hiddenSince !== null) return;
+    this.hiddenSince = now;
+    this.waitingSince = null;
+  }
+
+  /** Elle revient. Rend la durée de cette absence, que la ligne `rebuild` du retour porte. */
+  shown(now: number): number {
+    const since = this.hiddenSince;
+    if (since === null) return 0;
+    this.hiddenSince = null;
+    this.backgrounds += 1;
+    this.lastHiddenMs = Math.max(0, now - since);
+    this.backgroundMs += this.lastHiddenMs;
+    return this.lastHiddenMs;
+  }
+
+  /** La durée de la dernière absence terminée. */
+  get lastBackgroundMs(): number {
+    return this.lastHiddenMs;
+  }
+
+  backgroundRebuilt(): void {
+    this.backgroundRebuilds += 1;
+  }
+
   /** Le bilan à cet instant, attente en cours comprise — la séance peut finir en pleine attente. */
   summary(now: number): TallySummary {
     const ongoing = this.waitingSince !== null ? now - this.waitingSince : 0;
@@ -75,6 +115,10 @@ export class SessionTally {
       seeks: this.seeks,
       seekWaitMs: Math.round(this.seekWaitMs),
       audioSwitches: this.audioSwitches,
+      // Une séance qui finit en arrière-plan — l'application tuée — compte son absence en cours.
+      backgrounds: this.backgrounds + (this.hiddenSince !== null ? 1 : 0),
+      backgroundMs: Math.round(this.backgroundMs + (this.hiddenSince !== null ? now - this.hiddenSince : 0)),
+      backgroundRebuilds: this.backgroundRebuilds,
     };
   }
 

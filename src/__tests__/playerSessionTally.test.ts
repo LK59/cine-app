@@ -53,3 +53,25 @@ describe("newPlayerSessionId", () => {
     for (const id of ids) expect(id).toMatch(/^[0-9a-z-]{8}$/);
   });
 });
+
+describe("SessionTally — arrière-plan", () => {
+  it("compte les absences, leur durée, et celles qui ont coûté une reconstruction", () => {
+    const t = new SessionTally();
+    t.hidden(0);
+    t.hidden(10); // un second signal ne redouble rien
+    expect(t.shown(60_000)).toBe(60_000);
+    t.backgroundRebuilt();
+    t.hidden(100_000);
+    expect(t.summary(130_000)).toMatchObject({ backgrounds: 2, backgroundMs: 90_000, backgroundRebuilds: 1 });
+    expect(t.lastBackgroundMs).toBe(60_000);
+  });
+
+  it("n'appelle pas attente le temps passé en arrière-plan", () => {
+    const t = new SessionTally();
+    t.waitStarted(0);
+    t.hidden(100);
+    t.shown(50_000);
+    t.waitEnded(50_100);
+    expect(t.summary(60_000).waits).toBe(0);
+  });
+});

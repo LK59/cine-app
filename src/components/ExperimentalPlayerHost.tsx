@@ -1136,14 +1136,19 @@ export function ExperimentalPlayerHost({
     save();
     const timer = setInterval(save, 30_000);
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") save();
+      if (document.visibilityState === "hidden") {
+        tally.hidden(Date.now());
+        save();
+      } else {
+        tally.shown(Date.now());
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [sessionId, stopFields]);
+  }, [sessionId, stopFields, tally]);
   useEffect(() => {
     const onPageHide = () => reportStop("page");
     // Une page rendue depuis le cache du navigateur (retour arrière) reprend le film : son arrêt
@@ -1880,7 +1885,19 @@ export function ExperimentalPlayerHost({
       const playback = remuxRef.current;
       if (!playback?.lost || rebuildAtRef.current !== null) return;
       if (!spendRebuild()) return;
-      restart(playback.position || positionRef.current, "la plateforme a fermé la source");
+      const at = playback.position || positionRef.current;
+      // Écrit au journal, et plus seulement dans la trace : une reconstruction au retour se lisait
+      // comme une ouverture de plus, et combien de retours d'arrière-plan en coûtent une restait
+      // une question sans réponse (23/09/2026).
+      tally.backgroundRebuilt();
+      reportPlayback("rebuild", {
+        ...describeFileRef.current(),
+        path: "remux",
+        reason: "source fermée en arrière-plan",
+        at,
+        hiddenMs: tally.lastBackgroundMs,
+      });
+      restart(at, "la plateforme a fermé la source");
     };
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
@@ -1889,7 +1906,7 @@ export function ExperimentalPlayerHost({
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [path, restart, spendRebuild]);
+  }, [path, restart, spendRebuild, tally]);
 
   // Watched only while something is waiting on it: an idle player has no use for the news.
   useEffect(() => {

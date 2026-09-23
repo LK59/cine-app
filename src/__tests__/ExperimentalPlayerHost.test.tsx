@@ -582,6 +582,41 @@ describe("une coupure réseau", () => {
 });
 
 describe("une source perdue", () => {
+  /**
+   * Relu le 23/09/2026 : iOS ferme la source d'une page restée en arrière-plan. La reconstruction
+   * au retour n'était écrite que dans la trace — au journal, une ouverture de plus.
+   */
+  it("écrit la reconstruction au retour d'arrière-plan, avec la durée de l'absence", async () => {
+    const setVisibility = (state: "visible" | "hidden") => {
+      Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    const { unmount } = mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const now = vi.spyOn(Date, "now");
+    let t = 5_000_000;
+    now.mockImplementation(() => t);
+
+    act(() => setVisibility("hidden"));
+    t += 90_000;
+    remux.lost = true;
+    remux.position = 1200;
+    act(() => setVisibility("visible"));
+    now.mockRestore();
+
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1].startSeconds).toBeCloseTo(1200, 1);
+    const logged = (kind: string) =>
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .filter(([url]) => url === "/api/player/log")
+        .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+        .filter((entry) => entry.kind === kind);
+    expect(logged("rebuild")[0].fields).toMatchObject({ reason: "source fermée en arrière-plan", at: 1200, hiddenMs: 90_000 });
+
+    unmount();
+    expect(logged("stop")[0].fields).toMatchObject({ backgrounds: 1, backgroundMs: 90_000, backgroundRebuilds: 1 });
+  });
+
   it("reconstruit au lieu de reporter une panne", async () => {
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));

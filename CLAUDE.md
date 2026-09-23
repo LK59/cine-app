@@ -92,7 +92,8 @@ film watched to the end and one abandoned after thirty seconds read the same. Si
 every native-player line carries a `session` id (a rebuild rewrites `start`, so lines are joined
 by that, never by account and time), and `stop` is the session's summary: `watched`, `waits` /
 `waitedMs` / `longestWaitMs` (stops of 250 ms or more mid-playback — `stall` only fires at 5 s),
-`seeks` / `seekWaitMs`, `audioSwitches`. A page iOS kills in the background never gets to send
+`seeks` / `seekWaitMs`, `audioSwitches`, `backgrounds` / `backgroundMs` / `backgroundRebuilds` (a
+return from the background that finds the source closed also writes a `rebuild` line with `hiddenMs`). A page iOS kills in the background never gets to send
 it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`)
 and sent on the next launch as `why: "lost"` with `lateByMs`; the weekly reading keeps the last
 line per `session`. Both files are one
