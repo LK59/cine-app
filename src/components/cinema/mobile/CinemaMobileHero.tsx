@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -67,6 +67,45 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [index, setIndex] = useRotatingIndex(items.length, paused || dragging);
+
+  /**
+   * Un saut de plus d'un cran se fait sans glisser.
+   *
+   * Seules l'affiche courante et ses deux voisines sont rendues. Du dernier titre au premier, ou
+   * d'un toucher sur une barre éloignée, la piste glissait donc sur toute sa largeur en traversant
+   * des cases vides, l'affiche visible démontée d'emblée (relevé le 23/09/2026). Le glissement
+   * reste pour un cran — le geste, la rotation — ; au-delà, l'affiche est remplacée sur place.
+   * Retenu pendant le rendu, et non dans un effet : c'est ce rendu-là qui pose la transformation.
+   */
+  const [shownIndex, setShownIndex] = useState(index);
+  const [jumped, setJumped] = useState(false);
+  if (index !== shownIndex) {
+    setShownIndex(index);
+    setJumped(Math.abs(index - shownIndex) > 1);
+  }
+  // La transition revient une image après le saut, et non au cran suivant : rendue dans le même
+  // rendu que la nouvelle position, elle n'aurait rien à interpoler et ce cran se ferait d'un coup
+  // lui aussi (voir la note sur les deux images dans useCarouselDrag).
+  useEffect(() => {
+    if (!jumped) return;
+    const frame = requestAnimationFrame(() => setJumped(false));
+    return () => cancelAnimationFrame(frame);
+  }, [jumped]);
+
+  /**
+   * La barre de progression suit le minuteur, pauses comprises.
+   *
+   * Seul le minuteur s'arrêtait : la barre continuait de se remplir derrière une fiche ou la
+   * recherche, et au retour elle était pleine alors que le titre ne changeait que huit secondes
+   * plus tard. Elle se fige avec lui, et repart de zéro quand il repart pour un intervalle entier.
+   */
+  const running = !(paused || dragging);
+  const [runs, setRuns] = useState(0);
+  const [wasRunning, setWasRunning] = useState(running);
+  if (running !== wasRunning) {
+    setWasRunning(running);
+    if (running) setRuns((n) => n + 1);
+  }
   const drag = useCarouselDrag({
     trackRef,
     count: items.length,
@@ -117,7 +156,7 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
           className="flex"
           style={{
             transform: carouselTransform(index),
-            transition: CAROUSEL_TRANSITION,
+            transition: jumped ? "none" : CAROUSEL_TRANSITION,
             // Promue une fois pour toutes, plutôt qu'à chaque geste : sans cela le navigateur
             // décide de promouvoir la piste au premier déplacement, ce qui veut dire re-tramer
             // une surface de plusieurs écrans de large au moment où le doigt attend une réponse.
@@ -205,7 +244,13 @@ export const CinemaMobileHero = memo(function CinemaMobileHero({
               className="h-1 flex-1 overflow-hidden rounded-full bg-white/25"
             >
               {i < index && <div className="h-full w-full bg-white" />}
-              {i === index && <div key={index} className="h-full animate-hero-fill bg-white" />}
+              {i === index && (
+                <div
+                  key={`${index}:${runs}`}
+                  className="h-full animate-hero-fill bg-white"
+                  style={{ animationPlayState: running ? "running" : "paused" }}
+                />
+              )}
             </button>
           ))}
         </div>
