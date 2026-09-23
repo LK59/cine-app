@@ -6,6 +6,7 @@ export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/p
 import { config } from "@/lib/config";
 import { fetchJson } from "@/lib/http";
 import { jellyfinAuth, jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { forwardedFor } from "@/lib/clientAddress";
 import type { JellyfinDeviceProfile } from "@/lib/deviceProfile";
 
 const { url, apiKey } = config.jellyfin;
@@ -159,9 +160,10 @@ export interface PlaybackInfoOptions {
  * AuthenticateByName is what used to evict other people's tokens (see the auth route). Nothing
  * here authenticates, so nothing here can evict anything.
  */
-function playbackHeaders(token: string, client: PlaybackClient, userId: string) {
+async function playbackHeaders(token: string, client: PlaybackClient, userId: string) {
   const deviceId = `${client === PLAYBACK_CLIENTS.engine ? "cine-engine" : "cine-app"}-${userId}`;
   return {
+    ...(await forwardedFor()),
     "Content-Type": "application/json",
     Authorization: jellyfinAuth(token, {
       client,
@@ -183,10 +185,10 @@ export const jellyfin = {
   // can't send custom headers per-segment), and that URL eventually reaches
   // the browser. Using the user's scoped, revocable session token there — instead
   // of the eternal admin key — keeps that unavoidable exposure low-stakes.
-  getPlaybackInfo: (userId: string, itemId: string, token: string, opts: PlaybackInfoOptions) =>
+  getPlaybackInfo: async (userId: string, itemId: string, token: string, opts: PlaybackInfoOptions) =>
     fetchJson<JellyfinPlaybackInfo>(`${url}/Items/${itemId}/PlaybackInfo?UserId=${userId}`, {
       method: "POST",
-      headers: { ...jellyfinAuthHeaders(token), "Content-Type": "application/json" },
+      headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify({
         UserId: userId,
         MaxStreamingBitrate: opts.maxBitrate,
@@ -199,7 +201,7 @@ export const jellyfin = {
       }),
     }),
 
-  reportPlaybackStart: (
+  reportPlaybackStart: async (
     userId: string,
     itemId: string,
     token: string,
@@ -210,7 +212,7 @@ export const jellyfin = {
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing`, {
       method: "POST",
-      headers: playbackHeaders(token, client, userId),
+      headers: await playbackHeaders(token, client, userId),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -221,7 +223,7 @@ export const jellyfin = {
       }),
     }),
 
-  reportPlaybackProgress: (
+  reportPlaybackProgress: async (
     userId: string,
     itemId: string,
     token: string,
@@ -234,7 +236,7 @@ export const jellyfin = {
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Progress`, {
       method: "POST",
-      headers: playbackHeaders(token, client, userId),
+      headers: await playbackHeaders(token, client, userId),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -249,7 +251,7 @@ export const jellyfin = {
       }),
     }),
 
-  reportPlaybackStopped: (
+  reportPlaybackStopped: async (
     userId: string,
     itemId: string,
     token: string,
@@ -260,7 +262,7 @@ export const jellyfin = {
   ) =>
     fetchJson<void>(`${url}/Sessions/Playing/Stopped`, {
       method: "POST",
-      headers: playbackHeaders(token, client, userId),
+      headers: await playbackHeaders(token, client, userId),
       body: JSON.stringify({
         UserId: userId,
         ItemId: itemId,
@@ -277,7 +279,7 @@ export const jellyfin = {
    * Their account, their settings: the admin key would answer for whoever it belongs to, which
    * on a shared server is somebody else's languages.
    */
-  getUserConfiguration: (userId: string, token: string) =>
+  getUserConfiguration: async (userId: string, token: string) =>
     fetchJson<{
       Configuration?: {
         AudioLanguagePreference?: string | null;
@@ -285,7 +287,7 @@ export const jellyfin = {
         SubtitleMode?: string | null;
         PlayDefaultAudioTrack?: boolean;
       };
-    }>(`${url}/Users/${userId}`, { headers: jellyfinAuthHeaders(token) }),
+    }>(`${url}/Users/${userId}`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }),
 
   /**
    * Écrire ces mêmes préférences, avec le jeton de la personne.
@@ -294,10 +296,10 @@ export const jellyfin = {
    * effacerait tout le reste. L'appelant relit donc la configuration courante et renvoie l'objet
    * complet — voir la route, qui fait exactement ça.
    */
-  updateUserConfiguration: (userId: string, token: string, configuration: Record<string, unknown>) =>
+  updateUserConfiguration: async (userId: string, token: string, configuration: Record<string, unknown>) =>
     fetchJson<void>(`${url}/Users/${userId}/Configuration`, {
       method: "POST",
-      headers: { ...jellyfinAuthHeaders(token), "Content-Type": "application/json" },
+      headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify(configuration),
     }),
 
@@ -308,10 +310,10 @@ export const jellyfin = {
    * nous. La clé d'administration ferait le changement sans rien demander, ce qui transformerait
    * une session volée en prise de contrôle du compte.
    */
-  changePassword: (userId: string, token: string, currentPw: string, newPw: string) =>
+  changePassword: async (userId: string, token: string, currentPw: string, newPw: string) =>
     fetchJson<void>(`${url}/Users/${userId}/Password`, {
       method: "POST",
-      headers: { ...jellyfinAuthHeaders(token), "Content-Type": "application/json" },
+      headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()), "Content-Type": "application/json" },
       body: JSON.stringify({ CurrentPw: currentPw, NewPw: newPw }),
     }),
 

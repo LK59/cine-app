@@ -13,6 +13,7 @@ import { originalLanguageCode } from "@/lib/originalLanguage";
 import { displayTitle } from "@/lib/displayTitle";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { signCastToken, CAST_TOKEN_PARAM } from "@/lib/castToken";
+import { forwardedFor } from "@/lib/clientAddress";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest) {
       if (nativeHls) {
         try {
           const warmup = await fetch(`${config.jellyfin.url}${source.TranscodingUrl}`, {
-            headers: jellyfinAuthHeaders(session.jfToken),
+            headers: { ...jellyfinAuthHeaders(session.jfToken), ...(await forwardedFor()) },
             signal: AbortSignal.timeout(15_000),
           });
           // Read it to completion (a ~700 byte playlist) rather than dropping the response on the

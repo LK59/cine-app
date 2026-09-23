@@ -8,6 +8,7 @@ import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
 import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
+import { forwardedFor } from "@/lib/clientAddress";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -42,6 +43,8 @@ export async function POST(req: NextRequest) {
       jellyfinRes = await fetch(`${config.jellyfin.url}/Users/AuthenticateByName`, {
         method: "POST",
         headers: {
+          // Sans quoi Jellyfin inscrit chaque connexion depuis l'adresse du conteneur.
+          ...(await forwardedFor()),
           "Content-Type": "application/json",
           Authorization: `MediaBrowser Client="CineApp", Device="Server", DeviceId="${deviceId}", Version="1.0.0"`,
         },
