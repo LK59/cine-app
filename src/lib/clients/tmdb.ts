@@ -160,8 +160,23 @@ function enabled(): boolean {
   return Boolean(apiKey);
 }
 
+export interface TmdbTranslation {
+  iso_639_1: string;
+  iso_3166_1: string;
+  data?: { title?: string; name?: string };
+}
+
+/**
+ * Un titre et ses traductions, en un appel (`append_to_response=translations`).
+ *
+ * Les détails sont nécessaires : TMDB ne range pas la langue d'origine parmi les traductions. Un
+ * film français n'a pas d'entrée « fr » — son titre français est son titre d'origine.
+ */
 export interface TmdbTranslations {
-  translations?: { iso_639_1: string; iso_3166_1: string; data?: { title?: string; name?: string } }[];
+  original_language?: string;
+  original_title?: string;
+  original_name?: string;
+  translations?: { translations?: TmdbTranslation[] };
 }
 
 /** Les quatre langues de l'interface, plus les visuels sans texte. Voir `getMovieImages`. */
@@ -242,9 +257,9 @@ function createTmdbClient(lang = "fr-FR") {
      */
     /** Le titre dans chaque langue où il a été traduit — voir `titleNames`. */
     getMovieTranslations: (tmdbId: number) =>
-      fetchJson<TmdbTranslations>(`${BASE}/movie/${tmdbId}/translations?api_key=${apiKey}`),
+      fetchJson<TmdbTranslations>(`${BASE}/movie/${tmdbId}?api_key=${apiKey}&append_to_response=translations`),
     getTvTranslations: (tmdbTvId: number) =>
-      fetchJson<TmdbTranslations>(`${BASE}/tv/${tmdbTvId}/translations?api_key=${apiKey}`),
+      fetchJson<TmdbTranslations>(`${BASE}/tv/${tmdbTvId}?api_key=${apiKey}&append_to_response=translations`),
     getMovieImages: (tmdbId: number) =>
       fetchJson<TmdbImages>(
         `${BASE}/movie/${tmdbId}/images?api_key=${apiKey}&include_image_language=${IMAGE_LANGS}`

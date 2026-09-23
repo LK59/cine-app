@@ -23,12 +23,15 @@ vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 import { getTitleNames, localizedTitle, namesFromTranslations, resetTitleNames } from "@/lib/titleNames";
 
 const PRENOM = {
-  translations: [
-    { iso_639_1: "en", iso_3166_1: "US", data: { title: "What's in a Name" } },
-    { iso_639_1: "fr", iso_3166_1: "CA", data: { title: "Le Prénom (Québec)" } },
-    { iso_639_1: "fr", iso_3166_1: "FR", data: { title: "Le Prénom" } },
-    { iso_639_1: "de", iso_3166_1: "DE", data: { title: "" } },
-  ],
+  original_language: "en",
+  original_title: "What's in a Name",
+  translations: {
+    translations: [
+      { iso_639_1: "fr", iso_3166_1: "CA", data: { title: "Le Prénom (Québec)" } },
+      { iso_639_1: "fr", iso_3166_1: "FR", data: { title: "Le Prénom" } },
+      { iso_639_1: "de", iso_3166_1: "DE", data: { title: "" } },
+    ],
+  },
 };
 
 beforeEach(() => {
@@ -43,8 +46,20 @@ describe("namesFromTranslations", () => {
   });
 
   it("lit `name` pour une série", () => {
-    expect(namesFromTranslations({ translations: [{ iso_639_1: "fr", iso_3166_1: "FR", data: { name: "Le Bureau des légendes" } }] }))
+    expect(namesFromTranslations({ translations: { translations: [{ iso_639_1: "fr", iso_3166_1: "FR", data: { name: "Le Bureau des légendes" } }] } }))
       .toEqual({ fr: "Le Bureau des légendes" });
+  });
+
+  // Mesuré en production le 23/09/2026 : TMDB ne liste pas la langue d'origine parmi les
+  // traductions. Sans le titre d'origine, un film français restait sous son titre anglais.
+  it("prend le titre d'origine pour la langue d'origine", () => {
+    expect(
+      namesFromTranslations({
+        original_language: "fr",
+        original_title: "Le Retour de Martin Guerre",
+        translations: { translations: [{ iso_639_1: "en", iso_3166_1: "US", data: { title: "The Return of Martin Guerre" } }] },
+      })
+    ).toEqual({ fr: "Le Retour de Martin Guerre", en: "The Return of Martin Guerre" });
   });
 });
 
@@ -59,14 +74,14 @@ describe("getTitleNames", () => {
   });
 
   it("relit le cache disque sans rappeler TMDB", () => {
-    kv.set("tmdb:titles:v1:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: Date.now() });
+    kv.set("tmdb:titles:v2:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: Date.now() });
     expect(getTitleNames(77338, "movie")).toEqual({ fr: "Le Prénom" });
     expect(tmdb.getMovieTranslations).not.toHaveBeenCalled();
   });
 
   it("ressert une traduction périmée pendant qu'il la rafraîchit", () => {
     tmdb.getMovieTranslations.mockResolvedValue(PRENOM);
-    kv.set("tmdb:titles:v1:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: 0 });
+    kv.set("tmdb:titles:v2:movie:77338", { value: { fr: "Le Prénom" }, fetchedAt: 0 });
     expect(getTitleNames(77338, "movie")).toEqual({ fr: "Le Prénom" });
     expect(tmdb.getMovieTranslations).toHaveBeenCalledTimes(1);
   });

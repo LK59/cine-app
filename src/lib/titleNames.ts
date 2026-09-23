@@ -25,6 +25,8 @@ export type TitleNames = Partial<Record<Locale, string>>;
 // Sous les trente jours après lesquels le ménage du cache disque efface une entrée : rafraîchie
 // avant d'être effacée, une traduction ne redevient jamais inconnue.
 const TTL_MS = 14 * 24 * 3600_000;
+// `v2` : la forme lue a changé (la langue d'origine s'y ajoute). Une entrée `v1` relue telle quelle
+// laisserait les films français sous leur titre anglais pendant deux semaines.
 /** Le pays qu'on préfère quand une langue a plusieurs traductions : fr-FR plutôt que fr-CA. */
 const HOME_COUNTRY: Record<Locale, string> = { fr: "FR", en: "US", es: "ES", de: "DE" };
 
@@ -39,8 +41,17 @@ export function resetTitleNames(): void {
 
 export function namesFromTranslations(data: TmdbTranslations): TitleNames {
   const out: TitleNames = {};
+  const translations = data.translations?.translations ?? [];
   for (const locale of LOCALES) {
-    const candidates = (data.translations ?? []).filter((t) => t.iso_639_1 === locale);
+    // La langue d'origine n'est pas une traduction : TMDB ne la liste pas. Constaté sur *Le
+    // Retour de Martin Guerre*, qui avait un titre en anglais, en espagnol, en allemand — et
+    // aucun en français.
+    const original = data.original_title || data.original_name;
+    if (data.original_language === locale && original) {
+      out[locale] = original.trim();
+      continue;
+    }
+    const candidates = translations.filter((t) => t.iso_639_1 === locale);
     const ordered = [
       ...candidates.filter((t) => t.iso_3166_1 === HOME_COUNTRY[locale]),
       ...candidates.filter((t) => t.iso_3166_1 !== HOME_COUNTRY[locale]),
@@ -83,7 +94,7 @@ export function getTitleNames(tmdbId: number | null | undefined, mediaType: "mov
 
 function readTitleNames(tmdbId: number | null | undefined, mediaType: "movie" | "series"): TitleNames {
   if (!tmdbId || !tmdb.isEnabled()) return {};
-  const key = `tmdb:titles:v1:${mediaType}:${tmdbId}`;
+  const key = `tmdb:titles:v2:${mediaType}:${tmdbId}`;
   let entry = memory.get(key);
   if (!entry) {
     const disk = kvCacheDb.get(key);
