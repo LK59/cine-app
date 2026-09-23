@@ -113,7 +113,10 @@ export function CinemaHero({
     const timer = setTimeout(() => setDebouncedId(item.radarrId), 200);
     return () => clearTimeout(timer);
   }, [item.radarrId]);
-  const { data: rawInfo } = useSWR<RadarrInfo>(`/api/radarr/movies/${debouncedId}/info`, fetcher);
+  // Sans la réponse d'avant : `keepPreviousData` est réglé pour toute l'application (SWRProvider),
+  // et la bannière recevait le synopsis du titre précédent pendant que celui du nouveau arrivait —
+  // il fondait à nouveau, puis était remplacé (23/09/2026). Rien, plutôt que le texte d'un autre.
+  const { data: rawInfo } = useSWR<RadarrInfo>(`/api/radarr/movies/${debouncedId}/info`, fetcher, { keepPreviousData: false });
   // Guards against showing the PREVIOUS item's cast under the new title during the debounce
   // window — SWR still has that data cached from before debouncedId catches up.
   const info = debouncedId === item.radarrId ? rawInfo : undefined;

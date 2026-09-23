@@ -40,7 +40,10 @@ export function CinemaSeriesHero({
     const timer = setTimeout(() => setDebouncedId(item.sonarrId), 200);
     return () => clearTimeout(timer);
   }, [item.sonarrId]);
-  const { data: rawInfo } = useSWR<SonarrInfo>(`/api/sonarr/series/${debouncedId}/info`, fetcher);
+  // Sans la réponse d'avant : `keepPreviousData` est réglé pour toute l'application (SWRProvider),
+  // et la bannière recevait le synopsis du titre précédent pendant que celui du nouveau arrivait —
+  // il fondait à nouveau, puis était remplacé (23/09/2026). Rien, plutôt que le texte d'un autre.
+  const { data: rawInfo } = useSWR<SonarrInfo>(`/api/sonarr/series/${debouncedId}/info`, fetcher, { keepPreviousData: false });
   const info = debouncedId === item.sonarrId ? rawInfo : undefined;
 
   useEffect(() => {
