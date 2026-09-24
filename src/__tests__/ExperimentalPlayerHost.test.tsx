@@ -544,6 +544,11 @@ describe("une source perdue", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     };
     const { unmount } = mount();
+    // Le pipeline construit, et pas seulement l'écran sorti du chargement : sous la charge de la
+    // suite complète, le retour d'arrière-plan tombait avant que le lecteur existe, ses deux
+    // vérifications (tout de suite, puis 400 ms après) passaient à vide, et rien ne se
+    // reconstruisait (24/09/2026, deux fois, dont une construction d'image).
+    await waitFor(() => expect(probes).toHaveLength(1));
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     const now = vi.spyOn(Date, "now");
     let t = 5_000_000;
@@ -556,8 +561,6 @@ describe("une source perdue", () => {
     act(() => setVisibility("visible"));
     now.mockRestore();
 
-    // Trois secondes plutôt que la seconde par défaut : sous la charge de la suite complète, la
-    // reconstruction a mis 1,06 s à partir (24/09/2026) — le test échouait sans que rien ne soit faux.
     await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
     expect(probes[1].startSeconds).toBeCloseTo(1200, 1);
     const logged = (kind: string) =>
