@@ -37,7 +37,7 @@ async function saveAsAdmin(userId: string, itemId: string, kind: Kind, positionT
   const runtime = await jellyfin.getRunTimeTicks(userId, itemId);
   const pct = runtime ? (positionTicks / runtime) * 100 : null;
   if (pct !== null && pct >= MAX_RESUME_PCT) {
-    await jellyfin.markPlayedAsAdmin(userId, itemId);
+    await jellyfin.markPlayed(userId, itemId);
     return "vu";
   }
   if (pct !== null && pct < MIN_RESUME_PCT) {

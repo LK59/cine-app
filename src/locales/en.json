@@ -58,7 +58,8 @@
       "content": "Content",
       "manage": "Manage"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "activity": "Activity"
   },
   "common": {
     "loading": "Loading...",
@@ -173,7 +174,212 @@
     "imported": "Imported",
     "deleted": "Deleted",
     "downloadFailed": "Download failed",
-    "request": "Request"
+    "request": "Request",
+    "title": "Activity",
+    "subtitle": "{playing} watching · {app} in the app · {total} accounts",
+    "refresh": "Refresh",
+    "loadError": "Couldn't load the activity.",
+    "unavailable": "The media server didn't answer for this part.",
+    "yes": "Yes",
+    "no": "No",
+    "presence": {
+      "playing": "Watching",
+      "app": "In the app",
+      "away": "Away",
+      "awaySince": "Seen {when}"
+    },
+    "live": {
+      "title": "Live",
+      "nobody": "Nobody is in the app right now.",
+      "paused": "Paused",
+      "browsing": "Browsing the catalogue",
+      "nowWatching": "Now watching"
+    },
+    "alerts": {
+      "title": "Needs a look",
+      "tokenRefused": "Token refused",
+      "tokenStale": "Invisible to the media server",
+      "clientErrors": "{n} browser error|{n} browser errors"
+    },
+    "week": {
+      "title": "The last seven days",
+      "seances": "Sessions",
+      "viewers": "{n} viewer|{n} viewers",
+      "watched": "Time watched",
+      "waits": "Waits",
+      "waitsHint": "{d} in total",
+      "slowSeeks": "Slow seeks",
+      "slowSeeksHint": "out of {n} seeks",
+      "rebuilds": "Rebuilds",
+      "stalls": "{n} stall|{n} stalls",
+      "fallbacks": "Fallbacks",
+      "lost": "{n} lost session|{n} lost sessions",
+      "clientErrors": "Browser errors",
+      "tokenRefusals": "Refused tokens",
+      "perDay": "Sessions per day",
+      "legendSeances": "Sessions",
+      "legendProblems": "Share with incidents",
+      "troubled": "Troubled titles",
+      "troubledValue": "incidents: {p} · {n} session|incidents: {p} · {n} sessions",
+      "noTrouble": "No incidents this week.",
+      "rebuildReasons": "Why the player rebuilt",
+      "noRebuild": "No rebuilds this week.",
+      "serverErrors": "Server errors",
+      "noServerError": "No errors this week."
+    },
+    "accounts": {
+      "title": "Accounts ({n})",
+      "admin": "admin",
+      "disabled": "disabled",
+      "appSeen": "App",
+      "serverSeen": "Media server",
+      "week": "7 days",
+      "weekValue": "{n} session · {d}|{n} sessions · {d}",
+      "sessions": "Sessions · incidents",
+      "problems": "{n} incident|{n} incidents"
+    },
+    "recent": {
+      "title": "Latest sessions"
+    },
+    "flags": {
+      "fallback": "{n} fallback|{n} fallbacks",
+      "error": "{n} error|{n} errors",
+      "rebuild": "{n} rebuild|{n} rebuilds",
+      "stall": "{n} stall|{n} stalls",
+      "slowSeek": "{n} slow seek|{n} slow seeks",
+      "lost": "end lost",
+      "server": "server player"
+    },
+    "seance": {
+      "watched": "{d} watched",
+      "legacy": "reconstructed",
+      "serverPlayer": "Server player",
+      "nativePlayer": "Native player ({path})",
+      "watchedLabel": "Watched",
+      "endedAt": "stopped at {at} · {why}",
+      "waitsHint": "{d} in total · longest {max}",
+      "seeks": "Seeks",
+      "seekWait": "{d} waiting",
+      "audio": "Track changes",
+      "backgrounds": "Background",
+      "incidents": "Incidents",
+      "legacyHint": "A session from before end-of-session summaries: rebuilt from its lines, without totals.",
+      "noStop": "No summary yet: the session is still going, or the page closed without warning.",
+      "timeline": "Timeline ({n} lines)"
+    },
+    "line": {
+      "start": "Opened at {at} · {path} · ready in {opened} {rebuild}",
+      "rebuildN": "· rebuild #{n}",
+      "seek": "Seek from {from} to {to} · {took} {buffered}",
+      "buffered": "· already loaded",
+      "audio": "Audio track: {from} → {to} · {took} · {how}",
+      "stall": "Stuck at {at} for {took}",
+      "rebuild": "Rebuilt at {at}: {reason}",
+      "fallback": "Handed to the server player: {reason}",
+      "stop": "End ({why}) · {watched} watched · stopped at {at}",
+      "error": "Error",
+      "cast": "Cast to a TV"
+    },
+    "logs": {
+      "title": "Logs",
+      "subtitle": "{n} lines in this log",
+      "open": "Open the logs",
+      "openSeance": "View the session",
+      "sources": {
+        "player": "Player",
+        "server": "Server",
+        "bench": "Test bench",
+        "benchPlayer": "Bench player"
+      },
+      "user": "Account",
+      "allUsers": "All accounts",
+      "type": "Type",
+      "allTypes": "All types",
+      "period": "Period",
+      "lastDays": "Last day|Last {n} days",
+      "allTime": "All time",
+      "search": "Search the lines…",
+      "sessionFilter": "Session {id}",
+      "more": "Older",
+      "empty": "No line matches.",
+      "rotated": "The log has rotated since: the full line is no longer there.",
+      "allSteps": "Show all {n} steps",
+      "fewerSteps": "Show the last ones only"
+    },
+    "tabs": {
+      "seances": "Sessions",
+      "resume": "In progress",
+      "recent": "Recently watched",
+      "watchlist": "To watch",
+      "requests": "Requests",
+      "favorites": "Favourites",
+      "errors": "Errors"
+    },
+    "empty": {
+      "seances": "No sessions in the logs.",
+      "resume": "Nothing in progress.",
+      "recent": "Nothing watched yet.",
+      "favorites": "No favourites.",
+      "watchlist": "Empty list.",
+      "requests": "No requests.",
+      "errors": "No errors recorded for this account.",
+      "sessions": "No open sessions.",
+      "devices": "No devices."
+    },
+    "media": {
+      "played": "watched",
+      "minutes": "minutes",
+      "save": "Save",
+      "setPosition": "Correct the position",
+      "clear": "Remove from Continue",
+      "markPlayed": "Mark as watched",
+      "markUnplayed": "Mark as unwatched",
+      "movie": "Movie",
+      "series": "Series",
+      "added": "added {when}"
+    },
+    "requests": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "declined": "Declined",
+      "failed": "Failed",
+      "available": "Available"
+    },
+    "account": {
+      "seances": "Sessions",
+      "watched": "Time watched",
+      "thisWeek": "This week",
+      "problems": "Incidents",
+      "played": "Movies watched",
+      "playedEpisodes": "{n} episode|{n} episodes",
+      "firstSeen": "First session",
+      "profile": "Account",
+      "lastLogin": "Last sign-in",
+      "lastServerActivity": "Media server activity",
+      "remoteAccess": "Remote access",
+      "playback": "Playback allowed",
+      "invalidLogins": "Wrong passwords",
+      "language": "Language",
+      "defaultLanguage": "default",
+      "onboarding": "Welcome screen",
+      "onboardingPending": "not seen yet",
+      "onboardingDone": "seen",
+      "notifications": "Notifications",
+      "pushDevices": "Subscribed devices",
+      "followedRequests": "Followed requests",
+      "appSessions": "App sessions ({n})",
+      "unknownDevice": "Unknown device",
+      "sessionDates": "opened {opened} · seen {seen}",
+      "devices": "Media server devices ({n})",
+      "closeHint": "Closing a session signs that device out of the app and revokes the token that sign-in obtained; the person's other apps are untouched."
+    },
+    "actions": {
+      "close": "Close",
+      "closeAll": "Close their sessions ({n})",
+      "confirm": "Confirm",
+      "done": "Done.",
+      "failed": "The action failed."
+    }
   },
   "radarr": {
     "pageTitle": "Movies",
@@ -1371,7 +1577,10 @@
         "admin": "Administration"
       },
       "appLanguage": "App language",
-      "open": "Open"
+      "open": "Open",
+      "activity": "Account activity",
+      "activityHint": "Who's here, who's watching what, everyone's sessions and logs.",
+      "openActivity": "Open activity"
     },
     "browse": {
       "seeAll": "See all",

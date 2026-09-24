@@ -28,15 +28,15 @@ import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
  *
  * Des chemins calculés à l'appel, et non au chargement : les tests pointent `LOG_DIR` ailleurs.
  */
-const playerLogFile = () => path.join(LOG_DIR, "player.log");
-const benchPlayerLogFile = () => path.join(LOG_DIR, "bench-player.log");
+export const playerLogFile = () => path.join(LOG_DIR, "player.log");
+export const benchPlayerLogFile = () => path.join(LOG_DIR, "bench-player.log");
 
 /**
  * Cinq générations pour les spectateurs (≈ 30 Mo au plus) : l'historique de plusieurs jours est ce
  * qu'on vient y chercher. Deux pour le banc, dont seule la dernière série intéresse.
  */
-const PLAYER_LOG_KEEP = 5;
-const BENCH_PLAYER_LOG_KEEP = 2;
+export const PLAYER_LOG_KEEP = 5;
+export const BENCH_PLAYER_LOG_KEEP = 2;
 
 /** `player.log` et ses archives, du plus ancien au plus récent — les spectateurs seulement. */
 export function playerLogFiles(): string[] {

@@ -135,6 +135,10 @@ function migrate(db: Database.Database): void {
   try { db.exec("ALTER TABLE maintenance ADD COLUMN expires_at INTEGER"); } catch { /* already exists */ }
   // « iPhone · Safari » — de quoi reconnaître une session dans le panneau Compte (voir `deviceLabel`).
   try { db.exec("ALTER TABLE sessions ADD COLUMN device TEXT"); } catch { /* already exists */ }
+  // L'appareil que Jellyfin a inscrit pour cette connexion (`cine-app-<aléatoire>`) — pas un secret :
+  // c'est ce qui permet, à la déconnexion, de supprimer cet appareil chez Jellyfin et le jeton avec
+  // lui, sans jamais garder le jeton lui-même (voir `jellyfinRevoke.ts`).
+  try { db.exec("ALTER TABLE sessions ADD COLUMN jf_device TEXT"); } catch { /* already exists */ }
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_preferences (
       user_id    TEXT    PRIMARY KEY,
@@ -430,6 +434,11 @@ export const pushDb = {
     getDb().prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
   },
 
+  /** Combien d'appareils reçoivent les notifications de ce compte (rangées sous son nom). */
+  countForUser(userId: string): number {
+    return (getDb().prepare("SELECT COUNT(*) as n FROM push_subscriptions WHERE user_id = ?").get(userId) as { n: number }).n;
+  },
+
   removeByUser(userId: string): void {
     getDb().prepare("DELETE FROM push_subscriptions WHERE user_id = ?").run(userId);
   },
@@ -697,13 +706,19 @@ export const migrationDb = {
 };
 
 export const sessionDb = {
-  create(jti: string, userId: string, device: string | null = null): void {
+  /**
+   * Ouvre une session. Rend les appareils Jellyfin des sessions expirées que ce passage a effacées,
+   * pour que l'appelant révoque leurs jetons — personne ne s'en servira plus.
+   */
+  create(jti: string, userId: string, device: string | null = null, jfDevice: string | null = null): string[] {
     const db = getDb();
     const now = Date.now();
-    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at, device) VALUES (?, ?, ?, ?, ?)")
-      .run(jti, userId, now, now, device);
+    db.prepare("INSERT OR REPLACE INTO sessions (jti, user_id, created_at, last_seen_at, device, jf_device) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(jti, userId, now, now, device, jfDevice);
     // Opportunistic cleanup of expired sessions
+    const expired = db.prepare("SELECT jf_device FROM sessions WHERE last_seen_at < ? AND jf_device IS NOT NULL").all(now - SESSION_MAX_AGE_MS) as { jf_device: string }[];
     db.prepare("DELETE FROM sessions WHERE last_seen_at < ?").run(now - SESSION_MAX_AGE_MS);
+    return expired.map((r) => r.jf_device);
   },
 
   /**
@@ -734,8 +749,34 @@ export const sessionDb = {
     return !!(db.prepare("SELECT 1 FROM sessions WHERE jti = ?").get(jti));
   },
 
-  delete(jti: string): void {
+  /** Ferme une session. Rend l'appareil Jellyfin qui lui était lié, s'il est connu. */
+  delete(jti: string): string | null {
+    const row = getDb().prepare("SELECT jf_device FROM sessions WHERE jti = ?").get(jti) as { jf_device: string | null } | undefined;
     getDb().prepare("DELETE FROM sessions WHERE jti = ?").run(jti);
+    return row?.jf_device ?? null;
+  },
+
+  /** Toutes les sessions d'un compte, la plus récente d'abord — pour la page d'activité. */
+  listForUser(userId: string): StoredSession[] {
+    const rows = getDb()
+      .prepare("SELECT jti, created_at, last_seen_at, device FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC")
+      .all(userId) as { jti: string; created_at: number; last_seen_at: number; device: string | null }[];
+    return rows.map((r) => ({ jti: r.jti, createdAt: r.created_at, lastSeenAt: r.last_seen_at, device: r.device ?? null }));
+  },
+
+  /** Combien de sessions, et vue quand pour la dernière fois, par compte. */
+  summaryByUser(): Map<string, { count: number; lastSeenAt: number }> {
+    const rows = getDb()
+      .prepare("SELECT user_id, COUNT(*) as n, MAX(last_seen_at) as seen FROM sessions GROUP BY user_id")
+      .all() as { user_id: string; n: number; seen: number }[];
+    return new Map(rows.map((r) => [r.user_id, { count: r.n, lastSeenAt: r.seen }]));
+  },
+
+  /** Fermer toutes les sessions d'un compte. Rend les `jti` fermés. */
+  deleteForUser(userId: string): { jti: string; jfDevice: string | null }[] {
+    const rows = getDb().prepare("SELECT jti, jf_device FROM sessions WHERE user_id = ?").all(userId) as { jti: string; jf_device: string | null }[];
+    getDb().prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    return rows.map((r) => ({ jti: r.jti, jfDevice: r.jf_device }));
   },
 
   countOthers(userId: string, currentJti: string): number {

@@ -11,7 +11,7 @@ import { HttpError } from "@/lib/http";
 const mockJellyfin = {
   checkUserToken: vi.fn(),
   savePositionAsAdmin: vi.fn(),
-  markPlayedAsAdmin: vi.fn(),
+  markPlayed: vi.fn(),
   getRunTimeTicks: vi.fn(),
 };
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: mockJellyfin }));
@@ -120,7 +120,7 @@ describe("reportPlayback — un rapport refusé garde la position autrement", ()
     mockJellyfin.getRunTimeTicks.mockResolvedValue(7466e7);
     const { reportPlayback } = await import("@/lib/playbackReport");
     await reportPlayback(SESSION, "stop", "film", 7233e7, send);
-    expect(mockJellyfin.markPlayedAsAdmin).toHaveBeenCalledWith("jf-1", "film");
+    expect(mockJellyfin.markPlayed).toHaveBeenCalledWith("jf-1", "film");
     expect(mockJellyfin.savePositionAsAdmin).not.toHaveBeenCalled();
   });
 

@@ -12,6 +12,7 @@ import {
   Clock,
   Activity,
   Settings,
+  UsersRound,
 } from "lucide-react";
 import type { ServiceKey } from "@/lib/services";
 
@@ -62,6 +63,8 @@ export const NAV_GROUPS: { titleKey: string; items: NavItem[] }[] = [
       { href: "/jackett", navKey: "nav.jackett", icon: Search, service: "jackett" },
       { href: "/jellyfin", navKey: "nav.jellyfin", icon: PlayCircle, service: "jellyfin" },
       { href: "/jellyseerr", navKey: "nav.jellyseerr", icon: ListChecks, service: "jellyseerr" },
+      // Qui est là, qui regarde quoi, et tout ce que l'application sait de chaque compte.
+      { href: "/activite", navKey: "nav.activity", icon: UsersRound },
       { href: "/health", navKey: "nav.health", icon: Activity },
       // Dernier, comme partout ailleurs : c'est là qu'on va le chercher, pas au milieu.
       { href: "/parametres", navKey: "nav.settings", icon: Settings },

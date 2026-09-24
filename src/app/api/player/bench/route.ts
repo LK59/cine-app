@@ -1,10 +1,10 @@
-import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
-import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
+import { appendJsonLine, logGenerations } from "@/lib/logFile";
 import { readLogLines } from "@/lib/playerBench/plan";
+import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
 
 /**
  * Ce que le banc d'essai a trouvé, écrit à côté du journal du lecteur (`data/logs/bench.log`).
@@ -14,10 +14,7 @@ import { readLogLines } from "@/lib/playerBench/plan";
  * les lignes nomment des films regardés.
  */
 
-const BENCH_LOG = () => path.join(LOG_DIR, "bench.log");
 
-/** Écrite et relue ici seulement : les deux côtés doivent parler du même nombre d'archives. */
-const BENCH_LOG_KEEP = 2;
 
 /** Un film et sa trace tiennent en quelques dizaines de kilo-octets ; au-delà, ce n'est pas le banc. */
 const MAX_BODY = 400_000;

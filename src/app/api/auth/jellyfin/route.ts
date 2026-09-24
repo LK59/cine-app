@@ -1,3 +1,4 @@
+import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { NextRequest, NextResponse } from "next/server";
 import { deviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
@@ -25,17 +26,18 @@ export async function POST(req: NextRequest) {
   }
 
   let jellyfinRes: Response;
+  // DeviceId used to be a single hardcoded constant ("cine-app-server") shared by every login,
+  // from every user, every browser tab, every re-login — Jellyfin treats DeviceId as identifying
+  // one physical device, so every fresh AuthenticateByName call under that same DeviceId
+  // re-registers "the device" and can invalidate whichever token was previously issued to it,
+  // even for a completely different person. With several people using cine-app against the
+  // same server, this is what was silently kicking the video player's stored token out from
+  // under someone else — not time-based (no fixed-hours expiry), triggered by ANYONE logging
+  // in. A fresh random id per login makes every login its own distinct "device" to Jellyfin, so
+  // tokens can never collide/evict each other this way again.
+  // Gardé avec la session : c'est par lui que la déconnexion révoque ce jeton-là (`jellyfinRevoke.ts`).
+  const deviceId = `cine-app-${crypto.randomUUID()}`;
   try {
-    // DeviceId used to be a single hardcoded constant ("cine-app-server") shared by every login,
-    // from every user, every browser tab, every re-login — Jellyfin treats DeviceId as identifying
-    // one physical device, so every fresh AuthenticateByName call under that same DeviceId
-    // re-registers "the device" and can invalidate whichever token was previously issued to it,
-    // even for a completely different person. With several people using cine-app against the
-    // same server, this is what was silently kicking the video player's stored token out from
-    // under someone else — not time-based (no fixed-hours expiry), triggered by ANYONE logging
-    // in. A fresh random id per login makes every login its own distinct "device" to Jellyfin, so
-    // tokens can never collide/evict each other this way again.
-    const deviceId = `cine-app-${crypto.randomUUID()}`;
     // La forme donnée d'abord, la forme sans espace finale seulement si la première échoue — voir
     // `passwordAttempts`. Dans le cas courant il n'y a qu'un seul appel, comme avant.
     jellyfinRes = new Response(null, { status: 401 });
@@ -99,7 +101,9 @@ export async function POST(req: NextRequest) {
     jellyseerrCookie ?? undefined
   );
   const userId = jellyfinId || jellyfinUsername;
-  sessionDb.create(jti, userId, deviceLabel(req.headers.get("user-agent")));
+  const expired = sessionDb.create(jti, userId, deviceLabel(req.headers.get("user-agent")), deviceId);
+  // Les sessions expirées que ce passage vient d'effacer : leurs jetons ne serviront plus.
+  void revokeJellyfinDevices(expired, "session expirée");
   const lang = userPrefsDb.getLang(userId, config.app.language);
   const res = NextResponse.json({ ok: true, role });
   res.cookies.set(SESSION_COOKIE, token, {

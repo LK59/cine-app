@@ -17,14 +17,14 @@ import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
  * Les deux sorties, et pas l'une ou l'autre : la console reste ce qu'on regarde en direct pendant
  * qu'on travaille, le fichier ce qu'on relit après coup.
  */
-const SERVER_LOG_FILE = path.join(LOG_DIR, "server.log");
+export const SERVER_LOG_FILE = path.join(LOG_DIR, "server.log");
 
 /**
  * Trois générations : depuis qu'il reçoit aussi les erreurs des navigateurs, une boucle d'erreurs
  * sur un seul téléphone peut remplir 5 Mo en une soirée, et l'unique archive d'avant emportait
  * alors les erreurs serveur des jours précédents.
  */
-const SERVER_LOG_KEEP = 3;
+export const SERVER_LOG_KEEP = 3;
 
 export function logError(scope: string, err: unknown, context?: Record<string, unknown>): void {
   const entry = {
@@ -82,4 +82,15 @@ export function logClientError(user: string, report: Record<string, unknown>): v
     // Même forme que la pile d'une erreur serveur : six lignes, sur une seule.
     stack: stack ? stack.split("\n").slice(0, 6).map((line) => line.trim()).join(" | ") : undefined,
   }, { keep: SERVER_LOG_KEEP });
+}
+
+/**
+ * Une action de l'administrateur sur le compte de quelqu'un — fermer ses sessions, corriger une
+ * position, marquer un titre vu. Écrite au même journal, en `info` : ce n'est pas une erreur, mais
+ * c'est ce qu'on veut retrouver le jour où quelqu'un demande pourquoi sa reprise a changé.
+ */
+export function logAdminAction(admin: string, action: string, context: Record<string, unknown>): void {
+  const entry = { timestamp: new Date().toISOString(), level: "info", scope: "admin", user: admin, message: action, ...context };
+  console.log(JSON.stringify(entry));
+  appendJsonLine(SERVER_LOG_FILE, entry, { keep: SERVER_LOG_KEEP });
 }

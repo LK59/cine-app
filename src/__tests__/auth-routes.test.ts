@@ -15,6 +15,12 @@ vi.mock("@/lib/db", () => ({
   userPrefsDb: mockUserPrefsDb,
 }));
 
+const mockRevoke = { devices: vi.fn(async () => {}), token: vi.fn(async () => {}) };
+vi.mock("@/lib/jellyfinRevoke", () => ({
+  revokeJellyfinDevices: (...a: unknown[]) => mockRevoke.devices(...(a as [])),
+  revokeJellyfinToken: (...a: unknown[]) => mockRevoke.token(...(a as [])),
+}));
+
 vi.mock("@/lib/config", () => ({
   config: {
     app: { adminUser: "admin", adminPassword: "secret", sessionSecret: "test-secret", cookieSecure: false, language: "fr" },
@@ -87,6 +93,27 @@ describe("POST /api/auth/logout", () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     await POST(fakeReq({ cookie: token }));
     expect(mockSessionDb.delete).toHaveBeenCalledWith(jti);
+  });
+
+  // 24/09/2026 : le jeton Jellyfin de la connexion restait valide pour toujours après la
+  // déconnexion — vingt-quatre appareils « CineApp » accumulés pour un seul compte.
+  it("révoque chez Jellyfin l'appareil de cette connexion", async () => {
+    mockSessionDb.delete.mockReturnValueOnce("cine-app-1234" as never);
+    const { createSessionToken } = await import("@/lib/auth");
+    const { token } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");
+    const { POST } = await import("@/app/api/auth/logout/route");
+    await POST(fakeReq({ cookie: token }));
+    expect(mockRevoke.devices).toHaveBeenCalledWith(["cine-app-1234"], "déconnexion");
+    expect(mockRevoke.token).not.toHaveBeenCalled();
+  });
+
+  it("révoque le jeton lui-même pour une session ouverte avant qu'on garde son appareil", async () => {
+    mockSessionDb.delete.mockReturnValueOnce(null as never);
+    const { createSessionToken } = await import("@/lib/auth");
+    const { token } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");
+    const { POST } = await import("@/app/api/auth/logout/route");
+    await POST(fakeReq({ cookie: token }));
+    expect(mockRevoke.token).toHaveBeenCalledWith("jf-token", "déconnexion");
   });
 
   it("does not throw when the cookie is garbage", async () => {

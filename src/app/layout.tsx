@@ -30,6 +30,7 @@ import { BenchGate } from "@/components/player/BenchRunner";
 import { MaintenanceNotices } from "@/components/MaintenanceNotices";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientErrorListener } from "@/components/ClientErrorListener";
+import { PresencePinger } from "@/components/PresencePinger";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
@@ -190,6 +191,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       depuis son panneau Compte. Il ouvre et ferme les films par `PlaybackProvider`. */}
                   <ErrorBoundary name="banc-essai">
                     <BenchGate />
+                  </ErrorBoundary>
+                  {/* « Je suis là », une fois par minute, pour la vue en direct de l'administrateur.
+                      Sous `PlaybackProvider`, d'où il apprend ce qui joue. */}
+                  <ErrorBoundary name="presence">
+                    <PresencePinger />
                   </ErrorBoundary>
                 </PlaybackProvider>
               </ToastProvider>

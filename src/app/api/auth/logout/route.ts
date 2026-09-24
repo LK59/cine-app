@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { sessionDb } from "@/lib/db";
+import { revokeJellyfinDevices, revokeJellyfinToken } from "@/lib/jellyfinRevoke";
+import { forgetBeat } from "@/lib/activity/presence";
 
 /**
  * Se déconnecter.
@@ -11,16 +13,26 @@ import { sessionDb } from "@/lib/db";
  * `verifySessionToken`, qui ne consulte pas la base. Sans cette vérification, n'importe qui
  * connaissant un `jti` pouvait déconnecter la personne à qui il appartient.
  *
- * Ce qui est révoqué, c'est la session Cine App et rien d'autre : le jeton Jellyfin qu'elle
- * portait n'est pas fermé chez Jellyfin. C'est un choix — se déconnecter d'ici ne doit pas
- * ressembler, de près ou de loin, à perdre l'accès à Jellyfin. Le risque que ça laissait ouvert
- * — un cookie volé valant un jeton Jellyfin utilisable — est traité ailleurs et autrement : ce
- * jeton est désormais chiffré dans le cookie, et n'y est donc plus lisible.
+ * La session de l'application se ferme, et le jeton Jellyfin que cette connexion avait obtenu est
+ * révoqué avec elle (24/09/2026, à la demande de l'administrateur) : il restait valide pour
+ * toujours, et les jetons s'accumulaient — vingt-quatre pour un seul compte. Seul celui de cette
+ * connexion tombe : les autres applications de la personne gardent les leurs. Par l'appareil
+ * gardé avec la session quand on le connaît ; sinon, pour une session ouverte avant qu'on le
+ * garde, par le jeton lui-même, que le cookie porte. Sans attendre Jellyfin : une déconnexion ne
+ * doit jamais échouer parce qu'un autre serveur est lent.
+ *
+ * « Déconnecter tous les autres » (`/api/auth/sessions`) ne fait, lui, que fermer les sessions de
+ * l'application — voir la route.
  */
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const payload = await verifySessionToken(token);
-  if (payload?.jti) sessionDb.delete(payload.jti);
+  if (payload?.jti) {
+    const device = sessionDb.delete(payload.jti);
+    forgetBeat(payload.jti);
+    if (device) void revokeJellyfinDevices([device], "déconnexion");
+    else void revokeJellyfinToken(payload.jfToken, "déconnexion");
+  }
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, "", { maxAge: 0, path: "/" });
   return res;

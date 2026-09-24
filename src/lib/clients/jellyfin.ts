@@ -67,9 +67,18 @@ export function hasSomethingWatched(item: JellyfinItem): boolean {
 export interface JellyfinSession {
   Id: string;
   UserName?: string;
+  UserId?: string;
   Client: string;
   DeviceName: string;
-  NowPlayingItem?: { Name: string; Type: string; RunTimeTicks?: number };
+  NowPlayingItem?: {
+    Name: string;
+    Type: string;
+    RunTimeTicks?: number;
+    Id?: string;
+    SeriesName?: string;
+    IndexNumber?: number;
+    ParentIndexNumber?: number;
+  };
   PlayState?: {
     PositionTicks?: number;
     IsPaused?: boolean;
@@ -172,6 +181,26 @@ async function playbackHeaders(token: string, client: PlaybackClient, userId: st
       version: "1.0.0",
     }),
   };
+}
+
+/** Un compte, tel que `/Users` le rend à la clé d'administration. */
+export interface JellyfinUser {
+  Id: string;
+  Name: string;
+  LastLoginDate?: string;
+  LastActivityDate?: string;
+  HasPassword?: boolean;
+  Policy?: { IsAdministrator?: boolean; IsDisabled?: boolean; EnableRemoteAccess?: boolean; EnableMediaPlayback?: boolean; InvalidLoginAttemptCount?: number };
+}
+
+export interface JellyfinDevice {
+  Id: string;
+  Name?: string;
+  AppName?: string;
+  AppVersion?: string;
+  LastUserName?: string;
+  LastUserId?: string;
+  DateLastActivity?: string;
 }
 
 export const jellyfin = {
@@ -296,10 +325,6 @@ export const jellyfin = {
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ PlaybackPositionTicks: positionTicks, LastPlayedDate: new Date().toISOString() }),
     }),
-
-  /** Marquer vu, avec la clé d'administration — même filet que `savePositionAsAdmin`. */
-  markPlayedAsAdmin: async (userId: string, itemId: string) =>
-    fetchJson<void>(`${url}/UserPlayedItems/${itemId}?userId=${userId}`, { method: "POST", headers }),
 
   /** La durée d'un titre, en ticks — pour décider comme Jellyfin si un arrêt vaut « vu ». */
   getRunTimeTicks: (userId: string, itemId: string) =>
@@ -536,8 +561,26 @@ export const jellyfin = {
    * personne. Le nom compte autant que l'identifiant — c'est sous lui que les abonnements aux
    * notifications sont rangés (voir `pushDb`), et sous l'identifiant que Jellyfin répond.
    */
-  getUsers: () =>
-    fetchJson<{ Id: string; Name: string; Policy?: { IsAdministrator?: boolean } }[]>(`${url}/Users`, { headers }),
+  getUsers: () => fetchJson<JellyfinUser[]>(`${url}/Users`, { headers }),
+
+  /**
+   * Les appareils autorisés — un par jeton. Pour la page d'activité : un compte dont l'appareil de
+   * l'application ne bouge plus alors qu'il s'en sert a perdu son jeton (voir `jellyfinToken.ts`).
+   */
+  /**
+   * Supprimer un appareil — et le jeton qui lui est attaché : chez Jellyfin, un appareil inscrit
+   * est un jeton. Avec la clé d'administration, sur l'identifiant que la connexion a choisi
+   * (`cine-app-<aléatoire>`) : seul le jeton de cette connexion-là tombe, jamais ceux des autres
+   * applications de la personne.
+   */
+  deleteDevice: (deviceId: string) =>
+    fetchJson<void>(`${url}/Devices?id=${encodeURIComponent(deviceId)}`, { method: "DELETE", headers }, 5000, undefined, 0),
+
+  /** Fermer la session d'un jeton, avec ce jeton : il cesse d'être accepté. */
+  logoutToken: (token: string) =>
+    fetchJson<void>(`${url}/Sessions/Logout`, { method: "POST", headers: jellyfinAuthHeaders(token) }, 5000, undefined, 0),
+
+  getDevices: () => fetchJson<{ Items: JellyfinDevice[] }>(`${url}/Devices`, { headers }).then((res) => res.Items ?? []),
 
   getNextUpGlobal: (userId: string, limit = 10) =>
     fetchJson<{ Items: JellyfinItem[] }>(

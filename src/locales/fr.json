@@ -58,7 +58,8 @@
       "content": "Contenu",
       "manage": "Gestion"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "activity": "Activité"
   },
   "common": {
     "loading": "Chargement...",
@@ -173,7 +174,212 @@
     "imported": "Importé",
     "deleted": "Supprimé",
     "downloadFailed": "Téléchargement échoué",
-    "request": "Demande"
+    "request": "Demande",
+    "title": "Activité",
+    "subtitle": "{playing} en lecture · {app} dans l'application · {total} comptes",
+    "refresh": "Actualiser",
+    "loadError": "Impossible de charger l'activité.",
+    "unavailable": "Le serveur média n'a pas répondu pour cette partie.",
+    "yes": "Oui",
+    "no": "Non",
+    "presence": {
+      "playing": "En lecture",
+      "app": "Dans l'application",
+      "away": "Absent",
+      "awaySince": "Vu {when}"
+    },
+    "live": {
+      "title": "En direct",
+      "nobody": "Personne dans l'application en ce moment.",
+      "paused": "En pause",
+      "browsing": "Parcourt le catalogue",
+      "nowWatching": "En train de regarder"
+    },
+    "alerts": {
+      "title": "À regarder",
+      "tokenRefused": "Jeton refusé",
+      "tokenStale": "Invisible pour le serveur média",
+      "clientErrors": "{n} erreur navigateur|{n} erreurs navigateur"
+    },
+    "week": {
+      "title": "Les sept derniers jours",
+      "seances": "Séances",
+      "viewers": "{n} spectateur|{n} spectateurs",
+      "watched": "Temps regardé",
+      "waits": "Attentes",
+      "waitsHint": "{d} au total",
+      "slowSeeks": "Sauts lents",
+      "slowSeeksHint": "sur {n} sauts",
+      "rebuilds": "Reconstructions",
+      "stalls": "{n} blocage|{n} blocages",
+      "fallbacks": "Replis",
+      "lost": "{n} séance perdue|{n} séances perdues",
+      "clientErrors": "Erreurs navigateur",
+      "tokenRefusals": "Jetons refusés",
+      "perDay": "Séances par jour",
+      "legendSeances": "Séances",
+      "legendProblems": "Part avec incidents",
+      "troubled": "Titres à problèmes",
+      "troubledValue": "incidents : {p} · {n} séance|incidents : {p} · {n} séances",
+      "noTrouble": "Aucun incident cette semaine.",
+      "rebuildReasons": "Causes des reconstructions",
+      "noRebuild": "Aucune reconstruction cette semaine.",
+      "serverErrors": "Erreurs du serveur",
+      "noServerError": "Aucune erreur cette semaine."
+    },
+    "accounts": {
+      "title": "Comptes ({n})",
+      "admin": "admin",
+      "disabled": "désactivé",
+      "appSeen": "Application",
+      "serverSeen": "Serveur média",
+      "week": "7 jours",
+      "weekValue": "{n} séance · {d}|{n} séances · {d}",
+      "sessions": "Sessions · incidents",
+      "problems": "{n} incident|{n} incidents"
+    },
+    "recent": {
+      "title": "Dernières séances"
+    },
+    "flags": {
+      "fallback": "{n} repli|{n} replis",
+      "error": "{n} erreur|{n} erreurs",
+      "rebuild": "{n} reconstruction|{n} reconstructions",
+      "stall": "{n} blocage|{n} blocages",
+      "slowSeek": "{n} saut lent|{n} sauts lents",
+      "lost": "fin perdue",
+      "server": "lecteur serveur"
+    },
+    "seance": {
+      "watched": "{d} regardé",
+      "legacy": "reconstituée",
+      "serverPlayer": "Lecteur serveur",
+      "nativePlayer": "Lecteur natif ({path})",
+      "watchedLabel": "Regardé",
+      "endedAt": "arrêt à {at} · {why}",
+      "waitsHint": "{d} au total · la plus longue {max}",
+      "seeks": "Sauts",
+      "seekWait": "{d} d'attente",
+      "audio": "Changements de piste",
+      "backgrounds": "Arrière-plan",
+      "incidents": "Incidents",
+      "legacyHint": "Séance d'avant le bilan de fin : reconstituée à partir de ses lignes, sans chiffres d'ensemble.",
+      "noStop": "Pas encore de bilan : la séance est en cours, ou la page s'est fermée sans prévenir.",
+      "timeline": "Chronologie ({n} lignes)"
+    },
+    "line": {
+      "start": "Ouverture à {at} · {path} · prêt en {opened} {rebuild}",
+      "rebuildN": "· reconstruction n° {n}",
+      "seek": "Saut de {from} à {to} · {took} {buffered}",
+      "buffered": "· déjà chargé",
+      "audio": "Piste audio : {from} → {to} · {took} · {how}",
+      "stall": "Bloqué à {at} depuis {took}",
+      "rebuild": "Reconstruit à {at} : {reason}",
+      "fallback": "Passage au lecteur serveur : {reason}",
+      "stop": "Fin ({why}) · {watched} regardé · arrêt à {at}",
+      "error": "Erreur",
+      "cast": "Diffusion sur un téléviseur"
+    },
+    "logs": {
+      "title": "Journaux",
+      "subtitle": "{n} lignes dans ce journal",
+      "open": "Ouvrir les journaux",
+      "openSeance": "Voir la séance",
+      "sources": {
+        "player": "Lecteur",
+        "server": "Serveur",
+        "bench": "Banc d'essai",
+        "benchPlayer": "Lecteur du banc"
+      },
+      "user": "Compte",
+      "allUsers": "Tous les comptes",
+      "type": "Type",
+      "allTypes": "Tous les types",
+      "period": "Période",
+      "lastDays": "Dernier jour|{n} derniers jours",
+      "allTime": "Tout",
+      "search": "Rechercher dans les lignes…",
+      "sessionFilter": "Séance {id}",
+      "more": "Plus ancien",
+      "empty": "Aucune ligne ne correspond.",
+      "rotated": "Le journal a tourné depuis : la ligne complète n'est plus à cette place.",
+      "allSteps": "Voir les {n} étapes",
+      "fewerSteps": "Voir les dernières seulement"
+    },
+    "tabs": {
+      "seances": "Séances",
+      "resume": "En cours",
+      "recent": "Vus récemment",
+      "watchlist": "À voir",
+      "requests": "Demandes",
+      "favorites": "Favoris",
+      "errors": "Erreurs"
+    },
+    "empty": {
+      "seances": "Aucune séance dans les journaux.",
+      "resume": "Rien en cours.",
+      "recent": "Rien de vu pour l'instant.",
+      "favorites": "Aucun favori.",
+      "watchlist": "Liste vide.",
+      "requests": "Aucune demande.",
+      "errors": "Aucune erreur enregistrée pour ce compte.",
+      "sessions": "Aucune session ouverte.",
+      "devices": "Aucun appareil."
+    },
+    "media": {
+      "played": "vu",
+      "minutes": "minutes",
+      "save": "Enregistrer",
+      "setPosition": "Corriger la position",
+      "clear": "Retirer de « Reprendre »",
+      "markPlayed": "Marquer vu",
+      "markUnplayed": "Marquer non vu",
+      "movie": "Film",
+      "series": "Série",
+      "added": "ajouté {when}"
+    },
+    "requests": {
+      "pending": "En attente",
+      "approved": "Acceptée",
+      "declined": "Refusée",
+      "failed": "Échouée",
+      "available": "Disponible"
+    },
+    "account": {
+      "seances": "Séances",
+      "watched": "Temps regardé",
+      "thisWeek": "Cette semaine",
+      "problems": "Incidents",
+      "played": "Films vus",
+      "playedEpisodes": "{n} épisode|{n} épisodes",
+      "firstSeen": "Première séance",
+      "profile": "Compte",
+      "lastLogin": "Dernière connexion",
+      "lastServerActivity": "Activité sur le serveur média",
+      "remoteAccess": "Accès à distance",
+      "playback": "Lecture autorisée",
+      "invalidLogins": "Mots de passe erronés",
+      "language": "Langue",
+      "defaultLanguage": "par défaut",
+      "onboarding": "Écran d'accueil",
+      "onboardingPending": "pas encore vu",
+      "onboardingDone": "vu",
+      "notifications": "Notifications",
+      "pushDevices": "Appareils abonnés",
+      "followedRequests": "Demandes suivies",
+      "appSessions": "Sessions de l'application ({n})",
+      "unknownDevice": "Appareil inconnu",
+      "sessionDates": "ouverte {opened} · vue {seen}",
+      "devices": "Appareils du serveur média ({n})",
+      "closeHint": "Fermer une session déconnecte cet appareil de l'application et révoque le jeton que cette connexion avait obtenu ; les autres applications de la personne ne sont pas touchées."
+    },
+    "actions": {
+      "close": "Fermer",
+      "closeAll": "Fermer ses sessions ({n})",
+      "confirm": "Confirmer",
+      "done": "C'est fait.",
+      "failed": "L'action a échoué."
+    }
   },
   "radarr": {
     "pageTitle": "Films",
@@ -1371,7 +1577,10 @@
         "admin": "Administration"
       },
       "appLanguage": "Langue de l'application",
-      "open": "Ouvrir"
+      "open": "Ouvrir",
+      "activity": "Activité des comptes",
+      "activityHint": "Qui est là, qui regarde quoi, les séances et les journaux de chacun.",
+      "openActivity": "Ouvrir l'activité"
     },
     "browse": {
       "seeAll": "Voir tout",

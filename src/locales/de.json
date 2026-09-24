@@ -58,7 +58,8 @@
       "content": "Inhalte",
       "manage": "Verwaltung"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "activity": "Aktivität"
   },
   "common": {
     "loading": "Laden...",
@@ -173,7 +174,212 @@
     "imported": "Importiert",
     "deleted": "Gelöscht",
     "downloadFailed": "Download fehlgeschlagen",
-    "request": "Anfrage"
+    "request": "Anfrage",
+    "title": "Aktivität",
+    "subtitle": "{playing} schauen · {app} in der App · {total} Konten",
+    "refresh": "Aktualisieren",
+    "loadError": "Die Aktivität konnte nicht geladen werden.",
+    "unavailable": "Der Medienserver hat für diesen Teil nicht geantwortet.",
+    "yes": "Ja",
+    "no": "Nein",
+    "presence": {
+      "playing": "Schaut gerade",
+      "app": "In der App",
+      "away": "Abwesend",
+      "awaySince": "Gesehen {when}"
+    },
+    "live": {
+      "title": "Live",
+      "nobody": "Gerade ist niemand in der App.",
+      "paused": "Pausiert",
+      "browsing": "Stöbert im Katalog",
+      "nowWatching": "Schaut gerade"
+    },
+    "alerts": {
+      "title": "Genauer ansehen",
+      "tokenRefused": "Token abgelehnt",
+      "tokenStale": "Für den Medienserver unsichtbar",
+      "clientErrors": "{n} Browserfehler|{n} Browserfehler"
+    },
+    "week": {
+      "title": "Die letzten sieben Tage",
+      "seances": "Sitzungen",
+      "viewers": "{n} Zuschauer|{n} Zuschauer",
+      "watched": "Geschaute Zeit",
+      "waits": "Wartezeiten",
+      "waitsHint": "{d} insgesamt",
+      "slowSeeks": "Langsame Sprünge",
+      "slowSeeksHint": "von {n} Sprüngen",
+      "rebuilds": "Neuaufbauten",
+      "stalls": "{n} Hänger|{n} Hänger",
+      "fallbacks": "Ausweichlösungen",
+      "lost": "{n} verlorene Sitzung|{n} verlorene Sitzungen",
+      "clientErrors": "Browserfehler",
+      "tokenRefusals": "Abgelehnte Tokens",
+      "perDay": "Sitzungen pro Tag",
+      "legendSeances": "Sitzungen",
+      "legendProblems": "Anteil mit Vorfällen",
+      "troubled": "Titel mit Problemen",
+      "troubledValue": "Vorfälle: {p} · {n} Sitzung|Vorfälle: {p} · {n} Sitzungen",
+      "noTrouble": "Keine Vorfälle diese Woche.",
+      "rebuildReasons": "Gründe für Neuaufbauten",
+      "noRebuild": "Keine Neuaufbauten diese Woche.",
+      "serverErrors": "Serverfehler",
+      "noServerError": "Keine Fehler diese Woche."
+    },
+    "accounts": {
+      "title": "Konten ({n})",
+      "admin": "Admin",
+      "disabled": "deaktiviert",
+      "appSeen": "App",
+      "serverSeen": "Medienserver",
+      "week": "7 Tage",
+      "weekValue": "{n} Sitzung · {d}|{n} Sitzungen · {d}",
+      "sessions": "Sitzungen · Vorfälle",
+      "problems": "{n} Vorfall|{n} Vorfälle"
+    },
+    "recent": {
+      "title": "Letzte Sitzungen"
+    },
+    "flags": {
+      "fallback": "{n}× ausgewichen|{n}× ausgewichen",
+      "error": "{n} Fehler|{n} Fehler",
+      "rebuild": "{n} Neuaufbau|{n} Neuaufbauten",
+      "stall": "{n} Hänger|{n} Hänger",
+      "slowSeek": "{n} langsamer Sprung|{n} langsame Sprünge",
+      "lost": "Ende verloren",
+      "server": "Server-Player"
+    },
+    "seance": {
+      "watched": "{d} geschaut",
+      "legacy": "rekonstruiert",
+      "serverPlayer": "Server-Player",
+      "nativePlayer": "Nativer Player ({path})",
+      "watchedLabel": "Geschaut",
+      "endedAt": "gestoppt bei {at} · {why}",
+      "waitsHint": "{d} insgesamt · längste {max}",
+      "seeks": "Sprünge",
+      "seekWait": "{d} Wartezeit",
+      "audio": "Spurwechsel",
+      "backgrounds": "Hintergrund",
+      "incidents": "Vorfälle",
+      "legacyHint": "Sitzung aus der Zeit vor den Abschlussberichten: aus ihren Zeilen rekonstruiert, ohne Gesamtwerte.",
+      "noStop": "Noch kein Bericht: Die Sitzung läuft noch oder die Seite wurde unangekündigt geschlossen.",
+      "timeline": "Verlauf ({n} Zeilen)"
+    },
+    "line": {
+      "start": "Geöffnet bei {at} · {path} · bereit in {opened} {rebuild}",
+      "rebuildN": "· Neuaufbau Nr. {n}",
+      "seek": "Sprung von {from} zu {to} · {took} {buffered}",
+      "buffered": "· bereits geladen",
+      "audio": "Tonspur: {from} → {to} · {took} · {how}",
+      "stall": "Hängt bei {at} seit {took}",
+      "rebuild": "Neu aufgebaut bei {at}: {reason}",
+      "fallback": "An den Server-Player übergeben: {reason}",
+      "stop": "Ende ({why}) · {watched} geschaut · gestoppt bei {at}",
+      "error": "Fehler",
+      "cast": "Auf einen Fernseher übertragen"
+    },
+    "logs": {
+      "title": "Protokolle",
+      "subtitle": "{n} Zeilen in diesem Protokoll",
+      "open": "Protokolle öffnen",
+      "openSeance": "Sitzung ansehen",
+      "sources": {
+        "player": "Player",
+        "server": "Server",
+        "bench": "Prüfstand",
+        "benchPlayer": "Prüfstand-Player"
+      },
+      "user": "Konto",
+      "allUsers": "Alle Konten",
+      "type": "Typ",
+      "allTypes": "Alle Typen",
+      "period": "Zeitraum",
+      "lastDays": "Letzter Tag|Letzte {n} Tage",
+      "allTime": "Alles",
+      "search": "Zeilen durchsuchen…",
+      "sessionFilter": "Sitzung {id}",
+      "more": "Älter",
+      "empty": "Keine passende Zeile.",
+      "rotated": "Das Protokoll wurde seitdem rotiert: Die vollständige Zeile ist nicht mehr dort.",
+      "allSteps": "Alle {n} Schritte zeigen",
+      "fewerSteps": "Nur die letzten zeigen"
+    },
+    "tabs": {
+      "seances": "Sitzungen",
+      "resume": "Angefangen",
+      "recent": "Kürzlich gesehen",
+      "watchlist": "Zum Anschauen",
+      "requests": "Anfragen",
+      "favorites": "Favoriten",
+      "errors": "Fehler"
+    },
+    "empty": {
+      "seances": "Keine Sitzungen in den Protokollen.",
+      "resume": "Nichts angefangen.",
+      "recent": "Noch nichts gesehen.",
+      "favorites": "Keine Favoriten.",
+      "watchlist": "Leere Liste.",
+      "requests": "Keine Anfragen.",
+      "errors": "Keine Fehler für dieses Konto erfasst.",
+      "sessions": "Keine offenen Sitzungen.",
+      "devices": "Keine Geräte."
+    },
+    "media": {
+      "played": "gesehen",
+      "minutes": "Minuten",
+      "save": "Speichern",
+      "setPosition": "Position korrigieren",
+      "clear": "Aus „Fortsetzen“ entfernen",
+      "markPlayed": "Als gesehen markieren",
+      "markUnplayed": "Als ungesehen markieren",
+      "movie": "Film",
+      "series": "Serie",
+      "added": "hinzugefügt {when}"
+    },
+    "requests": {
+      "pending": "Ausstehend",
+      "approved": "Angenommen",
+      "declined": "Abgelehnt",
+      "failed": "Fehlgeschlagen",
+      "available": "Verfügbar"
+    },
+    "account": {
+      "seances": "Sitzungen",
+      "watched": "Geschaute Zeit",
+      "thisWeek": "Diese Woche",
+      "problems": "Vorfälle",
+      "played": "Gesehene Filme",
+      "playedEpisodes": "{n} Folge|{n} Folgen",
+      "firstSeen": "Erste Sitzung",
+      "profile": "Konto",
+      "lastLogin": "Letzte Anmeldung",
+      "lastServerActivity": "Aktivität auf dem Medienserver",
+      "remoteAccess": "Fernzugriff",
+      "playback": "Wiedergabe erlaubt",
+      "invalidLogins": "Falsche Passwörter",
+      "language": "Sprache",
+      "defaultLanguage": "Standard",
+      "onboarding": "Willkommensbildschirm",
+      "onboardingPending": "noch nicht gesehen",
+      "onboardingDone": "gesehen",
+      "notifications": "Benachrichtigungen",
+      "pushDevices": "Abonnierte Geräte",
+      "followedRequests": "Verfolgte Anfragen",
+      "appSessions": "App-Sitzungen ({n})",
+      "unknownDevice": "Unbekanntes Gerät",
+      "sessionDates": "geöffnet {opened} · gesehen {seen}",
+      "devices": "Geräte des Medienservers ({n})",
+      "closeHint": "Eine Sitzung zu schließen meldet dieses Gerät von der App ab und widerruft das Token dieser Anmeldung; die anderen Apps der Person bleiben unberührt."
+    },
+    "actions": {
+      "close": "Schließen",
+      "closeAll": "Sitzungen schließen ({n})",
+      "confirm": "Bestätigen",
+      "done": "Erledigt.",
+      "failed": "Die Aktion ist fehlgeschlagen."
+    }
   },
   "radarr": {
     "pageTitle": "Filme",
@@ -1371,7 +1577,10 @@
         "admin": "Verwaltung"
       },
       "appLanguage": "App-Sprache",
-      "open": "Öffnen"
+      "open": "Öffnen",
+      "activity": "Kontoaktivität",
+      "activityHint": "Wer da ist, wer was schaut, die Sitzungen und Protokolle aller.",
+      "openActivity": "Aktivität öffnen"
     },
     "browse": {
       "seeAll": "Alle anzeigen",

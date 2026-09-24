@@ -93,7 +93,9 @@ describe("POST /api/auth/jellyfin", () => {
     expect(mockJellyseerrLogin).toHaveBeenCalledWith("louis", "x");
     expect(mockCreateSessionToken).toHaveBeenCalledWith("louis", "admin", "louis", "jf-1", "jf-token", undefined);
     // L'appareil est retenu avec la session : c'est ce qui la rend reconnaissable dans Compte.
-    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1", "iPhone · Safari");
+    // L'appareil inscrit chez Jellyfin est gardé avec la session : c'est par lui que la déconnexion
+    // révoque ce jeton-là (`jellyfinRevoke.ts`).
+    expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1", "iPhone · Safari", expect.stringMatching(/^cine-app-/));
     expect(res.cookies.get("cine_session")?.value).toBe("signed-token");
   });
 

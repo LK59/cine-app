@@ -654,3 +654,32 @@ négociation se fait avec lui.
 **Trouvé le 24/09/2026** dans le journal du lecteur : deux films regardés en entier par un compte,
 aucune seconde gardée, « Invalid token » toutes les 10 s dans le journal de Jellyfin, et la reprise
 du lendemain repartie de zéro.
+
+---
+
+## 22. Ce que révoque une déconnexion
+
+**Règle.** Chaque connexion à l'application obtient de Jellyfin un jeton, sous un appareil à elle
+(`cine-app-<aléatoire>`), gardé avec la session (`sessions.jf_device`, pas un secret).
+« Se déconnecter » ferme la session **et** supprime cet appareil chez Jellyfin, ce qui révoque son
+jeton. « Déconnecter tous les autres » ne ferme **que** les sessions de l'application — choix de
+l'administrateur. Une session fermée par l'administrateur, effacée parce qu'expirée, ou fermée
+parce que son jeton était déjà refusé, révoque le sien. Seul l'appareil de la connexion tombe :
+télévision, Jellyfin web et applications mobiles gardent leurs jetons. Toujours au mieux — un
+Jellyfin absent n'empêche jamais de se déconnecter.
+
+**Porteur.** `src/lib/jellyfinRevoke.ts` (`revokeJellyfinDevices`, qui refuse tout identifiant
+qui ne commence pas par `cine-app-` ; `revokeJellyfinToken`, pour une session ouverte avant qu'on
+garde son appareil — le jeton est dans son cookie).
+
+**Appelants.** `/api/auth/logout`, `/api/auth/jellyfin` et `/api/auth/login` (ménage des
+expirées), `/api/admin/activity/accounts/[id]` (fermeture par l'administrateur), `src/proxy.ts`
+(jeton refusé).
+
+**Différent exprès.** `/api/auth/sessions` (« tous les autres ») ne révoque rien chez Jellyfin.
+
+**Tests.** `auth-routes.test.ts`, `jellyfin-revoke.test.ts`, `auth-jellyfin-route.test.ts`.
+
+**Décidé le 24/09/2026**, en revenant sur le choix du 06/09 (rien ne se révoquait) : vingt-quatre
+appareils « CineApp » s'étaient accumulés pour un seul compte, autant de jetons valides pour
+toujours.

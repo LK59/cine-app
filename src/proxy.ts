@@ -9,6 +9,7 @@ import { verifySessionFull } from "@/lib/session";
 import { castPassFor } from "@/lib/castToken";
 import { sessionDb } from "@/lib/db";
 import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
+import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 
 // Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
 // Edge-only middleware, so verifySessionFull's better-sqlite3-backed revocation check (a native
@@ -52,6 +53,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Une erreur du navigateur, remontée au journal du serveur : la route n'écrit que sur l'appelant
   // (son compte vient de la session) et ne lit rien en retour.
   "POST /api/client-error",
+  // « Je suis là », une fois par minute : la route n'écrit que sur l'appelant, en mémoire, et ne
+  // renvoie rien (vue en direct de l'administrateur).
+  "POST /api/presence",
   "POST /api/jellyfin/playback/playing",
   "POST /api/jellyfin/playback/progress",
   "POST /api/jellyfin/playback/stop",
@@ -244,7 +248,8 @@ export async function proxy(req: NextRequest) {
    * prochaine page.
    */
   if (!pathname.startsWith("/api/") && session.jfToken && !(await tokenStillAccepted(session))) {
-    sessionDb.delete(session.jti);
+    // Son jeton est déjà refusé ; l'appareil, lui, reste inscrit chez Jellyfin : on le retire.
+    void revokeJellyfinDevices([sessionDb.delete(session.jti)], "jeton refusé");
     forgetJellyfinToken(session.jti);
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("reason", "jellyfin");

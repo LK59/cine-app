@@ -58,7 +58,8 @@
       "content": "Contenido",
       "manage": "Gestión"
     },
-    "tmdb": "TMDB"
+    "tmdb": "TMDB",
+    "activity": "Actividad"
   },
   "common": {
     "loading": "Cargando...",
@@ -173,7 +174,212 @@
     "imported": "Importado",
     "deleted": "Eliminado",
     "downloadFailed": "Descarga fallida",
-    "request": "Solicitud"
+    "request": "Solicitud",
+    "title": "Actividad",
+    "subtitle": "{playing} viendo · {app} en la aplicación · {total} cuentas",
+    "refresh": "Actualizar",
+    "loadError": "No se pudo cargar la actividad.",
+    "unavailable": "El servidor multimedia no respondió para esta parte.",
+    "yes": "Sí",
+    "no": "No",
+    "presence": {
+      "playing": "Viendo",
+      "app": "En la aplicación",
+      "away": "Ausente",
+      "awaySince": "Visto {when}"
+    },
+    "live": {
+      "title": "En directo",
+      "nobody": "Nadie está en la aplicación ahora mismo.",
+      "paused": "En pausa",
+      "browsing": "Explorando el catálogo",
+      "nowWatching": "Viendo ahora"
+    },
+    "alerts": {
+      "title": "Para revisar",
+      "tokenRefused": "Token rechazado",
+      "tokenStale": "Invisible para el servidor multimedia",
+      "clientErrors": "{n} error del navegador|{n} errores del navegador"
+    },
+    "week": {
+      "title": "Los últimos siete días",
+      "seances": "Sesiones",
+      "viewers": "{n} espectador|{n} espectadores",
+      "watched": "Tiempo visto",
+      "waits": "Esperas",
+      "waitsHint": "{d} en total",
+      "slowSeeks": "Saltos lentos",
+      "slowSeeksHint": "de {n} saltos",
+      "rebuilds": "Reconstrucciones",
+      "stalls": "{n} bloqueo|{n} bloqueos",
+      "fallbacks": "Repliegues",
+      "lost": "{n} sesión perdida|{n} sesiones perdidas",
+      "clientErrors": "Errores del navegador",
+      "tokenRefusals": "Tokens rechazados",
+      "perDay": "Sesiones por día",
+      "legendSeances": "Sesiones",
+      "legendProblems": "Parte con incidencias",
+      "troubled": "Títulos con problemas",
+      "troubledValue": "incidencias: {p} · {n} sesión|incidencias: {p} · {n} sesiones",
+      "noTrouble": "Ninguna incidencia esta semana.",
+      "rebuildReasons": "Causas de las reconstrucciones",
+      "noRebuild": "Ninguna reconstrucción esta semana.",
+      "serverErrors": "Errores del servidor",
+      "noServerError": "Ningún error esta semana."
+    },
+    "accounts": {
+      "title": "Cuentas ({n})",
+      "admin": "admin",
+      "disabled": "desactivada",
+      "appSeen": "Aplicación",
+      "serverSeen": "Servidor multimedia",
+      "week": "7 días",
+      "weekValue": "{n} sesión · {d}|{n} sesiones · {d}",
+      "sessions": "Sesiones · incidencias",
+      "problems": "{n} incidencia|{n} incidencias"
+    },
+    "recent": {
+      "title": "Últimas sesiones"
+    },
+    "flags": {
+      "fallback": "{n} repliegue|{n} repliegues",
+      "error": "{n} error|{n} errores",
+      "rebuild": "{n} reconstrucción|{n} reconstrucciones",
+      "stall": "{n} bloqueo|{n} bloqueos",
+      "slowSeek": "{n} salto lento|{n} saltos lentos",
+      "lost": "final perdido",
+      "server": "reproductor del servidor"
+    },
+    "seance": {
+      "watched": "{d} vistos",
+      "legacy": "reconstruida",
+      "serverPlayer": "Reproductor del servidor",
+      "nativePlayer": "Reproductor nativo ({path})",
+      "watchedLabel": "Visto",
+      "endedAt": "parada en {at} · {why}",
+      "waitsHint": "{d} en total · la más larga {max}",
+      "seeks": "Saltos",
+      "seekWait": "{d} de espera",
+      "audio": "Cambios de pista",
+      "backgrounds": "Segundo plano",
+      "incidents": "Incidencias",
+      "legacyHint": "Sesión anterior al resumen final: reconstruida a partir de sus líneas, sin totales.",
+      "noStop": "Aún sin resumen: la sesión sigue en curso o la página se cerró sin avisar.",
+      "timeline": "Cronología ({n} líneas)"
+    },
+    "line": {
+      "start": "Apertura en {at} · {path} · listo en {opened} {rebuild}",
+      "rebuildN": "· reconstrucción n.º {n}",
+      "seek": "Salto de {from} a {to} · {took} {buffered}",
+      "buffered": "· ya cargado",
+      "audio": "Pista de audio: {from} → {to} · {took} · {how}",
+      "stall": "Bloqueado en {at} desde hace {took}",
+      "rebuild": "Reconstruido en {at}: {reason}",
+      "fallback": "Paso al reproductor del servidor: {reason}",
+      "stop": "Fin ({why}) · {watched} vistos · parada en {at}",
+      "error": "Error",
+      "cast": "Transmisión a un televisor"
+    },
+    "logs": {
+      "title": "Registros",
+      "subtitle": "{n} líneas en este registro",
+      "open": "Abrir los registros",
+      "openSeance": "Ver la sesión",
+      "sources": {
+        "player": "Reproductor",
+        "server": "Servidor",
+        "bench": "Banco de pruebas",
+        "benchPlayer": "Reproductor del banco"
+      },
+      "user": "Cuenta",
+      "allUsers": "Todas las cuentas",
+      "type": "Tipo",
+      "allTypes": "Todos los tipos",
+      "period": "Período",
+      "lastDays": "Último día|Últimos {n} días",
+      "allTime": "Todo",
+      "search": "Buscar en las líneas…",
+      "sessionFilter": "Sesión {id}",
+      "more": "Más antiguo",
+      "empty": "Ninguna línea coincide.",
+      "rotated": "El registro ha rotado desde entonces: la línea completa ya no está ahí.",
+      "allSteps": "Ver los {n} pasos",
+      "fewerSteps": "Ver solo los últimos"
+    },
+    "tabs": {
+      "seances": "Sesiones",
+      "resume": "En curso",
+      "recent": "Vistos recientemente",
+      "watchlist": "Por ver",
+      "requests": "Solicitudes",
+      "favorites": "Favoritos",
+      "errors": "Errores"
+    },
+    "empty": {
+      "seances": "Ninguna sesión en los registros.",
+      "resume": "Nada en curso.",
+      "recent": "Nada visto por ahora.",
+      "favorites": "Ningún favorito.",
+      "watchlist": "Lista vacía.",
+      "requests": "Ninguna solicitud.",
+      "errors": "Ningún error registrado para esta cuenta.",
+      "sessions": "Ninguna sesión abierta.",
+      "devices": "Ningún dispositivo."
+    },
+    "media": {
+      "played": "visto",
+      "minutes": "minutos",
+      "save": "Guardar",
+      "setPosition": "Corregir la posición",
+      "clear": "Quitar de «Continuar»",
+      "markPlayed": "Marcar como visto",
+      "markUnplayed": "Marcar como no visto",
+      "movie": "Película",
+      "series": "Serie",
+      "added": "añadido {when}"
+    },
+    "requests": {
+      "pending": "Pendiente",
+      "approved": "Aceptada",
+      "declined": "Rechazada",
+      "failed": "Fallida",
+      "available": "Disponible"
+    },
+    "account": {
+      "seances": "Sesiones",
+      "watched": "Tiempo visto",
+      "thisWeek": "Esta semana",
+      "problems": "Incidencias",
+      "played": "Películas vistas",
+      "playedEpisodes": "{n} episodio|{n} episodios",
+      "firstSeen": "Primera sesión",
+      "profile": "Cuenta",
+      "lastLogin": "Último inicio de sesión",
+      "lastServerActivity": "Actividad en el servidor multimedia",
+      "remoteAccess": "Acceso remoto",
+      "playback": "Reproducción permitida",
+      "invalidLogins": "Contraseñas incorrectas",
+      "language": "Idioma",
+      "defaultLanguage": "por defecto",
+      "onboarding": "Pantalla de bienvenida",
+      "onboardingPending": "aún no visto",
+      "onboardingDone": "visto",
+      "notifications": "Notificaciones",
+      "pushDevices": "Dispositivos suscritos",
+      "followedRequests": "Solicitudes seguidas",
+      "appSessions": "Sesiones de la aplicación ({n})",
+      "unknownDevice": "Dispositivo desconocido",
+      "sessionDates": "abierta {opened} · vista {seen}",
+      "devices": "Dispositivos del servidor multimedia ({n})",
+      "closeHint": "Cerrar una sesión desconecta ese dispositivo de la aplicación y revoca el token que obtuvo ese inicio de sesión; las demás aplicaciones de la persona no se ven afectadas."
+    },
+    "actions": {
+      "close": "Cerrar",
+      "closeAll": "Cerrar sus sesiones ({n})",
+      "confirm": "Confirmar",
+      "done": "Hecho.",
+      "failed": "La acción falló."
+    }
   },
   "radarr": {
     "pageTitle": "Películas",
@@ -1371,7 +1577,10 @@
         "admin": "Administración"
       },
       "appLanguage": "Idioma de la aplicación",
-      "open": "Abrir"
+      "open": "Abrir",
+      "activity": "Actividad de las cuentas",
+      "activityHint": "Quién está, quién ve qué, las sesiones y registros de cada uno.",
+      "openActivity": "Abrir la actividad"
     },
     "browse": {
       "seeAll": "Ver todo",

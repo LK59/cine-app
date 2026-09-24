@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
  * Fermer toutes les autres.
  *
  * Toutes les autres *sessions Cine App*, et rien de plus : les sessions Jellyfin ouvertes pour
- * elles ne sont pas fermées. C'est délibéré. Le bouton doit vouloir dire « qu'on me déconnecte
+ * elles ne sont pas fermées. C'est délibéré, et redit le 24/09/2026 quand « Se déconnecter » s'est
+ * mis à révoquer le jeton de sa propre connexion (voir `/api/auth/logout`). Le bouton doit vouloir dire « qu'on me déconnecte
  * d'ici », jamais « qu'on me coupe Jellyfin » — et pour qui lit l'étiquette, la nuance
  * n'existerait pas.
  *

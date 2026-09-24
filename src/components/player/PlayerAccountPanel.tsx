@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { signOut } from "@/lib/signOut";
@@ -127,6 +127,15 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
               <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
                 <SlidersHorizontal size={16} />
                 {t("player.account.openManage")}
+              </a>
+            </Section>
+            {/* L'activité des comptes, à un geste du cinéma : qui est là, qui regarde quoi, les séances
+                et les journaux de chacun (24/09/2026). */}
+            <Section icon={UsersRound} title={t("player.account.activity")}>
+              <p className="mb-3 text-xs text-subtle">{t("player.account.activityHint")}</p>
+              <a href="/activite" className="btn btn-ghost w-full justify-center sm:w-auto">
+                <UsersRound size={16} />
+                {t("player.account.openActivity")}
               </a>
             </Section>
             <MaintenanceSection />
