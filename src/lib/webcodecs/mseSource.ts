@@ -140,6 +140,12 @@ const MISPLACED_SECONDS = 10;
  * after the whole file has gone past.
  */
 const FRUITLESS_APPENDS = 8;
+/**
+ * Jusqu'où avant sa cible un saut peut légitimement commencer à lire : trois reculs de douze
+ * secondes quand l'index ment (`Remuxer.backUp`), plus le groupe d'images où il retombe. Du média
+ * plus lointain que cela n'est pas une lecture d'avance, et la garde « rien retenu » le compte.
+ */
+const PRE_ROLL_SECONDS = 40;
 
 /** Only the opening handful of segments is recorded: after that the record says nothing new. */
 const TRACED_APPENDS = 4;
@@ -797,6 +803,15 @@ export class MseSource {
           deepestSoFar = Math.max(deepestSoFar, depth);
           furthestLanes = Math.max(furthestLanes, lanes);
           fruitless = 0;
+        } else if (
+          segment.endSeconds + this.delaySeconds <= this.anchor &&
+          this.anchor - (segment.endSeconds + this.delaySeconds) <= PRE_ROLL_SECONDS
+        ) {
+          // Encore avant la cible : un saut repart de l'image clé qui la précède, parfois de douze
+          // secondes plus tôt quand l'index ment (voir `Remuxer.backUp`), et ce média-là ne couvre
+          // pas la tête — il n'a pas à le faire. Compté, il faisait conclure que le navigateur ne
+          // retenait rien avant même d'avoir atteint la cible (relu le 24/09/2026). La lecture
+          // d'avance est bornée par le remultiplexeur ; au-delà de la cible, la garde reprend.
         } else if (++fruitless >= FRUITLESS_APPENDS) {
           throw new Error(
             `Le navigateur n'a rien retenu des ${FRUITLESS_APPENDS} segments qui lui ont été envoyés. ${this.elementState()}`

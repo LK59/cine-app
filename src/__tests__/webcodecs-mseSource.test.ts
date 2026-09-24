@@ -2116,3 +2116,38 @@ describe("relu le 24/09/2026", () => {
   });
 });
 
+// Le média lu avant la cible d'un saut ne la couvre pas, et n'a pas à le faire : il n'est pas
+// « rien retenu » (relu le 24/09/2026).
+describe("la lecture d'avance d'un saut", () => {
+  it("ne compte pas comme un refus du navigateur", async () => {
+    const video = fakeVideo();
+    // Un saut qui repart 18 s avant sa cible — un index qui ment — et lit par tranches de 2 s.
+    let base = 0;
+    let index = 0;
+    const seeks: number[] = [];
+    const remuxer = Object.assign(fakeRemuxer(500), {
+      seeks,
+      seekTo: (at: number) => {
+        seeks.push(at);
+        base = Math.max(0, at - 18);
+        index = 0;
+      },
+      nextSegment: async () => {
+        index += 1;
+        const endSeconds = base + index * 2;
+        // Passé la cible, le média la couvre, comme dans un vrai tampon.
+        if (endSeconds > 100) for (const buffer of FakeSource.instances[0].buffers) buffer.coversNothing = false;
+        return { video: [new Uint8Array([index])], audio: new Uint8Array([index]), subtitles: [], endSeconds };
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    // Rien ne couvre la cible tant que la lecture d'avance ne l'a pas atteinte.
+    for (const buffer of FakeSource.instances[0].buffers) buffer.coversNothing = true;
+    await mse.seek(100);
+    await until(() => index >= 14, "la lecture d'avance, puis la cible");
+    // Pas de reprise : une seule demande de lecture, celle du saut.
+    expect(seeks.filter((at) => at > 50)).toHaveLength(1);
+    mse.destroy();
+  });
+});
