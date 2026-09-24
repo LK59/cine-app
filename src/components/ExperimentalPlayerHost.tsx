@@ -194,13 +194,12 @@ function syncFacts(
       facts.recoveries = recovery.recoveries;
       facts.frozenNudges = recovery.frozenNudges;
       if (recovery.escalations > 0) facts.escalations = recovery.escalations;
-      // Ce que Safari a retiré de lui-même, et les sauts qu'il a fallu relancer (24/09/2026) :
-      // écrits seulement s'il y en a eu, comme les barreaux.
+      // Ce que Safari a retiré de lui-même (24/09/2026) : écrit seulement s'il y en a eu, comme
+      // les barreaux.
       if (recovery.evictions > 0) {
         facts.evictions = recovery.evictions;
         facts.evictionsAhead = recovery.evictionsAhead;
       }
-      if (recovery.seekRelaunches > 0) facts.seekRelaunches = recovery.seekRelaunches;
     }
   } catch {
     // Idem.

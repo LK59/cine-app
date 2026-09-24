@@ -143,24 +143,10 @@ export interface RecoveryFacts {
   evictions: number;
   /** Dont devant la tête : ce que la lecture allait chercher. */
   evictionsAhead: number;
-  /** Sauts relancés parce que Safari restait `seeking` sur un média arrivé. */
-  seekRelaunches: number;
 }
 
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
-
-/**
- * La relance d'un saut resté en attente alors que son média est arrivé — voir `armSeekRelaunch`.
- *
- * Trois blocages du 24/09/2026 (un iPhone, deux fois un Mac) : le média relu couvrait la cible
- * 60 ms après l'envoi, et Safari restait `seeking` jusqu'à ce qu'on lui redonne la position. Le
- * délai laisse au décodeur le temps de traverser ce qui sépare l'image clé de la cible, mesuré
- * large — neuf secondes de 4K se décodent en une seconde et demie sur un iPhone, soit 170 ms par
- * seconde —, pour ne jamais relancer un saut qui était simplement en train de se faire.
- */
-const SEEK_RELAUNCH_BASE_MS = 300;
-const SEEK_RELAUNCH_PER_SECOND_MS = 200;
 
 /**
  * Combien de relectures, par minute, de ce que le navigateur a retiré devant la tête — voir
@@ -302,12 +288,6 @@ export class MseSource {
   /** Les relectures d'éviction de la dernière minute, et celle qui attend la lecture en cours. */
   private evictionRefills: number[] = [];
   private evictionRefillQueued = false;
-  /** La relance d'un saut en attente : quand, pour quelle tête, et si ce saut-ci l'a déjà eue. */
-  private relaunchDue: number | null = null;
-  private relaunchHead = -1;
-  private relaunchArmedAt = 0;
-  private relaunchSpent = false;
-  private seekRelaunches = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
   private recoveryStreak = 0;
@@ -922,7 +902,6 @@ export class MseSource {
         // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
         // À chaque envoi, et non plus au rythme de la trace : les deux étaient liés par accident.
         this.guard.mediaArrived();
-        this.armSeekRelaunch();
         const lanes = this.laneProgress();
         if (depth > deepestSoFar + 0.01 || lanes > furthestLanes + 0.01) {
           deepestSoFar = Math.max(deepestSoFar, depth);
@@ -1144,49 +1123,6 @@ export class MseSource {
     })();
   }
 
-  /**
-   * Arme la relance d'un saut dont le média vient d'arriver — voir `SEEK_RELAUNCH_BASE_MS`.
-   *
-   * Appelée après chaque envoi : c'est le moment où un saut en attente a enfin de quoi finir. Une
-   * seule relance par saut ; si elle ne suffit pas, l'horloge figée (`watchForFrozenClock`)
-   * reprend avec son propre délai, comme avant.
-   */
-  private armSeekRelaunch(): void {
-    if (this.relaunchDue !== null || this.relaunchSpent) return;
-    if (!this.video.seeking || this.pendingStart !== null || this.seekState.requested !== null) return;
-    const head = this.video.currentTime;
-    const ranges = this.playable;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= head && head < ranges.end(i)) {
-        const toDecode = head - ranges.start(i);
-        const delay = Math.min(this.seekingPatienceMs(head), SEEK_RELAUNCH_BASE_MS + SEEK_RELAUNCH_PER_SECOND_MS * toDecode);
-        this.relaunchArmedAt = Date.now();
-        this.relaunchDue = this.relaunchArmedAt + delay;
-        this.relaunchHead = head;
-        return;
-      }
-    }
-  }
-
-  /** La relance, si elle est due et toujours utile. Vrai quand la position a été redemandée. */
-  private relaunchSeekIfDue(now: number): boolean {
-    if (this.relaunchDue === null || Date.now() < this.relaunchDue) return false;
-    this.relaunchDue = null;
-    // Arrivé entre-temps, parti ailleurs, ou le média a de nouveau disparu : plus rien à relancer.
-    if (!this.video.seeking || Math.abs(now - this.relaunchHead) > 0.05 || !this.isBufferedAt(now)) return false;
-    this.relaunchSpent = true;
-    this.seekRelaunches += 1;
-    trace(`saut toujours en attente ${Date.now() - this.relaunchArmedAt} ms après l'arrivée de son média — on redemande la position à ${now.toFixed(2)} s`);
-    this.guard.forgetPause();
-    this.seekState.moved(now + FROZEN_STEP);
-    this.video.currentTime = now + FROZEN_STEP;
-    // Comme pour la poussée de l'horloge figée : le pas de la relance n'est pas de la lecture, et
-    // son délai à elle repart d'ici.
-    this.lastClockAt = now + FROZEN_STEP;
-    this.frozenSince = Date.now();
-    return true;
-  }
-
   /** Declares the stream over, if it still can be. Never throws. */
   private endStream(): void {
     try {
@@ -1323,9 +1259,6 @@ export class MseSource {
     this.seekState.serving(playerSeconds);
     this.readUpTo = playerSeconds;
     this.seeksServed += 1;
-    // Un nouveau saut a droit à sa propre relance, et celle du précédent ne vaut plus.
-    this.relaunchDue = null;
-    this.relaunchSpent = false;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
     // the very same place — doubling the work at exactly the moment it is most wanted elsewhere.
@@ -1515,8 +1448,6 @@ export class MseSource {
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
-    this.relaunchDue = null;
-    this.relaunchSpent = false;
     this.seekState.arrive(this.video.currentTime);
   };
 
@@ -1543,7 +1474,6 @@ export class MseSource {
     // organise. « Rien sous la tête » est donc l'état normal ici, pas une panne : la ramener
     // ferait repartir du début un film qu'on venait de demander à reprendre.
     if (this.pendingStart !== null) return;
-    if (this.relaunchSeekIfDue(now)) return;
     // On media: the only stall left is a clock that has stopped anyway, which is its own check.
     if (this.isBufferedAt(now)) return this.watchForFrozenClock(now);
 
@@ -1964,7 +1894,6 @@ export class MseSource {
       escalations: this.escalations,
       evictions: this.evictions,
       evictionsAhead: this.evictionsAhead,
-      seekRelaunches: this.seekRelaunches,
     };
   }
 

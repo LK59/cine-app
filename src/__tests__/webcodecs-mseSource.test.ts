@@ -2432,7 +2432,7 @@ describe("un saut dans le tampon pendant qu'un autre est servi", () => {
  * lecteur l'écrit, le compte, et relit tout de suite ce qui manque devant la tête.
  */
 describe("les évictions du navigateur", () => {
-  type Facts = { recoveryFacts: { evictions: number; evictionsAhead: number; seekRelaunches: number } };
+  type Facts = { recoveryFacts: { evictions: number; evictionsAhead: number } };
   const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
 
   it("écrit ce que le navigateur retire, et ne compte pas ses propres retraits", async () => {
@@ -2527,84 +2527,6 @@ describe("les évictions du navigateur", () => {
     FakeSource.instances[0].buffers[0].systemEvicts(0, 4);
     await flush();
     expect((mse as unknown as Facts).recoveryFacts.evictions).toBe(0);
-    mse.destroy();
-  });
-});
-
-/**
- * La relance d'un saut dont le média est arrivé (24/09/2026).
- *
- * Même soirée : le média relu couvrait la cible 60 ms après l'envoi, et Safari restait `seeking`
- * jusqu'à la poussée de l'horloge figée — 6 s, puis 2,9 s depuis le correctif de l'après-midi.
- * La position est maintenant redemandée dès que le décodeur a eu le temps de faire son travail.
- */
-describe("la relance d'un saut en attente", () => {
-  type Internals = {
-    watchdog: () => void;
-    watchdogTimer: ReturnType<typeof setInterval> | null;
-    armSeekRelaunch: () => void;
-    fillTask: Promise<void> | null;
-    recoveryFacts: { seekRelaunches: number };
-  };
-  const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
-  afterEach(() => vi.useRealTimers());
-
-  async function stuckSeek() {
-    const video = fakeVideo();
-    const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
-    const internals = mse as unknown as Internals;
-    await until(() => internals.fillTask === null && video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
-    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
-    // Comme à 11:24 : la cible à 2,8 s de l'image clé où commence le média relu.
-    const head = video.buffered.start(0) + 2.8;
-    setTime(video, head);
-    Object.assign(video, { seeking: true });
-    vi.useFakeTimers({ toFake: ["Date"] });
-    return { video, mse, internals, head };
-  }
-
-  it("redemande la position quand le décodeur a eu le temps de finir, une fois", async () => {
-    const { video, mse, internals, head } = await stuckSeek();
-    internals.armSeekRelaunch();
-    // 300 ms plus 200 ms par seconde à décoder : 860 ms. Avant, rien.
-    vi.setSystemTime(Date.now() + 600);
-    internals.watchdog();
-    expect(video.currentTime).toBe(head);
-    vi.setSystemTime(Date.now() + 300);
-    internals.watchdog();
-    expect(video.currentTime).toBeCloseTo(head + 0.08, 5);
-    expect(traceText()).toContain("on redemande la position");
-    expect(internals.recoveryFacts.seekRelaunches).toBe(1);
-
-    // Une seule par saut : si elle n'a pas suffi, c'est à l'horloge figée de reprendre.
-    const after = video.currentTime;
-    internals.armSeekRelaunch();
-    vi.setSystemTime(Date.now() + 2000);
-    internals.watchdog();
-    expect(video.currentTime).toBe(after);
-    mse.destroy();
-  });
-
-  it("ne touche pas à un saut qui aboutit de lui-même", async () => {
-    const { video, mse, internals, head } = await stuckSeek();
-    internals.armSeekRelaunch();
-    vi.setSystemTime(Date.now() + 400);
-    Object.assign(video, { seeking: false });
-    video.dispatchEvent(new Event("seeked"));
-    vi.setSystemTime(Date.now() + 2000);
-    internals.watchdog();
-    expect(video.currentTime).toBe(head);
-    expect(internals.recoveryFacts.seekRelaunches).toBe(0);
-    mse.destroy();
-  });
-
-  it("n'arme rien quand la tête n'a pas encore de média", async () => {
-    const { video, mse, internals } = await stuckSeek();
-    setTime(video, 900);
-    internals.armSeekRelaunch();
-    vi.setSystemTime(Date.now() + 5000);
-    internals.watchdog();
-    expect(internals.recoveryFacts.seekRelaunches).toBe(0);
     mse.destroy();
   });
 });

@@ -231,10 +231,10 @@ describe("le bilan d'une séance", () => {
       waits: 3, waitedMs: 2400, longestWaitMs: 1200, seeks: 6, seekWaitMs: 3100, audioSwitches: 1,
       backgrounds: 2, backgroundMs: 40000, backgroundRebuilds: 1,
       audioSync: { sourceMs: 12, encoderMs: 8 }, recoveries: 2, frozenNudges: 1, escalations: 1,
-      evictions: 4, evictionsAhead: 1, seekRelaunches: 1, frames: { total: 43000, dropped: 12 }, lateByMs: 5400,
+      evictions: 4, evictionsAhead: 1, frames: { total: 43000, dropped: 12 }, lateByMs: 5400,
     });
     const line = lines()[0];
-    expect(line).toMatchObject({ "frames.dropped": 12, lateByMs: 5400, evictions: 4, seekRelaunches: 1 });
+    expect(line).toMatchObject({ "frames.dropped": 12, lateByMs: 5400, evictions: 4, evictionsAhead: 1 });
   });
 });
 
