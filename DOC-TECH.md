@@ -71,8 +71,8 @@ downgrade — a player that drops a level without saying so looks like a player 
 | **3. Explicit refusal** | Named codec, stop | Neither path can carry it |
 
 **The canvas clock dates what is heard**, not what the audio graph processes: it subtracts the
-latency the browser reports (`outputLatency`, else `baseLatency`, read once a second, capped at
-0.5 s) — with Bluetooth headphones, 150–250 ms the picture used to run ahead (24/09).
+latency the browser reports (`outputLatency`, else `baseLatency` — a few milliseconds — read once a
+second, capped at 0.5 s; approximate, since the sound leaves through an `<audio>` element) — with Bluetooth headphones, 150–250 ms the picture used to run ahead (24/09).
 
 **The canvas's HDR→SDR conversion puts 203 nits at the screen's white** (`hdrMath.toneMapLuma`,
 mirrored in the shader): linear below 0.8 of that white, then a Reinhard shoulder that compresses
@@ -395,7 +395,9 @@ reads and two verbs.
   lead, the buffers are kept and the read is retried after 1, 2, 4 then 8 s, from where it stopped
   — and nothing is read in between, since only the retry repositions the file reader;
   just before the first re-read segment is appended, only what it will replace (its group, from its
-  first picture) is removed, so the buffer never holds the same pictures twice. Below 5 s of lead,
+  first picture) is removed, so the buffer never holds the same pictures twice — and never anything
+  under the head: a group starting less than 1 s ahead of it falls back to the ordinary recovery
+  instead (long GOPs, a late retry). Below 5 s of lead,
   after four tries, or if a seek intervened, the ordinary recovery runs as before (24/09).
 - **Source loss**: iOS reclaims media resources in the background and closes the MediaSource. This
   is a pipeline to rebuild at the current position, not a failure to report — up to three times.
@@ -670,7 +672,7 @@ Rules:
 - **The code wins over the name**; the name is read only in the absence of a code (3 audio tracks
   out of 1425 here).
 - An account with **no subtitle language** gets only what the file's flags designate — a forced
-  track, else a default one, else none — except in `Always` mode. Reading the empty language as
+  track *in the audio's language*, else a default one, else none — except in `Always` mode. Reading the empty language as
   "any language" switched on the first full track, whatever its language (24/09).
 - A track is **never** selected on the grounds that it is the only one left. Without the requested
   language, nothing is touched.

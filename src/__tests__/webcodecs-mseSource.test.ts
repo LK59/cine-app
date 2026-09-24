@@ -2240,6 +2240,46 @@ describe("une coupure réseau avec de l'avance", () => {
     vi.useRealTimers();
   });
 
+  // Le groupe relu commence sous la tête (un groupe de 25 s, un nouvel essai tardif) : le retirer
+  // enlèverait l'image en cours. La reprise habituelle, plutôt.
+  it("ne retire jamais le média sous la tête", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    const video = fakeVideo();
+    let index = 0;
+    let failOnce = false;
+    const seeks: number[] = [];
+    const remuxer = Object.assign(fakeRemuxer(500), {
+      seeks,
+      seekTo: (at: number) => {
+        seeks.push(at);
+        index = Math.floor(at / 2);
+      },
+      // Le groupe relu commence au tout début : bien avant la tête.
+      diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0, segmentStartSeconds: 0 }),
+      nextSegment: async () => {
+        if (failOnce) {
+          failOnce = false;
+          throw networkError();
+        }
+        index += 1;
+        return { video: [new Uint8Array([index])], audio: new Uint8Array([index]), subtitles: [], endSeconds: index * 2 };
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await vi.waitFor(() => expect(video.buffered.length > 0 && video.buffered.end(0) > 10).toBe(true));
+    const buffers = FakeSource.instances[0].buffers;
+    const removedBefore = buffers.map((b) => b.removed.length);
+    failOnce = true;
+    (video as unknown as { currentTime: number }).currentTime = 5;
+    await (mse as unknown as { fill: () => Promise<void> }).fill();
+    await vi.advanceTimersByTimeAsync(1100);
+    // Aucun retrait partiel sous la tête : soit rien, soit le vidage complet d'une reprise.
+    const removals = buffers.flatMap((b, i) => b.removed.slice(removedBefore[i]));
+    for (const [from] of removals) expect(from === 0 || from > 5).toBe(true);
+    expect(traceText()).toContain("sous la tête — reprise habituelle");
+    mse.destroy();
+  });
+
   it("vide et reprend comme avant quand il ne reste presque rien", async () => {
     const video = fakeVideo();
     let failNext = false;

@@ -125,6 +125,8 @@ const MAX_APPEND_FAILURES = 3;
 const NETWORK_KEEP_LEAD_SECONDS = 5;
 /** Attentes avant chaque nouvel essai, puis la reprise habituelle — une vingtaine de secondes en tout. */
 const NETWORK_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+/** Ce que le retrait laisse au moins devant la tête — sous elle, jamais. */
+const NETWORK_TRIM_MARGIN_SECONDS = 1;
 
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
@@ -789,6 +791,14 @@ export class MseSource {
         if (this.trimBeforeNextAppend) {
           this.trimBeforeNextAppend = false;
           const from = this.remuxer.diagnostics().segmentStartSeconds + this.delaySeconds;
+          // Le groupe relu commence sous la tête ou juste devant : le retirer enlèverait l'image en
+          // cours — un groupe de 25 s, ou un nouvel essai tardif qui a vu l'avance fondre. Garder le
+          // tampon n'a alors plus d'objet : la reprise habituelle, comme avant ce mécanisme.
+          if (from < this.video.currentTime + NETWORK_TRIM_MARGIN_SECONDS) {
+            trace(`coupure réseau : le groupe relu commence à ${from.toFixed(2)} s, sous la tête — reprise habituelle`);
+            this.recover(this.anchor);
+            break;
+          }
           trace(`coupure réseau : relecture depuis ${from.toFixed(2)} s, le tampon d'avant est gardé`);
           for (const queue of [this.videoOps, this.audioOps]) {
             if (queue) await this.clearFrom(queue, from);
