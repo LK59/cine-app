@@ -35,10 +35,12 @@ export class SeekLifecycle {
     this.requested = seconds;
   }
 
-  /** La source commence à le servir : c'est désormais sa cible. */
+  /**
+   * La source commence à le servir : c'est désormais sa cible. Le jeton de déplacement, lui, n'est
+   * posé qu'au moment où elle écrit la position (`expectOwnMove`) — voir `MseSource.performSeek`.
+   */
   serving(seconds: number): void {
     this.lastTarget = seconds;
-    this.expectOwnMove(seconds);
   }
 
   /** Servi : la demande est satisfaite, sauf si une autre l'a remplacée entre-temps. */
@@ -56,7 +58,8 @@ export class SeekLifecycle {
     if (this.intent) this.intent.target = seconds;
   }
 
-  private expectOwnMove(seconds: number): void {
+  /** La source va écrire cette position : le `seeking` qui suivra est le sien. */
+  expectOwnMove(seconds: number): void {
     this.ownMove = { at: seconds, until: Date.now() + OWN_MOVE_MS };
   }
 

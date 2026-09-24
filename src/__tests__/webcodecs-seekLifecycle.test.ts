@@ -16,9 +16,18 @@ describe("SeekLifecycle", () => {
 
   it("reconnaît ses propres déplacements, à un quart de seconde près", () => {
     const seek = new SeekLifecycle();
-    seek.serving(600);
+    seek.expectOwnMove(600);
     expect(seek.isOwnMove(600.2)).toBe(true);
     expect(seek.isOwnMove(601)).toBe(false);
+  });
+
+  // Fuzz du 24/09/2026 : servir un saut n'est pas encore écrire la position. Le jeton posé dès le
+  // service faisait prendre pour celui de la source un geste du spectateur vers la même position,
+  // pendant l'attente de la lecture en cours.
+  it("n'attend pas de déplacement tant qu'il ne l'a pas fait", () => {
+    const seek = new SeekLifecycle();
+    seek.serving(600);
+    expect(seek.isOwnMove(600)).toBe(false);
   });
 
   it("ne reconnaît son propre déplacement qu'une fois, et pas longtemps", () => {

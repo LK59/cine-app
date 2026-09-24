@@ -592,8 +592,12 @@ export class MseSource {
     // saut dans ce qui est déjà chargé. Oublié sur ce raccourci jusqu'au 22/09/2026 : pause, saut
     // en avant, Lecture, et la garde ramenait la tête à sa position de pause.
     this.guard.forgetPause();
-    // A step inside what is already buffered needs no work from the file at all.
-    if (this.isBufferedAt(target)) return void this.fill();
+    // A step inside what is already buffered needs no work from the file at all — sauf si un saut
+    // précédent est encore en cours : il va vider ces tampons et poser la tête sur sa propre cible,
+    // et ce geste-ci, le dernier, disparaissait dessous. Un doigt qui repasse sur une zone encore
+    // chargée pendant une rafale se retrouvait ramené à l'avant-dernière position (trouvé par le
+    // fuzz le 24/09/2026, graine 30054481). Par la voie normale, le dernier geste l'emporte.
+    if (this.isBufferedAt(target) && this.seekState.requested === null) return void this.fill();
     void this.seek(target);
   };
 
@@ -1130,7 +1134,16 @@ export class MseSource {
     this.appendsSinceSeek = 0;
     // Only when the element is not already there: reassigning would fire another seeking event
     // and start this over.
-    if (Math.abs(this.video.currentTime - playerSeconds) > 0.05) this.video.currentTime = playerSeconds;
+    //
+    // Le `seeking` de cette écriture-là est attendu comme celui de la source, et seulement de
+    // celle-là : le jeton était posé dès le début du service, avant l'attente de la lecture en cours
+    // — une seconde et plus sur un réseau lent —, et un spectateur qui sautait pendant ce temps pile
+    // à cette position (« −10 s » puis « +10 s », une rafale qui y revient) voyait son geste pris
+    // pour celui de la source et ignoré. Trouvé par le fuzz le 24/09/2026 (graine 30063323).
+    if (Math.abs(this.video.currentTime - playerSeconds) > 0.05) {
+      this.seekState.expectOwnMove(playerSeconds);
+      this.video.currentTime = playerSeconds;
+    }
 
     // Served: the reader is where it was asked to be. Anything asked for after this point is a
     // new seek, and the refill below is free to run.

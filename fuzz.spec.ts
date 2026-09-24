@@ -16,8 +16,9 @@
 //   FUZZ=1 FUZZ_SEED=1234 FUZZ_RUNS=200 FUZZ_LOG=/logs/fuzz.jsonl npx vitest run fuzz.spec.ts
 
 import { appendFileSync } from "node:fs";
-import { describe, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MseSource } from "@/lib/webcodecs/mseSource";
+import { traceReset, traceText } from "@/lib/webcodecs/trace";
 import type { Remuxer, RemuxPlan } from "@/lib/webcodecs/remuxer";
 
 const RUNS = Number(process.env.FUZZ_RUNS ?? 100);
@@ -289,7 +290,7 @@ const PLAN: RemuxPlan = {
   durationSeconds: DURATION,
 };
 
-type Violation = { seed: number; rule: string; detail: string; steps: string[] };
+type Violation = { seed: number; rule: string; detail: string; steps: string[]; trace?: string[] };
 
 async function oneRun(seed: number): Promise<Violation | null> {
   const random = rng(seed);
@@ -303,6 +304,7 @@ async function oneRun(seed: number): Promise<Violation | null> {
     activityAfterDestroy: 0,
   };
   FakeSource.world = world;
+  traceReset();
   let current = null as FakeSource | null;
   class Source extends FakeSource {
     constructor() {
@@ -316,7 +318,14 @@ async function oneRun(seed: number): Promise<Violation | null> {
   vi.stubGlobal("URL", { createObjectURL: () => "blob:fuzz", revokeObjectURL: () => {} });
 
   const steps: string[] = [];
-  const violation = (rule: string, detail: string): Violation => ({ seed, rule, detail, steps: steps.slice(-40) });
+  // La trace du lecteur lui-même : qui a déplacé la tête, qui a relu, qui a repris.
+  const violation = (rule: string, detail: string): Violation => ({
+    seed,
+    rule,
+    detail,
+    steps: steps.slice(-40),
+    trace: traceText().split("\n").slice(-60),
+  });
   const { video, tick, state } = fakeVideo(() => current);
   const remuxer = fakeRemuxer(world);
   let errors = 0;
@@ -393,11 +402,15 @@ async function oneRun(seed: number): Promise<Violation | null> {
         await advance(1000);
       } else {
         const burst = 2 + Math.floor(random() * 5);
-        steps.push(`rafale de ${burst} sauts`);
+        const targets: string[] = [];
         for (let b = 0; b < burst; b++) {
-          (video as unknown as { currentTime: number }).currentTime = Math.floor(random() * DURATION);
-          await vi.advanceTimersByTimeAsync(Math.floor(random() * 120));
+          const to = Math.floor(random() * DURATION);
+          const gap = Math.floor(random() * 120);
+          targets.push(`${to}(+${gap}ms)`);
+          (video as unknown as { currentTime: number }).currentTime = to;
+          await vi.advanceTimersByTimeAsync(gap);
         }
+        steps.push(`rafale de ${burst} sauts : ${targets.join(" ")}`);
         await advance(250);
       }
     }
@@ -476,3 +489,32 @@ describe.skipIf(!process.env.FUZZ)("fuzz du lecteur", () => {
     if (LOG) appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), kind: "batch", seed: BASE_SEED, runs: RUNS, failures }) + "\n");
   });
 });
+
+/**
+ * Les séquences qui ont trouvé un défaut, rejouées à chaque vérification.
+ *
+ * Déterministes — une graine, la même séquence — et rapides : une fraction de seconde chacune. Elles
+ * ne sont pas sautées : ce sont les seules à reproduire fidèlement les défauts qu'elles ont trouvés,
+ * là où un test unitaire écrit à la main passait avec ou sans correctif.
+ *  - 30054481 : un saut dans une zone encore chargée pendant qu'un autre était servi était perdu.
+ *  - 30063323 : le jeton « déplacement de la source », posé dès le service d'un saut, faisait
+ *    ignorer un retour du spectateur à la même position pendant l'attente de la lecture en cours.
+ */
+const REGRESSION_SEEDS = [30054481, 30063323];
+
+describe("fuzz du lecteur — graines de régression", () => {
+  for (const seed of REGRESSION_SEEDS) {
+    it(`graine ${seed}`, { timeout: 60_000 }, async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+      try {
+        const found = await oneRun(seed);
+        expect(found).toBeNull();
+      } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+      }
+    });
+  }
+});
+

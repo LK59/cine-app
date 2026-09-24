@@ -2307,3 +2307,40 @@ describe("une coupure réseau avec de l'avance", () => {
   });
 });
 
+// Fuzz du 24/09/2026 (graine 30054481) : pendant qu'un saut est servi, le spectateur saute dans une
+// zone encore dans le tampon. Le raccourci « déjà chargé » ne demandait rien, puis le saut en cours
+// vidait les tampons et ramenait la tête sur sa propre cible : le dernier geste était perdu.
+describe("un saut dans le tampon pendant qu'un autre est servi", () => {
+  it("laisse le dernier geste l'emporter", async () => {
+    const video = fakeVideo();
+    // Comme un vrai élément : écrire `currentTime` — y compris quand c'est la source qui le fait —
+    // déclenche `seeking`. C'est ce `seeking`-là qui effaçait la cible du spectateur.
+    let head = 0;
+    Object.defineProperty(video, "currentTime", {
+      get: () => head,
+      set: (t: number) => {
+        head = t;
+        queueMicrotask(() => video.dispatchEvent(new Event("seeking")));
+      },
+      configurable: true,
+    });
+    const mse = await MseSource.attach(video, fakeRemuxer(500, 0.2, true, 30), PLAN, { onError: vi.fn() });
+    const internals = mse as unknown as { watchdogTimer: ReturnType<typeof setInterval> | null };
+    // Sans le chien de garde : c'est le saut lui-même qui doit servir le dernier geste, pas un
+    // rattrapage une demi-seconde plus tard.
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 8, "du média");
+    const setTime = (t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+    // Un saut loin, hors du tampon : il attend la lecture en cours avant d'être servi…
+    setTime(900);
+    await Promise.resolve();
+    // …et le doigt revient aussitôt dans ce qui est encore chargé.
+    setTime(5);
+
+    await until(() => !mse.seekPending || video.currentTime !== 900, "le saut servi", 3000);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(video.currentTime).toBeCloseTo(5, 0);
+    mse.destroy();
+  });
+});
