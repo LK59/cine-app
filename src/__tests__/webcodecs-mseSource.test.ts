@@ -2133,12 +2133,27 @@ describe("relu le 24/09/2026", () => {
   // doit plus toucher l'élément, que le lecteur suivant est en train d'ouvrir.
   it("ne déplace plus l'élément une fois détruite", async () => {
     const video = fakeVideo();
-    const mse = await MseSource.attach(video, fakeRemuxer(500, 0.2, true, 30), PLAN, { onError: vi.fn() });
-    await until(() => video.buffered.length > 0, "du média");
+    // Le saut attend la lecture en cours : c'est pendant cette attente que la source part. La
+    // lecture est tenue jusqu'à la destruction plutôt que de durer 30 ms — sous la charge de la
+    // construction de l'image, 30 ms s'écoulaient avant la destruction et le test échouait sans que
+    // rien n'ait changé (24/09/2026).
+    // Le premier segment passe ; la lecture du deuxième reste en cours jusqu'à la destruction.
+    const remuxer = fakeRemuxer(500, 0.2, true);
+    const read = remuxer.nextSegment.bind(remuxer);
+    let reads = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    remuxer.nextSegment = async () => {
+      reads += 1;
+      if (reads > 1) await held;
+      return read();
+    };
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0 && reads > 1, "du média, et une lecture en cours");
     const seeking = mse.seek(900);
-    // Le saut attend la lecture en cours (30 ms) : c'est pendant cette attente que la source part.
     await flush();
     mse.destroy();
+    release();
     await seeking;
     expect(video.currentTime).not.toBeCloseTo(900, 0);
   });
