@@ -3,7 +3,7 @@ import { reportsDb } from "@/lib/db";
 import { detail, markSeenBy, notifyAdmin, seanceFor, readContext, readFields, summarize } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
-import { jsonField, reportCaller } from "@/lib/reportRequest";
+import { jsonField, reportCaller, reportError } from "@/lib/reportRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +24,12 @@ export async function POST(req: NextRequest) {
   const who = await reportCaller(req);
   if (who instanceof NextResponse) return who;
   const form = await req.formData().catch(() => null);
-  if (!form) return NextResponse.json({ error: "Formulaire illisible" }, { status: 400 });
+  if (!form) return reportError("form", 400, "Formulaire illisible");
   const draft = form.get("draft") === "1";
   const fields = readFields(jsonField(form, "report"), draft);
-  if (typeof fields === "string") return NextResponse.json({ error: fields }, { status: 400 });
+  if (typeof fields === "string") return reportError("incomplete", 400, fields);
   const images = imagesFromForm(form);
-  if (typeof images === "string") return NextResponse.json({ error: images }, { status: 400 });
+  if ("code" in images) return reportError(images.code, 400, images.detail);
 
   const report = reportsDb.create(who.userId, who.userName, fields, draft, readContext(jsonField(form, "context"), req.headers.get("user-agent")));
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);

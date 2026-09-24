@@ -274,6 +274,77 @@ describe("signalements — les séances qu'ils concernent (24/09/2026)", () => {
   });
 });
 
+describe("signalements — relus le 24/09/2026 au soir", () => {
+  const tiny = (name: string) => new File([new Uint8Array([0, 1, 2, 3])], name, { type: "image/png" });
+
+  it("répond par un code que l'écran traduit, pas par une phrase", async () => {
+    const res = await create("lucas", AUDIO, { images: [new File(["<script>"], "page.html", { type: "text/html" })] });
+    expect(res.body).toMatchObject({ code: "notImage" });
+    expect((await create("lucas", { ...AUDIO, description: "" })).body).toMatchObject({ code: "incomplete" });
+  });
+
+  it("un brouillon se supprime, par son auteur seulement, et emporte ses images", async () => {
+    const { body } = await create("sarah", { zone: "home", element: "homeResume" }, { draft: true, images: [tiny("a.png")] });
+    const { DELETE } = await import("@/app/api/reports/[id]/route");
+    expect((await DELETE(req("lucas"), params(body.id))).status).toBe(404);
+    const { existsSync } = await import("node:fs");
+    const dir = `${process.env.DATA_DIR}/reports/${body.id}`;
+    expect(existsSync(dir)).toBe(true);
+    expect((await DELETE(req("sarah"), params(body.id))).status).toBe(200);
+    expect(existsSync(dir)).toBe(false);
+    const { GET } = await import("@/app/api/reports/[id]/route");
+    expect((await GET(req("sarah"), params(body.id))).status).toBe(404);
+    // Un signalement envoyé, lui, ne se supprime pas.
+    const sent = await create("sarah", AUDIO);
+    expect((await DELETE(req("sarah"), params(sent.body.id))).status).toBe(409);
+  });
+
+  it("plafonne les images d'un fil, commentaires compris", async () => {
+    const { MAX_IMAGES_PER_REPORT, MAX_IMAGES } = await import("@/lib/reportLimits");
+    const { body } = await create("lucas", AUDIO);
+    const { POST: comment } = await import("@/app/api/reports/[id]/messages/route");
+    let last = 201;
+    for (let sent = 0; sent <= MAX_IMAGES_PER_REPORT; sent += MAX_IMAGES) {
+      const form = new FormData();
+      for (let i = 0; i < MAX_IMAGES; i++) form.append("images", tiny(`c${sent + i}.png`));
+      const res = await comment(req("lucas", { form }), params(body.id));
+      last = res.status;
+      if (res.status !== 201) {
+        expect(await res.json()).toMatchObject({ code: "tooMany" });
+        break;
+      }
+    }
+    expect(last).toBe(400);
+  });
+
+  it("deux envois simultanés du même brouillon ne préviennent qu'une fois", async () => {
+    const { body } = await create("sarah", { zone: "home", element: "homeResume" }, { draft: true });
+    await settle();
+    vi.clearAllMocks();
+    const { PUT } = await import("@/app/api/reports/[id]/route");
+    const sending = () => {
+      const form = reportForm({ zone: "home", element: "homeResume", issue: "unexpected", description: "Deux fois." });
+      form.set("send", "1");
+      return PUT(req("sarah", { form }), params(body.id));
+    };
+    const results = await Promise.all([sending(), sending()]);
+    await settle();
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(push.admins).toHaveBeenCalledTimes(1);
+  });
+
+  // Au-delà de 10 Mo par défaut, le proxy de Next ne garde que le début du corps : deux captures
+  // d'iPhone rendaient le formulaire illisible.
+  it("laisse passer au proxy tout ce que le téléphone peut envoyer", async () => {
+    const { MAX_REQUEST_BYTES } = await import("@/lib/reportLimits");
+    const { createRequire } = await import("node:module");
+    const config = createRequire(`${process.cwd()}/`)("./next.config.js") as { experimental?: { proxyClientMaxBodySize?: string } };
+    const raw = config.experimental?.proxyClientMaxBodySize ?? "10mb";
+    const mb = Number(/^(\d+)mb$/i.exec(raw)?.[1]);
+    expect(mb * 1024 * 1024).toBeGreaterThan(MAX_REQUEST_BYTES);
+  });
+});
+
 describe("signalements — images", () => {
   it("garde l'original, montre une version WebP, et dit quand rien n'a pu la lire", async () => {
     const { default: sharp } = await import("sharp");

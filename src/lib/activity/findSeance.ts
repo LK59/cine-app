@@ -8,6 +8,14 @@
 import { generationsNewestFirst, readFullLines, readGenerationRecords, readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 
+/**
+ * Combien de générations on remonte au plus pour une séance qu'on ne trouve pas. Un identifiant ne
+ * porte pas sa date ; sans borne, une séance sortie des journaux — un ticket ancien, un lien
+ * périmé — faisait relire tout l'historique, jusqu'à un gigaoctet, en bloquant le serveur (relu le
+ * 24/09/2026). Quarante générations de 5 Mo : des semaines de lecture, bien plus qu'on n'en relit.
+ */
+const MAX_SCANNED_GENERATIONS = 40;
+
 export function findSeance(id: string): { seance: Seance; lines: Record<string, unknown>[] } | null {
   let records: LogRecord[] = [];
   if (id.startsWith("ancienne:")) {
@@ -16,7 +24,9 @@ export function findSeance(id: string): { seance: Seance; lines: Record<string, 
   } else {
     const parts: LogRecord[][] = [];
     let found = false;
+    let scanned = 0;
     for (const { file } of generationsNewestFirst("player")) {
+      if (!found && ++scanned > MAX_SCANNED_GENERATIONS) break;
       const mine = readGenerationRecords(file).filter((r) => r.session === id);
       if (mine.length) {
         found = true;
@@ -38,7 +48,7 @@ export function findSeance(id: string): { seance: Seance; lines: Record<string, 
           r._t <= seance.end
       )
     : records;
-  const lines = readFullLines("player", mine.map((r) => ({ file: r._file, line: r._line })));
+  const lines = readFullLines("player", mine.map((r) => ({ file: r._file, line: r._line, at: r._t })));
   const stamp = (l: Record<string, unknown>) => Date.parse(String(l.timestamp ?? "")) || 0;
   lines.sort((a, b) => stamp(a) - stamp(b));
   return { seance, lines };

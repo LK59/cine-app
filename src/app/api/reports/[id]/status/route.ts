@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb, type ReportStatus } from "@/lib/db";
 import { canSetStatus, detail, isOwner, markSeenBy, notifyAdmin, notifyAuthor } from "@/lib/reports";
-import { reportCaller, reportFor } from "@/lib/reportRequest";
+import { reportCaller, reportError, reportFor } from "@/lib/reportRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (report instanceof NextResponse) return report;
   const body = (await req.json().catch(() => null)) as { status?: string } | null;
   const next = STATUSES.find((s) => s === body?.status);
-  if (!next || !canSetStatus(report, who, next)) return NextResponse.json({ error: "Changement refusé" }, { status: 403 });
+  if (!next || !canSetStatus(report, who, next)) return reportError("refused", 403, "Changement refusé");
 
   const byAuthor = isOwner(report, who);
   // Une fermeture ne réclame l'attention de personne : ni pastille, ni notification, de quelque

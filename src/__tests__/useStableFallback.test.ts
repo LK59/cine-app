@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useStableFallback, takeoverFor, returningFor, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, returningFor, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
 
 // The handover itself, apart from the two players it sits between. What matters is that it
 // happens without asking, says so once, and leaves an account of why.
@@ -202,5 +202,26 @@ describe("castHandBackPosition", () => {
   it("ne rend zéro que si rien d'autre n'est connu", () => {
     expect(castHandBackPosition(0, 0, undefined)).toBe(0);
     expect(castHandBackPosition(Number.NaN, 0, 12)).toBe(12);
+  });
+});
+
+// Relu le 24/09/2026 : en diffusion, l'épisode suivant se remontait sur le lecteur natif et AirPlay
+// tombait — le relais appartenait à la séance de l'épisode d'avant.
+describe("castCarriedTo", () => {
+  const episode1 = { itemId: "ep1", openId: 7, resumeAt: 0 };
+  const cast = { resumeAt: 1200, audioStreamIndex: 3, cast: true, owner: episode1 };
+
+  it("reporte une diffusion sur l'épisode suivant de la même lecture, depuis le début", () => {
+    const episode2 = { itemId: "ep2", openId: 7, resumeAt: 0 };
+    expect(castCarriedTo(cast, episode2)).toEqual({ resumeAt: 0, audioStreamIndex: undefined, cast: true, owner: episode2 });
+  });
+
+  it("ne reporte ni un repli ordinaire, ni sur une autre lecture, ni sur le même épisode", () => {
+    expect(castCarriedTo({ ...cast, cast: false }, { itemId: "ep2", openId: 7 })).toBeNull();
+    expect(castCarriedTo(cast, { itemId: "ep2", openId: 8 })).toBeNull();
+    expect(castCarriedTo(cast, episode1)).toBeNull();
+    expect(castCarriedTo(cast, { itemId: "ep1", openId: 7 })).toBeNull();
+    expect(castCarriedTo({ ...cast, owner: { itemId: "ep1" } }, { itemId: "ep2" })).toBeNull();
+    expect(castCarriedTo(null, { itemId: "ep2", openId: 7 })).toBeNull();
   });
 });

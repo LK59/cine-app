@@ -11,11 +11,11 @@ import { MyReports } from "@/components/reports/MyReports";
 import { ReportThread } from "@/components/reports/ReportThread";
 import { FRESH, reportKey } from "@/components/reports/reportCache";
 
-type ReportView = { kind: "new" } | { kind: "list" } | { kind: "draft"; id: number } | { kind: "thread"; id: number };
+type ReportView = { kind: "new"; fromList: boolean } | { kind: "list" } | { kind: "draft"; id: number } | { kind: "thread"; id: number };
 
-/** `#signalement=nouveau | liste | brouillon:<id> | <id>`. */
+/** `#signalement=nouveau | nouveau:liste | liste | brouillon:<id> | <id>` — « :liste » : ouvert depuis la liste. */
 export function decodeReportView(raw: string): ReportView {
-  if (raw === "nouveau") return { kind: "new" };
+  if (raw === "nouveau" || raw === "nouveau:liste") return { kind: "new", fromList: raw === "nouveau:liste" };
   if (raw.startsWith("brouillon:")) {
     const id = Number(raw.slice(10));
     if (Number.isInteger(id) && id > 0) return { kind: "draft", id };
@@ -34,7 +34,8 @@ function DraftEditor({ id }: { id: number }) {
   // Déjà parti — depuis un autre appareil, ou une liste restée en retard : c'est le ticket qu'on
   // montre, jamais un assistant dont l'envoi serait refusé.
   if (data.status !== "draft") return <ReportThread id={data.id} />;
-  return <ReportWizard key={data.updatedAt} existing={data} />;
+  // Un brouillon ne s'ouvre que depuis la liste (ou le ticket qu'elle a ouvert) : il y revient.
+  return <ReportWizard key={data.updatedAt} existing={data} fromList />;
 }
 
 /**
@@ -48,7 +49,7 @@ export function PlayerReportPanel({ raw, leaving }: { raw: string; leaving?: boo
     view.kind === "new" ? t("report.ui.newTitle") : view.kind === "draft" ? t("report.ui.draftTitle") : view.kind === "list" ? t("report.ui.listTitle") : t("report.ui.threadTitle");
   return (
     <PlayerPanelFrame title={title} back leaving={leaving}>
-      {view.kind === "new" && <ReportWizard />}
+      {view.kind === "new" && <ReportWizard fromList={view.fromList} />}
       {view.kind === "draft" && <DraftEditor id={view.id} />}
       {view.kind === "list" && <MyReports />}
       {view.kind === "thread" && <ReportThread id={view.id} />}

@@ -24,6 +24,14 @@ export interface ServerPlayerContext {
    * `start` dans le journal des spectateurs (23/09/2026).
    */
   bench?: string;
+  /**
+   * L'identifiant de séance, comme les lignes du lecteur natif, et le navigateur. Sans eux, le
+   * journal reconstituait ces séances « à l'ancienne », par compte et par titre : chaque relance
+   * devenait une séance, sans appareil — et, dans le diagnostic « fichier ou appareil », un
+   * témoin « propre » qui innocentait le titre (relu le 24/09/2026).
+   */
+  session?: string;
+  agent?: string;
 }
 
 /** Le lecteur serveur a obtenu son flux et le pose sur l'élément. */
@@ -70,5 +78,7 @@ function base(ctx: ServerPlayerContext): Record<string, unknown> {
     player: "serveur",
     cast: ctx.cast,
     ...(ctx.bench ? { bench: ctx.bench } : {}),
+    ...(ctx.session ? { session: ctx.session } : {}),
+    ...(ctx.agent ? { agent: ctx.agent } : {}),
   };
 }

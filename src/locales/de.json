@@ -2206,7 +2206,7 @@
       "addImage": "Bildschirmfoto",
       "removeImage": "Bild entfernen",
       "imagesHint": "Bis zu 6 Bilder — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
-      "noPreview": "Keine Vorschau — Original öffnen",
+      "noPreview": "Keine Vorschau — Original herunterladen",
       "new": "Neue Meldung",
       "newTitle": "Problem melden",
       "draftTitle": "Entwurf",
@@ -2240,7 +2240,27 @@
       "sending": "Wird gesendet…",
       "linkedSeance": "Die betroffene Sitzung",
       "linkedSeanceGone": "Diese Sitzung ist nicht mehr im Protokoll; ihre gespeicherte Zusammenfassung steht unten.",
-      "openedByAdmin": "Nachricht des Administrators"
+      "openedByAdmin": "Nachricht des Administrators",
+      "image": "Bild",
+      "original": "Original",
+      "closeImage": "Bild schließen",
+      "deleteDraft": "Löschen",
+      "deleteDraftConfirm": "Löschen bestätigen",
+      "draftDeleted": "Entwurf gelöscht"
+    },
+    "errors": {
+      "unauthenticated": "Ihre Sitzung ist abgelaufen: Bitte melden Sie sich erneut an.",
+      "notFound": "Diese Meldung existiert nicht mehr.",
+      "form": "Die Sendung konnte nicht gelesen werden: Bitte erneut versuchen.",
+      "notImage": "Eine der Dateien ist kein unterstütztes Bild.",
+      "tooLarge": "Ein Bild ist größer als 25 MB.",
+      "tooMany": "Zu viele Bilder für diese Meldung.",
+      "empty": "Schreiben Sie eine Nachricht oder hängen Sie ein Bild an.",
+      "notDraft": "Diese Meldung wurde bereits gesendet und kann nicht mehr geändert werden.",
+      "draftNoComment": "Ein Entwurf kann nicht kommentiert werden: Senden Sie ihn zuerst.",
+      "refused": "Diese Änderung ist nicht erlaubt.",
+      "incomplete": "Eine Antwort oder die Beschreibung fehlt.",
+      "requestTooLarge": "Die Bilder sind für eine Sendung zu groß: Entfernen Sie eines."
     }
   }
 }

@@ -5,6 +5,8 @@ import { LOG_SOURCES, generationsNewestFirst, readGenerationRecords, typeOf, typ
 export const dynamic = "force-dynamic";
 
 const PAGE = 100;
+/** Voir la boucle de lecture : au-delà, la page rend la main avec un curseur. */
+const MAX_GENERATIONS_PER_PAGE = 8;
 /** Les listes de filtres (comptes, types) : lues sur les deux dernières générations, pas sur des années. */
 const FACET_GENERATIONS = 2;
 
@@ -40,7 +42,16 @@ export async function GET(req: NextRequest) {
   const items: Record<string, unknown>[] = [];
   let next: string | null = null;
   let reachedEnd = false;
+  // Une page parcourt au plus ce nombre de générations, pleine ou non, et rend la main avec un
+  // curseur. Un filtre qui ne remplit jamais sa page — une séance de vingt lignes — relisait sinon
+  // tout l'historique d'une traite, en bloquant le serveur (relu le 24/09/2026).
+  let scanned = 0;
   scan: for (; g < generations.length; g++) {
+    if (++scanned > MAX_GENERATIONS_PER_PAGE) {
+      // Reprendre au début de cette génération-là : `Math.min` borne l'index à sa longueur.
+      next = `${g}.${Number.MAX_SAFE_INTEGER}`;
+      break;
+    }
     const { file, mtimeMs } = generations[g];
     // Toute l'archive est plus ancienne que la période : rien plus loin ne peut compter.
     if (since && g > 0 && mtimeMs < since) break;

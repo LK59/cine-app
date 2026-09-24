@@ -62,6 +62,7 @@ describe("proxy — what a plain user may write", () => {
       // ferme — la route vérifie ensuite que le signalement est bien le sien.
       ["POST", "/api/reports"],
       ["PUT", "/api/reports/12"],
+      ["DELETE", "/api/reports/12"],
       ["POST", "/api/reports/12/messages"],
       ["POST", "/api/reports/12/status"],
       ["DELETE", "/api/reports/12/images/3"],

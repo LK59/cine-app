@@ -150,10 +150,14 @@ export function ActivitySeance({ id }: { id: string }) {
             <SeanceFlags s={s} />
           </div>
         </div>
-        <ActivityLink to={{ kind: "logs", preset: { source: "player", session: s.id, days: 0 } }} className="btn-ghost shrink-0 px-3 py-1.5 text-xs">
-          <ListTree size={14} />
-          <span className="hidden sm:inline">{t("activity.logs.title")}</span>
-        </ActivityLink>
+        {/* Une séance reconstituée n'a pas d'identifiant dans les lignes (`ancienne:…`) : le filtre
+            ne trouverait rien. Sa chronologie, plus bas, montre déjà toutes ses lignes. */}
+        {!s.legacy && (
+          <ActivityLink to={{ kind: "logs", preset: { source: "player", session: s.id, days: 0 } }} className="btn-ghost shrink-0 px-3 py-1.5 text-xs">
+            <ListTree size={14} />
+            <span className="hidden sm:inline">{t("activity.logs.title")}</span>
+          </ActivityLink>
+        )}
       </div>
 
       {stop ? (

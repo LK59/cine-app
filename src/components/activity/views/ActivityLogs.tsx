@@ -33,7 +33,7 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
     const next = !open;
     setOpen(next);
     if (next && !full && !missing) {
-      const res = await fetch(`/api/admin/activity/logs/line?source=${source}&file=${encodeURIComponent(item._file)}&line=${item._line}`);
+      const res = await fetch(`/api/admin/activity/logs/line?source=${source}&file=${encodeURIComponent(item._file)}&line=${item._line}&at=${item._t}`);
       if (res.ok) setFull((await res.json()) as Record<string, unknown>);
       else setMissing(true);
     }

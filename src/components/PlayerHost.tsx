@@ -7,7 +7,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, returningFor, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, returningFor, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -26,6 +26,8 @@ import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { serverStartFields, serverFailureFields, castEstablishedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { newPlayerSessionId } from "@/lib/playerSessionTally";
+import { noteWatching } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
@@ -159,7 +161,12 @@ export function PlayerHost() {
    */
   const handCastBack = useCallback(
     (resumeAt: number) => {
-      if (itemId) stepBack(itemId, resumeAt, session);
+      if (!itemId) return;
+      // Un relais, pas une reprise : le lecteur natif ne recule pas de cinq secondes au retour
+      // d'une diffusion de plus de dix minutes, pendant laquelle rien n'avait noté la lecture
+      // (relu le 24/09/2026 — voir `resumeRewind.ts`).
+      if (!session?.bench) noteWatching(itemId);
+      stepBack(itemId, resumeAt, session);
     },
     [itemId, session, stepBack]
   );
@@ -195,7 +202,8 @@ export function PlayerHost() {
   // automatique désignent tous deux un lecteur qui n'existe pas sur cette installation. Un
   // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
   // transcodage — c'est tout l'objet du réglage.
-  const useNative = !serverFallback || (!legacy && !handedOver.includes(session.itemId));
+  const carried = castCarriedTo(takeover, session);
+  const useNative = !serverFallback || (!legacy && !handedOver.includes(session.itemId) && !carried);
   if (useNative) {
     return (
       <ExperimentalPlayerHost
@@ -223,7 +231,7 @@ export function PlayerHost() {
         session={session}
         mode={mode === "mini" ? "mini" : "full"}
         fallbackReason={fallbackReason}
-        takeover={takeover}
+        takeover={carried ?? takeover}
         onCastEnded={handCastBack}
       />
       {/* Shown over the stable player while it makes its own arrangements, and gone on its own.
@@ -398,10 +406,15 @@ function ActivePlayer({
   // Ce que chaque ligne du journal de ce lecteur porte — voir `serverPlayerLog`. Tenu dans une
   // référence : `startPlayback` a des dépendances volontairement figées, et y lire `title` ou
   // `castSession` directement nommerait l'épisode d'avant.
-  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench });
+  // Une séance par titre ouvert : l'épisode suivant en commence une autre.
+  const [firstSession] = useState(newPlayerSessionId);
+  const logSession = useRef({ itemId, id: firstSession });
+  const agent = typeof navigator === "undefined" ? undefined : navigator.userAgent;
+  const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench, session: firstSession, agent });
   useEffect(() => {
-    logContext.current = { itemId, title, cast: castSession, bench: session.bench };
-  }, [itemId, title, castSession, session.bench]);
+    if (logSession.current.itemId !== itemId) logSession.current = { itemId, id: newPlayerSessionId() };
+    logContext.current = { itemId, title, cast: castSession, bench: session.bench, session: logSession.current.id, agent };
+  }, [itemId, title, castSession, session.bench, agent]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);

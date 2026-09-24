@@ -83,7 +83,10 @@ function verdictOf(viewers: Viewer[]): Verdict {
  * lu de la période — les séances réussies comptent autant que les autres : ce sont elles qui
  * innocentent un fichier ou un appareil.
  */
-export function diagnoseTitles(seances: Seance[], limit = 12): TitleDiagnosis[] {
+export function diagnoseTitles(all: Seance[], limit = 12): TitleDiagnosis[] {
+  // Un témoin sans appareil connu — le lecteur serveur avant le 24/09/2026 ne disait pas lequel —
+  // ne prouve rien : il passait pour « quelqu'un chez qui ça marche » et innocentait le titre.
+  const seances = all.filter((s) => s.device !== null);
   // Ce que chaque spectateur a vécu sur l'ensemble de la période, titre par titre.
   const perViewer = new Map<string, Map<string, { seances: number; failed: number }>>();
   const byTitle = new Map<string, Seance[]>();
@@ -131,8 +134,9 @@ export function diagnoseTitles(seances: Seance[], limit = 12): TitleDiagnosis[] 
         reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
       }
     }
+    // `list` suit `buildSeances`, les plus récentes d'abord : `failedSeances` aussi, et le lien du
+    // témoin ouvre bien son dernier échec (il ouvrait le plus ancien, relu le 24/09/2026).
     const sortedViewers = [...viewers.values()].sort((a, b) => b.failed - a.failed || b.seances - a.seances);
-    for (const v of sortedViewers) v.failedSeances.reverse();
     out.push({
       key,
       itemId: list[0].itemId,

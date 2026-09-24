@@ -155,7 +155,9 @@ export function PlayerBottomBar() {
                 <Icon size={short ? 19 : 20} strokeWidth={on ? 2.4 : 1.8} />
                 {panel === "account" && badge.any && <NavDot />}
               </span>
-              {!short && <span className={`text-[10px] ${on ? "font-semibold" : "font-medium"}`}>{t(labelKey)}</span>}
+              {/* Sur un écran court, le nom n'est plus affiché mais reste dit : sans lui, le bouton
+                  n'avait aucun nom pour un lecteur d'écran (relu le 24/09/2026). */}
+              <span className={short ? "sr-only" : `text-[10px] ${on ? "font-semibold" : "font-medium"}`}>{t(labelKey)}</span>
             </button>
           );
         })}

@@ -54,7 +54,14 @@ export interface Seance {
    */
   backgroundRebuilds: number;
   stalls: number;
+  /** Les replis qui échouent. Une diffusion vers la télévision (AirPlay) n'en est pas un. */
   fallbacks: number;
+  /**
+   * Les passages au lecteur serveur pour diffuser — « diffusion demandée ». Comptés à part : ils
+   * faisaient accuser un appareil dans le diagnostic « fichier ou appareil », sept envois vers la
+   * télé tenant lieu de sept échecs (relu le 24/09/2026).
+   */
+  casts: number;
   errors: number;
   /** Les motifs des incidents, dans l'ordre — de quoi dire « pourquoi » sans ouvrir la séance. */
   incidents: { kind: string; t: number; reason: string }[];
@@ -66,6 +73,12 @@ export const SLOW_SEEK_MS = 3000;
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+/** Un repli qui est une diffusion : le champ posé depuis le 24/09/2026, ou, avant, la phrase. */
+function isCast(r: LogRecord, reason: string): boolean {
+  const takeover = r.takeover as { cast?: unknown } | undefined;
+  return r.cast === true || r["takeover.cast"] === true || takeover?.cast === true || reason === "diffusion demandée";
+}
+
 function blank(id: string, legacy: boolean, r: LogRecord): Seance {
   return {
     id,
@@ -73,8 +86,8 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     user: str(r.user) ?? "?",
     itemId: str(r.itemId),
     title: str(r.title) ?? "?",
-    start: r._t,
-    end: r._t,
+    start: lineTime(r),
+    end: lineTime(r),
     device: deviceLabel(str(r.agent)),
     openedMs: null,
     player: r.player === "serveur" ? "serveur" : "natif",
@@ -90,14 +103,26 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     backgroundRebuilds: 0,
     stalls: 0,
     fallbacks: 0,
+    casts: 0,
     errors: 0,
     incidents: [],
   };
 }
 
+/**
+ * L'instant qu'une ligne décrit. Un bilan perdu (`why: "lost"`) arrive au lancement suivant, parfois
+ * une heure après ; il porte `lateByMs`, l'écart entre sa mesure et son envoi. Daté de son arrivée,
+ * il étirait dix minutes de film sur une heure dans la frise (relu le 24/09/2026).
+ */
+export function lineTime(r: { _t: number; kind?: unknown; lateByMs?: unknown }): number {
+  const late = r.kind === "stop" ? num(r.lateByMs) : null;
+  return late !== null && late > 0 ? r._t - late : r._t;
+}
+
 function absorb(s: Seance, r: LogRecord): void {
-  s.end = Math.max(s.end, r._t);
-  s.start = Math.min(s.start, r._t);
+  const t = lineTime(r);
+  s.end = Math.max(s.end, t);
+  s.start = Math.min(s.start, t);
   s.device ??= deviceLabel(str(r.agent));
   if (r.player === "serveur") s.player = "serveur";
   const reason = str(r.reason) ?? str(r.message) ?? str(r.why) ?? "";
@@ -134,6 +159,10 @@ function absorb(s: Seance, r: LogRecord): void {
       s.incidents.push({ kind: "stall", t: r._t, reason: `${num(r.position)?.toFixed(0) ?? "?"} s` });
       break;
     case "fallback":
+      if (isCast(r, reason)) {
+        s.casts += 1;
+        break;
+      }
       s.fallbacks += 1;
       s.incidents.push({ kind: "fallback", t: r._t, reason });
       break;
@@ -177,7 +206,8 @@ export function buildSeances(records: LogRecord[]): Seance[] {
     }
     const key = `${str(r.user) ?? "?"}|${str(r.itemId) ?? str(r.title) ?? "?"}`;
     let s = legacyOpen.get(key);
-    const opens = r.kind === "start" && !(num(r.rebuild) ?? 0);
+    // Une relance (`retry`, lecteur serveur) n'ouvre pas une séance, pas plus qu'une reconstruction.
+    const opens = r.kind === "start" && !(num(r.rebuild) ?? 0) && !(num(r.retry) ?? 0);
     if (!s || opens) {
       s = blank(`ancienne:${key}:${r._t}`, true, r);
       byId.set(s.id, s);

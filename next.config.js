@@ -3,6 +3,14 @@ const { version } = require("./package.json");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  experimental: {
+    // Le corps d'une requête que le proxy (`src/proxy.ts`) doit laisser passer entier. 10 Mo par
+    // défaut, au-delà Next n'en garde que le début : deux captures d'iPhone jointes à un
+    // signalement rendaient le formulaire illisible (relu le 24/09/2026). Au-dessus de
+    // `MAX_REQUEST_BYTES` (reportLimits.ts), que le téléphone respecte — un test compare les deux.
+    // Pas plus : Next garde ce corps en mémoire, et le conteneur a 2 Go.
+    proxyClientMaxBodySize: "100mb",
+  },
   // Lets the development stack compile into its own directory (see docker-compose.dev.yml), so a
   // `next dev` running against the working tree and a production image build never overwrite each
   // other's output.

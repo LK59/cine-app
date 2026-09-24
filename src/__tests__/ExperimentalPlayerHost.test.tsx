@@ -88,6 +88,7 @@ vi.mock("@/components/PlayerControls", () => ({
       {props.subtitleTracks.map((track) => (
         <button key={track.id} onClick={() => props.onChangeSubtitle(track.id)}>{`st:${track.label}`}</button>
       ))}
+      <button onClick={() => props.onChangeSubtitle(null)}>st:aucun</button>
     </div>
   ),
 }));
@@ -868,6 +869,24 @@ describe("les préférences du compte Jellyfin", () => {
     mount();
     await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
     expect(remux.requestAudioTrack).not.toHaveBeenCalled();
+  });
+
+  // Relu le 24/09/2026 : éteindre les sous-titres remettait `wantedSubtitleRef` à `null`, soit
+  // « jamais choisi » — et chaque reconstruction réappliquait ceux du compte.
+  it("n'allume pas à nouveau des sous-titres que le spectateur a éteints, après une reconstruction", async () => {
+    viewerState = { resumeSeconds: 0, preferences: { ...preferences, subtitleMode: "Always" } };
+    mount();
+    await waitFor(() => expect(remux.selectSubtitleTrack).toHaveBeenCalledWith(5));
+    await act(async () => void fireEvent.click(screen.getByText("st:aucun")));
+    expect(remux.selectSubtitleTrack).toHaveBeenLastCalledWith(null);
+
+    const rebuilt = fakeRemux();
+    nextProbe = () => ({ path: "remux", start: async () => rebuilt, discard: vi.fn() });
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    expect(rebuilt.selectSubtitleTrack).not.toHaveBeenCalledWith(5);
   });
 
   it("laisse le choix du spectateur l'emporter sur une reconstruction", async () => {
@@ -1735,3 +1754,49 @@ describe("reprendre quelques secondes avant", () => {
   });
 });
 
+
+// Relus le 24/09/2026 au soir.
+describe("une reconstruction et ce qu'elle doit garder", () => {
+  const playerLines = (kind: string) =>
+    (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url]) => url === "/api/player/log")
+      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
+      .filter((entry) => entry.kind === kind);
+
+  it("ne relance pas un film que le spectateur avait mis en pause", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(300), new Event("play")));
+    await act(async () => void fireEvent(videoElement(300), new Event("pause")));
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect((probes[1] as unknown as { startPaused: boolean }).startPaused).toBe(true);
+  });
+
+  it("relance un film qui jouait", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(300), new Event("play")));
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect((probes[1] as unknown as { startPaused: boolean }).startPaused).toBe(false);
+  });
+
+  it("écrit le chemin sur chaque reconstruction", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    remux.lost = true;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(playerLines("rebuild")).toHaveLength(1));
+    expect(playerLines("rebuild")[0].fields.path).toBe("remux");
+  });
+
+  it("suspend le clavier sous l'écran « connexion perdue »", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("false"));
+    act(() => probes[0].onError("Plage inaccessible", "network"));
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("true"));
+  });
+});

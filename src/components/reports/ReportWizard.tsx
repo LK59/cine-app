@@ -6,7 +6,7 @@ import { ArrowLeft, Check, ChevronRight, Film, Lightbulb, Loader2, MessageSquare
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
-import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
 import { cinemaFetcher } from "@/lib/cinemaPayload";
 import { searchCinemaLibrary } from "@/lib/cinemaSearch";
@@ -17,6 +17,8 @@ import type { ReportDetail } from "@/lib/reports";
 import { ImagePicker, MAX_PICKED } from "./ImagePicker";
 import { appendImages, reportContext } from "./prepareImage";
 import { useRefreshReports } from "./reportCache";
+import { reportErrorText } from "./reportErrors";
+import { escapeBlurs } from "./escapeBlurs";
 
 type Step = "zone" | "element" | "title" | "issue" | "describe";
 
@@ -77,6 +79,7 @@ function OtherChoice({ selected, value, onSelect, onChange, onDone }: { selected
           }}
         >
           <input
+            {...escapeBlurs}
             autoFocus
             value={value}
             maxLength={200}
@@ -116,6 +119,7 @@ function TitleStep({ value, onPick }: { value: Draft["item"]; onPick: (item: Non
       <div className="relative">
         <Search size={16} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-subtle" />
         <input
+          {...escapeBlurs}
           autoFocus
           value={query}
           onChange={(e) => {
@@ -172,7 +176,7 @@ function TitleStep({ value, onPick }: { value: Draft["item"]; onPick: (item: Non
             if (query.trim()) onPick({ id: null, title: query.trim().slice(0, 200), kind: null });
           }}
         >
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("report.ui.titleFreePlaceholder")} className="input h-11 flex-1 text-sm" />
+          <input {...escapeBlurs} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("report.ui.titleFreePlaceholder")} className="input h-11 flex-1 text-sm" />
           <button type="submit" disabled={!query.trim()} className="btn btn-primary h-11 px-4 text-sm">
             {t("report.ui.next")}
           </button>
@@ -213,7 +217,18 @@ function fromDetail(d: ReportDetail): Draft {
  * « Autre (préciser) ». On peut revenir sur chaque choix, et garder le tout en brouillon pour plus
  * tard. Les journaux utiles sont joints par le serveur à l'envoi : personne n'a à les chercher.
  */
-export function ReportWizard({ existing }: { existing?: ReportDetail }) {
+export function ReportWizard({
+  existing,
+  fromList = false,
+}: {
+  existing?: ReportDetail;
+  /**
+   * Ouvert depuis « Mes signalements » : un brouillon enregistré ou supprimé y *revient* (retour
+   * dans l'historique) au lieu d'y aller. Y aller par un remplacement laissait deux fois la liste
+   * dans l'historique, et le premier « Retour » semblait ne rien faire (relu le 24/09/2026).
+   */
+  fromList?: boolean;
+}) {
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();
@@ -269,9 +284,32 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
       await refresh(saved);
       toast.success(send ? t("report.ui.sent") : t("report.ui.draftSaved"));
       // Remplacé et non empilé : revenir en arrière depuis le ticket ne doit pas rouvrir l'assistant.
-      cinemaNavigate({ report: send ? String(id) : "liste" }, "replace");
+      if (send) cinemaNavigate({ report: String(id) }, "replace");
+      else toList();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("report.ui.failed"));
+      toast.error(reportErrorText(error, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Vers « Mes signalements » : en revenant si l'on en vient, en y allant sinon. */
+  const toList = () => {
+    if (fromList) cinemaClose({ report: "liste" });
+    else cinemaNavigate({ report: "liste" }, "replace");
+  };
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteDraft = async () => {
+    if (!existing) return;
+    setBusy(true);
+    try {
+      await apiAction(`/api/reports/${existing.id}`, { method: "DELETE" });
+      await refresh();
+      toast.success(t("report.ui.draftDeleted"));
+      toList();
+    } catch (error) {
+      toast.error(reportErrorText(error, t));
     } finally {
       setBusy(false);
     }
@@ -283,7 +321,7 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
       await apiAction(`/api/reports/${existing.id}/images/${imageId}`, { method: "DELETE" });
       setKept((list) => list.filter((i) => i.id !== imageId));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("report.ui.failed"));
+      toast.error(reportErrorText(error, t));
     }
   };
 
@@ -388,6 +426,7 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
       {step === "describe" && (
         <div className="space-y-4">
           <textarea
+            {...escapeBlurs}
             autoFocus
             value={draft.description}
             maxLength={5000}
@@ -431,6 +470,19 @@ export function ReportWizard({ existing }: { existing?: ReportDetail }) {
           </button>
         )}
         <span className="flex-1" />
+        {existing && (
+          // En deux temps : un brouillon supprimé ne revient pas.
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => (confirmDelete ? void deleteDraft() : setConfirmDelete(true))}
+            onBlur={() => setConfirmDelete(false)}
+            className={`btn btn-ghost px-3 py-2 text-sm ${confirmDelete ? "text-danger" : ""}`}
+          >
+            <Trash2 size={15} />
+            {confirmDelete ? t("report.ui.deleteDraftConfirm") : t("report.ui.deleteDraft")}
+          </button>
+        )}
         {draft.zone && (
           <button type="button" disabled={busy} onClick={() => submit(false)} className="btn btn-ghost px-3 py-2 text-sm">
             <Save size={15} />

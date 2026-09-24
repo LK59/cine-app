@@ -110,7 +110,7 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Retirer sa propre demande — côté Jellyseerr seulement, jamais côté Radarr.
   /^DELETE \/api\/player\/requests\/\d+$/,
   // Ses propres signalements — la route refuse ceux des autres (`reportFor`, `canSetStatus`).
-  /^PUT \/api\/reports\/\d+$/,
+  /^(PUT|DELETE) \/api\/reports\/\d+$/,
   /^POST \/api\/reports\/\d+\/(messages|status)$/,
   /^DELETE \/api\/reports\/\d+\/images\/\d+$/,
 ];

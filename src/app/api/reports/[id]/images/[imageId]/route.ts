@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
 import { isOwner } from "@/lib/reports";
 import { reportFilePath, storedImageType } from "@/lib/reportImages";
-import { reportCaller, reportFor } from "@/lib/reportRequest";
+import { reportCaller, reportError, reportFor } from "@/lib/reportRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +20,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   const report = reportFor(id, who);
   if (report instanceof NextResponse) return report;
   const image = reportsDb.images(report.id).find((i) => i.id === Number(imageId));
-  if (!image) return NextResponse.json({ error: "Image introuvable" }, { status: 404 });
+  if (!image) return reportError("notFound", 404, "Image introuvable");
   const original = req.nextUrl.searchParams.get("original") === "1" || !image.file;
   const file = reportFilePath(report.id, original ? image.original : image.file!);
-  if (!file || !fs.existsSync(file)) return NextResponse.json({ error: "Image introuvable" }, { status: 404 });
+  if (!file || !fs.existsSync(file)) return reportError("notFound", 404, "Image introuvable");
   const name = (image.originalName ?? "capture").replace(/[^\w.\- ]/g, "_");
   return new NextResponse(fs.readFileSync(file), {
     headers: {
@@ -46,9 +46,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id, imageId } = await params;
   const report = reportFor(id, who);
   if (report instanceof NextResponse) return report;
-  if (!isOwner(report, who)) return NextResponse.json({ error: "Refusé" }, { status: 403 });
+  if (!isOwner(report, who)) return reportError("refused", 403, "Refusé");
   const removed = reportsDb.removeDraftImage(report.id, Number(imageId));
-  if (!removed) return NextResponse.json({ error: "Seul un brouillon perd ses images" }, { status: 409 });
+  if (!removed) return reportError("notDraft", 409, "Seul un brouillon perd ses images");
   for (const name of [removed.original, removed.file]) {
     const file = name ? reportFilePath(report.id, name) : null;
     if (file) fs.rmSync(file, { force: true });

@@ -2206,7 +2206,7 @@
       "addImage": "Screenshot",
       "removeImage": "Remove image",
       "imagesHint": "Up to 6 images — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
-      "noPreview": "No preview — open the original",
+      "noPreview": "No preview — download the original",
       "new": "New report",
       "newTitle": "Report a problem",
       "draftTitle": "Draft",
@@ -2240,7 +2240,27 @@
       "sending": "Sending…",
       "linkedSeance": "The session concerned",
       "linkedSeanceGone": "This session is no longer in the log; its frozen summary is below.",
-      "openedByAdmin": "Message from the administrator"
+      "openedByAdmin": "Message from the administrator",
+      "image": "Image",
+      "original": "Original",
+      "closeImage": "Close the image",
+      "deleteDraft": "Delete",
+      "deleteDraftConfirm": "Confirm deletion",
+      "draftDeleted": "Draft deleted"
+    },
+    "errors": {
+      "unauthenticated": "Your session has expired: please sign in again.",
+      "notFound": "This report no longer exists.",
+      "form": "The upload could not be read: please try again.",
+      "notImage": "One of the files is not a supported image.",
+      "tooLarge": "An image is larger than 25 MB.",
+      "tooMany": "Too many images for this report.",
+      "empty": "Write a message or attach an image.",
+      "notDraft": "This report has already been sent and can no longer be edited.",
+      "draftNoComment": "A draft cannot be commented on: send it first.",
+      "refused": "This change is not allowed.",
+      "incomplete": "An answer or the description is missing.",
+      "requestTooLarge": "The images are too heavy for one upload: remove one."
     }
   }
 }

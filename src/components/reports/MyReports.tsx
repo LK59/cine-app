@@ -27,7 +27,7 @@ export function MyReports() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 pt-2">
-      <button type="button" onClick={() => cinemaNavigate({ report: "nouveau" })} className="btn btn-primary w-full justify-center py-3 text-sm sm:w-auto sm:px-5">
+      <button type="button" onClick={() => cinemaNavigate({ report: "nouveau:liste" })} className="btn btn-primary w-full justify-center py-3 text-sm sm:w-auto sm:px-5">
         <Plus size={16} />
         {t("report.ui.new")}
       </button>

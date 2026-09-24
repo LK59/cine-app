@@ -48,7 +48,7 @@ export type LogRecord = Record<string, unknown> & {
 };
 
 /** Ce qui ne sert qu'au détail d'une ligne, et pèse l'essentiel de son poids. */
-const HEAVY_FIELDS = new Set(["steps", "trace", "stack", "questions", "timeline"]);
+export const HEAVY_FIELDS: ReadonlySet<string> = new Set(["steps", "trace", "stack", "questions", "timeline"]);
 const MAX_STRING = 240;
 
 function compact(entry: Record<string, unknown>, file: string, line: number): LogRecord {
@@ -65,6 +65,15 @@ function compact(entry: Record<string, unknown>, file: string, line: number): Lo
 }
 
 interface Cached {
+  /**
+   * L'identité du fichier sur le disque. Une rotation *renomme* : `player.log` devient `.1`, `.1`
+   * devient `.2`. Sans elle, la nouvelle `.1`, souvent plus longue que l'ancienne (5 Mo plus une
+   * ligne), passait pour « le même fichier, plus long » : on lisait sa fin à partir de l'ancien
+   * point d'arrêt, et le cache gardait sous le nom `.1` les lignes de l'archive précédente — une
+   * génération en double, la plus récente perdue, et des numéros de ligne qui menaient à d'autres
+   * séances (relu le 24/09/2026). Un renommage garde l'inode ; un fichier neuf en a un autre.
+   */
+  ino: number;
   mtimeMs: number;
   size: number;
   /** Où la lecture s'est arrêtée — une ligne en cours d'écriture n'est pas prise. */
@@ -117,12 +126,12 @@ function readGeneration(file: string): LogRecord[] {
   }
   const name = path.basename(file);
   const known = cache.get(file);
-  if (known && known.mtimeMs === stat.mtimeMs && known.size === stat.size) {
+  if (known && known.ino === stat.ino && known.mtimeMs === stat.mtimeMs && known.size === stat.size) {
     remember(file, known);
     return known.records;
   }
   // Le même fichier, plus long : seulement la suite. Plus court (il a tourné) : tout.
-  if (known && stat.size > known.size && known.consumed <= stat.size) {
+  if (known && known.ino === stat.ino && stat.size > known.size && known.consumed <= stat.size) {
     try {
       const fd = fs.openSync(file, "r");
       try {
@@ -150,7 +159,7 @@ function readGeneration(file: string): LogRecord[] {
   }
   const records: LogRecord[] = [];
   const { lines, consumed } = parseChunk(text, name, 0, records);
-  remember(file, { mtimeMs: stat.mtimeMs, size: stat.size, consumed, lines, records });
+  remember(file, { ino: stat.ino, mtimeMs: stat.mtimeMs, size: stat.size, consumed, lines, records });
   return records;
 }
 
@@ -193,7 +202,18 @@ export function readRecords(source: LogSource, since = 0): LogRecord[] {
 }
 
 /** Une ligne en entier, relue dans son fichier. `null` si le fichier a tourné entre-temps. */
-export function readFullLine(source: LogSource, file: string, line: number): Record<string, unknown> | null {
+/**
+ * La ligne relue est-elle bien celle qu'on cherche ? Un numéro de ligne vaut pour un état du
+ * fichier : entre la lecture et la relecture, une rotation a pu le décaler. `at` (l'instant lu la
+ * première fois) départage — une ligne d'une autre séance n'est jamais rendue à sa place.
+ */
+function sameLine(parsed: Record<string, unknown>, at: number | undefined): boolean {
+  if (at === undefined) return true;
+  const stamp = typeof parsed.timestamp === "string" ? parsed.timestamp : typeof parsed.at === "string" ? parsed.at : null;
+  return stamp !== null && Date.parse(stamp) === at;
+}
+
+export function readFullLine(source: LogSource, file: string, line: number, at?: number): Record<string, unknown> | null {
   const target = generationsOf(source).find((f) => path.basename(f) === file);
   if (!target) return null;
   let text = "";
@@ -205,16 +225,17 @@ export function readFullLine(source: LogSource, file: string, line: number): Rec
   const raw = text.split("\n")[line];
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as Record<string, unknown>;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return sameLine(parsed, at) ? parsed : null;
   } catch {
     return null;
   }
 }
 
 /** Plusieurs lignes d'un même fichier, en une lecture. */
-export function readFullLines(source: LogSource, refs: { file: string; line: number }[]): Record<string, unknown>[] {
-  const byFile = new Map<string, number[]>();
-  for (const ref of refs) byFile.set(ref.file, [...(byFile.get(ref.file) ?? []), ref.line]);
+export function readFullLines(source: LogSource, refs: { file: string; line: number; at?: number }[]): Record<string, unknown>[] {
+  const byFile = new Map<string, { line: number; at?: number }[]>();
+  for (const ref of refs) byFile.set(ref.file, [...(byFile.get(ref.file) ?? []), ref]);
   const out: Record<string, unknown>[] = [];
   for (const target of generationsOf(source)) {
     const wanted = byFile.get(path.basename(target));
@@ -225,9 +246,10 @@ export function readFullLines(source: LogSource, refs: { file: string; line: num
     } catch {
       continue;
     }
-    for (const n of wanted) {
+    for (const { line, at } of wanted) {
       try {
-        out.push(JSON.parse(rows[n]) as Record<string, unknown>);
+        const parsed = JSON.parse(rows[line]) as Record<string, unknown>;
+        if (sameLine(parsed, at)) out.push(parsed);
       } catch {
         /* déplacée par une rotation */
       }

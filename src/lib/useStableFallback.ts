@@ -68,6 +68,26 @@ export function takeoverFor(takeover: StableTakeover | null | undefined, session
   return takeover && takeover.owner === session ? takeover : null;
 }
 
+/**
+ * Une diffusion qui se poursuit à l'épisode suivant : le relais, reporté sur la nouvelle séance.
+ *
+ * Passer à l'épisode suivant garde le numéro d'ouverture et change l'épisode (`advance`). Le relais
+ * de diffusion appartenait à la séance d'avant : le nouvel épisode n'était plus « confié », le
+ * lecteur natif se remontait pour lui, et AirPlay tombait — l'épisode suivant jouait sur le
+ * téléphone (relu le 24/09/2026). Une diffusion reste une diffusion tant que la lecture n'a pas
+ * été fermée ; une autre ouverture (un autre numéro) ne l'hérite jamais.
+ */
+export function castCarriedTo(
+  takeover: StableTakeover | null | undefined,
+  session: { itemId: string; openId?: number; resumeAt?: number }
+): StableTakeover | null {
+  const owner = takeover?.owner as { itemId?: string; openId?: number } | undefined;
+  if (!takeover?.cast || !owner || owner === session) return null;
+  if (owner.openId === undefined || owner.openId !== session.openId || owner.itemId === session.itemId) return null;
+  // Un autre fichier : ni sa position ni sa piste ne valent ici. Depuis le début, piste par défaut.
+  return { ...takeover, owner: session, resumeAt: session.resumeAt ?? 0, audioStreamIndex: undefined };
+}
+
 export interface StableFallback {
   /** Items the experimental player has given up on, for this session only. */
   handedOver: string[];

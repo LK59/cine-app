@@ -1013,11 +1013,31 @@ export const reportsDb = {
   },
 
   /** Le brouillon part : il devient un signalement ouvert, avec ses journaux figés. */
-  send(id: number, logs: unknown): void {
+  /**
+   * Vrai si c'est cet appel qui l'a fait partir. Deux envois simultanés du même brouillon passaient
+   * tous deux la vérification d'avant la lecture du formulaire : le second ne change plus rien et le
+   * dit, pour ne pas prévenir l'administrateur une seconde fois (relu le 24/09/2026).
+   */
+  send(id: number, logs: unknown): boolean {
     const now = Date.now();
-    getDb()
-      .prepare("UPDATE reports SET status = 'open', sent_at = ?, logs = ?, updated_at = ?, last_user_at = ? WHERE id = ? AND status = 'draft'")
-      .run(now, JSON.stringify(logs ?? null), now, now, id);
+    return (
+      getDb()
+        .prepare("UPDATE reports SET status = 'open', sent_at = ?, logs = ?, updated_at = ?, last_user_at = ? WHERE id = ? AND status = 'draft'")
+        .run(now, JSON.stringify(logs ?? null), now, now, id).changes > 0
+    );
+  },
+
+  /** Supprimer un brouillon et tout ce qu'il porte. Un signalement envoyé, lui, ne s'efface pas. */
+  deleteDraft(id: number): boolean {
+    const db = getDb();
+    return db.transaction(() => {
+      const removed = db.prepare("DELETE FROM reports WHERE id = ? AND status = 'draft'").run(id).changes > 0;
+      if (removed) {
+        db.prepare("DELETE FROM report_images WHERE report_id = ?").run(id);
+        db.prepare("DELETE FROM report_messages WHERE report_id = ?").run(id);
+      }
+      return removed;
+    })();
   },
 
   setSeance(id: number, seanceId: string | null): void {

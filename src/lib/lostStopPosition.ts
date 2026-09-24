@@ -30,6 +30,8 @@ const MAX_RESUME_PCT = 90;
 const JELLYFIN_TIMEOUT_MS = 10 * 60_000;
 /** En deçà, l'écart ne vaut pas une écriture : le recul de reprise l'absorbe. */
 const MIN_GAIN_SECONDS = 3;
+/** Une lecture vivante rapporte toutes les 10 s : au-delà d'une minute sans nouvelles, elle est morte. */
+const LIVE_SESSION_MS = 60_000;
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -52,8 +54,16 @@ export async function recoverLostPosition(jfId: string | undefined, fields: Reco
   // Lu depuis, ici ou ailleurs : la séance suivante a le dernier mot.
   if (lastPlayed > savedAt + JELLYFIN_TIMEOUT_MS) return "lu depuis";
   // En cours de lecture en ce moment : c'est cette séance-là qui écrira la position, à son arrêt.
+  // En cours *pour de bon* : une session qui rapporte encore. Celle de la séance perdue reste
+  // listée jusqu'à ce que Jellyfin la close (~5 min) ; relancée entre-temps, l'application la
+  // prenait pour une lecture en cours, et la correction était perdue (relu le 24/09/2026).
   const sessions = await jellyfin.getSessions();
-  if (sessions.some((s) => s.UserId === jfId && s.NowPlayingItem?.Id === itemId)) return "en cours de lecture";
+  const live = sessions.some((s) => {
+    if (s.UserId !== jfId || s.NowPlayingItem?.Id !== itemId) return false;
+    const seen = Date.parse(s.LastPlaybackCheckIn ?? s.LastActivityDate ?? "");
+    return Number.isFinite(seen) && seen > now - LIVE_SESSION_MS;
+  });
+  if (live) return "en cours de lecture";
   if (data?.Played && known === 0) return "déjà vu";
   if (at - known < MIN_GAIN_SECONDS) return "déjà à jour";
   const pct = runtime ? ((at * TICKS_PER_SECOND) / runtime) * 100 : null;

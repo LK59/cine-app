@@ -34,6 +34,21 @@ function isStaleClientChunk(r: LogRecord): boolean {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * La date d'un jour, telle qu'on la lit ici — l'heure du serveur, celle du foyer. `toISOString`
+ * la donnait en UTC : minuit à Paris est 22 h la veille, et chaque barre portait le jour d'avant
+ * (relu le 24/09/2026).
+ */
+export function localDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Une ligne du journal du serveur qui est une erreur — pas un geste de l'administrateur (`info`). */
+function isError(r: LogRecord): boolean {
+  return r.level !== "info" && r.scope !== "admin";
+}
 /**
  * Jusqu'où remonte la fiche d'un compte. Les journaux gardent des années depuis le 24/09/2026 ;
  * tout relire à chaque ouverture tiendrait le serveur plusieurs secondes. Les journaux eux-mêmes
@@ -202,6 +217,9 @@ export function weekSignals(now = Date.now()): WeekSignals {
   for (const r of server) {
     const scope = String(r.scope ?? "?");
     if (scope === "client" || scope === "jellyfin-token") continue;
+    // Les gestes de l'administrateur (`logAdminAction`, niveau « info ») vivent dans le même
+    // journal : chaque session fermée comptait comme une erreur serveur (relu le 24/09/2026).
+    if (!isError(r)) continue;
     scopes.set(scope, (scopes.get(scope) ?? 0) + 1);
   }
   const perDay: WeekSignals["perDay"] = [];
@@ -210,7 +228,7 @@ export function weekSignals(now = Date.now()): WeekSignals {
     start.setHours(0, 0, 0, 0);
     const end = start.getTime() + DAY;
     const day = seances.filter((s) => s.start >= start.getTime() && s.start < end);
-    perDay.push({ day: start.toISOString().slice(0, 10), seances: day.length, problems: day.reduce((n, s) => n + problemsOf(s), 0) });
+    perDay.push({ day: localDay(start), seances: day.length, problems: day.reduce((n, s) => n + problemsOf(s), 0) });
   }
 
   return {
@@ -308,7 +326,7 @@ export async function accountDetail(id: string, now = Date.now()) {
   const historyStart = now - ACCOUNT_HISTORY_DAYS * DAY;
   const seances = buildSeances(readRecords("player", historyStart)).filter((s) => s.user.toLowerCase() === lower && s.start >= historyStart);
   const errors = readRecords("server", historyStart)
-    .filter((r) => String(r.user ?? "").toLowerCase() === lower)
+    .filter((r) => isError(r) && String(r.user ?? "").toLowerCase() === lower)
     .slice(-100)
     .reverse();
   const recent = recentMovies.ok && recentEpisodes.ok

@@ -59,7 +59,9 @@ export function ReportRowView({ r, showUser = false, onOpen, when }: { r: Report
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1.5">
         <span className="text-[11px] text-subtle">{when}</span>
-        {r.unread && <span className="h-2 w-2 rounded-full bg-accent-500" aria-label={t("report.ui.unread")} />}
+        {r.unread && (
+          <span role="img" className="h-2 w-2 rounded-full bg-accent-500" aria-label={t("report.ui.unread")} />
+        )}
       </span>
     </button>
   );

@@ -66,6 +66,9 @@ export function hasSomethingWatched(item: JellyfinItem): boolean {
 
 export interface JellyfinSession {
   Id: string;
+  /** Le dernier rapport de lecture reçu pour cette session. */
+  LastPlaybackCheckIn?: string;
+  LastActivityDate?: string;
   UserName?: string;
   UserId?: string;
   Client: string;

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildSeances } from "@/lib/activity/seances";
 import { diagnoseTitles } from "@/lib/activity/diagnosis";
 import { friseModel } from "@/lib/activity/frise";
+import { localDay } from "@/lib/activity/accounts";
 import type { LogRecord } from "@/lib/activity/logReader";
 
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1";
@@ -87,5 +88,71 @@ describe("la frise d'une séance", () => {
     const m = friseModel([{ timestamp: at(0), kind: "start", at: 100 }, { timestamp: at(60), kind: "stop", at: 160 }], start);
     expect(m.top).toBeGreaterThan(160);
     expect(m.top).toBeLessThan(200);
+  });
+});
+
+describe("relus le 24/09/2026 au soir", () => {
+  it("une diffusion vers la télévision n'est pas un échec", () => {
+    const records = [
+      ...seance("a", "x", IPHONE, false, [{ kind: "fallback", reason: "diffusion demandée" }]),
+      ...seance("b", "x", MAC, false, [{ kind: "fallback", reason: "autre raison", cast: true }]),
+    ];
+    const seances = buildSeances(records);
+    expect(seances.map((s) => [s.fallbacks, s.casts])).toEqual([
+      [0, 1],
+      [0, 1],
+    ]);
+    expect(diagnoseTitles(seances)).toEqual([]);
+  });
+
+  it("une relance du lecteur serveur n'ouvre pas une nouvelle séance", () => {
+    const base = { user: "a", itemId: "x", title: "Titre", player: "serveur", _file: "player.log" };
+    const lines = [
+      { ...base, kind: "start", at: 0, _t: 1_000, _line: 1 },
+      { ...base, kind: "start", at: 0, retry: 1, _t: 7_000, _line: 2 },
+      { ...base, kind: "start", at: 0, retry: 2, _t: 13_000, _line: 3 },
+    ] as LogRecord[];
+    expect(buildSeances(lines)).toHaveLength(1);
+  });
+
+  it("un témoin sans appareil connu n'innocente pas un titre", () => {
+    const serverWithoutAgent = [{ user: "c", itemId: "x", title: "Titre x", player: "serveur", session: "srv", kind: "start", at: 0, _t: 1_790_000_900_000, _file: "player.log", _line: 900 }] as LogRecord[];
+    const records = [...seance("a", "x", IPHONE, true), ...seance("b", "x", MAC, true), ...serverWithoutAgent];
+    expect(verdictOf(records, "x")).toEqual({ kind: "file" });
+  });
+
+  it("le lien d'un témoin mène à son échec le plus récent", () => {
+    const records = [...seance("a", "x", IPHONE, true), ...seance("a", "x", IPHONE, true), ...seance("b", "x", MAC, false)];
+    const seances = buildSeances(records);
+    const [d] = diagnoseTitles(seances);
+    const newest = seances.filter((s) => s.user === "a").sort((p, q) => q.start - p.start)[0];
+    expect(d.viewers[0].failedSeances[0]).toBe(newest.id);
+  });
+
+  it("un bilan perdu est placé à l'instant qu'il décrit, pas à son arrivée", () => {
+    const start = Date.parse("2026-09-24T14:35:20Z");
+    const lines = [
+      { timestamp: "2026-09-24T14:35:20Z", kind: "start", at: 1874 },
+      { timestamp: "2026-09-24T15:32:39Z", kind: "stop", at: 2448, why: "lost", lateByMs: 2_833_000 },
+    ];
+    const m = friseModel(lines, start, 3436);
+    // Environ dix minutes de séance, pas une heure.
+    expect(m.duration).toBeLessThan(11 * 60_000);
+    const records = lines.map((l, i) => ({ ...l, user: "c", itemId: "love", session: "s1", _t: Date.parse(l.timestamp), _file: "player.log", _line: i })) as LogRecord[];
+    const [s] = buildSeances(records);
+    expect(s.end - s.start).toBeLessThan(11 * 60_000);
+  });
+
+  it("date un jour dans l'heure du foyer, pas en UTC", () => {
+    const tz = process.env.TZ;
+    process.env.TZ = "Europe/Paris";
+    try {
+      const justAfterMidnight = new Date(2026, 8, 24, 0, 30);
+      // Le défaut : la date UTC de minuit et demie à Paris est la veille.
+      expect(justAfterMidnight.toISOString().slice(0, 10)).toBe("2026-09-23");
+      expect(localDay(justAfterMidnight)).toBe("2026-09-24");
+    } finally {
+      process.env.TZ = tz;
+    }
   });
 });

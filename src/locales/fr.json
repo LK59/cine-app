@@ -2206,7 +2206,7 @@
       "addImage": "Capture",
       "removeImage": "Retirer l'image",
       "imagesHint": "Jusqu'à 6 images — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
-      "noPreview": "Aperçu indisponible — ouvrir l'original",
+      "noPreview": "Aperçu indisponible — télécharger l'original",
       "new": "Nouveau signalement",
       "newTitle": "Signaler un problème",
       "draftTitle": "Brouillon",
@@ -2240,7 +2240,27 @@
       "sending": "Envoi…",
       "linkedSeance": "La séance concernée",
       "linkedSeanceGone": "Cette séance n'est plus dans le journal ; son résumé figé reste plus bas.",
-      "openedByAdmin": "Message de l'administrateur"
+      "openedByAdmin": "Message de l'administrateur",
+      "image": "Image",
+      "original": "Original",
+      "closeImage": "Fermer l'image",
+      "deleteDraft": "Supprimer",
+      "deleteDraftConfirm": "Confirmer la suppression",
+      "draftDeleted": "Brouillon supprimé"
+    },
+    "errors": {
+      "unauthenticated": "Session expirée : reconnectez-vous.",
+      "notFound": "Ce signalement n'existe plus.",
+      "form": "L'envoi n'a pas pu être lu : réessayez.",
+      "notImage": "Un des fichiers n'est pas une image prise en charge.",
+      "tooLarge": "Une image dépasse 25 Mo.",
+      "tooMany": "Trop d'images pour ce signalement.",
+      "empty": "Écrivez un message ou joignez une image.",
+      "notDraft": "Ce signalement est déjà envoyé : il ne se modifie plus.",
+      "draftNoComment": "Un brouillon ne se commente pas : envoyez-le d'abord.",
+      "refused": "Ce changement n'est pas permis.",
+      "incomplete": "Il manque une réponse ou la description.",
+      "requestTooLarge": "Les images sont trop lourdes pour un seul envoi : retirez-en une."
     }
   }
 }

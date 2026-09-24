@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
 import { detail, isOwner, LIMITS, markSeenBy, notifyAdmin, notifyAuthor } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
-import { reportCaller, reportFor } from "@/lib/reportRequest";
+import { reportCaller, reportError, reportFor } from "@/lib/reportRequest";
+import { MAX_IMAGES_PER_REPORT } from "@/lib/reportLimits";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (who instanceof NextResponse) return who;
   const report = reportFor((await params).id, who);
   if (report instanceof NextResponse) return report;
-  if (report.status === "draft") return NextResponse.json({ error: "Un brouillon ne se commente pas" }, { status: 409 });
+  if (report.status === "draft") return reportError("draftNoComment", 409, "Un brouillon ne se commente pas");
   const form = await req.formData().catch(() => null);
-  if (!form) return NextResponse.json({ error: "Formulaire illisible" }, { status: 400 });
+  if (!form) return reportError("form", 400, "Formulaire illisible");
   const body = typeof form.get("body") === "string" ? String(form.get("body")).trim().slice(0, LIMITS.MAX_MESSAGE) : "";
   const images = imagesFromForm(form);
-  if (typeof images === "string") return NextResponse.json({ error: images }, { status: 400 });
-  if (!body && images.length === 0) return NextResponse.json({ error: "Message vide" }, { status: 400 });
+  if ("code" in images) return reportError(images.code, 400, images.detail);
+  if (!body && images.length === 0) return reportError("empty", 400, "Message vide");
+  // Un plafond par signalement, commentaires compris : sans lui, un fil pouvait remplir `data/`,
+  // le seul volume inscriptible, qui porte aussi la base et les journaux (relu le 24/09/2026).
+  if (reportsDb.images(report.id).length + images.length > MAX_IMAGES_PER_REPORT) {
+    return reportError("tooMany", 400, `${MAX_IMAGES_PER_REPORT} images au plus par signalement`);
+  }
 
   const byAuthor = isOwner(report, who);
   const message = reportsDb.addMessage(report.id, byAuthor ? "user" : "admin", who.userName, body);

@@ -15,10 +15,8 @@ import { reportsDb, type ReportImage } from "@/lib/db";
 import { logError } from "@/lib/logger";
 
 export const REPORTS_DIR = () => path.join(DATA_DIR, "reports");
-/** Par image. Une photo d'iPhone récent fait 3 à 8 Mo ; une capture d'écran bien moins. */
-export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-/** Par envoi (signalement ou commentaire). */
-export const MAX_IMAGES = 6;
+import { MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/reportLimits";
+export { MAX_IMAGE_BYTES, MAX_IMAGES };
 
 /**
  * Les formats acceptés, et le type sous lequel chacun est servi. Le type vient d'ici, jamais du
@@ -116,16 +114,22 @@ export function reportFilePath(reportId: number, name: string): string | null {
   return path.join(REPORTS_DIR(), String(reportId), name);
 }
 
+/** Un refus d'images : un code, que l'écran traduit (`report.errors.*`), et le détail pour le journal. */
+export interface ImageRefusal {
+  code: "tooMany" | "notImage" | "tooLarge";
+  detail: string;
+}
+
 /** Les images d'un envoi, lues dans un formulaire : `images` et, à côté, `shown` au même rang. */
-export function imagesFromForm(form: FormData): { original: File; shown: File | null }[] | string {
+export function imagesFromForm(form: FormData): { original: File; shown: File | null }[] | ImageRefusal {
   const originals = form.getAll("images").filter((v): v is File => typeof v !== "string");
   const shown = form.getAll("shown");
-  if (originals.length > MAX_IMAGES) return `${MAX_IMAGES} images au plus`;
+  if (originals.length > MAX_IMAGES) return { code: "tooMany", detail: `${MAX_IMAGES} images au plus` };
   const out: { original: File; shown: File | null }[] = [];
   for (let i = 0; i < originals.length; i++) {
     const original = originals[i];
-    if (!looksLikeImage(original)) return `« ${original.name} » n'est pas une image`;
-    if (original.size > MAX_IMAGE_BYTES) return `« ${original.name} » dépasse 25 Mo`;
+    if (!looksLikeImage(original)) return { code: "notImage", detail: `« ${original.name} » n'est pas une image` };
+    if (original.size > MAX_IMAGE_BYTES) return { code: "tooLarge", detail: `« ${original.name} » dépasse 25 Mo` };
     const converted = shown[i];
     out.push({ original, shown: converted && typeof converted !== "string" && converted.size > 0 ? converted : null });
   }

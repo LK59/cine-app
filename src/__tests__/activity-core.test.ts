@@ -102,6 +102,29 @@ describe("lecture des journaux", () => {
     expect(readFullLine("player", "player.log", 2)?.kind).toBe("stop");
   });
 
+  // Relu le 24/09/2026 : une rotation renomme `.1` en `.2` et le fichier courant en `.1`. La
+  // nouvelle `.1` étant plus longue que l'ancienne, elle passait pour « la même, plus longue » :
+  // l'archive A comptait deux fois, la B disparaissait, et les numéros de ligne menaient ailleurs.
+  it("ne confond pas une archive avec la précédente quand une seconde rotation les décale", () => {
+    const at = (i: number) => new Date(Date.UTC(2026, 8, 20, 0, 0, i)).toISOString();
+    const lines = (tag: string, n: number, from: number) =>
+      Array.from({ length: n }, (_, i) => JSON.stringify({ timestamp: at(from + i), kind: tag })).join("\n") + "\n";
+    fs.writeFileSync(file(), lines("A", 3, 0));
+    expect(readRecords("player")).toHaveLength(3);
+    fs.renameSync(file(), file() + ".1");
+    fs.writeFileSync(file(), lines("B", 5, 10));
+    expect(readRecords("player").map((r) => r.kind).join("")).toBe("AAABBBBB");
+    fs.renameSync(file() + ".1", file() + ".2");
+    fs.renameSync(file(), file() + ".1");
+    fs.writeFileSync(file(), lines("C", 1, 20));
+    const after = readRecords("player");
+    expect(after.map((r) => r.kind).join("")).toBe("AAABBBBBC");
+    // Et chaque ligne se relit à sa place, ou pas du tout.
+    const b = after.find((r) => r.kind === "B")!;
+    expect(readFullLine("player", b._file, b._line, b._t)?.kind).toBe("B");
+    expect(readFullLine("player", "player.log.1", 0, Date.parse(at(0)))).toBeNull();
+  });
+
   it("relit tout après une rotation", () => {
     fs.writeFileSync(file(), JSON.stringify({ kind: "a" }) + "\n" + JSON.stringify({ kind: "b" }) + "\n");
     expect(readRecords("player")).toHaveLength(2);
@@ -131,5 +154,41 @@ describe("lecture bornée dans le temps (journaux de plusieurs centaines d'archi
     const kinds = readRecords("player", Date.parse("2026-08-15")).map((r) => r.kind);
     expect(kinds).toEqual(["vieux", "recent"]);
     expect(readRecords("player").map((r) => r.kind)).toEqual(["tres-vieux", "vieux", "recent"]);
+  });
+});
+
+describe("relus le 24/09/2026 au soir — erreurs et journaux figés", () => {
+  beforeEach(() => {
+    reader.reset();
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    for (const f of fs.readdirSync(LOG_DIR)) if (f.startsWith("server.log") || f.startsWith("auth.log")) fs.rmSync(path.join(LOG_DIR, f));
+  });
+
+  it("un geste de l'administrateur n'est pas une erreur serveur", async () => {
+    const now = Date.now();
+    const iso = new Date(now - 60_000).toISOString();
+    fs.writeFileSync(
+      path.join(LOG_DIR, "server.log"),
+      [
+        { timestamp: iso, level: "info", scope: "admin", user: "louis", message: "closeSessions" },
+        { timestamp: iso, level: "error", scope: "api", user: "louis", message: "Jellyfin injoignable" },
+      ]
+        .map((l) => JSON.stringify(l))
+        .join("\n") + "\n"
+    );
+    const { weekSignals } = await import("@/lib/activity/accounts");
+    expect(weekSignals(now).serverErrors).toEqual([{ scope: "api", count: 1 }]);
+  });
+
+  it("les journaux figés dans un ticket gardent leurs booléens", async () => {
+    fs.writeFileSync(
+      path.join(LOG_DIR, "auth.log"),
+      JSON.stringify({ timestamp: new Date().toISOString(), kind: "login", user: "louis", local: true, steps: "x".repeat(10) }) + "\n"
+    );
+    const { captureReportLogs } = await import("@/lib/reportLogs");
+    const [line] = captureReportLogs("louis", { id: null, title: null }).auth;
+    expect(line.local).toBe(true);
+    // Le marqueur d'un champ lourd, lui, part.
+    expect(line).not.toHaveProperty("steps");
   });
 });

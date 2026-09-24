@@ -19,27 +19,39 @@ import { ImagePicker } from "./ImagePicker";
 import { appendImages } from "./prepareImage";
 import { ReportPath, StatusBadge } from "./ReportParts";
 import { FRESH, reportKey, useRefreshReports } from "./reportCache";
+import { reportErrorText } from "./reportErrors";
+import { escapeBlurs } from "./escapeBlurs";
+import { ImageViewer } from "./ImageViewer";
 
 export { reportKey } from "./reportCache";
 
-/** Les captures d'un message : la version montrée, ou l'original quand rien n'a pu la produire. */
+/**
+ * Les captures d'un message : la version montrée, ouverte en grand dans l'application — ou,
+ * quand rien n'a pu la produire, l'original à télécharger.
+ */
 function Images({ images }: { images: ImageView[] }) {
   const t = useT();
+  const [open, setOpen] = useState<ImageView | null>(null);
   if (!images.length) return null;
   return (
     <div className="mt-2 flex flex-wrap gap-2">
       {images.map((image) =>
         image.url ? (
-          <a key={image.id} href={image.originalUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-white/10">
+          <button
+            key={image.id}
+            type="button"
+            onClick={() => setOpen(image)}
+            aria-label={image.name ?? t("report.ui.image")}
+            className="block overflow-hidden rounded-lg border border-white/10"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element -- servie par notre route, déjà réduite */}
-            <img src={image.url} alt={image.name ?? ""} loading="lazy" className="h-28 max-w-[14rem] object-cover" />
-          </a>
+            <img src={image.url} alt="" loading="lazy" className="h-28 max-w-[14rem] object-cover" />
+          </button>
         ) : (
           <a
             key={image.id}
             href={image.originalUrl}
-            target="_blank"
-            rel="noreferrer"
+            download={image.name ?? true}
             className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 p-2 text-center text-[11px] text-muted"
           >
             <ExternalLink size={14} />
@@ -48,6 +60,7 @@ function Images({ images }: { images: ImageView[] }) {
           </a>
         )
       )}
+      {open?.url && <ImageViewer src={open.url} originalUrl={open.originalUrl} name={open.name} onClose={() => setOpen(null)} />}
     </div>
   );
 }
@@ -156,7 +169,7 @@ export function ReportThread({ id }: { id: number }) {
   const [busy, setBusy] = useState(false);
 
   if (isLoading) return <LoadingState />;
-  if (error || !data) return <ErrorState message={error instanceof Error ? error.message : t("report.ui.loadError")} onRetry={() => mutate()} />;
+  if (error || !data) return <ErrorState message={t("report.ui.loadError")} onRetry={() => mutate()} />;
   const r = data;
   const admin = r.logs !== undefined || r.context !== undefined;
 
@@ -166,7 +179,7 @@ export function ReportThread({ id }: { id: number }) {
       await refresh((await run()) as ReportDetail);
       return true;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t("report.ui.failed"));
+      toast.error(reportErrorText(e, t));
       return false;
     } finally {
       setBusy(false);
@@ -177,10 +190,15 @@ export function ReportThread({ id }: { id: number }) {
     act(() => apiAction(`/api/reports/${r.id}/status`, { method: "POST", body: JSON.stringify({ status }), headers: { "Content-Type": "application/json" } }));
 
   const send = async () => {
-    const form = new FormData();
-    form.set("body", body);
-    await appendImages(form, files);
-    if (await act(() => apiAction(`/api/reports/${r.id}/messages`, { method: "POST", body: form }))) {
+    // La conversion des photos se fait sous `busy` : faite avant, elle laissait le bouton actif
+    // pendant une seconde par photo HEIC, et un second appui envoyait le message deux fois.
+    const posted = await act(async () => {
+      const form = new FormData();
+      form.set("body", body);
+      await appendImages(form, files);
+      return apiAction(`/api/reports/${r.id}/messages`, { method: "POST", body: form });
+    });
+    if (posted) {
       setBody("");
       setFiles([]);
     }
@@ -293,6 +311,7 @@ export function ReportThread({ id }: { id: number }) {
               maxLength={5000}
               rows={3}
               placeholder={admin ? t("report.ui.replyPlaceholderAdmin") : t("report.ui.replyPlaceholder")}
+              {...escapeBlurs}
               className="input w-full resize-y py-2 text-sm"
             />
             <div className="flex flex-wrap items-end justify-between gap-2">

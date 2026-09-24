@@ -53,7 +53,12 @@ export function friseModel(lines: Record<string, unknown>[], start: number, runt
   let last = 0;
   let maxPos = 0;
 
-  const at = (line: Record<string, unknown>) => Math.max(0, (Date.parse(text(line.timestamp)) || start) - start);
+  // Un bilan perdu est placé à l'instant qu'il décrit, pas à son arrivée (voir `lineTime`).
+  const at = (line: Record<string, unknown>) => {
+    const t = Date.parse(text(line.timestamp)) || start;
+    const late = text(line.kind) === "stop" ? num(line.lateByMs) : null;
+    return Math.max(0, (late !== null && late > 0 ? t - late : t) - start);
+  };
   const push = (p: FrisePoint) => {
     runs[runs.length - 1].push(p);
     maxPos = Math.max(maxPos, p.pos);

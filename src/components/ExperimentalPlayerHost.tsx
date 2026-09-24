@@ -41,14 +41,26 @@ import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
 import { awayFrom, noteWatching, rewound, AWAY_MS } from "@/lib/resumeRewind";
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
+import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 
 /** À combien de la fin l'épisode suivant est préparé : de quoi finir bien avant le décompte. */
 const NEXT_EPISODE_WARMUP_SECONDS = 60;
 
-/** L'épisode suivant, préparé une fois qu'on approche de la fin — voir `nextEpisodeWarmup.ts`. */
-function warmNextNear(nextId: string | null, position: number, duration: number): void {
-  if (!nextId || !(duration > 0) || duration - position > NEXT_EPISODE_WARMUP_SECONDS) return;
+/**
+ * L'épisode suivant, préparé une fois qu'on approche de la fin — voir `nextEpisodeWarmup.ts`.
+ *
+ * « La fin », c'est le générique quand on le connaît : c'est lui qui déclenche l'enchaînement, dix
+ * secondes après. Comptée depuis la fin du fichier, la préparation arrivait après le passage pour
+ * un générique de plus de 70 s. Et l'état du spectateur est redemandé tant qu'on attend (la
+ * demande se limite elle-même à une toutes les 30 s) : préparé une minute avant, il était jugé
+ * périmé au moment d'ouvrir, et redemandé (relu le 24/09/2026).
+ */
+function warmNextNear(nextId: string | null, position: number, duration: number, creditsStart: number | null): void {
+  if (!nextId || !(duration > 0)) return;
+  const endsAt = creditsStart !== null && creditsStart > 0 && creditsStart < duration ? creditsStart : duration;
+  if (endsAt - position > NEXT_EPISODE_WARMUP_SECONDS) return;
   void warmNextEpisode(nextId);
+  prefetchPlaybackState(nextId);
 }
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
@@ -463,7 +475,9 @@ export function ExperimentalPlayerHost({
     // `StableTakeover`.
     const handover = takeover ?? (everReadyRef.current ? takeoverNowRef.current() : undefined);
     trace(`repli : passage au lecteur stable — ${reason}`);
-    reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}) });
+    // `cast` à plat : une diffusion demandée n'est pas un échec, et le journal doit pouvoir le dire
+    // sans comparer des phrases (voir `seances.ts`).
+    reportPlayback("fallback", { ...file, reason, path, ...(handover ? { takeover: handover } : {}), ...(handover?.cast ? { cast: true } : {}) });
     onFallbackRef.current(reason, handover);
   }, [sessionId]);
   /**
@@ -655,6 +669,10 @@ export function ExperimentalPlayerHost({
    */
   const pendingSwitchRef = useRef<{ from: number | null; fromLabel: string; to: number; startedAt: number } | null>(null);
   const keepPausedRef = useRef(false);
+  /** Quand le spectateur a mis en pause (page visible, film pas fini) — nul dès que ça rejoue. */
+  const viewerPausedAtRef = useRef<number | null>(null);
+  /** Le dernier passage en arrière-plan. */
+  const hiddenAtRef = useRef<number | null>(null);
   /**
    * L'image figée d'une reconstruction pour changement de piste — voir `freezeFrame`. Sans elle,
    * l'image passait au noir le temps que le nouveau lecteur s'ouvre, puis revenait en fondu :
@@ -663,6 +681,8 @@ export function ExperimentalPlayerHost({
   const freezeRef = useRef<HTMLCanvasElement>(null);
   const [frozen, setFrozen] = useState(false);
   const wantedSubtitleRef = useRef<number | null>(null);
+  /** Les préférences du compte ont été appliquées — une fois par lecteur, voir `applyPreferences`. */
+  const preferencesAppliedRef = useRef(false);
   /**
    * The subtitle file being shown, when it is one that came from beside the film rather than
    * from inside it.
@@ -875,11 +895,23 @@ export function ExperimentalPlayerHost({
 
   const restart = useCallback((at: number, why: string) => {
     trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
+    // Une reconstruction ne relance pas un film que le spectateur avait mis en pause : seuls le
+    // changement de piste et le plafond HDR y veillaient, et un film arrêté, rendu par iOS au
+    // retour d'arrière-plan, repartait tout seul (relu le 24/09/2026). Une pause suivie de près par
+    // le passage en arrière-plan peut être celle d'iOS lui-même : elle ne compte que si elle le
+    // précède d'une seconde au moins — sinon la reprise se fait comme avant.
+    const pausedAt = viewerPausedAtRef.current;
+    const hiddenAt = hiddenAtRef.current;
+    if (pausedAt !== null && (hiddenAt === null || hiddenAt < pausedAt || pausedAt < hiddenAt - 1000)) keepPausedRef.current = true;
     traceKeepAcrossReset();
     rebuildAtRef.current = at;
     setOpenedAt(Date.now());
     setNetworkLost(null);
     setReady(false);
+    // Rien ne joue pendant une reconstruction, et l'élément démonté ne le dira pas : ses écouteurs
+    // sont déjà retirés. Resté vrai, `playing` comptait ce temps comme regardé et le rapportait
+    // à Jellyfin « en lecture » (relu le 24/09/2026). Le pipeline suivant le repasse à vrai.
+    setPlaying(false);
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
   }, []);
@@ -1128,6 +1160,7 @@ export function ExperimentalPlayerHost({
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
         tally.hidden(Date.now());
+        hiddenAtRef.current = Date.now();
         save();
       } else {
         tally.shown(Date.now());
@@ -1308,7 +1341,12 @@ export function ExperimentalPlayerHost({
       openedAudio: number | null = null
     ): number | null => {
       const preferences = playbackState?.preferences ?? null;
-      if (!preferences || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
+      if (!preferences || preferencesAppliedRef.current || wantedAudioRef.current !== null || wantedSubtitleRef.current !== null) return null;
+      // Une fois par lecteur. `null` dans les deux refs voulait dire à la fois « jamais choisi » et
+      // « sous-titres éteints exprès » : chaque reconstruction (retour d'arrière-plan, source
+      // perdue, réseau revenu) rallumait les sous-titres que le spectateur venait de couper
+      // (relu le 24/09/2026).
+      preferencesAppliedRef.current = true;
 
       // La même question que celle posée à l'ouverture, et il faut qu'elle le reste : une piste
       // que ce chemin ne porte pas ne doit pas être « voulue », sinon on ouvre sur l'une et on
@@ -1493,7 +1531,7 @@ export function ExperimentalPlayerHost({
           notedAt = Date.now();
           noteWatching(itemId);
         }
-        warmNextNear(nextEpisodeIdRef.current, element.currentTime, element.duration);
+        warmNextNear(nextEpisodeIdRef.current, element.currentTime, element.duration, info.creditsStart ?? null);
       };
       // A warning about not being able to reach a position is obsolete the instant pictures are
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
@@ -1515,6 +1553,7 @@ export function ExperimentalPlayerHost({
           }
         }
         pausedAt = null;
+        viewerPausedAtRef.current = null;
         setPlaying(true);
         setEnded(false);
         showWarning(null);
@@ -1522,6 +1561,7 @@ export function ExperimentalPlayerHost({
       };
       const onPause = () => {
         setPlaying(false);
+        if (document.visibilityState === "visible" && !element.ended) viewerPausedAtRef.current = Date.now();
         tally.waitEnded(Date.now());
         pausedAt = Date.now();
         if (!session.bench) noteWatching(itemId);
@@ -1665,6 +1705,7 @@ export function ExperimentalPlayerHost({
           trace(`réseau : lecture interrompue — ${message}`);
           reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
+          setPlaying(false);
           return;
         }
         // A closed source is not a fault to report, it is a pipeline to build again. Safari
@@ -1682,6 +1723,9 @@ export function ExperimentalPlayerHost({
           lastRebuildAtRef.current = where;
           reportPlayback("rebuild", {
             ...describeFileRef.current(),
+            // Comme la reconstruction d'arrière-plan : sans lui, une ligne sur deux n'avait pas de
+            // chemin, et tout regroupement par chemin la perdait.
+            path: "remux",
             reason: message,
             at,
             attempt: rebuildsRef.current,
@@ -1729,6 +1773,7 @@ export function ExperimentalPlayerHost({
         if (isNetworkFailure(cause)) {
           trace(`réseau : ouverture impossible — ${message}`);
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
+          setPlaying(false);
           return;
         }
         // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module
@@ -2383,7 +2428,9 @@ export function ExperimentalPlayerHost({
             // Et pas de clavier non plus : l'écouteur est posé sur la fenêtre, `inert` ne l'arrête pas.
             // Ni sous l'écran de fin : la barre d'espace y relançait le film par-dessous, sans
             // rouvrir la séance que la fin avait close — « Revoir » le fait, pas le clavier.
-            suspended={!ready || (ended && !nextEpisode && !isMini && !error)}
+            // Sous l'écran « connexion perdue » aussi : une flèche y déplaçait la reprise annoncée,
+            // et la barre d'espace jouait un élément mort (relu le 24/09/2026).
+            suspended={!ready || networkLost !== null || (ended && !nextEpisode && !isMini && !error)}
             // L'interrupteur n'apparaît que s'il y a un agrandissement à défaire — voir `useFrameFit`.
             frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
             hdrCap={

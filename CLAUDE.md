@@ -79,7 +79,11 @@ The server player writes there too since 2026-09-23 (`player: "serveur"`, `src/l
 its `start`, a refused negotiation or a missing first picture as `error`, and **`cast`** once a
 television has actually taken the route. It used to write nothing, so a handover to it read as the
 end of the session, and a television stuck loading was indistinguishable from one playing — an
-AirPlay stall was diagnosed from the reverse proxy's access log instead.
+AirPlay stall was diagnosed from the reverse proxy's access log instead. Since 2026-09-24 its lines
+also carry a `session` id and the `agent`: without them they were rebuilt "the old way", each
+`retry` a separate session with no device — a clean witness that exonerated failing titles in the
+activity page's file-or-device diagnosis. A handover to it *to cast* is logged as `fallback` with
+`cast: true`, and is not counted as a failure.
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Since

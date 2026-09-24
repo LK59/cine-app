@@ -2206,7 +2206,7 @@
       "addImage": "Captura",
       "removeImage": "Quitar imagen",
       "imagesHint": "Hasta 6 imágenes — JPEG, PNG, HEIC, HEIF, WebP, AVIF, GIF, BMP, TIFF, JPEG XL",
-      "noPreview": "Sin vista previa — abrir el original",
+      "noPreview": "Sin vista previa — descargar el original",
       "new": "Nuevo informe",
       "newTitle": "Informar de un problema",
       "draftTitle": "Borrador",
@@ -2240,7 +2240,27 @@
       "sending": "Enviando…",
       "linkedSeance": "La sesión en cuestión",
       "linkedSeanceGone": "Esta sesión ya no está en el registro; su resumen guardado sigue abajo.",
-      "openedByAdmin": "Mensaje del administrador"
+      "openedByAdmin": "Mensaje del administrador",
+      "image": "Imagen",
+      "original": "Original",
+      "closeImage": "Cerrar la imagen",
+      "deleteDraft": "Eliminar",
+      "deleteDraftConfirm": "Confirmar eliminación",
+      "draftDeleted": "Borrador eliminado"
+    },
+    "errors": {
+      "unauthenticated": "Tu sesión ha caducado: vuelve a iniciar sesión.",
+      "notFound": "Este informe ya no existe.",
+      "form": "No se pudo leer el envío: inténtalo de nuevo.",
+      "notImage": "Uno de los archivos no es una imagen compatible.",
+      "tooLarge": "Una imagen supera los 25 MB.",
+      "tooMany": "Demasiadas imágenes para este informe.",
+      "empty": "Escribe un mensaje o adjunta una imagen.",
+      "notDraft": "Este informe ya se envió y no se puede modificar.",
+      "draftNoComment": "Un borrador no se puede comentar: envíalo primero.",
+      "refused": "Este cambio no está permitido.",
+      "incomplete": "Falta una respuesta o la descripción.",
+      "requestTooLarge": "Las imágenes pesan demasiado para un solo envío: quita una."
     }
   }
 }

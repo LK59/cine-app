@@ -13,7 +13,7 @@ const jf = {
   userData: { PlaybackPositionTicks: 2421 * 10_000_000, LastPlayedDate: "" } as Record<string, unknown>,
   runtime: 3436 * 10_000_000,
   saved: [] as [string, string, number][],
-  sessions: [] as { UserId: string; NowPlayingItem?: { Id: string } }[],
+  sessions: [] as { UserId: string; NowPlayingItem?: { Id: string }; LastPlaybackCheckIn?: string }[],
 };
 vi.mock("@/lib/clients/jellyfin", () => ({
   jellyfin: {
@@ -114,13 +114,21 @@ describe("un bilan perdu rend sa position à Jellyfin", () => {
     jf.userData = { PlaybackPositionTicks: 100 * 10_000_000, LastPlayedDate: new Date(NOW - 60_000).toISOString() };
     await post(lost());
     jf.userData = { PlaybackPositionTicks: 2421 * 10_000_000, LastPlayedDate: new Date(NOW - 50 * 60_000).toISOString() };
-    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "love" } }];
+    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "love" }, LastPlaybackCheckIn: new Date(NOW - 5_000).toISOString() }];
     await post(lost());
     jf.sessions = [];
     jf.userData = { PlaybackPositionTicks: 2500 * 10_000_000, LastPlayedDate: new Date(NOW - 50 * 60_000).toISOString() };
     await post(lost());
     expect(jf.saved).toEqual([]);
     expect(mockLog.mock.calls.map((c) => (c[2] as { resumeFix?: string }).resumeFix)).toEqual(["lu depuis", "en cours de lecture", "déjà à jour"]);
+  });
+
+  // La session de la séance perdue elle-même, encore listée par Jellyfin mais muette depuis la
+  // mort de la page : elle ne doit pas passer pour une lecture en cours.
+  it("ne prend pas la session morte de la séance perdue pour une lecture en cours", async () => {
+    jf.sessions = [{ UserId: "jf-1", NowPlayingItem: { Id: "love" }, LastPlaybackCheckIn: new Date(NOW - 3 * 60_000).toISOString() }];
+    await post(lost());
+    expect(jf.saved).toEqual([["jf-1", "love", 2448 * 10_000_000]]);
   });
 
   it("ni un arrêt ordinaire, ni une fin de film, ni une position au-delà des seuils", async () => {

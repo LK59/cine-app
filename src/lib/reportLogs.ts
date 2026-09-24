@@ -5,7 +5,7 @@
 // de la personne dans les 48 dernières heures — et celles du titre choisi, sur trente jours —, ses
 // erreurs de navigateur et du serveur, ses connexions, et les notifications qu'elle a reçues.
 
-import { readRecords, type LogRecord } from "@/lib/activity/logReader";
+import { HEAVY_FIELDS, readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 
 const HOUR = 60 * 60 * 1000;
@@ -14,7 +14,9 @@ const HOUR = 60 * 60 * 1000;
 function slim(r: LogRecord): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(r)) {
-    if (k.startsWith("_") || v === true) continue;
+    // Seulement les marqueurs des champs lourds, que la liste remplace par `true` : retirer tout
+    // `true` emportait aussi `ended`, `cast`, `local`… des lignes figées (relu le 24/09/2026).
+    if (k.startsWith("_") || (v === true && HEAVY_FIELDS.has(k))) continue;
     out[k] = v;
   }
   out.at = r._t;

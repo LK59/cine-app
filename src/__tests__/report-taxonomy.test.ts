@@ -64,7 +64,9 @@ describe("adresses des signalements", () => {
   });
 
   it("le panneau distingue l'assistant, la liste, un brouillon et un ticket", () => {
-    expect(decodeReportView("nouveau")).toEqual({ kind: "new" });
+    expect(decodeReportView("nouveau")).toEqual({ kind: "new", fromList: false });
+    // Ouvert depuis la liste : l'assistant y reviendra au lieu d'empiler une seconde liste.
+    expect(decodeReportView("nouveau:liste")).toEqual({ kind: "new", fromList: true });
     expect(decodeReportView("liste")).toEqual({ kind: "list" });
     expect(decodeReportView("brouillon:7")).toEqual({ kind: "draft", id: 7 });
     expect(decodeReportView("7")).toEqual({ kind: "thread", id: 7 });
