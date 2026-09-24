@@ -246,6 +246,34 @@ describe("isRandomAccessPoint", () => {
     expect(isRandomAccessPoint(sample([0x41, 0, 0]), "V_MPEG4/ISO/AVC", 4)).toBe(false);
   });
 
+  // Blu-ray et télévision : l'image clé est une image I derrière un SEI « recovery point », pas une
+  // IDR. Supernatural S15E20 n'a qu'une IDR en 43 minutes (24/09/2026).
+  describe("AVC, point de reprise", () => {
+    // SEI : type 6, taille 1, recovery_frame_cnt ue(0) = « 1 », exact_match 1, broken_link 0,
+    // changing_slice_group_idc 00, puis l'alignement « 100 » ; enfin le bit d'arrêt du RBSP.
+    const recoveryPoint = [0x06, 0x06, 0x01, 0xc4, 0x80];
+    // recovery_frame_cnt = 2 : ue(2) = « 011 », puis 1, 0, 00 et l'alignement « 1 » : 0110 1001.
+    const gradualRecovery = [0x06, 0x06, 0x01, 0x69, 0x80];
+    // Une autre SEI (type 5, données non enregistrées) devant.
+    const otherSei = [0x06, 0x05, 0x01, 0x00, 0x80];
+    // Tranche non IDR : first_mb ue(0) = « 1 », slice_type ue(7) = « 0001000 » → I.
+    const intraSlice = [0x61, 0x88, 0x80];
+    // slice_type ue(5) = « 00110 » → P.
+    const predictedSlice = [0x61, 0x98, 0x80];
+
+    it("accepts an intra picture behind a recovery point", () => {
+      expect(isRandomAccessPoint(sample(recoveryPoint, intraSlice), "V_MPEG4/ISO/AVC", 4)).toBe(true);
+      expect(isRandomAccessPoint(sample(otherSei, recoveryPoint, intraSlice), "V_MPEG4/ISO/AVC", 4)).toBe(true);
+    });
+
+    it("still refuses a bare I slice, a predicted one, and a recovery that takes frames", () => {
+      expect(isRandomAccessPoint(sample(intraSlice), "V_MPEG4/ISO/AVC", 4)).toBe(false);
+      expect(isRandomAccessPoint(sample(otherSei, intraSlice), "V_MPEG4/ISO/AVC", 4)).toBe(false);
+      expect(isRandomAccessPoint(sample(recoveryPoint, predictedSlice), "V_MPEG4/ISO/AVC", 4)).toBe(false);
+      expect(isRandomAccessPoint(sample(gradualRecovery, intraSlice), "V_MPEG4/ISO/AVC", 4)).toBe(false);
+    });
+  });
+
   it("takes the container's word where it cannot read the picture", () => {
     // A codec with no NAL units, and bytes that are not a length-prefixed stream at all.
     expect(isRandomAccessPoint(sample([1, 2, 3]), "V_VP9", 4)).toBe(true);

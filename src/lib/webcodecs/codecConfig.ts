@@ -283,6 +283,7 @@ export function isRandomAccessPoint(data: Uint8Array, codecId: string, lengthSiz
   const hevc = codecId === "V_MPEGH/ISO/HEVC";
   if (!hevc && codecId !== "V_MPEG4/ISO/AVC") return true; // nothing to read; trust the container
 
+  let recovery = false;
   for (let at = 0; at + lengthSize + 1 <= data.byteLength; ) {
     let length = 0;
     for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
@@ -295,12 +296,84 @@ export function isRandomAccessPoint(data: Uint8Array, codecId: string, lengthSiz
       if (type <= 31) return type >= 16 && type <= 23; // BLA, IDR and CRA
     } else {
       const type = header & 0x1f;
-      if (type === 1 || type === 5) return type === 5; // a slice: IDR or not
+      const unit = data.subarray(at + lengthSize, at + lengthSize + length);
+      if (type === 6 && avcRecoveryPoint(unit)) recovery = true;
+      // A slice: IDR, or an intra picture announced by a recovery point — see below.
+      if (type === 1 || type === 5) return type === 5 || (recovery && avcIntraSlice(unit));
     }
     at += lengthSize + length;
   }
   // Nothing legible. The container's own word is all there is, and it said keyframe to get here.
   return true;
+}
+
+/*
+ * H.264 has two kinds of random access point, and the check above used to know only one.
+ *
+ * An IDR picture is one. So is an intra picture preceded by a recovery point SEI (payload 6)
+ * whose `recovery_frame_cnt` is zero — decoding may start there and every picture from it on is
+ * exact (D.2.8). Blu-ray and broadcast streams mark their keyframes that way: *Supernatural*
+ * S15E20 has a single IDR in 43 minutes, and every other keyframe is an I picture behind such a
+ * SEI (24/09/2026, 26 episodes across two series). Refused, a seek or a resume read the file to
+ * its end looking for an IDR that never came, and playing from the start never closed its first
+ * group, holding the whole episode in memory.
+ *
+ * Both conditions stay required. A bare non-IDR I slice is the AVC counterpart of the HEVC
+ * `TRAIL_R` keyframes above — pictures decoded after it may still reference earlier ones — and a
+ * recovery point with a non-zero count only promises a correct picture some frames later.
+ */
+
+/** Reads unsigned Exp-Golomb values; null once the bits run out. */
+function expGolomb(bytes: Uint8Array, startBit: number): { value: number; next: number } | null {
+  const bit = (i: number) => (bytes[i >> 3] >> (7 - (i & 7))) & 1;
+  const total = bytes.byteLength * 8;
+  let i = startBit;
+  let zeros = 0;
+  while (i < total && bit(i) === 0) {
+    zeros += 1;
+    i += 1;
+    if (zeros > 31) return null;
+  }
+  if (i >= total) return null;
+  i += 1;
+  let suffix = 0;
+  for (let k = 0; k < zeros; k++) {
+    if (i >= total) return null;
+    suffix = suffix * 2 + bit(i++);
+  }
+  return { value: 2 ** zeros - 1 + suffix, next: i };
+}
+
+/** Whether an SEI unit carries a recovery point from which decoding is exact at once. */
+function avcRecoveryPoint(unit: Uint8Array): boolean {
+  const rbsp = unescapeRbsp(unit);
+  let at = 1; // past the NAL header
+  while (at < rbsp.byteLength && rbsp[at] !== 0x80) {
+    let payloadType = 0;
+    while (at < rbsp.byteLength && rbsp[at] === 0xff) payloadType += rbsp[at++];
+    if (at >= rbsp.byteLength) return false;
+    payloadType += rbsp[at++];
+    let payloadSize = 0;
+    while (at < rbsp.byteLength && rbsp[at] === 0xff) payloadSize += rbsp[at++];
+    if (at >= rbsp.byteLength) return false;
+    payloadSize += rbsp[at++];
+    if (payloadType === 6) {
+      const count = expGolomb(rbsp.subarray(at, at + payloadSize), 0);
+      return count !== null && count.value === 0;
+    }
+    at += payloadSize;
+  }
+  return false;
+}
+
+/** Whether a slice is intra: I or SI (slice_type 2, 4, 7, 9). */
+function avcIntraSlice(unit: Uint8Array): boolean {
+  // The two first fields of the slice header, a handful of bytes at most.
+  const header = unescapeRbsp(unit.subarray(1, 17));
+  const firstMb = expGolomb(header, 0);
+  if (!firstMb) return false;
+  const sliceType = expGolomb(header, firstMb.next);
+  return sliceType !== null && [2, 4, 7, 9].includes(sliceType.value);
 }
 
 /**
