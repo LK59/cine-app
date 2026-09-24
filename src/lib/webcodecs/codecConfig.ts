@@ -216,6 +216,32 @@ export function isRandomAccessPoint(data: Uint8Array, codecId: string, lengthSiz
   return true;
 }
 
+/**
+ * Une image RASL (HEVC, types 8 et 9) : elle suit une image clé CRA dans l'ordre de décodage mais
+ * s'affiche avant elle, et se réfère à des images d'*avant* la clé.
+ *
+ * Un décodeur qui démarre sur la CRA doit les écarter (HEVC 8.1.3, NoRaslOutputFlag) : leurs
+ * références n'existent pas. Safari ne le fait pas pour nous — il répond « Media failed to decode »
+ * et ferme la MediaSource. *Ted Lasso* S02E01 (24/09/2026, Mac) : un tampon plein, la lecture
+ * reprise depuis la CRA de 1025,3 s, et Safari mort en quelques millisecondes ; deux
+ * reconstructions sur les CRA suivantes, mortes pareil, puis le lecteur serveur. Chacune de ces
+ * CRA avait deux ou trois RASL derrière elle ; celles de 2:44, où un saut venait de réussir, n'en
+ * avaient aucune. En lecture continue, rien ne change : les références sont là.
+ */
+export function isRaslPicture(data: Uint8Array, codecId: string, lengthSize: number): boolean {
+  if (codecId !== "V_MPEGH/ISO/HEVC") return false;
+  for (let at = 0; at + lengthSize + 1 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) return false;
+    const type = (data[at + lengthSize] >> 1) & 0x3f;
+    // Le premier NAL sous 32 est la tranche : c'est lui qui dit ce qu'est l'image.
+    if (type <= 31) return type === 8 || type === 9;
+    at += lengthSize + length;
+  }
+  return false;
+}
+
 /*
  * H.264 has two kinds of random access point, and the check above used to know only one.
  *

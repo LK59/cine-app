@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { strayUnits, isRandomAccessPoint, nalLengthSize,
+import { strayUnits, isRandomAccessPoint, isRaslPicture, nalLengthSize,
   hevcCodecString,
   avcCodecString,
   av1CodecString,
@@ -147,6 +147,26 @@ describe("subtitle text extraction", () => {
 
   it("strips inline override tags and honours ASS line breaks", () => {
     expect(subtitleText("0,0,Default,,0,0,0,,{\\i1}Salut{\\i0}\\Nla suite", "S_TEXT/ASS")).toBe("Salut\nla suite");
+  });
+});
+
+describe("isRaslPicture", () => {
+  const sample = (...nals: number[][]) => {
+    const out: number[] = [];
+    for (const nal of nals) out.push(0, 0, 0, nal.length, ...nal);
+    return new Uint8Array(out);
+  };
+  const hevcNal = (type: number, ...rest: number[]) => [(type << 1) & 0xfe, 1, ...rest];
+
+  it("reconnaît une RASL derrière son délimiteur et ses SEI, comme dans Ted Lasso", () => {
+    expect(isRaslPicture(sample(hevcNal(35), hevcNal(39, 0), hevcNal(39, 0), hevcNal(8, 0)), "V_MPEGH/ISO/HEVC", 4)).toBe(true);
+    expect(isRaslPicture(sample(hevcNal(35), hevcNal(9, 0)), "V_MPEGH/ISO/HEVC", 4)).toBe(true);
+  });
+
+  it("laisse passer tout le reste : images ordinaires, clés, RADL, et les autres codecs", () => {
+    for (const type of [0, 1, 6, 7, 19, 21]) expect(isRaslPicture(sample(hevcNal(type, 0)), "V_MPEGH/ISO/HEVC", 4)).toBe(false);
+    expect(isRaslPicture(sample([0x41, 0]), "V_MPEG4/ISO/AVC", 4)).toBe(false);
+    expect(isRaslPicture(new Uint8Array([0, 0, 0, 9, 1]), "V_MPEGH/ISO/HEVC", 4)).toBe(false);
   });
 });
 

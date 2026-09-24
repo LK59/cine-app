@@ -616,6 +616,66 @@ describe("la fin du fichier, son ré-encodé", () => {
   });
 });
 
+/**
+ * Une reprise sur une image clé CRA (24/09/2026, *Ted Lasso* S02E01 sur Mac) : les images RASL qui
+ * la suivent se réfèrent à des images d'avant la clé, absentes d'un tampon qui repart de là, et
+ * Safari fermait la MediaSource sur « Media failed to decode ». Écartées à la reprise seulement.
+ */
+describe("les images RASL", () => {
+  /**
+   * Une image HEVC d'un type donné, marquée d'un octet qu'on retrouvera dans le segment. Longueur
+   * de NAL sur un octet : c'est ce que dit HVCC ci-dessus (`lengthSizeMinusOne` à 0).
+   */
+  const picture = (type: number, timestampUs: number, marker: number, isKey = false): MediaSample => ({
+    trackNumber: 1, timestampUs, durationUs: 41_708, isKey, data: new Uint8Array([3, (type << 1) & 0x7e, 0x01, marker]),
+  });
+  const CRA_WITH_LEADING = [
+    picture(21, 10_000_000, 0xc1, true),
+    picture(9, 9_958_292, 0xa2), // RASL_R
+    picture(8, 9_916_584, 0xa1), // RASL_N
+    picture(1, 10_083_416, 0xb2),
+    picture(0, 10_041_708, 0xb1),
+  ];
+  const everything = async (remuxer: Remuxer) => {
+    const bytes: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const segment = await remuxer.nextSegment();
+      if (!segment) break;
+      for (const part of segment.video) bytes.push(...part);
+    }
+    return bytes;
+  };
+  // Le marqueur suit immédiatement l'en-tête du NAL : cherché avec lui, il ne se confond pas avec
+  // un octet de boîte MP4.
+  const carries = (bytes: number[], type: number, marker: number) =>
+    bytes.some((b, i) => b === ((type << 1) & 0x7e) && bytes[i + 1] === 0x01 && bytes[i + 2] === marker);
+  afterEach(() => {
+    readerSamples = [];
+  });
+
+  it("sont écartées quand la lecture reprend sur la clé qu'elles suivent", async () => {
+    readerSamples = CRA_WITH_LEADING;
+    const remuxer = await open(null);
+    remuxer.seekTo(10);
+    const bytes = await everything(remuxer);
+    expect(carries(bytes, 21, 0xc1)).toBe(true);
+    expect(carries(bytes, 0, 0xb1)).toBe(true);
+    expect(carries(bytes, 1, 0xb2)).toBe(true);
+    expect(carries(bytes, 9, 0xa2)).toBe(false);
+    expect(carries(bytes, 8, 0xa1)).toBe(false);
+    remuxer.close();
+  });
+
+  it("sont gardées en lecture continue : leurs références sont là", async () => {
+    readerSamples = [picture(19, 0, 0xd0, true), picture(1, 41_708, 0xd1), ...CRA_WITH_LEADING];
+    const remuxer = await open(null);
+    const bytes = await everything(remuxer);
+    expect(carries(bytes, 9, 0xa2)).toBe(true);
+    expect(carries(bytes, 8, 0xa1)).toBe(true);
+    remuxer.close();
+  });
+});
+
 describe("Remuxer fragments", () => {
   it("cuts a keyframe group into fragments bounded by bytes and by count", async () => {
     // This library's keyframes sit anywhere from nothing to ten seconds apart, so one group can

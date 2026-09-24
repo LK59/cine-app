@@ -348,6 +348,13 @@ dictionaries' values.
   played its first 2.5 s on a header that disagreed with its pictures). When a fix does not hold,
   the diagnosis was incomplete: list the NAL units of every block around the failure, and check
   each picture has exactly one of everything it should.
+- **A restart on a CRA keyframe drops the RASL pictures behind it** (`isRaslPicture`, remuxer).
+  They reference pictures from before the keyframe, which a buffer restarted there does not hold,
+  and Safari answers "Media failed to decode" instead of skipping them as the HEVC spec asks a
+  decoder to. *Ted Lasso* S02E01 (2026-09-24, Mac): a full buffer, a recovery from the CRA at
+  1025 s, and two rebuilds on the next CRAs all died within milliseconds, then the server player
+  took over; the CRAs where a seek had just worked had no RASL behind them. Continuous playback
+  keeps them — their references are there.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.

@@ -12,7 +12,7 @@
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
 import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitleMarkup";
-import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
+import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, isRaslPicture, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { clusterOffsetForTime, cueTimeAfter } from "./matroska";
 import { isReadAbandoned, type NetworkWindow } from "./byteSource";
@@ -616,6 +616,13 @@ export class Remuxer {
   private transcoderSeekPending = true;
   private videoCuePointsCache: number | null = null;
   private needKeyframe = false;
+  /**
+   * Juste après la clé où la lecture a repris : les images RASL qui la suivent sont écartées, et
+   * seulement celles-là — voir `isRaslPicture`. Retombe à la première image qui n'en est pas une.
+   */
+  private dropLeading = false;
+  /** Les RASL écartées depuis la dernière reprise, pour la trace. */
+  private leadingDropped = 0;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
   private sequence = 1;
@@ -845,6 +852,7 @@ export class Remuxer {
     this.groupClosed = false;
     this.groupAnchorUs = null;
     this.needKeyframe = true;
+    this.dropLeading = false;
     this.seekTargetUs = Math.round(seconds * 1e6);
     this.backupsLeft = MAX_INDEX_BACKUPS;
     this.done = false;
@@ -953,6 +961,16 @@ export class Remuxer {
           this.putBack(stray);
           continue;
         }
+        // Avant d'y joindre les unités en attente : elles ouvrent l'image suivante, pas celle-ci.
+        if (this.dropLeading) {
+          if (isRaslPicture(sample.data, this.videoTrack.codecId, this.nalLength)) {
+            this.leadingDropped += 1;
+            continue;
+          }
+          this.dropLeading = false;
+          if (this.leadingDropped > 0) trace(`reprise sur une image clé CRA : ${this.leadingDropped} image(s) RASL écartée(s)`);
+          this.leadingDropped = 0;
+        }
         if (this.strayAhead.length > 0) {
           sample = { ...sample, data: joinBytes([...this.strayAhead, sample.data]) };
           this.strayAhead = [];
@@ -976,6 +994,10 @@ export class Remuxer {
           }
           this.needKeyframe = false;
           this.seekTargetUs = null;
+          // Ce qui suit la clé de reprise se réfère peut-être à ce qui la précédait, et qui n'est
+          // pas là. Une IDR n'a pas de RASL : le test ne coûte rien et ne trouve rien.
+          this.dropLeading = true;
+          this.leadingDropped = 0;
         }
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (this.startsHere(sample) && span >= SEGMENT_US) {
