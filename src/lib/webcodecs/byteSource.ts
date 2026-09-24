@@ -873,7 +873,12 @@ export class HttpByteSource implements ByteSource {
     }
   }
 
-  close(): void {
+  /**
+   * @param leaveForNext laisser ses morceaux au relais (voir `handover`). Faux pour une source qui
+   *   ne sert qu'à préparer un autre fichier — l'épisode suivant — et qui, sinon, prendrait la place
+   *   unique du relais au film en cours.
+   */
+  close(leaveForNext = true): void {
     // Une seule fois. Une seconde fermeture (un nettoyage tardif) laissait au relais une carte
     // vide — ce qui l'efface —, et effaçait donc celui qu'une *autre* source, rouverte sur ce même
     // fichier puis refermée entre-temps, venait d'y laisser.
@@ -884,7 +889,7 @@ export class HttpByteSource implements ByteSource {
     this.inflightControllers.clear();
     // Les morceaux arrivés entiers restent valables pour ce fichier : laissés à la source qui le
     // rouvrira, s'il y en a une bientôt. Les requêtes en cours, elles, meurent avec celle-ci.
-    leaveHandover(this.url, this.size, this.chunks, this.kept);
+    if (leaveForNext) leaveHandover(this.url, this.size, this.chunks, this.kept);
     this.chunks = new Map();
     this.inflight.clear();
   }

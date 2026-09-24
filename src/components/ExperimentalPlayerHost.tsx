@@ -41,6 +41,17 @@ import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
 import { subtitleStyleStore, overlayCss } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
+import { awayFrom, noteWatching, rewound, AWAY_MS } from "@/lib/resumeRewind";
+import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
+
+/** À combien de la fin l'épisode suivant est préparé : de quoi finir bien avant le décompte. */
+const NEXT_EPISODE_WARMUP_SECONDS = 60;
+
+/** L'épisode suivant, préparé une fois qu'on approche de la fin — voir `nextEpisodeWarmup.ts`. */
+function warmNextNear(nextId: string | null, position: number, duration: number): void {
+  if (!nextId || !(duration > 0) || duration - position > NEXT_EPISODE_WARMUP_SECONDS) return;
+  void warmNextEpisode(nextId);
+}
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { EngineTrack } from "@/lib/webcodecs/engine";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -326,6 +337,8 @@ export function ExperimentalPlayerHost({
   // reprendre. `?? 0` et non la position du serveur : laisser zéro est ce qui permet au calcul de
   // `startSeconds` plus bas de retomber sur `playbackState`, quand la séance ne portait rien.
   const positionRef = useRef(session.resumeAt ?? 0);
+  /** La position d'ouverture a été décidée — voir le recul de reprise dans `startSeconds`. */
+  const openingDecidedRef = useRef(false);
   /**
    * Si `positionRef` dit où en est cette lecture, ou seulement ce qu'on lui a demandé.
    *
@@ -1235,6 +1248,12 @@ export function ExperimentalPlayerHost({
     playback.advance(nextEpisode);
   }, [nextEpisode, playback, stopPlaybackNow, reportStop]);
 
+  // Lu par les écouteurs de l'horloge, posés une fois pour toutes — voir `warmNextEpisode`.
+  const nextEpisodeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    nextEpisodeIdRef.current = session.bench ? null : (nextEpisode?.itemId ?? null);
+  }, [nextEpisode?.itemId, session.bench]);
+
   const handleExpand = useCallback(() => playback.expand(), [playback]);
   const { pos, size, isDragging, handlers } = useMiniPlayerDrag(isMini, handleExpand);
 
@@ -1410,9 +1429,19 @@ export function ExperimentalPlayerHost({
     // where it actually is, and only a player that has never played anything falls back to where
     // it was told to start. Without that last part, a rebuild nobody asked for — and there was
     // one, every time the player was minimised — sent the film back to where it began.
-    const startSeconds =
+    let startSeconds =
       rebuildAtRef.current ??
       (positionRef.current > 0 ? positionRef.current : session.resumeAt ?? playbackState?.resumeSeconds ?? 0);
+    // Reprendre quelques secondes avant, à la première ouverture seulement — jamais pour une
+    // reconstruction, qui rouvre là où l'image vient de s'arrêter. Voir `resumeRewind.ts`.
+    if (!openingDecidedRef.current) {
+      openingDecidedRef.current = true;
+      if (rebuildAtRef.current === null && !session.bench && startSeconds > 0 && awayFrom(itemId)) {
+        const earlier = rewound(startSeconds, info.runtimeSeconds);
+        if (earlier < startSeconds) trace(`reprise : ${startSeconds.toFixed(1)} s, reculée à ${earlier.toFixed(1)} s`);
+        startSeconds = earlier;
+      }
+    }
     // Connue avant que le moteur n'ouvre quoi que ce soit : entre ici et la première image il
     // s'écoule le temps de télécharger un en-tête et un groupe d'images, et une fermeture dans
     // cette fenêtre rapportait zéro.
@@ -1494,13 +1523,38 @@ export function ExperimentalPlayerHost({
         reportAudioSwitch(playback.currentAudioTrack, playback.diagnostics["Audio"] ?? "", wantedAudio, Date.now(), playback, "refus");
       }
 
+      let notedAt = 0;
       const onTime = () => {
         positionRef.current = element.currentTime;
         showSubtitleAt(element.currentTime, (at) => playback.subtitleAt(at), playback.presentationDelay);
+        // Retenu toutes les quinze secondes de lecture : ce qui distingue, à la prochaine
+        // ouverture, un relais d'une vraie reprise (voir `resumeRewind.ts`).
+        if (!element.paused && !session.bench && Date.now() - notedAt > 15_000) {
+          notedAt = Date.now();
+          noteWatching(itemId);
+        }
+        warmNextNear(nextEpisodeIdRef.current, element.currentTime, element.duration);
       };
       // A warning about not being able to reach a position is obsolete the instant pictures are
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
+      let pausedAt: number | null = null;
       const onPlay = () => {
+        // Après une longue pause, quelques secondes en arrière pour se remettre dans la scène.
+        // Pas après la fin — c'est « Revoir », ou un épisode relancé —, ni pendant un saut.
+        if (
+          pausedAt !== null &&
+          Date.now() - pausedAt >= AWAY_MS &&
+          !endStoppedRef.current &&
+          !element.seeking &&
+          !session.bench
+        ) {
+          const target = rewound(element.currentTime, element.duration);
+          if (target < element.currentTime) {
+            trace(`reprise après ${Math.round((Date.now() - pausedAt) / 60_000)} min de pause : ${target.toFixed(1)} s`);
+            element.currentTime = target;
+          }
+        }
+        pausedAt = null;
         setPlaying(true);
         setEnded(false);
         showWarning(null);
@@ -1509,6 +1563,8 @@ export function ExperimentalPlayerHost({
       const onPause = () => {
         setPlaying(false);
         tally.waitEnded(Date.now());
+        pausedAt = Date.now();
+        if (!session.bench) noteWatching(itemId);
       };
       /**
        * Les attentes en pleine lecture — voir `SessionTally`. Ni celles d'un saut, qui a sa ligne,
@@ -1658,6 +1714,7 @@ export function ExperimentalPlayerHost({
         }),
         engine.on("timeupdate", () => {
           positionRef.current = engine.currentTime;
+          warmNextNear(nextEpisodeIdRef.current, engine.currentTime, engine.duration);
           // Ce chemin n'a pas de `seeked` : le saut demandé est atteint quand la lecture y est.
           if (requestedSeekRef.current !== null && seekArrived(engine.currentTime, requestedSeekRef.current)) {
             requestedSeekRef.current = null;
@@ -1901,9 +1958,10 @@ export function ExperimentalPlayerHost({
   // donc l'ajouter ici ne peut pas relancer la construction du pipeline. C'est la seule raison
   // pour laquelle il peut y figurer — voir la note sur les rappels lus à travers une `ref`. Même
   // chose pour `showPipelineWarning`, qui ne dépend que de `showWarning`, stable lui aussi, et
-  // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, et pour
-  // `reopenAfterEnd`, sans dépendance (`useCallback([])`).
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch, tally, reopenAfterEnd]);
+  // pour `tally`, créé une fois au montage (`useState`) et jamais remplacé, pour
+  // `reopenAfterEnd`, sans dépendance (`useCallback([])`), et pour `itemId` et `session.bench`,
+  // fixés pour toute la vie de ce lecteur — sa clé est `itemId:openId` (voir PlayerHost).
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, spendRebuild, reportAudioSwitch, tally, reopenAfterEnd, itemId, session.bench]);
 
   // Watches for the platform having taken the source away while the page was not on screen. The
   // check runs on returning to the foreground, and once more a moment later: on iOS the closure

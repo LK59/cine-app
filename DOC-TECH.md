@@ -70,6 +70,18 @@ downgrade — a player that drops a level without saying so looks like a player 
 | **2. WebCodecs → canvas** | Software decode frame by frame, canvas render, hand-held audio clock, HDR→SDR conversion in a shader | The browser refuses a codec in MediaSource but can decode it another way |
 | **3. Explicit refusal** | Named codec, stop | Neither path can carry it |
 
+**Resuming a few seconds earlier** (`resumeRewind.ts`, native player): opening a title this
+device has not played for ten minutes — the next day, or after the TV — starts 5 s before the resume
+point, and so does pressing play after a pause of ten minutes or more. Never for a rebuild or a
+handover between players, which follow the last picture by seconds, nor within 30 s of either end.
+"Played recently" is kept per device in local storage (50 titles); a lost value means a 5 s rewind,
+never a missed scene.
+
+**The next episode is prepared during the credits** (`nextEpisodeWarmup.ts`): a minute before the
+end, its description, its resume state and its file header and index are fetched and left where
+the opening looks for them, so it starts without the round trips to a distant server. No picture is
+read, and the source closes without taking the current film's handover slot (`close(false)`).
+
 **The canvas clock dates what is heard**, not what the audio graph processes: it subtracts the
 latency the browser reports (`outputLatency`, else `baseLatency` — a few milliseconds — read once a
 second, capped at 0.5 s; approximate, since the sound leaves through an `<audio>` element) — with Bluetooth headphones, 150–250 ms the picture used to run ahead (24/09).

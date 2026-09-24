@@ -251,6 +251,7 @@ vi.mock("@/lib/webcodecs/engine", () => ({
   },
 }));
 
+import { noteWatching } from "@/lib/resumeRewind";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
 const onFallback = vi.fn();
@@ -289,6 +290,10 @@ const settle = () => act(async () => void (await Promise.resolve()));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Le titre des tests vient d'être joué sur cet appareil : pas de recul à l'ouverture, ce que
+  // tous les tests d'avant ce réglage supposent. Ceux qui l'éprouvent vident ce souvenir.
+  window.localStorage.removeItem("cine:last-watched");
+  noteWatching("item-1");
   recentSteps = [];
   serverFallback = undefined;
   probes = [];
@@ -1870,6 +1875,58 @@ describe("retour d'arrière-plan sur l'écran de fin", () => {
     act(() => setVisibility("visible"));
     await waitFor(() => expect(probes).toHaveLength(2));
     expect(probes[1]).toMatchObject({ startPaused: true });
+  });
+});
+
+// Reprendre quelques secondes avant (24/09/2026) : le lendemain, ou après une longue pause.
+describe("reprendre quelques secondes avant", () => {
+  it("recule de 5 s un titre qu'on n'a pas joué récemment sur cet appareil", async () => {
+    window.localStorage.removeItem("cine:last-watched");
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0].startSeconds).toBe(1195);
+  });
+
+  it("ne recule pas un relais, arrivé juste après la dernière image", async () => {
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0].startSeconds).toBe(1200);
+  });
+
+  it("ne recule ni « depuis le début », ni une reconstruction", async () => {
+    window.localStorage.removeItem("cine:last-watched");
+    mount({ resumeAt: 0 });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0].startSeconds).toBe(0);
+    await act(async () => void fireEvent(videoElement(600), new Event("timeupdate")));
+    remux.lost = true;
+    remux.position = 600;
+    act(() => probes[0].onError("morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(probes[1].startSeconds).toBeCloseTo(600, 1);
+  });
+
+  it("recule de 5 s après une pause de plus de dix minutes", async () => {
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const now = vi.spyOn(Date, "now");
+    let t = 7_000_000;
+    now.mockImplementation(() => t);
+    const element = videoElement(1300);
+    await act(async () => void fireEvent(element, new Event("pause")));
+    t += 11 * 60_000;
+    await act(async () => void fireEvent(element, new Event("play")));
+    now.mockRestore();
+    expect(element.currentTime).toBe(1295);
+  });
+
+  it("ne recule pas après une courte pause", async () => {
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(1300);
+    await act(async () => void fireEvent(element, new Event("pause")));
+    await act(async () => void fireEvent(element, new Event("play")));
+    expect(element.currentTime).toBe(1300);
   });
 });
 
