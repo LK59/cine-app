@@ -1158,8 +1158,11 @@ export class Remuxer {
     if (this.seekTargetUs === null || this.backupsLeft <= 0) return false;
     const step = MAX_INDEX_BACKUPS - this.backupsLeft + 1;
     this.backupsLeft -= 1;
-    const earlier = this.seekTargetUs - INDEX_BACKUP_US * step;
-    if (earlier < 0) return false;
+    // Borné au début du fichier plutôt que refusé : une cible sous douze secondes abandonnait sans
+    // reculer, et le saut retombait sur la vraie image clé suivante, jusqu'à dix secondes trop
+    // loin (relu le 24/09/2026). Ce n'est qu'une fois le début déjà relu qu'il n'y a plus où aller.
+    if (step > 1 && this.seekTargetUs - INDEX_BACKUP_US * (step - 1) <= 0) return false;
+    const earlier = Math.max(0, this.seekTargetUs - INDEX_BACKUP_US * step);
 
     const start = this.file.firstClusterOffset ?? this.file.segmentDataStart;
     const from = clusterOffsetForTime(this.file, earlier, this.videoTrack.number) ?? start;

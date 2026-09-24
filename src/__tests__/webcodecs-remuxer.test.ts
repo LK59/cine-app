@@ -48,13 +48,17 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
 // lire. Vide par défaut — le comportement d'avant pour tous les tests qui ne s'en servent pas :
 // le fichier est fini dès la première lecture.
 let readerSamples: MediaSample[] = [];
+/** Où le remultiplexeur a repointé le lecteur. */
+const readerSeeks: number[] = [];
 vi.mock("@/lib/webcodecs/sampleReader", () => ({
   SampleReader: class {
     private queue = [...readerSamples];
     async next() {
       return this.queue.shift() ?? null;
     }
-    seekTo() {}
+    seekTo(offset: number) {
+      readerSeeks.push(offset);
+    }
   },
 }));
 
@@ -658,3 +662,30 @@ describe("Remuxer streaming", () => {
     expect(__testing.settledAfter(100_000_000, 40_000)).toBe(60 + 64 + 1);
   });
 });
+
+// Un index qui désigne une image où l'on ne peut pas commencer (une TRAIL_R marquée clé, comme
+// Utopia) : le remultiplexeur recule pour trouver la vraie. Sous douze secondes, il abandonnait au
+// lieu de repartir du début (relu le 24/09/2026).
+describe("reculer dans l'index près du début", () => {
+  const trailing = (timestampUs: number): MediaSample => ({
+    trackNumber: 1,
+    timestampUs,
+    durationUs: 40_000,
+    isKey: true,
+    // Longueurs sur un octet : c'est ce que dit l'en-tête HVCC de ce banc (octet 21 à zéro).
+    data: new Uint8Array([3, 0x02, 0x01, 0xaf]),
+  });
+
+  it("repart du début du fichier pour une cible sous douze secondes", async () => {
+    readerSamples = [trailing(9_000_000), idr(20_000_000)];
+    readerSeeks.length = 0;
+    const remuxer = await open(null);
+    remuxer.seekTo(8);
+    const before = readerSeeks.length;
+    await remuxer.nextSegment();
+    expect(readerSeeks.length).toBeGreaterThan(before);
+    expect(readerSeeks.at(-1)).toBe(FILE.firstClusterOffset);
+    readerSamples = [];
+  });
+});
+
