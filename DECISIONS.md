@@ -625,3 +625,32 @@ Deux interfaces — bureau et mobile — ne sont pas une décision dupliquée : 
 (voir `CLAUDE.md`). La dette, c'est une *règle* écrite deux fois. Le bon axe n'est pas la taille
 d'écran : un correctif de reprise a manqué la fiche série alors qu'il avait touché le film et sa
 jumelle mobile. On compte les endroits qui décident, pas les mises en page.
+
+---
+
+## 21. Un jeton Jellyfin que Jellyfin ne reconnaît plus
+
+**Règle.** Changer ou réinitialiser un mot de passe révoque, côté Jellyfin, tous les jetons du
+compte, alors que la session de l'application continue de se prolonger. Un refus du jeton (401)
+n'est donc jamais silencieux : pendant un film, la position est écrite avec la clé
+d'administration (mêmes seuils que Jellyfin : sous 5 %, rien ; au-delà de 90 %, vu) et le film
+continue ; au chargement suivant d'une page, la session est fermée et la connexion redemandée
+(`/login?reason=jellyfin`). Seul un 401 conclut : un Jellyfin absent ou lent ne dit rien du jeton.
+
+**Porteur.** `src/lib/jellyfinToken.ts` (`jellyfinTokenAlive`, `markJellyfinTokenDead` — au plus
+une question par heure et par session, un refus écrit une fois dans `server.log`, scope
+`jellyfin-token`) ; `src/lib/playbackReport.ts` (`reportPlayback`, le filet des rapports).
+
+**Appelants.** `src/proxy.ts`, sur les pages seulement ; les routes `playback/playing`,
+`playback/progress`, `playback/stop`.
+
+**Différent exprès.** Le proxy ne vérifie **jamais** sur une route d'API : fermer la session là
+couperait aussi le flux d'un film en cours. `playback/start` (lecteur serveur) garde sa propre
+réponse, `jellyfin_reauth_required`, parce qu'il ne peut rien lancer sans le jeton — la
+négociation se fait avec lui.
+
+**Tests.** `jellyfin-token.test.ts`.
+
+**Trouvé le 24/09/2026** dans le journal du lecteur : deux films regardés en entier par un compte,
+aucune seconde gardée, « Invalid token » toutes les 10 s dans le journal de Jellyfin, et la reprise
+du lendemain repartie de zéro.

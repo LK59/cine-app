@@ -104,6 +104,11 @@ function LoginForm() {
               {t("auth.reasonPlayback")}
             </p>
           )}
+          {reason === "jellyfin" && (
+            <p className="mb-5 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-200">
+              {t("auth.reasonJellyfin")}
+            </p>
+          )}
 
           <form
             onSubmit={(e) => {

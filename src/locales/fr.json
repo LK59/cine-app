@@ -1,6 +1,7 @@
 {
   "auth": {
     "reasonPlayback": "Reconnectez-vous pour lancer la lecture.",
+    "reasonJellyfin": "Votre session a expiré : reconnectez-vous pour que vos lectures soient de nouveau enregistrées.",
     "jellyfin": {
       "heading": "Se connecter",
       "username": "Nom d'utilisateur",

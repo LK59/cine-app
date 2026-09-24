@@ -272,6 +272,40 @@ export const jellyfin = {
       }),
     }),
 
+  /**
+   * Le jeton de cette personne est-il encore accepté ?
+   *
+   * La question la plus légère qu'on puisse lui poser avec. Court et sans nouvel essai : elle est
+   * posée sur le chemin d'un chargement de page, qui ne doit pas attendre un serveur lent — voir
+   * `jellyfinToken.ts`, qui ne conclut qu'un 401.
+   */
+  checkUserToken: async (token: string) =>
+    fetchJson<{ Id?: string }>(`${url}/Users/Me`, { headers: { ...jellyfinAuthHeaders(token), ...(await forwardedFor()) } }, 2500, undefined, 0),
+
+  /**
+   * Écrire la position d'une personne avec la clé d'administration.
+   *
+   * Le filet des rapports de lecture quand Jellyfin a révoqué son jeton (un mot de passe changé ou
+   * réinitialisé révoque tous ceux du compte) : sans lui, six jours de visionnage d'un compte se
+   * sont perdus en silence (24/09/2026). La date est écrite aussi, pour que « Reprendre » range le
+   * titre à sa place.
+   */
+  savePositionAsAdmin: async (userId: string, itemId: string, positionTicks: number) =>
+    fetchJson<void>(`${url}/UserItems/${itemId}/UserData?userId=${userId}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ PlaybackPositionTicks: positionTicks, LastPlayedDate: new Date().toISOString() }),
+    }),
+
+  /** Marquer vu, avec la clé d'administration — même filet que `savePositionAsAdmin`. */
+  markPlayedAsAdmin: async (userId: string, itemId: string) =>
+    fetchJson<void>(`${url}/UserPlayedItems/${itemId}?userId=${userId}`, { method: "POST", headers }),
+
+  /** La durée d'un titre, en ticks — pour décider comme Jellyfin si un arrêt vaut « vu ». */
+  getRunTimeTicks: (userId: string, itemId: string) =>
+    fetchJson<{ RunTimeTicks?: number }>(`${url}/Users/${userId}/Items/${itemId}`, { headers }).then(
+      (item) => item.RunTimeTicks ?? null
+    ),
 
   /**
    * The viewer's own playback preferences, read with their own token.

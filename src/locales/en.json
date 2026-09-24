@@ -1,6 +1,7 @@
 {
   "auth": {
     "reasonPlayback": "Sign in again to start playing.",
+    "reasonJellyfin": "Your session has expired: sign in again so your viewing is saved again.",
     "jellyfin": {
       "heading": "Sign in",
       "username": "Username",

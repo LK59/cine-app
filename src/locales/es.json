@@ -1,6 +1,7 @@
 {
   "auth": {
     "reasonPlayback": "Vuelve a iniciar sesión para reproducir.",
+    "reasonJellyfin": "Tu sesión ha caducado: vuelve a iniciar sesión para que se guarde de nuevo lo que ves.",
     "jellyfin": {
       "heading": "Iniciar sesión",
       "username": "Nombre de usuario",

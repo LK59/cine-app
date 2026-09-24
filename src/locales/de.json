@@ -1,6 +1,7 @@
 {
   "auth": {
     "reasonPlayback": "Melde dich erneut an, um abzuspielen.",
+    "reasonJellyfin": "Deine Sitzung ist abgelaufen: Melde dich erneut an, damit dein Fortschritt wieder gespeichert wird.",
     "jellyfin": {
       "heading": "Anmelden",
       "username": "Benutzername",

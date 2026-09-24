@@ -4,6 +4,7 @@ import { PLAYBACK_CLIENTS, isPlaybackClient } from "@/lib/playbackClients";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
+import { reportPlayback } from "@/lib/playbackReport";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -32,23 +33,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   }
 
-  try {
-    await jellyfin.reportPlaybackProgress(
-      session.jfId,
-      itemId,
-      session.jfToken,
-      playSessionId,
-      mediaSourceId,
-      positionTicks,
-      playMethod,
-      client,
-      isPaused
-    );
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Erreur Jellyfin" },
-      { status: 502 }
-    );
-  }
+  const { jfId, jfToken } = session;
+  return reportPlayback({ ...session, jfId }, "progress", itemId, positionTicks, () =>
+    jellyfin.reportPlaybackProgress(jfId, itemId, jfToken, playSessionId, mediaSourceId, positionTicks, playMethod, client, isPaused)
+  );
 }

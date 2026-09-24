@@ -8,6 +8,7 @@ import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { castPassFor } from "@/lib/castToken";
 import { sessionDb } from "@/lib/db";
+import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
 
 // Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
 // Edge-only middleware, so verifySessionFull's better-sqlite3-backed revocation check (a native
@@ -150,6 +151,18 @@ async function signedInElsewhere(req: NextRequest): Promise<NextResponse | null>
   }
 }
 
+/**
+ * Gardée : une vérification qui lève sur le chemin de chaque page remplacerait la page par une
+ * erreur. Dans le doute, on laisse passer — c'est l'ancien comportement.
+ */
+async function tokenStillAccepted(session: Parameters<typeof jellyfinTokenAlive>[0]): Promise<boolean> {
+  try {
+    return await jellyfinTokenAlive(session);
+  } catch {
+    return true;
+  }
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -216,6 +229,29 @@ export async function proxy(req: NextRequest) {
     !isAllowedForEveryone(req.method, pathname)
   ) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });
+  }
+
+  /**
+   * Une session dont Jellyfin a révoqué le jeton se referme ici — au chargement d'une page, et
+   * seulement là.
+   *
+   * Changer ou réinitialiser un mot de passe révoque tous les jetons du compte côté Jellyfin, et
+   * rien ne le disait à la session de l'application, qui se prolonge à chaque visite : un compte a
+   * ainsi regardé des films six jours durant sans qu'aucune position soit gardée (24/09/2026). La
+   * question est posée au plus une fois par heure et par session (`jellyfinToken.ts`), et jamais
+   * sur une route d'API : fermer la session là couperait aussi le flux d'un film en cours. Un film
+   * déjà lancé garde sa position autrement (`playbackReport.ts`) ; la connexion est redemandée à la
+   * prochaine page.
+   */
+  if (!pathname.startsWith("/api/") && session.jfToken && !(await tokenStillAccepted(session))) {
+    sessionDb.delete(session.jti);
+    forgetJellyfinToken(session.jti);
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("reason", "jellyfin");
+    loginUrl.searchParams.set("next", pathname);
+    const expired = NextResponse.redirect(loginUrl);
+    expired.cookies.delete(SESSION_COOKIE);
+    return expired;
   }
 
   const res = NextResponse.next();
