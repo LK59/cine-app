@@ -46,3 +46,23 @@ describe("BufferQueue — échéance", () => {
     await expect(done).resolves.toBeUndefined();
   });
 });
+
+describe("BufferQueue — fermeture", () => {
+  it("n'exécute plus ce qui attendait quand la source est détruite", async () => {
+    vi.useFakeTimers();
+    const buffer = fakeBuffer();
+    const queue = new BufferQueue(buffer);
+    const removed = vi.fn();
+    // Un envoi en cours, et derrière lui le retrait qu'un saut vient de mettre en file.
+    void queue.enqueue(() => {
+      buffer.updating = true;
+    });
+    const pending = queue.enqueue(removed);
+    queue.close();
+    buffer.updating = false;
+    buffer.dispatchEvent(new Event("updateend"));
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(pending).resolves.toBeUndefined();
+    expect(removed).not.toHaveBeenCalled();
+  });
+});

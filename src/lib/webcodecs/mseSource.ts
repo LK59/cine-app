@@ -1124,6 +1124,13 @@ export class MseSource {
       if (queue) await this.clear(queue);
     }
     if (this.destroyed) return;
+    // La même question après le vidage, qui attend lui aussi le navigateur — des centaines de
+    // millisecondes sur un appareil lent. Un geste arrivé pendant ce temps était écrasé : la tête,
+    // que le spectateur venait de poser, repartait sur la cible abandonnée. Le saut suivant la
+    // ramenait d'ordinaire ; mais une source perdue entre les deux faisait reprendre, puis
+    // reconstruire, à l'ancienne position (fuzz du 24/09/2026, graine 901806).
+    const newer = this.seekState.requested;
+    if (newer !== null && newer !== requested) return this.performSeek(newer);
     // Les tampons viennent d'être vidés et le lecteur va être repositionné : plus rien à retirer
     // ni à retenir pour une coupure gardée plus tôt.
     this.trimBeforeNextAppend = false;
@@ -1818,6 +1825,8 @@ export class MseSource {
     this.networkRetryTimer = null;
     this.video.removeEventListener("error", this.onElementError);
     this.source.removeEventListener("sourceclose", this.onSourceClosed);
+    this.videoOps?.close();
+    this.audioOps?.close();
 
     try {
       if (this.source.readyState === "open") this.source.endOfStream();

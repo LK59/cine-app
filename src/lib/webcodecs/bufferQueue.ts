@@ -19,6 +19,7 @@ const BUFFER_OPERATION_TIMEOUT_MS = 4000;
  */
 export class BufferQueue {
   private chain: Promise<void> = Promise.resolve();
+  private closed = false;
 
   /**
    * @param why Whatever the element and the source can say about a refusal. The `error` event
@@ -29,6 +30,19 @@ export class BufferQueue {
     readonly buffer: SourceBuffer,
     private readonly why: () => string = () => ""
   ) {}
+
+  /**
+   * La source est détruite : ce qui attend encore dans la file ne s'exécute plus.
+   *
+   * Un saut met un retrait en file derrière l'envoi en cours ; détruit entre-temps (un changement
+   * de piste, une reconstruction), le lecteur voyait ce retrait partir sur un tampon qui n'était
+   * plus le sien. Sans effet dans un navigateur — une source détachée refuse, et le refus est
+   * avalé —, mais c'est l'inverse de ce que `destroy` promet, et le fuzz du 24/09/2026 le relevait
+   * dans une séquence sur quarante qui reconstruit.
+   */
+  close(): void {
+    this.closed = true;
+  }
 
   enqueue(operation: () => void): Promise<void> {
     const run = this.chain.then(() => this.runOne(operation));
@@ -41,6 +55,9 @@ export class BufferQueue {
   }
 
   private runOne(operation: () => void): Promise<void> {
+    // Résolue sans rien faire plutôt que rejetée : un appelant qui attendait n'a plus rien à
+    // conclure, et un rejet l'enverrait réparer une source qui n'existe plus.
+    if (this.closed) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       // Passed through untouched rather than re-wrapped: a full buffer is signalled by the type
