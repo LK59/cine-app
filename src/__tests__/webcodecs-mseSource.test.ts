@@ -1841,25 +1841,53 @@ describe("l'échelle des reprises", () => {
     // pour 1917 —, et la poussée arrivait au bout d'une seconde et demie : elle relançait le
     // saut, qui repartait de l'image clé, et ainsi de suite. « Une seconde de lecture pour deux
     // de chargement », jusqu'à ce qu'un saut finisse par passer entre deux poussées.
+    // La tête à neuf secondes du début du média, comme la cible de 1917 à neuf secondes de son
+    // image clé : c'est ce que le décodeur doit traverser.
     const video = fakeVideo();
     const remuxer = fakeRemuxer(200);
     const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
     const internals = internalsOf(mse);
-    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 5, "du média devant la tête");
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
     if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    const head = video.buffered.start(0) + 9;
 
-    setTime(video, 0.25);
+    setTime(video, head);
     video.dispatchEvent(new Event("play"));
     Object.assign(video, { seeking: true });
-    internals.watchForFrozenClock(0.25);
+    internals.watchForFrozenClock(head);
     internals.frozenSince = Date.now() - 2000;
-    internals.watchForFrozenClock(0.25);
-    expect(video.currentTime).toBe(0.25);
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBe(head);
 
     // Un saut qui ne se résout vraiment jamais est poussé quand même, plus tard.
     internals.frozenSince = Date.now() - 8000;
-    internals.watchForFrozenClock(0.25);
-    expect(video.currentTime).toBeGreaterThan(0.25);
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBeGreaterThan(head);
+  });
+
+  it("pousse plus tôt un saut qui n'a que quelques secondes à décoder", async () => {
+    // Journal du 24/09/2026 : un +10 s dans une zone relue depuis une image clé à 2,8 s de la
+    // cible, Safari figé en `seeking` six secondes, débloqué aussitôt par la poussée. Deux fois
+    // dans la même séance sur un Mac, une fois sur un iPhone.
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(200);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = internalsOf(mse);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    const head = video.buffered.start(0) + 2.8;
+
+    setTime(video, head);
+    video.dispatchEvent(new Event("play"));
+    Object.assign(video, { seeking: true });
+    internals.watchForFrozenClock(head);
+    // Encore dans le délai : 1,5 s plus 0,5 s par seconde à décoder, soit 2,9 s.
+    internals.frozenSince = Date.now() - 2500;
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBe(head);
+    internals.frozenSince = Date.now() - 3200;
+    internals.watchForFrozenClock(head);
+    expect(video.currentTime).toBeGreaterThan(head);
   });
 
   it("écrit un blocage une fois, avec de quoi le comprendre, et pas davantage", async () => {

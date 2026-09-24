@@ -39,6 +39,9 @@ const FROZEN_CLOCK_MS = 1500;
  */
 const FROZEN_SEEKING_MS = 6000;
 
+/** Ce qu'une seconde de média à décoder ajoute à ce délai — voir `seekingPatienceMs`. */
+const SEEKING_PATIENCE_PER_SECOND_MS = 500;
+
 /**
  * How far it is pushed — inside the media rather than onto its edge, which is what froze it.
  *
@@ -1543,6 +1546,30 @@ export class MseSource {
    * Answered the same way as the other, and just as bluntly: ask for the position again, a
    * fraction of a second further in, which is what completes a seek that never resolved.
    */
+  /**
+   * Combien de temps laisser un saut en cours finir de décoder : ce qu'il a réellement à décoder.
+   *
+   * Le média sous la tête commence à l'image clé d'où le décodage repart ; la distance jusqu'à la
+   * tête est ce que le décodeur doit traverser avant de montrer quoi que ce soit. `FROZEN_SEEKING_MS`
+   * a été fixé pour le pire cas (neuf secondes de 4K dans 1917) et s'appliquait à tous : un saut
+   * dans une zone relue depuis une image clé à 2,8 s restait figé six secondes sous Safari avant
+   * d'être poussé — deux fois dans la même séance sur un Mac, une fois sur un iPhone (journal du
+   * 24/09/2026), là où la poussée le débloquait aussitôt. Une demi-seconde par seconde à décoder,
+   * au-dessus du délai ordinaire, plafonnée à l'ancien délai : 1917 retrouve exactement ses six
+   * secondes. Une plage qui commence loin derrière (un saut dans un long tampon continu) garde le
+   * plafond — la vraie image clé est inconnue, et on reste alors sur la prudence d'avant.
+   */
+  private seekingPatienceMs(now: number): number {
+    const ranges = this.playable;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= now && now < ranges.end(i)) {
+        const toDecode = now - ranges.start(i);
+        return Math.min(FROZEN_SEEKING_MS, FROZEN_CLOCK_MS + SEEKING_PATIENCE_PER_SECOND_MS * toDecode);
+      }
+    }
+    return FROZEN_SEEKING_MS;
+  }
+
   private watchForFrozenClock(now: number): void {
     const moved = Math.abs(now - this.lastClockAt) > 0.05;
     if (moved || this.frozenSince === null) {
@@ -1551,7 +1578,7 @@ export class MseSource {
       if (moved) this.frozenNudges = 0;
       return;
     }
-    if (Date.now() - this.frozenSince < (this.video.seeking ? FROZEN_SEEKING_MS : FROZEN_CLOCK_MS)) return;
+    if (Date.now() - this.frozenSince < (this.video.seeking ? this.seekingPatienceMs(now) : FROZEN_CLOCK_MS)) return;
     // Only when there is plainly something to play: a clock that is not moving because the
     // buffer ran dry is an ordinary wait, and the fill loop is already on it.
     if (this.lead < 1) return;
