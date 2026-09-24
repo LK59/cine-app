@@ -1,4 +1,4 @@
-import { stripSubtitleMarkup } from "./subtitleMarkup";
+import { simultaneousText, stripSubtitleMarkup } from "./subtitleMarkup";
 import type { EngineTrack, SubtitleCue } from "./engine";
 
 /**
@@ -128,10 +128,13 @@ export class ExternalSubtitleTrack {
       if (this.cues[mid].startSeconds <= seconds) low = mid + 1;
       else high = mid;
     }
-    for (let i = low - 1; i >= 0 && i >= low - 8; i--) {
+    // Trente-deux en arrière : un panneau de plusieurs secondes peut avoir commencé bien avant
+    // les répliques qui le chevauchent, et huit le perdaient.
+    const covering = [];
+    for (let i = low - 1; i >= 0 && i >= low - 32; i--) {
       const cue = this.cues[i];
-      if (cue.startSeconds <= seconds && cue.endSeconds >= seconds) return cue.text;
+      if (cue.startSeconds <= seconds && cue.endSeconds >= seconds) covering.push(cue);
     }
-    return null;
+    return simultaneousText(covering);
   }
 }

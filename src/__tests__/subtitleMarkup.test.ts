@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripSubtitleMarkup, subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
+import { simultaneousText, stripSubtitleMarkup, subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
 
 /**
  * 22/09/2026 : un sous-titre forcé de *Ted Lasso*, piste SubRip, s'affichait « {\an8}Madeleine
@@ -29,3 +29,27 @@ describe("stripSubtitleMarkup et subtitlePlacement", () => {
     expect(stripSubtitleMarkup("<i>italique</i>")).toBe("italique");
   });
 });
+
+// Deux répliques qui se chevauchent s'affichent ensemble, deux au plus (relu le 24/09/2026).
+describe("simultaneousText", () => {
+  const cue = (startSeconds: number, text: string) => ({ startSeconds, text });
+
+  it("montre les répliques simultanées ensemble, dans l'ordre où elles sont apparues", () => {
+    expect(simultaneousText([cue(3, "Réponse."), cue(1, "Question ?")])).toBe("Question ?\nRéponse.");
+  });
+
+  it("n'en montre jamais plus de deux", () => {
+    expect(simultaneousText([cue(1, "un"), cue(2, "deux"), cue(3, "trois")])).toBe("un\ndeux");
+  });
+
+  it("reste en haut seulement si toutes le demandent", () => {
+    expect(simultaneousText([cue(1, "{\\an8}PANNEAU"), cue(2, "Dialogue.")])).toBe("PANNEAU\nDialogue.");
+    expect(simultaneousText([cue(1, "{\\an8}UN"), cue(2, "{\\an8}DEUX")])).toBe("{\\an8}UN\nDEUX");
+  });
+
+  it("ne change rien à une réplique seule", () => {
+    expect(simultaneousText([cue(1, "{\\an8}PANNEAU")])).toBe("{\\an8}PANNEAU");
+    expect(simultaneousText([])).toBeNull();
+  });
+});
+

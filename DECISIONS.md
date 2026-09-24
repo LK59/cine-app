@@ -578,6 +578,26 @@ anglais, juste sous une affiche qui portait le titre français.
 dans la langue de ses métadonnées. Les notifications gardent le titre de Radarr : elles sont
 écrites par le serveur, pour tout le monde à la fois.
 
+## 19. Des sous-titres qui se chevauchent
+
+**Règle.** Quand plusieurs répliques couvrent le même instant — deux personnes qui parlent en même
+temps, un panneau traduit pendant un dialogue —, elles s'affichent ensemble, dans l'ordre où elles
+sont apparues, deux au plus. En haut seulement si toutes le demandent (`{\an8}`).
+
+Chaque lecteur n'en montrait qu'une, et pas la même : la première trouvée pour les pistes du
+fichier (remultiplexage et canevas), la dernière commencée pour un fichier à côté — qui ne
+regardait en outre que huit répliques en arrière et perdait un panneau long.
+
+**Porteur.** `simultaneousText` (`src/lib/webcodecs/subtitleMarkup.ts`).
+
+**Appelants.** `RemuxPlayback.subtitleAt`, `selectCue` (`engine.ts`), `ExternalSubtitleTrack.textAt`.
+
+**Tests.** `subtitleMarkup.test.ts`, `webcodecs-codecConfig.test.ts` (« shows two overlapping
+lines together »), `webcodecs-externalSubtitles.test.ts`.
+
+**Voulu.** Le lecteur serveur n'est pas concerné : ses pistes passent par des `<track>` que le
+navigateur dessine lui-même, chevauchements compris.
+
 ---
 
 ## Ce qui n'est pas une dette

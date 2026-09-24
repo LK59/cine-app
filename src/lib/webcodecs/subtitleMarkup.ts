@@ -48,3 +48,28 @@ export function subtitlePlacement(text: string): { text: string; top: boolean } 
   if (!match) return { text, top: false };
   return { text: text.slice(match[0].length), top: ["7", "8", "9"].includes(match[1]) };
 }
+
+/** Au plus deux répliques à la fois : au-delà, les lignes couvrent l'image plus qu'elles n'aident. */
+export const MAX_SIMULTANEOUS_CUES = 2;
+
+/**
+ * Ce qu'on écrit quand plusieurs répliques couvrent le même instant — le seul endroit qui en décide.
+ *
+ * Deux personnes qui parlent en même temps, ou un panneau traduit pendant un dialogue, sont deux
+ * répliques qui se chevauchent. Chaque lecteur n'en montrait qu'une, et pas la même : le premier
+ * trouvé pour les pistes du fichier, le dernier commencé pour un fichier à côté (relu le
+ * 24/09/2026). Elles s'affichent ensemble, dans l'ordre où elles sont apparues, deux au plus.
+ *
+ * La place : en haut seulement si toutes le demandent. Un panneau en haut et un dialogue en bas
+ * ne peuvent pas être dessinés aux deux endroits par un seul paragraphe ; en bas, les deux restent
+ * lisibles, et le dialogue ne monte pas cacher le haut de l'image.
+ */
+export function simultaneousText(covering: readonly { startSeconds: number; text: string }[]): string | null {
+  if (covering.length === 0) return null;
+  if (covering.length === 1) return covering[0].text;
+  const shown = [...covering].sort((a, b) => a.startSeconds - b.startSeconds).slice(0, MAX_SIMULTANEOUS_CUES);
+  const placed = shown.map((cue) => subtitlePlacement(cue.text));
+  const text = placed.map((line) => line.text).join("\n");
+  return placed.every((line) => line.top) ? `{\\an8}${text}` : text;
+}
+

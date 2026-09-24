@@ -70,6 +70,12 @@ downgrade — a player that drops a level without saying so looks like a player 
 | **2. WebCodecs → canvas** | Software decode frame by frame, canvas render, hand-held audio clock, HDR→SDR conversion in a shader | The browser refuses a codec in MediaSource but can decode it another way |
 | **3. Explicit refusal** | Named codec, stop | Neither path can carry it |
 
+**The canvas's HDR→SDR conversion puts 203 nits at the screen's white** (`hdrMath.toneMapLuma`,
+mirrored in the shader): linear below 0.8 of that white, then a Reinhard shoulder that compresses
+highlights without clipping. It used to normalise on the mastering peak, which put 203-nit white at
+a half (1 000-nit master) or a quarter (4 000) of the screen's white — the same "far too dark" that
+was settled by eye for Chrome on 22/09. Revisit only with an eye on a real screen.
+
 **Path 1 is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no
 audio sample passes through JavaScript: the browser decodes in hardware, composes the image itself,
@@ -445,7 +451,10 @@ Chrome on a Mac uses the same one as Safari.
 
 Library census (30 110 audio tracks, 21/09): 99.5 % mono, stereo, 5.1 or 7.1. The rest — Opus 3.0
 (76, series), AC-3 3.0 (8), DTS 6.1 (5), E-AC3 5.0 (2), AC-3 4.1 (2) — go through `fold`'s rule
-for layouts it cannot name: keep L R C, drop the rest, rather than guess.
+for layouts it cannot name: keep L R C, drop the rest, rather than guess. The rule holds even when
+the count does not change, and an encoder is never asked for five or seven channels: they go out as
+six or eight (`knownLayoutAtLeast`), L R C in place and the rest silent — Firefox's Opus encoder
+accepts five channels and read a 4.1 as a 5.0, the LFE in the left surround (24/09).
 
 How it was measured, to do it again: encode one sine per channel at distinct frequencies with the
 browser's own `AudioEncoder`, wrap the packets in a container ffmpeg reads, decode with ffmpeg, and
@@ -597,6 +606,9 @@ which fills its window already. The server-side player is not affected.
 
 ## Subtitles
 
+**Overlapping lines** are shown together, in the order they appeared, two at most
+(`simultaneousText`, DECISIONS.md n°19); they stay at the top only if every one asks for it.
+
 **Internal text tracks** are collected in one pass by the remuxer (see above) and filtered by
 language at display time. `subtitleMarkup.ts` strips markup, for internal tracks and external files
 alike.
@@ -644,6 +656,9 @@ Rules:
 - Languages are normalised to a comparable form before matching.
 - **The code wins over the name**; the name is read only in the absence of a code (3 audio tracks
   out of 1425 here).
+- An account with **no subtitle language** gets only what the file's flags designate — a forced
+  track, else a default one, else none — except in `Always` mode. Reading the empty language as
+  "any language" switched on the first full track, whatever its language (24/09).
 - A track is **never** selected on the grounds that it is the only one left. Without the requested
   language, nothing is touched.
 - **Audio descriptions and commentaries are excluded** — `French (France) AD` is a real-world

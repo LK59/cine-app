@@ -18,6 +18,7 @@ import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelecto
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
+import { simultaneousText } from "./subtitleMarkup";
 
 /** Cues more than this far behind the playhead are dropped: a three-hour film is a lot of lines. */
 const CUE_HISTORY_SECONDS = 60;
@@ -460,10 +461,9 @@ export class RemuxPlayback {
   subtitleAt(seconds: number): string | null {
     const track = this.currentSubtitle;
     if (track === null) return null;
-    for (const cue of this.cues) {
-      if (cue.track === track && cue.startSeconds <= seconds && seconds <= cue.endSeconds) return cue.text;
-    }
-    return null;
+    return simultaneousText(
+      this.cues.filter((cue) => cue.track === track && cue.startSeconds <= seconds && seconds <= cue.endSeconds)
+    );
   }
 
   /**

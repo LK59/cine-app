@@ -15,7 +15,7 @@
 import { transcodableAudio } from "./audioTranscode";
 import { playerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
-import { stripSubtitleMarkup } from "./subtitleMarkup";
+import { simultaneousText, stripSubtitleMarkup } from "./subtitleMarkup";
 import { clusterOffsetForTime, type MatroskaFile, type MatroskaTrack, type MediaSample } from "./matroska";
 import { createSampleReader, openMediaFile, type MediaSampleReader } from "./mediaFile";
 import { audioConfigCandidates, audioConfigFor, joinBytes, nalLengthSize, strayUnits, videoConfigFor, unsupportedReason } from "./codecConfig";
@@ -177,7 +177,10 @@ function queueDepthFor(width: number, height: number): { frames: number; decode:
  */
 export function selectCue(cues: SubtitleCue[], seconds: number): SubtitleCue | null {
   while (cues.length > 0 && cues[0].endSeconds < seconds) cues.shift();
-  return cues.find((cue) => cue.startSeconds <= seconds && cue.endSeconds >= seconds) ?? null;
+  const covering = cues.filter((cue) => cue.startSeconds <= seconds && cue.endSeconds >= seconds);
+  const text = simultaneousText(covering);
+  // Une réplique composée quand plusieurs se chevauchent — voir `simultaneousText`.
+  return text === null ? null : { ...covering[0], text };
 }
 
 export class PlaybackEngine {

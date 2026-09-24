@@ -88,6 +88,19 @@ describe("ExternalSubtitleTrack", () => {
     expect(track.textAt(5)).toBe("longue");
   });
 
+  it("montre ensemble deux répliques qui se chevauchent", async () => {
+    const track = await load("00:00:00.000 --> 00:00:10.000\nlongue\n\n00:00:02.000 --> 00:00:03.000\ncourte");
+    expect(track.textAt(2.5)).toBe("longue\ncourte");
+  });
+
+  // Un panneau long, commencé bien avant les répliques qui le chevauchent : huit en arrière le perdaient.
+  it("retrouve une réplique commencée longtemps avant", async () => {
+    const lines = ["00:00:00.000 --> 00:01:00.000\nPANNEAU"];
+    for (let i = 0; i < 12; i++) lines.push(`00:00:${String(10 + i * 2).padStart(2, "0")}.000 --> 00:00:${String(11 + i * 2).padStart(2, "0")}.000\nligne ${i}`);
+    const track = await load(lines.join("\n\n"));
+    expect(track.textAt(33.5)).toBe("PANNEAU");
+  });
+
   it("dit ce qui manque quand le serveur refuse le fichier", async () => {
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 404 }));
     await expect(ExternalSubtitleTrack.load({ id: -3, language: null, title: null, url: "/x" })).rejects.toThrow(/404/);

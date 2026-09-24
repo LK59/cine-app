@@ -159,6 +159,16 @@ describe("subtitle cue selection", () => {
     expect(selectCue(cues(), 3)?.text).toBe("un");
   });
 
+  // Deux répliques en même temps : les deux, pas la première trouvée (relu le 24/09/2026).
+  it("shows two overlapping lines together", () => {
+    const overlapping = [
+      { startSeconds: 1, endSeconds: 9, text: "{\\an8}PANNEAU" },
+      { startSeconds: 2, endSeconds: 4, text: "Dialogue." },
+    ];
+    expect(selectCue(overlapping, 3)?.text).toBe("PANNEAU\nDialogue.");
+    expect(selectCue(overlapping, 6)?.text).toBe("{\\an8}PANNEAU");
+  });
+
   // Cues arrive in order and are consumed in order; dropping the past ones is what stops this
   // re-scanning a growing list on every animation frame.
   it("discards expired lines as it goes", () => {
