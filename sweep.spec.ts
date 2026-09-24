@@ -49,9 +49,14 @@ const OUT = process.env.SWEEP_OUT ?? "/shm";
 const LOG = process.env.SWEEP_LOG ?? "/logs/remux.jsonl";
 /** Positions éprouvées, en fraction de la durée. */
 const POSITIONS = [0.15, 0.5, 0.85];
+/**
+ * Ou des instants précis, en secondes (`SWEEP_AT=4120,5770`) : rejouer l'endroit exact où un
+ * spectateur a vu le lecteur échouer, plutôt que trois points pris au hasard.
+ */
+const AT_SECONDS = process.env.SWEEP_AT ? process.env.SWEEP_AT.split(",").map(Number) : null;
 /** Ce qu'on lit à chaque position : quelques groupes d'images, de quoi passer une jonction. */
-const SECONDS_PER_POSITION = 10;
-const MAX_SEGMENTS = 12;
+const SECONDS_PER_POSITION = Number(process.env.SWEEP_SECONDS ?? 10);
+const MAX_SEGMENTS = Number(process.env.SWEEP_MAX_SEGMENTS ?? 12);
 /** Au-delà, le producteur attend que le décodeur rattrape : la mémoire partagée n'est pas infinie. */
 const MAX_PENDING = 16;
 
@@ -137,8 +142,9 @@ describe.skipIf(!LIST)("balayage", () => {
         );
         const plan = remuxer.plan();
 
-        for (let p = 0; p < POSITIONS.length; p++) {
-          const target_s = Math.floor(duration * POSITIONS[p]);
+        const targetsSeconds = AT_SECONDS ?? POSITIONS.map((fraction) => Math.floor(duration * fraction));
+        for (let p = 0; p < targetsSeconds.length; p++) {
+          const target_s = targetsSeconds[p];
           const item = `${String(index).padStart(4, "0")}-${p}`;
           const positionBegan = Date.now();
           try {
