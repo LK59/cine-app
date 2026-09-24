@@ -598,6 +598,11 @@ export class Remuxer {
   }
   private presentationDelayUs: number | null = null;
   private audioFrameUs: number | null = null;
+  /**
+   * La fin du dernier bloc audio remis, horloge du lecteur — le plancher du suivant. Oubliée à
+   * chaque relecture (saut, recul faute d'index) : ce qui est lu ensuite ne suit plus rien.
+   */
+  private audioEndUs: number | null = null;
   private subtitleNumbersCache: Map<number, MatroskaTrack> | null = null;
   /** Where the segment being built actually starts, on the file's clock. */
   private segmentStartUs = 0;
@@ -831,6 +836,7 @@ export class Remuxer {
     this.transcoderSeekPending = this.transcoder !== null;
     this.pendingVideo = [];
     this.pendingAudio = [];
+    this.audioEndUs = null;
     this.pendingSubtitles = [];
     this.strayAhead = [];
     // The group being handed over piece by piece is abandoned with everything else.
@@ -1172,6 +1178,7 @@ export class Remuxer {
     this.source.warm?.(from);
     this.pendingVideo = [];
     this.pendingAudio = [];
+    this.audioEndUs = null;
     this.pendingSubtitles = [];
     this.strayAhead = [];
     trace(
@@ -1304,25 +1311,47 @@ export class Remuxer {
       // The distance to the next block, split across the frames packed into this one, is the
       // frame duration — no knowledge of the codec's block layout needed. The last run of a
       // segment has no successor, so it reuses the duration measured from the runs before it.
-      const frameDuration = next
+      let frameDuration = next
         ? (next.timestamp - run.timestamp) / run.frames.length
         : (this.audioFrameUs ?? FALLBACK_AUDIO_FRAME_US);
-      if (next && run.frames.length > 0) this.audioFrameUs = frameDuration;
+      // Un bloc suivant qui *recule* ne mesure rien. « The Proposal » (balayage du 24/09/2026) :
+      // des blocs AC-3 aux horodatages arrondis et bousculés, 1 625 reculs sur 202 000 trames.
+      // L'écart négatif devenait une durée ramenée à 1 µs, gardée comme durée de trame pour la
+      // suite. La durée du bloc est alors celle mesurée avant lui.
+      if (next && frameDuration > 0) this.audioFrameUs = frameDuration;
+      else if (!(frameDuration > 0)) frameDuration = this.audioFrameUs ?? FALLBACK_AUDIO_FRAME_US;
 
       for (let i = 0; i < run.frames.length; i++) {
         // Re-anchored on the block's own timestamp rather than accumulated from the previous
         // segment, so a rounding error cannot build up into audible drift over a two-hour film.
-        const decode = Math.round(run.timestamp + i * frameDuration) + delay;
+        let decode = Math.round(run.timestamp + i * frameDuration) + delay;
+        const end = Math.round(run.timestamp + (i + 1) * frameDuration) + delay;
+        // Jamais avant la fin de la trame précédente. Le même film place un bloc de huit trames
+        // 54 ms *avant* la fin du bloc de deux qui le précède (968,607 s puis 968,617 s) : un
+        // fMP4 ne sait pas dire un chevauchement — ses instants sont la somme des durées —, et le
+        // temps de décodage reculait d'un fragment à l'autre, ce que ffmpeg refuse (« non
+        // monotonically increasing dts »). Une trame recouverte à plus de moitié est écartée,
+        // comme un navigateur écarte ce qu'un envoi recouvre ; les autres commencent où la
+        // précédente finit, et les suivantes, réancrées sur leur horodatage, n'en héritent rien.
+        // Écartée plutôt que comprimée : une trame ramenée à 1 µs avait un instant égal à celui
+        // de la suivante une fois exprimé en échantillons.
+        if (this.audioEndUs !== null && decode < this.audioEndUs) {
+          if (end - this.audioEndUs < frameDuration / 2) continue;
+          decode = this.audioEndUs;
+        }
+        const duration = Math.max(1, end - decode);
         samples.push({
           data: run.frames[i].data,
           decodeTime: decode,
-          duration: Math.max(1, Math.round(frameDuration)),
+          duration,
           compositionOffset: 0,
           isKeyframe: true,
         });
+        this.audioEndUs = decode + duration;
       }
     }
 
+    if (samples.length === 0) return null;
     return mediaSegment(this.audioInfo, this.sequence, samples);
   }
 }

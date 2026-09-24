@@ -689,3 +689,58 @@ describe("reculer dans l'index près du début", () => {
   });
 });
 
+
+/**
+ * Des blocs audio aux horodatages bousculés : « The Proposal » (balayage du 24/09/2026), AC-3 de
+ * 32 ms arrondis à la milliseconde, parfois un peu en arrière du précédent, une fois 22 ms en
+ * arrière (968,639 s puis 968,617 s). L'écart négatif devenait une durée de 1 µs : les temps
+ * implicites du fragment glissaient d'autant, et le fragment suivant commençait avant la fin du
+ * précédent — un temps de décodage qui recule, que ffmpeg refuse.
+ */
+describe("des horodatages audio qui reculent", () => {
+  const aac = (timestampUs: number): MediaSample => ({
+    trackNumber: 2,
+    timestampUs,
+    durationUs: 32_000,
+    isKey: true,
+    data: new Uint8Array([0x21, 0x10, 0x04]),
+  });
+
+  /** tfdt et durées du trun d'un segment : sa première instant et sa fin implicite. */
+  function span(segment: Uint8Array): { start: number; end: number } {
+    const view = new DataView(segment.buffer, segment.byteOffset, segment.byteLength);
+    const find = (type: string) => {
+      for (let i = 0; i + 8 <= segment.length; i++) {
+        if (String.fromCharCode(...segment.subarray(i + 4, i + 8)) === type) return i;
+      }
+      throw new Error(`${type} absent`);
+    };
+    const tfdt = find("tfdt");
+    const start = Number(view.getBigUint64(tfdt + 12));
+    const trun = find("trun");
+    const count = view.getUint32(trun + 12);
+    let end = start;
+    for (let s = 0; s < count; s++) end += view.getUint32(trun + 20 + s * 16);
+    return { start, end };
+  }
+
+  it("ne fait jamais commencer un segment audio avant la fin du précédent", async () => {
+    const video = Array.from({ length: 120 }, (_, i) => idr(i * 100_000));
+    // Une trame de 32 ms, avec le bruit du fichier : ±3 ms, et un recul franc de 22 ms.
+    const jitter = [0, 1_000, -2_000, 3_000, -1_000, 2_000, -3_000, 0];
+    const audio = Array.from({ length: 360 }, (_, i) => aac(i * 32_000 + Math.max(0, jitter[i % 8] + 3_000)));
+    audio[180] = aac(audio[179].timestampUs - 22_000);
+    // Rangés comme dans une grappe : par horodatage, pistes mêlées.
+    readerSamples = [...video, ...audio].sort((a, b) => a.timestampUs - b.timestampUs);
+    const remuxer = await open();
+    const spans: { start: number; end: number }[] = [];
+    for (let i = 0; i < 40; i++) {
+      const segment = await remuxer.nextSegment();
+      if (!segment) break;
+      if (segment.audio) spans.push(span(segment.audio));
+    }
+    readerSamples = [];
+    expect(spans.length).toBeGreaterThan(2);
+    for (let i = 1; i < spans.length; i++) expect(spans[i].start).toBeGreaterThanOrEqual(spans[i - 1].end);
+  });
+});
