@@ -268,10 +268,35 @@ export class AudioOutput {
     }
   }
 
-  /** Current playback position in the file, in seconds. */
+  /** Current playback position in the file, in seconds — what is being *heard*. */
   currentMediaTime(): number {
     if (!this.started) return this.anchorMediaSeconds;
-    return this.anchorMediaSeconds + (this.context.currentTime - this.anchorContextTime);
+    return this.anchorMediaSeconds + (this.context.currentTime - this.anchorContextTime) - this.outputLatency();
+  }
+
+  private latencySeconds = 0;
+  private latencyReadAt = -Infinity;
+
+  /**
+   * Le temps entre le graphe et l'oreille, tel que le navigateur l'annonce.
+   *
+   * `context.currentTime` date ce que le graphe traite, pas ce qu'on entend : avec des écouteurs
+   * Bluetooth, le son sort 150 à 250 ms plus tard, et l'image — calée sur cette horloge — passait
+   * autant en avance (relu le 24/09/2026). `outputLatency` le dit quand le navigateur le sait,
+   * `baseLatency` à défaut ; Safari répond parfois zéro, ce qui laisse les choses comme avant.
+   *
+   * Relu une fois par seconde, pas à chaque image : la valeur bouge de quelques millisecondes d'une
+   * lecture à l'autre, et une horloge qui tremble fait trembler l'image. Bornée à une demi-seconde :
+   * au-delà, c'est une valeur fausse plutôt qu'un casque.
+   */
+  private outputLatency(): number {
+    const now = this.context.currentTime;
+    if (now - this.latencyReadAt < 1) return this.latencySeconds;
+    this.latencyReadAt = now;
+    const context = this.context as AudioContext & { outputLatency?: number; baseLatency?: number };
+    const reported = context.outputLatency && context.outputLatency > 0 ? context.outputLatency : (context.baseLatency ?? 0);
+    this.latencySeconds = Number.isFinite(reported) ? Math.min(Math.max(reported, 0), 0.5) : 0;
+    return this.latencySeconds;
   }
 
   /** Drops everything queued — used by seeking, where queued audio is now wrong. */

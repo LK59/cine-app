@@ -172,3 +172,31 @@ describe("multichannel fold", () => {
     expect(channelData[1][0]).toBe(-1);
   });
 });
+
+// Des écouteurs Bluetooth : le son sort 200 ms après le graphe, et l'image doit l'attendre
+// (relu le 24/09/2026).
+describe("AudioOutput clock", () => {
+  it("dates what is heard, not what the graph is processing", () => {
+    const output = new AudioOutput({ sampleRate: 48000, numberOfChannels: 2 });
+    const context = (output as unknown as { context: { currentTime: number; outputLatency?: number } }).context;
+    context.outputLatency = 0.2;
+    output.enqueue(fakeAudioData("f32-planar", 2, 4800, () => 0), 10);
+    context.currentTime = 2.05;
+    expect(output.currentMediaTime()).toBeCloseTo(10 + 2 - 0.2, 3);
+  });
+
+  it("ignores an absurd latency, and changes nothing without one", () => {
+    const output = new AudioOutput({ sampleRate: 48000, numberOfChannels: 2 });
+    const context = (output as unknown as { context: { currentTime: number; outputLatency?: number } }).context;
+    output.enqueue(fakeAudioData("f32-planar", 2, 4800, () => 0), 10);
+    context.currentTime = 1.05;
+    expect(output.currentMediaTime()).toBeCloseTo(11, 3);
+    const other = new AudioOutput({ sampleRate: 48000, numberOfChannels: 2 });
+    const otherContext = (other as unknown as { context: { currentTime: number; outputLatency?: number } }).context;
+    otherContext.outputLatency = 30;
+    other.enqueue(fakeAudioData("f32-planar", 2, 4800, () => 0), 10);
+    otherContext.currentTime = 1.05;
+    expect(other.currentMediaTime()).toBeCloseTo(10.5, 3);
+  });
+});
+
