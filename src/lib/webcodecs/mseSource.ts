@@ -1101,7 +1101,6 @@ export class MseSource {
     this.ended = false;
     this.seekState.serving(playerSeconds);
     this.readUpTo = playerSeconds;
-    this.guard.seekServed(playerSeconds);
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
@@ -1137,6 +1136,13 @@ export class MseSource {
     // reconstruire, à l'ancienne position (fuzz du 24/09/2026, graine 901806).
     const newer = this.seekState.requested;
     if (newer !== null && newer !== requested) return this.performSeek(newer);
+    // La licence d'atterrissage — poser la tête sur le premier média à moins de 15 s après la
+    // cible — vaut pour le média *de ce saut*, et n'est donc accordée qu'une fois les tampons
+    // vidés. Accordée avant, elle laissait la garde, pendant le vidage, poser la tête sur l'ancien
+    // média : « −10 s » depuis 62 s, avec un tampon qui commençait à 60,2 s, devenait 60,2 s. La
+    // suite du saut réécrivait 52 s d'ordinaire ; une reconstruction dans l'intervalle (un
+    // changement de piste) repartait de 60 s (fuzz du 24/09/2026, graine 10133935).
+    this.guard.seekServed(playerSeconds);
     // Les tampons viennent d'être vidés et le lecteur va être repositionné : plus rien à retirer
     // ni à retenir pour une coupure gardée plus tôt.
     this.trimBeforeNextAppend = false;

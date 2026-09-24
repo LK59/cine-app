@@ -698,6 +698,8 @@ describe.skipIf(!process.env.FUZZ)("fuzz du lecteur", () => {
  *    une reconstruction.
  *  - 20124805 : l'ouverture différée posait le jeton « déplacement de la source » sans écrire la
  *    tête ; un spectateur qui sautait puis revenait à la position d'ouverture était ignoré.
+ *  - 10133935 : la licence d'atterrissage, accordée avant le vidage des tampons, laissait la garde
+ *    poser la tête sur l'ancien média plutôt qu'attendre celui du saut.
  */
 const REGRESSION_SEEDS: { seed: number; enriched: boolean }[] = [
   { seed: 30054481, enriched: false },
@@ -706,6 +708,7 @@ const REGRESSION_SEEDS: { seed: number; enriched: boolean }[] = [
   { seed: 901806, enriched: true },
   { seed: 900025, enriched: true },
   { seed: 20124805, enriched: true },
+  { seed: 10133935, enriched: true },
 ];
 
 describe("fuzz du lecteur — graines de régression", () => {
