@@ -7,7 +7,7 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { refreshAfterPlayback } from "@/lib/swr";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, castCarriedTo, returningFor, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track, VOLUME_STORAGE_KEY } from "@/components/PlayerControls";
 import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
@@ -161,13 +161,13 @@ export function PlayerHost() {
    * reviendrait rejouerait son échec en boucle. La règle vit là-bas, pas ici.
    */
   const handCastBack = useCallback(
-    (resumeAt: number) => {
+    (resumeAt: number, paused = false) => {
       if (!itemId) return;
       // Un relais, pas une reprise : le lecteur natif ne recule pas de cinq secondes au retour
       // d'une diffusion de plus de dix minutes, pendant laquelle rien n'avait noté la lecture
       // (relu le 24/09/2026 — voir `resumeRewind.ts`).
       if (!session?.bench) noteWatching(itemId);
-      stepBack(itemId, resumeAt, session);
+      stepBack(itemId, resumeAt, session, paused);
     },
     [itemId, session, stepBack]
   );
@@ -197,7 +197,7 @@ export function PlayerHost() {
    * nombre.
    */
   const back = returningFor(returning, session);
-  const playing = back !== null ? { ...session, resumeAt: back } : session;
+  const playing = back !== null ? { ...session, resumeAt: back, ...(returnsPaused(returning, session) ? { startPaused: true } : {}) } : session;
 
   // Sans lecteur serveur, il n'y a pas d'aiguillage : le choix du compte comme le repli
   // automatique désignent tous deux un lecteur qui n'existe pas sur cette installation. Un
@@ -276,7 +276,8 @@ function ActivePlayer({
   /** Where to resume and on which track, when the handover happened mid-playback. */
   takeover?: StableTakeover | null;
   /** Appelé quand la diffusion s'arrête, avec la position où elle s'est arrêtée. */
-  onCastEnded?: (resumeAt: number) => void;
+  /** `paused` : la diffusion s'est arrêtée d'elle-même — voir `returnsPaused`. */
+  onCastEnded?: (resumeAt: number, paused?: boolean) => void;
 }) {
   const playback = usePlayback();
   const t = useT();
@@ -1147,7 +1148,8 @@ function ActivePlayer({
       // Avec la séance et la marque de diffusion : sans elles, la ligne se rangeait dans une séance
       // « reconstituée » et comptait comme un repli raté sur la page Activité (24/09/2026).
       reportPlayback("fallback", castEndedFields(logContext.current, source, video.currentTime || 0));
-      if (castSession) onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
+      // En pause : la route est tombée sans que personne ne demande à continuer sur le téléphone.
+      if (castSession) onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt), true);
     };
     const setActive = (active: boolean) => {
       // Établie, et pas seulement demandée : sans cette ligne, un téléviseur resté en chargement

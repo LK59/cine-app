@@ -106,9 +106,9 @@ export interface StableFallback {
    * La garde est dans la fonction et non chez l'appelant — c'est la règle, elle ne doit pas
    * dépendre de qui appelle.
    */
-  stepBack: (itemId: string, resumeAt: number, owner?: unknown) => void;
+  stepBack: (itemId: string, resumeAt: number, owner?: unknown, paused?: boolean) => void;
   /** Où reprendre quand le lecteur natif est repris après une diffusion — lire par `returningFor`. */
-  returning: { itemId: string; resumeAt: number; owner?: unknown } | null;
+  returning: { itemId: string; resumeAt: number; owner?: unknown; paused?: boolean } | null;
 }
 
 /**
@@ -120,10 +120,27 @@ export interface StableFallback {
  * bascule suivante (relu le 22/09/2026).
  */
 export function returningFor(
-  returning: { itemId: string; resumeAt: number; owner?: unknown } | null,
+  returning: { itemId: string; resumeAt: number; owner?: unknown; paused?: boolean } | null,
   session: { itemId: string }
 ): number | null {
   return returning && returning.itemId === session.itemId && returning.owner === session ? returning.resumeAt : null;
+}
+
+/**
+ * Le lecteur natif repris après une diffusion doit-il attendre, en pause ?
+ *
+ * Oui quand la diffusion s'est arrêtée d'elle-même — télé éteinte, AirPlay coupé depuis le
+ * téléphone : c'est ce que fait iOS de toute vidéo dont la route AirPlay tombe. Le film repartait
+ * sur le téléphone, que personne ne regardait. Le 24/09/2026, un spectateur qui avait fini son
+ * film sur la télé l'a vu relancé dans sa poche, puis a fermé l'application : un « blocage » au
+ * journal d'une lecture que personne ne suivait. Non quand il a demandé lui-même à revenir sur le
+ * téléphone : il veut continuer. Même règle d'appartenance que `returningFor`.
+ */
+export function returnsPaused(
+  returning: { itemId: string; resumeAt: number; owner?: unknown; paused?: boolean } | null,
+  session: { itemId: string }
+): boolean {
+  return returningFor(returning, session) !== null && returning?.paused === true;
 }
 
 /**
@@ -156,7 +173,7 @@ export function useStableFallback(): StableFallback {
   const [negotiating, setNegotiating] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [takeover, setTakeover] = useState<StableTakeover | null>(null);
-  const [returning, setReturning] = useState<{ itemId: string; resumeAt: number; owner?: unknown } | null>(null);
+  const [returning, setReturning] = useState<{ itemId: string; resumeAt: number; owner?: unknown; paused?: boolean } | null>(null);
 
   const stepAside = useCallback((itemId: string, why: string, resumeInto?: StableTakeover) => {
     setHandedOver((ids) => {
@@ -174,13 +191,13 @@ export function useStableFallback(): StableFallback {
     });
   }, []);
 
-  const stepBack = useCallback((itemId: string, resumeAt: number, owner?: unknown) => {
+  const stepBack = useCallback((itemId: string, resumeAt: number, owner?: unknown, paused = false) => {
     setTakeover((current) => {
       // Seule une bascule de diffusion revient. Vérifié ici plutôt que chez l'appelant : c'est la
       // règle elle-même, et une règle qui dépend de qui l'invoque n'en est pas une.
       if (!current?.cast) return current;
       setHandedOver((ids) => ids.filter((id) => id !== itemId));
-      setReturning({ itemId, resumeAt, owner });
+      setReturning({ itemId, resumeAt, owner, ...(paused ? { paused: true } : {}) });
       return null;
     });
   }, []);

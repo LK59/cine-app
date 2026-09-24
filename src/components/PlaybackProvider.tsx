@@ -35,6 +35,11 @@ export interface PlaybackSession {
    * position mémorisée par le serveur, elle, était encore à zéro.
    */
   resumeAt?: number;
+  /**
+   * S'ouvrir en pause, à `resumeAt` : le retour sur le téléphone d'une diffusion qui s'est arrêtée
+   * d'elle-même — voir `returnsPaused`. Posé par l'aiguillage des lecteurs, jamais par un appelant.
+   */
+  startPaused?: boolean;
   /** Only honored for the very first startPlayback call after opening — an initial audio track
    *  other than the default, used to resume into the right track after a WebKit reload-based
    *  track switch (see PLAYER_RELOAD_INTENT_KEY below). */

@@ -676,7 +676,9 @@ export function ExperimentalPlayerHost({
    * spectateur qui change de langue sur un film arrêté ne veut pas qu'il reparte tout seul.
    */
   const pendingSwitchRef = useRef<{ from: number | null; fromLabel: string; to: number; startedAt: number } | null>(null);
-  const keepPausedRef = useRef(false);
+  // Vrai d'emblée au retour d'une diffusion arrêtée d'elle-même : le film attend sur le téléphone
+  // au lieu d'y repartir tout seul (`PlaybackSession.startPaused`).
+  const keepPausedRef = useRef(session.startPaused === true);
   /** Quand le spectateur a mis en pause (page visible, film pas fini) — nul dès que ça rejoue. */
   const viewerPausedAtRef = useRef<number | null>(null);
   /** Le dernier passage en arrière-plan. */

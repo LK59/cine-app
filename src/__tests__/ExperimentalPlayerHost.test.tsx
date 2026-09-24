@@ -206,7 +206,7 @@ import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
 const onFallback = vi.fn();
 
-function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini" }> = {}) {
+function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean }> = {}) {
   return (
     <ExperimentalPlayerHost
       session={
@@ -214,6 +214,7 @@ function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" |
           itemId: over.itemId ?? "item-1",
           title: "Un film",
           resumeAt: over.resumeAt ?? null,
+          ...(over.startPaused ? { startPaused: true } : {}),
         } as never
       }
       mode={over.mode ?? "full"}
@@ -225,7 +226,7 @@ function player(over: Partial<{ resumeAt: number; itemId: string; mode: "full" |
   );
 }
 
-function mount(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini" }> = {}) {
+function mount(over: Partial<{ resumeAt: number; itemId: string; mode: "full" | "mini"; startPaused: boolean }> = {}) {
   return render(player(over));
 }
 
@@ -768,6 +769,18 @@ describe("changer de piste audio", () => {
     } finally {
       delete (HTMLMediaElement.prototype as unknown as Record<string, unknown>).paused;
     }
+  });
+
+  it("revient d'une diffusion arrêtée d'elle-même en pause, sans relancer le film", async () => {
+    // 24/09/2026 : la télé éteinte en fin de film, le lecteur natif repartait sur le téléphone
+    // que personne ne regardait — et le journal écrivait un blocage.
+    mount({ resumeAt: 6382, startPaused: true });
+    await waitFor(() => expect(probes).toHaveLength(1));
+    expect(probes[0]).toMatchObject({ startPaused: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
   });
 
   it("revient à la piste d'avant quand la nouvelle n'ouvre pas par le lecteur natif", async () => {

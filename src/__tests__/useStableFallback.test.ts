@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useStableFallback, takeoverFor, castCarriedTo, returningFor, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, returningFor, returnsPaused, castHandBackPosition, NEGOTIATING_MS } from "@/lib/useStableFallback";
 
 // The handover itself, apart from the two players it sits between. What matters is that it
 // happens without asking, says so once, and leaves an account of why.
@@ -184,6 +184,30 @@ describe("returningFor", () => {
     act(() => result.current.stepBack("film-1", 4200, session));
     expect(returningFor(result.current.returning, session)).toBe(4200);
     expect(returningFor(result.current.returning, { itemId: "film-1" })).toBeNull();
+  });
+});
+
+describe("returnsPaused", () => {
+  // 24/09/2026 : la télé éteinte, le film repartait sur un téléphone que personne ne regardait.
+  const session = { itemId: "film-1" };
+
+  it("attend en pause quand la diffusion s'est arrêtée d'elle-même", () => {
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "diffusion demandée", { resumeAt: 100, cast: true, owner: session }));
+    act(() => result.current.stepBack("film-1", 6382, session, true));
+    expect(returningFor(result.current.returning, session)).toBe(6382);
+    expect(returnsPaused(result.current.returning, session)).toBe(true);
+  });
+
+  it("reprend la lecture quand le spectateur a demandé lui-même à revenir", () => {
+    const { result } = renderHook(() => useStableFallback());
+    act(() => result.current.stepAside("film-1", "diffusion demandée", { resumeAt: 100, cast: true, owner: session }));
+    act(() => result.current.stepBack("film-1", 6382, session));
+    expect(returnsPaused(result.current.returning, session)).toBe(false);
+  });
+
+  it("ne vaut que pour la lecture qui diffusait", () => {
+    expect(returnsPaused({ itemId: "film-1", resumeAt: 1, owner: session, paused: true }, { itemId: "film-1" })).toBe(false);
   });
 });
 
