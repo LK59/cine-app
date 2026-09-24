@@ -11,10 +11,11 @@
 // identifiant Jellyfin (sessions, liste « À voir », langue) et son nom (notifications,
 // abonnements, demandes suivies, accueil). Les deux sont résolues ici, et nulle part ailleurs.
 
+import { summarize } from "@/lib/reports";
 import { jellyfin, type JellyfinUser, type JellyfinDevice, type JellyfinSession } from "@/lib/clients/jellyfin";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
-import { sessionDb, watchlistDb, pushDb, notificationPrefsDb, userPrefsDb, onboardingDb, pendingRequestDb } from "@/lib/db";
+import { sessionDb, watchlistDb, pushDb, notificationPrefsDb, userPrefsDb, onboardingDb, pendingRequestDb, reportsDb } from "@/lib/db";
 import { presenceOf, type Presence } from "@/lib/activity/presence";
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
@@ -311,6 +312,7 @@ export async function accountDetail(id: string, now = Date.now()) {
     part(jellyfin.getPlayedCount(id, "Episode").then((r) => r.TotalRecordCount)),
     part(requestsOf(id)),
   ]);
+  const nextUp = await part(jellyfin.getNextUpGlobal(id, 12).then((items) => (items as unknown as JellyfinItemLike[]).map(mediaEntry)));
 
   const historyStart = now - ACCOUNT_HISTORY_DAYS * DAY;
   const seances = buildSeances(readRecords("player", historyStart)).filter((s) => s.user.toLowerCase() === lower && s.start >= historyStart);
@@ -371,6 +373,16 @@ export async function accountDetail(id: string, now = Date.now()) {
       firstSeen: seances.length ? seances[seances.length - 1].start : null,
     },
     errors,
+    quality: qualityByDevice(seances),
+    habits: habitsOf(seances),
+    seriesInProgress: nextUp.ok ? nextUp.value : null,
+    auth: authEventsFor(name, historyStart),
+    notificationsReceived: notificationsFor(name, historyStart),
+    // Ses signalements envoyés — ses brouillons ne sont qu'à lui.
+    reports: reportsDb
+      .listForUser(id)
+      .filter((r) => r.status !== "draft")
+      .map((r) => summarize(r, { userId: "", userName: "", admin: true }, "admin")),
   };
 }
 
@@ -398,4 +410,149 @@ async function requestsOf(jellyfinId: string) {
 /** Les dernières séances, tous comptes confondus — le fil de ce qui s'est regardé. */
 export function recentSeances(limit = 20, now = Date.now()): Seance[] {
   return buildSeances(readRecords("player", now - 30 * DAY)).slice(0, limit);
+}
+
+
+// ─── Qualité, habitudes, connexions, notifications ──────────────────────────────────
+
+export interface DeviceQuality {
+  device: string;
+  seances: number;
+  watchedSeconds: number;
+  /** Temps d'ouverture médian, en ms. */
+  openMs: number | null;
+  waits: number;
+  waitedMs: number;
+  slowSeeks: number;
+  rebuilds: number;
+  stalls: number;
+  fallbacks: number;
+  errors: number;
+  /** Part des séances qui ont connu au moins un incident. */
+  troubledShare: number;
+}
+
+function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/**
+ * La qualité de lecture par appareil — « iPhone · Safari », « Mac · Safari ». Un appareil qui souffre
+ * se voit là avant qu'on le dise : ouvertures lentes, reconstructions, replis. Né d'un iPhone 12 qui
+ * perdait son décodeur au bout de vingt minutes, et que rien ne distinguait des autres (23/09/2026).
+ */
+export function qualityByDevice(seances: Seance[]): DeviceQuality[] {
+  const groups = new Map<string, Seance[]>();
+  for (const s of seances) {
+    const key = s.device ?? "?";
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return [...groups]
+    .map(([device, list]) => ({
+      device,
+      seances: list.length,
+      watchedSeconds: list.reduce((n, s) => n + (s.stop?.watched ?? 0), 0),
+      openMs: median(list.map((s) => s.openedMs).filter((v): v is number => v !== null)),
+      waits: list.reduce((n, s) => n + (s.stop?.waits ?? 0), 0),
+      waitedMs: list.reduce((n, s) => n + (s.stop?.waitedMs ?? 0), 0),
+      slowSeeks: list.reduce((n, s) => n + s.slowSeeks, 0),
+      rebuilds: list.reduce((n, s) => n + s.rebuilds, 0),
+      stalls: list.reduce((n, s) => n + s.stalls, 0),
+      fallbacks: list.reduce((n, s) => n + s.fallbacks, 0),
+      errors: list.reduce((n, s) => n + s.errors, 0),
+      troubledShare: list.filter((s) => problemsOf(s) > 0).length / list.length,
+    }))
+    .sort((a, b) => b.seances - a.seances);
+}
+
+export interface Habits {
+  /** [jour de la semaine, lundi = 0][heure] → secondes regardées (ou séances, faute de bilan). */
+  heatmap: number[][];
+  topTitles: { title: string; seances: number; watchedSeconds: number }[];
+}
+
+/** Le nom d'une série pour un épisode — « Ted Lasso — S04E01 · … » → « Ted Lasso ». */
+function workTitle(title: string): string {
+  const cut = title.indexOf(" — S");
+  return cut > 0 ? title.slice(0, cut) : title;
+}
+
+/** Quand on regarde, et quoi : de quoi voir les habitudes d'une personne ou du foyer. */
+export function habitsOf(seances: Seance[]): Habits {
+  const heatmap = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+  const titles = new Map<string, { title: string; seances: number; watchedSeconds: number }>();
+  for (const s of seances) {
+    const d = new Date(s.start);
+    // L'heure du serveur, qui est celle du foyer (TZ du conteneur).
+    const day = (d.getDay() + 6) % 7;
+    heatmap[day][d.getHours()] += s.stop?.watched ?? 60;
+    const key = workTitle(s.title);
+    const t = titles.get(key) ?? { title: key, seances: 0, watchedSeconds: 0 };
+    t.seances += 1;
+    t.watchedSeconds += s.stop?.watched ?? 0;
+    titles.set(key, t);
+  }
+  return {
+    heatmap,
+    topTitles: [...titles.values()].sort((a, b) => b.watchedSeconds - a.watchedSeconds || b.seances - a.seances).slice(0, 10),
+  };
+}
+
+/** Les notifications reçues par ce compte : ce qui est parti, et ce qu'il en est advenu chez lui. */
+function notificationsFor(userName: string, since: number) {
+  const lower = userName.toLowerCase();
+  return readRecords("notifications", since)
+    .filter((r) => r._t >= since)
+    .map((r) => {
+      const mine = (Array.isArray(r.recipients) ? (r.recipients as Record<string, unknown>[]) : []).find(
+        (x) => String(x.user ?? "").toLowerCase() === lower
+      );
+      return mine ? { at: r._t, category: r.category ?? null, title: String(r.title ?? ""), body: String(r.body ?? ""), outcome: mine } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .reverse()
+    .slice(0, 100);
+}
+
+/** Les connexions de ce compte, les plus récentes d'abord. */
+function authEventsFor(userName: string, since: number) {
+  const lower = userName.toLowerCase();
+  return readRecords("auth", since)
+    .filter((r) => r._t >= since && String(r.user ?? "").toLowerCase() === lower)
+    .reverse()
+    .slice(0, 100)
+    .map((r) => ({ at: r._t, kind: String(r.kind ?? "?"), device: r.device ?? null, ip: r.ip ?? null, reason: r.reason ?? null, count: r.count ?? null, by: r.by ?? null }));
+}
+
+/** Le foyer sur trente jours : appareils, habitudes, connexions et notifications. */
+export function household(now = Date.now()) {
+  const since = now - 30 * DAY;
+  const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
+  const auth = readRecords("auth", since).filter((r) => r._t >= since);
+  const notifications = readRecords("notifications", since).filter((r) => r._t >= since);
+  const recipients = notifications.flatMap((r) => (Array.isArray(r.recipients) ? (r.recipients as Record<string, number>[]) : []));
+  return {
+    days: 30,
+    devices: qualityByDevice(seances),
+    habits: habitsOf(seances),
+    logins: {
+      ok: auth.filter((r) => r.kind === "login").length,
+      failed: auth.filter((r) => r.kind === "login-failed").length,
+      recentFailures: auth
+        .filter((r) => r.kind === "login-failed")
+        .slice(-10)
+        .reverse()
+        .map((r) => ({ at: r._t, user: String(r.user ?? "?"), reason: r.reason ?? null, device: r.device ?? null, ip: r.ip ?? null })),
+    },
+    notifications: {
+      sent: notifications.length,
+      delivered: recipients.reduce((n, x) => n + (Number(x.sent) || 0), 0),
+      failed: recipients.reduce((n, x) => n + (Number(x.failed) || 0) + (Number(x.removed) || 0), 0),
+      byCategory: [...notifications.reduce((m, r) => m.set(String(r.category ?? "?"), (m.get(String(r.category ?? "?")) ?? 0) + 1), new Map<string, number>())]
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count),
+    },
+  };
 }

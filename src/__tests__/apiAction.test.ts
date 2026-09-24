@@ -52,6 +52,15 @@ describe("apiAction", () => {
     expect(fetchMock.mock.calls[1]?.[1]?.headers).toBeUndefined();
   });
 
+  // Imposer du JSON à un formulaire lui retire sa frontière : le serveur ne pouvait plus lire les
+  // captures d'un signalement (« Formulaire illisible », 24/09/2026).
+  it("leaves a form to declare its own type", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => answer(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    await apiAction("/api/reports", { method: "POST", body: new FormData() });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toBeUndefined();
+  });
+
   it("lets the caller keep its own headers alongside the JSON one", async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => answer(200, {}));
     vi.stubGlobal("fetch", fetchMock);

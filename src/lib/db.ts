@@ -252,6 +252,64 @@ function migrate(db: Database.Database): void {
    * le 21/09/2026, un compte absent de la table le voit (voir `onboardingDb.isPending`) ; une ligne
    * ne sert plus qu'à dire « fait » ou « à refaire ».
    */
+  /* Les signalements (« Signaler un problème », 24/09/2026) : un ticket par signalement, ses
+     échanges, ses images. Rien n'est jamais effacé — choix de l'administrateur. `draft` est un
+     brouillon que seule la personne voit ; `*_seen_at` et `last_*_at` font la pastille de chaque
+     côté (une réponse de l'administrateur que la personne n'a pas lue, et l'inverse). */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id        TEXT    NOT NULL,
+      user_name      TEXT    NOT NULL,
+      status         TEXT    NOT NULL DEFAULT 'open'
+                     CHECK (status IN ('draft','open','in_progress','resolved','closed')),
+      zone           TEXT    NOT NULL,
+      element        TEXT,
+      element_other  TEXT,
+      issue          TEXT,
+      issue_other    TEXT,
+      item_id        TEXT,
+      item_title     TEXT,
+      item_kind      TEXT,
+      description    TEXT    NOT NULL DEFAULT '',
+      context        TEXT,
+      logs           TEXT,
+      created_at     INTEGER NOT NULL,
+      updated_at     INTEGER NOT NULL,
+      sent_at        INTEGER,
+      last_user_at   INTEGER NOT NULL,
+      last_admin_at  INTEGER NOT NULL DEFAULT 0,
+      user_seen_at   INTEGER NOT NULL,
+      admin_seen_at  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_reports_user ON reports (user_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status, updated_at);
+
+    CREATE TABLE IF NOT EXISTS report_messages (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id   INTEGER NOT NULL,
+      author      TEXT    NOT NULL CHECK (author IN ('user','admin','system')),
+      author_name TEXT    NOT NULL,
+      body        TEXT    NOT NULL,
+      created_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_report_messages ON report_messages (report_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS report_images (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id     INTEGER NOT NULL,
+      message_id    INTEGER,
+      file          TEXT,
+      original      TEXT    NOT NULL,
+      mime          TEXT    NOT NULL,
+      original_name TEXT,
+      width         INTEGER,
+      height        INTEGER,
+      bytes         INTEGER NOT NULL,
+      created_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_report_images ON report_images (report_id);
+  `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS onboarding (
       user_name  TEXT    PRIMARY KEY,
@@ -830,6 +888,216 @@ export interface MaintenanceState {
   /** Quand le bandeau s'éteindra tout seul, en ms. Null quand il est éteint. */
   expiresAt: number | null;
 }
+
+// ─── Signalements ───────────────────────────────────────────────────────────────
+
+export type ReportStatus = "draft" | "open" | "in_progress" | "resolved" | "closed";
+
+export interface ReportRow {
+  id: number;
+  userId: string;
+  userName: string;
+  status: ReportStatus;
+  zone: string;
+  element: string | null;
+  elementOther: string | null;
+  issue: string | null;
+  issueOther: string | null;
+  itemId: string | null;
+  itemTitle: string | null;
+  itemKind: string | null;
+  description: string;
+  context: Record<string, unknown> | null;
+  logs: Record<string, unknown> | null;
+  createdAt: number;
+  updatedAt: number;
+  sentAt: number | null;
+  lastUserAt: number;
+  lastAdminAt: number;
+  userSeenAt: number;
+  adminSeenAt: number;
+}
+
+export interface ReportMessage {
+  id: number;
+  reportId: number;
+  author: "user" | "admin" | "system";
+  authorName: string;
+  body: string;
+  createdAt: number;
+}
+
+export interface ReportImage {
+  id: number;
+  reportId: number;
+  messageId: number | null;
+  file: string | null;
+  original: string;
+  mime: string;
+  originalName: string | null;
+  width: number | null;
+  height: number | null;
+  bytes: number;
+  createdAt: number;
+}
+
+type ReportDbRow = {
+  id: number; user_id: string; user_name: string; status: ReportStatus; zone: string; element: string | null;
+  element_other: string | null; issue: string | null; issue_other: string | null; item_id: string | null;
+  item_title: string | null; item_kind: string | null; description: string; context: string | null; logs: string | null;
+  created_at: number; updated_at: number; sent_at: number | null; last_user_at: number; last_admin_at: number;
+  user_seen_at: number; admin_seen_at: number;
+};
+
+function parseJson(text: string | null): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function toReport(r: ReportDbRow): ReportRow {
+  return {
+    id: r.id, userId: r.user_id, userName: r.user_name, status: r.status, zone: r.zone, element: r.element,
+    elementOther: r.element_other, issue: r.issue, issueOther: r.issue_other, itemId: r.item_id, itemTitle: r.item_title,
+    itemKind: r.item_kind, description: r.description, context: parseJson(r.context), logs: parseJson(r.logs),
+    createdAt: r.created_at, updatedAt: r.updated_at, sentAt: r.sent_at, lastUserAt: r.last_user_at,
+    lastAdminAt: r.last_admin_at, userSeenAt: r.user_seen_at, adminSeenAt: r.admin_seen_at,
+  };
+}
+
+export interface ReportFields {
+  zone: string;
+  element: string | null;
+  elementOther: string | null;
+  issue: string | null;
+  issueOther: string | null;
+  itemId: string | null;
+  itemTitle: string | null;
+  itemKind: string | null;
+  description: string;
+}
+
+export const reportsDb = {
+  create(userId: string, userName: string, fields: ReportFields, draft: boolean, context: unknown): ReportRow {
+    const now = Date.now();
+    const info = getDb()
+      .prepare(`INSERT INTO reports (user_id, user_name, status, zone, element, element_other, issue, issue_other, item_id,
+        item_title, item_kind, description, context, created_at, updated_at, sent_at, last_user_at, user_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(userId, userName, draft ? "draft" : "open", fields.zone, fields.element, fields.elementOther, fields.issue,
+        fields.issueOther, fields.itemId, fields.itemTitle, fields.itemKind, fields.description, JSON.stringify(context ?? null),
+        now, now, draft ? null : now, now, now);
+    return reportsDb.get(Number(info.lastInsertRowid))!;
+  },
+
+  /** Un brouillon réécrit : ses choix et son texte, rien d'autre. */
+  updateDraft(id: number, fields: ReportFields, context: unknown): void {
+    getDb()
+      .prepare(`UPDATE reports SET zone = ?, element = ?, element_other = ?, issue = ?, issue_other = ?, item_id = ?,
+        item_title = ?, item_kind = ?, description = ?, context = ?, updated_at = ?, last_user_at = ? WHERE id = ? AND status = 'draft'`)
+      .run(fields.zone, fields.element, fields.elementOther, fields.issue, fields.issueOther, fields.itemId, fields.itemTitle,
+        fields.itemKind, fields.description, JSON.stringify(context ?? null), Date.now(), Date.now(), id);
+  },
+
+  /** Le brouillon part : il devient un signalement ouvert, avec ses journaux figés. */
+  send(id: number, logs: unknown): void {
+    const now = Date.now();
+    getDb()
+      .prepare("UPDATE reports SET status = 'open', sent_at = ?, logs = ?, updated_at = ?, last_user_at = ? WHERE id = ? AND status = 'draft'")
+      .run(now, JSON.stringify(logs ?? null), now, now, id);
+  },
+
+  setLogs(id: number, logs: unknown): void {
+    getDb().prepare("UPDATE reports SET logs = ? WHERE id = ?").run(JSON.stringify(logs ?? null), id);
+  },
+
+  get(id: number): ReportRow | null {
+    const row = getDb().prepare("SELECT * FROM reports WHERE id = ?").get(id) as ReportDbRow | undefined;
+    return row ? toReport(row) : null;
+  },
+
+  listForUser(userId: string): ReportRow[] {
+    return (getDb().prepare("SELECT * FROM reports WHERE user_id = ? ORDER BY updated_at DESC").all(userId) as ReportDbRow[]).map(toReport);
+  },
+
+  /** Pour l'administrateur : tout sauf les brouillons, que personne d'autre que leur auteur ne voit. */
+  listSent(): ReportRow[] {
+    return (getDb().prepare("SELECT * FROM reports WHERE status != 'draft' ORDER BY updated_at DESC").all() as ReportDbRow[]).map(toReport);
+  },
+
+  setStatus(id: number, status: ReportStatus, by: "user" | "admin"): void {
+    const now = Date.now();
+    getDb()
+      .prepare(`UPDATE reports SET status = ?, updated_at = ?, ${by === "admin" ? "last_admin_at" : "last_user_at"} = ? WHERE id = ?`)
+      .run(status, now, now, id);
+  },
+
+  addMessage(reportId: number, author: ReportMessage["author"], authorName: string, body: string): ReportMessage {
+    const now = Date.now();
+    const info = getDb()
+      .prepare("INSERT INTO report_messages (report_id, author, author_name, body, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(reportId, author, authorName, body, now);
+    if (author !== "system") {
+      getDb()
+        .prepare(`UPDATE reports SET updated_at = ?, ${author === "admin" ? "last_admin_at" : "last_user_at"} = ? WHERE id = ?`)
+        .run(now, now, reportId);
+    }
+    return { id: Number(info.lastInsertRowid), reportId, author, authorName, body, createdAt: now };
+  },
+
+  messages(reportId: number): ReportMessage[] {
+    const rows = getDb().prepare("SELECT * FROM report_messages WHERE report_id = ? ORDER BY created_at, id").all(reportId) as {
+      id: number; report_id: number; author: ReportMessage["author"]; author_name: string; body: string; created_at: number;
+    }[];
+    return rows.map((r) => ({ id: r.id, reportId: r.report_id, author: r.author, authorName: r.author_name, body: r.body, createdAt: r.created_at }));
+  },
+
+  addImage(image: Omit<ReportImage, "id" | "createdAt">): ReportImage {
+    const now = Date.now();
+    const info = getDb()
+      .prepare(`INSERT INTO report_images (report_id, message_id, file, original, mime, original_name, width, height, bytes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(image.reportId, image.messageId, image.file, image.original, image.mime, image.originalName, image.width, image.height, image.bytes, now);
+    return { ...image, id: Number(info.lastInsertRowid), createdAt: now };
+  },
+
+  images(reportId: number): ReportImage[] {
+    const rows = getDb().prepare("SELECT * FROM report_images WHERE report_id = ? ORDER BY id").all(reportId) as {
+      id: number; report_id: number; message_id: number | null; file: string | null; original: string; mime: string;
+      original_name: string | null; width: number | null; height: number | null; bytes: number; created_at: number;
+    }[];
+    return rows.map((r) => ({
+      id: r.id, reportId: r.report_id, messageId: r.message_id, file: r.file, original: r.original, mime: r.mime,
+      originalName: r.original_name, width: r.width, height: r.height, bytes: r.bytes, createdAt: r.created_at,
+    }));
+  },
+
+  /** Retirer une image d'un brouillon — un signalement envoyé, lui, garde tout. */
+  removeDraftImage(reportId: number, imageId: number): ReportImage | null {
+    const report = reportsDb.get(reportId);
+    if (!report || report.status !== "draft") return null;
+    const image = reportsDb.images(reportId).find((i) => i.id === imageId) ?? null;
+    if (image) getDb().prepare("DELETE FROM report_images WHERE id = ? AND report_id = ?").run(imageId, reportId);
+    return image;
+  },
+
+  markSeen(id: number, by: "user" | "admin"): void {
+    getDb().prepare(`UPDATE reports SET ${by === "admin" ? "admin_seen_at" : "user_seen_at"} = ? WHERE id = ?`).run(Date.now(), id);
+  },
+
+  /** Des réponses de l'administrateur que cette personne n'a pas encore lues. */
+  unreadForUser(userId: string): number {
+    return (getDb().prepare("SELECT COUNT(*) as n FROM reports WHERE user_id = ? AND status != 'draft' AND last_admin_at > user_seen_at").get(userId) as { n: number }).n;
+  },
+
+  /** Des signalements ou des commentaires que l'administrateur n'a pas encore lus. */
+  unreadForAdmin(): number {
+    return (getDb().prepare("SELECT COUNT(*) as n FROM reports WHERE status != 'draft' AND last_user_at > admin_seen_at").get() as { n: number }).n;
+  },
+};
 
 export const maintenanceDb = {
   /**

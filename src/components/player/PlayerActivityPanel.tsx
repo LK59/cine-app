@@ -6,6 +6,7 @@ import { decodeView } from "@/components/activity/nav";
 import { ActivityOverview } from "@/components/activity/views/ActivityOverview";
 import { ActivityAccount } from "@/components/activity/views/ActivityAccount";
 import { ActivityLogs } from "@/components/activity/views/ActivityLogs";
+import { ReportThread } from "@/components/reports/ReportThread";
 import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
 
 /**
@@ -20,7 +21,7 @@ import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
 export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: boolean }) {
   const t = useT();
   const view = decodeView(raw) ?? { kind: "overview" as const };
-  const title = view.kind === "logs" ? t("activity.logs.title") : t("activity.title");
+  const title = view.kind === "logs" ? t("activity.logs.title") : view.kind === "report" ? t("report.ui.threadTitle") : t("activity.title");
   return (
     <PlayerPanelFrame title={title} back leaving={leaving}>
       <div className="mx-auto w-full max-w-7xl space-y-6 pt-2">
@@ -28,6 +29,7 @@ export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: b
         {view.kind === "account" && <ActivityAccount id={view.id} />}
         {view.kind === "logs" && <ActivityLogs preset={view.preset} />}
         {view.kind === "seance" && <ActivitySeance id={view.id} />}
+        {view.kind === "report" && <ReportThread id={view.id} />}
       </div>
     </PlayerPanelFrame>
   );

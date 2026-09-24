@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminOnly } from "@/lib/activity/adminOnly";
-import { listAccounts, recentSeances, weekSignals } from "@/lib/activity/accounts";
+import { household, listAccounts, recentSeances, weekSignals } from "@/lib/activity/accounts";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,5 @@ export async function GET(req: NextRequest) {
   if (session instanceof NextResponse) return session;
   const now = Date.now();
   const [accounts, signals] = await Promise.all([listAccounts(now), Promise.resolve(weekSignals(now))]);
-  return NextResponse.json({ now, accounts, signals, recent: recentSeances(20) });
+  return NextResponse.json({ now, accounts, signals, recent: recentSeances(20), household: household(now) });
 }

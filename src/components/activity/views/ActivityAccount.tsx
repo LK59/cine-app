@@ -15,6 +15,7 @@ import {
   KeyRound,
   ListChecks,
   LogOut,
+  MessageSquareWarning,
   MonitorSmartphone,
   Pencil,
   PlayCircle,
@@ -45,11 +46,14 @@ import {
   hours,
   type T,
 } from "@/components/activity/parts";
+import { DeviceQualityList, Heatmap, TopTitles, AuthList, NotificationList } from "@/components/activity/insights";
+import { ReportRowView } from "@/components/reports/ReportParts";
+import { goTo } from "@/components/activity/nav";
 import type { AccountDetail, MediaEntry } from "@/lib/activity/accounts";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
 
 type Detail = AccountDetail & { now: number };
-type Tab = "seances" | "resume" | "recent" | "watchlist" | "requests" | "errors";
+type Tab = "seances" | "resume" | "recent" | "watchlist" | "requests" | "devices" | "habits" | "auth" | "notifications" | "reports" | "errors";
 
 /** Un « oui / non » sans fenêtre : le bouton demande confirmation à lui-même, le temps d'un clic. */
 function ConfirmButton({ label, confirm, onConfirm, danger = false }: { label: string; confirm: string; onConfirm: () => Promise<void>; danger?: boolean }) {
@@ -231,6 +235,11 @@ export function ActivityAccount({ id }: { id: string }) {
     { key: "recent", label: t("activity.tabs.recent"), count: d.library.recent?.length ?? null, icon: History },
     { key: "watchlist", label: t("activity.tabs.watchlist"), count: d.watchlist.length, icon: ListChecks },
     { key: "requests", label: t("activity.tabs.requests"), count: d.requests?.length ?? null, icon: Send },
+    { key: "devices", label: t("activity.tabs.devices"), count: d.quality.length, icon: MonitorSmartphone },
+    { key: "habits", label: t("activity.tabs.habits"), count: null, icon: CalendarClock },
+    { key: "auth", label: t("activity.tabs.auth"), count: d.auth.length, icon: KeyRound },
+    { key: "notifications", label: t("activity.tabs.notifications"), count: d.notificationsReceived.length, icon: Bell },
+    { key: "reports", label: t("activity.tabs.reports"), count: d.reports.length, icon: MessageSquareWarning },
     { key: "errors", label: t("activity.tabs.errors"), count: d.errors.length, icon: AlertTriangle },
   ];
 
@@ -399,6 +408,49 @@ export function ActivityAccount({ id }: { id: string }) {
               </ul>
             ) : (
               <Empty label={t("activity.empty.requests")} />
+            ))}
+
+          {tab === "devices" && <DeviceQualityList devices={d.quality} />}
+
+          {tab === "habits" && (
+            <div className="space-y-5 py-4">
+              <div className="px-4">
+                <Heatmap heatmap={d.habits.heatmap} />
+              </div>
+              <div>
+                <h3 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("activity.habits.top")}</h3>
+                <TopTitles habits={d.habits} />
+              </div>
+              <div>
+                <h3 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("activity.habits.seriesInProgress")}</h3>
+                {d.seriesInProgress === null ? (
+                  <Unavailable />
+                ) : d.seriesInProgress.length ? (
+                  <ul className="divide-y divide-white/5">
+                    {d.seriesInProgress.map((m) => (
+                      <MediaRow key={m.itemId} m={m} now={now} onAction={(a, i, s) => act(a, i, s)} actions={["played"]} />
+                    ))}
+                  </ul>
+                ) : (
+                  <Empty label={t("activity.habits.noSeries")} />
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === "auth" && <AuthList events={d.auth} now={now} />}
+
+          {tab === "notifications" && <NotificationList items={d.notificationsReceived} now={now} />}
+
+          {tab === "reports" &&
+            (d.reports.length ? (
+              <div className="divide-y divide-white/5">
+                {d.reports.map((r) => (
+                  <ReportRowView key={r.id} r={r} when={ago(r.sentAt, now, t)} onOpen={() => goTo({ kind: "report", id: r.id })} />
+                ))}
+              </div>
+            ) : (
+              <Empty label={t("activity.empty.reports")} />
             ))}
 
           {tab === "errors" &&

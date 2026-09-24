@@ -12,9 +12,12 @@ import { withCode } from "@/lib/upstreamError";
  * Throws with whatever the server explained, so the caller only has to say it.
  */
 export async function apiAction(url: string, init?: RequestInit): Promise<unknown> {
+  // Un formulaire porte son propre type, avec la frontière qui sépare ses parties : lui imposer
+  // du JSON rendait les captures d'un signalement illisibles pour le serveur (24/09/2026).
+  const json = init?.body && !(init.body instanceof FormData);
   const res = await fetch(url, {
     ...init,
-    headers: init?.body ? { "Content-Type": "application/json", ...init?.headers } : init?.headers,
+    headers: json ? { "Content-Type": "application/json", ...init?.headers } : init?.headers,
   });
 
   if (!res.ok) {

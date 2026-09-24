@@ -6,6 +6,8 @@ import { useIsShortViewport } from "@/lib/useIsMobile";
 import { useHideOnScroll } from "@/lib/useHideOnScroll";
 import { useT } from "@/components/TranslationProvider";
 import { PLAYER_NAV, activePanel, openPanel } from "./playerNav";
+import { useReportBadge } from "@/lib/useReportBadge";
+import { NavDot } from "./NavDot";
 
 /**
  * La durée du mouvement d'entrée et de sortie.
@@ -36,6 +38,7 @@ const DOUBLE_FIRE_MS = 700;
  */
 export function PlayerBottomBar() {
   const t = useT();
+  const badge = useReportBadge();
   const route = useCinemaRoute();
   // Effacée pendant qu'une fiche est ouverte : elle recouvre l'écran entier, et la barre y
   // flotterait au-dessus d'un contenu qu'elle ne commande pas.
@@ -148,7 +151,10 @@ export function PlayerBottomBar() {
                 short ? "h-11 w-14 gap-0" : "h-14 w-16 gap-0.5"
               } ${on ? "text-white" : "text-subtle active:text-muted"}`}
             >
-              <Icon size={short ? 19 : 20} strokeWidth={on ? 2.4 : 1.8} />
+              <span className="relative">
+                <Icon size={short ? 19 : 20} strokeWidth={on ? 2.4 : 1.8} />
+                {panel === "account" && badge.any && <NavDot />}
+              </span>
               {!short && <span className={`text-[10px] ${on ? "font-semibold" : "font-medium"}`}>{t(labelKey)}</span>}
             </button>
           );

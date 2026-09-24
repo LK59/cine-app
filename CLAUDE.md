@@ -100,6 +100,14 @@ line per `session`. Both files are one
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`) — `player.log` keeping five archives
 (`.1` newest … `.5`), `server.log` three — and read with `tail`/`jq`; `logGenerations` lists a log
 and its archives oldest first for any reader.
+`data/logs/auth.log` (since 2026-09-24) records sign-ins, refusals, sign-outs, closed sessions and
+refused tokens, with device and address; `data/logs/notifications.log` records every push sent,
+with what happened to it per account (delivered, failed, subscription removed, turned off). Both are
+written by `src/lib/eventLogs.ts` and read by the activity panel like the others.
+**Reports** (« Signaler un problème », `src/lib/reports.ts`) freeze a snapshot of the author's logs
+when sent (`src/lib/reportLogs.ts`) — the logs rotate, the ticket must stay readable. Their paths
+come from one tree, `src/lib/reportTaxonomy.ts`, read by both the wizard and the route; screenshots
+live in `data/reports/<id>/`, the original kept beside a WebP made by `sharp`.
 `data/logs/bench.log` holds the device test bench's results — one line per film, failures with the
 player's trace — started by an administrator from the cinema's Account panel (DOC-TECH "Device test
 bench"). **The player lines a bench causes do not go to `player.log`**: any line carrying `bench`

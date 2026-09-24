@@ -39,6 +39,22 @@ export const NOTIFICATION_CATEGORIES = [
     descKey: "notifications.categoriesList.requestAvailable.description",
     enabledByDefault: true,
   },
+  {
+    id: "report-reply",
+    label: "Réponse à ton signalement",
+    labelKey: "notifications.categoriesList.reportReply.label",
+    description: "Quand l'administrateur répond à un de tes signalements ou change son état.",
+    descKey: "notifications.categoriesList.reportReply.description",
+    enabledByDefault: true,
+  },
+  {
+    id: "report-new",
+    label: "Nouveau signalement",
+    labelKey: "notifications.categoriesList.reportNew.label",
+    description: "Quand quelqu'un signale un problème, fait une suggestion ou commente un signalement.",
+    descKey: "notifications.categoriesList.reportNew.description",
+    enabledByDefault: true,
+  },
 ] as const;
 
 export type NotificationCategory = typeof NOTIFICATION_CATEGORIES[number]["id"];
@@ -60,10 +76,10 @@ export function isNotificationCategory(value: string): value is NotificationCate
  * `sendPushToAdmins`), qui les règlent au même endroit, sous les leurs. Un compte ordinaire ne
  * peut pas les écrire.
  */
-export const VIEWER_NOTIFICATION_CATEGORIES = ["new-episode", "request-available", "watchlist-available"] as const satisfies readonly NotificationCategory[];
+export const VIEWER_NOTIFICATION_CATEGORIES = ["new-episode", "request-available", "watchlist-available", "report-reply"] as const satisfies readonly NotificationCategory[];
 
 /** Les annonces de téléchargement, qui ne partent qu'aux administrateurs (`sendPushToAdmins`). */
-export const ADMIN_NOTIFICATION_CATEGORIES = ["torrent-complete", "torrent-started"] as const satisfies readonly NotificationCategory[];
+export const ADMIN_NOTIFICATION_CATEGORIES = ["torrent-complete", "torrent-started", "report-new"] as const satisfies readonly NotificationCategory[];
 
 export function isViewerNotificationCategory(value: string): boolean {
   return (VIEWER_NOTIFICATION_CATEGORIES as readonly string[]).includes(value);

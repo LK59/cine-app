@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { sessionDb } from "@/lib/db";
+import { logAuthEvent } from "@/lib/eventLogs";
 
 async function getSession(req: NextRequest) {
   return verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
@@ -56,5 +57,6 @@ export async function DELETE(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   const revoked = sessionDb.deleteOthers(userId(session), session.jti);
+  logAuthEvent("others-closed", { user: session.jfUser ?? session.u, count: revoked });
   return NextResponse.json({ ok: true, revoked });
 }

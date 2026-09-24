@@ -24,6 +24,7 @@ const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m)
 // L'activité des comptes, pour l'administrateur seul : chargée à la première ouverture, jamais
 // avant — personne d'autre ne paie son code.
 const PlayerActivityPanel = dynamic(() => import("./PlayerActivityPanel").then((m) => m.PlayerActivityPanel), { ssr: false, loading: PanelPlaceholder });
+const PlayerReportPanel = dynamic(() => import("./PlayerReportPanel").then((m) => m.PlayerReportPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
@@ -106,6 +107,8 @@ export function PlayerShell() {
   const account = useExitDelay(route.account, EXIT_MS);
   const activity = useExitDelay(route.activity !== null, EXIT_MS);
   const lastActivity = useLastValue(route.activity);
+  const report = useExitDelay(route.report !== null, EXIT_MS);
+  const lastReport = useLastValue(route.report);
   /**
    * Ces fiches sortent en glissant, sauf quand ce qu'elles recouvrent n'est pas dessiné.
    *
@@ -228,6 +231,7 @@ export function PlayerShell() {
       {activity.render && lastActivity !== null && (
         <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} />
       )}
+      {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} />}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de
           deux crans. L'historique garde la précédente, et le retour la rouvre.

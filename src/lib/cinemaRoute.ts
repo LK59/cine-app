@@ -51,6 +51,11 @@ export interface CinemaRoute {
    * d'ensemble, puis au panneau Compte d'où l'on est parti.
    */
   activity: string | null;
+  /**
+   * « Signaler un problème » : `nouveau`, `liste`, `brouillon:<id>` ou l'identifiant d'un
+   * signalement. Ouvert depuis le panneau Compte, qu'il remplace, comme l'activité.
+   */
+  report: string | null;
 }
 
 const EMPTY: CinemaRoute = {
@@ -66,6 +71,7 @@ const EMPTY: CinemaRoute = {
   person: null,
   browse: null,
   activity: null,
+  report: null,
 };
 
 // How many entries this session has pushed. Kept in history.state so a close can tell "I opened
@@ -154,6 +160,7 @@ function parse(hash: string): CinemaRoute {
     person: readNumber(params, "personne"),
     browse: params.get("parcourir"),
     activity: params.get("activite"),
+    report: params.get("signalement"),
   };
 }
 
@@ -173,6 +180,7 @@ function serialize(route: CinemaRoute): string {
   if (route.person) params.set("personne", String(route.person));
   if (route.browse) params.set("parcourir", route.browse);
   if (route.activity) params.set("activite", route.activity);
+  if (route.report) params.set("signalement", route.report);
   const query = params.toString();
   return query ? `#${query}` : "";
 }
@@ -443,7 +451,7 @@ if (typeof window !== "undefined") {
  * laisse pas une fermeture l'oublier — l'activité, ajoutée le 24/09/2026, restait sinon affichée
  * après une croix.
  */
-export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null } satisfies Partial<CinemaRoute>;
+export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null, report: null } satisfies Partial<CinemaRoute>;
 
 export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   if (typeof window === "undefined") return;

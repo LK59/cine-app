@@ -289,7 +289,9 @@
         "player": "Reproductor",
         "server": "Servidor",
         "bench": "Banco de pruebas",
-        "benchPlayer": "Reproductor del banco"
+        "benchPlayer": "Reproductor del banco",
+        "auth": "Inicios de sesión",
+        "notifications": "Notificaciones"
       },
       "user": "Cuenta",
       "allUsers": "Todas las cuentas",
@@ -313,7 +315,12 @@
       "watchlist": "Por ver",
       "requests": "Solicitudes",
       "favorites": "Favoritos",
-      "errors": "Errores"
+      "errors": "Errores",
+      "auth": "Inicios de sesión",
+      "devices": "Dispositivos",
+      "habits": "Hábitos",
+      "notifications": "Notificaciones",
+      "reports": "Informes"
     },
     "empty": {
       "seances": "Ninguna sesión en los registros.",
@@ -324,7 +331,8 @@
       "requests": "Ninguna solicitud.",
       "errors": "Ningún error registrado para esta cuenta.",
       "sessions": "Ninguna sesión abierta.",
-      "devices": "Ningún dispositivo."
+      "devices": "Ningún dispositivo.",
+      "reports": "Ningún informe enviado."
     },
     "media": {
       "played": "visto",
@@ -380,6 +388,71 @@
       "confirm": "Confirmar",
       "done": "Hecho.",
       "failed": "La acción falló."
+    },
+    "auth": {
+      "title": "Inicios de sesión",
+      "ok": "Correctos",
+      "failed": "Fallidos",
+      "none": "Ningún inicio de sesión registrado.",
+      "by": "por {who}",
+      "kinds": {
+        "login": "Inicio de sesión",
+        "login-failed": "Inicio de sesión fallido",
+        "logout": "Cierre de sesión",
+        "others-closed": "Cerró {n} otra sesión|Cerró {n} otras sesiones",
+        "closed-by-admin": "Sesión cerrada por el administrador",
+        "token-refused": "Token rechazado",
+        "expired": "Sesión caducada"
+      }
+    },
+    "habits": {
+      "days": "Lun|Mar|Mié|Jue|Vie|Sáb|Dom",
+      "none": "Nada visto en este periodo.",
+      "noSeries": "Ninguna serie en curso.",
+      "seriesInProgress": "Series en curso",
+      "top": "Lo más visto",
+      "when": "Cuándo se ve"
+    },
+    "household": {
+      "title": "El hogar, últimos {n} días"
+    },
+    "notifs": {
+      "title": "Notificaciones enviadas",
+      "sent": "Enviadas",
+      "deliveredTile": "Entregadas",
+      "failedTile": "Fallos",
+      "delivered": "Entregada a {n} dispositivo|Entregada a {n} dispositivos",
+      "partial": "{ok} entregadas, {ko} fallidas",
+      "failed": "Entrega fallida",
+      "removed": "Suscripción caducada, eliminada",
+      "muted": "Desactivada por elección",
+      "noDevice": "Ningún dispositivo suscrito",
+      "none": "Ninguna notificación recibida."
+    },
+    "quality": {
+      "title": "Calidad de reproducción por dispositivo",
+      "device": "Dispositivo",
+      "seances": "Sesiones",
+      "watched": "Visto",
+      "open": "Apertura",
+      "waits": "Esperas",
+      "slowSeeks": "Saltos lentos",
+      "rebuilds": "Reconstrucciones",
+      "fallbacks": "Alternativas, errores",
+      "troubled": "Con incidencias",
+      "troubledShort": "{p} % con incidencias",
+      "nSeances": "{n} sesión|{n} sesiones",
+      "nWaits": "{n} espera|{n} esperas",
+      "nRebuilds": "{n} reconstrucción|{n} reconstrucciones",
+      "nFallbacks": "{n} alternativa|{n} alternativas",
+      "none": "Ninguna sesión en este periodo."
+    },
+    "reports": {
+      "title": "Informes abiertos ({n})",
+      "none": "Ningún informe pendiente.",
+      "noneDone": "Ningún informe resuelto.",
+      "showDone": "Ver resueltos ({n})",
+      "showPending": "Ver pendientes"
     }
   },
   "radarr": {
@@ -893,6 +966,14 @@
       "requestAvailable": {
         "label": "Tu solicitud está disponible",
         "description": "Cuando una película o serie que solicitaste vía Jellyseerr está disponible."
+      },
+      "reportReply": {
+        "label": "Respuesta a tu reporte",
+        "description": "Cuando el administrador responde a uno de tus reportes o cambia su estado."
+      },
+      "reportNew": {
+        "label": "Nuevo reporte",
+        "description": "Cuando alguien reporta un problema, hace una sugerencia o comenta un reporte."
       }
     },
     "pushToggle": {
@@ -1581,7 +1662,15 @@
       "open": "Abrir",
       "activity": "Actividad de las cuentas",
       "activityHint": "Quién está, quién ve qué, las sesiones y registros de cada uno.",
-      "openActivity": "Abrir la actividad"
+      "openActivity": "Abrir la actividad",
+      "notifReportReply": "Respuesta a un reporte",
+      "notifReportReplyHint": "Cuando uno de tus reportes recibe una respuesta o cambia de estado.",
+      "notifReportNew": "Nuevos reportes",
+      "notifReportNewHint": "Cuando alguien reporta un problema, hace una sugerencia o comenta un reporte.",
+      "report": "Informar de un problema",
+      "reportHint": "¿Un problema o una idea? Descríbelo en unos pasos y sigue la respuesta aquí.",
+      "reportNew": "Informar de un problema",
+      "reportMine": "Mis informes"
     },
     "browse": {
       "seeAll": "Ver todo",
@@ -1870,5 +1959,244 @@
       "x-reopen": "Cerrar y reabrir al instante"
     },
     "depthExtreme": "Extrema"
+  },
+  "report": {
+    "zones": {
+      "home": "Inicio",
+      "search": "Búsqueda",
+      "list": "Mi lista",
+      "sheet": "Ficha de una película o serie",
+      "player": "Reproducción de una película o episodio",
+      "account": "Cuenta y ajustes",
+      "notifications": "Notificaciones",
+      "access": "Inicio de sesión e instalación",
+      "suggestion": "Una sugerencia",
+      "other": "Otra cosa"
+    },
+    "nodes": {
+      "homeHero": "El gran banner de arriba",
+      "homeResume": "La fila «Continuar»",
+      "homeNextUp": "La fila «A continuación»",
+      "homeRows": "Las demás filas (categorías, novedades…)",
+      "homeSeeAll": "La cuadrícula «Ver todo»",
+      "homeTabs": "Las pestañas Películas y Series",
+      "homePosters": "Los carteles y las imágenes",
+      "homeScroll": "El desplazamiento de la página",
+      "searchField": "El campo de búsqueda",
+      "searchResults": "Los resultados",
+      "searchUnavailable": "Un título aún no disponible",
+      "searchPeople": "Actores y directores",
+      "searchRequest": "Solicitar un título",
+      "listToWatch": "«Por ver»",
+      "listRequests": "«Solicitudes»",
+      "listWatched": "«Visto»",
+      "listAdd": "Añadir o quitar un título",
+      "sheetPlay": "El botón Reproducir o Reanudar",
+      "sheetInfo": "El resumen, las notas y la información",
+      "sheetEpisodes": "Las temporadas y los episodios",
+      "sheetCast": "El reparto",
+      "sheetSimilar": "Títulos similares",
+      "sheetMyList": "Añadir a mi lista",
+      "sheetWatched": "Marcar visto o no visto",
+      "playerVideo": "La imagen",
+      "playerAudio": "El sonido",
+      "playerSubtitles": "Los subtítulos",
+      "playerControls": "Los controles (pausa, avanzar, retroceder…)",
+      "playerStart": "El inicio de la reproducción",
+      "playerEnd": "El final y el episodio siguiente",
+      "playerBackground": "Volver a la aplicación tras salir de ella",
+      "playerCast": "La transmisión al televisor",
+      "playerPip": "El minirreproductor",
+      "accountLanguage": "El idioma de la aplicación",
+      "accountPlayback": "Preferencias de reproducción (idiomas, subtítulos)",
+      "accountNotifications": "Los ajustes de notificaciones",
+      "accountPassword": "La contraseña",
+      "accountDevices": "Los dispositivos conectados",
+      "accountReports": "Mis reportes",
+      "notifEpisode": "«Nuevo episodio»",
+      "notifRequest": "«Tu solicitud está disponible»",
+      "notifWatchlist": "«Un título de tu lista está disponible»",
+      "notifReport": "«Respuesta a tu reporte»",
+      "accessLogin": "Iniciar sesión",
+      "accessInstall": "La aplicación en la pantalla de inicio",
+      "accessUpdate": "Las actualizaciones de la aplicación",
+      "suggestHome": "Para el inicio",
+      "suggestSearch": "Para la búsqueda",
+      "suggestList": "Para Mi lista",
+      "suggestSheet": "Para las fichas de los títulos",
+      "suggestPlayer": "Para el reproductor",
+      "suggestAccount": "Para la cuenta y los ajustes",
+      "suggestNotifications": "Para las notificaciones",
+      "suggestCatalogue": "Una película o serie para añadir",
+      "suggestFeature": "Una nueva función"
+    },
+    "issues": {
+      "generic": {
+        "notShown": "No aparece",
+        "wrongDisplay": "Se ve mal o en el lugar equivocado",
+        "wrongContent": "Contenido incorrecto (título, imagen, información)",
+        "unexpected": "No hace lo que esperaba",
+        "slow": "Demasiado lento",
+        "stuck": "Bloqueado, no responde",
+        "errorMessage": "Aparece un mensaje de error"
+      },
+      "video": {
+        "black": "Pantalla negra",
+        "frozen": "Imagen congelada",
+        "stutter": "Tirones",
+        "blurry": "Imagen borrosa o pixelada",
+        "colors": "Colores apagados, demasiado oscuros o demasiado vivos",
+        "framing": "Imagen deformada, cortada o mal encuadrada",
+        "avsync": "La imagen y el sonido no están sincronizados"
+      },
+      "audio": {
+        "none": "Sin sonido",
+        "language": "Idioma equivocado",
+        "cuts": "El sonido se corta o chisporrotea",
+        "sync": "El sonido va desfasado de la imagen",
+        "sides": "Voces por un solo lado o mal repartidas",
+        "volume": "Demasiado alto o demasiado bajo",
+        "trackMenu": "No se puede cambiar el idioma del audio"
+      },
+      "subtitles": {
+        "missing": "No aparecen",
+        "language": "Idioma equivocado",
+        "sync": "Adelantados o retrasados",
+        "display": "Mal mostrados o ilegibles",
+        "stuck": "Se quedan en pantalla",
+        "menu": "No se pueden activar ni cambiar"
+      },
+      "controls": {
+        "noResponse": "Los botones no responden",
+        "seekWrong": "El salto llega al lugar equivocado",
+        "seekSlow": "El salto tarda",
+        "progressBar": "La barra de progreso es incorrecta",
+        "pauseResume": "Pausa o reproducir no funcionan",
+        "hidden": "Los controles no aparecen o no desaparecen",
+        "fullscreen": "La pantalla completa no funciona"
+      },
+      "start": {
+        "noStart": "No arranca",
+        "slowStart": "Tarda mucho en arrancar",
+        "wrongPosition": "No reanuda en el lugar correcto",
+        "errorMessage": "Aparece un mensaje de error"
+      },
+      "end": {
+        "nextNotStarting": "El siguiente episodio no empieza",
+        "wrongNext": "Empieza el episodio equivocado",
+        "cutShort": "El final está cortado",
+        "watchedState": "Marcado como visto por error, o no marcado"
+      },
+      "cast": {
+        "noStart": "No se inicia en el televisor",
+        "stuck": "Bloqueado o cargando sin fin",
+        "noSound": "Sin sonido en el televisor",
+        "noSubtitles": "Sin subtítulos en el televisor",
+        "quality": "Mala calidad de imagen"
+      },
+      "pip": {
+        "noStart": "No se abre",
+        "stuck": "Se congela o se detiene",
+        "controls": "Los botones no funcionan",
+        "position": "Mal colocado o no se puede mover"
+      },
+      "notifications": {
+        "notReceived": "No la recibo",
+        "unwanted": "La recibo aunque la desactivé",
+        "duplicate": "La recibo dos veces",
+        "wrongContent": "Su contenido es incorrecto",
+        "late": "Llega tarde",
+        "wrongLink": "Abre la pantalla equivocada"
+      },
+      "access": {
+        "cannotLogin": "No puedo iniciar sesión",
+        "loggedOut": "Se cierra la sesión sola",
+        "wontOpen": "La aplicación no se abre",
+        "icon": "Icono o pantalla de inicio incorrectos",
+        "update": "La actualización no se hace o se repite",
+        "slow": "Todo va lento",
+        "errorMessage": "Aparece un mensaje de error"
+      }
+    },
+    "status": {
+      "draft": "Borrador",
+      "open": "Abierto",
+      "in_progress": "En curso",
+      "resolved": "Resuelto",
+      "closed": "Cerrado"
+    },
+    "push": {
+      "admin": {
+        "new": "Nuevo informe de {user}",
+        "comment": "{user} respondió a su informe",
+        "status": "{user} cambió el estado de su informe"
+      },
+      "user": {
+        "reply": "Respuesta a tu informe",
+        "status": "Tu informe cambió de estado"
+      }
+    },
+    "ui": {
+      "qZone": "¿Dónde está el problema?",
+      "qElement": "¿Más concretamente?",
+      "qSuggestion": "Tu idea trata de…",
+      "qTitle": "¿Qué película o serie?",
+      "qIssue": "¿Qué ocurre?",
+      "qDescribe": "Describe el problema",
+      "qDescribeSuggestion": "Describe tu idea",
+      "describePlaceholder": "Lo que hacías, lo que pasó, lo que esperabas…",
+      "describeSuggestionPlaceholder": "Lo que te gustaría, y por qué…",
+      "other": "Otro (especificar)",
+      "otherPlaceholder": "Precísalo en pocas palabras",
+      "next": "Siguiente",
+      "back": "Atrás",
+      "saveDraft": "Guardar borrador",
+      "send": "Enviar",
+      "sent": "Informe enviado",
+      "draftSaved": "Borrador guardado",
+      "failed": "El envío falló",
+      "loadError": "No se pudo cargar el informe",
+      "titleSearch": "Buscar en la biblioteca",
+      "titleNone": "Ningún título encontrado.",
+      "titleFree": "¿No está en la lista? Escríbelo",
+      "titleFreePlaceholder": "El título",
+      "movie": "Película",
+      "series": "Serie",
+      "logsHint": "Los datos técnicos útiles (dispositivo, reproducciones recientes) se adjuntan automáticamente.",
+      "addImage": "Captura",
+      "removeImage": "Quitar imagen",
+      "imagesHint": "Hasta 6 imágenes, cualquier formato habitual (HEIC incluido)",
+      "noPreview": "Sin vista previa — abrir el original",
+      "new": "Nuevo informe",
+      "newTitle": "Informar de un problema",
+      "draftTitle": "Borrador",
+      "listTitle": "Mis informes",
+      "threadTitle": "Informe",
+      "empty": "Aún no has informado de nada.",
+      "groupDrafts": "Borradores",
+      "groupOpen": "Pendientes",
+      "groupDone": "Resueltos",
+      "noDescription": "Aún sin descripción",
+      "unread": "Nueva respuesta",
+      "draftHint": "Este borrador solo lo ves tú hasta que lo envíes.",
+      "editDraft": "Retomar el borrador",
+      "sentOn": "enviado el {when}",
+      "close": "Cerrar el informe",
+      "reopen": "Reabrir",
+      "statusChanged": "{who}: {status}",
+      "fromAdmin": "Administrador",
+      "reply": "Responder",
+      "replyPlaceholder": "Añadir un comentario…",
+      "replyPlaceholderAdmin": "Responder a la persona…",
+      "context": "Dispositivo y contexto",
+      "logsCaptured": "Registros capturados al enviar, el {when}",
+      "logsItem": "Sesiones de este título (30 días)",
+      "logsRecent": "Sesiones de las últimas 48 h",
+      "logsNone": "Ninguna sesión.",
+      "logsErrors": "Errores",
+      "logsAuth": "Inicios de sesión",
+      "logsNotifications": "Notificaciones recibidas",
+      "titleLoading": "Cargando la biblioteca…"
+    }
   }
 }

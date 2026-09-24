@@ -18,7 +18,7 @@ vi.mock("@/lib/auth", () => ({
   SESSION_COOKIE: "cine_session",
   SESSION_MAX_AGE: 3600,
 }));
-const mockSessionDb = { create: vi.fn() };
+const mockSessionDb = { create: vi.fn((): string[] => []) };
 const mockUserPrefsDb = { getLang: vi.fn() };
 vi.mock("@/lib/db", () => ({ sessionDb: mockSessionDb, userPrefsDb: mockUserPrefsDb }));
 let rateLimitOk = true;

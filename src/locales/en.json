@@ -289,7 +289,9 @@
         "player": "Player",
         "server": "Server",
         "bench": "Test bench",
-        "benchPlayer": "Bench player"
+        "benchPlayer": "Bench player",
+        "auth": "Sign-ins",
+        "notifications": "Notifications"
       },
       "user": "Account",
       "allUsers": "All accounts",
@@ -313,7 +315,12 @@
       "watchlist": "To watch",
       "requests": "Requests",
       "favorites": "Favourites",
-      "errors": "Errors"
+      "errors": "Errors",
+      "auth": "Sign-ins",
+      "devices": "Devices",
+      "habits": "Habits",
+      "notifications": "Notifications",
+      "reports": "Reports"
     },
     "empty": {
       "seances": "No sessions in the logs.",
@@ -324,7 +331,8 @@
       "requests": "No requests.",
       "errors": "No errors recorded for this account.",
       "sessions": "No open sessions.",
-      "devices": "No devices."
+      "devices": "No devices.",
+      "reports": "No reports sent."
     },
     "media": {
       "played": "watched",
@@ -380,6 +388,71 @@
       "confirm": "Confirm",
       "done": "Done.",
       "failed": "The action failed."
+    },
+    "auth": {
+      "title": "Sign-ins",
+      "ok": "Successful",
+      "failed": "Failed",
+      "none": "No sign-ins recorded.",
+      "by": "by {who}",
+      "kinds": {
+        "login": "Signed in",
+        "login-failed": "Sign-in failed",
+        "logout": "Signed out",
+        "others-closed": "Closed {n} other session|Closed {n} other sessions",
+        "closed-by-admin": "Session closed by the administrator",
+        "token-refused": "Token refused",
+        "expired": "Session expired"
+      }
+    },
+    "habits": {
+      "days": "Mon|Tue|Wed|Thu|Fri|Sat|Sun",
+      "none": "Nothing watched in this period.",
+      "noSeries": "No series in progress.",
+      "seriesInProgress": "Series in progress",
+      "top": "Most watched",
+      "when": "When people watch"
+    },
+    "household": {
+      "title": "The household, last {n} days"
+    },
+    "notifs": {
+      "title": "Notifications sent",
+      "sent": "Sent",
+      "deliveredTile": "Delivered",
+      "failedTile": "Failures",
+      "delivered": "Delivered to {n} device|Delivered to {n} devices",
+      "partial": "{ok} delivered, {ko} failed",
+      "failed": "Delivery failed",
+      "removed": "Subscription expired, removed",
+      "muted": "Turned off by choice",
+      "noDevice": "No subscribed device",
+      "none": "No notifications received."
+    },
+    "quality": {
+      "title": "Playback quality per device",
+      "device": "Device",
+      "seances": "Sessions",
+      "watched": "Watched",
+      "open": "Opening",
+      "waits": "Waits",
+      "slowSeeks": "Slow seeks",
+      "rebuilds": "Rebuilds",
+      "fallbacks": "Fallbacks, errors",
+      "troubled": "With incidents",
+      "troubledShort": "{p}% with incidents",
+      "nSeances": "{n} session|{n} sessions",
+      "nWaits": "{n} wait|{n} waits",
+      "nRebuilds": "{n} rebuild|{n} rebuilds",
+      "nFallbacks": "{n} fallback|{n} fallbacks",
+      "none": "No sessions in this period."
+    },
+    "reports": {
+      "title": "Open reports ({n})",
+      "none": "No reports waiting.",
+      "noneDone": "No settled reports.",
+      "showDone": "Show settled ({n})",
+      "showPending": "Show waiting"
     }
   },
   "radarr": {
@@ -893,6 +966,14 @@
       "requestAvailable": {
         "label": "Your request is available",
         "description": "When a movie or series you requested via Jellyseerr becomes available."
+      },
+      "reportReply": {
+        "label": "Reply to your report",
+        "description": "When the administrator replies to one of your reports or changes its status."
+      },
+      "reportNew": {
+        "label": "New report",
+        "description": "When someone reports a problem, makes a suggestion or comments on a report."
       }
     },
     "pushToggle": {
@@ -1581,7 +1662,15 @@
       "open": "Open",
       "activity": "Account activity",
       "activityHint": "Who's here, who's watching what, everyone's sessions and logs.",
-      "openActivity": "Open activity"
+      "openActivity": "Open activity",
+      "notifReportReply": "Reply to a report",
+      "notifReportReplyHint": "When one of your reports gets a reply or changes status.",
+      "notifReportNew": "New reports",
+      "notifReportNewHint": "When someone reports a problem, makes a suggestion or comments on a report.",
+      "report": "Report a problem",
+      "reportHint": "Something wrong, or an idea? Describe it in a few steps, then follow the answer here.",
+      "reportNew": "Report a problem",
+      "reportMine": "My reports"
     },
     "browse": {
       "seeAll": "See all",
@@ -1870,5 +1959,244 @@
       "x-reopen": "Close and reopen at once"
     },
     "depthExtreme": "Extreme"
+  },
+  "report": {
+    "zones": {
+      "home": "Home",
+      "search": "Search",
+      "list": "My list",
+      "sheet": "A movie or series page",
+      "player": "Playing a movie or an episode",
+      "account": "Account and settings",
+      "notifications": "Notifications",
+      "access": "Signing in and installing",
+      "suggestion": "A suggestion",
+      "other": "Something else"
+    },
+    "nodes": {
+      "homeHero": "The big banner at the top",
+      "homeResume": "The “Continue watching” row",
+      "homeNextUp": "The “Up next” row",
+      "homeRows": "The other rows (categories, new arrivals…)",
+      "homeSeeAll": "The “See all” grid",
+      "homeTabs": "The Movies and Series tabs",
+      "homePosters": "Posters and pictures",
+      "homeScroll": "Scrolling the page",
+      "searchField": "The search box",
+      "searchResults": "The results",
+      "searchUnavailable": "A title that isn't available yet",
+      "searchPeople": "Actors and directors",
+      "searchRequest": "Requesting a title",
+      "listToWatch": "“To watch”",
+      "listRequests": "“Requests”",
+      "listWatched": "“Watched”",
+      "listAdd": "Adding or removing a title",
+      "sheetPlay": "The Play or Resume button",
+      "sheetInfo": "The summary, ratings and details",
+      "sheetEpisodes": "Seasons and episodes",
+      "sheetCast": "The cast",
+      "sheetSimilar": "Similar titles",
+      "sheetMyList": "Adding to my list",
+      "sheetWatched": "Marking watched or unwatched",
+      "playerVideo": "The picture",
+      "playerAudio": "The sound",
+      "playerSubtitles": "Subtitles",
+      "playerControls": "The controls (pause, skip forward, back…)",
+      "playerStart": "Starting playback",
+      "playerEnd": "The ending and the next episode",
+      "playerBackground": "Coming back to the app after leaving it",
+      "playerCast": "Casting to the TV",
+      "playerPip": "The mini player",
+      "accountLanguage": "The app language",
+      "accountPlayback": "Playback preferences (languages, subtitles)",
+      "accountNotifications": "Notification settings",
+      "accountPassword": "The password",
+      "accountDevices": "Signed-in devices",
+      "accountReports": "My reports",
+      "notifEpisode": "“New episode”",
+      "notifRequest": "“Your request is available”",
+      "notifWatchlist": "“A title from your list is available”",
+      "notifReport": "“Reply to your report”",
+      "accessLogin": "Signing in",
+      "accessInstall": "The app on the home screen",
+      "accessUpdate": "App updates",
+      "suggestHome": "For the home page",
+      "suggestSearch": "For search",
+      "suggestList": "For My list",
+      "suggestSheet": "For title pages",
+      "suggestPlayer": "For the player",
+      "suggestAccount": "For account and settings",
+      "suggestNotifications": "For notifications",
+      "suggestCatalogue": "A movie or series to add",
+      "suggestFeature": "A new feature"
+    },
+    "issues": {
+      "generic": {
+        "notShown": "Doesn't show up",
+        "wrongDisplay": "Looks wrong or is in the wrong place",
+        "wrongContent": "Wrong content (title, picture, details)",
+        "unexpected": "Doesn't do what I expected",
+        "slow": "Too slow",
+        "stuck": "Stuck, not responding",
+        "errorMessage": "An error message appears"
+      },
+      "video": {
+        "black": "Black screen",
+        "frozen": "Frozen picture",
+        "stutter": "Stuttering",
+        "blurry": "Blurry or blocky picture",
+        "colors": "Colours washed out, too dark or too bright",
+        "framing": "Picture stretched, cropped or badly framed",
+        "avsync": "Picture and sound out of sync"
+      },
+      "audio": {
+        "none": "No sound",
+        "language": "Wrong language",
+        "cuts": "Sound cuts out or crackles",
+        "sync": "Sound is out of sync with the picture",
+        "sides": "Voices on one side only or badly spread",
+        "volume": "Too loud or too quiet",
+        "trackMenu": "Can't change the audio language"
+      },
+      "subtitles": {
+        "missing": "Missing",
+        "language": "Wrong language",
+        "sync": "Too early or too late",
+        "display": "Badly displayed or hard to read",
+        "stuck": "Stay on screen",
+        "menu": "Can't turn them on or change them"
+      },
+      "controls": {
+        "noResponse": "Buttons don't respond",
+        "seekWrong": "Skipping lands in the wrong place",
+        "seekSlow": "Skipping takes long",
+        "progressBar": "The progress bar is wrong",
+        "pauseResume": "Pause or play doesn't work",
+        "hidden": "Controls don't show or don't go away",
+        "fullscreen": "Full screen doesn't work"
+      },
+      "start": {
+        "noStart": "Doesn't start",
+        "slowStart": "Takes very long to start",
+        "wrongPosition": "Doesn't resume at the right place",
+        "errorMessage": "An error message appears"
+      },
+      "end": {
+        "nextNotStarting": "The next episode doesn't start",
+        "wrongNext": "The wrong episode starts",
+        "cutShort": "The ending is cut off",
+        "watchedState": "Marked watched by mistake, or not marked"
+      },
+      "cast": {
+        "noStart": "Doesn't start on the TV",
+        "stuck": "Stuck or loading forever",
+        "noSound": "No sound on the TV",
+        "noSubtitles": "No subtitles on the TV",
+        "quality": "Poor picture quality"
+      },
+      "pip": {
+        "noStart": "Doesn't open",
+        "stuck": "Freezes or stops",
+        "controls": "Buttons don't work",
+        "position": "Badly placed or can't be moved"
+      },
+      "notifications": {
+        "notReceived": "I don't receive it",
+        "unwanted": "I get it although I turned it off",
+        "duplicate": "I get it twice",
+        "wrongContent": "Its content is wrong",
+        "late": "It arrives late",
+        "wrongLink": "It opens the wrong screen"
+      },
+      "access": {
+        "cannotLogin": "Can't sign in",
+        "loggedOut": "Signed out on its own",
+        "wontOpen": "The app doesn't open",
+        "icon": "Wrong icon or launch screen",
+        "update": "Update doesn't happen or keeps looping",
+        "slow": "Everything is slow",
+        "errorMessage": "An error message appears"
+      }
+    },
+    "status": {
+      "draft": "Draft",
+      "open": "Open",
+      "in_progress": "In progress",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "push": {
+      "admin": {
+        "new": "New report from {user}",
+        "comment": "{user} replied to their report",
+        "status": "{user} changed their report's status"
+      },
+      "user": {
+        "reply": "A reply to your report",
+        "status": "Your report's status changed"
+      }
+    },
+    "ui": {
+      "qZone": "Where is the problem?",
+      "qElement": "More precisely?",
+      "qSuggestion": "Your idea is about…",
+      "qTitle": "Which film or series?",
+      "qIssue": "What happens?",
+      "qDescribe": "Describe the problem",
+      "qDescribeSuggestion": "Describe your idea",
+      "describePlaceholder": "What you were doing, what happened, what you expected…",
+      "describeSuggestionPlaceholder": "What you would like, and why…",
+      "other": "Other (specify)",
+      "otherPlaceholder": "Say it in a few words",
+      "next": "Next",
+      "back": "Back",
+      "saveDraft": "Save draft",
+      "send": "Send",
+      "sent": "Report sent",
+      "draftSaved": "Draft saved",
+      "failed": "Sending failed",
+      "loadError": "Could not load the report",
+      "titleSearch": "Search the library",
+      "titleNone": "No title found.",
+      "titleFree": "Not in the list? Type it",
+      "titleFreePlaceholder": "The title",
+      "movie": "Film",
+      "series": "Series",
+      "logsHint": "Useful technical details (device, recent playback) are attached automatically.",
+      "addImage": "Screenshot",
+      "removeImage": "Remove image",
+      "imagesHint": "Up to 6 images, any common format (HEIC included)",
+      "noPreview": "No preview — open the original",
+      "new": "New report",
+      "newTitle": "Report a problem",
+      "draftTitle": "Draft",
+      "listTitle": "My reports",
+      "threadTitle": "Report",
+      "empty": "You haven't reported anything yet.",
+      "groupDrafts": "Drafts",
+      "groupOpen": "Waiting",
+      "groupDone": "Settled",
+      "noDescription": "No description yet",
+      "unread": "New reply",
+      "draftHint": "This draft is only visible to you until you send it.",
+      "editDraft": "Continue the draft",
+      "sentOn": "sent {when}",
+      "close": "Close the report",
+      "reopen": "Reopen",
+      "statusChanged": "{who}: {status}",
+      "fromAdmin": "Administrator",
+      "reply": "Reply",
+      "replyPlaceholder": "Add a comment…",
+      "replyPlaceholderAdmin": "Reply to the person…",
+      "context": "Device and context",
+      "logsCaptured": "Logs captured when sent, {when}",
+      "logsItem": "Sessions of this title (30 days)",
+      "logsRecent": "Sessions in the last 48 h",
+      "logsNone": "No sessions.",
+      "logsErrors": "Errors",
+      "logsAuth": "Sign-ins",
+      "logsNotifications": "Notifications received",
+      "titleLoading": "Loading the library…"
+    }
   }
 }

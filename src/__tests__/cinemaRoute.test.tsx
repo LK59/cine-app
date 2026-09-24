@@ -33,6 +33,7 @@ describe("cinemaRoute", () => {
       person: null,
       browse: null,
       activity: null,
+      report: null,
     });
 
     act(() => cinemaNavigate({ film: 603 }));
@@ -156,6 +157,7 @@ describe("cinemaRoute", () => {
       person: null,
       browse: null,
       activity: null,
+      report: null,
     });
   });
 

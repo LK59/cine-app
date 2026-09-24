@@ -7,6 +7,7 @@ import { forgetBeat } from "@/lib/activity/presence";
 import { forgetJellyfinToken } from "@/lib/jellyfinToken";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { logAdminAction } from "@/lib/logger";
+import { logAuthEvent } from "@/lib/eventLogs";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         }
         await revokeJellyfinDevices(closed.map((c) => c.jfDevice), "fermée par l'administrateur");
         logAdminAction(admin, "sessions fermées", { account: user.Name, count: closed.length });
+        logAuthEvent("closed-by-admin", { user: user.Name, count: closed.length, by: admin });
         return NextResponse.json({ ok: true, closed: closed.length });
       }
       case "markPlayed":

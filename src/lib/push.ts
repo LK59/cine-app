@@ -3,6 +3,7 @@ import { isWebPushConfigured, sendWebPush, shouldRemovePushSubscription } from "
 import type { NotificationCategory } from "@/lib/notifications";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { config } from "@/lib/config";
+import { logNotificationSent } from "@/lib/eventLogs";
 
 export interface PushPayload {
   title: string;
@@ -22,20 +23,31 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, payload: Pus
   for (const uid of uniqueUsers) {
     userPrefs.set(uid, notificationPrefsDb.getForUser(uid));
   }
+  // Ce qu'il est advenu de l'envoi, par compte — pour le journal des notifications.
+  const outcome = new Map(uniqueUsers.map((user) => [user, { user, sent: 0, failed: 0, removed: 0, muted: false }]));
 
   await Promise.allSettled(
     subs.map(async (sub) => {
+      const tally = outcome.get(sub.userId)!;
       try {
-        if (payload.category && !userPrefs.get(sub.userId)?.[payload.category]) return;
+        if (payload.category && !userPrefs.get(sub.userId)?.[payload.category]) {
+          tally.muted = true;
+          return;
+        }
         await sendWebPush(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           { ...payload, icon: payload.icon ?? "/icon-192.png", badge: "/icon-192.png" }
         );
+        tally.sent += 1;
       } catch (err: unknown) {
-        if (shouldRemovePushSubscription(err)) pushDb.remove(sub.endpoint);
+        if (shouldRemovePushSubscription(err)) {
+          pushDb.remove(sub.endpoint);
+          tally.removed += 1;
+        } else tally.failed += 1;
       }
     })
   );
+  logNotificationSent({ category: payload.category ?? null, title: payload.title, body: payload.body, recipients: [...outcome.values()] });
 }
 
 export async function sendPushToAll(payload: PushPayload): Promise<void> {

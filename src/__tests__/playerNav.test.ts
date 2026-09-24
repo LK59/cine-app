@@ -17,6 +17,7 @@ const EMPTY: CinemaRoute = {
   person: null,
   browse: null,
   activity: null,
+  report: null,
 };
 
 beforeEach(() => vi.clearAllMocks());

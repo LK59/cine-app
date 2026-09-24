@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const source = q.get("source") ?? "";
   const file = q.get("file") ?? "";
   const line = Number(q.get("line"));
-  if (!(LOG_SOURCES as string[]).includes(source) || !/^[a-z-]+\.log(\.\d)?$/.test(file) || !Number.isInteger(line) || line < 0) {
+  if (!(LOG_SOURCES as string[]).includes(source) || !/^[a-z-]+\.log(\.\d{1,3})?$/.test(file) || !Number.isInteger(line) || line < 0) {
     return NextResponse.json({ error: "Ligne introuvable" }, { status: 400 });
   }
   const entry = readFullLine(source as LogSource, file, line);

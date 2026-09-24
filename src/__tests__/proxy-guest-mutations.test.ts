@@ -58,6 +58,13 @@ describe("proxy — what a plain user may write", () => {
       // La langue de l'app (23/09/2026) : refusée sans bruit, elle revenait au français au
       // rechargement.
       ["PUT", "/api/user/preferences"],
+      // Signaler un problème (24/09/2026) : tout le monde crée, modifie son brouillon, commente,
+      // ferme — la route vérifie ensuite que le signalement est bien le sien.
+      ["POST", "/api/reports"],
+      ["PUT", "/api/reports/12"],
+      ["POST", "/api/reports/12/messages"],
+      ["POST", "/api/reports/12/status"],
+      ["DELETE", "/api/reports/12/images/3"],
     ] as const) {
       const res = await proxy(req(method, path));
       expect([method, path, res.status]).toEqual([method, path, 200]);

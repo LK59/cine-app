@@ -19,7 +19,7 @@ interface LogPage {
   facets: { users: string[]; types: { name: string; count: number }[]; recentLines: number };
 }
 
-const SOURCES = ["player", "server", "bench", "benchPlayer"] as const;
+const SOURCES = ["player", "server", "auth", "notifications", "bench", "benchPlayer"] as const;
 const PERIODS = [1, 7, 30, 0] as const;
 
 /** Une ligne, repliée : l'heure, le type, qui, quoi. Dépliée : la ligne entière, traces comprises. */

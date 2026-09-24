@@ -10,6 +10,7 @@ import { getClientIp } from "@/lib/api-helpers";
 import { passwordAttempts, hasLeadingSpace } from "@/lib/passwordAttempts";
 import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
 import { forwardedFor } from "@/lib/clientAddress";
+import { logAuthEvent } from "@/lib/eventLogs";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -55,10 +56,17 @@ export async function POST(req: NextRequest) {
       if (jellyfinRes.ok) break;
     }
   } catch {
+    logAuthEvent("login-failed", { user: username, ip, device: deviceLabel(req.headers.get("user-agent")), reason: "serveur média injoignable" });
     return NextResponse.json({ error: "Impossible de contacter Jellyfin" }, { status: 502 });
   }
 
   if (!jellyfinRes.ok) {
+    logAuthEvent("login-failed", {
+      user: username,
+      ip,
+      device: deviceLabel(req.headers.get("user-agent")),
+      reason: hasLeadingSpace(password) ? "mot de passe refusé (espace en tête)" : "mot de passe refusé",
+    });
     // Nommer ce qu'on voit dans ce que la personne a tapé, jamais ce qu'on sait du mot de passe
     // attendu. Une espace de tête est invisible et ne pardonne pas : la signaler transforme six
     // tentatives identiques en une correction.
@@ -104,6 +112,8 @@ export async function POST(req: NextRequest) {
   const expired = sessionDb.create(jti, userId, deviceLabel(req.headers.get("user-agent")), deviceId);
   // Les sessions expirées que ce passage vient d'effacer : leurs jetons ne serviront plus.
   void revokeJellyfinDevices(expired, "session expirée");
+  logAuthEvent("login", { user: jellyfinUsername, ip, device: deviceLabel(req.headers.get("user-agent")), role });
+  if (expired.length) logAuthEvent("expired", { user: jellyfinUsername, count: expired.length });
   const lang = userPrefsDb.getLang(userId, config.app.language);
   const res = NextResponse.json({ ok: true, role });
   res.cookies.set(SESSION_COOKIE, token, {

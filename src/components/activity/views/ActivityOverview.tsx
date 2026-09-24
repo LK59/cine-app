@@ -1,15 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import {
   Activity,
   AlertTriangle,
+  Bell,
+  CalendarClock,
   Clapperboard,
   Clock,
   FastForward,
   Hourglass,
   KeyRound,
   ListTree,
+  MessageSquareWarning,
+  MonitorSmartphone,
   Radio,
   RefreshCw,
   ServerCrash,
@@ -21,15 +26,132 @@ import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { AlertChip, Avatar, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, secs, type T } from "@/components/activity/parts";
-import type { AccountSummary, WeekSignals } from "@/lib/activity/accounts";
+import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
+import type { ReportSummary } from "@/lib/reports";
+import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
+import { ReportRowView } from "@/components/reports/ReportParts";
+import { DeviceQualityList, Heatmap, TopTitles, AuthList } from "@/components/activity/insights";
 import type { Seance } from "@/lib/activity/seances";
-import { ActivityLink } from "@/components/activity/nav";
+import { ActivityLink, goTo } from "@/components/activity/nav";
 
 interface Overview {
   now: number;
   accounts: AccountSummary[];
   signals: WeekSignals;
   recent: Seance[];
+  household: ReturnType<typeof household>;
+}
+
+/**
+ * La petite fenêtre des signalements : ceux qui attendent (ouverts, en cours) en tête, le nouveau
+ * marqué d'une pastille. Les réglés restent consultables d'un geste, jamais supprimés.
+ */
+function ReportsPanel({ now }: { now: number }) {
+  const t = useT();
+  const [showDone, setShowDone] = useState(false);
+  const { data } = useSWR<{ reports: ReportSummary[]; unread: number }>("/api/admin/activity/reports", fetcher, { refreshInterval: 30_000 });
+  if (!data) return null;
+  const pending = data.reports.filter((r) => r.status === "open" || r.status === "in_progress");
+  const done = data.reports.filter((r) => r.status === "resolved" || r.status === "closed");
+  const shown = showDone ? done : pending;
+  return (
+    <Panel
+      title={t("activity.reports.title", { n: pending.length })}
+      icon={MessageSquareWarning}
+      action={
+        done.length > 0 && (
+          <button type="button" onClick={() => setShowDone((v) => !v)} className="text-xs text-accent-300 hover:underline">
+            {showDone ? t("activity.reports.showPending") : t("activity.reports.showDone", { n: done.length })}
+          </button>
+        )
+      }
+    >
+      {shown.length ? (
+        <div className="scrollbar-thin max-h-96 divide-y divide-white/5 overflow-y-auto">
+          {shown.map((r) => (
+            <ReportRowView key={r.id} r={r} showUser when={ago(r.sentAt, now, t)} onOpen={() => goTo({ kind: "report", id: r.id })} />
+          ))}
+        </div>
+      ) : (
+        <p className="px-4 py-6 text-sm text-slate-500">{showDone ? t("activity.reports.noneDone") : t("activity.reports.none")}</p>
+      )}
+    </Panel>
+  );
+}
+
+/** Le foyer sur trente jours : appareils, habitudes, connexions, notifications. */
+function HouseholdSection({ h, now }: { h: Overview["household"]; now: number }) {
+  const t = useT();
+  const deliveredShare = h.notifications.delivered + h.notifications.failed > 0 ? h.notifications.delivered / (h.notifications.delivered + h.notifications.failed) : null;
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("activity.household.title", { n: h.days })}</h2>
+      <Panel title={t("activity.quality.title")} icon={MonitorSmartphone}>
+        <DeviceQualityList devices={h.devices} />
+      </Panel>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Panel title={t("activity.habits.when")} icon={CalendarClock}>
+          <div className="p-4">
+            <Heatmap heatmap={h.habits.heatmap} />
+          </div>
+        </Panel>
+        <Panel title={t("activity.habits.top")} icon={Clapperboard}>
+          <TopTitles habits={h.habits} />
+        </Panel>
+        <Panel
+          title={t("activity.auth.title")}
+          icon={KeyRound}
+          action={
+            <ActivityLink to={{ kind: "logs", preset: { source: "auth" } }} className="text-xs text-accent-300 hover:underline">
+              {t("activity.logs.open")}
+            </ActivityLink>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 p-3">
+            <Tile icon={KeyRound} label={t("activity.auth.ok")} value={h.logins.ok} tone="good" />
+            <Tile icon={ShieldAlert} label={t("activity.auth.failed")} value={h.logins.failed} tone={h.logins.failed ? "warn" : "good"} />
+          </div>
+          {h.logins.recentFailures.length > 0 && (
+            <AuthList
+              now={now}
+              showUser
+              events={h.logins.recentFailures.map((f) => ({ ...f, kind: "login-failed" }))}
+            />
+          )}
+        </Panel>
+        <Panel
+          title={t("activity.notifs.title")}
+          icon={Bell}
+          action={
+            <ActivityLink to={{ kind: "logs", preset: { source: "notifications" } }} className="text-xs text-accent-300 hover:underline">
+              {t("activity.logs.open")}
+            </ActivityLink>
+          }
+        >
+          <div className="grid grid-cols-3 gap-3 p-3">
+            <Tile icon={Bell} label={t("activity.notifs.sent")} value={h.notifications.sent} />
+            <Tile icon={Bell} label={t("activity.notifs.deliveredTile")} value={h.notifications.delivered} hint={deliveredShare !== null ? `${Math.round(deliveredShare * 100)} %` : undefined} tone="good" />
+            <Tile icon={AlertTriangle} label={t("activity.notifs.failedTile")} value={h.notifications.failed} tone={h.notifications.failed ? "warn" : "good"} />
+          </div>
+          {h.notifications.byCategory.length > 0 && (
+            <ul className="divide-y divide-white/5 border-t border-white/5">
+              {h.notifications.byCategory.map((c) => (
+                <li key={c.category} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                  <span className="truncate text-slate-300">{categoryLabel(c.category, t)}</span>
+                  <span className="shrink-0 tabular-nums text-slate-400">{c.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function categoryLabel(id: string, t: T): string {
+  const known = NOTIFICATION_CATEGORIES.find((c) => c.id === id);
+  return known ? t(known.labelKey) : id;
 }
 
 function alertLabel(a: AccountSummary["alerts"][number], t: T): string {
@@ -179,6 +301,9 @@ export function ActivityOverview() {
         </Panel>
       )}
 
+      {/* Les signalements qui attendent une réponse. */}
+      <ReportsPanel now={now} />
+
       {/* 3. La semaine en chiffres. */}
       <div>
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">{t("activity.week.title")}</h2>
@@ -295,6 +420,8 @@ export function ActivityOverview() {
           ))}
         </div>
       </Panel>
+
+      <HouseholdSection h={data.household} now={now} />
 
       {/* 5. Le fil des séances. */}
       <Panel

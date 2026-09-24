@@ -126,6 +126,8 @@ const CHOICE_LABELS: Record<NotificationCategory, [string, string]> = {
   "watchlist-available": ["player.account.notifList", "player.account.notifListHint"],
   "torrent-complete": ["player.account.notifDownloadDone", "player.account.notifDownloadDoneHint"],
   "torrent-started": ["player.account.notifDownloadStarted", "player.account.notifDownloadStartedHint"],
+  "report-reply": ["player.account.notifReportReply", "player.account.notifReportReplyHint"],
+  "report-new": ["player.account.notifReportNew", "player.account.notifReportNewHint"],
 };
 
 export function NotificationChoices({ admin = false }: { admin?: boolean }) {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound } from "lucide-react";
+import { LogOut, Languages, Subtitles, Bell, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, ListChecks } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { signOut } from "@/lib/signOut";
@@ -14,6 +14,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { useReportBadge } from "@/lib/useReportBadge";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
@@ -58,6 +59,31 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+/**
+ * « Signaler un problème » — pour tout le monde. L'assistant et la liste remplacent ce panneau,
+ * comme l'activité : le retour y ramène. La pastille dit qu'une réponse attend.
+ */
+function ReportSection() {
+  const t = useT();
+  const { mine } = useReportBadge();
+  return (
+    <Section icon={MessageSquareWarning} title={t("player.account.report")}>
+      <p className="mb-3 text-xs text-subtle">{t("player.account.reportHint")}</p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "nouveau" })} className="btn btn-primary w-full justify-center sm:w-auto">
+          <MessageSquareWarning size={16} />
+          {t("player.account.reportNew")}
+        </button>
+        <button type="button" onClick={() => cinemaNavigate({ account: false, report: "liste" })} className="btn btn-ghost w-full justify-center sm:w-auto">
+          <ListChecks size={16} />
+          {t("player.account.reportMine")}
+          {mine > 0 && <span className="rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">{mine}</span>}
+        </button>
+      </div>
+    </Section>
+  );
+}
+
 export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: boolean; replaced?: boolean; fromTab?: boolean }) {
   const t = useT();
   const router = useRouter();
@@ -69,6 +95,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
   // monde. Le « non » par défaut annonçait un instant « compte local » à chacun, puis la page
   // sautait quand la lecture et le mot de passe apparaissaient (23/09/2026).
   const hasJellyfin = me ? me.jfUser != null : true;
+  const badge = useReportBadge();
 
   // Gardée : hors ligne, la déconnexion restait bloquée sur place — voir `signOut`.
   const logout = () => signOut((path) => router.replace(path));
@@ -117,6 +144,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
 
         <Group title={t("player.account.groups.help")}>
           <HelpSection />
+          <ReportSection />
         </Group>
 
         {/* Montré à l'administrateur seulement : rien n'est bloqué au-delà de l'affichage — le
@@ -135,6 +163,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
               >
                 <UsersRound size={16} />
                 {t("player.account.openActivity")}
+                {badge.admin > 0 && <span className="rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">{badge.admin}</span>}
               </button>
             </Section>
             <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>

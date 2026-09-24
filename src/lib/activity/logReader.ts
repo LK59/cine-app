@@ -16,9 +16,10 @@ import { logGenerations } from "@/lib/logFile";
 import { playerLogFile, benchPlayerLogFile, PLAYER_LOG_KEEP, BENCH_PLAYER_LOG_KEEP } from "@/lib/playerLog";
 import { SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
+import { AUTH_LOG, NOTIFICATIONS_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
 
-export type LogSource = "player" | "server" | "bench" | "benchPlayer";
-export const LOG_SOURCES: LogSource[] = ["player", "server", "bench", "benchPlayer"];
+export type LogSource = "player" | "server" | "auth" | "notifications" | "bench" | "benchPlayer";
+export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "bench", "benchPlayer"];
 
 function generationsOf(source: LogSource): string[] {
   switch (source) {
@@ -26,6 +27,10 @@ function generationsOf(source: LogSource): string[] {
       return logGenerations(playerLogFile(), PLAYER_LOG_KEEP);
     case "server":
       return logGenerations(SERVER_LOG_FILE, SERVER_LOG_KEEP);
+    case "auth":
+      return logGenerations(AUTH_LOG(), EVENT_LOG_KEEP);
+    case "notifications":
+      return logGenerations(NOTIFICATIONS_LOG(), EVENT_LOG_KEEP);
     case "bench":
       return logGenerations(BENCH_LOG(), BENCH_LOG_KEEP);
     case "benchPlayer":

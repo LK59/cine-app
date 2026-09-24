@@ -14,6 +14,7 @@ vi.mock("@/lib/activity/accounts", () => ({
   listAccounts: () => listAccounts(),
   weekSignals: () => ({}),
   recentSeances: () => [],
+  household: () => ({}),
   accountDetail: vi.fn(async () => null),
 }));
 

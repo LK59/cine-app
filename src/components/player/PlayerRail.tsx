@@ -8,6 +8,8 @@ import { useCinemaRoute } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { prefetchRoute } from "@/lib/prefetch";
 import { PLAYER_NAV, MANAGE_ITEM, activePanel, openPanel } from "./playerNav";
+import { useReportBadge } from "@/lib/useReportBadge";
+import { NavDot } from "./NavDot";
 
 /**
  * Le rail du lecteur — desktop.
@@ -28,6 +30,7 @@ export function PlayerRail() {
   const route = useCinemaRoute();
   const router = useRouter();
   const t = useT();
+  const badge = useReportBadge();
   const active = activePanel(route);
   // La gestion est à l'administrateur, et le panneau Compte ne la propose qu'à lui : le rail la
   // montrait à tout le monde, vers des pages où chaque bouton répond 403 (23/09/2026).
@@ -104,7 +107,10 @@ export function PlayerRail() {
                   : "text-muted hover:bg-white/10 hover:text-white"
               }`}
             >
-              <Icon size={21} className="shrink-0" />
+              <span className="relative shrink-0">
+                <Icon size={21} />
+                {panel === "account" && badge.any && <NavDot />}
+              </span>
               <span className="player-rail-label whitespace-nowrap">
                 {t(labelKey)}
               </span>

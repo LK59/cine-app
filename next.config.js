@@ -96,9 +96,10 @@ const nextConfig = {
               // img.youtube.com pour les vignettes de bande-annonce (person/[id]/page.tsx:282),
               // et le remotePoster de Radarr/Sonarr (radarr/page.tsx:434, sonarr/page.tsx:444),
               // qui retombe sur ces deux mêmes hôtes.
-              // Volontairement sans data: ni blob: — rien dans le dépôt n'en sert en image, et
-              // le parcours en Report-Only n'a relevé aucune violation ici, ce qui le confirme.
-              "img-src 'self' https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com",
+              // blob: depuis le 24/09/2026, et pour une seule chose : l'aperçu des captures jointes
+              // à un signalement, lu dans le fichier choisi (URL.createObjectURL) avant tout envoi.
+              // Toujours sans data: — rien dans le dépôt n'en sert en image.
+              "img-src 'self' blob: https://image.tmdb.org https://artworks.thetvdb.com https://img.youtube.com",
               // blob: n'est pas une commodité : le lecteur natif attache son MediaSource par
               // URL.createObjectURL (mseSource.ts:240,244). Sans lui, plus aucun film ne démarre.
               "media-src 'self' blob:",

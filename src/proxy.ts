@@ -10,6 +10,7 @@ import { castPassFor } from "@/lib/castToken";
 import { sessionDb } from "@/lib/db";
 import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
+import { logAuthEvent } from "@/lib/eventLogs";
 
 // Next.js 16's Proxy (formerly "middleware") always runs on the Node.js runtime — unlike the old
 // Edge-only middleware, so verifySessionFull's better-sqlite3-backed revocation check (a native
@@ -56,6 +57,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // « Je suis là », une fois par minute : la route n'écrit que sur l'appelant, en mémoire, et ne
   // renvoie rien (vue en direct de l'administrateur).
   "POST /api/presence",
+  // « Signaler un problème » : créer le sien. Les routes vérifient que c'est bien le sien pour tout
+  // le reste (modifier un brouillon, commenter, fermer, retirer une image).
+  "POST /api/reports",
   "POST /api/jellyfin/playback/playing",
   "POST /api/jellyfin/playback/progress",
   "POST /api/jellyfin/playback/stop",
@@ -105,6 +109,10 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
 const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Retirer sa propre demande — côté Jellyseerr seulement, jamais côté Radarr.
   /^DELETE \/api\/player\/requests\/\d+$/,
+  // Ses propres signalements — la route refuse ceux des autres (`reportFor`, `canSetStatus`).
+  /^PUT \/api\/reports\/\d+$/,
+  /^POST \/api\/reports\/\d+\/(messages|status)$/,
+  /^DELETE \/api\/reports\/\d+\/images\/\d+$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {
@@ -252,6 +260,7 @@ export async function proxy(req: NextRequest) {
   if (!pathname.startsWith("/api/") && session.jfToken && !(await tokenStillAccepted(session))) {
     // Son jeton est déjà refusé ; l'appareil, lui, reste inscrit chez Jellyfin : on le retire.
     void revokeJellyfinDevices([sessionDb.delete(session.jti)], "jeton refusé");
+    logAuthEvent("token-refused", { user: session.jfUser ?? session.u });
     forgetJellyfinToken(session.jti);
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("reason", "jellyfin");

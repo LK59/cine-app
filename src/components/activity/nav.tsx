@@ -15,6 +15,7 @@ export type ActivityView =
   | { kind: "overview" }
   | { kind: "account"; id: string }
   | { kind: "seance"; id: string }
+  | { kind: "report"; id: number }
   | { kind: "logs"; preset: LogsPreset };
 
 export function encodeView(view: ActivityView): string {
@@ -25,6 +26,8 @@ export function encodeView(view: ActivityView): string {
       return `compte:${view.id}`;
     case "seance":
       return `seance:${view.id}`;
+    case "report":
+      return `signalement:${view.id}`;
     case "logs": {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(view.preset)) if (v !== undefined && v !== "") params.set(k, String(v));
@@ -38,6 +41,10 @@ export function decodeView(raw: string | null): ActivityView | null {
   if (!raw) return null;
   if (raw.startsWith("compte:")) return { kind: "account", id: raw.slice(7) };
   if (raw.startsWith("seance:")) return { kind: "seance", id: raw.slice(7) };
+  if (raw.startsWith("signalement:")) {
+    const id = Number(raw.slice(12));
+    if (Number.isInteger(id) && id > 0) return { kind: "report", id };
+  }
   if (raw === "journaux" || raw.startsWith("journaux:")) {
     const params = new URLSearchParams(raw.slice(9));
     const days = params.get("days");

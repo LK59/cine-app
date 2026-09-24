@@ -19,6 +19,8 @@ export interface Seance {
   start: number;
   end: number;
   device: string | null;
+  /** Le temps d'ouverture de la première ouverture (hors reconstructions), en ms. */
+  openedMs: number | null;
   /** « natif » (remultiplexage ou canevas) ou « serveur ». */
   player: "natif" | "serveur";
   path: string | null;
@@ -66,6 +68,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     start: r._t,
     end: r._t,
     device: deviceLabel(str(r.agent)),
+    openedMs: null,
     player: r.player === "serveur" ? "serveur" : "natif",
     path: str(r.path),
     video: str(r.video),
@@ -91,6 +94,7 @@ function absorb(s: Seance, r: LogRecord): void {
   const reason = str(r.reason) ?? str(r.message) ?? str(r.why) ?? "";
   switch (r.kind) {
     case "start":
+      if (s.openedMs === null && !(num(r.rebuild) ?? 0)) s.openedMs = num(r.openedInMs);
       s.path = str(r.path) ?? s.path;
       s.video ??= str(r.video);
       s.range ??= str(r.range);
