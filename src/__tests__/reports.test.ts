@@ -3,10 +3,31 @@ import type { NextRequest } from "next/server";
 
 // Une base et un dossier de données à ce fichier seul.
 vi.hoisted(() => {
-  const { mkdtempSync } = require("node:fs") as typeof import("node:fs");
+  const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
   const { tmpdir } = require("node:os") as typeof import("node:os");
   process.env.DATA_DIR = mkdtempSync(`${tmpdir()}/cine-reports-`);
+  // Une séance de lucas sur « Red Dragon » (abc), une heure avant : celle que ses tickets citeront.
+  mkdirSync(`${process.env.DATA_DIR}/logs`, { recursive: true });
+  const t = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+  const base = { user: "lucas", itemId: "abc", title: "Red Dragon", session: "sess-abc", agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)" };
+  writeFileSync(
+    `${process.env.DATA_DIR}/logs/player.log`,
+    [
+      { timestamp: t(60), kind: "start", at: 0, ...base },
+      { timestamp: t(58), kind: "stall", position: 120, ...base },
+      { timestamp: t(55), kind: "stop", at: 300, why: "close", watched: 280, ...base },
+    ]
+      .map((l) => JSON.stringify(l))
+      .join("\n") + "\n"
+  );
 });
+
+vi.mock("@/lib/clients/jellyfin", () => ({
+  jellyfin: {
+    getUsers: async () => [{ Id: "id-lucas", Name: "lucas" }, { Id: "id-sarah", Name: "sarah" }],
+    getItemRunTimeTicks: async () => 7_200 * 10_000_000,
+  },
+}));
 
 const push = { admins: vi.fn(async () => {}), user: vi.fn(async () => {}) };
 vi.mock("@/lib/push", () => ({
@@ -85,7 +106,9 @@ describe("signalements — créer et voir", () => {
     // Les journaux et le contexte ne sont pas pour l'auteur.
     expect(mine.logs).toBeUndefined();
     const admin = (await (await GET(req("louis"), params(body.id))).json()) as Record<string, unknown>;
-    expect(admin.logs).toMatchObject({ seances: [], itemSeances: [] });
+    // La séance de lucas sur ce titre, figée avec le ticket.
+    const logs = admin.logs as { itemSeances: { id: string; stalls: number }[] };
+    expect(logs.itemSeances).toMatchObject([{ id: "sess-abc", stalls: 1 }]);
     expect((admin.context as Record<string, unknown>).agent).toContain("iPhone");
   });
 
@@ -208,6 +231,46 @@ describe("signalements — ce qui allume une pastille (24/09/2026)", () => {
     expect(push.admins).toHaveBeenCalledTimes(1);
     expect(push.user).not.toHaveBeenCalled();
     expect((await counts("louis")).admin).toBe(admin);
+  });
+});
+
+describe("signalements — les séances qu'ils concernent (24/09/2026)", () => {
+  it("un ticket sur un titre cite la séance de ce titre, et la séance le retrouve", async () => {
+    const { body } = await create("lucas", AUDIO);
+    expect(body.seanceId).toBe("sess-abc");
+    const { GET } = await import("@/app/api/admin/activity/seances/[id]/route");
+    const seance = (await (await GET(req("louis"), params("sess-abc"))).json()) as { runtime: number; reports: { id: number }[] };
+    expect(seance.runtime).toBe(7200);
+    expect(seance.reports.map((r) => r.id)).toContain(body.id);
+    // Un souci de recherche n'a pas de séance : en citer une au hasard égarerait.
+    const search = await create("lucas", { zone: "search", element: "searchResults", issue: "unexpected", description: "Rien ne sort." });
+    expect(search.body.seanceId).toBeNull();
+  });
+
+  it("l'administrateur écrit à quelqu'un depuis sa séance : un ticket à son nom, sa pastille, sa notification", async () => {
+    const { POST } = await import("@/app/api/admin/activity/seances/[id]/report/route");
+    const { GET: unread } = await import("@/app/api/reports/unread/route");
+    const count = async (who: string) => ((await (await unread(req(who))).json()) as { mine: number; admin: number });
+    const before = await count("lucas");
+    const adminBefore = (await count("louis")).admin;
+    expect((await POST(req("lucas", { json: { message: "Salut" } }), params("sess-abc"))).status).toBe(403);
+    const res = await POST(req("louis", { json: { message: "J'ai vu un blocage à 2:00, tu peux m'en dire plus ?" } }), params("sess-abc"));
+    expect(res.status).toBe(201);
+    const report = (await res.json()) as { id: number; openedBy: string; seanceId: string; itemTitle: string };
+    expect(report).toMatchObject({ openedBy: "admin", seanceId: "sess-abc", itemTitle: "Red Dragon" });
+    await settle();
+    expect(push.user).toHaveBeenCalledTimes(1);
+    expect((await count("lucas")).mine).toBe(before.mine + 1);
+    // Il ne réveille pas l'administrateur lui-même.
+    expect((await count("louis")).admin).toBe(adminBefore);
+    // Il est à lucas : dans sa liste, et il peut y répondre.
+    const { GET: mine } = await import("@/app/api/reports/route");
+    const list = (await (await mine(req("lucas"))).json()) as { reports: { id: number }[] };
+    expect(list.reports.map((r) => r.id)).toContain(report.id);
+    const { POST: comment } = await import("@/app/api/reports/[id]/messages/route");
+    const form = new FormData();
+    form.set("body", "Oui, l'image s'est figée.");
+    expect((await comment(req("lucas", { form }), params(report.id))).status).toBe(201);
   });
 });
 

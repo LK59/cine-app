@@ -310,6 +310,11 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_report_images ON report_images (report_id);
   `);
+  // Le lien entre un ticket et la séance de lecture qu'il concerne, et qui l'a ouvert : l'auteur,
+  // ou l'administrateur qui écrit à quelqu'un depuis une séance qui s'est mal passée (24/09/2026).
+  try { db.exec("ALTER TABLE reports ADD COLUMN seance_id TEXT"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE reports ADD COLUMN opened_by TEXT NOT NULL DEFAULT 'user'"); } catch { /* already exists */ }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_reports_seance ON reports (seance_id)");
   db.exec(`
     CREATE TABLE IF NOT EXISTS onboarding (
       user_name  TEXT    PRIMARY KEY,
@@ -916,6 +921,10 @@ export interface ReportRow {
   lastAdminAt: number;
   userSeenAt: number;
   adminSeenAt: number;
+  /** La séance de lecture que ce ticket concerne, quand on la connaît. */
+  seanceId: string | null;
+  /** « admin » : ouvert par l'administrateur pour cette personne, depuis une séance. */
+  openedBy: "user" | "admin";
 }
 
 export interface ReportMessage {
@@ -946,7 +955,7 @@ type ReportDbRow = {
   element_other: string | null; issue: string | null; issue_other: string | null; item_id: string | null;
   item_title: string | null; item_kind: string | null; description: string; context: string | null; logs: string | null;
   created_at: number; updated_at: number; sent_at: number | null; last_user_at: number; last_admin_at: number;
-  user_seen_at: number; admin_seen_at: number;
+  user_seen_at: number; admin_seen_at: number; seance_id: string | null; opened_by: string;
 };
 
 function parseJson(text: string | null): Record<string, unknown> | null {
@@ -965,6 +974,7 @@ function toReport(r: ReportDbRow): ReportRow {
     itemKind: r.item_kind, description: r.description, context: parseJson(r.context), logs: parseJson(r.logs),
     createdAt: r.created_at, updatedAt: r.updated_at, sentAt: r.sent_at, lastUserAt: r.last_user_at,
     lastAdminAt: r.last_admin_at, userSeenAt: r.user_seen_at, adminSeenAt: r.admin_seen_at,
+    seanceId: r.seance_id, openedBy: r.opened_by === "admin" ? "admin" : "user",
   };
 }
 
@@ -1008,6 +1018,31 @@ export const reportsDb = {
     getDb()
       .prepare("UPDATE reports SET status = 'open', sent_at = ?, logs = ?, updated_at = ?, last_user_at = ? WHERE id = ? AND status = 'draft'")
       .run(now, JSON.stringify(logs ?? null), now, now, id);
+  },
+
+  setSeance(id: number, seanceId: string | null): void {
+    getDb().prepare("UPDATE reports SET seance_id = ? WHERE id = ?").run(seanceId, id);
+  },
+
+  /** Les tickets qui citent une séance — pour la montrer depuis la séance. */
+  forSeance(seanceId: string): ReportRow[] {
+    return (getDb().prepare("SELECT * FROM reports WHERE seance_id = ? AND status != 'draft' ORDER BY created_at").all(seanceId) as ReportDbRow[]).map(toReport);
+  },
+
+  /**
+   * Un ticket ouvert par l'administrateur pour quelqu'un : il appartient à cette personne — c'est
+   * dans « Mes signalements » qu'elle le lit et y répond —, et c'est elle qui a du nouveau.
+   */
+  openForUser(userId: string, userName: string, fields: ReportFields, seanceId: string | null, logs: unknown): ReportRow {
+    const now = Date.now();
+    const info = getDb()
+      .prepare(`INSERT INTO reports (user_id, user_name, status, zone, element, element_other, issue, issue_other, item_id,
+        item_title, item_kind, description, context, logs, created_at, updated_at, sent_at, last_user_at, last_admin_at,
+        user_seen_at, admin_seen_at, seance_id, opened_by)
+        VALUES (?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 0, ?, 0, ?, ?, 'admin')`)
+      .run(userId, userName, fields.zone, fields.element, fields.elementOther, fields.issue, fields.issueOther, fields.itemId,
+        fields.itemTitle, fields.itemKind, fields.description, JSON.stringify(logs ?? null), now, now, now, now, now, seanceId);
+    return reportsDb.get(Number(info.lastInsertRowid))!;
   },
 
   setLogs(id: number, logs: unknown): void {

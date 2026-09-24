@@ -9,6 +9,8 @@ import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { LoadingState, ErrorState } from "@/components/StateViews";
+import { SeanceFrise } from "@/components/activity/SeanceFrise";
+import type { Seance } from "@/lib/activity/seances";
 import { Panel, SeanceRow, JsonBlock, describeLine, fullDate, kindDot } from "@/components/activity/parts";
 import type { ReportStatus } from "@/lib/db";
 import type { ReportDetail, ImageView } from "@/lib/reports";
@@ -51,6 +53,34 @@ function Images({ images }: { images: ImageView[] }) {
 }
 
 /** Ce que le ticket a emporté des journaux — pour l'administrateur seul. */
+/**
+ * La séance que le ticket concerne, relue dans le journal avec sa frise. Les journaux tournent :
+ * une séance trop ancienne n'y est plus, et le ticket garde alors son résumé figé plus bas.
+ */
+function LinkedSeance({ id }: { id: string }) {
+  const t = useT();
+  const { data, error } = useSWR<{ seance: Seance; lines: Record<string, unknown>[]; runtime: number | null }>(
+    `/api/admin/activity/seances/${encodeURIComponent(id)}`,
+    fetcher
+  );
+  return (
+    <Panel title={t("report.ui.linkedSeance")} icon={Clapperboard}>
+      {error ? (
+        <p className="px-4 py-4 text-sm text-subtle">{t("report.ui.linkedSeanceGone")}</p>
+      ) : !data ? (
+        <p className="px-4 py-4 text-sm text-subtle">…</p>
+      ) : (
+        <>
+          <SeanceRow s={data.seance} now={data.seance.end} />
+          <div className="border-t border-white/5 p-3">
+            <SeanceFrise lines={data.lines} start={data.seance.start} runtime={data.runtime} />
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 function LogsSnapshot({ logs }: { logs: ReportLogs }) {
   const t = useT();
   const now = logs.capturedAt;
@@ -222,6 +252,8 @@ export function ReportThread({ id }: { id: number }) {
         <div className="space-y-4">
           {/* Le signalement lui-même, puis les échanges, dans l'ordre. */}
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            {/* Ouvert par l'administrateur depuis une séance : c'est son message, pas celui de la personne. */}
+            {r.openedBy === "admin" && <p className="mb-1 text-[11px] text-muted">{t("report.ui.openedByAdmin")}</p>}
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100">{r.description}</p>
             <Images images={topImages} />
           </div>
@@ -275,6 +307,7 @@ export function ReportThread({ id }: { id: number }) {
 
         {admin && (
           <div className="mt-6 space-y-4 lg:mt-0">
+            {r.seanceId && <LinkedSeance id={r.seanceId} />}
             {r.context && (
               <Panel title={t("report.ui.context")} icon={Smartphone}>
                 <div className="p-3">

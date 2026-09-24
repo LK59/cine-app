@@ -11,6 +11,7 @@ import { createT, loadLocaleDict, LOCALES, type Locale } from "@/lib/i18n";
 import { sendPushToAdmins, sendPushToUser } from "@/lib/push";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
+import type { ReportLogs } from "@/lib/reportLogs";
 
 export interface Who {
   userId: string;
@@ -124,6 +125,8 @@ export interface ReportSummary {
   sentAt: number | null;
   /** Du nouveau pour celui qui demande : une réponse de l'administrateur, ou l'inverse. */
   unread: boolean;
+  seanceId: string | null;
+  openedBy: "user" | "admin";
 }
 
 /**
@@ -149,6 +152,8 @@ export function summarize(report: ReportRow, who: Who, side?: "user" | "admin"):
     updatedAt: report.updatedAt,
     sentAt: report.sentAt,
     unread: report.status !== "draft" && (forAdmin ? report.lastUserAt > report.adminSeenAt : report.lastAdminAt > report.userSeenAt),
+    seanceId: report.seanceId,
+    openedBy: report.openedBy,
   };
 }
 
@@ -238,18 +243,34 @@ async function sendToAdmin(report: ReportRow, what: "new" | "comment" | "status"
   }
 }
 
-/** Prévenir l'auteur : l'administrateur a répondu, ou a changé l'état. Ne lève jamais. */
-export function notifyAuthor(report: ReportRow, what: "reply" | "status"): Promise<void> {
+/**
+ * La séance que concerne un signalement qui part : la plus récente du titre choisi, sinon — pour un
+ * souci de lecture sans titre — la dernière séance de la personne. Rien pour le reste : un souci de
+ * recherche n'a pas de séance, et en citer une au hasard égarerait.
+ */
+export function seanceFor(report: Pick<ReportRow, "zone" | "itemId" | "itemTitle">, logs: ReportLogs): string | null {
+  if (report.itemId || report.itemTitle) return logs.itemSeances[0]?.id ?? null;
+  if (report.zone === "player") return logs.seances[0]?.id ?? null;
+  return null;
+}
+
+/** Prévenir l'auteur : l'administrateur a répondu, a changé l'état, ou lui a écrit le premier. Ne lève jamais. */
+export function notifyAuthor(report: ReportRow, what: "reply" | "status" | "opened"): Promise<void> {
   return track(sendToAuthor(report, what));
 }
 
-async function sendToAuthor(report: ReportRow, what: "reply" | "status"): Promise<void> {
+async function sendToAuthor(report: ReportRow, what: "reply" | "status" | "opened"): Promise<void> {
   try {
     const locale = userPrefsDb.getLang(report.userId, config.app.language);
     const t = await translator(locale);
     await sendPushToUser(report.userName, {
       title: t(`report.push.user.${what}`),
-      body: what === "status" ? t(`report.status.${report.status}`) : await pathLabel(report, locale),
+      body:
+        what === "status"
+          ? t(`report.status.${report.status}`)
+          : what === "opened"
+            ? (report.itemTitle ?? report.description.slice(0, 120))
+            : await pathLabel(report, locale),
       tag: `report-${report.id}`,
       url: `/#signalement=${report.id}`,
       category: "report-reply",

@@ -218,9 +218,6 @@
       "perDay": "Sessions per day",
       "legendSeances": "Sessions",
       "legendProblems": "Share with incidents",
-      "troubled": "Troubled titles",
-      "troubledValue": "incidents: {p} · {n} session|incidents: {p} · {n} sessions",
-      "noTrouble": "No incidents this week.",
       "rebuildReasons": "Why the player rebuilt",
       "noRebuild": "No rebuilds this week.",
       "serverErrors": "Server errors",
@@ -265,7 +262,12 @@
       "incidents": "Incidents",
       "legacyHint": "A session from before end-of-session summaries: rebuilt from its lines, without totals.",
       "noStop": "No summary yet: the session is still going, or the page closed without warning.",
-      "timeline": "Timeline ({n} lines)"
+      "timeline": "Timeline ({n} lines)",
+      "reports": "Tickets about this session ({n})",
+      "writeTo": "Write to {who}",
+      "writeHint": "{who} will get a ticket about this session in “My reports”, and can reply to it.",
+      "writePlaceholder": "For example: I saw playback got stuck — can you tell me what happened?",
+      "written": "Ticket sent to {who}"
     },
     "line": {
       "start": "Opened at {at} · {path} · ready in {opened} {rebuild}",
@@ -453,6 +455,48 @@
       "noneDone": "No settled reports.",
       "showDone": "Show settled ({n})",
       "showPending": "Show waiting"
+    },
+    "diagnosis": {
+      "title": "The file or the device? ({n} days)",
+      "none": "No title failed in this period.",
+      "counts": "{f} failed sessions out of {n} · last {when}",
+      "verdict": {
+        "file": "The file",
+        "platform": "A device type",
+        "device": "One device",
+        "mixed": "Unclear",
+        "alone": "To confirm"
+      },
+      "why": {
+        "file": "It failed for every one of its {n} viewers: it's the file.",
+        "platform": "It failed on {device} for {n} people; the {clean} others watched it fine elsewhere: that device type.",
+        "device": "It only failed for {who} ({device}); the {clean} others watched it fine: that device.",
+        "everywhere": "It struggles elsewhere too: {p}% of its other sessions failed.",
+        "onlyHere": "Its {n} other sessions went fine: it's this title on this device.",
+        "mixed": "It failed for {n} viewers and the {clean} others watched it fine, with nothing obvious in common.",
+        "alone": "Only {who} has opened it: nothing to compare yet."
+      }
+    },
+    "frise": {
+      "title": "The session at a glance",
+      "aria": "Position in the film over the session",
+      "legend": {
+        "play": "Playback",
+        "seek": "{n} seek, {d} waiting|{n} seeks, {d} waiting",
+        "wait": "Waiting",
+        "background": "App in the background",
+        "incidents": "{n} incident|{n} incidents"
+      },
+      "marks": {
+        "start": "Opening",
+        "stop": "Stop",
+        "stall": "Stall",
+        "rebuild": "Rebuild",
+        "error": "Error",
+        "fallback": "Fallback",
+        "audio": "Track change",
+        "background": "Back from background"
+      }
     }
   },
   "radarr": {
@@ -2133,7 +2177,8 @@
       },
       "user": {
         "reply": "A reply to your report",
-        "status": "Your report's status changed"
+        "status": "Your report's status changed",
+        "opened": "The administrator wrote to you"
       }
     },
     "ui": {
@@ -2197,7 +2242,10 @@
       "logsAuth": "Sign-ins",
       "logsNotifications": "Notifications received",
       "titleLoading": "Loading the library…",
-      "sending": "Sending…"
+      "sending": "Sending…",
+      "linkedSeance": "The session concerned",
+      "linkedSeanceGone": "This session is no longer in the log; its frozen summary is below.",
+      "openedByAdmin": "Message from the administrator"
     }
   }
 }

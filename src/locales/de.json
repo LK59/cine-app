@@ -218,9 +218,6 @@
       "perDay": "Sitzungen pro Tag",
       "legendSeances": "Sitzungen",
       "legendProblems": "Anteil mit Vorfällen",
-      "troubled": "Titel mit Problemen",
-      "troubledValue": "Vorfälle: {p} · {n} Sitzung|Vorfälle: {p} · {n} Sitzungen",
-      "noTrouble": "Keine Vorfälle diese Woche.",
       "rebuildReasons": "Gründe für Neuaufbauten",
       "noRebuild": "Keine Neuaufbauten diese Woche.",
       "serverErrors": "Serverfehler",
@@ -265,7 +262,12 @@
       "incidents": "Vorfälle",
       "legacyHint": "Sitzung aus der Zeit vor den Abschlussberichten: aus ihren Zeilen rekonstruiert, ohne Gesamtwerte.",
       "noStop": "Noch kein Bericht: Die Sitzung läuft noch oder die Seite wurde unangekündigt geschlossen.",
-      "timeline": "Verlauf ({n} Zeilen)"
+      "timeline": "Verlauf ({n} Zeilen)",
+      "reports": "Tickets zu dieser Sitzung ({n})",
+      "writeTo": "{who} schreiben",
+      "writeHint": "{who} erhält ein Ticket zu dieser Sitzung unter „Meine Meldungen“ und kann darauf antworten.",
+      "writePlaceholder": "Zum Beispiel: Ich habe gesehen, dass die Wiedergabe hängen blieb – was ist passiert?",
+      "written": "Ticket an {who} gesendet"
     },
     "line": {
       "start": "Geöffnet bei {at} · {path} · bereit in {opened} {rebuild}",
@@ -453,6 +455,48 @@
       "noneDone": "Keine erledigten Meldungen.",
       "showDone": "Erledigte zeigen ({n})",
       "showPending": "Offene zeigen"
+    },
+    "diagnosis": {
+      "title": "Datei oder Gerät? ({n} Tage)",
+      "none": "In diesem Zeitraum ist kein Titel fehlgeschlagen.",
+      "counts": "{f} von {n} Sitzungen fehlgeschlagen · zuletzt {when}",
+      "verdict": {
+        "file": "Die Datei",
+        "platform": "Ein Gerätetyp",
+        "device": "Ein Gerät",
+        "mixed": "Unklar",
+        "alone": "Zu bestätigen"
+      },
+      "why": {
+        "file": "Er ist bei jedem seiner {n} Zuschauer fehlgeschlagen: Es liegt an der Datei.",
+        "platform": "Er ist auf {device} bei {n} Personen fehlgeschlagen; die {clean} anderen haben ihn anderswo problemlos gesehen: dieser Gerätetyp.",
+        "device": "Er ist nur bei {who} ({device}) fehlgeschlagen; die {clean} anderen haben ihn problemlos gesehen: dieses Gerät.",
+        "everywhere": "Es hat auch anderswo Probleme: {p} % seiner anderen Sitzungen sind fehlgeschlagen.",
+        "onlyHere": "Seine {n} anderen Sitzungen liefen gut: Es ist dieser Titel auf diesem Gerät.",
+        "mixed": "Er ist bei {n} Zuschauern fehlgeschlagen, die {clean} anderen haben ihn problemlos gesehen, ohne erkennbare Gemeinsamkeit.",
+        "alone": "Nur {who} hat ihn geöffnet: noch nichts zu vergleichen."
+      }
+    },
+    "frise": {
+      "title": "Die Sitzung auf einen Blick",
+      "aria": "Position im Film im Verlauf der Sitzung",
+      "legend": {
+        "play": "Wiedergabe",
+        "seek": "{n} Sprung, {d} Wartezeit|{n} Sprünge, {d} Wartezeit",
+        "wait": "Warten",
+        "background": "App im Hintergrund",
+        "incidents": "{n} Störung|{n} Störungen"
+      },
+      "marks": {
+        "start": "Start",
+        "stop": "Ende",
+        "stall": "Hänger",
+        "rebuild": "Neuaufbau",
+        "error": "Fehler",
+        "fallback": "Ausweichen",
+        "audio": "Spurwechsel",
+        "background": "Rückkehr aus dem Hintergrund"
+      }
     }
   },
   "radarr": {
@@ -2133,7 +2177,8 @@
       },
       "user": {
         "reply": "Antwort auf Ihre Meldung",
-        "status": "Der Status Ihrer Meldung hat sich geändert"
+        "status": "Der Status Ihrer Meldung hat sich geändert",
+        "opened": "Der Administrator hat Ihnen geschrieben"
       }
     },
     "ui": {
@@ -2197,7 +2242,10 @@
       "logsAuth": "Anmeldungen",
       "logsNotifications": "Erhaltene Benachrichtigungen",
       "titleLoading": "Bibliothek wird geladen…",
-      "sending": "Wird gesendet…"
+      "sending": "Wird gesendet…",
+      "linkedSeance": "Die betroffene Sitzung",
+      "linkedSeanceGone": "Diese Sitzung ist nicht mehr im Protokoll; ihre gespeicherte Zusammenfassung steht unten.",
+      "openedByAdmin": "Nachricht des Administrators"
     }
   }
 }

@@ -31,6 +31,7 @@ import type { ReportSummary } from "@/lib/reports";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
 import { ReportRowView } from "@/components/reports/ReportParts";
 import { ADMIN_REPORTS_KEY } from "@/components/reports/reportCache";
+import { DiagnosisPanel } from "@/components/activity/Diagnosis";
 import { DeviceQualityList, Heatmap, TopTitles, AuthList } from "@/components/activity/insights";
 import type { Seance } from "@/lib/activity/seances";
 import { ActivityLink, goTo } from "@/components/activity/nav";
@@ -305,6 +306,9 @@ export function ActivityOverview() {
       {/* Les signalements qui attendent une réponse. */}
       <ReportsPanel now={now} />
 
+      {/* Le fichier ou l'appareil : le verdict de chaque titre qui a échoué. */}
+      <DiagnosisPanel items={data.household.diagnosis} now={now} days={data.household.days} />
+
       {/* 3. La semaine en chiffres. */}
       <div>
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">{t("activity.week.title")}</h2>
@@ -339,7 +343,7 @@ export function ActivityOverview() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title={t("activity.week.perDay")} icon={Activity}>
+        <Panel title={t("activity.week.perDay")} icon={Activity} className="lg:col-span-2">
           <div className="p-4">
             <DayBars days={s.perDay} />
             <p className="mt-3 flex gap-4 text-xs text-slate-500">
@@ -353,23 +357,6 @@ export function ActivityOverview() {
               </span>
             </p>
           </div>
-        </Panel>
-
-        <Panel title={t("activity.week.troubled")} icon={AlertTriangle}>
-          {s.troubledTitles.length ? (
-            <ul className="divide-y divide-white/5">
-              {s.troubledTitles.map((tt) => (
-                <li key={tt.itemId ?? tt.title} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <span className="truncate text-slate-200">{tt.title}</span>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {t("activity.week.troubledValue", { p: tt.problems, n: tt.seances })}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="px-4 py-6 text-sm text-slate-500">{t("activity.week.noTrouble")}</p>
-          )}
         </Panel>
 
         <Panel title={t("activity.week.rebuildReasons")} icon={Wrench}>

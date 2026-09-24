@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, markSeenBy, notifyAdmin, readContext, readFields, summarize } from "@/lib/reports";
+import { detail, markSeenBy, notifyAdmin, seanceFor, readContext, readFields, summarize } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
 import { jsonField, reportCaller } from "@/lib/reportRequest";
@@ -34,7 +34,9 @@ export async function POST(req: NextRequest) {
   const report = reportsDb.create(who.userId, who.userName, fields, draft, readContext(jsonField(form, "context"), req.headers.get("user-agent")));
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);
   if (!draft) {
-    reportsDb.setLogs(report.id, captureReportLogs(who.userName, { id: fields.itemId, title: fields.itemTitle }));
+    const logs = captureReportLogs(who.userName, { id: fields.itemId, title: fields.itemTitle });
+    reportsDb.setLogs(report.id, logs);
+    reportsDb.setSeance(report.id, seanceFor(fields, logs));
     markSeenBy(report, who);
     void notifyAdmin(report, "new");
   }

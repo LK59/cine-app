@@ -218,9 +218,6 @@
       "perDay": "Sesiones por día",
       "legendSeances": "Sesiones",
       "legendProblems": "Parte con incidencias",
-      "troubled": "Títulos con problemas",
-      "troubledValue": "incidencias: {p} · {n} sesión|incidencias: {p} · {n} sesiones",
-      "noTrouble": "Ninguna incidencia esta semana.",
       "rebuildReasons": "Causas de las reconstrucciones",
       "noRebuild": "Ninguna reconstrucción esta semana.",
       "serverErrors": "Errores del servidor",
@@ -265,7 +262,12 @@
       "incidents": "Incidencias",
       "legacyHint": "Sesión anterior al resumen final: reconstruida a partir de sus líneas, sin totales.",
       "noStop": "Aún sin resumen: la sesión sigue en curso o la página se cerró sin avisar.",
-      "timeline": "Cronología ({n} líneas)"
+      "timeline": "Cronología ({n} líneas)",
+      "reports": "Tickets de esta sesión ({n})",
+      "writeTo": "Escribir a {who}",
+      "writeHint": "{who} recibirá un ticket sobre esta sesión en «Mis informes» y podrá responder.",
+      "writePlaceholder": "Por ejemplo: vi que la reproducción se bloqueó, ¿me cuentas qué pasó?",
+      "written": "Ticket enviado a {who}"
     },
     "line": {
       "start": "Apertura en {at} · {path} · listo en {opened} {rebuild}",
@@ -453,6 +455,48 @@
       "noneDone": "Ningún informe resuelto.",
       "showDone": "Ver resueltos ({n})",
       "showPending": "Ver pendientes"
+    },
+    "diagnosis": {
+      "title": "¿El archivo o el dispositivo? ({n} días)",
+      "none": "Ningún título falló en este periodo.",
+      "counts": "{f} sesiones fallidas de {n} · última {when}",
+      "verdict": {
+        "file": "El archivo",
+        "platform": "Un tipo de dispositivo",
+        "device": "Un dispositivo",
+        "mixed": "Sin conclusión",
+        "alone": "Por confirmar"
+      },
+      "why": {
+        "file": "Ha fallado con cada uno de sus {n} espectadores: es el archivo.",
+        "platform": "Ha fallado en {device} con {n} personas; los otros {clean} lo vieron sin problema en otros dispositivos: ese tipo de dispositivo.",
+        "device": "Solo ha fallado con {who} ({device}); los otros {clean} lo vieron sin problema: ese dispositivo.",
+        "everywhere": "También tiene problemas en otros: el {p} % de sus otras sesiones fallaron.",
+        "onlyHere": "Sus otras {n} sesiones fueron bien: es este título en este dispositivo.",
+        "mixed": "Ha fallado con {n} espectadores y los otros {clean} lo vieron sin problema, sin nada evidente en común.",
+        "alone": "Solo {who} lo ha abierto: nada que comparar por ahora."
+      }
+    },
+    "frise": {
+      "title": "La sesión de un vistazo",
+      "aria": "Posición en la película a lo largo de la sesión",
+      "legend": {
+        "play": "Reproducción",
+        "seek": "{n} salto, {d} de espera|{n} saltos, {d} de espera",
+        "wait": "Espera",
+        "background": "App en segundo plano",
+        "incidents": "{n} incidencia|{n} incidencias"
+      },
+      "marks": {
+        "start": "Apertura",
+        "stop": "Parada",
+        "stall": "Bloqueo",
+        "rebuild": "Reconstrucción",
+        "error": "Error",
+        "fallback": "Alternativa",
+        "audio": "Cambio de pista",
+        "background": "Vuelta del segundo plano"
+      }
     }
   },
   "radarr": {
@@ -2133,7 +2177,8 @@
       },
       "user": {
         "reply": "Respuesta a tu informe",
-        "status": "Tu informe cambió de estado"
+        "status": "Tu informe cambió de estado",
+        "opened": "El administrador te ha escrito"
       }
     },
     "ui": {
@@ -2197,7 +2242,10 @@
       "logsAuth": "Inicios de sesión",
       "logsNotifications": "Notificaciones recibidas",
       "titleLoading": "Cargando la biblioteca…",
-      "sending": "Enviando…"
+      "sending": "Enviando…",
+      "linkedSeance": "La sesión en cuestión",
+      "linkedSeanceGone": "Esta sesión ya no está en el registro; su resumen guardado sigue abajo.",
+      "openedByAdmin": "Mensaje del administrador"
     }
   }
 }

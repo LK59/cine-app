@@ -218,9 +218,6 @@
       "perDay": "Séances par jour",
       "legendSeances": "Séances",
       "legendProblems": "Part avec incidents",
-      "troubled": "Titres à problèmes",
-      "troubledValue": "incidents : {p} · {n} séance|incidents : {p} · {n} séances",
-      "noTrouble": "Aucun incident cette semaine.",
       "rebuildReasons": "Causes des reconstructions",
       "noRebuild": "Aucune reconstruction cette semaine.",
       "serverErrors": "Erreurs du serveur",
@@ -265,7 +262,12 @@
       "incidents": "Incidents",
       "legacyHint": "Séance d'avant le bilan de fin : reconstituée à partir de ses lignes, sans chiffres d'ensemble.",
       "noStop": "Pas encore de bilan : la séance est en cours, ou la page s'est fermée sans prévenir.",
-      "timeline": "Chronologie ({n} lignes)"
+      "timeline": "Chronologie ({n} lignes)",
+      "reports": "Tickets liés à cette séance ({n})",
+      "writeTo": "Écrire à {who}",
+      "writeHint": "{who} recevra un ticket lié à cette séance, dans « Mes signalements », et pourra y répondre.",
+      "writePlaceholder": "Par exemple : j'ai vu que la lecture s'est bloquée, tu peux me dire ce qui s'est passé ?",
+      "written": "Ticket envoyé à {who}"
     },
     "line": {
       "start": "Ouverture à {at} · {path} · prêt en {opened} {rebuild}",
@@ -453,6 +455,48 @@
       "noneDone": "Aucun signalement réglé.",
       "showDone": "Voir les réglés ({n})",
       "showPending": "Voir ceux en attente"
+    },
+    "diagnosis": {
+      "title": "Le fichier ou l'appareil ? ({n} jours)",
+      "none": "Aucun titre n'a échoué sur la période.",
+      "counts": "{f} séances en échec sur {n} · dernière {when}",
+      "verdict": {
+        "file": "Le fichier",
+        "platform": "Un type d'appareil",
+        "device": "Un appareil",
+        "mixed": "Pas tranché",
+        "alone": "À confirmer"
+      },
+      "why": {
+        "file": "Il a échoué chez chacun de ses {n} spectateurs : c'est le fichier.",
+        "platform": "Il a échoué sur {device} chez {n} personnes ; les {clean} autres l'ont regardé sans souci ailleurs : ce type d'appareil.",
+        "device": "Il n'a échoué que chez {who} ({device}) ; les {clean} autres l'ont regardé sans souci : cet appareil.",
+        "everywhere": "Il peine aussi ailleurs : {p} % de ses autres séances ont échoué.",
+        "onlyHere": "Sur ses {n} autres séances, il va bien : c'est ce titre sur cet appareil.",
+        "mixed": "Il a échoué chez {n} spectateurs, et les {clean} autres l'ont regardé sans souci, sans point commun évident.",
+        "alone": "Seul {who} l'a ouvert : rien à croiser pour l'instant."
+      }
+    },
+    "frise": {
+      "title": "La séance en un coup d'œil",
+      "aria": "Position dans le film au fil de la séance",
+      "legend": {
+        "play": "Lecture",
+        "seek": "{n} saut, {d} d'attente|{n} sauts, {d} d'attente",
+        "wait": "Attente",
+        "background": "Application en arrière-plan",
+        "incidents": "{n} incident|{n} incidents"
+      },
+      "marks": {
+        "start": "Ouverture",
+        "stop": "Arrêt",
+        "stall": "Blocage",
+        "rebuild": "Reconstruction",
+        "error": "Erreur",
+        "fallback": "Repli",
+        "audio": "Changement de piste",
+        "background": "Retour d'arrière-plan"
+      }
     }
   },
   "radarr": {
@@ -2133,7 +2177,8 @@
       },
       "user": {
         "reply": "Réponse à votre signalement",
-        "status": "Votre signalement a changé d'état"
+        "status": "Votre signalement a changé d'état",
+        "opened": "L'administrateur vous a écrit"
       }
     },
     "ui": {
@@ -2197,7 +2242,10 @@
       "logsAuth": "Connexions",
       "logsNotifications": "Notifications reçues",
       "titleLoading": "Chargement de la bibliothèque…",
-      "sending": "Envoi…"
+      "sending": "Envoi…",
+      "linkedSeance": "La séance concernée",
+      "linkedSeanceGone": "Cette séance n'est plus dans le journal ; son résumé figé reste plus bas.",
+      "openedByAdmin": "Message de l'administrateur"
     }
   }
 }

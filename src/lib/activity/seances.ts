@@ -44,7 +44,15 @@ export interface Seance {
   seeks: number;
   slowSeeks: number;
   audioSwitches: number;
+  /** Les reconstructions qui sont des incidents : réseau, décodeur, tampon refusé. */
   rebuilds: number;
+  /**
+   * Les reconstructions au retour d'arrière-plan (ligne `rebuild` portant `hiddenMs`) : iOS a fermé
+   * la source pendant que l'application était cachée, et le lecteur la rouvre. Rien n'a échoué ;
+   * les compter comme des incidents faisait passer pour fragile un appareil qu'on avait juste
+   * rangé dans sa poche (24/09/2026).
+   */
+  backgroundRebuilds: number;
   stalls: number;
   fallbacks: number;
   errors: number;
@@ -79,6 +87,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     slowSeeks: 0,
     audioSwitches: 0,
     rebuilds: 0,
+    backgroundRebuilds: 0,
     stalls: 0,
     fallbacks: 0,
     errors: 0,
@@ -113,6 +122,10 @@ function absorb(s: Seance, r: LogRecord): void {
       s.audioSwitches += 1;
       break;
     case "rebuild":
+      if (num(r.hiddenMs) !== null) {
+        s.backgroundRebuilds += 1;
+        break;
+      }
       s.rebuilds += 1;
       s.incidents.push({ kind: "rebuild", t: r._t, reason });
       break;

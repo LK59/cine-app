@@ -17,6 +17,7 @@ import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { sessionDb, watchlistDb, pushDb, notificationPrefsDb, userPrefsDb, onboardingDb, pendingRequestDb, reportsDb } from "@/lib/db";
 import { presenceOf, type Presence } from "@/lib/activity/presence";
+import { diagnoseTitles } from "@/lib/activity/diagnosis";
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 import { isChunkLoadError } from "@/lib/chunkError";
@@ -176,7 +177,6 @@ export interface WeekSignals {
   serverErrors: { scope: string; count: number }[];
   rebuildReasons: { reason: string; count: number }[];
   /** Les titres qui ont posé le plus de problèmes cette semaine. */
-  troubledTitles: { title: string; itemId: string | null; problems: number; seances: number }[];
   /** Les séances par jour, pour la courbe. */
   perDay: { day: string; seances: number; problems: number }[];
 }
@@ -192,19 +192,11 @@ export function weekSignals(now = Date.now()): WeekSignals {
   for (const s of seances) {
     for (const i of s.incidents) {
       if (i.kind !== "rebuild") continue;
-      // Le motif sans son état détaillé : « InvalidStateError … (MediaSource closed, …) » et
-      // « source fermée en arrière-plan » sont les familles qui se comptent.
+      // Le motif sans son état détaillé : « InvalidStateError … (MediaSource closed, …) » est la
+      // famille qui se compte. Les retours d'arrière-plan n'en sont plus (`backgroundRebuilds`).
       const family = i.reason.replace(/\s*\(.*$/, "").slice(0, 80) || "?";
       reasons.set(family, (reasons.get(family) ?? 0) + 1);
     }
-  }
-  const titles = new Map<string, { title: string; itemId: string | null; problems: number; seances: number }>();
-  for (const s of seances) {
-    const key = s.itemId ?? s.title;
-    const t = titles.get(key) ?? { title: s.title, itemId: s.itemId, problems: 0, seances: 0 };
-    t.problems += problemsOf(s);
-    t.seances += 1;
-    titles.set(key, t);
   }
   const scopes = new Map<string, number>();
   for (const r of server) {
@@ -241,7 +233,6 @@ export function weekSignals(now = Date.now()): WeekSignals {
     tokenRefusals: server.filter((r) => r.scope === "jellyfin-token").length,
     serverErrors: [...scopes].map(([scope, count]) => ({ scope, count })).sort((a, b) => b.count - a.count).slice(0, 8),
     rebuildReasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 6),
-    troubledTitles: [...titles.values()].filter((t) => t.problems > 0).sort((a, b) => b.problems - a.problems).slice(0, 8),
     perDay,
   };
 }
@@ -537,6 +528,9 @@ export function household(now = Date.now()) {
     days: 30,
     devices: qualityByDevice(seances),
     habits: habitsOf(seances),
+    // Le titre ou l'appareil : les réussites de la période comptent autant que les échecs, ce sont
+    // elles qui innocentent l'un ou l'autre.
+    diagnosis: diagnoseTitles(seances),
     logins: {
       ok: auth.filter((r) => r.kind === "login").length,
       failed: auth.filter((r) => r.kind === "login-failed").length,

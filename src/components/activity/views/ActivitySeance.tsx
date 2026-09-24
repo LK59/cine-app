@@ -2,17 +2,87 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { AudioLines, ChevronDown, ChevronRight, Clock, FastForward, Hourglass, ListTree, Moon, Wrench } from "lucide-react";
+import { AudioLines, ChevronDown, ChevronRight, Clock, FastForward, Hourglass, ListTree, Loader2, MessageSquarePlus, MessageSquareWarning, Moon, Send, Wrench } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { JsonBlock, Poster, SeanceFlags, Steps, Tile, clock, describeLine, fullDate, hours, kindDot, kindTone, secs } from "@/components/activity/parts";
 import type { Seance } from "@/lib/activity/seances";
-import { ActivityLink } from "@/components/activity/nav";
+import { ActivityLink, goTo } from "@/components/activity/nav";
+import { SeanceFrise } from "@/components/activity/SeanceFrise";
+import { ReportRowView } from "@/components/reports/ReportParts";
+import { useRefreshReports } from "@/components/reports/reportCache";
+import { apiAction } from "@/lib/apiAction";
+import { useToast } from "@/components/Toast";
+import type { ReportDetail, ReportSummary } from "@/lib/reports";
 
 interface SeanceData {
   seance: Seance;
   lines: Record<string, unknown>[];
+  runtime: number | null;
+  reports: ReportSummary[];
+}
+
+/**
+ * Écrire à la personne depuis sa séance : un ticket ouvert à son nom, lié à la séance. Elle le lit
+ * dans « Mes signalements » et y répond ; la conversation continue dans le ticket.
+ */
+function WriteToViewer({ seanceId, user, onSent }: { seanceId: string; user: string; onSent: () => void }) {
+  const t = useT();
+  const toast = useToast();
+  const refresh = useRefreshReports();
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="btn-ghost px-3 py-1.5 text-xs">
+        <MessageSquarePlus size={14} />
+        {t("activity.seance.writeTo", { who: user })}
+      </button>
+    );
+  }
+  const send = async () => {
+    setBusy(true);
+    try {
+      const report = (await apiAction(`/api/admin/activity/seances/${encodeURIComponent(seanceId)}/report`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      })) as ReportDetail;
+      await refresh(report);
+      toast.success(t("activity.seance.written", { who: user }));
+      setOpen(false);
+      setMessage("");
+      onSent();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("report.ui.failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="w-full space-y-2 rounded-xl border border-white/10 p-3">
+      <p className="text-xs text-slate-400">{t("activity.seance.writeHint", { who: user })}</p>
+      <textarea
+        autoFocus
+        value={message}
+        maxLength={5000}
+        rows={3}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder={t("activity.seance.writePlaceholder")}
+        className="input w-full resize-y py-2 text-sm"
+      />
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={() => setOpen(false)} className="btn btn-ghost px-3 py-1.5 text-sm">
+          {t("common.cancel")}
+        </button>
+        <button type="button" disabled={busy || !message.trim()} onClick={send} className="btn btn-primary px-4 py-1.5 text-sm">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+          {t("report.ui.send")}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /** Une étape de la séance : l'instant depuis l'ouverture, ce qui s'est passé, et le détail à la demande. */
@@ -56,7 +126,7 @@ export function ActivitySeance({ id }: { id: string }) {
   if (isLoading && !data) return <LoadingState />;
   if (error || !data) return <ErrorState message={t("activity.loadError")} onRetry={() => mutate()} />;
 
-  const { seance: s, lines } = data;
+  const { seance: s, lines, runtime, reports } = data;
   const stop = s.stop;
 
   return (
@@ -98,6 +168,31 @@ export function ActivitySeance({ id }: { id: string }) {
       ) : (
         <p className="card px-4 py-3 text-sm text-slate-400">{s.legacy ? t("activity.seance.legacyHint") : t("activity.seance.noStop")}</p>
       )}
+
+      <section className="card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-white">{t("activity.frise.title")}</h2>
+        <SeanceFrise lines={lines} start={s.start} runtime={runtime} />
+      </section>
+
+      {/* Les tickets qui parlent de cette séance, et de quoi écrire à la personne. */}
+      <section className="card overflow-hidden">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-4 py-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <MessageSquareWarning size={15} className="text-slate-400" />
+            {t("activity.seance.reports", { n: reports.length })}
+          </h2>
+        </header>
+        {reports.length > 0 && (
+          <div className="divide-y divide-white/5">
+            {reports.map((r) => (
+              <ReportRowView key={r.id} r={r} showUser when={fullDate(r.sentAt)} onOpen={() => goTo({ kind: "report", id: r.id })} />
+            ))}
+          </div>
+        )}
+        <div className="px-4 py-3">
+          <WriteToViewer seanceId={s.id} user={s.user} onSent={() => void mutate()} />
+        </div>
+      </section>
 
       <section className="card p-4">
         <h2 className="mb-2 text-sm font-semibold text-white">{t("activity.seance.timeline", { n: lines.length })}</h2>

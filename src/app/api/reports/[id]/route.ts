@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsDb } from "@/lib/db";
-import { detail, isOwner, markSeenBy, notifyAdmin, readContext, readFields } from "@/lib/reports";
+import { detail, isOwner, markSeenBy, notifyAdmin, seanceFor, readContext, readFields } from "@/lib/reports";
 import { imagesFromForm, saveReportImage } from "@/lib/reportImages";
 import { captureReportLogs } from "@/lib/reportLogs";
 import { jsonField, reportCaller, reportFor } from "@/lib/reportRequest";
@@ -45,7 +45,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
   reportsDb.updateDraft(report.id, fields, readContext(jsonField(form, "context"), req.headers.get("user-agent")));
   for (const image of images) await saveReportImage(report.id, null, image.original, image.shown);
   if (send) {
-    reportsDb.send(report.id, captureReportLogs(who.userName, { id: fields.itemId, title: fields.itemTitle }));
+    const logs = captureReportLogs(who.userName, { id: fields.itemId, title: fields.itemTitle });
+    reportsDb.send(report.id, logs);
+    reportsDb.setSeance(report.id, seanceFor(fields, logs));
     const sent = reportsDb.get(report.id)!;
     markSeenBy(sent, who);
     void notifyAdmin(sent, "new");

@@ -327,6 +327,15 @@ export const jellyfin = {
     }),
 
   /** La durée d'un titre, en ticks — pour décider comme Jellyfin si un arrêt vaut « vu ». */
+  /**
+   * La durée d'un élément sans passer par un compte : la clé du serveur suffit. Pour l'activité,
+   * dont l'administrateur peut être connecté localement, sans compte Jellyfin derrière lui.
+   */
+  getItemRunTimeTicks: (itemId: string) =>
+    fetchJson<{ Items?: { RunTimeTicks?: number }[] }>(`${url}/Items?ids=${encodeURIComponent(itemId)}`, { headers }).then(
+      (r) => r.Items?.[0]?.RunTimeTicks ?? null
+    ),
+
   getRunTimeTicks: (userId: string, itemId: string) =>
     fetchJson<{ RunTimeTicks?: number }>(`${url}/Users/${userId}/Items/${itemId}`, { headers }).then(
       (item) => item.RunTimeTicks ?? null
