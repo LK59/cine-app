@@ -53,3 +53,16 @@ describe("simultaneousText", () => {
   });
 });
 
+describe("simultaneousText, textes identiques", () => {
+  it("ne répète pas un même texte", () => {
+    expect(simultaneousText([{ startSeconds: 1, text: "Bonjour." }, { startSeconds: 1, text: "Bonjour." }])).toBe("Bonjour.");
+    expect(
+      simultaneousText([
+        { startSeconds: 1, text: "A" },
+        { startSeconds: 1, text: "A" },
+        { startSeconds: 2, text: "B" },
+      ])
+    ).toBe("A\nB");
+  });
+});
+

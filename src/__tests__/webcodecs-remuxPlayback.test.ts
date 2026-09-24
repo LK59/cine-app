@@ -132,3 +132,18 @@ describe("une piste qu'aucun chemin ne porte", () => {
     expect(playback.currentAudioTrack).toBe(AAC.number);
   });
 });
+
+// Une relecture renvoie les répliques du passage relu : gardées deux fois, elles s'affichaient
+// deux fois depuis que les répliques simultanées sont réunies (relu le 24/09/2026).
+describe("les répliques d'un passage relu", () => {
+  it("ne s'affichent qu'une fois", async () => {
+    const { playback } = await start(0, true);
+    const line = { track: 7, startSeconds: 10, endSeconds: 12, text: "Bonjour." };
+    const collect = (playback as unknown as { collect: (cues: unknown[]) => void }).collect.bind(playback);
+    collect([line]);
+    collect([{ ...line }]);
+    playback.selectSubtitleTrack(7);
+    expect(playback.subtitleAt(11)).toBe("Bonjour.");
+  });
+});
+

@@ -275,6 +275,11 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
   };
 }
 
+/** Une réplique, reconnue à sa piste, son début et son texte. */
+function cueKey(cue: TrackedCue): string {
+  return `${cue.track}:${cue.startSeconds.toFixed(3)}:${cue.text}`;
+}
+
 export class RemuxPlayback {
   private mse: MseSource | null = null;
   private cues: TrackedCue[] = [];
@@ -361,7 +366,16 @@ export class RemuxPlayback {
   }
 
   private collect(cues: TrackedCue[]): void {
-    this.cues.push(...cues);
+    // Une relecture — un saut en arrière, une reprise, une coupure réseau — renvoie les répliques
+    // du passage relu, déjà là. Gardées deux fois, elles s'affichaient deux fois depuis que les
+    // répliques simultanées sont réunies (relu le 24/09/2026) ; la première trouvée les masquait.
+    const known = new Set(this.cues.map(cueKey));
+    for (const cue of cues) {
+      const key = cueKey(cue);
+      if (known.has(key)) continue;
+      known.add(key);
+      this.cues.push(cue);
+    }
     if (this.cues.length <= 600) return;
     const now = this.video.currentTime;
     this.cues = this.cues.filter(

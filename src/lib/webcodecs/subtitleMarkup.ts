@@ -67,7 +67,13 @@ export const MAX_SIMULTANEOUS_CUES = 2;
 export function simultaneousText(covering: readonly { startSeconds: number; text: string }[]): string | null {
   if (covering.length === 0) return null;
   if (covering.length === 1) return covering[0].text;
-  const shown = [...covering].sort((a, b) => a.startSeconds - b.startSeconds).slice(0, MAX_SIMULTANEOUS_CUES);
+  // Le même texte deux fois n'est pas deux répliques : une piste ASS qui superpose des couches, ou
+  // un passage relu que quelqu'un aurait gardé en double.
+  const seen = new Set<string>();
+  const distinct = [...covering]
+    .sort((a, b) => a.startSeconds - b.startSeconds)
+    .filter((cue) => (seen.has(cue.text) ? false : (seen.add(cue.text), true)));
+  const shown = distinct.slice(0, MAX_SIMULTANEOUS_CUES);
   const placed = shown.map((cue) => subtitlePlacement(cue.text));
   const text = placed.map((line) => line.text).join("\n");
   return placed.every((line) => line.top) ? `{\\an8}${text}` : text;
