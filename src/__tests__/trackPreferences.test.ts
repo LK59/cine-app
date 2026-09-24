@@ -147,7 +147,18 @@ describe("chooseSubtitleTrack", () => {
 
     it("suit les drapeaux du fichier : forcée d'abord, puis par défaut", () => {
       expect(chooseSubtitleTrack([arabic, flagged], noLanguage("Default"), "eng")).toBe(flagged);
-      expect(chooseSubtitleTrack([arabic, flagged, forced], noLanguage("Default"), "eng")).toBe(forced);
+      // La forcée française n'est pas pour l'audio anglais : c'est la piste par défaut qui vient.
+      expect(chooseSubtitleTrack([arabic, flagged, forced], noLanguage("Default"), "eng")).toBe(flagged);
+      expect(chooseSubtitleTrack([arabic, flagged, forced], noLanguage("Default"), "fre")).toBe(forced);
+    });
+
+    // Une piste forcée traduit ce qui est étranger à l'audio entendu : la forcée française du
+    // doublage n'a rien à faire sous l'audio anglais.
+    it("ne prend une forcée que dans la langue de l'audio", () => {
+      const forcedFrench = track({ language: "fre", name: "Forcés", isForced: true });
+      const forcedEnglish = track({ language: "eng", name: "Forced", isForced: true });
+      expect(chooseSubtitleTrack([forcedFrench, forcedEnglish], noLanguage("Default"), "eng")).toBe(forcedEnglish);
+      expect(chooseSubtitleTrack([forcedFrench, arabic], noLanguage("Default"), "eng")).toBeNull();
     });
 
     it("« toujours » garde son sens", () => {

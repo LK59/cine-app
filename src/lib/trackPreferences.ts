@@ -319,8 +319,14 @@ export function chooseSubtitleTrack<T extends NamedTrack>(
   // Reading the empty language as "any language" switched on the file's first full track, in
   // whatever language it was: Arabic under an English film, for the nine accounts here that have
   // `Default` and no language (24/09/2026). `Always` still means always.
+  // A forced track translates the lines foreign *to the audio being heard*: a French forced track
+  // belongs to the French dub, and under English audio it would caption lines nobody needs.
   if (!wanted && mode !== "Always") {
-    return tracks.find(isForcedTrack) ?? tracks.find((track) => track.isDefault) ?? null;
+    return (
+      tracks.find((track) => isForcedTrack(track) && spoken !== null && trackLanguage(track) === spoken) ??
+      tracks.find((track) => track.isDefault) ??
+      null
+    );
   }
 
   // Nothing to translate: the film is already being heard in the language the subtitles would
