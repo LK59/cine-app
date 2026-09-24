@@ -59,8 +59,40 @@ class FakeBuffer extends EventTarget {
   }
   private ranges: [number, number][] = [];
 
+  /**
+   * Un tampon de ManagedMediaSource : il a `onbufferedchange`, et dit chaque plage retirée — par
+   * la page comme par le système. Les tests qui l'écoutent l'allument ; les autres restent des
+   * tampons de MediaSource ordinaire, sans l'événement.
+   */
+  static managed = false;
+
   constructor(readonly type: string) {
     super();
+    if (FakeBuffer.managed) Object.assign(this, { onbufferedchange: null });
+  }
+
+  private announceRemoved(removed: [number, number][]) {
+    if (!("onbufferedchange" in this) || removed.length === 0) return;
+    const ranges = {
+      length: removed.length,
+      start: (i: number) => removed[i][0],
+      end: (i: number) => removed[i][1],
+    } as unknown as TimeRanges;
+    this.dispatchEvent(Object.assign(new Event("bufferedchange"), { addedRanges: { length: 0 }, removedRanges: ranges }));
+  }
+
+  /** Ce que fait Safari quand la mémoire manque : retirer une plage, sans qu'on le lui demande. */
+  systemEvicts(start: number, end: number) {
+    const kept: [number, number][] = [];
+    for (const [s, e] of this.ranges) {
+      if (e <= start || s >= end) kept.push([s, e]);
+      else {
+        if (s < start) kept.push([s, start]);
+        if (e > end) kept.push([end, e]);
+      }
+    }
+    this.ranges = kept;
+    this.announceRemoved([[start, end]]);
   }
 
   get buffered() {
@@ -122,8 +154,11 @@ class FakeBuffer extends EventTarget {
   remove(start: number, end: number) {
     this.refuseIfBusy("remove");
     this.removed.push([start, end]);
+    const had = this.ranges;
     this.ranges = [];
     this.updating = true;
+    // Annoncé pendant l'opération, avant `updateend`, comme le fait l'algorithme de retrait.
+    this.announceRemoved(had.map(([s, e]) => [Math.max(s, start), Math.min(e, end)] as [number, number]).filter(([s, e]) => e > s));
     if (this.busyMs > 0) {
       setTimeout(() => {
         this.updating = false;
@@ -305,6 +340,7 @@ function fakeRemuxer(segments: number, delay = 0.2, seekable = true, readMs = 0)
 }
 
 beforeEach(() => {
+  FakeBuffer.managed = false;
   playheadOf = () => 0;
   mediaStartsAtDefault = null;
   FakeSource.instances = [];
@@ -2384,6 +2420,191 @@ describe("un saut dans le tampon pendant qu'un autre est servi", () => {
     await until(() => !mse.seekPending || video.currentTime !== 900, "le saut servi", 3000);
     await new Promise((r) => setTimeout(r, 200));
     expect(video.currentTime).toBeCloseTo(5, 0);
+    mse.destroy();
+  });
+});
+
+/**
+ * Ce que Safari retire de lui-même (24/09/2026).
+ *
+ * Trois sauts « dans le chargé » ont trouvé leur cible vide 0,7 s plus tard, sans qu'on puisse
+ * dire si c'était le système ou ce lecteur. ManagedMediaSource le dit par `bufferedchange` : le
+ * lecteur l'écrit, le compte, et relit tout de suite ce qui manque devant la tête.
+ */
+describe("les évictions du navigateur", () => {
+  type Facts = { recoveryFacts: { evictions: number; evictionsAhead: number; seekRelaunches: number } };
+  const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+  it("écrit ce que le navigateur retire, et ne compte pas ses propres retraits", async () => {
+    FakeBuffer.managed = true;
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(200);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 20, "du média devant la tête");
+    // Un saut : ce lecteur vide ses deux tampons, et le système l'annonce comme tout retrait.
+    await mse.seek(40);
+    await until(() => video.buffered.length > 0 && video.buffered.end(0) > 60, "le saut rempli");
+    expect((mse as unknown as Facts).recoveryFacts.evictions).toBe(0);
+    expect(traceText()).not.toContain("le navigateur a retiré");
+
+    // Derrière la tête : noté, rien à relire.
+    setTime(video, 50);
+    const seeks = remuxer.seeks.length;
+    FakeSource.instances[0].buffers[0].systemEvicts(40, 45);
+    await flush();
+    expect(traceText()).toContain("le navigateur a retiré vidéo 40.00–45.00 — tête à 50.0 s");
+    expect((mse as unknown as Facts).recoveryFacts).toMatchObject({ evictions: 1, evictionsAhead: 0 });
+    expect(remuxer.seeks).toHaveLength(seeks);
+    mse.destroy();
+  });
+
+  it("relit tout de suite ce qui manque devant la tête, sans toucher à ce qui est dessous", async () => {
+    FakeBuffer.managed = true;
+    const video = fakeVideo();
+    const onError = vi.fn();
+    let index = 0;
+    const seeks: number[] = [];
+    const remuxer = Object.assign(fakeRemuxer(500), {
+      seeks,
+      seekTo: (at: number) => {
+        seeks.push(at);
+        index = Math.floor(at / 2);
+      },
+      diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0, segmentStartSeconds: index * 2 }),
+      nextSegment: async () => {
+        index += 1;
+        return { video: [new Uint8Array([index])], audio: new Uint8Array([index]), subtitles: [], endSeconds: index * 2 };
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError });
+    const internals = mse as unknown as { fillTask: Promise<void> | null };
+    await until(() => internals.fillTask === null && video.buffered.length > 0 && video.buffered.end(0) >= 30, "le premier remplissage est fini");
+    setTime(video, 2);
+    const buffers = FakeSource.instances[0].buffers;
+    const removedBefore = buffers.map((b) => b.removed.length);
+
+    // Le système retire les douze dernières secondes de l'image : l'avance tombe de 30 à 18 s.
+    buffers[0].systemEvicts(20, 40);
+    await until(() => seeks.length > 0, "le lecteur de fichier renvoyé au trou");
+    // Au début du trou, sur l'horloge du fichier…
+    expect(seeks[0]).toBeCloseTo(19.8, 5);
+    expect(traceText()).toContain("devant elle dès 20.0 s");
+    expect(traceText()).toContain("relecture de ce que le navigateur a retiré, depuis 20.0 s");
+    await until(() => internals.fillTask === null && buffers[0].appended.length > 20, "la relecture envoyée");
+    // …et rien n'a été retiré sous la tête : seulement ce qui allait être relu.
+    const removals = buffers.flatMap((b, i) => b.removed.slice(removedBefore[i]));
+    expect(removals.length).toBeGreaterThan(0);
+    for (const [from] of removals) expect(from).toBeGreaterThan(2);
+    // Le retrait de la relecture est le sien : il ne compte pas comme une éviction.
+    expect((mse as unknown as Facts).recoveryFacts).toMatchObject({ evictions: 1, evictionsAhead: 1 });
+    expect(onError).not.toHaveBeenCalled();
+    mse.destroy();
+  });
+
+  it("ne relit pas plus de trois fois par minute un système qui retire à mesure", async () => {
+    FakeBuffer.managed = true;
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(2000);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = mse as unknown as { fillTask: Promise<void> | null };
+    await until(() => internals.fillTask === null && video.buffered.length > 0 && video.buffered.end(0) >= 30, "le premier remplissage est fini");
+    traceReset();
+    for (let i = 0; i < 5; i++) {
+      const end = video.buffered.end(0);
+      FakeSource.instances[0].buffers[0].systemEvicts(end - 5, end);
+      await until(() => internals.fillTask === null, "la relecture finie");
+      await flush();
+    }
+    expect(traceText().match(/relecture de ce que le navigateur a retiré/g)?.length ?? 0).toBeLessThanOrEqual(3);
+    expect(traceText()).toContain("retraits répétés");
+    mse.destroy();
+  });
+
+  it("ne s'abonne à rien sur une MediaSource ordinaire", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(50), PLAN, { onError: vi.fn() });
+    await until(() => video.buffered.length > 0, "du média");
+    FakeSource.instances[0].buffers[0].systemEvicts(0, 4);
+    await flush();
+    expect((mse as unknown as Facts).recoveryFacts.evictions).toBe(0);
+    mse.destroy();
+  });
+});
+
+/**
+ * La relance d'un saut dont le média est arrivé (24/09/2026).
+ *
+ * Même soirée : le média relu couvrait la cible 60 ms après l'envoi, et Safari restait `seeking`
+ * jusqu'à la poussée de l'horloge figée — 6 s, puis 2,9 s depuis le correctif de l'après-midi.
+ * La position est maintenant redemandée dès que le décodeur a eu le temps de faire son travail.
+ */
+describe("la relance d'un saut en attente", () => {
+  type Internals = {
+    watchdog: () => void;
+    watchdogTimer: ReturnType<typeof setInterval> | null;
+    armSeekRelaunch: () => void;
+    fillTask: Promise<void> | null;
+    recoveryFacts: { seekRelaunches: number };
+  };
+  const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+  afterEach(() => vi.useRealTimers());
+
+  async function stuckSeek() {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(200), PLAN, { onError: vi.fn() });
+    const internals = mse as unknown as Internals;
+    await until(() => internals.fillTask === null && video.buffered.length > 0 && video.buffered.end(0) > 12, "du média devant la tête");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    // Comme à 11:24 : la cible à 2,8 s de l'image clé où commence le média relu.
+    const head = video.buffered.start(0) + 2.8;
+    setTime(video, head);
+    Object.assign(video, { seeking: true });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    return { video, mse, internals, head };
+  }
+
+  it("redemande la position quand le décodeur a eu le temps de finir, une fois", async () => {
+    const { video, mse, internals, head } = await stuckSeek();
+    internals.armSeekRelaunch();
+    // 300 ms plus 200 ms par seconde à décoder : 860 ms. Avant, rien.
+    vi.setSystemTime(Date.now() + 600);
+    internals.watchdog();
+    expect(video.currentTime).toBe(head);
+    vi.setSystemTime(Date.now() + 300);
+    internals.watchdog();
+    expect(video.currentTime).toBeCloseTo(head + 0.08, 5);
+    expect(traceText()).toContain("on redemande la position");
+    expect(internals.recoveryFacts.seekRelaunches).toBe(1);
+
+    // Une seule par saut : si elle n'a pas suffi, c'est à l'horloge figée de reprendre.
+    const after = video.currentTime;
+    internals.armSeekRelaunch();
+    vi.setSystemTime(Date.now() + 2000);
+    internals.watchdog();
+    expect(video.currentTime).toBe(after);
+    mse.destroy();
+  });
+
+  it("ne touche pas à un saut qui aboutit de lui-même", async () => {
+    const { video, mse, internals, head } = await stuckSeek();
+    internals.armSeekRelaunch();
+    vi.setSystemTime(Date.now() + 400);
+    Object.assign(video, { seeking: false });
+    video.dispatchEvent(new Event("seeked"));
+    vi.setSystemTime(Date.now() + 2000);
+    internals.watchdog();
+    expect(video.currentTime).toBe(head);
+    expect(internals.recoveryFacts.seekRelaunches).toBe(0);
+    mse.destroy();
+  });
+
+  it("n'arme rien quand la tête n'a pas encore de média", async () => {
+    const { video, mse, internals } = await stuckSeek();
+    setTime(video, 900);
+    internals.armSeekRelaunch();
+    vi.setSystemTime(Date.now() + 5000);
+    internals.watchdog();
+    expect(internals.recoveryFacts.seekRelaunches).toBe(0);
     mse.destroy();
   });
 });

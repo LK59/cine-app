@@ -134,8 +134,40 @@ const NETWORK_TRIM_MARGIN_SECONDS = 1;
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
 
+/** Ce que la ligne `stop` apprend des reprises de la séance — voir `MseSource.recoveryFacts`. */
+export interface RecoveryFacts {
+  recoveries: number;
+  frozenNudges: number;
+  escalations: number;
+  /** Plages que le navigateur a retirées de lui-même (ManagedMediaSource seulement). */
+  evictions: number;
+  /** Dont devant la tête : ce que la lecture allait chercher. */
+  evictionsAhead: number;
+  /** Sauts relancés parce que Safari restait `seeking` sur un média arrivé. */
+  seekRelaunches: number;
+}
+
 /** How often that is checked. Often enough that a recovery is not itself the thing you notice. */
 const WATCHDOG_MS = 250;
+
+/**
+ * La relance d'un saut resté en attente alors que son média est arrivé — voir `armSeekRelaunch`.
+ *
+ * Trois blocages du 24/09/2026 (un iPhone, deux fois un Mac) : le média relu couvrait la cible
+ * 60 ms après l'envoi, et Safari restait `seeking` jusqu'à ce qu'on lui redonne la position. Le
+ * délai laisse au décodeur le temps de traverser ce qui sépare l'image clé de la cible, mesuré
+ * large — neuf secondes de 4K se décodent en une seconde et demie sur un iPhone, soit 170 ms par
+ * seconde —, pour ne jamais relancer un saut qui était simplement en train de se faire.
+ */
+const SEEK_RELAUNCH_BASE_MS = 300;
+const SEEK_RELAUNCH_PER_SECOND_MS = 200;
+
+/**
+ * Combien de relectures, par minute, de ce que le navigateur a retiré devant la tête — voir
+ * `refillEvicted`. Au-delà, un système qui manque de mémoire retirerait à mesure qu'on relit : le
+ * remplissage ordinaire et le chien de garde reprennent la main, comme avant.
+ */
+const EVICTION_REFILLS_PER_MINUTE = 3;
 /** Voir `open` : l'attente de `sourceopen` ne peut pas durer toujours. */
 const SOURCE_OPEN_TIMEOUT_MS = 15_000;
 
@@ -257,6 +289,25 @@ export class MseSource {
 
 
   private seeksServed = 0;
+  /**
+   * Les retraits en cours de ce lecteur, par tampon — ce qui distingue, dans `bufferedchange`, nos
+   * propres purges de celles que le système décide seul. Voir `removeRange`.
+   */
+  private readonly ownRemovals = new Map<SourceBuffer, number>();
+  /** Les écouteurs `bufferedchange`, pour les retirer à la destruction. */
+  private readonly evictionListeners: [SourceBuffer, EventListener][] = [];
+  /** Plages retirées par le navigateur sur la séance, et parmi elles celles devant la tête. */
+  private evictions = 0;
+  private evictionsAhead = 0;
+  /** Les relectures d'éviction de la dernière minute, et celle qui attend la lecture en cours. */
+  private evictionRefills: number[] = [];
+  private evictionRefillQueued = false;
+  /** La relance d'un saut en attente : quand, pour quelle tête, et si ce saut-ci l'a déjà eue. */
+  private relaunchDue: number | null = null;
+  private relaunchHead = -1;
+  private relaunchArmedAt = 0;
+  private relaunchSpent = false;
+  private seekRelaunches = 0;
   private recoveries = 0;
   private recoveryTarget = -1;
   private recoveryStreak = 0;
@@ -429,6 +480,8 @@ export class MseSource {
         this.audioBuffer.mode = "segments";
         this.audioOps = new BufferQueue(this.audioBuffer, () => this.elementState());
       }
+      this.watchEvictions(this.videoBuffer, "vidéo");
+      if (this.audioBuffer) this.watchEvictions(this.audioBuffer, "audio");
 
       await this.appendTo(this.videoOps, this.plan.videoInit, this.generation);
       trace("segment d'initialisation vidéo accepté");
@@ -597,6 +650,10 @@ export class MseSource {
     // This object's own move, already being served — serving it again would clear the buffers
     // it is in the middle of refilling.
     if (this.seekState.isOwnMove(target)) return void this.fill();
+    // L'état des deux tampons au moment du geste (24/09/2026). Trois sauts de +10 s « dans le
+    // chargé » ont trouvé, 0,7 s plus tard, la cible sans média — et rien ne disait si elle
+    // l'avait vraiment été, ni dans quel tampon : la trace du saut le dit maintenant.
+    trace(`saut de l'élément vers ${target.toFixed(1)} s — vidéo ${this.spansNear(this.videoBuffer, target)} · audio ${this.audioBuffer ? this.spansNear(this.audioBuffer, target) : "aucun"}`);
     // A deliberate move settles the question of where playback belongs — et c'est vrai aussi d'un
     // saut dans ce qui est déjà chargé. Oublié sur ce raccourci jusqu'au 22/09/2026 : pause, saut
     // en avant, Lecture, et la garde ramenait la tête à sa position de pause.
@@ -865,6 +922,7 @@ export class MseSource {
         // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
         // À chaque envoi, et non plus au rythme de la trace : les deux étaient liés par accident.
         this.guard.mediaArrived();
+        this.armSeekRelaunch();
         const lanes = this.laneProgress();
         if (depth > deepestSoFar + 0.01 || lanes > furthestLanes + 0.01) {
           deepestSoFar = Math.max(deepestSoFar, depth);
@@ -917,7 +975,8 @@ export class MseSource {
         if (Number.isFinite(distance) && distance > MISPLACED_SECONDS) {
           trace(
             `reprise : média à ${distance.toFixed(1)} s de la tête (${this.anchor.toFixed(1)} s), ` +
-              `lecteur à ${this.readUpTo.toFixed(1)} s`
+              `lecteur à ${this.readUpTo.toFixed(1)} s — vidéo ${this.spansNear(this.videoBuffer, this.anchor)} · ` +
+              `audio ${this.audioBuffer ? this.spansNear(this.audioBuffer, this.anchor) : "aucun"}`
           );
           // Vers la cible du saut en cours s'il y en a un, pas vers la tête partie ailleurs : c'était
           // une relecture pour rien, suivie de celle vers la cible (22/09/2026).
@@ -969,6 +1028,165 @@ export class MseSource {
   }
 
 
+  /**
+   * Un retrait de ce lecteur, compté le temps qu'il dure — voir `onBufferedChange`.
+   *
+   * Compté dans l'opération elle-même, pas à la mise en file : un retrait qui attend derrière un
+   * envoi ne doit pas couvrir une éviction faite *pendant* cet envoi, qui est justement le moment
+   * où le navigateur fait de la place.
+   */
+  private removeRange(queue: BufferQueue, from: number, to: number): Promise<void> {
+    const buffer = queue.buffer;
+    let started = false;
+    return queue
+      .enqueue(() => {
+        started = true;
+        this.ownRemovals.set(buffer, (this.ownRemovals.get(buffer) ?? 0) + 1);
+        buffer.remove(from, to);
+      })
+      .finally(() => {
+        if (started) this.ownRemovals.set(buffer, Math.max(0, (this.ownRemovals.get(buffer) ?? 1) - 1));
+      });
+  }
+
+  /**
+   * Écoute ce que le navigateur retire de lui-même (24/09/2026).
+   *
+   * ManagedMediaSource — Safari, sur iPhone comme sur Mac — a le droit de retirer du média d'un
+   * tampon quand la mémoire manque, et le dit par `bufferedchange` avec les plages retirées. Rien
+   * ne l'écoutait : trois sauts ont trouvé leur cible vidée sans qu'on puisse dire si c'était le
+   * système ou ce lecteur. Les MediaSource ordinaires n'ont pas cet événement, ni ce droit.
+   */
+  private watchEvictions(buffer: SourceBuffer, lane: "vidéo" | "audio"): void {
+    if (!("onbufferedchange" in buffer)) return;
+    const listener: EventListener = (event) => this.onBufferedChange(buffer, lane, event as BufferedChangeEvent);
+    buffer.addEventListener("bufferedchange", listener);
+    this.evictionListeners.push([buffer, listener]);
+  }
+
+  private onBufferedChange(buffer: SourceBuffer, lane: "vidéo" | "audio", event: BufferedChangeEvent): void {
+    // Jamais sur le chemin d'une lecture : ce n'est qu'une écoute.
+    try {
+      if (this.destroyed) return;
+      const removed = event.removedRanges;
+      if (!removed || removed.length === 0) return;
+      // Nos propres retraits — un saut, la place faite derrière la tête — sont déjà dans la trace.
+      if ((this.ownRemovals.get(buffer) ?? 0) > 0) return;
+      const head = this.anchor;
+      const spans: string[] = [];
+      let aheadFrom = Infinity;
+      for (let i = 0; i < removed.length; i++) {
+        const start = removed.start(i);
+        const end = removed.end(i);
+        if (spans.length < 4) spans.push(`${start.toFixed(2)}–${end.toFixed(2)}`);
+        // Devant la tête, ou sous elle : ce que la lecture va chercher.
+        if (end > head + 0.1) aheadFrom = Math.min(aheadFrom, Math.max(start, head));
+      }
+      const ahead = Number.isFinite(aheadFrom);
+      this.evictions += 1;
+      if (ahead) this.evictionsAhead += 1;
+      trace(
+        `le navigateur a retiré ${lane} ${spans.join(" · ")} — tête à ${head.toFixed(1)} s` +
+          (ahead ? `, devant elle dès ${aheadFrom.toFixed(1)} s` : "")
+      );
+      if (ahead) this.refillEvicted();
+    } catch {
+      /* rien */
+    }
+  }
+
+  /**
+   * Relit tout de suite ce que le navigateur a retiré devant la tête.
+   *
+   * Sans cela, on le découvrait au pire moment : la tête arrivait sur le trou et s'arrêtait, ou un
+   * saut « dans le chargé » tombait sur du vide — et le chien de garde reprenait après coup. Le
+   * trou commence là où le média s'interrompt devant la tête ; le lecteur y est renvoyé, et la
+   * suite est celle d'une coupure réseau gardée (`trimBeforeNextAppend`) : ce qui suit le trou est
+   * retiré puis relu d'un seul tenant, et un groupe relu qui commencerait sous la tête devient une
+   * reprise ordinaire.
+   */
+  private refillEvicted(): void {
+    if (this.evictionRefillQueued) return;
+    const now = Date.now();
+    this.evictionRefills = this.evictionRefills.filter((at) => now - at < 60_000);
+    if (this.evictionRefills.length >= EVICTION_REFILLS_PER_MINUTE) {
+      trace("retraits répétés : la relecture est laissée au remplissage ordinaire");
+      return;
+    }
+    this.evictionRefills.push(now);
+    this.evictionRefillQueued = true;
+    const generation = this.generation;
+    void (async () => {
+      // Le lecteur ne se déplace jamais sous une lecture en cours — voir `performSeek`.
+      try {
+        await this.fillTask?.catch(() => {});
+      } finally {
+        this.evictionRefillQueued = false;
+      }
+      // Un saut, une reprise, une coupure gardée ou une destruction entre-temps : ils
+      // repositionnent tout eux-mêmes.
+      if (this.destroyed || this.stuck || this.generation !== generation || this.networkHold) return;
+      if (this.seekState.requested !== null || this.pendingStart !== null) return;
+      const hole = this.bufferedEnd();
+      // Déjà relu, ou le trou est au-delà de ce qui avait été lu : rien à faire.
+      if (hole >= this.readUpTo + this.delaySeconds - 0.5) return;
+      if (hole <= this.video.currentTime + 0.1) {
+        trace(`relecture de ce que le navigateur a retiré : sous la tête, à ${this.anchor.toFixed(1)} s`);
+        if (!this.recover(this.anchor)) this.handOver(this.anchor);
+        return;
+      }
+      trace(`relecture de ce que le navigateur a retiré, depuis ${hole.toFixed(1)} s`);
+      this.remuxer.seekTo(Math.max(0, hole - this.delaySeconds));
+      this.readUpTo = hole;
+      this.ended = false;
+      this.trimBeforeNextAppend = true;
+      void this.fill();
+    })();
+  }
+
+  /**
+   * Arme la relance d'un saut dont le média vient d'arriver — voir `SEEK_RELAUNCH_BASE_MS`.
+   *
+   * Appelée après chaque envoi : c'est le moment où un saut en attente a enfin de quoi finir. Une
+   * seule relance par saut ; si elle ne suffit pas, l'horloge figée (`watchForFrozenClock`)
+   * reprend avec son propre délai, comme avant.
+   */
+  private armSeekRelaunch(): void {
+    if (this.relaunchDue !== null || this.relaunchSpent) return;
+    if (!this.video.seeking || this.pendingStart !== null || this.seekState.requested !== null) return;
+    const head = this.video.currentTime;
+    const ranges = this.playable;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= head && head < ranges.end(i)) {
+        const toDecode = head - ranges.start(i);
+        const delay = Math.min(this.seekingPatienceMs(head), SEEK_RELAUNCH_BASE_MS + SEEK_RELAUNCH_PER_SECOND_MS * toDecode);
+        this.relaunchArmedAt = Date.now();
+        this.relaunchDue = this.relaunchArmedAt + delay;
+        this.relaunchHead = head;
+        return;
+      }
+    }
+  }
+
+  /** La relance, si elle est due et toujours utile. Vrai quand la position a été redemandée. */
+  private relaunchSeekIfDue(now: number): boolean {
+    if (this.relaunchDue === null || Date.now() < this.relaunchDue) return false;
+    this.relaunchDue = null;
+    // Arrivé entre-temps, parti ailleurs, ou le média a de nouveau disparu : plus rien à relancer.
+    if (!this.video.seeking || Math.abs(now - this.relaunchHead) > 0.05 || !this.isBufferedAt(now)) return false;
+    this.relaunchSpent = true;
+    this.seekRelaunches += 1;
+    trace(`saut toujours en attente ${Date.now() - this.relaunchArmedAt} ms après l'arrivée de son média — on redemande la position à ${now.toFixed(2)} s`);
+    this.guard.forgetPause();
+    this.seekState.moved(now + FROZEN_STEP);
+    this.video.currentTime = now + FROZEN_STEP;
+    // Comme pour la poussée de l'horloge figée : le pas de la relance n'est pas de la lecture, et
+    // son délai à elle repart d'ici.
+    this.lastClockAt = now + FROZEN_STEP;
+    this.frozenSince = Date.now();
+    return true;
+  }
+
   /** Declares the stream over, if it still can be. Never throws. */
   private endStream(): void {
     try {
@@ -1013,7 +1231,7 @@ export class MseSource {
       if (!queue || !buffer || buffer.buffered.length === 0 || buffer.buffered.start(0) >= until) continue;
       // Queued rather than fired at the buffer directly: eviction is triggered by a full buffer
       // in the middle of an append, which is exactly when the buffer is busy.
-      void queue.enqueue(() => buffer.remove(0, until)).catch(() => {});
+      void this.removeRange(queue, 0, until).catch(() => {});
     }
   }
 
@@ -1105,6 +1323,9 @@ export class MseSource {
     this.seekState.serving(playerSeconds);
     this.readUpTo = playerSeconds;
     this.seeksServed += 1;
+    // Un nouveau saut a droit à sa propre relance, et celle du précédent ne vaut plus.
+    this.relaunchDue = null;
+    this.relaunchSpent = false;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
     // the very same place — doubling the work at exactly the moment it is most wanted elsewhere.
@@ -1216,7 +1437,7 @@ export class MseSource {
     if (queue.buffer.buffered.length === 0 || this.source.readyState === "closed") return;
     const end = Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9;
     if (from >= end) return;
-    await queue.enqueue(() => queue.buffer.remove(Math.max(0, from), end)).catch(() => {
+    await this.removeRange(queue, Math.max(0, from), end).catch(() => {
       // Refusé : l'envoi qui suit remplacera la même plage, comme la norme le prévoit.
     });
   }
@@ -1263,7 +1484,7 @@ export class MseSource {
     // A finite end rather than Infinity: it is what the specification's examples use and what
     // every implementation is exercised against.
     const end = Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9;
-    await queue.enqueue(() => queue.buffer.remove(0, end)).catch(() => {
+    await this.removeRange(queue, 0, end).catch(() => {
       // A removal the browser declines is not worth failing a seek over; the append that follows
       // will overwrite the range anyway.
     });
@@ -1294,6 +1515,8 @@ export class MseSource {
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
+    this.relaunchDue = null;
+    this.relaunchSpent = false;
     this.seekState.arrive(this.video.currentTime);
   };
 
@@ -1320,6 +1543,7 @@ export class MseSource {
     // organise. « Rien sous la tête » est donc l'état normal ici, pas une panne : la ramener
     // ferait repartir du début un film qu'on venait de demander à reprendre.
     if (this.pendingStart !== null) return;
+    if (this.relaunchSeekIfDue(now)) return;
     // On media: the only stall left is a clock that has stopped anyway, which is its own check.
     if (this.isBufferedAt(now)) return this.watchForFrozenClock(now);
 
@@ -1496,6 +1720,7 @@ export class MseSource {
       recoveryStreak: this.recoveryStreak,
       frozenNudges: this.frozenNudges,
       recoveries: this.recoveries,
+      evictions: this.evictions,
       // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
       streaming: typeof managed === "boolean" ? managed : "sans objet",
       steps: traceRecent(STALL_TRACE_MS).join(" | "),
@@ -1732,8 +1957,15 @@ export class MseSource {
   }
 
   /** What the `stop` line wants to know of the recoveries over the whole session. */
-  get recoveryFacts(): { recoveries: number; frozenNudges: number; escalations: number } {
-    return { recoveries: this.recoveries, frozenNudges: this.frozenNudgesTotal, escalations: this.escalations };
+  get recoveryFacts(): RecoveryFacts {
+    return {
+      recoveries: this.recoveries,
+      frozenNudges: this.frozenNudgesTotal,
+      escalations: this.escalations,
+      evictions: this.evictions,
+      evictionsAhead: this.evictionsAhead,
+      seekRelaunches: this.seekRelaunches,
+    };
   }
 
   /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
@@ -1864,6 +2096,8 @@ export class MseSource {
     this.networkRetryTimer = null;
     this.video.removeEventListener("error", this.onElementError);
     this.source.removeEventListener("sourceclose", this.onSourceClosed);
+    for (const [buffer, listener] of this.evictionListeners) buffer.removeEventListener("bufferedchange", listener);
+    this.evictionListeners.length = 0;
     this.videoOps?.close();
     this.audioOps?.close();
 

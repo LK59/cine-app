@@ -97,7 +97,11 @@ every native-player line carries a `session` id (a rebuild rewrites `start`, so 
 by that, never by account and time), and `stop` is the session's summary: `watched`, `waits` /
 `waitedMs` / `longestWaitMs` (stops of 250 ms or more mid-playback — `stall` only fires at 5 s),
 `seeks` / `seekWaitMs`, `audioSwitches`, `backgrounds` / `backgroundMs` / `backgroundRebuilds` (a
-return from the background that finds the source closed also writes a `rebuild` line with `hiddenMs`). A page iOS kills in the background never gets to send
+return from the background that finds the source closed also writes a `rebuild` line with `hiddenMs`),
+and since 2026-09-24 `evictions` / `evictionsAhead` (ranges ManagedMediaSource dropped on its own,
+heard through `bufferedchange` — the player's own removals are not counted) and `seekRelaunches`
+(a seek Safari left `seeking` over media that had arrived). A `seek` line carries `ranges`, the
+element's buffered ranges when the viewer asked, and its trace the two buffers separately. A page iOS kills in the background never gets to send
 it, so the summary is kept in `localStorage` while the session lives (`src/lib/unsentStop.ts`)
 and sent on the next launch as `why: "lost"` with `lateByMs`; the weekly reading keeps the last
 line per `session`. Both files are one

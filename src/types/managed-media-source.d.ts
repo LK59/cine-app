@@ -5,7 +5,15 @@
 // that decision to the system — it tells the page when to stream and when to stop, and may evict
 // buffered media on its own — and in exchange it works on the phone.
 
-interface ManagedSourceBuffer extends SourceBuffer {}
+interface ManagedSourceBuffer extends SourceBuffer {
+  onbufferedchange: ((this: ManagedSourceBuffer, ev: BufferedChangeEvent) => unknown) | null;
+}
+
+/** What a ManagedSourceBuffer reports each time its ranges change — including by the system's own eviction. */
+interface BufferedChangeEvent extends Event {
+  readonly addedRanges: TimeRanges;
+  readonly removedRanges: TimeRanges;
+}
 
 declare class ManagedMediaSource extends EventTarget {
   static isTypeSupported(type: string): boolean;

@@ -102,7 +102,11 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
   const keep = (key: string, value: unknown): void => {
     // 28 : le banc d'essai ajoute `bench` en tête des lignes, et une ligne `stall` en portait déjà
     // 24 — la dernière, `steps`, la plus précieuse, serait tombée.
-    if (kept >= 28 || key.length > 40) return;
+    // 40 depuis le 24/09/2026 : la ligne `stop` touchait les 28 depuis que le bilan de séance y
+    // est, et perdait en silence ses derniers champs — les images perdues, et `lateByMs` d'un
+    // bilan renvoyé après coup, sans lequel la frise le place au mauvais moment. Le plafond reste
+    // une borne de disque ; il n'a jamais voulu choisir quels faits d'une ligne honnête écrire.
+    if (kept >= 40 || key.length > 40) return;
     if (typeof value === "number" && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the

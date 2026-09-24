@@ -12,7 +12,7 @@ import { HttpByteSource, type ByteSource } from "./byteSource";
 import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
 import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
-import { MseSource } from "./mseSource";
+import { MseSource, type RecoveryFacts } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
@@ -510,8 +510,8 @@ export class RemuxPlayback {
   }
 
   /** Le pire écart d'horloge du son ré-encodé, `null` quand le son est copié — voir `Remuxer.audioTiming`. */
-  /** Reprises, poussées et barreaux gravis sur la séance, pour la ligne `stop` — voir `MseSource.recoveryFacts`. */
-  recoveryFacts(): { recoveries: number; frozenNudges: number; escalations: number } | null {
+  /** Reprises, poussées, barreaux gravis et évictions sur la séance, pour la ligne `stop` — voir `MseSource.recoveryFacts`. */
+  recoveryFacts(): RecoveryFacts | null {
     return this.mse?.recoveryFacts ?? null;
   }
 

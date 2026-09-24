@@ -65,7 +65,7 @@ describe("logPlaybackEvent", () => {
     const written = lines()[0];
     expect(written.reason.length).toBe(500);
     // Three of its own keys, plus what a caller is allowed to add.
-    expect(Object.keys(written).length).toBeLessThanOrEqual(31);
+    expect(Object.keys(written).length).toBeLessThanOrEqual(43);
   });
 
   it("laisse de côté ce qui n'est ni texte, ni nombre, ni booléen", async () => {
@@ -220,6 +220,24 @@ describe("l'événement d'un changement de piste audio", () => {
  * Un blocage de lecture s'écrit (22/09/2026) : une horloge figée dix-neuf secondes sous un
  * indicateur de chargement ne laissait au journal que la ligne `seek` d'avant.
  */
+describe("le bilan d'une séance", () => {
+  it("garde tous ses champs, les derniers compris", async () => {
+    // 24/09/2026 : la ligne `stop` atteignait le plafond de 28 champs, et ce qui venait en
+    // dernier — les images perdues, `lateByMs` d'un bilan renvoyé après coup — tombait sans un mot.
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "stop", {
+      itemId: "x", title: "t", container: "mkv", video: "hevc", range: "SDR", agent: "a", session: "s1", path: "remux",
+      why: "lost", at: 812.4, watched: 1800, ended: false, rebuild: 1, audio: "eac3 → aac",
+      waits: 3, waitedMs: 2400, longestWaitMs: 1200, seeks: 6, seekWaitMs: 3100, audioSwitches: 1,
+      backgrounds: 2, backgroundMs: 40000, backgroundRebuilds: 1,
+      audioSync: { sourceMs: 12, encoderMs: 8 }, recoveries: 2, frozenNudges: 1, escalations: 1,
+      evictions: 4, evictionsAhead: 1, seekRelaunches: 1, frames: { total: 43000, dropped: 12 }, lateByMs: 5400,
+    });
+    const line = lines()[0];
+    expect(line).toMatchObject({ "frames.dropped": 12, lateByMs: 5400, evictions: 4, seekRelaunches: 1 });
+  });
+});
+
 describe("l'événement d'un blocage de lecture", () => {
   it("est accepté, et garde tout ce que la source en dit, trace comprise", async () => {
     const { isPlayerEventKind, logPlaybackEvent } = await import("@/lib/playerLog");

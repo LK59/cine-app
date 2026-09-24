@@ -31,7 +31,8 @@ import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
  * Les règles de Louis, qui sont le contrat de cet écran :
  *  - il se propose tant que le marqueur du compte est allumé (voir `onboardingDb`) ;
  *  - « Passer » le cache jusqu'au prochain lancement seulement — `sessionStorage`, que ferme la
- *    fermeture de l'application ; une déconnexion en cours de route ne change rien ;
+ *    fermeture de l'application, et au plus `SKIP_HOLD_MS` (voir là) ; une déconnexion en cours
+ *    de route ne change rien ;
  *  - seul le bouton de fin éteint le marqueur ;
  *  - les réglages déjà faits chez Jellyfin sont préremplis ; le français seulement là où il n'y a
  *    rien, pour ne jamais écraser un choix fait exprès ;
@@ -42,6 +43,16 @@ import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
  */
 
 const SKIPPED_KEY = "cine:onboarding-skipped";
+/**
+ * Combien de temps « Passer » tient, au plus (24/09/2026).
+ *
+ * Le « prochain lancement » de `sessionStorage` n'arrive jamais sur un ordinateur : Safari garde
+ * la session d'un onglet à travers les rechargements, et la rend à la réouverture des fenêtres.
+ * Un compte sur Mac, passé une fois le 21/09, recevait encore « à faire » du serveur trois jours
+ * plus tard sans que l'accueil s'affiche. On y range donc l'heure du « Passer » : il vaut pour la
+ * soirée, pas pour la vie de l'onglet. L'ancienne valeur « 1 » se lit comme expirée.
+ */
+const SKIP_HOLD_MS = 6 * 3600_000;
 /** L'étape où reprendre après le rechargement qu'impose un changement de langue. */
 const RESUME_KEY = "cine:onboarding-resume";
 
@@ -67,7 +78,10 @@ function writeSession(key: string, value: string | null) {
 export function PlayerOnboardingGate() {
   const { data } = useSWR<{ pending: boolean }>("/api/onboarding", fetcher, { revalidateOnFocus: false });
   // Lus une fois, au montage : ce sont des faits de ce lancement-ci.
-  const [skipped] = useState(() => typeof window !== "undefined" && readSession(SKIPPED_KEY) === "1");
+  const [skipped] = useState(() => {
+    const at = typeof window !== "undefined" ? Number(readSession(SKIPPED_KEY)) : NaN;
+    return Number.isFinite(at) && Date.now() - at < SKIP_HOLD_MS;
+  });
   const [resumeAt] = useState(() => {
     const raw = typeof window !== "undefined" ? readSession(RESUME_KEY) : null;
     return raw === null ? null : Number(raw) || 0;
@@ -90,7 +104,7 @@ export function PlayerOnboardingGate() {
     <PlayerOnboarding
       startAt={resumeAt ?? 0}
       onSkip={() => {
-        writeSession(SKIPPED_KEY, "1");
+        writeSession(SKIPPED_KEY, String(Date.now()));
         setClosed(true);
         setManual(false);
       }}

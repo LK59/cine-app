@@ -75,7 +75,7 @@ describe("l'écran d'accueil", () => {
     draw();
     fireEvent.click(await screen.findByText("player.onboarding.skip"));
     expect(screen.queryByText(/welcomeTitle/)).toBeNull();
-    expect(sessionStorage.getItem("cine:onboarding-skipped")).toBe("1");
+    expect(Number(sessionStorage.getItem("cine:onboarding-skipped"))).toBeGreaterThan(0);
     expect(posted("/api/onboarding")).toHaveLength(0);
 
     // Même onglet, remonté : toujours caché. Nouveau lancement (session vide) : il revient.
@@ -87,6 +87,24 @@ describe("l'écran d'accueil", () => {
     sessionStorage.clear();
     draw();
     expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
+  });
+
+  it("« Passer » ne tient pas plus de quelques heures dans un onglet qui ne se ferme jamais", async () => {
+    // Safari sur Mac garde la session d'un onglet à travers rechargements et réouvertures : un
+    // « Passer » du 21/09 cachait encore l'accueil le 24, marqueur allumé côté serveur.
+    sessionStorage.setItem("cine:onboarding-skipped", String(Date.now() - 7 * 3600_000));
+    draw();
+    expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
+    cleanup();
+    // L'ancienne valeur, écrite avant le correctif, ne cache plus rien.
+    sessionStorage.setItem("cine:onboarding-skipped", "1");
+    draw();
+    expect(await screen.findByText("player.onboarding.welcomeTitle:Louis")).toBeTruthy();
+    cleanup();
+    sessionStorage.setItem("cine:onboarding-skipped", String(Date.now() - 3600_000));
+    draw();
+    await waitFor(() => expect(called("/api/onboarding")).toBe(true));
+    expect(screen.queryByText(/welcomeTitle/)).toBeNull();
   });
 
   it("préremplit le français là où rien n'est réglé, et l'enregistre", async () => {

@@ -64,6 +64,7 @@ function warmNextNear(nextId: string | null, position: number, duration: number,
 }
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
+import type { RecoveryFacts } from "@/lib/webcodecs/mseSource";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import type { PlaybackState } from "@/app/api/jellyfin/playback-state/[itemId]/route";
 import {
@@ -174,7 +175,7 @@ function useElapsedSince(startedAt: number | null): number | null {
 function syncFacts(
   remux: {
     audioTiming(): { sourceMs: number; encoderMs: number } | null;
-    recoveryFacts?(): { recoveries: number; frozenNudges: number; escalations: number } | null;
+    recoveryFacts?(): RecoveryFacts | null;
   } | null,
   element: HTMLVideoElement | null
 ): Record<string, unknown> {
@@ -193,6 +194,13 @@ function syncFacts(
       facts.recoveries = recovery.recoveries;
       facts.frozenNudges = recovery.frozenNudges;
       if (recovery.escalations > 0) facts.escalations = recovery.escalations;
+      // Ce que Safari a retiré de lui-même, et les sauts qu'il a fallu relancer (24/09/2026) :
+      // écrits seulement s'il y en a eu, comme les barreaux.
+      if (recovery.evictions > 0) {
+        facts.evictions = recovery.evictions;
+        facts.evictionsAhead = recovery.evictionsAhead;
+      }
+      if (recovery.seekRelaunches > 0) facts.seekRelaunches = recovery.seekRelaunches;
     }
   } catch {
     // Idem.
@@ -596,7 +604,7 @@ export function ExperimentalPlayerHost({
    */
   const requestedSeekRef = useRef<number | null>(null);
   /** Le saut en cours de mesure, pour la ligne `seek` du journal — le dernier demandé seulement. */
-  const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; hiddenAtStart: number; buffered: boolean } | null>(null);
+  const seekTimingRef = useRef<{ from: number; to: number; startedAt: number; hiddenAtStart: number; buffered: boolean; ranges: string } | null>(null);
   /**
    * Un saut qui n'arrive pas là où il était demandé n'écrivait rien : la ligne ne part qu'à
    * l'arrivée. 2012 sur iPhone (22/09/2026) : une tête passée de 2141 à 1681 s sans une trace.
@@ -617,6 +625,7 @@ export function ExperimentalPlayerHost({
       from: Math.round(timing.from),
       to: Math.round(timing.to),
       buffered: timing.buffered,
+      ranges: timing.ranges,
       ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
       superseded: true,
       landedAt: Math.round(landedAt * 10) / 10,
@@ -1613,6 +1622,7 @@ export function ExperimentalPlayerHost({
             from: Math.round(timing.from),
             to: Math.round(timing.to),
             buffered: timing.buffered,
+            ranges: timing.ranges,
             tookMs: seekElapsed(tally, timing),
             // Ce que la source a fait entre la demande et l'arrivée — et une demi-seconde avant,
             // pour le geste qui l'a lancée. Un saut arrière suivi d'un blocage (22/09/2026) ne
@@ -1994,11 +2004,25 @@ export function ExperimentalPlayerHost({
     // remplace aussi sa mesure : c'est le dernier geste qui compte.
     const element = videoElRef.current;
     let buffered = false;
+    // Les plages elles-mêmes, pas seulement « la cible y est » (24/09/2026) : trois sauts notés
+    // `buffered` ont trouvé leur cible vide 0,7 s plus tard, et la ligne ne permettait pas de
+    // dire ce qu'il y avait autour. Les quatre plus proches de la cible, écrites court.
+    const near: [number, number][] = [];
     for (let i = 0; element && i < element.buffered.length; i++) {
-      if (element.buffered.start(i) <= seconds && seconds < element.buffered.end(i)) buffered = true;
+      const start = element.buffered.start(i);
+      const end = element.buffered.end(i);
+      if (start <= seconds && seconds < end) buffered = true;
+      near.push([start, end]);
     }
+    const ranges =
+      near
+        .sort((a, b) => Math.abs((a[0] + a[1]) / 2 - seconds) - Math.abs((b[0] + b[1]) / 2 - seconds))
+        .slice(0, 4)
+        .sort((a, b) => a[0] - b[0])
+        .map(([start, end]) => `${start.toFixed(1)}–${end.toFixed(1)}`)
+        .join(" · ") || "vide";
     reportUnarrivedSeek(element?.currentTime ?? positionRef.current, element?.seeking ?? false);
-    seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered };
+    seekTimingRef.current = { from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges };
   };
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */
