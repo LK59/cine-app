@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { logPlaybackEvent, isPlayerEventKind } from "@/lib/playerLog";
+import { recoverLostPosition } from "@/lib/lostStopPosition";
 
 /**
  * The player telling the server what happened to it.
@@ -27,6 +28,14 @@ export async function POST(req: NextRequest) {
   // `bench` envoie la ligne dans le journal du banc : réservé à l'administrateur, qui seul lance
   // un banc. Sinon, n'importe quel compte pourrait sortir ses lignes du journal des spectateurs.
   if (session.role !== "admin") delete cleaned.bench;
+  // Un bilan perdu connaît la dernière position mieux que Jellyfin : il la lui rend, s'il n'a rien
+  // de plus récent (voir `lostStopPosition.ts`). Ce que ça a donné part dans la ligne ; un échec ici
+  // ne coûte que la reprise d'avant, jamais la ligne elle-même.
+  if (body.kind === "stop" && cleaned.why === "lost") {
+    cleaned.resumeFix = await recoverLostPosition(session.jfId, cleaned).catch((error: unknown) =>
+      `échec : ${error instanceof Error ? error.message : String(error)}`.slice(0, 200)
+    );
+  }
   logPlaybackEvent(session.u, body.kind, cleaned);
   return NextResponse.json({ ok: true });
 }
