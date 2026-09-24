@@ -14,6 +14,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
+import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
 import { openOnboarding } from "./onboardingEvents";
@@ -123,21 +124,26 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
             s'ouvre pas est une promesse qu'on ne tient pas. */}
         {me?.role === "admin" && (
           <Group title={t("player.account.groups.admin")}>
+            {/* L'activité des comptes, dans le cinéma et au-dessus de la gestion : c'est là qu'on
+                vient le plus souvent (24/09/2026). Elle remplace ce panneau, et le retour y ramène. */}
+            <Section icon={UsersRound} title={t("player.account.activity")}>
+              <p className="mb-3 text-xs text-subtle">{t("player.account.activityHint")}</p>
+              <button
+                type="button"
+                onClick={() => cinemaNavigate({ account: false, activity: "1" })}
+                className="btn btn-ghost w-full justify-center sm:w-auto"
+              >
+                <UsersRound size={16} />
+                {t("player.account.openActivity")}
+              </button>
+            </Section>
             <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
               <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
                 <SlidersHorizontal size={16} />
                 {t("player.account.openManage")}
               </a>
             </Section>
-            {/* L'activité des comptes, à un geste du cinéma : qui est là, qui regarde quoi, les séances
-                et les journaux de chacun (24/09/2026). */}
-            <Section icon={UsersRound} title={t("player.account.activity")}>
-              <p className="mb-3 text-xs text-subtle">{t("player.account.activityHint")}</p>
-              <a href="/activite" className="btn btn-ghost w-full justify-center sm:w-auto">
-                <UsersRound size={16} />
-                {t("player.account.openActivity")}
-              </a>
-            </Section>
+
             <MaintenanceSection />
             <BenchSection />
           </Group>

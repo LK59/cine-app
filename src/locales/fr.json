@@ -58,8 +58,7 @@
       "content": "Contenu",
       "manage": "Gestion"
     },
-    "tmdb": "TMDB",
-    "activity": "Activité"
+    "tmdb": "TMDB"
   },
   "common": {
     "loading": "Chargement...",
@@ -225,7 +224,8 @@
       "rebuildReasons": "Causes des reconstructions",
       "noRebuild": "Aucune reconstruction cette semaine.",
       "serverErrors": "Erreurs du serveur",
-      "noServerError": "Aucune erreur cette semaine."
+      "noServerError": "Aucune erreur cette semaine.",
+      "staleReloads": "+ {n} rechargement après un déploiement|+ {n} rechargements après un déploiement"
     },
     "accounts": {
       "title": "Comptes ({n})",
@@ -282,7 +282,7 @@
     },
     "logs": {
       "title": "Journaux",
-      "subtitle": "{n} lignes dans ce journal",
+      "subtitle": "Ce journal compte {n} fichier|Ce journal compte {n} fichiers",
       "open": "Ouvrir les journaux",
       "openSeance": "Voir la séance",
       "sources": {
@@ -371,7 +371,8 @@
       "unknownDevice": "Appareil inconnu",
       "sessionDates": "ouverte {opened} · vue {seen}",
       "devices": "Appareils du serveur média ({n})",
-      "closeHint": "Fermer une session déconnecte cet appareil de l'application et révoque le jeton que cette connexion avait obtenu ; les autres applications de la personne ne sont pas touchées."
+      "closeHint": "Fermer une session déconnecte cet appareil de l'application et révoque le jeton que cette connexion avait obtenu ; les autres applications de la personne ne sont pas touchées.",
+      "historyHint": "sur {n} jours"
     },
     "actions": {
       "close": "Fermer",

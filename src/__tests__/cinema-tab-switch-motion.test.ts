@@ -38,7 +38,8 @@ describe("changement d'onglet sur le téléphone", () => {
 
   it("un onglet pas encore chargé montre son fond, pas l'accueil", () => {
     const src = lire("src/components/player/PlayerShell.tsx");
-    expect(src.match(/loading: PanelPlaceholder/g)?.length).toBe(3);
+    // Recherche, Ma liste, Compte — et l'activité des comptes (24/09/2026), qui s'ouvre depuis Compte.
+    expect(src.match(/loading: PanelPlaceholder/g)?.length).toBe(4);
   });
 });
 

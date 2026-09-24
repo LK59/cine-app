@@ -127,6 +127,8 @@ function isAllowedForEveryone(method: string, pathname: string): boolean {
 const MOVED_PATHS: Record<string, string> = {
   "/cinema": "/",
   "/player": "/",
+  // L'activité des comptes a quitté la gestion pour un panneau du cinéma (24/09/2026).
+  "/activite": "/#activite=1",
 };
 
 /**

@@ -5,6 +5,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => false, useIsShortViewport: () => false }));
 vi.mock("@/lib/cinemaRoute", () => ({
+  CLOSE_PANELS: { search: false, list: false, account: false, browse: null, activity: null },
   cinemaClose: vi.fn(),
   cinemaNavigate: vi.fn(),
   useCinemaRoute: () => ({ film: null, serie: null, discover: null, person: null }),

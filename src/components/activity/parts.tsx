@@ -6,13 +6,13 @@
 // avec les données, jamais contre `Date.now()` pendant le rendu : un rendu doit être pur, et deux
 // affichages des mêmes données doivent dire la même chose.
 
-import Link from "next/link";
 import { useState } from "react";
 import { AlertTriangle, ChevronRight, Film, MonitorSmartphone, Tv } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import type { Seance } from "@/lib/activity/seances";
 import type { Presence } from "@/lib/activity/presence";
 import type { NowPlaying } from "@/lib/activity/accounts";
+import { ActivityLink } from "@/components/activity/nav";
 
 export type T = ReturnType<typeof useT>;
 
@@ -206,8 +206,8 @@ export function SeanceRow({ s, now, showUser = false }: { s: Seance; now: number
   const t = useT();
   const watched = s.stop?.watched;
   return (
-    <Link
-      href={`/activite/seances/${encodeURIComponent(s.id)}`}
+    <ActivityLink
+      to={{ kind: "seance", id: s.id }}
       className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.03]"
     >
       <Poster itemId={s.itemId} kind={s.title.includes(" — S") ? "episode" : "movie"} className="h-12 w-8" />
@@ -230,7 +230,7 @@ export function SeanceRow({ s, now, showUser = false }: { s: Seance; now: number
         </span>
       </span>
       <ChevronRight size={15} className="shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5" />
-    </Link>
+    </ActivityLink>
   );
 }
 

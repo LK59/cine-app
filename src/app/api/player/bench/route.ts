@@ -4,7 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { appendJsonLine, logGenerations } from "@/lib/logFile";
 import { readLogLines } from "@/lib/playerBench/plan";
-import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
+import { BENCH_LOG, BENCH_LOG_KEEP, BENCH_LOG_READ } from "@/lib/playerBench/benchLog";
 
 /**
  * Ce que le banc d'essai a trouvé, écrit à côté du journal du lecteur (`data/logs/bench.log`).
@@ -66,7 +66,7 @@ export interface BenchRunSummary {
 export async function GET(req: NextRequest) {
   if (!(await admin(req))) return new NextResponse(null, { status: 403 });
   const runs = new Map<string, BenchRunSummary>();
-  for (const line of readLogLines(logGenerations(BENCH_LOG(), BENCH_LOG_KEEP)) as Record<string, unknown>[]) {
+  for (const line of readLogLines(logGenerations(BENCH_LOG(), BENCH_LOG_KEEP).slice(-BENCH_LOG_READ)) as Record<string, unknown>[]) {
     const runId = String(line.runId ?? "");
     if (!runId) continue;
     let run = runs.get(runId);

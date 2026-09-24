@@ -34,8 +34,15 @@ const MAX_BYTES = 5 * 1024 * 1024;
  */
 export const DEFAULT_KEEP = 1;
 
-/** Au-delà, ce n'est plus un carnet : on borne ce qu'un appelant peut demander. */
-const MAX_KEEP = 20;
+/**
+ * Au-delà, on borne ce qu'un appelant peut demander.
+ *
+ * Vingt jusqu'au 24/09/2026 ; l'administrateur a voulu une vraie base d'historique — de l'ordre du
+ * gigaoctet pour l'ensemble des journaux —, ce qui fait cent vingt archives de 5 Mo pour le seul
+ * lecteur. Les lecteurs de ces journaux ne relisent plus tout (voir `activity/logReader.ts` et
+ * `recentPlayerLogFiles`) : garder beaucoup ne coûte que du disque.
+ */
+const MAX_KEEP = 250;
 
 function keepOf(keep: number | undefined): number {
   if (keep === undefined || !Number.isFinite(keep)) return DEFAULT_KEEP;

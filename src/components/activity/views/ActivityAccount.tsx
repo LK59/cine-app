@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { use, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import {
   AlertTriangle,
-  ArrowLeft,
   Bell,
   CalendarClock,
   Check,
@@ -13,7 +11,6 @@ import {
   Clock,
   Eye,
   EyeOff,
-  Heart,
   History,
   KeyRound,
   ListChecks,
@@ -52,7 +49,7 @@ import type { AccountDetail, MediaEntry } from "@/lib/activity/accounts";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
 
 type Detail = AccountDetail & { now: number };
-type Tab = "seances" | "resume" | "recent" | "watchlist" | "requests" | "favorites" | "errors";
+type Tab = "seances" | "resume" | "recent" | "watchlist" | "requests" | "errors";
 
 /** Un « oui / non » sans fenêtre : le bouton demande confirmation à lui-même, le temps d'un clic. */
 function ConfirmButton({ label, confirm, onConfirm, danger = false }: { label: string; confirm: string; onConfirm: () => Promise<void>; danger?: boolean }) {
@@ -205,8 +202,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export default function AccountActivityPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+/** Tout ce que l'application et le serveur média savent d'un compte, et les actions sur lui. */
+export function ActivityAccount({ id }: { id: string }) {
   const t = useT();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("seances");
@@ -234,7 +231,6 @@ export default function AccountActivityPage({ params }: { params: Promise<{ id: 
     { key: "recent", label: t("activity.tabs.recent"), count: d.library.recent?.length ?? null, icon: History },
     { key: "watchlist", label: t("activity.tabs.watchlist"), count: d.watchlist.length, icon: ListChecks },
     { key: "requests", label: t("activity.tabs.requests"), count: d.requests?.length ?? null, icon: Send },
-    { key: "favorites", label: t("activity.tabs.favorites"), count: d.library.favorites?.length ?? null, icon: Heart },
     { key: "errors", label: t("activity.tabs.errors"), count: d.errors.length, icon: AlertTriangle },
   ];
 
@@ -243,11 +239,6 @@ export default function AccountActivityPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="space-y-6">
-      <Link href="/activite" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white">
-        <ArrowLeft size={15} />
-        {t("activity.title")}
-      </Link>
-
       {/* L'identité, l'état, et l'action qui compte. */}
       <div className="flex flex-wrap items-center gap-4">
         <Avatar name={d.name} size={56} />
@@ -290,8 +281,8 @@ export default function AccountActivityPage({ params }: { params: Promise<{ id: 
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} />
-        <Tile icon={Clock} label={t("activity.account.watched")} value={hours(d.stats.watchedSeconds)} />
+        <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} hint={t("activity.account.historyHint", { n: d.historyDays })} />
+        <Tile icon={Clock} label={t("activity.account.watched")} value={hours(d.stats.watchedSeconds)} hint={t("activity.account.historyHint", { n: d.historyDays })} />
         <Tile icon={CalendarClock} label={t("activity.account.thisWeek")} value={d.stats.weekSeances} hint={hours(d.stats.weekWatchedSeconds)} />
         <Tile icon={Wrench} label={t("activity.account.problems")} value={d.stats.problems} tone={d.stats.problems ? "warn" : "good"} />
         <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
@@ -353,19 +344,6 @@ export default function AccountActivityPage({ params }: { params: Promise<{ id: 
               </ul>
             ) : (
               <Empty label={t("activity.empty.recent")} />
-            ))}
-
-          {tab === "favorites" &&
-            (d.library.favorites === null ? (
-              <Unavailable />
-            ) : d.library.favorites.length ? (
-              <ul className="divide-y divide-white/5">
-                {d.library.favorites.map((m) => (
-                  <MediaRow key={m.itemId} m={m} now={now} onAction={(a, i, s) => act(a, i, s)} actions={[]} />
-                ))}
-              </ul>
-            ) : (
-              <Empty label={t("activity.empty.favorites")} />
             ))}
 
           {tab === "watchlist" &&

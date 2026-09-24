@@ -58,8 +58,7 @@
       "content": "Contenido",
       "manage": "Gestión"
     },
-    "tmdb": "TMDB",
-    "activity": "Actividad"
+    "tmdb": "TMDB"
   },
   "common": {
     "loading": "Cargando...",
@@ -225,7 +224,8 @@
       "rebuildReasons": "Causas de las reconstrucciones",
       "noRebuild": "Ninguna reconstrucción esta semana.",
       "serverErrors": "Errores del servidor",
-      "noServerError": "Ningún error esta semana."
+      "noServerError": "Ningún error esta semana.",
+      "staleReloads": "+ {n} recarga tras un despliegue|+ {n} recargas tras un despliegue"
     },
     "accounts": {
       "title": "Cuentas ({n})",
@@ -282,7 +282,7 @@
     },
     "logs": {
       "title": "Registros",
-      "subtitle": "{n} líneas en este registro",
+      "subtitle": "Este registro tiene {n} archivo|Este registro tiene {n} archivos",
       "open": "Abrir los registros",
       "openSeance": "Ver la sesión",
       "sources": {
@@ -371,7 +371,8 @@
       "unknownDevice": "Dispositivo desconocido",
       "sessionDates": "abierta {opened} · vista {seen}",
       "devices": "Dispositivos del servidor multimedia ({n})",
-      "closeHint": "Cerrar una sesión desconecta ese dispositivo de la aplicación y revoca el token que obtuvo ese inicio de sesión; las demás aplicaciones de la persona no se ven afectadas."
+      "closeHint": "Cerrar una sesión desconecta ese dispositivo de la aplicación y revoca el token que obtuvo ese inicio de sesión; las demás aplicaciones de la persona no se ven afectadas.",
+      "historyHint": "en {n} días"
     },
     "actions": {
       "close": "Cerrar",

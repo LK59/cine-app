@@ -18,8 +18,26 @@ import { sessionDb, watchlistDb, pushDb, notificationPrefsDb, userPrefsDb, onboa
 import { presenceOf, type Presence } from "@/lib/activity/presence";
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
+import { isChunkLoadError } from "@/lib/chunkError";
+
+/**
+ * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
+ * déploiement, et elle a demandé un morceau de code renommé depuis. L'écran d'erreur recharge
+ * alors l'application d'office, une fois (`chunkError.ts`) — il n'y a rien à réparer. Comptée à
+ * part pour ne pas lever d'alerte : Sarah et Lucas en avaient chacun une le 23/09/2026, un jour
+ * de déploiements, et elles se lisaient comme des pannes.
+ */
+function isStaleClientChunk(r: LogRecord): boolean {
+  return r.scope === "client" && isChunkLoadError({ message: String(r.message ?? ""), name: String(r.name ?? "") });
+}
 
 const DAY = 24 * 60 * 60 * 1000;
+/**
+ * Jusqu'où remonte la fiche d'un compte. Les journaux gardent des années depuis le 24/09/2026 ;
+ * tout relire à chaque ouverture tiendrait le serveur plusieurs secondes. Les journaux eux-mêmes
+ * remontent aussi loin qu'on le demande (page Journaux, « Plus ancien »).
+ */
+export const ACCOUNT_HISTORY_DAYS = 90;
 /** Un compte actif dans l'application dont Jellyfin ne voit rien depuis plus d'un jour : son jeton. */
 const TOKEN_GAP_MS = DAY;
 
@@ -78,7 +96,7 @@ export function problemsOf(s: Seance): number {
 }
 
 function serverRecordsSince(since: number): LogRecord[] {
-  return readRecords("server").filter((r) => r._t >= since);
+  return readRecords("server", since).filter((r) => r._t >= since);
 }
 
 /** Qui est dans l'application, qui regarde quoi, et les comptes d'un coup d'œil. */
@@ -89,7 +107,7 @@ export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> 
   ]);
   const appSessions = sessionDb.summaryByUser();
   const weekStart = now - 7 * DAY;
-  const seances = buildSeances(readRecords("player")).filter((s) => s.start >= weekStart);
+  const seances = buildSeances(readRecords("player", weekStart)).filter((s) => s.start >= weekStart);
   const server = serverRecordsSince(weekStart);
 
   return users
@@ -100,7 +118,7 @@ export async function listAccounts(now = Date.now()): Promise<AccountSummary[]> 
       const lastActivity = time(user.LastActivityDate);
       const mine = seances.filter((s) => s.user.toLowerCase() === lower);
       const refused = server.filter((r) => r.scope === "jellyfin-token" && String(r.user ?? "").toLowerCase() === lower);
-      const clientErrors = server.filter((r) => r.scope === "client" && String(r.user ?? "").toLowerCase() === lower);
+      const clientErrors = server.filter((r) => r.scope === "client" && !isStaleClientChunk(r) && String(r.user ?? "").toLowerCase() === lower);
       const alerts: AccountSummary["alerts"] = [];
       if (refused.length) alerts.push({ kind: "tokenRefused", at: refused[refused.length - 1]._t });
       else if (app && app.lastSeenAt > weekStart && (lastActivity === null || app.lastSeenAt - lastActivity > TOKEN_GAP_MS)) {
@@ -151,6 +169,8 @@ export interface WeekSignals {
   lost: number;
   audioSwitches: number;
   clientErrors: number;
+  /** Des pages ouvertes pendant un déploiement, rechargées d'office — voir `isStaleClientChunk`. */
+  staleReloads: number;
   tokenRefusals: number;
   serverErrors: { scope: string; count: number }[];
   rebuildReasons: { reason: string; count: number }[];
@@ -163,7 +183,7 @@ export interface WeekSignals {
 /** Le bilan de la semaine : ce que le journal du lecteur et celui du serveur en disent. */
 export function weekSignals(now = Date.now()): WeekSignals {
   const since = now - 7 * DAY;
-  const seances = buildSeances(readRecords("player")).filter((s) => s.start >= since);
+  const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
   const server = serverRecordsSince(since);
   const sum = (f: (s: Seance) => number) => seances.reduce((n, s) => n + f(s), 0);
 
@@ -215,7 +235,8 @@ export function weekSignals(now = Date.now()): WeekSignals {
     errors: sum((s) => s.errors),
     lost: seances.filter((s) => s.stop?.why === "lost").length,
     audioSwitches: sum((s) => s.audioSwitches),
-    clientErrors: server.filter((r) => r.scope === "client").length,
+    clientErrors: server.filter((r) => r.scope === "client" && !isStaleClientChunk(r)).length,
+    staleReloads: server.filter(isStaleClientChunk).length,
     tokenRefusals: server.filter((r) => r.scope === "jellyfin-token").length,
     serverErrors: [...scopes].map(([scope, count]) => ({ scope, count })).sort((a, b) => b.count - a.count).slice(0, 8),
     rebuildReasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 6),
@@ -291,8 +312,9 @@ export async function accountDetail(id: string, now = Date.now()) {
     part(requestsOf(id)),
   ]);
 
-  const seances = buildSeances(readRecords("player")).filter((s) => s.user.toLowerCase() === lower);
-  const errors = readRecords("server")
+  const historyStart = now - ACCOUNT_HISTORY_DAYS * DAY;
+  const seances = buildSeances(readRecords("player", historyStart)).filter((s) => s.user.toLowerCase() === lower && s.start >= historyStart);
+  const errors = readRecords("server", historyStart)
     .filter((r) => String(r.user ?? "").toLowerCase() === lower)
     .slice(-100)
     .reverse();
@@ -338,6 +360,7 @@ export async function accountDetail(id: string, now = Date.now()) {
     watchlist: watchlistDb.getAll(id),
     requests: requests.ok ? requests.value : null,
     seances: seances.slice(0, 300),
+    historyDays: ACCOUNT_HISTORY_DAYS,
     stats: {
       seances: seances.length,
       watchedSeconds: seances.reduce((n, s) => n + (s.stop?.watched ?? 0), 0),
@@ -373,6 +396,6 @@ async function requestsOf(jellyfinId: string) {
 }
 
 /** Les dernières séances, tous comptes confondus — le fil de ce qui s'est regardé. */
-export function recentSeances(limit = 20): Seance[] {
-  return buildSeances(readRecords("player")).slice(0, limit);
+export function recentSeances(limit = 20, now = Date.now()): Seance[] {
+  return buildSeances(readRecords("player", now - 30 * DAY)).slice(0, limit);
 }

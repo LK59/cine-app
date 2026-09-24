@@ -58,8 +58,7 @@
       "content": "Content",
       "manage": "Manage"
     },
-    "tmdb": "TMDB",
-    "activity": "Activity"
+    "tmdb": "TMDB"
   },
   "common": {
     "loading": "Loading...",
@@ -225,7 +224,8 @@
       "rebuildReasons": "Why the player rebuilt",
       "noRebuild": "No rebuilds this week.",
       "serverErrors": "Server errors",
-      "noServerError": "No errors this week."
+      "noServerError": "No errors this week.",
+      "staleReloads": "+ {n} reload after a deploy|+ {n} reloads after a deploy"
     },
     "accounts": {
       "title": "Accounts ({n})",
@@ -282,7 +282,7 @@
     },
     "logs": {
       "title": "Logs",
-      "subtitle": "{n} lines in this log",
+      "subtitle": "This log has {n} file|This log has {n} files",
       "open": "Open the logs",
       "openSeance": "View the session",
       "sources": {
@@ -371,7 +371,8 @@
       "unknownDevice": "Unknown device",
       "sessionDates": "opened {opened} · seen {seen}",
       "devices": "Media server devices ({n})",
-      "closeHint": "Closing a session signs that device out of the app and revokes the token that sign-in obtained; the person's other apps are untouched."
+      "closeHint": "Closing a session signs that device out of the app and revokes the token that sign-in obtained; the person's other apps are untouched.",
+      "historyHint": "over {n} days"
     },
     "actions": {
       "close": "Close",

@@ -34,7 +34,8 @@ export const MANAGE_ITEM = { href: "/gestion", labelKey: "player.nav.manage", ic
 export function activePanel(route: CinemaRoute): PlayerPanel {
   if (route.search) return "search";
   if (route.list) return "list";
-  if (route.account) return "account";
+  // L'activité s'ouvre depuis le compte et le remplace : c'est toujours l'onglet Compte.
+  if (route.account || route.activity !== null) return "account";
   return "home";
 }
 
@@ -60,6 +61,7 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     discover: null,
     person: null,
     browse: null,
+    activity: null,
   } satisfies Partial<CinemaRoute>;
 
   if (panel === "home") {
@@ -83,7 +85,9 @@ export function openPanel(panel: PlayerPanel, current: CinemaRoute): void {
     current.serie !== null ||
     current.discover !== null ||
     current.person !== null ||
-    current.browse !== null;
+    current.browse !== null ||
+    // L'activité remplace le panneau Compte : y retourner depuis le rail doit la refermer.
+    current.activity !== null;
   if (activePanel(current) === panel && !covered) {
     // Déjà là, et rien par-dessus : il n'y a pas d'écran à changer. Mais sur la recherche, ce
     // second appui a un sens — c'est l'intention de taper, celle qu'on refuse au premier pour ne

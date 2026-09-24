@@ -32,15 +32,25 @@ export const playerLogFile = () => path.join(LOG_DIR, "player.log");
 export const benchPlayerLogFile = () => path.join(LOG_DIR, "bench-player.log");
 
 /**
- * Cinq générations pour les spectateurs (≈ 30 Mo au plus) : l'historique de plusieurs jours est ce
- * qu'on vient y chercher. Deux pour le banc, dont seule la dernière série intéresse.
+ * Cent vingt générations pour les spectateurs (≈ 600 Mo au plus) : l'administrateur veut une vraie
+ * base d'historique (24/09/2026) — au rythme de ce foyer, des années. Dix pour le banc, dont seules
+ * les dernières séries intéressent. Cinq et deux jusque-là.
  */
-export const PLAYER_LOG_KEEP = 5;
-export const BENCH_PLAYER_LOG_KEEP = 2;
+export const PLAYER_LOG_KEEP = 120;
+export const BENCH_PLAYER_LOG_KEEP = 10;
 
 /** `player.log` et ses archives, du plus ancien au plus récent — les spectateurs seulement. */
 export function playerLogFiles(): string[] {
   return logGenerations(playerLogFile(), PLAYER_LOG_KEEP);
+}
+
+/**
+ * Les dernières générations seulement — de quoi couvrir ce qu'on relit d'un seul tenant (le plan
+ * du banc d'essai) sans charger des centaines de mégaoctets. Six, soit les 30 Mo que le journal
+ * gardait en tout avant le 24/09/2026 : le plan choisit ses films exactement comme avant.
+ */
+export function recentPlayerLogFiles(generations = 6): string[] {
+  return playerLogFiles().slice(-generations);
 }
 
 /** `bench-player.log` et ses archives, du plus ancien au plus récent. */

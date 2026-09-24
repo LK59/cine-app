@@ -21,6 +21,9 @@ function PanelPlaceholder() {
 }
 const PlayerListPanel = dynamic(() => import("./PlayerListPanel").then((m) => m.PlayerListPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerAccountPanel = dynamic(() => import("./PlayerAccountPanel").then((m) => m.PlayerAccountPanel), { ssr: false, loading: PanelPlaceholder });
+// L'activité des comptes, pour l'administrateur seul : chargée à la première ouverture, jamais
+// avant — personne d'autre ne paie son code.
+const PlayerActivityPanel = dynamic(() => import("./PlayerActivityPanel").then((m) => m.PlayerActivityPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerSearchPanel = dynamic(() => import("./PlayerSearchPanel").then((m) => m.PlayerSearchPanel), { ssr: false, loading: PanelPlaceholder });
 const PlayerDiscoverSheet = dynamic(() => import("./PlayerDiscoverSheet").then((m) => m.PlayerDiscoverSheet), { ssr: false });
 const PlayerPersonSheet = dynamic(() => import("./PlayerPersonSheet").then((m) => m.PlayerPersonSheet), { ssr: false });
@@ -52,7 +55,7 @@ const EXIT_MS = 200;
  * pendant le rendu qu'on en a besoin. L'ajustement en cours de rendu est la forme que React
  * recommande pour dériver un état d'une entrée.
  */
-function useLastValue(value: number | null): number | null {
+function useLastValue<T extends number | string>(value: T | null): T | null {
   const [last, setLast] = useState(value);
   if (value !== null && value !== last) setLast(value);
   return value ?? last;
@@ -101,6 +104,8 @@ export function PlayerShell() {
   const search = useExitDelay(route.search, EXIT_MS);
   const list = useExitDelay(route.list, EXIT_MS);
   const account = useExitDelay(route.account, EXIT_MS);
+  const activity = useExitDelay(route.activity !== null, EXIT_MS);
+  const lastActivity = useLastValue(route.activity);
   /**
    * Ces fiches sortent en glissant, sauf quand ce qu'elles recouvrent n'est pas dessiné.
    *
@@ -217,6 +222,11 @@ export function PlayerShell() {
           replaced={account.leaving && (route.search || route.list)}
           fromTab={search.leaving || list.leaving}
         />
+      )}
+      {/* L'activité : une clé par vue — une autre vue est un autre écran (voir la règle des fiches
+          dans CLAUDE.md), avec son entrée, son défilement et son focus à elle. */}
+      {activity.render && lastActivity !== null && (
+        <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} />
       )}
       {/* Une seule fiche du dessus à la fois. Deux rendues ensemble se recouvraient dans l'ordre
           de montage, et surtout écoutaient Échap toutes les deux — une touche remontait alors de

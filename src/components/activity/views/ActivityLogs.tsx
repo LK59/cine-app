@@ -1,22 +1,22 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import useSWRInfinite from "swr/infinite";
-import { ArrowLeft, ChevronDown, ChevronRight, Clapperboard, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Clapperboard, Search } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { JsonBlock, Steps, describeLine, fullDate, kindTone } from "@/components/activity/parts";
+import { ActivityLink, type LogsPreset } from "@/components/activity/nav";
 
 interface LogPage {
   source: string;
-  total: number;
-  items: (Record<string, unknown> & { _file: string; _line: number; _t: number; _index: number })[];
-  nextCursor: number | null;
-  facets: { users: string[]; types: { name: string; count: number }[] };
+  /** Combien de fichiers ce journal compte : le courant et ses archives. */
+  generations: number;
+  items: (Record<string, unknown> & { _file: string; _line: number; _t: number })[];
+  /** `génération.ligne`, ou rien quand on est au bout. */
+  nextCursor: string | null;
+  facets: { users: string[]; types: { name: string; count: number }[]; recentLines: number };
 }
 
 const SOURCES = ["player", "server", "bench", "benchPlayer"] as const;
@@ -43,11 +43,19 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
   const { steps, stack, ...rest } = shown as { steps?: unknown; stack?: unknown };
   return (
     <li className="border-b border-white/5">
-      <button type="button" onClick={toggle} className="flex w-full items-start gap-3 px-4 py-2 text-left hover:bg-white/[0.03]">
+      {/* Sur téléphone, la date et le type sur une ligne, le texte en dessous sur toute la largeur ;
+          sur grand écran, des colonnes alignées (`sm:contents` fait des deux premiers des cellules). */}
+      <button
+        type="button"
+        onClick={toggle}
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-2 text-left hover:bg-white/[0.03] sm:grid-cols-[auto_7.5rem_6rem_minmax(0,1fr)]"
+      >
         {open ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-slate-500" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-slate-500" />}
-        <span className="w-24 shrink-0 font-mono text-[11px] text-slate-500">{fullDate(item._t)}</span>
-        <span className={`w-24 shrink-0 truncate rounded px-1.5 py-0.5 text-center font-mono text-[10px] ${kindTone(kind, item.level)}`}>{kind}</span>
-        <span className="min-w-0 flex-1 text-sm">
+        <span className="flex items-center gap-2 sm:contents">
+          <span className="whitespace-nowrap font-mono text-[11px] text-slate-500">{fullDate(item._t)}</span>
+          <span className={`truncate rounded px-1.5 py-0.5 text-center font-mono text-[10px] sm:w-24 ${kindTone(kind, item.level)}`}>{kind}</span>
+        </span>
+        <span className="col-start-2 min-w-0 text-sm sm:col-start-auto">
           <span className="flex flex-wrap items-baseline gap-x-2">
             {typeof item.user === "string" && <span className="font-medium text-accent-300">{item.user}</span>}
             {typeof item.title === "string" && <span className="truncate text-slate-200">{item.title}</span>}
@@ -56,12 +64,12 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
         </span>
       </button>
       {open && (
-        <div className="space-y-2 px-4 pb-3 pl-11">
+        <div className="space-y-2 px-4 pb-3 sm:pl-11">
           {typeof item.session === "string" && source === "player" && (
-            <Link href={`/activite/seances/${encodeURIComponent(item.session)}`} className="inline-flex items-center gap-1.5 text-xs text-accent-300 hover:underline">
+            <ActivityLink to={{ kind: "seance", id: item.session }} className="inline-flex items-center gap-1.5 text-xs text-accent-300 hover:underline">
               <Clapperboard size={13} />
               {t("activity.logs.openSeance")}
-            </Link>
+            </ActivityLink>
           )}
           {missing && <p className="text-xs text-amber-300">{t("activity.logs.rotated")}</p>}
           {typeof steps === "string" && <Steps text={steps} />}
@@ -73,33 +81,27 @@ function LogLine({ item, source }: { item: LogPage["items"][number]; source: str
   );
 }
 
-function LogsView() {
+/**
+ * Les journaux, filtrés. Les filtres de départ viennent de l'adresse (un lien « les erreurs du
+ * serveur », « les lignes de cette séance ») ; les changer ne touche plus à l'adresse — ce sont des
+ * réglages de l'écran, pas des écrans à retrouver par le retour.
+ */
+export function ActivityLogs({ preset }: { preset: LogsPreset }) {
   const t = useT();
-  const router = useRouter();
-  const params = useSearchParams();
-  const source = (SOURCES as readonly string[]).includes(params.get("source") ?? "") ? params.get("source")! : "player";
-  const user = params.get("user") ?? "";
-  const type = params.get("type") ?? "";
-  const days = Number(params.get("days") ?? 7);
-  const q = params.get("q") ?? "";
-  const session = params.get("session") ?? "";
-  const [draft, setDraft] = useState(q);
-
-  const set = (patch: Record<string, string | number | null>) => {
-    const next = new URLSearchParams(params.toString());
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === null || v === "" || (k === "days" && v === 7)) next.delete(k);
-      else next.set(k, String(v));
-    }
-    router.replace(`/activite/journaux${next.size ? `?${next}` : ""}`);
-  };
+  const [source, setSource] = useState((SOURCES as readonly string[]).includes(preset.source ?? "") ? preset.source! : "player");
+  const [user, setUser] = useState(preset.user ?? "");
+  const [type, setType] = useState(preset.type ?? "");
+  const [days, setDays] = useState(preset.days ?? 7);
+  const [q, setQ] = useState("");
+  const [session, setSession] = useState(preset.session ?? "");
+  const [draft, setDraft] = useState("");
 
   const base = new URLSearchParams({ source, days: String(days), ...(user && { user }), ...(type && { type }), ...(q && { q }), ...(session && { session }) });
   const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<LogPage>(
     (index, previous) => {
       if (previous && previous.nextCursor === null) return null;
       const cursor = previous?.nextCursor;
-      return `/api/admin/activity/logs?${base}${index && cursor ? `&cursor=${cursor}` : ""}`;
+      return `/api/admin/activity/logs?${base}${index && cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
     },
     fetcher
   );
@@ -110,20 +112,20 @@ function LogsView() {
 
   return (
     <div className="space-y-4">
-      <Link href="/activite" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white">
-        <ArrowLeft size={15} />
-        {t("activity.title")}
-      </Link>
-      <PageHeader title={t("activity.logs.title")} subtitle={first ? t("activity.logs.subtitle", { n: first.total }) : undefined} />
+      {first && <p className="text-sm text-slate-400">{t("activity.logs.subtitle", { n: first.generations })}</p>}
 
-      {/* Les filtres, gardés dans l'adresse : un lien vers une recherche la retrouve telle quelle. */}
       <div className="card space-y-3 p-3">
         <div className="flex flex-wrap gap-1">
           {SOURCES.map((key) => (
             <button
               key={key}
               type="button"
-              onClick={() => set({ source: key, type: null, user: null, session: null })}
+              onClick={() => {
+                setSource(key);
+                setType("");
+                setUser("");
+                setSession("");
+              }}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${source === key ? "bg-accent-500/20 text-accent-200" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
             >
               {t(`activity.logs.sources.${key}`)}
@@ -131,7 +133,7 @@ function LogsView() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={user} onChange={(e) => set({ user: e.target.value })} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.user")}>
+          <select value={user} onChange={(e) => setUser(e.target.value)} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.user")}>
             <option value="">{t("activity.logs.allUsers")}</option>
             {first?.facets.users.map((u) => (
               <option key={u} value={u}>
@@ -139,7 +141,7 @@ function LogsView() {
               </option>
             ))}
           </select>
-          <select value={type} onChange={(e) => set({ type: e.target.value })} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.type")}>
+          <select value={type} onChange={(e) => setType(e.target.value)} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.type")}>
             <option value="">{t("activity.logs.allTypes")}</option>
             {first?.facets.types.map((ty) => (
               <option key={ty.name} value={ty.name}>
@@ -147,7 +149,7 @@ function LogsView() {
               </option>
             ))}
           </select>
-          <select value={days} onChange={(e) => set({ days: Number(e.target.value) })} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.period")}>
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="input h-9 w-auto text-xs" aria-label={t("activity.logs.period")}>
             {PERIODS.map((p) => (
               <option key={p} value={p}>
                 {p ? t("activity.logs.lastDays", { n: p }) : t("activity.logs.allTime")}
@@ -158,7 +160,7 @@ function LogsView() {
             className="flex min-w-[12rem] flex-1 items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              set({ q: draft.trim() });
+              setQ(draft.trim());
             }}
           >
             <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t("activity.logs.search")} className="input h-9 flex-1 text-xs" />
@@ -167,7 +169,7 @@ function LogsView() {
             </button>
           </form>
           {session && (
-            <button type="button" onClick={() => set({ session: null })} className="rounded bg-accent-500/15 px-2 py-1 text-xs text-accent-200">
+            <button type="button" onClick={() => setSession("")} className="rounded bg-accent-500/15 px-2 py-1 text-xs text-accent-200">
               {t("activity.logs.sessionFilter", { id: session })} ×
             </button>
           )}
@@ -197,14 +199,5 @@ function LogsView() {
         <p className="card px-4 py-10 text-center text-sm text-slate-500">{t("activity.logs.empty")}</p>
       )}
     </div>
-  );
-}
-
-export default function LogsPage() {
-  // `useSearchParams` dans une page client demande une frontière de suspension à Next.
-  return (
-    <Suspense fallback={<LoadingState />}>
-      <LogsView />
-    </Suspense>
   );
 }

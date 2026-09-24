@@ -8,4 +8,7 @@ import { LOG_DIR } from "@/lib/logFile";
  * nombre d'archives.
  */
 export const BENCH_LOG = () => path.join(LOG_DIR, "bench.log");
-export const BENCH_LOG_KEEP = 2;
+/** Dix archives depuis le 24/09/2026 (deux avant) ; la route n'en relit que les dernières. */
+export const BENCH_LOG_KEEP = 10;
+/** Ce que la route relit pour l'historique des séries : les trois dernières générations, comme avant. */
+export const BENCH_LOG_READ = 3;

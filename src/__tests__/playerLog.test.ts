@@ -135,17 +135,21 @@ describe("logPlaybackEvent", () => {
     expect(logGenerations(file)).toEqual([`${file}.1`, file]);
   });
 
-  it("garde cinq générations de l'historique des spectateurs", async () => {
-    const { logPlaybackEvent, playerLogFiles } = await import("@/lib/playerLog");
+  // Cinq générations jusqu'au 24/09/2026 ; cent vingt depuis (≈ 600 Mo), pour une vraie base
+  // d'historique. Ce qui relit tout d'un tenant — le plan du banc — s'en tient aux six dernières.
+  it("garde bien plus de cinq générations, et le plan du banc ne relit que les dernières", async () => {
+    const { logPlaybackEvent, playerLogFiles, recentPlayerLogFiles, PLAYER_LOG_KEEP } = await import("@/lib/playerLog");
     const file = path.join(dir, "logs", "player.log");
     fs.mkdirSync(path.join(dir, "logs"), { recursive: true });
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 7; i++) {
       fs.writeFileSync(file, "x".repeat(6 * 1024 * 1024));
       logPlaybackEvent("louis", "start", {});
     }
-    expect(fs.existsSync(`${file}.5`)).toBe(true);
-    expect(fs.existsSync(`${file}.6`)).toBe(false);
-    expect(playerLogFiles()).toEqual([5, 4, 3, 2, 1].map((i) => `${file}.${i}`).concat(file));
+    expect(fs.existsSync(`${file}.7`)).toBe(true);
+    expect(PLAYER_LOG_KEEP).toBe(120);
+    expect(playerLogFiles()).toHaveLength(121);
+    expect(playerLogFiles().at(-1)).toBe(file);
+    expect(recentPlayerLogFiles()).toEqual([5, 4, 3, 2, 1].map((i) => `${file}.${i}`).concat(file));
   });
 
   it("écrit les lignes du banc d'essai à part, jamais dans l'historique des spectateurs", async () => {

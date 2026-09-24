@@ -44,6 +44,13 @@ export interface CinemaRoute {
    * qu'une grille de genre se partage et se retrouve.
    */
   browse: string | null;
+  /**
+   * L'activité des comptes (administrateur) : `1` pour la vue d'ensemble, `compte:<id>`,
+   * `seance:<id>`, `journaux` ou `journaux:<filtres>` — voir `components/activity/nav.ts`. Un
+   * écran par valeur, pour que le retour remonte de la séance à la fiche, puis à la vue
+   * d'ensemble, puis au panneau Compte d'où l'on est parti.
+   */
+  activity: string | null;
 }
 
 const EMPTY: CinemaRoute = {
@@ -58,6 +65,7 @@ const EMPTY: CinemaRoute = {
   discoverType: "movie",
   person: null,
   browse: null,
+  activity: null,
 };
 
 // How many entries this session has pushed. Kept in history.state so a close can tell "I opened
@@ -145,6 +153,7 @@ function parse(hash: string): CinemaRoute {
     discoverType: params.get("type") === "series" ? "series" : "movie",
     person: readNumber(params, "personne"),
     browse: params.get("parcourir"),
+    activity: params.get("activite"),
   };
 }
 
@@ -163,6 +172,7 @@ function serialize(route: CinemaRoute): string {
   }
   if (route.person) params.set("personne", String(route.person));
   if (route.browse) params.set("parcourir", route.browse);
+  if (route.activity) params.set("activite", route.activity);
   const query = params.toString();
   return query ? `#${query}` : "";
 }
@@ -426,6 +436,14 @@ if (typeof window !== "undefined") {
     backPending = false;
   });
 }
+
+/**
+ * Ce que referme un panneau quand il n'y a rien derrière lui (arrivée directe par un lien) : tous
+ * les panneaux, la grille complète et l'activité. Une seule liste, pour que l'ajout d'un écran ne
+ * laisse pas une fermeture l'oublier — l'activité, ajoutée le 24/09/2026, restait sinon affichée
+ * après une croix.
+ */
+export const CLOSE_PANELS = { search: false, list: false, account: false, browse: null, activity: null } satisfies Partial<CinemaRoute>;
 
 export function cinemaClose(fallback: Partial<CinemaRoute>): void {
   if (typeof window === "undefined") return;

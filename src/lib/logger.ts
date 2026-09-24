@@ -24,7 +24,8 @@ export const SERVER_LOG_FILE = path.join(LOG_DIR, "server.log");
  * sur un seul téléphone peut remplir 5 Mo en une soirée, et l'unique archive d'avant emportait
  * alors les erreurs serveur des jours précédents.
  */
-export const SERVER_LOG_KEEP = 3;
+// Soixante depuis le 24/09/2026 (≈ 300 Mo) : la même base d'historique que le lecteur. Trois avant.
+export const SERVER_LOG_KEEP = 60;
 
 export function logError(scope: string, err: unknown, context?: Record<string, unknown>): void {
   const entry = {

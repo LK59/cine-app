@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Un dossier de journaux à ce fichier seul : les fichiers de test tournent en parallèle, et deux
+// d'entre eux écrivent `player.log` et ses archives.
+vi.hoisted(() => {
+  const { mkdtempSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  process.env.DATA_DIR = mkdtempSync(`${tmpdir()}/cine-activity-`);
+});
 import fs from "node:fs";
 import path from "node:path";
 import { LOG_DIR } from "@/lib/logFile";
@@ -100,5 +108,28 @@ describe("lecture des journaux", () => {
     fs.renameSync(file(), file() + ".1");
     fs.writeFileSync(file(), JSON.stringify({ kind: "c" }) + "\n");
     expect(readRecords("player").map((r) => r.kind)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("lecture bornée dans le temps (journaux de plusieurs centaines d'archives)", () => {
+  const file = () => path.join(LOG_DIR, "player.log");
+  const line = (kind: string, iso: string) => JSON.stringify({ timestamp: iso, kind }) + "\n";
+  beforeEach(() => {
+    reader.reset();
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    for (const f of fs.readdirSync(LOG_DIR)) if (f.startsWith("player.log")) fs.rmSync(path.join(LOG_DIR, f));
+  });
+
+  it("n'ouvre pas une archive entièrement plus ancienne que la période", async () => {
+    fs.writeFileSync(file() + ".2", line("tres-vieux", "2026-01-01T00:00:00Z"));
+    fs.writeFileSync(file() + ".1", line("vieux", "2026-09-01T00:00:00Z"));
+    fs.writeFileSync(file(), line("recent", "2026-09-24T00:00:00Z"));
+    // Une archive n'est plus écrite après sa rotation : sa date dit jusqu'où elle va.
+    fs.utimesSync(file() + ".2", new Date("2026-01-01"), new Date("2026-01-01"));
+    fs.utimesSync(file() + ".1", new Date("2026-09-01"), new Date("2026-09-01"));
+    const { readRecords } = await import("@/lib/activity/logReader");
+    const kinds = readRecords("player", Date.parse("2026-08-15")).map((r) => r.kind);
+    expect(kinds).toEqual(["vieux", "recent"]);
+    expect(readRecords("player").map((r) => r.kind)).toEqual(["tres-vieux", "vieux", "recent"]);
   });
 });

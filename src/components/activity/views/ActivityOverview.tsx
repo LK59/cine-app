@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import useSWR from "swr";
 import {
   Activity,
@@ -19,12 +18,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { AlertChip, Avatar, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, secs, type T } from "@/components/activity/parts";
 import type { AccountSummary, WeekSignals } from "@/lib/activity/accounts";
 import type { Seance } from "@/lib/activity/seances";
+import { ActivityLink } from "@/components/activity/nav";
 
 interface Overview {
   now: number;
@@ -45,7 +44,7 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
   const playing = a.nowPlaying;
   const pingTitle = a.presence.playing?.title;
   return (
-    <Link href={`/activite/comptes/${a.id}`} className="card flex gap-3 p-3 transition-colors hover:bg-white/[0.04]">
+    <ActivityLink to={{ kind: "account", id: a.id }} className="card flex gap-3 p-3 transition-colors hover:bg-white/[0.04]">
       <Avatar name={a.name} size={40} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
@@ -71,14 +70,14 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
           <span className="mt-1 block text-xs text-slate-500">{a.presence.devices.join(" · ") || t("activity.live.browsing")}</span>
         )}
       </span>
-    </Link>
+    </ActivityLink>
   );
 }
 
 function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
   const t = useT();
   return (
-    <Link href={`/activite/comptes/${a.id}`} className="group grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.03] md:grid-cols-[auto_minmax(0,1.4fr)_repeat(4,minmax(0,1fr))_auto]">
+    <ActivityLink to={{ kind: "account", id: a.id }} className="group grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.03] md:grid-cols-[auto_minmax(0,1.4fr)_repeat(4,minmax(0,1fr))_auto]">
       <Avatar name={a.name} />
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-1.5">
@@ -112,11 +111,12 @@ function AccountRow({ a, now }: { a: AccountSummary; now: number }) {
         </span>
       </span>
       <span className="text-slate-600 transition-transform group-hover:translate-x-0.5">›</span>
-    </Link>
+    </ActivityLink>
   );
 }
 
-export default function ActivityPage() {
+/** La vue d'ensemble : en direct, à regarder, la semaine, les comptes, le fil des séances. */
+export function ActivityOverview() {
   const t = useT();
   const { data, error, isLoading, mutate } = useSWR<Overview>("/api/admin/activity", fetcher, { refreshInterval: 20_000 });
 
@@ -130,22 +130,21 @@ export default function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t("activity.title")}
-        subtitle={t("activity.subtitle", { playing: playingCount, app: live.length - playingCount, total: accounts.length })}
-        action={
-          <div className="flex gap-2">
-            <button type="button" onClick={() => mutate()} className="btn-ghost px-3 py-1.5 text-xs">
-              <RefreshCw size={14} />
-              <span className="hidden sm:inline">{t("activity.refresh")}</span>
-            </button>
-            <Link href="/activite/journaux" className="btn-ghost px-3 py-1.5 text-xs">
-              <ListTree size={14} />
-              <span className="hidden sm:inline">{t("activity.logs.title")}</span>
-            </Link>
-          </div>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-400">
+          {t("activity.subtitle", { playing: playingCount, app: live.length - playingCount, total: accounts.length })}
+        </p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => mutate()} className="btn-ghost px-3 py-1.5 text-xs">
+            <RefreshCw size={14} />
+            <span className="hidden sm:inline">{t("activity.refresh")}</span>
+          </button>
+          <ActivityLink to={{ kind: "logs", preset: {} }} className="btn-ghost px-3 py-1.5 text-xs">
+            <ListTree size={14} />
+            <span className="hidden sm:inline">{t("activity.logs.title")}</span>
+          </ActivityLink>
+        </div>
+      </div>
 
       {/* 1. Maintenant. */}
       <Panel title={t("activity.live.title")} icon={Radio}>
@@ -166,14 +165,14 @@ export default function ActivityPage() {
           <ul className="divide-y divide-white/5">
             {alerts.map((a) => (
               <li key={a.id}>
-                <Link href={`/activite/comptes/${a.id}`} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm hover:bg-white/[0.03]">
+                <ActivityLink to={{ kind: "account", id: a.id }} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm hover:bg-white/[0.03]">
                   <span className="font-medium text-white">{a.name}</span>
                   {a.alerts.map((al) => (
                     <span key={al.kind} className="text-xs text-slate-400">
                       {alertLabel(al, t)} · {ago(al.at, now, t)}
                     </span>
                   ))}
-                </Link>
+                </ActivityLink>
               </li>
             ))}
           </ul>
@@ -202,7 +201,13 @@ export default function ActivityPage() {
           />
           <Tile icon={Wrench} label={t("activity.week.rebuilds")} value={s.rebuilds} hint={t("activity.week.stalls", { n: s.stalls })} tone={s.rebuilds ? "warn" : "good"} />
           <Tile icon={ServerCrash} label={t("activity.week.fallbacks")} value={s.fallbacks} hint={t("activity.week.lost", { n: s.lost })} tone={s.fallbacks ? "warn" : "good"} />
-          <Tile icon={AlertTriangle} label={t("activity.week.clientErrors")} value={s.clientErrors} tone={s.clientErrors ? "bad" : "good"} />
+          <Tile
+            icon={AlertTriangle}
+            label={t("activity.week.clientErrors")}
+            value={s.clientErrors}
+            hint={s.staleReloads ? t("activity.week.staleReloads", { n: s.staleReloads }) : undefined}
+            tone={s.clientErrors ? "bad" : "good"}
+          />
           <Tile icon={KeyRound} label={t("activity.week.tokenRefusals")} value={s.tokenRefusals} tone={s.tokenRefusals ? "bad" : "good"} />
         </div>
       </div>
@@ -260,18 +265,18 @@ export default function ActivityPage() {
           title={t("activity.week.serverErrors")}
           icon={ServerCrash}
           action={
-            <Link href="/activite/journaux?source=server" className="text-xs text-accent-300 hover:underline">
+            <ActivityLink to={{ kind: "logs", preset: { source: "server" } }} className="text-xs text-accent-300 hover:underline">
               {t("activity.logs.open")}
-            </Link>
+            </ActivityLink>
           }
         >
           {s.serverErrors.length ? (
             <ul className="divide-y divide-white/5">
               {s.serverErrors.map((e) => (
                 <li key={e.scope} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <Link href={`/activite/journaux?source=server&type=${encodeURIComponent(e.scope)}`} className="truncate font-mono text-xs text-slate-300 hover:text-white">
+                  <ActivityLink to={{ kind: "logs", preset: { source: "server", type: e.scope } }} className="truncate font-mono text-xs text-slate-300 hover:text-white">
                     {e.scope}
-                  </Link>
+                  </ActivityLink>
                   <span className="shrink-0 tabular-nums text-slate-400">{e.count}</span>
                 </li>
               ))}
@@ -296,9 +301,9 @@ export default function ActivityPage() {
         title={t("activity.recent.title")}
         icon={Clapperboard}
         action={
-          <Link href="/activite/journaux" className="text-xs text-accent-300 hover:underline">
+          <ActivityLink to={{ kind: "logs", preset: {} }} className="text-xs text-accent-300 hover:underline">
             {t("activity.logs.open")}
-          </Link>
+          </ActivityLink>
         }
       >
         <div className="divide-y divide-white/5">

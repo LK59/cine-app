@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
-import { playerLogFiles } from "@/lib/playerLog";
+import { recentPlayerLogFiles } from "@/lib/playerLog";
 import { candidatesFrom, readLogLines, suggest } from "@/lib/playerBench/plan";
 
 /**
@@ -19,6 +19,6 @@ export async function GET(req: NextRequest) {
   // Toutes les archives, et les spectateurs seulement : les lignes du banc vont dans
   // `bench-player.log`, et un banc qui choisirait ses films d'après ses propres blocages ne
   // ferait que se répéter (`candidatesFrom` écarte en plus celles d'avant la séparation).
-  const candidates = candidatesFrom(readLogLines(playerLogFiles()));
+  const candidates = candidatesFrom(readLogLines(recentPlayerLogFiles()));
   return NextResponse.json({ candidates: candidates.slice(0, 40), suggested: suggest(candidates, 8) });
 }

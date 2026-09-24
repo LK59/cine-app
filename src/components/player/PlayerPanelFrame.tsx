@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, X } from "lucide-react";
-import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { CLOSE_PANELS, cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useT } from "@/components/TranslationProvider";
 import { usePanelArrowNav } from "@/lib/usePanelArrowNav";
@@ -160,7 +160,7 @@ export function PlayerPanelFrame({
       if (document.querySelector('[aria-modal="true"]')) return;
       if ((e.target as Element | null)?.closest?.("[data-owns-escape]")) return;
       e.stopPropagation();
-      cinemaClose({ search: false, list: false, account: false, browse: null });
+      cinemaClose(CLOSE_PANELS);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -219,7 +219,7 @@ export function PlayerPanelFrame({
         {back && (
           <button
             type="button"
-            onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
+            onClick={() => cinemaClose(CLOSE_PANELS)}
             className="btn btn-ghost -ml-1 mt-0.5 shrink-0 rounded-full px-3 py-2"
           >
             <ArrowLeft size={16} /> {t("cinema.back")}
@@ -246,7 +246,7 @@ export function PlayerPanelFrame({
           {!isMobile && !back && (
             <button
               type="button"
-              onClick={() => cinemaClose({ search: false, list: false, account: false, browse: null })}
+              onClick={() => cinemaClose(CLOSE_PANELS)}
               aria-label={t("common.close")}
               className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
             >

@@ -69,6 +69,20 @@ interface Cached {
 }
 const cache = new Map<string, Cached>();
 
+/**
+ * Combien de générations restent en mémoire. Les journaux peuvent garder des centaines d'archives
+ * (≈ 1 Go au total) ; en tenir le quart en objets dépasserait la mémoire du conteneur. Les plus
+ * anciennement lues s'en vont — relire une archive coûte une lecture de 5 Mo, rien de plus.
+ */
+const MAX_CACHED_GENERATIONS = 12;
+
+function remember(file: string, entry: Cached): void {
+  // Réinsérée en fin : l'ordre d'insertion d'une Map sert d'ordre d'usage.
+  cache.delete(file);
+  cache.set(file, entry);
+  while (cache.size > MAX_CACHED_GENERATIONS) cache.delete(cache.keys().next().value as string);
+}
+
 function parseChunk(text: string, file: string, firstLine: number, into: LogRecord[]): { lines: number; consumed: number } {
   // La dernière ligne sans retour est peut-être à moitié écrite : elle attend la prochaine lecture.
   const end = text.lastIndexOf("\n");
@@ -98,7 +112,10 @@ function readGeneration(file: string): LogRecord[] {
   }
   const name = path.basename(file);
   const known = cache.get(file);
-  if (known && known.mtimeMs === stat.mtimeMs && known.size === stat.size) return known.records;
+  if (known && known.mtimeMs === stat.mtimeMs && known.size === stat.size) {
+    remember(file, known);
+    return known.records;
+  }
   // Le même fichier, plus long : seulement la suite. Plus court (il a tourné) : tout.
   if (known && stat.size > known.size && known.consumed <= stat.size) {
     try {
@@ -111,6 +128,7 @@ function readGeneration(file: string): LogRecord[] {
         known.consumed += consumed;
         known.mtimeMs = stat.mtimeMs;
         known.size = stat.size;
+        remember(file, known);
         return known.records;
       } finally {
         fs.closeSync(fd);
@@ -127,13 +145,46 @@ function readGeneration(file: string): LogRecord[] {
   }
   const records: LogRecord[] = [];
   const { lines, consumed } = parseChunk(text, name, 0, records);
-  cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, consumed, lines, records });
+  remember(file, { mtimeMs: stat.mtimeMs, size: stat.size, consumed, lines, records });
   return records;
 }
 
-/** Toutes les lignes d'un journal, archives comprises, de la plus ancienne à la plus récente. */
-export function readRecords(source: LogSource): LogRecord[] {
-  return generationsOf(source).flatMap(readGeneration);
+/**
+ * Les générations qui existent, **de la plus récente à la plus ancienne**, avec leur date de
+ * dernière écriture. Une archive n'est plus jamais écrite après sa rotation : sa date dit donc
+ * jusqu'où elle va, sans l'ouvrir.
+ */
+export function generationsNewestFirst(source: LogSource): { file: string; mtimeMs: number }[] {
+  const out: { file: string; mtimeMs: number }[] = [];
+  for (const file of [...generationsOf(source)].reverse()) {
+    try {
+      out.push({ file, mtimeMs: fs.statSync(file).mtimeMs });
+    } catch {
+      /* archive absente : le journal n'a pas encore tourné jusque-là */
+    }
+  }
+  return out;
+}
+
+/** Les lignes d'une génération, lues (ou reprises du cache). */
+export function readGenerationRecords(file: string): LogRecord[] {
+  return readGeneration(file);
+}
+
+/**
+ * Les lignes d'un journal depuis `since` (en ms), de la plus ancienne à la plus récente.
+ *
+ * On s'arrête à la première archive entièrement plus ancienne que `since` — sans l'ouvrir. La
+ * génération qui chevauche la limite est lue en entier : la page filtre ensuite ce qu'elle veut.
+ * Sans `since`, tout — à réserver à ce qui en a vraiment besoin.
+ */
+export function readRecords(source: LogSource, since = 0): LogRecord[] {
+  const parts: LogRecord[][] = [];
+  for (const { file, mtimeMs } of generationsNewestFirst(source)) {
+    if (since && mtimeMs < since && parts.length > 0) break;
+    parts.push(readGeneration(file));
+  }
+  return parts.reverse().flat();
 }
 
 /** Une ligne en entier, relue dans son fichier. `null` si le fichier a tourné entre-temps. */
