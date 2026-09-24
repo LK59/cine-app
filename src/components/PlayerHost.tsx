@@ -25,7 +25,8 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { reportPlayback } from "@/lib/reportPlayback";
-import { serverStartFields, serverFailureFields, castEstablishedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
+import { castRouteActive } from "@/lib/castRoute";
 import { newPlayerSessionId } from "@/lib/playerSessionTally";
 import { noteWatching } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
@@ -410,11 +411,22 @@ function ActivePlayer({
   const [firstSession] = useState(newPlayerSessionId);
   const logSession = useRef({ itemId, id: firstSession });
   const agent = typeof navigator === "undefined" ? undefined : navigator.userAgent;
+  /**
+   * Quelque chose diffuse-t-il vraiment ?
+   *
+   * Tenu par l'écouteur de route plus bas et par lui seul. Deux endroits qui observeraient le même état
+   * finiraient par ne plus être d'accord, et celui-ci décide d'un mot que le spectateur lit.
+   */
+  const [castActive, setCastActive] = useState(false);
+  const castActiveRef = useRef(false);
+  // Déclaré avant le contexte du journal, qui le lit.
   const logContext = useRef<ServerPlayerContext>({ itemId, title, cast: castSession, bench: session.bench, session: firstSession, agent });
   useEffect(() => {
     if (logSession.current.itemId !== itemId) logSession.current = { itemId, id: newPlayerSessionId() };
-    logContext.current = { itemId, title, cast: castSession, bench: session.bench, session: logSession.current.id, agent };
-  }, [itemId, title, castSession, session.bench, agent]);
+    // `cast` ne se lit plus « séance ouverte pour diffuser » seulement : une route établie depuis
+    // les commandes de la vidéo compte aussi, pour les lignes qui suivent (arrêt compris).
+    logContext.current = { itemId, title, cast: castSession || castActive, bench: session.bench, session: logSession.current.id, agent };
+  }, [itemId, title, castSession, castActive, session.bench, agent]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -1058,14 +1070,6 @@ function ActivePlayer({
 
   const castAttempted = useRef(false);
   /**
-   * Quelque chose diffuse-t-il vraiment ?
-   *
-   * Tenu par l'écouteur ci-dessous et par lui seul. Deux endroits qui observeraient le même état
-   * finiraient par ne plus être d'accord, et celui-ci décide d'un mot que le spectateur lit.
-   */
-  const [castActive, setCastActive] = useState(false);
-  const castActiveRef = useRef(false);
-  /**
    * La diffusion s'est arrêtée toute seule, et on ne peut pas la relancer en silence.
    *
    * Relancer un flux veut dire ouvrir une nouvelle session HLS, ce que WebKit ne permet pas dans
@@ -1104,7 +1108,13 @@ function ActivePlayer({
   }
   useEffect(() => {
     const video = videoRef.current as CastCapableVideo | null;
-    if (!video || !castSession) return;
+    // Écouté dans toutes les séances de ce lecteur, pas seulement celles ouvertes pour diffuser
+    // (24/09/2026). Le bouton AirPlay des commandes de la vidéo marche partout : un film rouvert
+    // sur ce lecteur, puis envoyé à la télé de là, a joué vingt-sept minutes sur un téléviseur —
+    // le relais voyait l'appareil AirPlay chercher chaque morceau — pendant que le journal disait
+    // « sans diffusion », faute d'écouteur. Hors séance de diffusion, rien d'autre ne change : ni
+    // sélecteur ouvert d'office, ni main rendue au lecteur natif à la fin.
+    if (!video) return;
 
     const openPicker = () => {
       if (castAttempted.current) return;
@@ -1118,8 +1128,10 @@ function ActivePlayer({
     };
     // Dès que l'image est là — pas avant : un sélecteur ouvert sur un élément sans source ne
     // propose rien à quoi se connecter.
-    if (video.readyState >= 1) openPicker();
-    else video.addEventListener("loadedmetadata", openPicker, { once: true });
+    if (castSession) {
+      if (video.readyState >= 1) openPicker();
+      else video.addEventListener("loadedmetadata", openPicker, { once: true });
+    }
 
     /**
      * Rendre la main, en disant d'où vient la décision.
@@ -1130,13 +1142,10 @@ function ActivePlayer({
      * comprendre le 19/09/2026, et la question se reposera.
      */
     const ended = (source: string) => {
-      reportPlayback("fallback", {
-        itemId,
-        title,
-        reason: `fin de diffusion (${source})`,
-        at: Math.round(video.currentTime || 0),
-      });
-      onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
+      // Avec la séance et la marque de diffusion : sans elles, la ligne se rangeait dans une séance
+      // « reconstituée » et comptait comme un repli raté sur la page Activité (24/09/2026).
+      reportPlayback("fallback", castEndedFields(logContext.current, source, video.currentTime || 0));
+      if (castSession) onCastEnded?.(castHandBackPosition(video.currentTime, lastKnownTime.current, lastPlaybackOpts.current?.resumeAt));
     };
     const setActive = (active: boolean) => {
       // Établie, et pas seulement demandée : sans cette ligne, un téléviseur resté en chargement
@@ -1162,6 +1171,9 @@ function ActivePlayer({
     video.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", onWirelessChanged);
     video.remote?.addEventListener?.("connect", onConnect);
     video.remote?.addEventListener?.("disconnect", onDisconnect);
+    // Une route déjà établie ne se signale plus : l'écouteur arrive après l'événement quand le
+    // lecteur est remonté pendant la diffusion (une relance, l'épisode suivant). Lue une fois ici.
+    if (castRouteActive(video)) setActive(true);
 
     return () => {
       video.removeEventListener("loadedmetadata", openPicker);
@@ -1169,10 +1181,9 @@ function ActivePlayer({
       video.remote?.removeEventListener?.("connect", onConnect);
       video.remote?.removeEventListener?.("disconnect", onDisconnect);
     };
-    // `itemId` et `title` ne servent qu'à nommer la ligne de journal ; les mettre en dépendance
-    // réarmerait les écouteurs de diffusion sur un changement d'épisode, ce qui perdrait la route
-    // en cours. Ils ne changent pas sans que cet effet ne soit déjà remonté par `videoKey`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Les lignes du journal se nomment par `logContext`, lu au moment d'écrire : ni le titre ni
+    // l'épisode ne sont des dépendances, et un changement d'épisode ne réarme pas les écouteurs —
+    // ce qui perdrait la route en cours.
   }, [castSession, onCastEnded, videoKey]);
 
   // Ends playback entirely (not just minimize) when the video finishes — same in both modes.
@@ -1333,12 +1344,7 @@ function ActivePlayer({
        * rend alors la main proprement, à la position atteinte.
        */
       if (castActiveRef.current) {
-        reportPlayback("error", {
-          itemId,
-          title,
-          reason: "erreur pendant une diffusion — reprise refusée, relance proposée",
-          code: code ?? 0,
-        });
+        reportPlayback("error", serverFailureFields(logContext.current, "erreur pendant une diffusion — reprise refusée, relance proposée", { code: code ?? 0 }));
         // Ni reprise ni échelle : voir `castInterrupted`. L'écran prend le relais.
         setReconnecting(false);
         setLoading(false);
@@ -1367,11 +1373,7 @@ function ActivePlayer({
            * drapeau, aux deux instants où il peut décider.
            */
           if (castActiveRef.current) {
-            reportPlayback("error", {
-              itemId,
-              title,
-              reason: "reprise abandonnée : une diffusion s'est établie entre-temps",
-            });
+            reportPlayback("error", serverFailureFields(logContext.current, "reprise abandonnée : une diffusion s'est établie entre-temps"));
             setReconnecting(false);
             return;
           }

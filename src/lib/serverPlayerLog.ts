@@ -58,7 +58,21 @@ export function serverFailureFields(ctx: ServerPlayerContext, reason: string, ex
 
 /** Le téléviseur a pris la route : la diffusion est établie, et non seulement demandée. */
 export function castEstablishedFields(ctx: ServerPlayerContext, at: number): Record<string, unknown> {
-  return { ...base(ctx), path: "serveur", reason: "diffusion établie", at: Math.round(at) };
+  // `cast: true` quel que soit le contexte : une route prise depuis les commandes de la vidéo, dans
+  // une séance qui n'avait pas été ouverte pour diffuser, est une diffusion tout autant.
+  return { ...base(ctx), cast: true, path: "serveur", reason: "diffusion établie", at: Math.round(at) };
+}
+
+/**
+ * La diffusion s'est arrêtée — le téléviseur, le centre de contrôle, ou cette page.
+ *
+ * Une diffusion qui finit n'est pas un repli raté : `cast: true` quoi que dise le contexte (une
+ * séance ouverte sur le téléphone puis envoyée à la télé par les commandes de la vidéo n'est pas
+ * une « séance de diffusion »), et la séance, sans laquelle la ligne tombait dans une séance
+ * reconstituée et comptait comme un échec sur la page Activité (relu le 24/09/2026).
+ */
+export function castEndedFields(ctx: ServerPlayerContext, source: string, at: number): Record<string, unknown> {
+  return { ...base(ctx), cast: true, path: "serveur", reason: `fin de diffusion (${source})`, at: Math.round(at) };
 }
 
 /**

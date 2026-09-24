@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { serverStartFields, serverFailureFields, castEstablishedFields, serverStopFields } from "@/lib/serverPlayerLog";
+import { serverStartFields, serverFailureFields, castEstablishedFields, castEndedFields, serverStopFields } from "@/lib/serverPlayerLog";
 import { isPlayerEventKind } from "@/lib/playerLog";
 
 // Le lecteur serveur n'écrivait rien : l'AirPlay figé du 22/09/2026 ne s'est compris qu'au journal
@@ -76,5 +76,26 @@ describe("lecteur serveur pendant un banc", () => {
   it("marque ses lignes du banc, pour qu'elles restent hors du journal des spectateurs", () => {
     expect(serverStartFields({ ...CTX, bench: "banc-1" }, { directPlay: false, nativeHls: true, resumeAt: 0, audioStreamIndex: undefined })).toMatchObject({ bench: "banc-1" });
     expect(serverStopFields(CTX, "close", 10)).not.toHaveProperty("bench");
+  });
+});
+
+// 24/09/2026 : une séance ouverte sur le téléphone puis envoyée à la télé par les commandes de la
+// vidéo n'est pas une « séance de diffusion » — et pourtant c'en est une dès que la route est prise.
+describe("une diffusion prise depuis une séance ordinaire", () => {
+  const PHONE = { itemId: "b".repeat(32), title: "Send Help", cast: false, session: "s-9", agent: "iPhone" };
+
+  it("s'écrit comme une diffusion, avec sa séance", () => {
+    expect(castEstablishedFields(PHONE, 12)).toMatchObject({ cast: true, session: "s-9", reason: "diffusion établie" });
+  });
+
+  it("sa fin aussi : ni séance reconstituée, ni repli raté", () => {
+    expect(castEndedFields(PHONE, "route sans fil perdue", 1650.4)).toMatchObject({
+      cast: true,
+      session: "s-9",
+      agent: "iPhone",
+      player: "serveur",
+      reason: "fin de diffusion (route sans fil perdue)",
+      at: 1650,
+    });
   });
 });

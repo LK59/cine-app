@@ -62,6 +62,13 @@ export interface Seance {
    * télé tenant lieu de sept échecs (relu le 24/09/2026).
    */
   casts: number;
+  /**
+   * Un téléviseur a réellement pris la lecture (ligne `cast`, « diffusion établie ») — et non
+   * seulement demandée. Une séance rouverte sur le téléphone puis envoyée à la télé par les
+   * commandes de la vidéo n'a pas de repli « diffusion demandée » : sans ceci, elle se lisait
+   * comme une lecture serveur sur téléphone (24/09/2026).
+   */
+  onTv: boolean;
   errors: number;
   /** Les motifs des incidents, dans l'ordre — de quoi dire « pourquoi » sans ouvrir la séance. */
   incidents: { kind: string; t: number; reason: string }[];
@@ -76,7 +83,15 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 /** Un repli qui est une diffusion : le champ posé depuis le 24/09/2026, ou, avant, la phrase. */
 function isCast(r: LogRecord, reason: string): boolean {
   const takeover = r.takeover as { cast?: unknown } | undefined;
-  return r.cast === true || r["takeover.cast"] === true || takeover?.cast === true || reason === "diffusion demandée";
+  // « fin de diffusion » : la ligne l'écrivait sans champ `cast` avant le 24/09/2026, et chaque
+  // diffusion terminée comptait comme un repli raté.
+  return (
+    r.cast === true ||
+    r["takeover.cast"] === true ||
+    takeover?.cast === true ||
+    reason === "diffusion demandée" ||
+    reason.startsWith("fin de diffusion")
+  );
 }
 
 function blank(id: string, legacy: boolean, r: LogRecord): Seance {
@@ -104,6 +119,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     stalls: 0,
     fallbacks: 0,
     casts: 0,
+    onTv: false,
     errors: 0,
     incidents: [],
   };
@@ -165,6 +181,9 @@ function absorb(s: Seance, r: LogRecord): void {
       }
       s.fallbacks += 1;
       s.incidents.push({ kind: "fallback", t: r._t, reason });
+      break;
+    case "cast":
+      s.onTv = true;
       break;
     case "error":
       s.errors += 1;

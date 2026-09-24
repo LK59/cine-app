@@ -556,7 +556,9 @@ describe("une source perdue", () => {
     act(() => setVisibility("visible"));
     now.mockRestore();
 
-    await waitFor(() => expect(probes).toHaveLength(2));
+    // Trois secondes plutôt que la seconde par défaut : sous la charge de la suite complète, la
+    // reconstruction a mis 1,06 s à partir (24/09/2026) — le test échouait sans que rien ne soit faux.
+    await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
     expect(probes[1].startSeconds).toBeCloseTo(1200, 1);
     const logged = (kind: string) =>
       (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls

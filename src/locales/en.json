@@ -245,7 +245,8 @@
       "stall": "{n} stall|{n} stalls",
       "slowSeek": "{n} slow seek|{n} slow seeks",
       "lost": "end lost",
-      "server": "server player"
+      "server": "server player",
+      "tv": "on a TV"
     },
     "seance": {
       "watched": "{d} watched",

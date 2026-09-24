@@ -75,6 +75,21 @@ describe("séances", () => {
     expect(seances.every((s) => s.legacy)).toBe(true);
   });
 
+  it("marque une séance qu'un téléviseur a prise, et ne compte pas la fin d'une diffusion comme un échec", () => {
+    // Timéo, 24/09/2026 : un film rouvert sur le lecteur serveur puis envoyé à la télé depuis les
+    // commandes de la vidéo — pas de « diffusion demandée », seulement la route établie.
+    const [s] = buildSeances([
+      rec({ kind: "start", session: "t1", user: "timeo", player: "serveur", cast: false, title: "Send Help", itemId: "i" }, 1000),
+      rec({ kind: "cast", session: "t1", user: "timeo", player: "serveur", cast: true, reason: "diffusion établie" }, 2000),
+      // La fin d'une diffusion, telle qu'elle s'écrivait avant ce jour : sans `cast`.
+      rec({ kind: "fallback", session: "t1", user: "timeo", reason: "fin de diffusion (route sans fil perdue)" }, 3000),
+    ]);
+    expect(s.onTv).toBe(true);
+    expect(s.fallbacks).toBe(0);
+    expect(s.casts).toBe(1);
+    expect(s.incidents).toHaveLength(0);
+  });
+
   it("ignore les lignes du banc d'essai", () => {
     expect(buildSeances([rec({ kind: "start", session: "b", bench: "run-1", user: "louis" }, 1)])).toHaveLength(0);
   });

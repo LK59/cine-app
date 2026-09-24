@@ -189,6 +189,7 @@ export function SeanceFlags({ s }: { s: Seance }) {
   if (s.slowSeeks) flags.push({ label: t("activity.flags.slowSeek", { n: s.slowSeeks }), tone: "bg-amber-500/15 text-amber-300" });
   if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-slate-500/20 text-slate-300" });
   if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
+  if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
   if (!flags.length) return null;
   return (
     <span className="flex flex-wrap gap-1">

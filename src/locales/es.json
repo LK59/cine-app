@@ -245,7 +245,8 @@
       "stall": "{n} bloqueo|{n} bloqueos",
       "slowSeek": "{n} salto lento|{n} saltos lentos",
       "lost": "final perdido",
-      "server": "reproductor del servidor"
+      "server": "reproductor del servidor",
+      "tv": "en un televisor"
     },
     "seance": {
       "watched": "{d} vistos",

@@ -245,7 +245,8 @@
       "stall": "{n} Hänger|{n} Hänger",
       "slowSeek": "{n} langsamer Sprung|{n} langsame Sprünge",
       "lost": "Ende verloren",
-      "server": "Server-Player"
+      "server": "Server-Player",
+      "tv": "auf einem Fernseher"
     },
     "seance": {
       "watched": "{d} geschaut",
