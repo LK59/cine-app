@@ -70,6 +70,10 @@ downgrade — a player that drops a level without saying so looks like a player 
 | **2. WebCodecs → canvas** | Software decode frame by frame, canvas render, hand-held audio clock, HDR→SDR conversion in a shader | The browser refuses a codec in MediaSource but can decode it another way |
 | **3. Explicit refusal** | Named codec, stop | Neither path can carry it |
 
+**The canvas clock dates what is heard**, not what the audio graph processes: it subtracts the
+latency the browser reports (`outputLatency`, else `baseLatency`, read once a second, capped at
+0.5 s) — with Bluetooth headphones, 150–250 ms the picture used to run ahead (24/09).
+
 **The canvas's HDR→SDR conversion puts 203 nits at the screen's white** (`hdrMath.toneMapLuma`,
 mirrored in the shader): linear below 0.8 of that white, then a Reinhard shoulder that compresses
 highlights without clipping. It used to normalise on the mastering peak, which put 203-nit white at
@@ -367,7 +371,9 @@ reads and two verbs.
   buffers, so emptying audio empties them all.
 - **Frozen clock (1.5 s)**: playing, head on media, seconds of lead, and the clock not moving. The
   inverse shape of every other stall, handled the same way — re-request the position, slightly
-  further on. Three nudges of 0.08 s; past those, a real recovery (below), once per 1.5 s.
+  further on. Three nudges of 0.08 s; past those, a real recovery (below), once per 1.5 s. The
+  recovery's own 0.08 s step is not playback: counted as such, it reset the nudges after every
+  recovery, and a frozen picture took four minutes to reach the stable player (24/09).
 - **The recovery ladder** (`recover` → `escalate` → `handOver`, `mseSource.ts`). Both kinds of
   stall climb the same rungs, and no rung is ever a dead end:
   1. seek to the head again, buffers cleared and re-read — **three times** at one spot within 5 s;
@@ -384,6 +390,13 @@ reads and two verbs.
   the 5 s window was refreshed by *abandoned* calls too — the watchdog calls every 250 ms, so it
   never expired and every call after the third gave up; and the frozen clock was left alone for
   good after its third nudge.
+- **Network failure with lead** (`keepThroughNetworkFailure`): a read that fails for the network,
+  retries included, used to go through a recovery — both buffers cleared. With **5 s or more** of
+  lead, the buffers are kept and the read is retried after 1, 2, 4 then 8 s, from where it stopped
+  — and nothing is read in between, since only the retry repositions the file reader;
+  just before the first re-read segment is appended, only what it will replace (its group, from its
+  first picture) is removed, so the buffer never holds the same pictures twice. Below 5 s of lead,
+  after four tries, or if a seek intervened, the ordinary recovery runs as before (24/09).
 - **Source loss**: iOS reclaims media resources in the background and closes the MediaSource. This
   is a pipeline to rebuild at the current position, not a failure to report — up to three times.
 - **A platform audio decoder that fails on the canvas path is not fatal**: the codec is set aside

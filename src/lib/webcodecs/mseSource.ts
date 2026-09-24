@@ -116,6 +116,16 @@ const STALL_TRACE_MS = 20_000;
 /** Refused appends in a row before playback is declared broken rather than merely interrupted. */
 const MAX_APPEND_FAILURES = 3;
 
+/**
+ * Une coupure réseau ne vide le tampon que s'il n'y a plus grand-chose dedans.
+ *
+ * Au-dessus de cette avance, le film continue sur ce qu'il a pendant que la lecture est retentée
+ * (voir `keepThroughNetworkFailure`). En dessous, rien à perdre : la reprise habituelle.
+ */
+const NETWORK_KEEP_LEAD_SECONDS = 5;
+/** Attentes avant chaque nouvel essai, puis la reprise habituelle — une vingtaine de secondes en tout. */
+const NETWORK_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+
 /** How long a playhead with no media under it is tolerated before a seek is forced to reach it. */
 const STALL_TIMEOUT_MS = 700;
 
@@ -193,6 +203,21 @@ export class MseSource {
   private audioOps: BufferQueue | null = null;
   /** Consecutive refused appends. A single one is worth retrying; a run of them is not. */
   private appendFailures = 0;
+  /** Nouveaux essais réseau faits sans vider le tampon depuis le dernier envoi réussi. */
+  private networkRetries = 0;
+  private networkRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * La lecture a repris après une coupure sans vider le tampon : le premier segment relu remplace
+   * ce que le tampon tient déjà à partir de son propre début, qui est retiré juste avant l'envoi.
+   */
+  private trimBeforeNextAppend = false;
+  /**
+   * Plus aucune lecture jusqu'au nouvel essai : le lecteur de fichier est resté là où l'erreur l'a
+   * laissé, peut-être au milieu d'une grappe, et seul le nouvel essai le repositionne. Sans ce
+   * verrou, le premier `timeupdate` relançait le remplissage sur ce lecteur-là. Un saut le lève :
+   * il repositionne tout lui-même.
+   */
+  private networkHold = false;
   /**
    * Everything about the element's own clock — pausing, resuming, landing after a seek, starting
    * a film the element gave up on. A different subject from moving bytes, with a
@@ -694,7 +719,7 @@ export class MseSource {
   }
 
   private async runFill(): Promise<void> {
-    if (this.destroyed || this.ended) return;
+    if (this.destroyed || this.ended || this.networkHold) return;
     const generation = this.generation;
     // Media accepted but not retained leaves the depth where it was. A handful of segments that
     // change nothing is a browser quietly discarding what it is given, and reading the rest of
@@ -756,6 +781,25 @@ export class MseSource {
         }
 
         if (segment.subtitles.length > 0) this.callbacks.onSubtitles?.(segment.subtitles);
+
+        // Première relecture après une coupure gardée : ce segment recommence à l'image clé qui
+        // précède l'endroit où la lecture s'était arrêtée, sur du média déjà là. Ce qu'il va
+        // remplacer est retiré d'abord — jamais deux fois les mêmes images dans le tampon, ce qui
+        // n'arrive nulle part ailleurs dans ce lecteur — et tout ce qui précède reste.
+        if (this.trimBeforeNextAppend) {
+          this.trimBeforeNextAppend = false;
+          const from = this.remuxer.diagnostics().segmentStartSeconds + this.delaySeconds;
+          trace(`coupure réseau : relecture depuis ${from.toFixed(2)} s, le tampon d'avant est gardé`);
+          for (const queue of [this.videoOps, this.audioOps]) {
+            if (queue) await this.clearFrom(queue, from);
+          }
+          if (this.generation !== generation || this.destroyed) break;
+          // La profondeur vient de reculer au début du groupe relu : mesurée contre celle d'avant
+          // le retrait, la relecture d'un long groupe passait pour « rien retenu ».
+          deepestSoFar = this.bufferedEnd();
+          furthestLanes = this.laneProgress();
+          fruitless = 0;
+        }
 
         if (this.videoOps) {
           // One call per fragment. Handing over a whole keyframe group at once is what this
@@ -862,6 +906,7 @@ export class MseSource {
       // Une lecture coupée par un saut : ce n'est pas un segment refusé, et il n'y a rien à
       // reprendre — le saut qui l'a coupée repositionne tout derrière.
       if (isReadAbandoned(error)) return;
+      if (isNetworkFailure(error) && this.keepThroughNetworkFailure(generation)) return;
       // Reported by the viewer as a freeze that a second seek or a language change undoes — so
       // nothing was actually lost, and declaring playback over was the wrong answer. A refused
       // append is retried from where the playhead is; only a run of them is a real fault.
@@ -886,6 +931,7 @@ export class MseSource {
     try {
       await queue.enqueue(() => queue.buffer.appendBuffer(data as BufferSource));
       this.appendFailures = 0;
+      this.networkRetries = 0;
     } catch (error) {
       // The buffer is full rather than broken: drop what is behind the playhead and try again.
       //
@@ -1064,6 +1110,10 @@ export class MseSource {
       if (queue) await this.clear(queue);
     }
     if (this.destroyed) return;
+    // Les tampons viennent d'être vidés et le lecteur va être repositionné : plus rien à retirer
+    // ni à retenir pour une coupure gardée plus tôt.
+    this.trimBeforeNextAppend = false;
+    this.networkHold = false;
 
     this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
     this.seekNetworkPending = true;
@@ -1114,6 +1164,50 @@ export class MseSource {
     this.seekState.moved(landing);
     this.video.currentTime = landing;
     this.guard.opened(landing, !this.startPaused);
+  }
+
+  /** Retire d'un tampon tout ce qui suit cet instant — voir `trimBeforeNextAppend`. */
+  private async clearFrom(queue: BufferQueue, from: number): Promise<void> {
+    if (queue.buffer.buffered.length === 0 || this.source.readyState === "closed") return;
+    const end = Number.isFinite(this.source.duration) ? this.source.duration + 1 : 1e9;
+    if (from >= end) return;
+    await queue.enqueue(() => queue.buffer.remove(Math.max(0, from), end)).catch(() => {
+      // Refusé : l'envoi qui suit remplacera la même plage, comme la norme le prévoit.
+    });
+  }
+
+  /**
+   * Une lecture réseau a échoué, nouvelles tentatives comprises : garder le tampon et réessayer.
+   *
+   * La reprise habituelle passe par un saut, qui vide les deux tampons. Pendant un redéploiement
+   * du serveur — plusieurs par jour, deux ou trois secondes de réponses refusées — c'était jusqu'à
+   * trente secondes d'image jetées et un chargement à l'écran, alors que le film avait de quoi
+   * tenir (relu le 24/09/2026). Tant qu'il reste une avance confortable, la lecture reprend donc
+   * plus tard, là où elle s'était arrêtée, sans rien toucher à ce qui est déjà là.
+   *
+   * Prudente à dessein : au-dessous de `NETWORK_KEEP_LEAD_SECONDS`, après quatre essais, ou si un
+   * saut est passé entre-temps, rien de tout cela — la reprise habituelle, comme avant. Et le
+   * chien de garde reste là : si l'avance s'épuise pendant l'attente, il reprend à sa façon.
+   */
+  private keepThroughNetworkFailure(generation: number): boolean {
+    if (this.destroyed || this.stuck) return false;
+    if (this.lead < NETWORK_KEEP_LEAD_SECONDS) return false;
+    if (this.networkRetries >= NETWORK_RETRY_DELAYS_MS.length) return false;
+    const delay = NETWORK_RETRY_DELAYS_MS[this.networkRetries];
+    this.networkRetries += 1;
+    this.networkHold = true;
+    trace(`coupure réseau avec ${this.lead.toFixed(1)} s d'avance : tampon gardé, nouvel essai dans ${delay / 1000} s`);
+    if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
+    this.networkRetryTimer = setTimeout(() => {
+      this.networkRetryTimer = null;
+      // Un saut, une reprise ou une destruction entre-temps a tout repositionné : rien à reprendre.
+      if (this.destroyed || this.generation !== generation) return;
+      this.networkHold = false;
+      this.remuxer.seekTo(Math.max(0, this.readUpTo - this.delaySeconds));
+      this.trimBeforeNextAppend = true;
+      void this.fill();
+    }, delay);
+    return true;
   }
 
   private async clear(queue: BufferQueue): Promise<void> {
@@ -1427,6 +1521,12 @@ export class MseSource {
       // then the next keyframe, then a rebuild. Paced by `frozenSince`, once per 1.5 s at most.
       trace(`horloge figée à ${now.toFixed(2)} s malgré ${this.frozenNudges} poussées — reprise`);
       if (!this.recover(now + FROZEN_STEP)) this.handOver(now);
+      // Même raison que pour la poussée ci-dessous : la reprise pose l'horloge 0,08 s plus loin,
+      // et ce pas-là passait pour de la lecture. Les poussées repartaient à zéro après chaque
+      // reprise — trois poussées, une reprise, trois poussées… — et une image figée mettait quatre
+      // minutes à gravir l'échelle jusqu'au lecteur serveur au lieu d'une et demie (relu le
+      // 24/09/2026, mesuré : 62 s → 21 s hors saut, 242 s → 96 s pendant un saut).
+      this.lastClockAt = now + FROZEN_STEP;
       return;
     }
 
@@ -1691,6 +1791,8 @@ export class MseSource {
     this.video.removeEventListener("playing", this.onResumed);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
+    if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
+    this.networkRetryTimer = null;
     this.video.removeEventListener("error", this.onElementError);
     this.source.removeEventListener("sourceclose", this.onSourceClosed);
 
