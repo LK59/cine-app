@@ -413,7 +413,7 @@ function ActivePlayer({
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
-  const { stop: stopPlaybackNow } = usePlaybackSession(
+  const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
     useCallback(() => lastKnownTime.current, []),
     // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
     // is what the server's own dashboard should show.
@@ -1169,16 +1169,36 @@ function ActivePlayer({
   // `ended` les coupait net — l'épisode suivant ne venait jamais sur ce lecteur, alors que le
   // lecteur natif, lui, reste ouvert et laisse le décompte finir (relu le 24/09/2026). Pas dans le
   // mini-lecteur, qui n'a pas de commandes et donc pas de carte : il se ferme comme avant.
+  //
+  // Resté ouvert, il annonce quand même la fin à Jellyfin tout de suite, comme le lecteur natif :
+  // c'est cet arrêt qui marque l'épisode vu, et il ne partait sinon qu'au passage à l'épisode
+  // suivant ou à la fermeture — jamais, pour une page tuée pendant la question « toujours là ? »
+  // (relu le 24/09/2026). Relancé après, l'épisode rouvre sa séance.
   const hasNextEpisode = nextEpisode !== null && mode !== "mini";
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || hasNextEpisode) return;
+    if (!video) return;
+    let endStopped = false;
     function onEnded() {
-      handleClose();
+      if (!hasNextEpisode) {
+        handleClose();
+        return;
+      }
+      endStopped = true;
+      void stopPlaybackNow();
+    }
+    function onPlay() {
+      if (!endStopped) return;
+      endStopped = false;
+      resumePlaybackSession();
     }
     video.addEventListener("ended", onEnded);
-    return () => video.removeEventListener("ended", onEnded);
-  }, [handleClose, videoKey, hasNextEpisode]);
+    video.addEventListener("play", onPlay);
+    return () => {
+      video.removeEventListener("ended", onEnded);
+      video.removeEventListener("play", onPlay);
+    };
+  }, [handleClose, videoKey, hasNextEpisode, stopPlaybackNow, resumePlaybackSession]);
 
   // Tracked independently of PlayerControls (which keeps its own copy for the full-mode UI)
   // so the mini player's play/pause icon stays correct without threading state through props.
