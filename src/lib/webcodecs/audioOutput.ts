@@ -138,14 +138,30 @@ export class AudioOutput {
     this.gain.gain.setTargetAtTime(muted ? 0 : volume, this.context.currentTime, 0.01);
   }
 
+  /**
+   * Ce qu'on veut du contexte, par opposition à ce qu'il annonce.
+   *
+   * `context.state` ne change qu'une fois la promesse de `suspend()` ou `resume()` tenue. Une
+   * reprise demandée pendant une suspension en cours lisait donc « running », ne faisait rien, et
+   * la suspension finissait par l'emporter : l'horloge — celle du son — restait arrêtée, et l'image
+   * avec elle, jusqu'à une pause et une lecture. Latent depuis toujours entre `freeze` et `thaw`,
+   * rendu fréquent le 24/09/2026 quand chaque saut s'est mis à suspendre le son. Chaque transition
+   * relit donc, une fois faite, ce qui est voulu à ce moment-là.
+   */
+  private wantRunning = true;
+
   async resume(): Promise<void> {
+    this.wantRunning = true;
     if (this.context.state === "suspended") await this.context.resume();
+    if (!this.wantRunning && this.context.state === "running") await this.context.suspend();
     // The element has its own autoplay gate, and this is called from a real gesture.
-    await this.element?.play().catch(() => {});
+    if (this.wantRunning) await this.element?.play().catch(() => {});
   }
 
   async suspend(): Promise<void> {
+    this.wantRunning = false;
     if (this.context.state === "running") await this.context.suspend();
+    if (this.wantRunning && this.context.state === "suspended") await this.context.resume();
   }
 
   /**

@@ -200,3 +200,30 @@ describe("AudioOutput clock", () => {
   });
 });
 
+// Une reprise demandée pendant une suspension en cours ne doit pas être perdue : l'horloge du
+// canevas restait arrêtée, et l'image avec elle (relu le 24/09/2026).
+describe("AudioOutput suspend/resume", () => {
+  it("honore la dernière demande, même arrivée pendant la précédente", async () => {
+    const output = new AudioOutput({ sampleRate: 48000, numberOfChannels: 2 });
+    const context = (output as unknown as { context: { state: string; suspend: () => Promise<void>; resume: () => Promise<void> } }).context;
+    let finishSuspend!: () => void;
+    context.state = "running";
+    context.suspend = () =>
+      new Promise<void>((resolve) => {
+        finishSuspend = () => {
+          context.state = "suspended";
+          resolve();
+        };
+      });
+    context.resume = async () => {
+      context.state = "running";
+    };
+    const suspending = output.suspend();
+    const resuming = output.resume(); // voit encore « running »
+    finishSuspend();
+    await suspending;
+    await resuming;
+    expect(context.state).toBe("running");
+  });
+});
+
