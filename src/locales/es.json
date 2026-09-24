@@ -1489,8 +1489,6 @@
       "paths": {
         "remuxName": "Remultiplexado",
         "remuxDetail": "decodificación por hardware, HDR nativo",
-        "webcodecsName": "WebCodecs → canvas",
-        "webcodecsDetail": "decodificación por software",
         "pendingName": "En examen",
         "pendingDetail": "el archivo aún no ha hablado"
       }
@@ -1803,10 +1801,7 @@
     "warnings": {
       "noIndexSeek": "Este archivo no permite avanzar ni retroceder: no tiene índice.",
       "noIndexAudio": "Este archivo no permite cambiar de pista de audio durante la reproducción: no tiene índice.",
-      "audioTrackRefused": "No se pudo abrir esta pista de audio: sigue la anterior.",
-      "noSound": "Sin sonido en esta pista.",
-      "audioInterrupted": "El sonido se ha interrumpido.",
-      "noAudioDecoder": "Esta pista de audio no se puede reproducir aquí."
+      "audioTrackRefused": "No se pudo abrir esta pista de audio: sigue la anterior."
     },
     "hdrCap": {
       "title": "Brillo HDR",

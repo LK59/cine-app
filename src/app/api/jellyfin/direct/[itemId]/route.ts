@@ -90,11 +90,6 @@ export interface DirectPlayInfo {
   /** Null when the file can be attempted; a user-facing explanation when it cannot. */
   refusedReason: string | null;
   /**
-   * Applies only if playback falls back to decoding on a canvas. The native path shows HDR
-   * without converting anything, so this is enforced by the client rather than here.
-   */
-  canvasHdrRefusal: string | null;
-  /**
    * Subtitle files sitting beside the film rather than inside it.
    *
    * Nothing in the container names them, so without this they simply do not exist for a player
@@ -193,21 +188,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     ? null
     : `Le lecteur expérimental ne lit pas les fichiers « ${container || "inconnu"} » (Matroska et MP4 seulement).`;
 
-  // HDR is a different matter now, and the server is the wrong place to decide it. Repackaging the
-  // file for the browser's own decoder carries the HDR signalling through untouched and the
-  // display handles it — there is nothing to tone map and nothing to warn about. It is only the
-  // canvas pipeline that has to convert the picture by hand, so this is passed down as a reason
-  // that *may* apply and is enforced by the client once it knows which path it is on.
-  //
-  // There is no longer anything to consent to, either. Converting HDR on the GPU was once a
-  // setting because it was the only way HDR played at all and it costs the picture something;
-  // now the native path shows it untouched and the conversion is what happens on the fallback
-  // instead of nothing. A file that cannot be converted is still refused, and says why.
-  // Conservé, et désormais toujours nul en pratique : le seul cas qu'il portait est remonté dans
-  // `refusedReason` ci-dessus, où il garde les deux chemins au lieu d'un. Le champ reste parce que
-  // le canevas peut se voir refuser une conversion pour d'autres raisons que celle-là, et que le
-  // client sait déjà quoi en faire.
-  const canvasHdrRefusal: string | null = null;
+  // HDR needs nothing from the server: the remuxer carries the HDR signalling through untouched
+  // and the display handles it. (A `canvasHdrRefusal` field used to travel alongside, for a canvas
+  // player that converted HDR by hand; always null in practice, removed with that player on
+  // 2026-09-24.)
 
   /**
    * La langue de tournage, reliée au film par son identifiant TMDB.
@@ -268,7 +252,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
       })),
     originalLanguage,
     refusedReason,
-    canvasHdrRefusal,
     externalSubtitles,
     title: naming ? displayTitle(naming, "") || null : null,
     introSkip: timestamps?.Introduction?.Valid

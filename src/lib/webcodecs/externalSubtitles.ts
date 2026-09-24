@@ -1,5 +1,6 @@
 import { simultaneousText, stripSubtitleMarkup } from "./subtitleMarkup";
-import type { EngineTrack, SubtitleCue } from "./engine";
+import type { SubtitleCue } from "./subtitleMarkup";
+import type { PlayerTrack } from "./playerTrack";
 
 /**
  * Subtitles that live beside the film rather than inside it.
@@ -34,7 +35,7 @@ export interface ExternalSubtitleSource {
   url: string;
 }
 
-export function toEngineTrack(source: ExternalSubtitleSource): EngineTrack {
+export function toPlayerTrack(source: ExternalSubtitleSource): PlayerTrack {
   return {
     number: source.id,
     // Named for what the viewer will see, not for what the file was before Jellyfin converted it.
@@ -101,7 +102,7 @@ export function parseSubtitles(text: string): SubtitleCue[] {
 /**
  * One track's cues, in memory, looked up by time.
  *
- * Unlike the engine's queue, this is not consumed as it is read: the viewer can jump backwards,
+ * Not consumed as it is read: the viewer can jump backwards,
  * and re-parsing the file to do it would be absurd when it is already here.
  */
 export class ExternalSubtitleTrack {

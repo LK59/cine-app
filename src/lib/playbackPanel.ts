@@ -104,7 +104,7 @@ export function describeJellyfinPlayback(
 }
 
 export interface RemuxPlayback {
-  path: "remux" | "webcodecs" | null;
+  path: "remux" | null;
   pathReason: string | null;
   container: string | null;
   video: { codec: string | null; width: number | null; height: number | null; bitDepth: number | null; rangeType: string | null } | null;
@@ -119,14 +119,10 @@ export const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
 
 /** Ce que le lecteur natif sait de sa lecture, dans le même modèle. */
 export function describeRemuxPlayback(info: RemuxPlayback, t: Translate): Omit<PlaybackPanelData, "report"> {
-  const known = {
-    remux: { name: t("player.info.paths.remuxName"), detail: t("player.info.paths.remuxDetail"), tone: "good" as const },
-    webcodecs: { name: t("player.info.paths.webcodecsName"), detail: t("player.info.paths.webcodecsDetail"), tone: "warn" as const },
-  };
   const headline =
     info.path === null
       ? { name: t("player.info.paths.pendingName"), detail: t("player.info.paths.pendingDetail"), tone: "neutral" as const }
-      : known[info.path];
+      : { name: t("player.info.paths.remuxName"), detail: t("player.info.paths.remuxDetail"), tone: "good" as const };
 
   return {
     headline,

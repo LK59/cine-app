@@ -1489,8 +1489,6 @@
       "paths": {
         "remuxName": "Remuxing",
         "remuxDetail": "hardware decoding, native HDR",
-        "webcodecsName": "WebCodecs → canvas",
-        "webcodecsDetail": "software decoding",
         "pendingName": "Examining",
         "pendingDetail": "the file has not spoken yet"
       }
@@ -1803,10 +1801,7 @@
     "warnings": {
       "noIndexSeek": "This file can't be skipped through: it has no index.",
       "noIndexAudio": "This file can't switch audio tracks during playback: it has no index.",
-      "audioTrackRefused": "This audio track couldn't be opened: the previous one keeps playing.",
-      "noSound": "No sound on this track.",
-      "audioInterrupted": "The sound was interrupted.",
-      "noAudioDecoder": "This audio track can't be played here."
+      "audioTrackRefused": "This audio track couldn't be opened: the previous one keeps playing."
     },
     "hdrCap": {
       "title": "HDR brightness",

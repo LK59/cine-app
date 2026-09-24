@@ -24,7 +24,7 @@ vi.mock("@/lib/useViewportResizing", () => ({ useViewportResizing: () => false }
 /** Ce que la trace rend quand on lui demande ses dernières étapes — vide, sauf pour qui le dit. */
 let recentSteps: string[] = [];
 vi.mock("@/lib/webcodecs/trace", () => ({ trace: vi.fn(), traceKeepAcrossReset: vi.fn(), traceRecent: () => recentSteps }));
-vi.mock("@/lib/webcodecs/pathSelector", () => ({ describePath: () => "raison du choix" }));
+vi.mock("@/lib/webcodecs/pathSelector", () => ({ NATIVE_PATH: "raison du choix" }));
 vi.mock("@/lib/webcodecs/capabilities", () => ({
   probeCapabilities: async () => ({}),
   describeCapabilities: () => ({}),
@@ -35,20 +35,6 @@ vi.mock("@/components/ExperimentalPlayerReport", () => ({
 vi.mock("@/components/MiniPlayer", () => ({
   MiniPlayerChrome: () => <div data-testid="mini" />,
   useMiniPlayerDrag: () => ({ pos: { x: 0, y: 0 }, size: { width: 1, height: 1 }, isDragging: false, handlers: {} }),
-}));
-const facadeSeeks: number[] = [];
-vi.mock("@/lib/webcodecs/mediaFacade", () => ({
-  MediaElementFacade: class {
-    constructor(readonly engine: { seek?: (at: number) => void; play: () => Promise<void> }) {}
-    destroy = vi.fn();
-    set currentTime(at: number) {
-      facadeSeeks.push(at);
-    }
-    play() {
-      return this.engine.play();
-    }
-  },
-  asVideoElement: (facade: unknown) => facade,
 }));
 
 const stopPlaybackNow = vi.fn();
@@ -153,7 +139,6 @@ function info(over: Info = {}): Info {
     streamUrl: "/stream.mkv",
     container: "mkv",
     refusedReason: null,
-    canvasHdrRefusal: null,
     externalSubtitles: [],
     video: { codec: "hevc", width: 1920, height: 1080, bitDepth: 10, isHdr: false, rangeType: "SDR" },
     introSkip: null,
@@ -215,42 +200,6 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
   }),
 }));
 
-/** Les pistes du moteur canevas — une seule par défaut, les tests qui en veulent plus le disent. */
-const ONE_ENGINE_TRACK = [{ number: 1, codecId: "A_AAC", language: "fre", name: null, isDefault: true, isForced: false }];
-let engineAudio: unknown[] = ONE_ENGINE_TRACK;
-let engineSubtitles: unknown[] = [];
-const engineHandlers = new Map<string, ((payload?: unknown) => void)[]>();
-/** Les moteurs construits, pour lire ce qu'on a demandé à `load`. */
-const engineInstances: { load: ReturnType<typeof vi.fn> }[] = [];
-const emit = (event: string, payload?: unknown) =>
-  act(() => void (engineHandlers.get(event) ?? []).forEach((handler) => handler(payload)));
-
-vi.mock("@/lib/webcodecs/engine", () => ({
-  PlaybackEngine: class {
-    constructor() {
-      engineInstances.push(this as never);
-    }
-    audioTracks = engineAudio;
-    subtitleTracks = engineSubtitles;
-    currentAudioTrack = 1;
-    diagnostics = {};
-    on(event: string, handler: (payload?: unknown) => void) {
-      const list = engineHandlers.get(event) ?? [];
-      list.push(handler);
-      engineHandlers.set(event, list);
-      return () => {};
-    }
-    load = vi.fn(async () => {});
-    play = vi.fn(async () => {});
-    pause = vi.fn();
-    destroy = vi.fn();
-    resumeAudio = vi.fn();
-    setSubtitleTrack = vi.fn();
-    setSubtitleOffset = vi.fn();
-    setAudioTrack = vi.fn(async () => {});
-  },
-}));
-
 import { noteWatching } from "@/lib/resumeRewind";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 
@@ -297,10 +246,6 @@ beforeEach(() => {
   recentSteps = [];
   serverFallback = undefined;
   probes = [];
-  engineHandlers.clear();
-  engineInstances.length = 0;
-  engineAudio = ONE_ENGINE_TRACK;
-  engineSubtitles = [];
   announcedSessions.length = 0;
   swr = { data: info(), error: undefined };
   viewerState = { resumeSeconds: 0, preferences: null };
@@ -821,8 +766,8 @@ describe("changer de piste audio", () => {
 
   it("revient à la piste d'avant quand la nouvelle n'ouvre pas par le lecteur natif", async () => {
     // Relu le 22/09/2026 : module TrueHD injoignable, encodeur qui refuse — la reconstruction
-    // tombait sur le canevas ou le lecteur serveur, et un film qui jouait était perdu pour un
-    // choix de langue. Avant la livraison par piste, un changement raté laissait l'ancienne jouer.
+    // tombait sur un autre lecteur, et un film qui jouait était perdu pour un choix de langue.
+    // Avant la livraison par piste, un changement raté laissait l'ancienne jouer.
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
 
@@ -830,15 +775,16 @@ describe("changer de piste audio", () => {
     let attempt = 0;
     nextProbe = () =>
       ++attempt === 1
-        ? { path: "webcodecs", chosen: { path: "webcodecs", attempts: [] }, discard: vi.fn() }
+        ? (() => {
+            throw new Error("Aucun chemin de lecture disponible pour ce fichier. remux : module TrueHD injoignable");
+          })()
         : { path: "remux", start: async () => back, discard: vi.fn() };
     await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
 
     await waitFor(() => expect(probes).toHaveLength(3));
     expect(probes[1]).toMatchObject({ audioTrackNumber: 2 });
     expect(probes[2]).toMatchObject({ audioTrackNumber: 1 });
-    // Ni moteur canevas, ni lecteur serveur : le film continue sur la piste qui jouait.
-    expect(engineInstances).toHaveLength(0);
+    // Pas de lecteur serveur : le film continue sur la piste qui jouait.
     expect(onFallback).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText("audioTrackRefused")).toBeTruthy());
   });
@@ -1041,33 +987,38 @@ describe("les sous-titres posés à côté du film", () => {
   });
 });
 
-describe("le chemin canvas", () => {
-  it("refuse le HDR seulement une fois qu'il est vraiment question de le convertir", async () => {
-    // The native path shows this file's HDR untouched; it is landing on the canvas that makes
-    // tone mapping necessary, so the refusal cannot be decided before the path is known.
-    swr = { data: info({ canvasHdrRefusal: "HDR non converti" }), error: undefined };
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(onFallback).toHaveBeenCalledWith("HDR non converti"));
-  });
-
-  it("se tait sur les répliques du conteneur pendant qu'un fichier externe est affiché", async () => {
-    swr = {
-      data: info({ externalSubtitles: [{ id: -1, language: "fra", title: "Français", url: "/sub.vtt" }] }),
-      error: undefined,
+// Le lecteur canevas, retiré le 24/09/2026 (docs/lecteur-canvas.md) : ce qui reste de ses tests
+// vaut pour le chemin natif — un refus passe au lecteur serveur sans autre essai, et les
+// avertissements du pipeline s'affichent puis s'effacent.
+describe("un fichier que le chemin natif ne porte pas", () => {
+  it("passe directement au lecteur serveur, avec le motif du refus", async () => {
+    nextProbe = () => {
+      throw new Error("Aucun chemin de lecture disponible pour ce fichier. remux : vidéo V_VP9 non remultiplexable");
     };
-    stubFetch(() => ({ ok: true, text: async () => "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nDu fichier." }));
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
     mount();
-    await waitFor(() => expect(screen.getByText(/^st:Français — full/)).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText(/^st:Français — full/)));
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-
-    emit("subtitle", "Du conteneur.");
-    expect(screen.queryByText("Du conteneur.")).toBeNull();
-    vi.unstubAllGlobals();
+    await waitFor(() =>
+      expect(onFallback).toHaveBeenCalledWith("Aucun chemin de lecture disponible pour ce fichier. remux : vidéo V_VP9 non remultiplexable")
+    );
+    // Une seule tentative : plus de second chemin local à essayer avant.
+    expect(probes).toHaveLength(1);
+    // Et plus de surface à peindre : la seule toile est l'image figée d'un changement de piste.
+    expect(document.querySelectorAll("canvas")).toHaveLength(1);
+    expect(document.querySelector("canvas")?.getAttribute("aria-hidden")).not.toBeNull();
   });
 
+  it("n'en fait pas une panne quand c'est le réseau qui manque", async () => {
+    const { NetworkUnavailable } = await import("@/lib/webcodecs/byteSource");
+    nextProbe = () => {
+      throw new NetworkUnavailable("Plage inaccessible : Failed to fetch");
+    };
+    mount();
+    await settle();
+    await settle();
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+});
+
+describe("les avertissements du pipeline", () => {
   it("retire un avertissement tout seul, parce qu'il ne décrivait qu'un instant", async () => {
     // Measured on a real file: a seek recovered by the second route left "cette position est
     // impossible à atteindre" on screen for the rest of the film, while the film played.
@@ -1088,53 +1039,20 @@ describe("le chemin canvas", () => {
     vi.useFakeTimers();
     mount();
     await act(async () => {});
-    act(() => probes[0].onWarning({ code: "audioInterrupted" }));
+    act(() => probes[0].onWarning({ code: "noIndexAudio" }));
     await act(async () => void vi.advanceTimersByTime(6100));
-    expect(screen.queryByText("audioInterrupted")).toBeNull();
+    expect(screen.queryByText("noIndexAudio")).toBeNull();
 
-    act(() => probes[0].onWarning({ code: "audioInterrupted" }));
-    expect(screen.getByText("audioInterrupted")).toBeTruthy();
+    act(() => probes[0].onWarning({ code: "noIndexAudio" }));
+    expect(screen.getByText("noIndexAudio")).toBeTruthy();
     vi.useRealTimers();
   });
 
-  it("reconstruit un moteur qui s'arrête en cours de film, au lieu de céder la main", async () => {
-    // The rebuild machinery is the same one the native path uses for a lost source; it was
-    // simply never wired to this one. A decoder the platform took away mid-film says nothing
-    // about the file.
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+  it("n'affiche plus les avertissements du lecteur canevas, retiré", async () => {
     mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    emit("playing"); // the picture is actually running
-
-    emit("error", "Le contexte graphique a été perdu.");
-    await waitFor(() => expect(probes).toHaveLength(2));
-    expect(onFallback).not.toHaveBeenCalled();
-  });
-
-  it("ne s'acharne pas sur un fichier que l'appareil ne sait pas décoder", async () => {
-    // That one fails on the way up, and retrying it is three spinners and the same answer.
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-
-    emit("error", "Aucun décodeur disponible pour l'audio DTS.");
-    await waitFor(() => expect(onFallback).toHaveBeenCalledWith("Aucun décodeur disponible pour l'audio DTS.", expect.anything()));
-    expect(probes).toHaveLength(1);
-  });
-
-  it("distingue un avertissement, qui laisse jouer, d'une erreur, qui arrête", async () => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-
-    emit("warning", { code: "noSound", detail: "0 bloc décodé" });
-    expect(screen.getByText("noSound")).toBeTruthy();
-    expect(onFallback).not.toHaveBeenCalled();
-
-    // Nothing has played yet, so this one is answered by handing the file over rather than by
-    // trying the same thing again.
-    emit("error", "décodage impossible");
-    expect(onFallback).toHaveBeenCalledWith("décodage impossible", expect.anything());
+    await waitFor(() => expect(probes).toHaveLength(1));
+    act(() => probes[0].onWarning({ code: "noSound", detail: "0 bloc décodé" }));
+    expect(screen.queryByText("noSound")).toBeNull();
   });
 });
 
@@ -1310,66 +1228,7 @@ describe("la fin d'une séance, au journal", () => {
   });
 });
 
-describe("le canevas ouvre sur la bonne piste", () => {
-  // Il ouvrait toujours sur la piste par défaut du fichier, et l'écran basculait ensuite vers celle
-  // du compte — la bascule que le chemin remultiplexé avait supprimée le 20/09. L'hôte lui passe
-  // maintenant la même règle que son écran.
-  const tracks = [
-    { number: 1, codecId: "A_AAC", language: "eng", name: null, isDefault: true, isForced: false, channels: 2 },
-    { number: 2, codecId: "A_AAC", language: "fre", name: null, isDefault: false, isForced: false, channels: 2 },
-    { number: 3, codecId: "A_AC3", language: "fre", name: null, isDefault: false, isForced: false, channels: 6 },
-  ];
-  const chooser = () =>
-    (engineInstances[0].load.mock.calls[0][1] as { chooseAudioTrack: (t: typeof tracks) => number | null }).chooseAudioTrack;
-
-  beforeEach(() => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-  });
-
-  it("choisit la langue du compte, et la plus riche des pistes de cette langue", async () => {
-    viewerState = {
-      resumeSeconds: 0,
-      preferences: { audioLanguage: "fra", subtitleLanguage: null, subtitleMode: "Default", playDefaultAudioTrack: false },
-    };
-    mount();
-    await waitFor(() => expect(engineInstances[0]?.load).toHaveBeenCalled());
-    expect(chooser()(tracks)).toBe(3);
-  });
-
-  it("laisse la règle du fichier sans préférence", async () => {
-    viewerState = { resumeSeconds: 0, preferences: null };
-    mount();
-    await waitFor(() => expect(engineInstances[0]?.load).toHaveBeenCalled());
-    expect(chooser()(tracks)).toBeNull();
-  });
-});
-
 describe("relu le 22/09/2026", () => {
-  it("rouvre le moteur canevas reconstruit sur la piste et les sous-titres choisis", async () => {
-    // Le menu restait sur le choix du spectateur, le film revenait sur la piste du compte et sans
-    // ses sous-titres : le chemin canevas ne retenait pas le choix audio, et ne redonnait pas les
-    // sous-titres du conteneur au nouveau moteur.
-    engineAudio = [
-      { number: 1, codecId: "A_AAC", language: "fre", name: null, isDefault: true, isForced: false },
-      { number: 2, codecId: "A_AAC", language: "eng", name: null, isDefault: false, isForced: false },
-    ];
-    engineSubtitles = [{ number: 5, codecId: "S_TEXT/UTF8", language: "fre", name: null, isDefault: false, isForced: false }];
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
-    emit("playing");
-    await act(async () => void fireEvent.click(screen.getByText(/^audio:Anglais/)));
-    await act(async () => void fireEvent.click(screen.getByText(/^st:Français/)));
-
-    emit("error", "Le contexte graphique a été perdu.");
-    await waitFor(() => expect(engineInstances[1]?.load).toHaveBeenCalled());
-    const options = engineInstances[1].load.mock.calls[0][1] as { chooseAudioTrack: (t: unknown[]) => number | null };
-    expect(options.chooseAudioTrack(engineAudio)).toBe(2);
-    await waitFor(() =>
-      expect((engineInstances[1] as unknown as { setSubtitleTrack: ReturnType<typeof vi.fn> }).setSubtitleTrack).toHaveBeenCalledWith(5)
-    );
-  });
-
   it("garde la même séance Jellyfin à travers une reconstruction", async () => {
     // Chaque reconstruction — un geste ordinaire depuis la livraison par piste — clôturait la
     // séance chez Jellyfin puis en annonçait une nouvelle.
@@ -1389,50 +1248,28 @@ describe("relu le 22/09/2026", () => {
    * close ; « Revoir » le fait, et c'est le seul chemin.
    */
   it("suspend le clavier sous l'écran de fin, et « Revoir » rouvre la séance", async () => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
     mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    emit("playing");
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(10), new Event("play")));
     expect(screen.getByTestId("controls").dataset.suspended).toBe("false");
-    emit("ended");
+    await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
     await waitFor(() => expect(screen.getByTestId("controls").dataset.suspended).toBe("true"));
 
     await act(async () => void fireEvent.click(screen.getByText("revoir")));
     expect(resumePlaybackSession).toHaveBeenCalled();
   });
 
-  /**
-   * Le décalage des sous-titres atteint ce qui les dessine.
-   *
-   * Ce lecteur écrit ses lignes lui-même : le réglage des commandes déplaçait les répliques du
-   * `<video>`, que personne n'affiche ici (relevé le 23/09/2026).
-   */
-  it("applique le décalage des sous-titres au moteur canevas", async () => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
+  it("« Revoir » rejoue le film depuis le début", async () => {
     mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    emit("playing");
-    const engine = engineInstances[0] as unknown as { setSubtitleOffset: ReturnType<typeof vi.fn> };
-
-    await act(async () => void fireEvent.click(screen.getByText("décalage:0")));
-    expect(engine.setSubtitleOffset).toHaveBeenLastCalledWith(0.5);
-    expect(screen.getByText("décalage:0.5")).toBeTruthy();
-  });
-
-  it("« Revoir » rejoue le film sur le chemin canevas", async () => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    emit("playing");
-    emit("ended");
-    const engine = engineInstances[0] as unknown as { play: ReturnType<typeof vi.fn> };
-    engine.play.mockClear();
-    facadeSeeks.length = 0;
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(5400), new Event("ended")));
+    const element = videoElement(5400);
+    (HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>).mockClear();
 
     await act(async () => void fireEvent.click(screen.getByText("revoir")));
 
-    expect(facadeSeeks).toEqual([0]);
-    expect(engine.play).toHaveBeenCalled();
+    expect(element.currentTime).toBe(0);
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
   });
 
   it("espace ses relances quand le réseau est là mais que le serveur ne répond pas", async () => {
@@ -1484,10 +1321,10 @@ describe("relu le 22/09/2026", () => {
   });
 
   it("ignore ce qui n'est pas un avertissement connu", async () => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
     mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    emit("warning", "une phrase nue d'une ancienne version");
+    await waitFor(() => expect(probes).toHaveLength(1));
+    // Hors du type exprès : c'est ce qui arriverait d'une version plus ancienne du pipeline.
+    act(() => probes[0].onWarning("une phrase nue d'une ancienne version" as never));
     expect(screen.queryByText(/phrase nue/)).toBeNull();
   });
 
@@ -1690,24 +1527,6 @@ describe("relu le 22/09/2026", () => {
     expect(seek?.fields.steps).toBe("+0 ms saut demandé vers 600.0 s | +412 ms segment 1 construit");
   });
 
-  it("ne mesure pas les sauts du chemin canvas, que seul le remux sait conclure", async () => {
-    // Chasse aux bugs du 22/09/2026 : sur le canevas, la mesure ouverte par un saut n'était
-    // fermée que par le `seeked` de l'élément du remux, qui n'y existe pas — chaque saut suivant
-    // écrivait une ligne fausse, « remux », tombée à 0, jamais arrivée.
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
-    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
-    await act(async () => void fireEvent.click(screen.getByText("saut:600")));
-
-    const seeks = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([url]) => url === "/api/player/log")
-      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { kind: string; fields: Record<string, unknown> })
-      .filter((entry) => entry.kind === "seek");
-    expect(seeks).toHaveLength(0);
-  });
-
   it("ne dit pas arrivé ou non un saut remplacé pendant que l'élément cherche encore", async () => {
     // Pendant `seeking`, currentTime vaut déjà la cible : « arrivé » n'y voulait rien dire, et un
     // saut remplacé en plein chargement se lisait arrivé. L'endroit reste, le verdict part.
@@ -1809,20 +1628,6 @@ describe("après la fin", () => {
     expect(resumePlaybackSession).toHaveBeenCalledTimes(1);
     // Une fois : une pause puis une reprise ne rouvrent rien de plus.
     await act(async () => void fireEvent(videoElement(20), new Event("play")));
-    expect(resumePlaybackSession).toHaveBeenCalledTimes(1);
-  });
-
-  // Le chemin canevas n'annonçait la fin qu'à la fermeture : une app tuée sur l'écran de fin
-  // laissait le film non vu.
-  it("annonce la fin tout de suite sur le chemin canevas", async () => {
-    nextProbe = () => ({ path: "webcodecs", chosen: {}, discard: vi.fn() });
-    mount();
-    await waitFor(() => expect(screen.getByTestId("controls")).toBeTruthy());
-    emit("playing");
-    expect(stopPlaybackNow).not.toHaveBeenCalled();
-    emit("ended");
-    expect(stopPlaybackNow).toHaveBeenCalled();
-    emit("playing");
     expect(resumePlaybackSession).toHaveBeenCalledTimes(1);
   });
 });

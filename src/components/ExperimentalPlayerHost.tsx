@@ -26,10 +26,8 @@ import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT, useLocale } from "@/components/TranslationProvider";
-import { PlaybackEngine } from "@/lib/webcodecs/engine";
-import { MediaElementFacade, asVideoElement } from "@/lib/webcodecs/mediaFacade";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
-import { describePath } from "@/lib/webcodecs/pathSelector";
+import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
@@ -53,13 +51,13 @@ function warmNextNear(nextId: string | null, position: number, duration: number)
   void warmNextEpisode(nextId);
 }
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
-import type { EngineTrack } from "@/lib/webcodecs/engine";
+import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import type { PlaybackState } from "@/app/api/jellyfin/playback-state/[itemId]/route";
 import {
   ExternalSubtitleTrack,
   isExternalTrack,
-  toEngineTrack as externalToEngineTrack,
+  toPlayerTrack as externalToPlayerTrack,
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
 import { chooseAudioTrack, chooseSubtitleTrack, trackLanguage } from "@/lib/trackPreferences";
@@ -208,10 +206,10 @@ function formatClock(seconds: number): string {
 
 /** "Français — VFF", falling back to whatever the file actually gives us. */
 /**
- * Jellyfin's stream index for one of the engine's audio tracks, or undefined if it cannot be
+ * Jellyfin's stream index for one of the file's audio tracks, or undefined if it cannot be
  * named with confidence.
  *
- * The two lists describe the same file from two sides: the engine reads Matroska track *numbers*
+ * The two lists describe the same file from two sides: the player reads Matroska track *numbers*
  * out of the container, Jellyfin reports ffmpeg stream *indices*. Neither converts into the
  * other — Matroska only requires a track number to be unique and positive, so the tempting
  * `index = number - 1` holds for files mkvmerge wrote and is arithmetic elsewhere. What is
@@ -223,12 +221,12 @@ function formatClock(seconds: number): string {
  * better failure than one that opens on a track chosen by a rule that did not hold.
  */
 function jellyfinAudioIndex(
-  engineTracks: EngineTrack[],
+  fileTracks: PlayerTrack[],
   jellyfinTracks: DirectPlayInfo["audio"] | undefined,
   trackNumber: number
 ): number | undefined {
-  if (!jellyfinTracks || jellyfinTracks.length !== engineTracks.length) return undefined;
-  const ordinal = engineTracks.findIndex((t) => t.number === trackNumber);
+  if (!jellyfinTracks || jellyfinTracks.length !== fileTracks.length) return undefined;
+  const ordinal = fileTracks.findIndex((t) => t.number === trackNumber);
   if (ordinal < 0) return undefined;
   return jellyfinTracks[ordinal]?.index;
 }
@@ -239,7 +237,7 @@ function jellyfinAudioIndex(
  * Les pistes externes portent un identifiant négatif (voir `ExternalSubtitle`), ce qui suffit à
  * les reconnaître sans leur ajouter un champ.
  */
-function useSubtitleLabels(tracks: EngineTrack[]) {
+function useSubtitleLabels(tracks: PlayerTrack[]) {
   const t = useT();
   const { locale } = useLocale();
   return useMemo(() => {
@@ -266,12 +264,12 @@ function useSubtitleLabels(tracks: EngineTrack[]) {
  * de canaux déjà résolu. On les apparie dans l'ordre, comme `jellyfinAudioIndex` le fait déjà, et
  * on étiquette avec les deux. Sans Jellyfin, l'étiquette est simplement moins précise.
  */
-function useAudioLabels(engineTracks: EngineTrack[], jellyfin: DirectPlayInfo["audio"] | undefined, originalLanguage: string | null) {
+function useAudioLabels(fileTracks: PlayerTrack[], jellyfin: DirectPlayInfo["audio"] | undefined, originalLanguage: string | null) {
   const t = useT();
   const { locale } = useLocale();
   return useMemo(() => {
-    const apparie = jellyfin && jellyfin.length === engineTracks.length ? jellyfin : null;
-    const faits = engineTracks.map((track, i) => ({
+    const apparie = jellyfin && jellyfin.length === fileTracks.length ? jellyfin : null;
+    const faits = fileTracks.map((track, i) => ({
       ...track,
       codecId: track.codecId || apparie?.[i]?.codec || null,
       channels: track.channels ?? apparie?.[i]?.channels ?? null,
@@ -285,22 +283,20 @@ function useAudioLabels(engineTracks: EngineTrack[], jellyfin: DirectPlayInfo["a
       piste: (n) => t("player.trackLabel.track", { n }),
     });
     return new Map(etiquettes.map((e) => [e.number, e.label]));
-  }, [engineTracks, jellyfin, originalLanguage, locale, t]);
+  }, [fileTracks, jellyfin, originalLanguage, locale, t]);
 }
 
 const TRANSITION =
   "top 300ms cubic-bezier(0.4,0,0.2,1), left 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)";
 
 /**
- * The experimental player: the same chrome as the stable one, over a canvas fed by the WebCodecs
- * engine instead of a <video> element playing an HLS stream.
+ * The native player: the same chrome as the stable one, over a <video> element fed by the remuxer
+ * (MediaSource) instead of an HLS stream transcoded by the server.
  *
- * Two rules it follows deliberately, both asked for:
- *
- *  * No silent fallback. If anything in the direct-decode path fails, it says what failed and
- *    offers a manual switch. A player that quietly repaired itself would never tell us which
- *    files this pipeline actually cannot handle, which is the whole reason it exists.
- *  * The controls are the stable player's, unmodified — see mediaFacade.ts.
+ * A file it cannot carry, or a failure it cannot recover from, is handed to the server player
+ * (`fallToStable`), with the reason written to the record — never repaired silently, so the record
+ * always says which files this path cannot handle. The controls are the stable player's,
+ * unmodified: here they drive a real media element.
  */
 /** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
 const FREEZE_MAX_MS = 4000;
@@ -334,14 +330,11 @@ export function ExperimentalPlayerHost({
   const playback = usePlayback();
   const { itemId, title: openedAs } = session;
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
   const remuxRef = useRef<RemuxPlayback | null>(null);
   /** Le dernier élément vidéo du pipeline, pour `syncFacts` — voir `reportStop`. */
   const lastVideoElRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const engineRef = useRef<PlaybackEngine | null>(null);
-  const facadeRef = useRef<MediaElementFacade | null>(null);
   // Semée au point de reprise plutôt qu'à zéro : fermer pendant le chargement rapportait sinon
   // un arrêt à 0:00, ce qui effaçait chez Jellyfin la position qu'on venait justement de vouloir
   // reprendre. `?? 0` et non la position du serveur : laisser zéro est ce qui permet au calcul de
@@ -420,7 +413,7 @@ export function ExperimentalPlayerHost({
    * directly. These are filled in by effects below, once there is something to describe.
    */
   const describeFileRef = useRef<() => Record<string, unknown>>(() => ({}));
-  const pathRef = useRef<"remux" | "webcodecs" | null>(null);
+  const pathRef = useRef<"remux" | null>(null);
   // Read through a ref so this function is stable for the life of the player. The pipeline is
   // built by an effect that depends on it, and a caller passing an inline arrow — which the one
   // above did — turned every one of its own renders into a teardown and a rebuild.
@@ -517,7 +510,6 @@ export function ExperimentalPlayerHost({
     const frame = requestAnimationFrame(() => setRevealed(true));
     return () => cancelAnimationFrame(frame);
   }, []);
-  const [facade, setFacade] = useState<MediaElementFacade | null>(null);
   const [playing, setPlaying] = useState(false);
   // Tant que ça joue, l'écran reste allumé — voir useWakeLock pour ce que chaque chemin
   // obtient déjà tout seul et ce qu'il n'obtient pas.
@@ -531,9 +523,9 @@ export function ExperimentalPlayerHost({
    */
   const [ended, setEnded] = useState(false);
   const [subtitle, setSubtitle] = useState<string | null>(null);
-  // Mirrored into state from the engine so the controls' menus can be driven by props, the way
+  // Mirrored into state from the pipeline so the controls' menus can be driven by props, the way
   // they already are for the stable player.
-  const [tracks, setTracks] = useState<{ audio: EngineTrack[]; subtitles: EngineTrack[] }>({ audio: [], subtitles: [] });
+  const [tracks, setTracks] = useState<{ audio: PlayerTrack[]; subtitles: PlayerTrack[] }>({ audio: [], subtitles: [] });
   const [currentAudio, setCurrentAudio] = useState<number | null>(null);
   /** Le plafond de lumière HDR choisi sur cet appareil — voir `hdrDisplay.ts`. */
   const [hdrCapChoice, setHdrCapChoice] = useState<HdrCapChoice>(readHdrCapChoice);
@@ -551,9 +543,10 @@ export function ExperimentalPlayerHost({
   const [showInfo, setShowInfo] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Record<string, string>>({});
   // Answered once and kept: none of it changes while the page is open.
-  // Which of the two pipelines is running. Null until the file has been examined — the element
-  // that shows the picture differs between them, so both are mounted and one is hidden.
-  const [path, setPath] = useState<"remux" | "webcodecs" | null>(null);
+  // Whether the native pipeline is running. Null until the file has been examined: the element is
+  // mounted from the start — the remux path needs a <video> to attach to — and stays hidden until
+  // then.
+  const [path, setPath] = useState<"remux" | null>(null);
   // When playback was asked to start, and has not yet. Reported by the pipeline as a measured
   // fact rather than guessed from the platform: on a desktop it clears within a frame, so none
   // of what follows ever appears there.
@@ -561,21 +554,8 @@ export function ExperimentalPlayerHost({
   // Why this file is being played the way it is. Kept for the panel on *both* paths: a fallback
   // whose reason is only visible on the path that was not taken explains nothing at all.
   const [pathReason, setPathReason] = useState<string | null>(null);
-  // The remux path puts a real <video> on screen and is driven through it; only the WebCodecs
-  // one paints a canvas and needs the façade in front of it.
+  // The picture is on the element once the native path is running.
   const onElement = path === "remux";
-  /**
-   * The façade dressed as a ref, kept stable while the façade is.
-   *
-   * Rebuilt inline it was a fresh object on every render, and the controls key their whole
-   * mount-time synchronisation off the identity of this — so that effect ran again for every
-   * render of the player, on the one path where the picture is already being painted frame by
-   * frame in JavaScript.
-   */
-  const facadeRefObject = useMemo(
-    () => ({ current: facade ? asVideoElement(facade) : null }),
-    [facade]
-  );
   /**
    * Le chemin retenu, noté au moment où il est choisi.
    *
@@ -703,10 +683,8 @@ export function ExperimentalPlayerHost({
   const subtitleFetchRef = useRef<AbortController | null>(null);
 
   /**
-   * Chooses a subtitle, from the menu or from the viewer's account.
-   *
-   * Both pipelines are told, and neither branches on which one is running: only one of the two
-   * refs is ever set. Files beside the film reach both the same way.
+   * Chooses a subtitle, from the menu or from the viewer's account — a track of the file, told to
+   * the pipeline, or a file beside the film, fetched here.
    */
   const chooseSubtitle = useCallback(
     (id: number | null, sources: ExternalSubtitleSource[]) => {
@@ -714,7 +692,6 @@ export function ExperimentalPlayerHost({
       // Un décalage corrige une piste, pas la suivante.
       subtitleOffsetRef.current = 0;
       setSubtitleOffset(0);
-      engineRef.current?.setSubtitleOffset(0);
       setCurrentSubtitle(id);
       setSubtitle(null);
 
@@ -722,7 +699,6 @@ export function ExperimentalPlayerHost({
       // the container and a file showing its own would both write the same line.
       const external = id !== null && isExternalTrack(id);
       remuxRef.current?.selectSubtitleTrack(external ? null : id);
-      engineRef.current?.setSubtitleTrack(external ? null : id);
 
       // Retiré tout de suite, y compris pour un autre fichier : l'ancien restait affiché pendant le
       // chargement du nouveau, et pour de bon si ce chargement échouait — du français sous un menu
@@ -941,7 +917,7 @@ export function ExperimentalPlayerHost({
    * piste interne peut être le sosie d'une externe.
    */
   const subtitleChoices = useMemo(
-    () => [...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToEngineTrack)],
+    () => [...tracks.subtitles, ...(info?.externalSubtitles ?? []).map(externalToPlayerTrack)],
     [tracks.subtitles, info?.externalSubtitles]
   );
   const subtitleLabels = useSubtitleLabels(subtitleChoices);
@@ -960,10 +936,9 @@ export function ExperimentalPlayerHost({
    */
   const takeoverNow = useCallback(
     (): StableTakeover => ({
-      // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`. La position suivie sur
-      // tous les chemins, et non celle de l'élément : sur le chemin canevas l'élément est une
-      // coquille vide qui dit toujours zéro, et juste après une reconstruction il n'a pas encore
-      // été posé là où le film en était.
+      // Un nombre, jamais un champ omis : voir `PlaybackSession.resumeAt`. La position suivie, et
+      // non celle de l'élément : juste après une reconstruction, il n'a pas encore été posé là où
+      // le film en était.
       resumeAt: positionKnownRef.current ? positionRef.current : session.resumeAt ?? 0,
       audioStreamIndex: jellyfinAudioIndex(tracks.audio, info?.audio, currentAudio ?? -1),
     }),
@@ -1030,16 +1005,6 @@ export function ExperimentalPlayerHost({
   const title = info?.title ?? openedAs;
 
   /** The file, as every entry in the server's record wants it described. */
-  /**
-   * Reprendre l'affichage, ou le rendre.
-   *
-   * L'élément n'est jamais caché ni arrêté : il décode, porte le son et mène l'horloge exactement
-   * comme avant. Le canevas se pose par-dessus, et se retire dès que le présentateur renonce —
-   * l'image en dessous est restée là tout du long, il n'y a jamais de noir à traverser.
-   *
-   * Dépend de `ready` : avant la première image décodée, il n'y a rien à interroger, et la
-   * question « dans quel espace es-tu » n'a pas encore de réponse.
-   */
   const describeFile = useCallback(
     () => ({
       itemId,
@@ -1192,7 +1157,7 @@ export function ExperimentalPlayerHost({
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession } = usePlaybackSession(
     useCallback(() => positionRef.current, []),
-    // The engine talks to the file directly, so there is no Jellyfin transcode session — but
+    // The native player reads the file directly, so there is no Jellyfin transcode session — but
     // progress still has to be reported, or resume points would stop updating for this player.
     // It announces its own start for the same reason: nothing else tells the server this film is
     // being watched, so without it the reports described a session Jellyfin had never heard of.
@@ -1200,6 +1165,8 @@ export function ExperimentalPlayerHost({
     announced && !session.bench
       ? {
           itemId,
+          // « engine » : le nom sous lequel Jellyfin connaît ce lecteur depuis le début (sessions,
+          // greffon de statistiques). Gardé tel quel, même sans moteur canevas.
           playSessionId: `cine-engine-${itemId}`,
           mediaSourceId: itemId,
           playMethod: "DirectPlay",
@@ -1273,7 +1240,7 @@ export function ExperimentalPlayerHost({
     if (!showInfo && !error && !stuck) return;
     const read = () => {
       try {
-        setDiagnostics(remuxRef.current?.diagnostics ?? engineRef.current?.diagnostics ?? { Moteur: "non démarré" });
+        setDiagnostics(remuxRef.current?.diagnostics ?? { Moteur: "non démarré" });
       } catch (error) {
         // A panel that silently shows nothing is worse than one that shows why.
         setDiagnostics({ "Diagnostic indisponible": error instanceof Error ? error.message : "erreur" });
@@ -1284,20 +1251,6 @@ export function ExperimentalPlayerHost({
     return () => clearInterval(id);
   }, [showInfo, error, stuck]);
 
-  // iOS starts every AudioContext suspended and only lets it resume from the task of a real
-  // interaction. The player's own container already tries on each pointer down, but a tap can
-  // land on a control that stops propagation, or on browser chrome — so the document is watched
-  // too, in the capture phase, for as long as the player is open. Resuming an already-running
-  // context costs nothing, which is why this can afford to be indiscriminate.
-  useEffect(() => {
-    const resume = () => void engineRef.current?.resumeAudio();
-    document.addEventListener("pointerdown", resume, true);
-    document.addEventListener("touchend", resume, true);
-    return () => {
-      document.removeEventListener("pointerdown", resume, true);
-      document.removeEventListener("touchend", resume, true);
-    };
-  }, []);
 
   // Sets up the whole pipeline once the file's description has arrived. Everything it can refuse
   // is refused here, with the reason, rather than deeper down where the message would be opaque.
@@ -1323,7 +1276,7 @@ export function ExperimentalPlayerHost({
     }
     // `playbackState` est attendu au même titre que la description : ouvrir le film sans savoir
     // où l'on en est, c'est l'ouvrir au mauvais endroit.
-    if (!info || playbackState === undefined || !canvasRef.current || !videoElRef.current) return;
+    if (!info || playbackState === undefined || !videoElRef.current) return;
 
     let cancelled = false;
     let unsubscribes: (() => void)[] = [];
@@ -1344,16 +1297,13 @@ export function ExperimentalPlayerHost({
      * ask for, and told nothing about it.
      */
     const applyPreferences = (
-      audio: EngineTrack[],
-      subtitles: EngineTrack[],
+      audio: PlayerTrack[],
+      subtitles: PlayerTrack[],
       /**
-       * « Cette piste joue-t-elle par ce chemin ? », posée par celui qui sait répondre.
-       *
-       * Fournie par le chemin remultiplexé, absente pour le chemin canevas : celui-ci décode en
-       * logiciel et n'a pas les mêmes limites, donc lui prêter les réponses de l'autre serait une
-       * supposition. Sans elle, le classement est exactement celui d'avant.
+       * « Cette piste joue-t-elle par ce chemin ? », posée par celui qui sait répondre — le chemin
+       * remultiplexé. Sans elle, le classement ignore ce critère.
        */
-      carriable?: (track: EngineTrack) => boolean,
+      carriable?: (track: PlayerTrack) => boolean,
       /** La piste sur laquelle ce chemin s'est ouvert — celle qu'on entend faute de préférence. */
       openedAudio: number | null = null
     ): number | null => {
@@ -1375,7 +1325,7 @@ export function ExperimentalPlayerHost({
         isForced: false,
       });
       const wantedSubtitle = chooseSubtitleTrack(
-        [...subtitles, ...(info.externalSubtitles ?? []).map(externalToEngineTrack)],
+        [...subtitles, ...(info.externalSubtitles ?? []).map(externalToPlayerTrack)],
         preferences,
         spoken
       );
@@ -1394,7 +1344,7 @@ export function ExperimentalPlayerHost({
     const attemptStartedAt = Date.now();
     let announced = false;
     /** Written once per pipeline: what was actually chosen, and how long it took to get there. */
-    const announceStart = (chosen: "remux" | "webcodecs", why: string | null) => {
+    const announceStart = (chosen: "remux", why: string | null) => {
       if (announced) return;
       announced = true;
       reportPlayback("start", {
@@ -1427,7 +1377,7 @@ export function ExperimentalPlayerHost({
       // honoré maintenant, sur le lecteur neuf, au lieu d'être écrasé par sa position de départ.
       const asked = requestedSeekRef.current;
       if (asked !== null && Math.abs(asked - startSeconds) > 0.5) {
-        const media = facadeRef.current ?? videoElRef.current;
+        const media = videoElRef.current;
         if (media) media.currentTime = asked;
       } else requestedSeekRef.current = null;
       setReady(true);
@@ -1659,155 +1609,6 @@ export function ExperimentalPlayerHost({
     };
 
     /**
-     * Whether this engine ever got as far as playing.
-     *
-     * The line between a file this device cannot decode — which fails on the way up, and for
-     * which retrying is three spinners and the same answer — and a decoder the platform took
-     * away mid-film, which is worth rebuilding for.
-     */
-    let engineStarted = false;
-
-    const startEngine = async (reason: string | null) => {
-      // Un changement de piste qui attendait une reconstruction native n'a plus d'objet ici : ce
-      // chemin choisit sa piste lui-même, et n'hérite pas du compte rendu. La pause, elle, est
-      // gardée — un film à l'arrêt ne repart pas parce qu'il a changé de chemin —, et l'image
-      // figée s'efface : ce chemin ne dessine pas sur l'élément qu'elle attendait.
-      pendingSwitchRef.current = null;
-      const stayPaused = keepPausedRef.current;
-      keepPausedRef.current = false;
-      setFrozen(false);
-      setPathReason(reason);
-      // Only now is this refusal real. The native path would have shown this file's HDR without
-      // converting anything; it is landing on the canvas that makes tone mapping — and therefore
-      // the viewer's consent to it — necessary.
-      if (info.canvasHdrRefusal) {
-        pathRef.current = "webcodecs";
-        setPath("webcodecs");
-        fallToStable(info.canvasHdrRefusal);
-        return;
-      }
-
-      const engine = new PlaybackEngine(canvasRef.current!);
-      engineRef.current = engine;
-      // Un moteur reconstruit garde le décalage réglé sur le précédent.
-      engine.setSubtitleOffset(subtitleOffsetRef.current);
-      pathRef.current = "webcodecs";
-      setPath("webcodecs");
-      announceStart("webcodecs", reason);
-
-      unsubscribes = [
-        // The engine distinguishes the two itself, rather than the host guessing from the
-        // wording: a warning is degraded playback that continues, an error stops it.
-        engine.on("error", (payload) => {
-          const message = typeof payload === "string" ? payload : "Lecture interrompue.";
-          // Rebuilt rather than given up on, exactly as a lost source is on the other path —
-          // the machinery is the same and was simply never wired to this one. But only for a
-          // failure that happened *after* the picture was running: a file this device cannot
-          // decode fails before it ever starts, and retrying that is three spinners and the same
-          // answer. What is worth retrying is a decoder the platform took away mid-film, or a
-          // GPU context it reclaimed — neither of which says anything about the file.
-          if (engineStarted && spendRebuild()) {
-            reportPlayback("rebuild", { ...describeFileRef.current(), reason: message, at: positionRef.current });
-            showWarning(tRef.current("player.experimental.resumedAfterInterruption"));
-            restart(positionRef.current, `le moteur s'est arrêté (${message})`);
-            return;
-          }
-          fallToStable(message);
-        }),
-        engine.on("warning", showPipelineWarning),
-        // Une image HDR sans conversion tonale est délavée et fausse sur un écran standard, et
-        // aucun bandeau ne rattrape ça. Le lecteur du serveur, lui, sait convertir : on lui rend
-        // la main plutôt que de laisser regarder un film aux mauvaises couleurs.
-        engine.on("hdr-abandoned", (payload) => {
-          const reason = typeof payload === "string" ? payload : "conversion HDR indisponible";
-          fallToStable(`la conversion HDR est impossible ici (${reason})`);
-        }),
-        engine.on("timeupdate", () => {
-          positionRef.current = engine.currentTime;
-          warmNextNear(nextEpisodeIdRef.current, engine.currentTime, engine.duration);
-          // Ce chemin n'a pas de `seeked` : le saut demandé est atteint quand la lecture y est.
-          if (requestedSeekRef.current !== null && seekArrived(engine.currentTime, requestedSeekRef.current)) {
-            requestedSeekRef.current = null;
-          }
-          if (externalSubtitleRef.current) showSubtitleAt(engine.currentTime, () => null);
-        }),
-        engine.on("playing", () => {
-          engineStarted = true;
-          setPlaying(true);
-          tally.waitEnded(Date.now());
-          reopenAfterEnd();
-        }),
-        engine.on("pause", () => {
-          setPlaying(false);
-          tally.waitEnded(Date.now());
-        }),
-        // Le moteur signale aussi ses sauts par `waiting` : ceux-là ont leur propre attente.
-        engine.on("waiting", () => {
-          if (engineStarted && requestedSeekRef.current === null) tally.waitStarted(Date.now());
-        }),
-        engine.on("ended", () => {
-          setPlaying(false);
-          setEnded(true);
-          // Comme sur l'élément : la fin annoncée tout de suite, c'est elle qui marque le film vu.
-          // Ce chemin ne l'envoyait qu'à la fermeture (relu le 24/09/2026).
-          void stopPlaybackRef.current();
-          endStoppedRef.current = true;
-        }),
-        engine.on("subtitle", (payload) => {
-          // Silenced while a file beside the film is showing, which the engine knows nothing of.
-          if (externalSubtitleRef.current) return;
-          setSubtitle(typeof payload === "string" ? payload : null);
-        }),
-        // Controls appear as soon as the file is understood — duration, tracks — rather than
-        // waiting for the whole pipeline to fill. Anything that goes wrong afterwards replaces
-        // them with the error panel, so there is no window where a broken player looks usable.
-        engine.on("loadedmetadata", () => {
-          setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
-          setCurrentAudio(engine.currentAudioTrack);
-          declareReady();
-        }),
-      ];
-
-      await engine.load(info.streamUrl, {
-        hdr: info.video?.isHdr ?? false,
-        knownSize: info.sizeBytes,
-        startSeconds,
-        // La même question que `applyPreferences` pose juste après, posée avant d'ouvrir : si
-        // les deux répondent pareil — et elles lisent les mêmes pistes, par la même règle — il
-        // n'y a plus de bascule. Rien quand le spectateur a déjà choisi : c'est son choix qui compte.
-        chooseAudioTrack: (tracks) => {
-          // Le choix du spectateur d'abord : une reconstruction (moteur arrêté par la plateforme,
-          // coupure) rouvrait sur la piste du compte, menu resté sur la sienne. Le chemin
-          // remultiplexé le faisait déjà par `audioTrackNumber` (relu le 22/09/2026).
-          const wanted = wantedAudioRef.current;
-          if (wanted !== null) return tracks.some((track) => track.number === wanted) ? wanted : null;
-          const preferences = playbackState?.preferences ?? null;
-          if (!preferences) return null;
-          return chooseAudioTrack(tracks, preferences)?.number ?? null;
-        },
-      });
-      if (cancelled) return;
-      // Les sous-titres du conteneur choisis avant la reconstruction, redonnés au nouveau moteur
-      // comme `startRemux` le fait : sans cela le menu les disait choisis et l'écran n'en montrait
-      // aucun. Un fichier à côté du film n'a pas besoin de lui — il est affiché ici.
-      const keptSubtitle = wantedSubtitleRef.current;
-      if (keptSubtitle !== null && !isExternalTrack(keptSubtitle)) engine.setSubtitleTrack(keptSubtitle);
-
-      const built = new MediaElementFacade(engine);
-      facadeRef.current = built;
-      setFacade(built);
-      setTracks({ audio: engine.audioTracks, subtitles: engine.subtitleTracks });
-      const preferred = applyPreferences(engine.audioTracks, engine.subtitleTracks, undefined, engine.currentAudioTrack);
-      if (preferred !== null && preferred !== engine.currentAudioTrack) {
-        wantedAudioRef.current = preferred;
-        await engine.setAudioTrack(preferred).catch(() => {});
-      }
-      setCurrentAudio(engine.currentAudioTrack);
-      declareReady();
-      if (!stayPaused) await engine.play().catch(() => {});
-    };
-
-    /**
      * Un changement de piste qui a demandé cette reconstruction et qui n'aboutit pas : on rouvre
      * sur la piste d'avant, avec un mot, au lieu de laisser le film glisser vers un autre lecteur.
      * Une seule fois — la réouverture n'a plus de changement en attente, donc un second échec
@@ -1915,29 +1716,10 @@ export function ExperimentalPlayerHost({
           probe.discard();
           return;
         }
-        // Le chemin retenu, nommé ici plutôt que dans chaque branche.
-        //
-        // Deux branches sur trois le faisaient, et pas celle du remultiplexage — c'est-à-dire pas
-        // le chemin normal. Le rapport technique affichait donc « non encore décidé » quand tout
-        // allait bien, et ne se remplissait que lorsque la lecture se dégradait : exactement
-        // l'inverse de ce qu'on attend d'un rapport, et de quoi faire croire à une panne du
-        // lecteur natif alors qu'il jouait le film. Posé au point de branchement, il ne peut plus
-        // manquer à une branche qu'on ajouterait plus tard.
-        // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module
-        // TrueHD injoignable, encodeur qui refuse : le canevas ou le lecteur serveur coûteraient
-        // un film qui jouait très bien, pour un choix de langue. On revient à la piste d'avant.
-        if (probe.path !== "remux" && revertFailedSwitch(`chemin ${probe.path}`)) {
-          probe.discard();
-          return;
-        }
-        if (probe.path === "remux") {
-          setPathReason(describePath(probe.chosen));
-          return startRemux(element, probe.start);
-        }
-        // Le moteur nomme déjà le sien : il reçoit le motif en argument. (Il y avait un troisième
-        // chemin, la lecture directe d'un MP4 ; tout fichier passe désormais par le traitement —
-        // voir remuxPlayback.ts.)
-        return startEngine(describePath(probe.chosen));
+        // Le chemin retenu, nommé ici : le rapport technique le montre aussi quand tout va bien,
+        // et pas seulement quand la lecture se dégrade.
+        setPathReason(NATIVE_PATH);
+        return startRemux(element, probe.start);
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -1949,6 +1731,9 @@ export function ExperimentalPlayerHost({
           setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
           return;
         }
+        // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module
+        // TrueHD injoignable, encodeur qui refuse : le lecteur serveur coûterait un film qui jouait
+        // très bien, pour un choix de langue. On revient à la piste d'avant.
         if (revertFailedSwitch(message)) return;
         fallToStable(message);
       });
@@ -1958,11 +1743,6 @@ export function ExperimentalPlayerHost({
       for (const unsubscribe of unsubscribes) unsubscribe();
       remuxRef.current?.destroy();
       remuxRef.current = null;
-      facadeRef.current?.destroy();
-      facadeRef.current = null;
-      setFacade(null);
-      engineRef.current?.destroy();
-      engineRef.current = null;
     };
   // `reportAudioSwitch` ne dépend que de `tally`, fixé au montage : son identité ne change jamais,
   // donc l'ajouter ici ne peut pas relancer la construction du pipeline. C'est la seule raison
@@ -2158,9 +1938,9 @@ export function ExperimentalPlayerHost({
     requestedSeekRef.current = seconds;
     // Une reconstruction pas encore ouverte rouvre directement là.
     if (rebuildAtRef.current !== null) rebuildAtRef.current = seconds;
-    // Mesuré sur le remux seulement : c'est le `seeked` de son élément qui ferme la mesure. Sur
-    // le canevas, rien ne la fermait, et chaque saut suivant écrivait la précédente en ligne
-    // fausse — « remux », tombée à 0, jamais arrivée (chasse aux bugs du 22/09/2026).
+    // Mesuré une fois le chemin natif en marche : c'est le `seeked` de son élément qui ferme la
+    // mesure. Avant, rien ne la fermerait, et le saut suivant écrirait celle-ci en ligne fausse —
+    // tombée à 0, jamais arrivée (le cas du chemin canevas, chasse aux bugs du 22/09/2026).
     if (pathRef.current !== "remux") {
       seekTimingRef.current = null;
       return;
@@ -2229,10 +2009,9 @@ export function ExperimentalPlayerHost({
       restart(intendedPosition(), `piste ${id} — reconstruction sur elle`);
       return;
     }
+    // Avant que le chemin natif ne soit en marche : retenue, et le pipeline qui s'ouvre la prend.
     setCurrentAudio(id);
-    // Retenu comme sur l'autre chemin, pour qu'une reconstruction rouvre sur elle.
     wantedAudioRef.current = id;
-    void engineRef.current?.setAudioTrack(id).catch(() => {});
     };
 
   /**
@@ -2272,7 +2051,7 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     if (!session.bench) return;
     const state = () => benchStateRef.current;
-    const media = () => (facadeRef.current as unknown as HTMLVideoElement | null) ?? videoElRef.current;
+    const media = () => videoElRef.current;
     return registerBenchBridge({
       itemId,
       media,
@@ -2297,7 +2076,6 @@ export function ExperimentalPlayerHost({
       changeSubtitle: (id) => state()?.changeSubtitle(id),
       subtitleText: () => state()?.subtitle ?? null,
       frames: () => {
-        if (facadeRef.current) return null;
         try {
           return videoElRef.current?.getVideoPlaybackQuality?.().totalVideoFrames ?? null;
         } catch {
@@ -2324,15 +2102,10 @@ export function ExperimentalPlayerHost({
       ref={containerRef}
       style={style}
       className={isMini ? "animate-fade-in-scale" : "app-viewport"}
-      // Every touch is an opportunity to unblock the audio hardware — see resumeAudio(). Capture
-      // phase and pointerdown specifically, so the permission is used before any control's own
-      // handler has a chance to await something and lose it.
-      onPointerDownCapture={() => void engineRef.current?.resumeAudio()}
       {...(isMini ? handlers : {})}
     >
-      {/* Both surfaces are mounted from the start, because the element that shows the picture is
-          only known once the file has been examined and the remux path needs a <video> to attach
-          to before it can begin. The unused one holds nothing and is hidden. */}
+      {/* The element is mounted from the start: the remux path needs a <video> to attach to before
+          it can begin. It stays hidden until the file has been examined and the path is running. */}
       {/* Fondu depuis le noir sur la première image. La toute première frame d'une MediaSource
           arrive rarement seule et proprement — il y a un battement entre l'élément qui se
           déclare prêt et l'image qui s'installe. Trois cents millisecondes de fondu couvrent
@@ -2351,13 +2124,6 @@ export function ExperimentalPlayerHost({
             // se voyait au travers — un creux sombre au lieu d'un fondu.
             className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
               ready || frozen ? "opacity-100" : "opacity-0"
-            }`}
-          />
-          <canvas
-            ref={canvasRef}
-            hidden={onElement}
-            className={`${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"} transition-opacity duration-300 ease-out ${
-              ready ? "opacity-100" : "opacity-0"
             }`}
           />
           {/* L'image d'avant, le temps d'une reconstruction pour changement de piste : posée par-dessus,
@@ -2440,9 +2206,7 @@ export function ExperimentalPlayerHost({
           itemId={itemId}
           title={info?.title ?? openedAs}
           onReplay={() => {
-            // Le moteur canevas quand c'est lui qui joue : l'élément vidéo n'y est qu'une coquille
-            // sans source, et « Revoir » ne faisait qu'effacer l'écran de fin (relu le 22/09/2026).
-            const media = facadeRef.current ?? videoElRef.current;
+            const media = videoElRef.current;
             if (media) {
               media.currentTime = 0;
               void media.play().catch(() => {});
@@ -2539,15 +2303,9 @@ export function ExperimentalPlayerHost({
           playing={playing}
           onTogglePlay={() => {
             const element = videoElRef.current;
-            if (onElement && element) {
-              if (element.paused) void element.play();
-              else element.pause();
-              return;
-            }
-            const engine = engineRef.current;
-            if (!engine) return;
-            if (engine.paused) void engine.play();
-            else engine.pause();
+            if (!onElement || !element) return;
+            if (element.paused) void element.play();
+            else element.pause();
           }}
           onClose={handleClose}
         />
@@ -2556,7 +2314,7 @@ export function ExperimentalPlayerHost({
         // s'estomper puis de revenir : elles disparaissaient d'un coup et réapparaissaient d'un
         // coup, ce qui ajoutait à l'effet « sec » du changement (22/09/2026).
         (ready || frozen) &&
-        (facade || onElement) &&
+        onElement &&
         !error && (
           <div
             className={`absolute inset-0 z-10 transition-opacity duration-200 ease-out ${
@@ -2566,16 +2324,15 @@ export function ExperimentalPlayerHost({
             inert={!ready}
           >
           <PlayerControls
-            // On the remux path this is a real media element, so seeking, volume and rate are the
-            // browser's own; the facade exists only to give the canvas pipeline the same shape.
-            videoRef={onElement ? videoElRef : facadeRefObject}
+            // A real media element: seeking, volume and rate are the browser's own.
+            videoRef={videoElRef}
             onSeekRequest={noteSeekRequest}
             containerRef={containerRef}
             itemId={itemId}
             title={title}
             onClose={handleClose}
             onMinimize={() => playback.minimize()}
-            // Straight from the container the engine is reading, not from Jellyfin's view of the
+            // Straight from the container the player is reading, not from Jellyfin's view of the
             // file: those are the tracks it can actually switch between.
             audioTracks={tracks.audio.map((track) => ({ id: track.number, label: audioLabels.get(track.number) ?? String(track.number) }))}
             /* Diffuser depuis ce lecteur est impossible : il alimente son élément vidéo par
@@ -2609,7 +2366,6 @@ export function ExperimentalPlayerHost({
                 const next = Math.round((subtitleOffsetRef.current + delta) * 10) / 10;
                 subtitleOffsetRef.current = next;
                 setSubtitleOffset(next);
-                engineRef.current?.setSubtitleOffset(next);
               },
             }}
             onTogglePlaybackInfo={() => setShowInfo((open) => !open)}

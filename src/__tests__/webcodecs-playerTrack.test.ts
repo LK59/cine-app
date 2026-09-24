@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { fromMatroskaTrack } from "@/lib/webcodecs/engineTrack";
+import { fromMatroskaTrack } from "@/lib/webcodecs/playerTrack";
 import type { MatroskaTrack } from "@/lib/webcodecs/matroska";
 
-// Une seule conversion pour les deux chemins. Il y en avait deux : celle du canevas oubliait les
+// Une seule conversion. Il y en avait deux, du temps du lecteur canevas : la sienne oubliait les
 // canaux, et toutes deux le drapeau « malentendants » — que le lecteur stable, lui, affichait.
 
 const track = (over: Partial<MatroskaTrack>) =>

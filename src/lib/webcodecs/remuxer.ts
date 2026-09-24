@@ -4,14 +4,14 @@
 // The samples inside Matroska are already exactly what MP4 wants — HEVC and AVC access units
 // prefixed by their length, AC-3 and AAC frames as they are. Only the packaging differs. So this
 // copies samples verbatim and rebuilds the wrapper around them, which is why it costs almost
-// nothing and, unlike the WebCodecs path, hands the decoding back to the browser's own hardware
-// pipeline: no canvas, no per-frame JavaScript, no colour conversion, HDR handled natively.
+// nothing and hands the decoding to the browser's own hardware pipeline: no per-frame JavaScript,
+// no colour conversion, HDR handled natively.
 //
 // An MP4 comes through here too, described in the same shape (mp4Demux.ts) and read through the
 // same factory (mediaFile.ts): the remuxer never learns which container it is reading.
 
 import { deriveDurations, assignDecodeTimes } from "./decodeOrder";
-import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./engine";
+import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitleMarkup";
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { clusterOffsetForTime, cueTimeAfter } from "./matroska";

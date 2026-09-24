@@ -1,4 +1,4 @@
-// Matroska demuxer for the experimental WebCodecs player.
+// Matroska demuxer for the native player's remuxer.
 //
 // Reads only what playback needs: the timestamp scale and duration, the track list with each
 // track's codec configuration, the cue index for seeking, and then a stream of encoded samples

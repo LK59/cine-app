@@ -52,10 +52,10 @@ export const config = {
     // file playable. The per-account "legacy player" option is part of this: it is the same
     // server-side player, chosen deliberately.
     //
-    // False: nothing is ever handed to Jellyfin. A file neither the native path nor WebCodecs
-    // can carry ends on a plain playback error naming the reason, and the per-account option is
-    // neither offered nor honoured. For an operator who wants a hard guarantee that no playback
-    // can ever start a transcode.
+    // False: nothing is ever handed to Jellyfin. A file the native path cannot carry ends on a
+    // plain playback error naming the reason, and the per-account option is neither offered nor
+    // honoured. For an operator who wants a hard guarantee that no playback can ever start a
+    // transcode.
     serverFallback: optional("PLAYER_SERVER_FALLBACK", "true") === "true",
     // Whether the picture is enlarged to hide black bars baked into the file (see pictureFrame.ts).
     // Measured on the server from Jellyfin's trickplay thumbnails — no video is decoded — so it

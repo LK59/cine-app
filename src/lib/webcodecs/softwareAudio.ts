@@ -8,7 +8,7 @@
 // only when a file actually needs it.
 //
 // The one thing worth care here is that mediabunny does its own demuxing. Pointed at the URL it
-// would fetch the file a second time; given a CustomSource backed by the engine's own ByteSource
+// would fetch the file a second time; given a CustomSource backed by the player's own ByteSource
 // it reads through the same 1 MiB chunk cache, so the bytes cross the network once and the
 // second demux costs CPU only.
 
@@ -45,7 +45,7 @@ function sharedInput(source: ByteSource, core: Mediabunny, iso: boolean): Promis
       formats: [iso ? new core.Mp4InputFormat() : new core.MatroskaInputFormat()],
       source: new core.CustomSource({
         getSize: () => source.size,
-        // end is exclusive, and the engine's source clamps at EOF on its own.
+        // end is exclusive, and the player's source clamps at EOF on its own.
         read: (start, end) => source.read(start, end - start),
       }),
     });

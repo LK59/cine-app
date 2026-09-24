@@ -51,7 +51,7 @@ const PARAMETER_SET_SEARCH = 400;
  *
  * Voir `hevcRecordHasParameterSets` : un fichier peut ne porter ses VPS/SPS/PPS que dans le flux,
  * et Safari ne démarre alors jamais — sans erreur, sans image. Fait ici, une fois, pour que tout
- * ce qui lit la piste — le remultiplexeur, le canevas, la chaîne de codec — voie le même en-tête.
+ * ce qui lit la piste — le remultiplexeur, la chaîne de codec — voie le même en-tête.
  * Écrit dans la description de la piste, qui est gardée en mémoire avec l'en-tête du fichier : une
  * réouverture ne relit rien. Rien ne change pour un fichier dont l'en-tête est complet, c'est-à-dire
  * presque tous : la vérification ne lit pas un octet de plus.

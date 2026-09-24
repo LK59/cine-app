@@ -93,7 +93,6 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
   it("describes a plain SDR Matroska file without refusing anything", async () => {
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull();
-    expect(body.canvasHdrRefusal).toBeNull();
     expect(body.container).toBe("mkv");
     expect(body.video).toMatchObject({ codec: "hevc", width: 3840, bitDepth: 10, isHdr: false });
     expect(body.streamUrl).toContain("static=true");
@@ -119,15 +118,13 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
 
   // The change that matters: repackaging carries HDR signalling through untouched and the display
   // handles it. Refusing the file outright here would block the one path that plays it properly.
-  it("raises no objection to an HDR file it can convert", async () => {
+  it("raises no objection to an HDR file", async () => {
     // There is nothing to consent to any more. Converting on the GPU was a setting because it
-    // was once the only way HDR played at all; the native path shows it untouched, and on the
-    // fallback the conversion is what happens instead of nothing.
+    // was once the only way HDR played at all; the native path shows it untouched.
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "HDR10" }));
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull();
     expect(body.video.isHdr).toBe(true);
-    expect(body.canvasHdrRefusal).toBeNull();
   });
 
   /**
@@ -147,7 +144,8 @@ describe("GET /api/jellyfin/direct/[itemId]", () => {
     mockGetSources.mockResolvedValue(mediaSource({ rangeType: "DOVI" }));
     const body = await (await get()).json();
     expect(body.refusedReason).toBeNull();
-    expect(body.canvasHdrRefusal).toBeNull();
+    // Le champ du lecteur canevas, retiré avec lui le 24/09/2026 : il ne descend plus.
+    expect(body).not.toHaveProperty("canvasHdrRefusal");
     // La donnée sur laquelle le client tranchera.
     expect(body.video.rangeType).toBe("DOVI");
     expect(body.video.isHdr).toBe(true);

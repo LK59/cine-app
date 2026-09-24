@@ -61,14 +61,21 @@ server instead of showing an error, never the reverse.
 
 ## Path selection
 
-`pathSelector.ts` classifies the file and **always states its reasoning**. There is no silent
-downgrade — a player that drops a level without saying so looks like a player that works.
+`pathSelector.ts` decides whether the native path can carry the file and **always states its
+reasoning**. There is no silent downgrade — a player that drops a level without saying so looks
+like a player that works.
 
-| Path | Mechanism | When |
+| Outcome | Mechanism | When |
 |---|---|---|
-| **1. Remux → native `<video>`** | Matroska or MP4 repackaged into fragmented MP4 in the browser, fed to a real `<video>` through MediaSource | The normal path |
-| **2. WebCodecs → canvas** | Software decode frame by frame, canvas render, hand-held audio clock, HDR→SDR conversion in a shader | The browser refuses a codec in MediaSource but can decode it another way |
-| **3. Explicit refusal** | Named codec, stop | Neither path can carry it |
+| **Remux → native `<video>`** | Matroska or MP4 repackaged into fragmented MP4 in the browser, fed to a real `<video>` through MediaSource | The normal path |
+| **Refusal → server player** | An error naming the codec or the reason (`Aucun chemin de lecture disponible pour ce fichier. remux : …`), which the host hands to the server player (`fallToStable`) — or shows as a playback error when `PLAYER_SERVER_FALLBACK=false` | The native path cannot carry it |
+
+There used to be a second local path between the two, **WebCodecs → canvas** (software decode frame
+by frame, canvas render, hand-held audio clock, HDR→SDR in a shader). It was removed on 2026-09-24:
+ten sessions in three weeks, all of them tests, every one ending in the same server fallback a
+second later, and every reason that once led there now handled by the native path. What it taught
+the project, and where to find it: [`docs/lecteur-canvas.md`](docs/lecteur-canvas.md), tag
+`lecteur-canvas-final-2026-09-24`.
 
 **Resuming a few seconds earlier** (`resumeRewind.ts`, native player): opening a title this
 device has not played for ten minutes — the next day, or after the TV — starts 5 s before the resume
@@ -82,17 +89,7 @@ end, its description, its resume state and its file header and index are fetched
 the opening looks for them, so it starts without the round trips to a distant server. No picture is
 read, and the source closes without taking the current film's handover slot (`close(false)`).
 
-**The canvas clock dates what is heard**, not what the audio graph processes: it subtracts the
-latency the browser reports (`outputLatency`, else `baseLatency` — a few milliseconds — read once a
-second, capped at 0.5 s; approximate, since the sound leaves through an `<audio>` element) — with Bluetooth headphones, 150–250 ms the picture used to run ahead (24/09).
-
-**The canvas's HDR→SDR conversion puts 203 nits at the screen's white** (`hdrMath.toneMapLuma`,
-mirrored in the shader): linear below 0.8 of that white, then a Reinhard shoulder that compresses
-highlights without clipping. It used to normalise on the mastering peak, which put 203-nit white at
-a half (1 000-nit master) or a quarter (4 000) of the screen's white — the same "far too dark" that
-was settled by eye for Chrome on 22/09. Revisit only with an eye on a real screen.
-
-**Path 1 is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
+**The native path is nearly free.** Matroska samples are already exactly what MP4 wants — length-prefixed
 HEVC/AVC access units, AC-3/AAC frames as they are. Only the packaging differs. No pixel and no
 audio sample passes through JavaScript: the browser decodes in hardware, composes the image itself,
 drives its own audio clock, and **displays HDR natively**. Building one group of pictures takes
@@ -132,7 +129,7 @@ byteSource ──▶ ebml/matroska ──▶ sampleReader ──────▶ 
 
 `mediaFile.ts` is the only door: `openMediaFile` reads the header of either container into the
 same `MatroskaFile` description, and `createSampleReader` returns the matching reader. Every caller
-— remuxer, canvas engine, TrueHD decoder, path selection — goes through it, so none of them knows
+— remuxer, TrueHD decoder, path selection — goes through it, so none of them knows
 or cares which container it reads.
 
 ### `byteSource` — HTTP range reads
@@ -413,13 +410,6 @@ reads and two verbs.
   after four tries, or if a seek intervened, the ordinary recovery runs as before (24/09).
 - **Source loss**: iOS reclaims media resources in the background and closes the MediaSource. This
   is a pipeline to rebuild at the current position, not a failure to report — up to three times.
-- **A platform audio decoder that fails on the canvas path is not fatal**: the codec is set aside
-  and the software decoder takes over at the current position (`nativeAudioFailed`, as
-  `maybeDemoteNativeAudio` does for one that stays silent). Only if nothing else can read the
-  track does playback stop.
-- **The canvas path rebuilds too**, with the same machinery and budget, but only for a failure that
-  occurs **after** the picture started moving. A file the device cannot decode fails before
-  starting; retrying it is three spinners for the same answer.
 - **The rebuild budget decays.** Three source losses an hour apart are not the failure the limit
   exists to stop: past three minutes without incident the counter resets. Otherwise a two-hour film
   exhausts its budget by accident and yields to the stable player mid-session.
@@ -447,8 +437,8 @@ Both halves must hold: the browser must be able to **produce** the codec *and* *
 MediaSource. AAC first, Opus second.
 
 - **Firefox does not encode AAC at all**, but encodes Opus in stereo *and* 5.1 and accepts it in
-  MediaSource. Without the Opus fallback it loses the native path — and since it does not decode
-  10-bit HEVC in WebCodecs either, it loses playback altogether.
+  MediaSource. Without the Opus fallback it loses the native path, and the film goes to the
+  server player.
 - **iOS does not accept Opus** in MediaSource, but encodes AAC in 5.1.
 
 ### Channel order: who converts, measured (2026-09-21)
@@ -467,13 +457,11 @@ AC-3/E-AC3/DTS (measured against ffmpeg, 19/09), libFLAC (the format defines it)
 | Opus, Chrome / Safari | stereo only | refused beyond two channels |
 
 The table lives in `APPLE_AAC_ORDER` / `orderFor` (`audioTranscode.ts`), keyed on
-`appleAudioToolbox()` — the *system*, not the engine: it is the platform encoder that decides, and
+`appleAudioToolbox()` — the *system*, not the browser: it is the platform encoder that decides, and
 Chrome on a Mac uses the same one as Safari.
 
 **Not measured, and where to look first if a viewer reports voices on one side:**
 - AAC from **Chrome on Android** (42 plays here): read in Chromium and Android, not heard.
-- The **canvas path** folds to stereo itself (`AudioOutput`), assuming the *platform* decoder
-  (AAC, Opus through `AudioDecoder`) also hands back the standard order.
 - Multichannel **Opus decoded by Apple** — why only mono and stereo Opus are transcoded on Safari.
 
 Library census (30 110 audio tracks, 21/09): 99.5 % mono, stereo, 5.1 or 7.1. The rest — Opus 3.0
@@ -549,8 +537,8 @@ What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what n
 - **The end of the file is declared with a transcoder too**: once the last picture is out, the
   rest of the re-encoded sound is asked for once, then `nextSegment()` answers `null` and the
   stream is ended. Until 22/09/2026 it never did, and every re-encoded film looped in its credits.
-- **A switch that cannot open reverts to the previous track** instead of falling to the canvas or
-  the server player (`revertFailedSwitch`).
+- **A switch that cannot open reverts to the previous track** instead of falling to the server
+  player (`revertFailedSwitch`).
 - **The rebuild keeps the picture**: the frame on screen is copied into a canvas above the
   element and fades out once the new pipeline has its own; and the new `HttpByteSource` inherits
   the size and the chunks of the one just closed for the same URL (no HEAD, no re-download —
@@ -660,8 +648,8 @@ covered by a file alongside.
 - They are fetched **when selected**, as WebVTT — Jellyfin converts, whatever the on-disk format.
 - They are held **above the pipelines**, like the chosen language, so they survive a rebuild after a
   network cut.
-- Lookup is **binary and non-destructive**, unlike the engine's queue: seeking backwards finds its
-  line again instead of showing nothing until the next one.
+- Lookup is **binary and non-destructive**: seeking backwards finds its line again instead of
+  showing nothing until the next one.
 
 Two details of real server responses the parser must handle: a **BOM** before the `WEBVTT` header,
 and **position settings** at the end of a cue timing line (`region:subtitle line:90%`) which are not
@@ -732,7 +720,7 @@ Jellyfin 12), with the old Intro Skipper endpoint (`/Episode/{id}/Timestamps`) a
 Jellyfin 12 it answers 404 for every episode. `timestampsFromSegments` keeps the earliest `Intro`
 and the earliest `Outro` starting after the first minute, and ignores segments shorter than 5 s:
 some analyses produce a 3-second "intro" or an "outro" at 3 s next to the real one. Both players
-use it, on both paths; on the canvas path the control bar seeks through the façade's `currentTime`.
+use it.
 
 The next-episode card appears at the credits, or **in the last second** when no credits are known,
 so an episode never freezes on its final frame with nothing offered. Its countdown only runs while
@@ -756,10 +744,6 @@ Shown:
 
 | Message | Raised when |
 |---|---|
-| `No sound: …` | Nothing can decode the audio track, or the audio output could not be created |
-| `No decoder available for audio X` | Switch to a track nothing can decode |
-| `Software audio decoding interrupted: …` | The WASM DTS/AC-3 decoder stopped mid-stream |
-| `HDR conversion unavailable, picture shown without it (…)` | Canvas path, the conversion shader could not be created |
 | `This audio track could not be opened: …` | Track change refused; **the previous one keeps playing** |
 | `External subtitles unavailable.` | The requested `.srt` did not come back from the server |
 | `This file has no seek index: seeking is not possible.` | Matroska without Cues |
@@ -1016,14 +1000,9 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 |---|---|
 | `audioTranscode.ts`, `softwareAudio.ts` | Audio decoding and re-encoding |
 | `externalSubtitles.ts` | The `.srt` files alongside: fetching, lookup by time |
-| `subtitleMarkup.ts` | Markup stripping, for internal tracks **and** files |
+| `subtitleMarkup.ts` | Markup stripping, for internal tracks **and** files; text of a subtitle block (`subtitleText`) |
+| `playerTrack.ts` | A track as the interface sees it (`PlayerTrack`), read from the container |
 | `capabilities.ts` | What the device accepts, measured |
-
-### The canvas path
-
-| File | Role |
-|---|---|
-| `engine.ts`, `renderer.ts`, `audioOutput.ts`, `hdrMath.ts`, `mediaFacade.ts` | WebCodecs → canvas |
 
 ### Server side and reporting
 

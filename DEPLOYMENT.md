@@ -531,8 +531,8 @@ byte ranges, repackages it in the tab and hands it to a native `<video>` — har
 native HDR, no transcode. That is why the flag defaults to on; it was opt-in when every play meant
 a Jellyfin transcode, and that is no longer what happens.
 
-**The one case that can cost CPU** is the safety net. A file neither the native path nor WebCodecs
-can carry is handed to Jellyfin, which negotiates DirectPlay / DirectStream / Transcode; only that
+**The one case that can cost CPU** is the safety net. A file the native path cannot carry is
+handed to Jellyfin, which negotiates DirectPlay / DirectStream / Transcode; only that
 last one is real work, and how often it happens depends on your library's formats and the browsers
 people watch on.
 

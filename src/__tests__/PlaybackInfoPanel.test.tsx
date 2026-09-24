@@ -129,9 +129,8 @@ describe("describeRemuxPlayback", () => {
     diagnostics: {},
   };
 
-  it("colore le chemin par le travail demandé à l'appareil, pas par la réussite", () => {
+  it("colore le chemin : natif en marche, ou encore en examen", () => {
     expect(describeRemuxPlayback(base, t).headline.tone).toBe("good");
-    expect(describeRemuxPlayback({ ...base, path: "webcodecs" }, t).headline.tone).toBe("warn");
     expect(describeRemuxPlayback({ ...base, path: null }, t).headline.tone).toBe("neutral");
   });
 

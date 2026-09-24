@@ -21,7 +21,7 @@ export interface Seance {
   device: string | null;
   /** Le temps d'ouverture de la première ouverture (hors reconstructions), en ms. */
   openedMs: number | null;
-  /** « natif » (remultiplexage ou canevas) ou « serveur ». */
+  /** « natif » (remultiplexage — ou canevas, dans les séances d'avant le 24/09/2026) ou « serveur ». */
   player: "natif" | "serveur";
   path: string | null;
   video: string | null;

@@ -79,3 +79,42 @@ export function simultaneousText(covering: readonly { startSeconds: number; text
   return placed.every((line) => line.top) ? `{\\an8}${text}` : text;
 }
 
+
+/** Une réplique, déjà décodée en texte et placée dans le temps, en secondes. */
+export interface SubtitleCue {
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+}
+
+/**
+ * Les sous-titres texte que le lecteur dessine lui-même. ASS et SSA n'y sont que pour leurs mots :
+ * le style, la position et les polices embarquées sont laissés, ce qui ne se voit pas sur un
+ * dialogue ordinaire et fait d'un panneau placé une ligne en bas comme les autres. Les proposer
+ * nettoyés vaut mieux que priver 218 fichiers de leurs sous-titres pour leur mise en forme — voir
+ * `subtitleText`.
+ */
+export const TEXT_SUBTITLE_CODECS = new Set(["S_TEXT/UTF8", "S_TEXT/ASCII", "S_TEXT/ASS", "S_TEXT/SSA"]);
+
+/**
+ * Le texte affichable d'un bloc de sous-titre.
+ *
+ * Un bloc SRT est la réplique elle-même, balises comprises : `<i>`, `<b>`, `<font color="…">`.
+ * Elles sont retirées, sans quoi le lecteur, qui dessine ses lignes dans un paragraphe, les
+ * afficherait — ce que faisaient les quatre pistes SubRip internes de Titanic. Un bloc ASS est la
+ * fin d'une ligne Dialogue — neuf champs séparés par des virgules avant le texte —, avec des
+ * balises en ligne comme {\i1}. Elles partent aussi : la mise en page est hors de portée, mais
+ * jeter la piste pour son style laisserait 218 fichiers de cette bibliothèque sans sous-titres
+ * alors que le texte est là.
+ *
+ * Vivait dans `engine.ts` avec le lecteur canevas, retiré le 24/09/2026 ; le remultiplexeur s'en
+ * servait déjà.
+ */
+export function subtitleText(raw: string, codecId: string): string {
+  if (codecId !== "S_TEXT/ASS" && codecId !== "S_TEXT/SSA") {
+    return stripSubtitleMarkup(raw).trim();
+  }
+  const fields = raw.split(",");
+  const text = fields.length > 8 ? fields.slice(8).join(",") : raw;
+  return stripSubtitleMarkup(text.replace(/\\N/gi, "\n").replace(/\\h/gi, " "), { allBraces: true }).trim();
+}

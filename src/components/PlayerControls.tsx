@@ -178,9 +178,7 @@ export function PlayerControls({
    * iOS does not: `volume` on a media element is read-only there, silently, and the hardware
    * buttons are the only control. So the slider did nothing except through the one line that
    * *did* work — muting at zero — which is exactly what it looked like from the outside: a bar
-   * that turned the sound off and on and had no middle. Probed rather than sniffed from the user
-   * agent, and answered per element: the canvas pipeline drives a gain node through the façade,
-   * which works everywhere, including on the phone where the element does not.
+   * that turned the sound off and on and had no middle.
    */
   const [volumeSettable, setVolumeSettable] = useState(true);
 
@@ -194,9 +192,8 @@ export function PlayerControls({
    * stayed on screen, and it behaved as a mute switch with nothing in between — which is what
    * was reported, twice. A measurement whose subject lies is not a measurement.
    *
-   * Narrow on purpose. Only a real media element is affected: the canvas pipeline puts its sound
-   * through a gain node of its own, which obeys on an iPhone like anywhere else — so the control
-   * stays where it works and goes where it does not.
+   * Narrow on purpose: only Apple's mobile systems, where the write is ignored — the control stays
+   * where it works and goes where it does not.
    */
   const probeVolume = useCallback((video: HTMLVideoElement) => {
     if (probedVolumeOn.current === video) return;

@@ -1,20 +1,19 @@
 // The remux path, assembled: file in, a playing <video> element out.
 //
-// Deliberately shaped like the WebCodecs engine's public surface — same track lists, same subtitle
-// selection and lookup — so the player component branches once on which path was chosen and not
-// again on every operation. Audio is the exception: here a change of track rebuilds the player
-// (see `requestAudioTrack`), where the engine switches its own software decoder.
+// Track lists, subtitle selection and lookup live here, next to the element they drive. A change
+// of audio track rebuilds the player (see `requestAudioTrack`). This was once shaped like the
+// public surface of a second player — a WebCodecs engine painting a canvas — so the component
+// could branch once between the two; that engine was removed on 2026-09-24 (docs/lecteur-canvas.md).
 
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
 import { HttpByteSource, type ByteSource } from "./byteSource";
-import type { EngineTrack } from "./engine";
-import { fromMatroskaTrack } from "./engineTrack";
+import { fromMatroskaTrack, type PlayerTrack } from "./playerTrack";
 import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { openMediaFile } from "./mediaFile";
 import { MseSource } from "./mseSource";
-import { choosePlaybackPath, describePath, type ChosenPath } from "./pathSelector";
+import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
 import { Remuxer, playableAudio, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
@@ -67,7 +66,7 @@ export interface RemuxPlaybackOptions {
    * 1 784 ms sur du DTS — et jusqu'à 7,9 s sur l'appareil le plus lent du foyer.
    *
    * Absentes, tout se passe comme avant : c'est le repli quand la préférence n'est pas encore
-   * chargée, et c'est aussi ce que voit le chemin WebCodecs, qui choisit sa piste autrement.
+   * chargée.
    */
   audioPreferences?: TrackPreferences | null;
   /**
@@ -87,26 +86,28 @@ export interface RemuxPlaybackOptions {
   startPaused?: boolean;
 }
 
-export type PathProbe = { discard: () => void } & (
-  /**
-   * `chosen` est porté ici aussi, et pas seulement par la variante WebCodecs.
-   *
-   * Le motif du choix n'existait que dans la trace, si bien que l'appelant ne pouvait pas nommer
-   * le chemin *quand il marchait* : le rapport technique disait « non encore décidé » sur une
-   * lecture parfaitement saine, et ne se remplissait qu'en cas de repli. Un rapport qui ne se
-   * renseigne que lorsque ça se dégrade est un rapport qu'on lit à l'envers.
-   */
-  | { path: "remux"; start: (video: HTMLVideoElement) => Promise<RemuxPlayback>; chosen: ChosenPath }
-  | { path: "webcodecs"; chosen: ChosenPath }
+/**
+ * Le chemin natif, ouvert et prêt à démarrer sur un élément vidéo — ou, si l'appelant change
+ * d'avis, à rendre ce qu'il tient (`discard`).
+ *
+ * Un fichier que ce chemin ne porte pas ne donne pas de sonde : `probePlaybackPath` rejette avec
+ * le motif, et l'hôte passe la main au lecteur serveur. (Il y avait une variante « webcodecs », le
+ * lecteur canevas, retirée le 24/09/2026 — voir docs/lecteur-canvas.md.)
+ */
+export type PathProbe = {
+  path: "remux";
+  start: (video: HTMLVideoElement) => Promise<RemuxPlayback>;
+  chosen: ChosenPath;
+  discard: () => void;
   /*
-   * Il y avait un troisième chemin, « direct » : un MP4 remis tel quel à `<video>`. Retiré le
+   * Il y avait aussi un chemin « direct » : un MP4 remis tel quel à `<video>`. Retiré le
    * 22/09/2026 — un bon conteneur ne dit pas que tout se lit nativement. Sur les MP4 de la
    * bibliothèque, il jouait l'E-AC3 muet sur Chrome et Firefox sans erreur ni repli, n'offrait ni
    * menu de pistes ni langue du compte, n'affichait aucun sous-titre intégré, et un HEVC refusé
    * finissait en écran d'erreur. Tout fichier passe désormais par le même traitement, qui ne fait
    * rien (ou presque) quand rien n'est à faire : voir mediaFile.ts et mp4Demux.ts.
    */
-);
+};
 
 /**
  * The audio track to open on.
@@ -191,12 +192,10 @@ export function openingAudio(
 }
 
 /**
- * Works out how this file should be played, without committing to it.
+ * Works out whether this file can be played here, without committing to it.
  *
- * The header is read here and, on the WebCodecs path, read again by the engine. That is a handful
- * of ranged requests against a cache, paid only on the path that is already the slower of the
- * two — much cheaper than reshaping the engine to accept a file someone else parsed, which is a
- * thousand lines of working code this has no business destabilising.
+ * Resolves with the remux path ready to start, or rejects with the reason it cannot carry the
+ * file — which the player hands to the server player (`fallToStable`).
  */
 export async function probePlaybackPath(options: RemuxPlaybackOptions): Promise<PathProbe> {
   traceReset();
@@ -256,11 +255,7 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
     remux: { lightCapNits: lightCap },
   });
 
-  trace(`chemin choisi : ${describePath(chosen)}`);
-  if (chosen.path !== "remux" || !chosen.remuxer || !chosen.plan) {
-    source.close();
-    return { path: "webcodecs", chosen, discard: () => {} };
-  }
+  trace(`chemin choisi : ${NATIVE_PATH}`);
 
   return {
     path: "remux",
@@ -269,7 +264,7 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
     // For a caller that asked and then changed its mind: the remuxer holds the software decoder
     // and the encoder, and the source holds the connection.
     discard: () => {
-      chosen.remuxer?.close();
+      chosen.remuxer.close();
       source.close();
     },
   };
@@ -293,7 +288,6 @@ export class RemuxPlayback {
     private readonly videoTrack: MatroskaTrack,
     private audioTrack: MatroskaTrack | null,
     private remuxer: Remuxer,
-    private readonly chosen: ChosenPath,
     private readonly options: RemuxPlaybackOptions
   ) {}
 
@@ -306,7 +300,7 @@ export class RemuxPlayback {
     chosen: ChosenPath,
     options: RemuxPlaybackOptions
   ): Promise<RemuxPlayback> {
-    const playback = new RemuxPlayback(video, source, file, videoTrack, audioTrack, chosen.remuxer!, chosen, options);
+    const playback = new RemuxPlayback(video, source, file, videoTrack, audioTrack, chosen.remuxer, options);
     // The instance is only handed back once it is attached, so a rejection here leaves an object
     // nobody can free: it holds the remuxer — hence an AudioDecoder and an AudioEncoder, of which
     // the browser allows a fixed number at a time — the byte source and its connection. Firefox on
@@ -314,7 +308,7 @@ export class RemuxPlayback {
     // refuses as a SourceBuffer (see codecSupport.ts), and `addSourceBuffer` throws inside attach.
     // Releasing it here rather than in the caller: nothing else ever held a reference to it.
     try {
-      await playback.attach(chosen.plan!, options.startSeconds);
+      await playback.attach(chosen.plan, options.startSeconds);
     } catch (error) {
       // `destroy()` tolerates a half-built instance — `mse` is still null, `Remuxer.close()` and
       // `AudioTranscoder.close()` are both guarded and idempotent — so it cannot replace the
@@ -383,11 +377,11 @@ export class RemuxPlayback {
     );
   }
 
-  get audioTracks(): EngineTrack[] {
+  get audioTracks(): PlayerTrack[] {
     return this.remuxer.audioTracks().map(fromMatroskaTrack);
   }
 
-  get subtitleTracks(): EngineTrack[] {
+  get subtitleTracks(): PlayerTrack[] {
     return this.remuxer.subtitleTracks().map(fromMatroskaTrack);
   }
 
@@ -528,7 +522,7 @@ export class RemuxPlayback {
   get diagnostics(): Record<string, string> {
     const remux = this.remuxer.diagnostics();
     return {
-      Chemin: describePath(this.chosen),
+      Chemin: NATIVE_PATH,
       Décodage: "matériel, par le navigateur",
       Vidéo: `${this.videoTrack.codecId} ${this.videoTrack.video?.width ?? "?"}×${this.videoTrack.video?.height ?? "?"}`,
       Audio: this.audioTrack ? `${this.audioTrack.codecId} ${this.audioTrack.audio?.channels ?? "?"} canaux` : "aucune",

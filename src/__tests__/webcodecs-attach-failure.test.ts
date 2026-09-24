@@ -142,7 +142,6 @@ describe("a MediaSource that refuses the buffer it said it supported", () => {
       path: "remux",
       remuxer: remuxer as unknown as Remuxer,
       plan: PLAN,
-      attempts: [],
     };
 
     await expect(

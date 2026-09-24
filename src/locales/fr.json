@@ -1489,8 +1489,6 @@
       "paths": {
         "remuxName": "Remultiplexage",
         "remuxDetail": "décodage matériel, HDR natif",
-        "webcodecsName": "WebCodecs → canvas",
-        "webcodecsDetail": "décodage logiciel",
         "pendingName": "En cours d'examen",
         "pendingDetail": "le fichier n'a pas encore parlé"
       }
@@ -1803,10 +1801,7 @@
     "warnings": {
       "noIndexSeek": "Ce fichier ne permet pas d'avancer ou de reculer : il n'a pas d'index.",
       "noIndexAudio": "Ce fichier ne permet pas de changer de piste audio en cours de lecture : il n'a pas d'index.",
-      "audioTrackRefused": "Cette piste audio n'a pas pu être ouverte : la précédente continue.",
-      "noSound": "Pas de son sur cette piste.",
-      "audioInterrupted": "Le son s'est interrompu.",
-      "noAudioDecoder": "Cette piste audio ne peut pas être lue ici."
+      "audioTrackRefused": "Cette piste audio n'a pas pu être ouverte : la précédente continue."
     },
     "hdrCap": {
       "title": "Luminosité HDR",

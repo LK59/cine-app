@@ -155,24 +155,27 @@ for weeks before that was fixed.
 stays drawn under the one above it.
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`.
-Two paths, chosen per file — remux → native `<video>` (normal), WebCodecs → canvas (fallback).
-Every file goes through them, MP4 included: `mediaFile.ts` reads Matroska or MP4 into the same
+One local path — remux → native `<video>` — and the server player when it cannot carry a file.
+Every file goes through it, MP4 included: `mediaFile.ts` reads Matroska or MP4 into the same
 description, and a good container does not mean everything in it plays natively (there used to be
 a "direct play" path for MP4 — silent E-AC3 on Chrome, no track menus, no embedded subtitles).
 `PlayerHost` chooses between the native player and the legacy server-transcoding one;
 `fallToStable` hands over rather than closing — unless `PLAYER_SERVER_FALLBACK=false`, where there
 is no server-side player to hand to and the same call surfaces a clean playback error instead.
 
-**A refusal that names the player, not the path, must stop the chain.** `tryRemux` returns either
-a plain string — "not by this route, try the next" — or `{ reason, server: true }`, which means no
-local path can carry this file at all and the server player is the answer. Two cases reach it
-now: Dolby Vision with no HDR10 base layer, and audio no decoder anywhere can read
-(`audioDecoderExists` — MP2, which mediabunny does not recognise). TrueHD used to be the second
-until 2026-09-21, when FFmpeg's decoder was compiled to WebAssembly
-(`tools/truehd-wasm`, `src/lib/webcodecs/truehd/`). All were found the same way: the log showed
-the canvas path being opened, failing on something already known, and only then falling back. Use the **same predicate** that refuses at runtime, never a neighbouring one —
-`playableAudio` means "cannot cross MediaSource", which is true of an AAC in a browser that
-cannot encode, and that shortcut would have handed working files to the server.
+**A refusal is a named error, and the server player is its answer.** `tryRemux` returns the
+opened remuxer or a string saying why it cannot carry the file; `choosePlaybackPath` throws it as
+`Aucun chemin de lecture disponible pour ce fichier. remux : …`, and the host hands the file over
+(`fallToStable`) — except a network failure, rethrown as such, which gets the "connection lost"
+screen instead. There was a second local path, a WebCodecs → canvas player, tried before the
+server; it was removed on 2026-09-24 (`docs/lecteur-canvas.md`, tag `lecteur-canvas-final-2026-09-24`)
+after ten sessions in three weeks, all tests, each ending in the same fallback a second later. It
+also forced every refusal to say whether it meant "not by this path" or "not by this player" —
+twice the log showed the canvas opened only to fail on something already known (Dolby Vision
+without a base layer, MP2). That distinction is gone with it. Keep the refusal strings exact —
+they are what the activity page's file-or-device diagnosis groups by — and keep the **same
+predicate** that refuses at runtime: `playableAudio` means "cannot cross MediaSource", and
+`audioDecoderExists` only names the MP2 case more precisely in the log.
 
 **TrueHD is decoded by FFmpeg's own decoder, compiled to WebAssembly and committed**
 (`src/lib/webcodecs/truehd/truehd-wasm.mjs`, 466 KB). `tools/truehd-wasm/build.sh` rebuilds it
@@ -331,7 +334,7 @@ dictionaries' values.
   sample, it closed the MediaSource at each of those keyframes; a rebuild *starting* on the
   keyframe never saw the block, so each one played until the next. `strayUnits` puts the units
   back (RPU and other suffix units onto the picture before, parameter sets onto the one after),
-  in the remuxer and the canvas engine alike. Three fixes shipped before it chased what the block
+  in the remuxer. Three fixes shipped before it chased what the block
   *caused* — duplicate instants, a "wrong" header, a mid-stream init segment — and were reverted
   once the cause was found; Safari reads HEVC parameter sets in-band perfectly well (the film
   played its first 2.5 s on a header that disagreed with its pictures). When a fix does not hold,

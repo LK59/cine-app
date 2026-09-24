@@ -1,6 +1,6 @@
 import { noteUnauthorized, SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { trace } from "./trace";
-// Random access over a media file, for the experimental WebCodecs player.
+// Random access over a media file, for the native player's remuxer.
 //
 // The demuxer needs to jump around a file that can be 40 GB: read the header, jump to the end
 // for the index, then stream clusters from wherever the user seeks. HTTP range requests give

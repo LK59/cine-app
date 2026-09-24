@@ -3,11 +3,9 @@ import { strayUnits, isRandomAccessPoint, nalLengthSize,
   hevcCodecString,
   avcCodecString,
   av1CodecString,
-  videoConfigFor,
   audioConfigFor,
-  unsupportedReason,
 } from "@/lib/webcodecs/codecConfig";
-import { selectCue, subtitleText } from "@/lib/webcodecs/engine";
+import { subtitleText } from "@/lib/webcodecs/subtitleMarkup";
 import type { MatroskaTrack } from "@/lib/webcodecs/matroska";
 
 // A codec string is matched character for character against the browser's hardware capabilities.
@@ -73,20 +71,7 @@ describe("other codec strings", () => {
 
 });
 
-describe("track configuration", () => {
-  it("configures an HEVC track with its codec-private description", () => {
-    const priv = hvcC({});
-    const config = videoConfigFor(track({ codecId: "V_MPEGH/ISO/HEVC", codecPrivate: priv, video: { width: 3840, height: 1680 } }));
-    expect(config).toMatchObject({ codec: "hvc1.2.4.L150.90", codedWidth: 3840, codedHeight: 1680 });
-    expect(config?.description).toBe(priv);
-  });
-
-  it("refuses an HEVC track with no configuration record rather than guessing a profile", () => {
-    const t = track({ codecId: "V_MPEGH/ISO/HEVC", codecPrivate: null, video: { width: 1920, height: 1080 } });
-    expect(videoConfigFor(t)).toBeNull();
-    expect(unsupportedReason(t)).toContain("configuration de décodeur");
-  });
-
+describe("audio decoder configuration", () => {
   it("configures AAC only with its AudioSpecificConfig, which carries the profile and SBR rate", () => {
     const base = { type: "audio" as const, audio: { sampleRate: 48000, channels: 6 } };
     expect(audioConfigFor(track({ ...base, codecId: "A_AAC", codecPrivate: new Uint8Array([0x11, 0x90]) }))).toMatchObject({
@@ -108,22 +93,11 @@ describe("track configuration", () => {
   });
 
   // DTS and TrueHD have no decoder on any platform and no registered codec string, so asking
-  // would be theatre.
-  it("refuses DTS up front, and says a software decoder is what is missing", () => {
-    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS"]) {
-      const t = track({ type: "audio", codecId, audio: { sampleRate: 48000, channels: 6 } });
-      expect(audioConfigFor(t)).toBeNull();
-      expect(unsupportedReason(t)).toContain("décodeur logiciel");
-    }
-  });
-
-  it("points TrueHD at the software decoder, which exists since 21/09/2026", () => {
-    // Until then the message said "no decoder anywhere, choose another track" — true, and the
-    // reason TrueHD had its own list. FFmpeg's decoder, compiled to WebAssembly, ended it.
-    for (const codecId of ["A_TRUEHD", "A_MLP"]) {
+  // would be theatre: they go to our own software decoders (softwareAudio.ts).
+  it("has no platform configuration for DTS and TrueHD", () => {
+    for (const codecId of ["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_TRUEHD", "A_MLP"]) {
       const t = track({ type: "audio", codecId, audio: { sampleRate: 48000, channels: 8 } });
       expect(audioConfigFor(t)).toBeNull();
-      expect(unsupportedReason(t)).toContain("décodeur logiciel");
     }
   });
 
@@ -132,50 +106,6 @@ describe("track configuration", () => {
     expect(audioConfigFor(track({ ...base, codecId: "A_OPUS" }))?.codec).toBe("opus");
     expect(audioConfigFor(track({ ...base, codecId: "A_FLAC" }))?.codec).toBe("flac");
     expect(audioConfigFor(track({ ...base, codecId: "A_MPEG/L3" }))?.codec).toBe("mp3");
-  });
-});
-
-describe("subtitle cue selection", () => {
-  const cues = () => [
-    { startSeconds: 1, endSeconds: 3, text: "un" },
-    { startSeconds: 3.5, endSeconds: 5, text: "deux" },
-    { startSeconds: 10, endSeconds: 12, text: "trois" },
-  ];
-
-  it("shows the line whose window contains the playhead", () => {
-    expect(selectCue(cues(), 2)?.text).toBe("un");
-    expect(selectCue(cues(), 4)?.text).toBe("deux");
-    expect(selectCue(cues(), 11)?.text).toBe("trois");
-  });
-
-  it("shows nothing in the gaps, including before the first line", () => {
-    expect(selectCue(cues(), 0.5)).toBeNull();
-    expect(selectCue(cues(), 3.2)).toBeNull();
-    expect(selectCue(cues(), 99)).toBeNull();
-  });
-
-  it("includes both edges of a line's window", () => {
-    expect(selectCue(cues(), 1)?.text).toBe("un");
-    expect(selectCue(cues(), 3)?.text).toBe("un");
-  });
-
-  // Deux répliques en même temps : les deux, pas la première trouvée (relu le 24/09/2026).
-  it("shows two overlapping lines together", () => {
-    const overlapping = [
-      { startSeconds: 1, endSeconds: 9, text: "{\\an8}PANNEAU" },
-      { startSeconds: 2, endSeconds: 4, text: "Dialogue." },
-    ];
-    expect(selectCue(overlapping, 3)?.text).toBe("PANNEAU\nDialogue.");
-    expect(selectCue(overlapping, 6)?.text).toBe("{\\an8}PANNEAU");
-  });
-
-  // Cues arrive in order and are consumed in order; dropping the past ones is what stops this
-  // re-scanning a growing list on every animation frame.
-  it("discards expired lines as it goes", () => {
-    const queue = cues();
-    selectCue(queue, 11);
-    expect(queue).toHaveLength(1);
-    expect(queue[0].text).toBe("trois");
   });
 });
 
@@ -371,12 +301,9 @@ describe("strayUnits", () => {
     expect(strayUnits(new Uint8Array([1, 2, 3]), "V_AV1", 4)).toBeNull();
   });
 
-  it("is applied by both paths that read video blocks", async () => {
-    // One decision, two readers: the remuxer and the canvas engine. A block repaired by one and
-    // decoded as a picture by the other would move the failure rather than end it.
+  it("is applied by the remuxer to every video block it reads", async () => {
+    // It had two readers until 2026-09-24 — the remuxer and the canvas engine, removed since.
     const { readFileSync } = await import("node:fs");
-    for (const file of ["src/lib/webcodecs/remuxer.ts", "src/lib/webcodecs/engine.ts"]) {
-      expect(readFileSync(file, "utf8")).toMatch(/const stray = strayUnits\(sample\.data,/);
-    }
+    expect(readFileSync("src/lib/webcodecs/remuxer.ts", "utf8")).toMatch(/const stray = strayUnits\(sample\.data,/);
   });
 });

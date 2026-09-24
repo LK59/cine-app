@@ -203,12 +203,11 @@ In-app playback is **on by default** (`PLAYER_ENABLED`), because of how it now w
   itself: the browser fetches the file (MKV or MP4) by byte ranges, repackages it into fragmented MP4 in the
   tab, and hands it to a real `<video>` — hardware decoding, native HDR, no transcoding at all: a
   4K Dolby Vision HEVC film with E-AC3 Atmos plays on an iPhone with nothing running on the
-  server. Where the codecs make that impossible it decodes with WebCodecs onto a canvas
-  instead. Audio the device cannot play — TrueHD (FFmpeg's own decoder, compiled to
+  server. Audio the device cannot play — TrueHD (FFmpeg's own decoder, compiled to
   WebAssembly), DTS, FLAC — is decoded in the browser and re-encoded. Each audio track is delivered
   in its best form, and switching to a track of another format rebuilds the player at the same
   position.
-- **The server-side player** is the safety net underneath. A file neither browser path can carry is
+- **The server-side player** is the safety net underneath. A file the native player cannot carry is
   handed to Jellyfin, which negotiates DirectPlay / DirectStream / Transcode the way its own web
   client does; a "Playback info" panel says which of the three is running, why, and at what
   bitrate. This is the only case where a playback can cost your server CPU, which is why it can be
@@ -625,9 +624,9 @@ The build cache does accumulate — `docker builder prune` reclaims it.
 
 One caveat: the development port is plain HTTP, and several browser APIs are restricted to secure
 contexts. The ordinary path — remux into MediaSource, native `<video>` — works there. WebCodecs
-does not exist outside a secure context, so neither does what depends on it: the canvas fallback
-(which stops with a message saying HTTPS is required) and the in-browser re-encoding of DTS, TrueHD
-and FLAC, which needs `AudioEncoder`. Testing those needs HTTPS — deploy it, or point a
+does not exist outside a secure context, so neither does what depends on it: the in-browser
+re-encoding of DTS, TrueHD and FLAC, which needs `AudioEncoder` — those files go to the server
+player instead. Testing them needs HTTPS — deploy it, or point a
 reverse-proxy host at port 3001 (`localhost` also counts as secure).
 
 ## Debugging a running deployment

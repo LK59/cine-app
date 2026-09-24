@@ -1,28 +1,20 @@
-// Which way to play this file, and why.
+// Whether this file can be played here, and why not when it cannot.
 //
-// There are two working paths and they are not equivalent. Ranking them here, in one place, keeps
-// the reasoning out of the player and makes the choice something that can be shown to the viewer
-// rather than guessed at from the symptoms.
+// One local path: remux to fragmented MP4 and hand it to a real <video>. The browser decodes in
+// hardware, composites the picture itself, drives its own audio clock and displays HDR natively;
+// no pixel passes through JavaScript, and the only audio that does is a track this browser cannot
+// take as it is, re-encoded on the way (audioTranscode.ts). When it cannot carry a file, the
+// refusal says exactly why, and the player hands the file to the server player — which transcodes
+// what nothing here can.
 //
-//   1. Remux to fragmented MP4 and hand it to a real <video>.
-//      The browser decodes in hardware, composites the picture itself, drives its own audio
-//      clock, and displays HDR natively. No pixel and no audio sample passes through JavaScript.
-//      This is better on every axis that matters — battery, heat, smoothness, colour — and the
-//      only reason it is not the sole path is that it can only carry codecs the browser accepts.
-//
-//   2. Decode with WebCodecs and paint a canvas.
-//      Works where the first cannot: an audio codec the browser will not accept in an MP4 but
-//      that can be decoded in software, or a container the remuxer does not handle. It costs a
-//      per-frame JavaScript loop, tone mapping in a shader for HDR, and a hand-run audio clock.
-//
-//   3. Neither. Say so, name the codec, and stop.
-//
-// What is deliberately absent is a silent fallback. A player that quietly drops from the first
-// path to the second looks like it works and hides that the good path never ran — which is
-// exactly how a performance problem stays invisible for months.
+// There used to be a second local path, a WebCodecs engine painting a canvas, tried before the
+// server. It was removed on 2026-09-24: ten sessions in three weeks, all of them tests, all ending
+// in the same server fallback a second later, and every reason that once led there now handled by
+// the native path. It also forced a distinction every refusal had to make — "not by this path" or
+// "not by this player" — which is gone with it. See docs/lecteur-canvas.md.
 
 import { isNetworkFailure, isReadAbandoned, type ByteSource } from "./byteSource";
-import { unsupportedReason, dolbyVisionInfo } from "./codecConfig";
+import { dolbyVisionInfo } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
 import { trace } from "./trace";
@@ -40,22 +32,11 @@ import {
 /** Placeholder for the playability probe, which only ever reads the MIME strings. */
 const EMPTY = new Uint8Array(0);
 
-export type PlaybackPathName = "remux" | "webcodecs";
-
-export interface PathAttempt {
-  path: PlaybackPathName;
-  ok: boolean;
-  /** Why this path was not taken. Shown in the technical panel, never swallowed. */
-  reason?: string;
-}
-
+/** The remux path, opened and ready to start. */
 export interface ChosenPath {
-  path: PlaybackPathName;
-  /** Present only when the chosen path is the remux one. */
-  remuxer: Remuxer | null;
-  plan: RemuxPlan | null;
-  /** Every path considered, in rank order, with the reason each was rejected. */
-  attempts: PathAttempt[];
+  path: "remux";
+  remuxer: Remuxer;
+  plan: RemuxPlan;
 }
 
 export interface PathInput {
@@ -149,25 +130,8 @@ export function planDolbyVision(
   };
 }
 
-/**
- * Un refus qui ne vise pas le remultiplexage, mais **ce lecteur**.
- *
- * Presque tous les refus de `tryRemux` disent « pas par ce chemin-là », et le chemin canevas prend
- * la suite. Celui du Dolby Vision sans couche de base ne dit pas cela : il dit que le fichier n'a
- * aucune image juste à offrir ici, canevas compris, et qu'il faut le lecteur serveur.
- *
- * La distinction manquait, et le journal l'a montrée le 20/09/2026. « Disclosure Day » sur Chrome :
- * le remultiplexage refuse en annonçant « passage au lecteur serveur », le canevas est essayé
- * quand même, décode, puis échoue à convertir l'image — deux tentatives perdues avant le repli
- * qu'on avait déjà décidé. La trace disait la bonne chose, le code faisait l'autre.
- */
-interface NoLocalPath {
-  reason: string;
-  server: true;
-}
-
-/** Why the remux path cannot carry this file, or null if it can. */
-async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: RemuxPlan } | string | NoLocalPath> {
+/** The remux path opened for this file, or why it cannot carry it. */
+async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: RemuxPlan } | string> {
   const { file, videoTrack, audioTrack, dimensions, source } = input;
 
   trace(`chemin : examen du remultiplexage — vidéo ${videoTrack.codecId}, audio ${audioTrack?.codecId ?? "aucune"}`);
@@ -180,26 +144,10 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
 
   if (!remuxableVideo(videoTrack)) return `vidéo ${videoTrack.codecId} non remultiplexable`;
   if (audioTrack && !playableAudio(audioTrack)) {
-    /**
-     * Refuser ce chemin, et plus jamais le lecteur entier pour une question de son.
-     *
-     * Jusqu'au 21/09/2026, un fichier dont **toutes** les pistes étaient en TrueHD passait
-     * directement au lecteur serveur (`server: true`) : aucun décodeur n'existait, nulle part, et
-     * essayer le canevas n'aboutissait qu'au même refus un peu plus tard. Le décodeur de FFmpeg,
-     * compilé en WebAssembly, a fermé ce cas.
-     *
-     * `playableAudio` faux veut donc dire « ne traverse pas MediaSource » — un AAC dans un
-     * navigateur qui n'encode rien, par exemple —, et le chemin canevas, qui décode en logiciel,
-     * reste la suite normale. Ne pas le confondre avec « aucun décodeur » : c'est l'erreur qu'un
-     * test existant avait attrapée la première fois.
-     *
-     * « Aucun décodeur » existe pourtant encore, et c'est un autre prédicat : `audioDecoderExists`,
-     * celui qui fait échouer le canevas. Le MP2 (balayage du 24/09/2026) passait par ce canevas
-     * pour y échouer sur « Pas de son », puis seulement au lecteur serveur.
-     */
-    if (!audioDecoderExists(audioTrack)) {
-      return { reason: `audio ${audioTrack.codecId} : aucun décodeur, ni ici ni dans le navigateur`, server: true };
-    }
+    // Deux refus distincts, pour que le journal dise lequel : une piste que rien ne sait lire (le
+    // MP2, balayage du 24/09/2026), et une piste lisible qui ne traverse pas MediaSource ici. Le
+    // lecteur serveur est la suite des deux.
+    if (!audioDecoderExists(audioTrack)) return `audio ${audioTrack.codecId} : aucun décodeur, ni ici ni dans le navigateur`;
     return `audio ${audioTrack.codecId} non remultiplexable`;
   }
 
@@ -220,8 +168,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
     // n'existe pas.
     trace(`chemin : codec de remplacement retenu — ${plan.codec} en ${plan.channels} canaux`);
     if (plan.channels !== channels) {
-      // Deux canaux d'ambiance en moins valent mieux que le chemin canevas, qui décode un 4K HDR
-      // en logiciel et, sur une source Dolby Vision, ne sait pas convertir l'image.
+      // Deux canaux d'ambiance en moins valent mieux qu'un film confié au lecteur serveur.
       trace(`chemin : ${channels} canaux non encodables ici, la piste sera livrée en ${plan.channels}`);
     }
   }
@@ -259,7 +206,7 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
           : "refusé, et sans couche de base : passage au lecteur serveur";
     trace(`dolby vision : ${videoTrack.dolbyVision.type} présent — ${detail}`);
   }
-  if (dv.kind === "server") return { reason: dv.reason, server: true };
+  if (dv.kind === "server") return dv.reason;
 
   try {
     const remuxer = await Remuxer.open(
@@ -277,49 +224,28 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
   } catch (error) {
     // Le réseau et la lecture abandonnée ne disent rien de ce chemin : ils remontent tels quels.
     // Changés en refus (chasse aux défauts du 22/09/2026), une coupure du Wi-Fi pendant
-    // l'ouverture envoyait le film au canevas — ou au lecteur serveur, qui a besoin du même réseau
-    // —, et une reconstruction pour un changement de piste répondait « piste refusée ». Remontée,
+    // l'ouverture envoyait le film au lecteur serveur, qui a besoin du même réseau, et une
+    // reconstruction pour un changement de piste répondait « piste refusée ». Remontée,
     // la panne réseau trouve l'écran « connexion perdue » de l'hôte (`isNetworkFailure`).
     if (isNetworkFailure(error) || isReadAbandoned(error)) throw error;
     return error instanceof Error ? error.message : "ouverture impossible";
   }
 }
 
+/**
+ * Le chemin natif ouvert pour ce fichier, ou une erreur qui dit pourquoi il ne peut pas le porter.
+ *
+ * L'erreur est ce qui envoie le film au lecteur serveur (`fallToStable`, dans l'hôte). Son libellé
+ * est gardé tel qu'il était pour un refus sans autre issue locale — « Aucun chemin de lecture
+ * disponible pour ce fichier. remux : … » —, pour que le journal se lise de la même façon avant et
+ * après le retrait du canevas.
+ */
 export async function choosePlaybackPath(input: PathInput): Promise<ChosenPath> {
-  const attempts: PathAttempt[] = [];
-
   const remux = await tryRemux(input);
-  if (typeof remux === "object" && "remuxer" in remux) {
-    attempts.push({ path: "remux", ok: true });
-    return { path: "remux", remuxer: remux.remuxer, plan: remux.plan, attempts };
-  }
-  const refus = typeof remux === "string" ? { reason: remux, server: false as const } : remux;
-  trace(`chemin : remultiplexage refusé — ${refus.reason}`);
-  attempts.push({ path: "remux", ok: false, reason: refus.reason });
-
-  // Un refus qui vise ce lecteur et non ce chemin s'arrête ici : voir `NoLocalPath`. Essayer le
-  // canevas par-dessus, c'est décoder un 4K pour aboutir au repli qu'on vient de choisir.
-  if (refus.server) {
-    attempts.push({ path: "webcodecs", ok: false, reason: refus.reason });
-    throw new Error(`Aucun chemin de lecture disponible pour ce fichier. remux : ${refus.reason}`);
-  }
-
-  // Second choice, and it has to be able to say no as clearly as the first did.
-  const webcodecsReason = unsupportedReason(input.videoTrack);
-  if (webcodecsReason) {
-    attempts.push({ path: "webcodecs", ok: false, reason: webcodecsReason });
-    const explained = attempts.map((a) => `${a.path} : ${a.reason}`).join(" · ");
-    throw new Error(`Aucun chemin de lecture disponible pour ce fichier. ${explained}`);
-  }
-
-  attempts.push({ path: "webcodecs", ok: true });
-  return { path: "webcodecs", remuxer: null, plan: null, attempts };
+  if (typeof remux !== "string") return { path: "remux", remuxer: remux.remuxer, plan: remux.plan };
+  trace(`chemin : remultiplexage refusé — ${remux}`);
+  throw new Error(`Aucun chemin de lecture disponible pour ce fichier. remux : ${remux}`);
 }
 
-/** A one-line summary of the decision, for the technical panel. */
-export function describePath(chosen: ChosenPath): string {
-  const rejected = chosen.attempts.filter((a) => !a.ok);
-  const name = chosen.path === "remux" ? "remultiplexage → lecteur natif" : "WebCodecs → canvas";
-  if (rejected.length === 0) return name;
-  return `${name} (après : ${rejected.map((a) => `${a.path} refusé — ${a.reason}`).join(" ; ")})`;
-}
+/** Le chemin, en mots, pour le panneau technique et le journal (`start.reason`). */
+export const NATIVE_PATH = "remultiplexage → lecteur natif";

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { parseSubtitles, ExternalSubtitleTrack, isExternalTrack, toEngineTrack } from "@/lib/webcodecs/externalSubtitles";
+import { parseSubtitles, ExternalSubtitleTrack, isExternalTrack, toPlayerTrack } from "@/lib/webcodecs/externalSubtitles";
 
 // Subtitles that came from beside the film. What matters is that the parser survives the shapes
 // real files come in, and that a jump backwards still finds its line.
@@ -112,7 +112,7 @@ describe("numérotation", () => {
     // Container track numbers are positive; these are derived as -1 - index, so index 0 is -1.
     expect(isExternalTrack(-1)).toBe(true);
     expect(isExternalTrack(3)).toBe(false);
-    expect(toEngineTrack({ id: -1, language: "fre", title: "Français", url: "/x" })).toMatchObject({
+    expect(toPlayerTrack({ id: -1, language: "fre", title: "Français", url: "/x" })).toMatchObject({
       number: -1,
       language: "fre",
       name: "Français",

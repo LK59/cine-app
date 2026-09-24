@@ -122,15 +122,12 @@ const DECODABLE_HERE = new Set([
 /**
  * Si cette piste a un décodeur quelque part — le navigateur, ou l'un des nôtres.
  *
- * Faux, aucun chemin local ne peut en tirer un son : le remultiplexage la refuse, le canevas la
- * refuse aussi, un peu plus tard (« Pas de son »), et c'est seulement là que le lecteur serveur
- * prend la main. C'était le cas du MP2 (« Des gens bien », 6 épisodes, balayage du 24/09/2026) :
- * mediabunny ne le reconnaît pas (codec nul), aucun navigateur ne l'annonce à WebCodecs.
- *
- * Délibérément large : un codec que mediabunny connaît compte comme décodable même sans
- * configuration dans l'en-tête (un AAC sans AudioSpecificConfig), puisque le canevas l'essaie
- * alors par ce chemin-là. Ne répondre « non » que pour ce que rien ne sait lire — une erreur ici
- * enverrait au serveur un fichier qui jouait.
+ * Faux, rien ici ne peut en tirer un son. C'est le cas du MP2 (« Des gens bien », 6 épisodes,
+ * balayage du 24/09/2026) : mediabunny ne le reconnaît pas (codec nul), aucun navigateur ne
+ * l'annonce à WebCodecs. Le lecteur serveur est alors la seule issue, comme pour toute piste que
+ * le remultiplexage ne porte pas ; cette réponse ne sert plus qu'à nommer le refus exactement dans
+ * le journal (voir `tryRemux`). Elle décidait, du temps où un lecteur canevas pouvait prendre la
+ * suite (retiré le 24/09/2026).
  */
 export function audioDecoderExists(track: MatroskaTrack): boolean {
   if (audioConfigFor(track)) return true;
@@ -368,11 +365,12 @@ export interface TranscodePlan {
  * Mesuré sur un Chrome Windows : il encode l'AAC en 2 et en 6 canaux, pas en 8. Une piste
  * E-AC3 7.1 — le cas de « Mourir peut attendre », dont la piste française est en 7.1 Atmos —
  * n'avait donc aucun remplaçant, le remultiplexage était refusé, et la lecture tombait sur le
- * chemin canevas : décodage logiciel d'un 4K HDR, et pour une source Dolby Vision une image que
- * ce navigateur ne sait pas convertir. Le même fichier se lit nativement sur iPhone, qui accepte
- * l'E-AC3 tel quel.
+ * chemin canevas d'alors : décodage logiciel d'un 4K HDR, et pour une source Dolby Vision une image
+ * que ce navigateur ne savait pas convertir. Le même fichier se lit nativement sur iPhone, qui
+ * accepte l'E-AC3 tel quel.
  *
- * Descendre d'un 7.1 à un 5.1 coûte deux canaux d'ambiance ; le chemin canevas coûtait l'image.
+ * Descendre d'un 7.1 à un 5.1 coûte deux canaux d'ambiance ; l'autre issue — aujourd'hui le lecteur
+ * serveur — coûte bien davantage.
  */
 export async function chooseTranscodePlan(sampleRate: number, channels: number): Promise<TranscodePlan | null> {
   // Le compte de la source d'abord, puis les deux dispositions qu'un navigateur sait produire.
@@ -879,7 +877,7 @@ export function knownLayoutAtLeast(channels: number): number {
 /**
  * Le coefficient de demi-puissance, écrit exactement.
  *
- * `0.707` traînait ici quand l'autre repli — celui du canevas — utilisait `Math.SQRT1_2`. Le
+ * `0.707` traînait ici quand l'autre repli — celui du canevas, retiré depuis — utilisait `Math.SQRT1_2`. Le
  * commentaire du repli disait pourtant « 0,707, soit 1/√2 » : c'était la même intention notée deux
  * fois, arrondie d'un côté. Un écart de 10⁻⁴, inaudible, mais c'est exactement le genre de
  * divergence silencieuse qui fait dire à un test qu'un des deux chemins a changé.
@@ -945,7 +943,7 @@ export function fold(planes: Float32Array[], to: number): Float32Array[] {
    * Écrite plan par plan dans le tampon de sortie, chaque addition arrondissait au format 32 bits
    * avant la suivante : un repli 5.1 → stéréo, qui somme trois termes, s'écartait de 8·10⁻⁵ du
    * résultat exact. Inaudible — quelque chose comme −81 dB —, mais gratuit à éviter, et c'est ce
-   * qu'un test de repli du canevas mesurait déjà sans que personne n'ait à le demander.
+   * qu'un test de repli mesurait déjà sans que personne n'ait à le demander.
    */
   const mix = (...parts: [Float32Array | undefined, number][]) => {
     const out = new Float32Array(planes[0].length);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { choosePlaybackPath, describePath, type PathInput } from "@/lib/webcodecs/pathSelector";
+import { choosePlaybackPath, type PathInput } from "@/lib/webcodecs/pathSelector";
 import type { MatroskaFile, MatroskaTrack } from "@/lib/webcodecs/matroska";
 import {
   MemoryByteSource,
@@ -86,7 +86,6 @@ describe("choosePlaybackPath", () => {
     expect(chosen.path).toBe("remux");
     expect(chosen.remuxer).not.toBeNull();
     expect(chosen.plan?.videoMimeType).toBe(mime.video);
-    expect(chosen.attempts).toEqual([{ path: "remux", ok: true }]);
   });
 
   it("re-encodes audio the browser will not take, rather than giving up the hardware path", async () => {
@@ -101,42 +100,31 @@ describe("choosePlaybackPath", () => {
     expect(chosen.plan?.audioMimeType).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
-  it("steps down to WebCodecs when it can neither carry nor re-encode the audio", async () => {
+  // Plus de second chemin local depuis le 24/09/2026 (docs/lecteur-canvas.md) : tout refus est une
+  // erreur qui nomme sa raison, et c'est elle que l'hôte passe au lecteur serveur.
+  it("refuses out loud when it can neither carry nor re-encode the audio", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
     vi.stubGlobal("AudioEncoder", undefined);
-    const chosen = await choosePlaybackPath(input(VIDEO, EAC3));
-
-    expect(chosen.path).toBe("webcodecs");
-    expect(chosen.remuxer).toBeNull();
-    expect(chosen.attempts[0]).toMatchObject({ path: "remux", ok: false });
-    expect(chosen.attempts[0].reason).toContain("A_EAC3");
-    expect(chosen.attempts[1]).toEqual({ path: "webcodecs", ok: true });
+    await expect(choosePlaybackPath(input(VIDEO, EAC3))).rejects.toThrow(
+      /^Aucun chemin de lecture disponible pour ce fichier\. remux : ce navigateur n'accepte pas A_EAC3/
+    );
   });
 
-  it("steps down when the container holds a codec the remuxer cannot describe", async () => {
-    const supportedMime = mimeFor(VIDEO, AAC);
-    supported = new Set([supportedMime.video, supportedMime.audio!]);
-    const dts = track({ number: 2, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
-    const chosen = await choosePlaybackPath(input(VIDEO, dts));
-
-    expect(chosen.path).toBe("webcodecs");
-    expect(chosen.attempts[0].reason).toContain("A_DTS");
-  });
-
-  it("steps down when the browser accepts nothing at all", async () => {
+  it("refuses when the browser accepts nothing at all, naming what it refused", async () => {
     vi.stubGlobal("AudioEncoder", undefined);
-    const chosen = await choosePlaybackPath(input());
-    expect(chosen.path).toBe("webcodecs");
-    expect(chosen.attempts[0]).toMatchObject({ path: "remux", ok: false });
-    expect(chosen.attempts[1]).toEqual({ path: "webcodecs", ok: true });
+    await expect(choosePlaybackPath(input())).rejects.toThrow(/audio A_AAC non remultiplexable/);
+    // Le son réglé, l'image reste refusée — et c'est elle que le refus nomme alors.
+    supported = new Set([mimeFor(VIDEO, AAC).audio!]);
+    await expect(choosePlaybackPath(input())).rejects.toThrow(/Vidéo non prise en charge par ce navigateur/);
   });
 
-  it("refuses out loud when neither path can carry the file, naming both reasons", async () => {
-    // MPEG-2 is in no browser's WebCodecs and cannot be described in an MP4 sample entry here.
-    const mpeg2 = track({ number: 1, type: "video", codecId: "V_MPEG2", video: { width: 720, height: 576 } });
-    await expect(choosePlaybackPath(input(mpeg2, AAC))).rejects.toThrow(/V_MPEG2/);
-    // Both refusals appear, so the panel can show the whole chain rather than only the last step.
-    await expect(choosePlaybackPath(input(mpeg2, AAC))).rejects.toThrow(/remux[\s\S]*webcodecs/);
+  it("refuses a video codec the remuxer cannot describe — VP9, MPEG-2 — naming it", async () => {
+    // VP8/VP9 were the last files only the canvas could play; none is in this library, and the
+    // server player carries them.
+    for (const codecId of ["V_MPEG2", "V_VP9", "V_VP8"]) {
+      const video = track({ number: 1, type: "video", codecId, video: { width: 720, height: 576 } });
+      await expect(choosePlaybackPath(input(video, AAC))).rejects.toThrow(new RegExp(`vidéo ${codecId} non remultiplexable`));
+    }
   });
 
   it("treats a file with no audio track as remuxable", async () => {
@@ -158,7 +146,7 @@ describe("choosePlaybackPath", () => {
 describe("une ouverture interrompue par le réseau", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("remonte une panne réseau au lieu de descendre au canevas", async () => {
+  it("remonte une panne réseau au lieu d'un refus qui enverrait au serveur", async () => {
     const mime = mimeFor(VIDEO, AAC);
     supported = new Set([mime.video, mime.audio!]);
     vi.spyOn(Remuxer, "open").mockRejectedValueOnce(new NetworkUnavailable("Plage inaccessible : Failed to fetch"));
@@ -180,13 +168,16 @@ describe("une ouverture interrompue par le réseau", () => {
     expect(isReadAbandoned(failure)).toBe(true);
   });
 
-  it("une autre erreur reste un refus de ce chemin", async () => {
+  it("une autre erreur reste un refus de ce chemin, qui nomme sa cause", async () => {
     const mime = mimeFor(VIDEO, AAC);
     supported = new Set([mime.video, mime.audio!]);
     vi.spyOn(Remuxer, "open").mockRejectedValueOnce(new Error("en-tête incohérent"));
-    const chosen = await choosePlaybackPath(input());
-    expect(chosen.path).toBe("webcodecs");
-    expect(describePath(chosen)).toContain("en-tête incohérent");
+    const failure = await choosePlaybackPath(input()).then(
+      () => null,
+      (error: unknown) => error
+    );
+    expect(isNetworkFailure(failure)).toBe(false);
+    expect((failure as Error).message).toBe("Aucun chemin de lecture disponible pour ce fichier. remux : en-tête incohérent");
   });
 });
 
@@ -194,9 +185,8 @@ describe("une ouverture interrompue par le réseau", () => {
  * Un fichier tout en TrueHD — Top Gun Maverick, Sinners, American Sniper.
  *
  * Jusqu'au 21/09/2026, aucun décodeur n'existait nulle part : un tel fichier était cédé d'office au
- * lecteur serveur, sans essayer le canevas qui aurait échoué sur la même chose (« American
- * Sniper », 20/09/2026, 250 à 700 ms perdues par tentative). Le décodeur de FFmpeg, compilé en
- * WebAssembly, en fait maintenant un fichier comme un autre : son ré-encodé comme le DTS.
+ * lecteur serveur. Le décodeur de FFmpeg, compilé en WebAssembly, en fait maintenant un fichier
+ * comme un autre : son ré-encodé comme le DTS.
  */
 describe("un fichier tout en TrueHD", () => {
   const TRUEHD = track({ number: 2, type: "audio", codecId: "A_TRUEHD", audio: { sampleRate: 48000, channels: 8 } });
@@ -209,47 +199,36 @@ describe("un fichier tout en TrueHD", () => {
     expect(chosen.plan?.audioMimeType).toBe('audio/mp4; codecs="mp4a.40.2"');
   });
 
-  it("et, sans encodeur, laisse sa chance au canevas au lieu de le céder au serveur", async () => {
+  it("et, sans encodeur, le cède au serveur en disant pourquoi", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
     vi.stubGlobal("AudioEncoder", undefined);
-    const chosen = await choosePlaybackPath(input(VIDEO, TRUEHD));
-    expect(chosen.path).toBe("webcodecs");
+    await expect(choosePlaybackPath(input(VIDEO, TRUEHD))).rejects.toThrow(/ce navigateur n'accepte pas A_TRUEHD/);
   });
 });
 
 /**
- * Une piste que rien ne décode : le MP2 de « Des gens bien » (balayage du 24/09/2026). Le canevas
- * l'essayait pour échouer sur « Pas de son », avant que le lecteur serveur ne prenne la main.
+ * Une piste que rien ne décode : le MP2 de « Des gens bien » (balayage du 24/09/2026). Le refus le
+ * dit exactement, distinct d'une piste lisible qui ne traverse pas MediaSource ici.
  */
 describe("un son que rien ne décode", () => {
   const MP2 = track({ number: 2, type: "audio", codecId: "A_MPEG/L2", audio: { sampleRate: 48000, channels: 2 } });
 
-  it("passe directement au lecteur serveur, sans essayer le canevas", async () => {
+  it("est refusée en nommant l'absence de décodeur", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
     vi.stubGlobal("AudioEncoder", { isConfigSupported: async () => ({ supported: true }) });
     await expect(choosePlaybackPath(input(VIDEO, MP2))).rejects.toThrow(/A_MPEG\/L2 : aucun décodeur/);
   });
 
-  it("mais un AAC sans configuration garde sa chance au canevas", async () => {
+  it("mais un AAC sans configuration n'est pas « sans décodeur » : son refus dit autre chose", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
     vi.stubGlobal("AudioEncoder", undefined);
     const bare = track({ number: 2, type: "audio", codecId: "A_AAC", audio: { sampleRate: 48000, channels: 2 } });
-    const chosen = await choosePlaybackPath(input(VIDEO, bare));
-    expect(chosen.path).toBe("webcodecs");
-  });
-});
-
-describe("describePath", () => {
-  it("names the path taken, and every one refused before it", async () => {
-    supported = new Set([mimeFor(VIDEO, null).video]);
-    expect(describePath(await choosePlaybackPath(input(VIDEO, null)))).toBe("remultiplexage → lecteur natif");
-
-    vi.stubGlobal("AudioEncoder", undefined);
-    const stepped = await choosePlaybackPath(input(VIDEO, EAC3));
-    const described = describePath(stepped);
-    expect(described).toContain("WebCodecs → canvas");
-    expect(described).toContain("remux refusé");
-    expect(described).toContain("A_EAC3");
+    const failure = await choosePlaybackPath(input(VIDEO, bare)).then(
+      () => null,
+      (error: unknown) => error as Error
+    );
+    expect(failure?.message).toMatch(/A_AAC/);
+    expect(failure?.message).not.toMatch(/aucun décodeur/);
   });
 });
 

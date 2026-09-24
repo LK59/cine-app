@@ -1489,8 +1489,6 @@
       "paths": {
         "remuxName": "Remuxing",
         "remuxDetail": "Hardware-Dekodierung, natives HDR",
-        "webcodecsName": "WebCodecs → Canvas",
-        "webcodecsDetail": "Software-Dekodierung",
         "pendingName": "Wird geprüft",
         "pendingDetail": "die Datei hat noch nichts gesagt"
       }
@@ -1803,10 +1801,7 @@
     "warnings": {
       "noIndexSeek": "In dieser Datei kann nicht gespult werden: sie hat keinen Index.",
       "noIndexAudio": "Bei dieser Datei kann die Tonspur während der Wiedergabe nicht gewechselt werden: sie hat keinen Index.",
-      "audioTrackRefused": "Diese Tonspur konnte nicht geöffnet werden: die vorherige läuft weiter.",
-      "noSound": "Kein Ton auf dieser Spur.",
-      "audioInterrupted": "Der Ton wurde unterbrochen.",
-      "noAudioDecoder": "Diese Tonspur kann hier nicht abgespielt werden."
+      "audioTrackRefused": "Diese Tonspur konnte nicht geöffnet werden: die vorherige läuft weiter."
     },
     "hdrCap": {
       "title": "HDR-Helligkeit",

@@ -1,10 +1,11 @@
-// Translates a Matroska track into the configuration WebCodecs wants.
+// Codec strings and configuration records, read out of a Matroska track.
 //
-// `VideoDecoder.configure()` takes a codec string that carries the exact profile, level and
-// constraints — not just "hevc" — because that string is what the browser matches against its
-// hardware decoder's capabilities. Getting it wrong doesn't degrade gracefully: the decoder
-// either refuses the configuration or, worse, accepts it and produces garbage. The values all
-// come out of CodecPrivate, which holds the same configuration record an MP4 would store.
+// A codec string carries the exact profile, level and constraints — not just "hevc" — because it
+// is what the browser matches against its hardware decoder's capabilities, in
+// `MediaSource.isTypeSupported` as in `AudioDecoder.isConfigSupported`. Getting it wrong doesn't
+// degrade gracefully: the browser either refuses the stream or, worse, accepts it and produces
+// garbage. The values all come out of CodecPrivate, which holds the same configuration record an
+// MP4 would store.
 
 import type { MatroskaTrack } from "./matroska";
 
@@ -14,33 +15,10 @@ export interface DecoderConfig {
   description?: Uint8Array;
 }
 
-export interface VideoConfig extends DecoderConfig {
-  codedWidth: number;
-  codedHeight: number;
-}
-
 export interface AudioConfig extends DecoderConfig {
   sampleRate: number;
   numberOfChannels: number;
 }
-
-// AC3 and E-AC3 are worth *asking* for rather than assuming: they are not part of the web
-// platform's baseline, but they are decoded natively by the operating system on Apple devices
-// and on Windows, and WebCodecs exposes whatever the platform provides. Configuring them and
-// letting AudioDecoder.isConfigSupported() answer costs nothing and, where it says yes, turns a
-// silent film into a working one. Where it says no, the engine reports exactly that.
-//
-// DTS and TrueHD have no platform decoder anywhere and no codec string in the registry, so they
-// are refused up front instead of being asked about.
-/**
- * Codecs no browser decodes, for which there is a decoder here.
- *
- * TrueHD and MLP joined DTS on 21/09/2026: until then nothing decoded them in a browser —
- * mediabunny publishes decoders for DTS and Dolby Digital only — and a separate list said so,
- * because telling the viewer "it would need the software decoder" implied one existed. FFmpeg's
- * decoder, compiled to WebAssembly (tools/truehd-wasm), is that decoder now.
- */
-export const SOFTWARE_AUDIO_CODECS = new Set(["A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_TRUEHD", "A_MLP"]);
 
 function hex(value: number, digits = 2): string {
   return value.toString(16).toUpperCase().padStart(digits, "0");
@@ -150,56 +128,6 @@ export function avcCodecString(avcC: Uint8Array): string | null {
   return `avc1.${hex(avcC[1])}${hex(avcC[2])}${hex(avcC[3])}`.toLowerCase();
 }
 
-export function videoConfigFor(track: MatroskaTrack): VideoConfig | null {
-  if (track.type !== "video" || !track.video) return null;
-  const size = { codedWidth: track.video.width, codedHeight: track.video.height };
-  const priv = track.codecPrivate;
-
-  switch (track.codecId) {
-    case "V_MPEGH/ISO/HEVC": {
-      if (!priv) return null;
-      const codec = hevcCodecString(priv);
-      return codec ? { codec, description: priv, ...size } : null;
-    }
-    case "V_MPEG4/ISO/AVC": {
-      if (!priv) return null;
-      const codec = avcCodecString(priv);
-      return codec ? { codec, description: priv, ...size } : null;
-    }
-    case "V_AV1": {
-      const codec = priv ? av1CodecString(priv) : "av01.0.08M.08";
-      return codec ? { codec, ...(priv ? { description: priv } : {}), ...size } : null;
-    }
-    case "V_VP9":
-      // VP9 carries everything it needs in-band; the profile in the string is advisory.
-      return { codec: "vp09.00.10.08", ...size };
-    case "V_VP8":
-      return { codec: "vp8", ...size };
-    default:
-      return null;
-  }
-}
-
-/**
- * Every configuration worth offering for a track, best first.
- *
- * Codec strings for AC3 and E-AC3 are not as settled as the video ones — the registry says
- * "ac-3" and "ec-3", but implementations have shipped other spellings, and a platform that
- * refuses one may accept another. Since the only cost of asking is one isConfigSupported call,
- * the engine tries them in order rather than betting on a single string.
- */
-export function audioConfigCandidates(track: MatroskaTrack): AudioConfig[] {
-  const primary = audioConfigFor(track);
-  if (!primary) return [];
-  const alternatives: Record<string, string[]> = {
-    A_AC3: ["ac-3", "ac3", "mp4a.a5"],
-    A_EAC3: ["ec-3", "eac3", "ec3", "mp4a.a6"],
-  };
-  const spellings = alternatives[track.codecId];
-  if (!spellings) return [primary];
-  return spellings.map((codec) => ({ ...primary, codec }));
-}
-
 export function audioConfigFor(track: MatroskaTrack): AudioConfig | null {
   if (track.type !== "audio" || !track.audio) return null;
   const base = { sampleRate: Math.round(track.audio.sampleRate), numberOfChannels: track.audio.channels };
@@ -227,25 +155,6 @@ export function audioConfigFor(track: MatroskaTrack): AudioConfig | null {
     default:
       return null;
   }
-}
-
-/** Why a track cannot be played, phrased for the error the user actually sees. */
-export function unsupportedReason(track: MatroskaTrack): string | null {
-  if (track.type === "video") {
-    if (videoConfigFor(track)) return null;
-    if (!track.codecPrivate && (track.codecId === "V_MPEGH/ISO/HEVC" || track.codecId === "V_MPEG4/ISO/AVC")) {
-      return `La piste vidéo ${track.codecId} n'a pas de configuration de décodeur dans le fichier.`;
-    }
-    return `Codec vidéo non pris en charge par le lecteur expérimental : ${track.codecId}.`;
-  }
-  if (track.type === "audio") {
-    if (audioConfigFor(track)) return null;
-    if (SOFTWARE_AUDIO_CODECS.has(track.codecId)) {
-      return `L'audio ${track.codecId.replace("A_", "")} n'a de décodeur sur aucune plateforme — il faudrait le décodeur logiciel.`;
-    }
-    return `Codec audio non pris en charge : ${track.codecId}.`;
-  }
-  return null;
 }
 
 /**

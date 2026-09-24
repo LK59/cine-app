@@ -21,12 +21,11 @@ type NavigatorWithWakeLock = Navigator & {
 /**
  * Garder l'écran allumé tant qu'un film joue.
  *
- * Pourquoi ce n'est pas gratuit partout : un `<video>` visible qui joue obtient déjà un verrou
- * *implicite* du navigateur — c'est le cas du chemin natif et du remultiplexage, qui alimentent
- * tous deux un vrai élément vidéo. Le chemin WebCodecs, lui, peint dans un `<canvas>` : pour le
- * navigateur, rien ne joue, et l'écran s'éteint au milieu du film. C'est ce trou-là qui justifie
- * un verrou explicite ; le demander aussi sur les deux autres chemins ne coûte rien et couvre les
- * cas où l'heuristique implicite ne s'applique pas (lecture muette, notamment).
+ * Un `<video>` visible qui joue obtient déjà un verrou *implicite* du navigateur, et les deux
+ * lecteurs en alimentent un. Le verrou explicite couvre les cas où cette heuristique ne s'applique
+ * pas — lecture muette, notamment — et ne coûte rien ailleurs. (Il est né pour un lecteur canevas,
+ * retiré le 24/09/2026, où rien ne jouait aux yeux du navigateur et l'écran s'éteignait en plein
+ * film.)
  *
  * Le verrou est relâché par la plateforme dès que la page passe en arrière-plan, et n'est *pas*
  * rendu au retour : d'où la reprise sur `visibilitychange`, sans laquelle une veille suffisait à

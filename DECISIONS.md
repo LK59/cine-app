@@ -87,16 +87,14 @@ pipeline**, et par la même fonction que l'écran, sinon la bascule revient.
   (`openingAudio`, depuis le 22/09/2026) : tout changement de piste passe par cette
   reconstruction (`requestAudioTrack`), et ouvrir ailleurs puis y basculer en redemanderait une
   seconde.
-- Canevas : l'option `chooseAudioTrack` de `PlaybackEngine.load`, que l'hôte remplit avec la même
-  fonction ; `applyPreferences` à l'écran.
 - Lecteur stable : Jellyfin choisit (l'index passé à `playback/start`).
 
-**Tests.** `trackPreferences.test.ts`, `preferredAudio.test.ts`, `ExperimentalPlayerHost.test.tsx`
-(« le canevas ouvre sur la bonne piste »), `decisions-partagees.test.ts`.
+**Tests.** `trackPreferences.test.ts`, `preferredAudio.test.ts`, `decisions-partagees.test.ts`
+(« le chemin natif ouvre sur la piste que l'écran choisira »).
 
-**Corrigé le 21/09.** Le canevas ouvrait toujours sur la piste par défaut et basculait ensuite —
-la bascule supprimée la veille pour le remux. Et sa conversion des pistes oubliait les canaux :
-le départage « le plus riche » y était inerte.
+**Corrigé le 21/09.** Le lecteur canevas (retiré le 24/09/2026) ouvrait toujours sur la piste par
+défaut et basculait ensuite — la bascule supprimée la veille pour le remux. Et sa conversion des
+pistes oubliait les canaux : le départage « le plus riche » y était inerte.
 
 **Voulu.**
 - À l'ouverture du remux, on ne classe que les pistes **jouables** ; l'écran classe tout. Quand la
@@ -109,17 +107,22 @@ le départage « le plus riche » y était inerte.
 
 ## 4. Quand un fichier va au lecteur serveur
 
-**Règle.** Un refus qui vise le *lecteur* (aucun chemin local ne portera ce fichier) arrête la
-chaîne et passe au serveur ; un refus qui vise le *chemin* essaie le suivant. Voir `CLAUDE.md`.
+**Règle.** Tout fichier que le chemin natif ne porte pas passe au lecteur serveur, avec la raison
+écrite au journal — une panne réseau exceptée, qui a son propre écran. Il n'y a plus d'autre
+chemin local à essayer entre les deux depuis le retrait du lecteur canevas, le 24/09/2026
+(`docs/lecteur-canvas.md`) : la distinction « refus du chemin » / « refus du lecteur » qu'imposait
+ce second chemin a disparu avec lui. Voir `CLAUDE.md`.
 
-**Porteur.** `choosePlaybackPath` (`pathSelector.ts`) à l'ouverture : Dolby Vision sans couche
-HDR10. (Le TrueHD/MLP partout, `SANS_DECODEUR`, était le second cas jusqu'au 21/09/2026 : son
-décodeur existe maintenant ici — `truehd/`, FFmpeg compilé en WebAssembly.)
+**Porteur.** `choosePlaybackPath` (`pathSelector.ts`) à l'ouverture, qui lève l'erreur ;
+`fallToStable` dans l'hôte, qui passe la main. Un changement de piste qui échoue ainsi revient à
+la piste d'avant au lieu de céder le film (`revertFailedSwitch`).
 
 **Voulu.** En plein film, choisir une piste que le remux ne porte pas (`canCarryAudio`, c'est-à-dire
-`playableAudio`) passe la main au serveur **plutôt qu'au canevas**, même si le canevas saurait la
-décoder. Reconstruire en cours de film sur un autre chemin est plus fragile que de confier le
-fichier à Jellyfin, qui le lit toujours. C'est un choix de robustesse, pas l'oubli du prédicat.
+`playableAudio`) passe la main au serveur. Reconstruire en cours de film sur un autre lecteur est
+plus fragile que de confier le fichier à Jellyfin, qui le lit toujours.
+
+**Tests.** `webcodecs-pathSelector.test.ts`, `ExperimentalPlayerHost.test.tsx` (« un fichier que
+le chemin natif ne porte pas »).
 
 ## 5. Le nom d'une piste
 
@@ -131,9 +134,9 @@ fichier à Jellyfin, qui le lit toujours. C'est un choix de robustesse, pas l'ou
 `describeFileTracks` (`fileTracks.ts`).
 
 **Une seule conversion des pistes du conteneur :** `fromMatroskaTrack`
-(`src/lib/webcodecs/engineTrack.ts`), pour le remux et le canevas.
+(`src/lib/webcodecs/playerTrack.ts`) — qui servait aussi le canevas, retiré le 24/09/2026.
 
-**Tests.** `trackLabel.test.ts`, `fileTracks.test.ts`, `webcodecs-engineTrack.test.ts`.
+**Tests.** `trackLabel.test.ts`, `fileTracks.test.ts`, `webcodecs-playerTrack.test.ts`.
 
 **La langue nommée est celle que le choix de piste retient** : `trackLanguage`, qui lit le titre
 quand le code manque. L'étiquette ne lisait que le code, si bien qu'une piste « French » sans code
@@ -585,15 +588,15 @@ temps, un panneau traduit pendant un dialogue —, elles s'affichent ensemble, d
 sont apparues, deux au plus. En haut seulement si toutes le demandent (`{\an8}`).
 
 Chaque lecteur n'en montrait qu'une, et pas la même : la première trouvée pour les pistes du
-fichier (remultiplexage et canevas), la dernière commencée pour un fichier à côté — qui ne
+fichier (remultiplexage, et le canevas d'alors), la dernière commencée pour un fichier à côté — qui ne
 regardait en outre que huit répliques en arrière et perdait un panneau long.
 
 **Porteur.** `simultaneousText` (`src/lib/webcodecs/subtitleMarkup.ts`).
 
-**Appelants.** `RemuxPlayback.subtitleAt`, `selectCue` (`engine.ts`), `ExternalSubtitleTrack.textAt`.
+**Appelants.** `RemuxPlayback.subtitleAt`, `ExternalSubtitleTrack.textAt`. (`selectCue`, dans
+le moteur canevas, en était un troisième jusqu'au 24/09/2026.)
 
-**Tests.** `subtitleMarkup.test.ts`, `webcodecs-codecConfig.test.ts` (« shows two overlapping
-lines together »), `webcodecs-externalSubtitles.test.ts`.
+**Tests.** `subtitleMarkup.test.ts`, `webcodecs-externalSubtitles.test.ts`.
 
 **Voulu.** Le lecteur serveur n'est pas concerné : ses pistes passent par des `<track>` que le
 navigateur dessine lui-même, chevauchements compris.

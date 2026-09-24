@@ -23,19 +23,11 @@ const lire = (f: string) => readFileSync(f, "utf8");
 
 describe("un seul repli stéréo", () => {
   /**
-   * Le chemin du canevas replie le multicanal pour le graphe audio, celui du remultiplexage avant
-   * de ré-encoder. Les deux écrivaient leur propre matrice, et les deux lisaient donc le rang 4
-   * comme une ambiance gauche — faux pour une piste 5.0, qui n'en a pas.
+   * Le lecteur canevas repliait le multicanal pour son graphe audio, le remultiplexage avant de
+   * ré-encoder, chacun avec sa matrice. Il ne reste que `fold` (audioTranscode.ts) depuis le
+   * retrait du canevas, le 24/09/2026 — et ce test garde le coefficient qui avait divergé.
    */
-  it("le chemin du canevas emprunte la matrice de l'autre plutôt que la sienne", () => {
-    const src = lire("src/lib/webcodecs/audioOutput.ts");
-    expect(src).toMatch(/import \{ fold \} from "\.\/audioTranscode"/);
-    expect(src).toMatch(/const \[l, r\] = fold\(planes, 2\)/);
-    // La matrice qu'il s'écrivait : des rangs lus à la main, et le piège exact.
-    expect(src).not.toMatch(/const surroundLeft = planes\[4\]/);
-  });
-
-  it("le coefficient de demi-puissance est écrit exactement, des deux côtés", () => {
+  it("le coefficient de demi-puissance est écrit exactement", () => {
     // `0.707` d'un côté et `Math.SQRT1_2` de l'autre : la même intention, arrondie une fois. Un
     // écart de 10⁻⁴ que seul un test a vu, et qui disait qu'un des deux chemins avait changé.
     //
@@ -298,16 +290,16 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
     }
   });
 
-  it("une piste du conteneur devient une `EngineTrack` en un seul endroit", () => {
-    for (const f of ["src/lib/webcodecs/engine.ts", "src/lib/webcodecs/remuxPlayback.ts"]) {
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("fromMatroskaTrack")]);
-      expect([f, /isForced: (t|track)\.isForced/.test(codeOnly(f))]).toEqual([f, false]);
-    }
+  it("une piste du conteneur devient une `PlayerTrack` en un seul endroit", () => {
+    const f = "src/lib/webcodecs/remuxPlayback.ts";
+    expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("fromMatroskaTrack")]);
+    expect([f, /isForced: (t|track)\.isForced/.test(codeOnly(f))]).toEqual([f, false]);
   });
 
-  it("le canevas ouvre sur la piste que l'écran choisira, par la même règle", () => {
-    const host = codeOnly("src/components/ExperimentalPlayerHost.tsx");
-    expect(host).toMatch(/chooseAudioTrack: \(tracks\) => \{[\s\S]{0,300}chooseAudioTrack\(tracks, preferences\)/);
+  // Le lecteur canevas avait sa propre ouverture, gardée alignée par un test ici ; retiré le
+  // 24/09/2026, il ne reste que celle du chemin natif — la même fonction que l'écran.
+  it("le chemin natif ouvre sur la piste que l'écran choisira, par la même règle", () => {
+    expect(codeOnly("src/lib/webcodecs/remuxPlayback.ts")).toMatch(/chooseAudioTrack\(/);
   });
 });
 

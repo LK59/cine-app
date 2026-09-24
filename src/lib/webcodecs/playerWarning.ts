@@ -13,13 +13,10 @@ export type PlayerWarningCode =
   /** Pas d'index dans le fichier : la piste audio ne peut pas changer en cours de lecture. */
   | "noIndexAudio"
   /** La piste demandée n'a pas pu s'ouvrir ; la précédente continue. */
-  | "audioTrackRefused"
-  /** Le film joue sans son. */
-  | "noSound"
-  /** Le décodage audio s'est interrompu en cours de route. */
-  | "audioInterrupted"
-  /** Aucun décodeur pour la piste demandée. */
-  | "noAudioDecoder";
+  | "audioTrackRefused";
+// « Pas de son », « son interrompu » et « aucun décodeur » venaient du lecteur canevas, qui
+// décodait l'audio lui-même ; retirés avec lui le 24/09/2026. Le lecteur natif rend ces cas au
+// lecteur serveur ou reconstruit, sans avertissement.
 
 export interface PlayerWarning {
   code: PlayerWarningCode;
@@ -35,12 +32,9 @@ const CODES: ReadonlySet<string> = new Set<PlayerWarningCode>([
   "noIndexSeek",
   "noIndexAudio",
   "audioTrackRefused",
-  "noSound",
-  "audioInterrupted",
-  "noAudioDecoder",
 ]);
 
-/** Ce qui arrive par l'événement `warning` du moteur n'est pas typé : vérifié avant d'être dit. */
+/** Ce qui arrive par le rappel `onWarning` du pipeline n'est pas typé : vérifié avant d'être dit. */
 export function isPlayerWarning(value: unknown): value is PlayerWarning {
   return typeof value === "object" && value !== null && CODES.has((value as { code?: unknown }).code as string);
 }

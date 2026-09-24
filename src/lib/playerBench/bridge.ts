@@ -15,9 +15,9 @@ export interface BenchTrack {
 
 export interface BenchBridge {
   itemId: string;
-  /** L'élément que les commandes pilotent : la vraie balise <video>, ou la façade du chemin canevas. */
+  /** L'élément vidéo que les commandes pilotent. */
   media(): HTMLVideoElement | null;
-  /** « remux », « webcodecs », ou `null` tant que rien n'est choisi. */
+  /** « remux », ou `null` tant que rien n'est choisi. */
   path(): string | null;
   /** Le pipeline en place a montré sa première image. Faux pendant une reconstruction. */
   ready(): boolean;

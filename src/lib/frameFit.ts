@@ -174,9 +174,8 @@ export function useFrameFit(
     return () => observer.disconnect();
   }, [screenRef]);
 
-  // Le format de l'image décodée, lu à chaque changement de dimensions. Le chemin canevas n'en
-  // donne pas — l'élément vidéo y reste vide —, et n'est donc jamais agrandi : c'est le chemin de
-  // secours, et ne rien couper y compte plus que de remplir l'écran.
+  // Le format de l'image décodée, lu à chaque changement de dimensions. Tant que l'élément n'a pas
+  // d'image, rien n'est agrandi : ne rien couper compte plus que remplir l'écran.
   useEffect(() => {
     const video = mediaRef.current;
     if (!video) return;

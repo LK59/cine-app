@@ -7,7 +7,7 @@
 //
 // The decoder is libFLAC, the format's reference implementation, compiled to WebAssembly by
 // @wasm-audio-decoders/flac — not something written here. It is registered with mediabunny the
-// way @mediabunny/dts registers its own, so everything downstream — demuxing through the engine's
+// way @mediabunny/dts registers its own, so everything downstream — demuxing through the player's
 // byte cache, timing, channel handling, the encoder — is the path DTS already proved.
 //
 // Channel order needs no care: FLAC's order for every count it defines is the WAVE order, which
