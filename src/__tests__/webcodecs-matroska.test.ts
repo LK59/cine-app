@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MemoryByteSource } from "@/lib/webcodecs/byteSource";
-import { parseMatroska, clusterOffsetForTime, parseBlock } from "@/lib/webcodecs/matroska";
+import { parseMatroska, clusterOffsetForTime, parseBlock, parseTagDuration } from "@/lib/webcodecs/matroska";
 import { keptRangeAt } from "@/lib/webcodecs/matroska";
 import { SampleReader } from "@/lib/webcodecs/sampleReader";
 import { readElementId, readVarSize, readVarInt } from "@/lib/webcodecs/ebml";
@@ -373,3 +373,42 @@ describe("keptRangeAt", () => {
     expect(keptRangeAt({ cues: [], segmentEnd: 1 } as never, 5)).toBeNull();
   });
 });
+
+// The Ferpect Crime, Oldboy (24/09/2026) : pas de durée dans l'en-tête, seulement dans les
+// étiquettes des pistes. Sans elle, la barre suivait le chargement et aucun saut ne la dépassait.
+describe("durée tirée des étiquettes", () => {
+  it("lit la forme HH:MM:SS.nnnnnnnnn", () => {
+    expect(parseTagDuration("01:38:33.628000000")).toBeCloseTo(5913.628, 3);
+    expect(parseTagDuration("02:00:08.917000000\0")).toBeCloseTo(7208.917, 3);
+    expect(parseTagDuration("n'importe quoi")).toBeNull();
+    expect(parseTagDuration("00:00:00.000")).toBeNull();
+  });
+
+  const text = (value: string) => new TextEncoder().encode(value);
+  const simpleTag = (name: string, value: string) => el(0x67c8, concat(el(0x45a3, text(name)), el(0x4487, text(value))));
+  function withoutHeaderDuration(tags: Uint8Array | null) {
+    const ebmlHeader = el(0x1a45dfa3, el(0x4286, uint(1)));
+    const info = el(0x1549a966, el(0x2ad7b1, uint(1_000_000, 4)));
+    const tracks = el(0x1654ae6b, el(0xae, concat(el(0xd7, uint(1)), el(0x83, uint(1)), el(0x86, text("V_MPEGH/ISO/HEVC")))));
+    const cluster = el(0x1f43b675, concat(el(0xe7, uint(0)), simpleBlock(1, 0, true, new Uint8Array([0xaa]))));
+    return concat(ebmlHeader, el(0x18538067, concat(info, tracks, tags ?? new Uint8Array(0), cluster)));
+  }
+
+  it("prend la plus longue des durées de piste quand l'en-tête n'en donne pas", async () => {
+    const tags = el(
+      0x1254c367,
+      concat(
+        el(0x7373, concat(simpleTag("BPS", "3000000"), simpleTag("DURATION", "01:38:33.628000000"))),
+        el(0x7373, simpleTag("DURATION", "01:38:26.720000000"))
+      )
+    );
+    const file = await parseMatroska(new MemoryByteSource(withoutHeaderDuration(tags)));
+    expect(file.durationSeconds).toBeCloseTo(5913.628, 3);
+  });
+
+  it("reste inconnue sans en-tête ni étiquette", async () => {
+    const file = await parseMatroska(new MemoryByteSource(withoutHeaderDuration(null)));
+    expect(file.durationSeconds).toBeNull();
+  });
+});
+

@@ -14,6 +14,13 @@ export const ID = {
   TimestampScale: 0x2ad7b1,
   Duration: 0x4489,
 
+  /** Les étiquettes — lues seulement pour la durée, quand l'en-tête ne la donne pas. */
+  Tags: 0x1254c367,
+  Tag: 0x7373,
+  SimpleTag: 0x67c8,
+  TagName: 0x45a3,
+  TagString: 0x4487,
+
   Tracks: 0x1654ae6b,
   TrackEntry: 0xae,
   TrackNumber: 0xd7,

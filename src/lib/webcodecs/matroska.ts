@@ -356,6 +356,42 @@ export async function parseMatroska(source: ByteSource, key?: string): Promise<M
   return file;
 }
 
+/**
+ * La plus longue durée déclarée par les étiquettes des pistes, en secondes, ou null.
+ *
+ * `DURATION` s'écrit `HH:MM:SS.nnnnnnnnn`. La plus longue plutôt que celle de la vidéo : c'est ce
+ * que retient ffmpeg pour le fichier entier, et les pistes n'y diffèrent que de quelques secondes.
+ */
+async function tagsDuration(source: ByteSource, start: number, end: number): Promise<number | null> {
+  let longest: number | null = null;
+  await forEachChild(source, start, end, async (tag) => {
+    if (tag.id !== ID.Tag) return "continue";
+    await forEachChild(source, tag.offset, tag.offset + (tag.size ?? 0), async (simple) => {
+      if (simple.id !== ID.SimpleTag) return "continue";
+      let name = "";
+      let value = "";
+      await forEachChild(source, simple.offset, simple.offset + (simple.size ?? 0), async (field) => {
+        if (field.id === ID.TagName) name = new TextDecoder().decode(await payload(source, field));
+        if (field.id === ID.TagString) value = new TextDecoder().decode(await payload(source, field));
+        return "continue";
+      });
+      const seconds = name.toUpperCase() === "DURATION" ? parseTagDuration(value) : null;
+      if (seconds !== null && (longest === null || seconds > longest)) longest = seconds;
+      return "continue";
+    });
+    return "continue";
+  });
+  return longest;
+}
+
+/** `01:38:33.628000000` → 5913.628. Null pour tout ce qui n'a pas cette forme. */
+export function parseTagDuration(value: string): number | null {
+  const match = /^\s*(\d+):(\d{1,2}):(\d{1,2}(?:\.\d+)?)\s*$/.exec(value.replace(/\0/g, ""));
+  if (!match) return null;
+  const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
 async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
   const first = await readElementAt(source, 0);
   if (!first || first.id !== ID.EBML) throw new Error("Ce fichier n'est pas un conteneur Matroska.");
@@ -386,6 +422,8 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
   // Positions recorded by the SeekHead, so Tracks/Cues can be jumped to directly. Without it the
   // walk below still finds them, it just has to step over more elements.
   const seekPositions = new Map<number, number>();
+  /** La durée lue dans les étiquettes, si l'en-tête n'en donne pas — voir `tagsDuration`. */
+  let taggedDuration: number | null = null;
 
   await forEachChild(source, segmentDataStart, segmentEnd, async (el) => {
     switch (el.id) {
@@ -437,6 +475,12 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
         return "continue";
       }
 
+      case ID.Tags: {
+        const end = el.offset + (el.size ?? 0);
+        taggedDuration = await tagsDuration(await SlicedSource.of(source, el.offset, end), el.offset, end);
+        return "continue";
+      }
+
       case ID.Cluster:
         // The first cluster is where playback begins when there is no usable index. Reaching it
         // also means every header element that matters has been passed, so the walk can stop
@@ -446,6 +490,25 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
     }
     return "continue";
   });
+
+  // Un en-tête sans durée : la durée est dans les étiquettes de chaque piste (`DURATION`), une
+  // convention de mkvmerge et de ffmpeg. Lues seulement dans ce cas — elles sont souvent en fin de
+  // fichier, et les chercher coûterait un aller-retour à tous les autres. Sans durée, la barre de
+  // progression suivait ce qui était chargé et aucun saut ne dépassait le tampon (The Ferpect
+  // Crime, Oldboy, relevés par le balayage de la bibliothèque le 24/09/2026).
+  if (file.durationSeconds === null) {
+    if (taggedDuration === null) {
+      const tagsOffset = seekPositions.get(ID.Tags);
+      if (tagsOffset !== undefined && tagsOffset < source.size) {
+        const tags = await readElementAt(source, tagsOffset);
+        if (tags && tags.id === ID.Tags && tags.size !== null) {
+          const end = tags.offset + tags.size;
+          taggedDuration = await tagsDuration(await SlicedSource.of(source, tags.offset, end), tags.offset, end);
+        }
+      }
+    }
+    if (taggedDuration !== null) file.durationSeconds = taggedDuration;
+  }
 
   // Some muxers put Cues at the very end and only reference them from the SeekHead, so the
   // forward walk above stops at the first cluster before ever seeing them.
