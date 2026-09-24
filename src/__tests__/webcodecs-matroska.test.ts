@@ -88,7 +88,7 @@ function elUnknownSize(id: number, payload: Uint8Array): Uint8Array {
   return concat(idBytes(id), new Uint8Array([0xff]), payload);
 }
 
-function buildFile(options: { unknownSizeClusters?: boolean } = {}): Uint8Array {
+function buildFile(options: { unknownSizeClusters?: boolean; cueShift?: number } = {}): Uint8Array {
   const cluster = options.unknownSizeClusters ? elUnknownSize : el;
   const ebmlHeader = el(0x1a45dfa3, el(0x4286, uint(1)));
 
@@ -171,7 +171,8 @@ function buildFile(options: { unknownSizeClusters?: boolean } = {}): Uint8Array 
     tracks,
     cluster0,
     cluster1,
-    cuesFor(cluster0Position, cluster1Position)
+    // Un index écrit avant qu'on ne modifie l'en-tête : décalé de quelques octets (voir cueShift).
+    cuesFor(cluster0Position - (options.cueShift ?? 0), cluster1Position - (options.cueShift ?? 0))
   );
   return concat(ebmlHeader, el(0x18538067, segmentPayload));
 }
@@ -409,6 +410,33 @@ describe("durée tirée des étiquettes", () => {
   it("reste inconnue sans en-tête ni étiquette", async () => {
     const file = await parseMatroska(new MemoryByteSource(withoutHeaderDuration(null)));
     expect(file.durationSeconds).toBeNull();
+  });
+});
+
+// Paycheck, The Guilty, Bullitt (24/09/2026) : un index décalé de 165 à 182 octets — l'en-tête
+// modifié après le multiplexage sans que l'index suive. Chaque saut lisait au mauvais endroit, n'y
+// trouvait pas de groupe d'images et concluait à la fin du fichier : 0 image.
+describe("un index décalé", () => {
+  it("est recalé sur les vrais groupes d'images", async () => {
+    const good = await parseMatroska(new MemoryByteSource(buildFile()));
+    const shifted = await parseMatroska(new MemoryByteSource(buildFile({ cueShift: 7 })));
+    expect(shifted.cues.map((c) => c.clusterOffset)).toEqual(good.cues.map((c) => c.clusterOffset));
+  });
+
+  it("permet de nouveau de lire après un saut", async () => {
+    const bytes = buildFile({ cueShift: 7 });
+    const source = new MemoryByteSource(bytes);
+    const file = await parseMatroska(source);
+    const reader = new SampleReader(source, file, clusterOffsetForTime(file, 5_000_000, 1)!);
+    const sample = await reader.next();
+    expect(sample?.timestampUs).toBe(5_000_000);
+  });
+
+  it("ne touche pas à un index juste", async () => {
+    const good = buildFile();
+    const file = await parseMatroska(new MemoryByteSource(good));
+    const reader = new SampleReader(new MemoryByteSource(good), file, clusterOffsetForTime(file, 5_000_000, 1)!);
+    expect((await reader.next())?.timestampUs).toBe(5_000_000);
   });
 });
 

@@ -392,6 +392,40 @@ export function parseTagDuration(value: string): number | null {
   return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
+/**
+ * Recale un index décalé de quelques octets sur les vrais groupes d'images.
+ *
+ * Un en-tête modifié après le multiplexage — une étiquette ajoutée, un titre changé — peut grandir
+ * de quelques octets sans que les positions de l'index suivent. Paycheck, The Guilty et Bullitt
+ * (balayage du 24/09/2026) ont tout leur index décalé de 165 à 182 octets : chaque saut lisait au
+ * mauvais endroit, prenait des octets quelconques pour un élément et concluait à la fin du fichier.
+ * ffmpeg s'en sort en cherchant le groupe d'images voisin ; ici, le décalage est constant, il suffit
+ * de le mesurer une fois.
+ *
+ * Rien à lire pour un fichier sain : on ne cherche que si le premier point de l'index ne tombe pas
+ * sur le premier groupe d'images, et le décalage n'est retenu que s'il est confirmé ailleurs — un
+ * point au milieu de l'index doit alors désigner un vrai groupe d'images.
+ */
+async function realignCues(source: ByteSource, file: MatroskaFile): Promise<void> {
+  if (file.cues.length < 2 || file.firstClusterOffset === null) return;
+  const earliest = file.cues.reduce((min, cue) => Math.min(min, cue.clusterOffset), Infinity);
+  if (earliest === file.firstClusterOffset) return;
+  const isCluster = async (offset: number) => {
+    if (offset < 0 || offset >= source.size) return false;
+    try {
+      return (await readElementAt(source, offset))?.id === ID.Cluster;
+    } catch {
+      return false;
+    }
+  };
+  const probe = file.cues[Math.floor(file.cues.length / 2)].clusterOffset;
+  // L'index dit vrai à cet endroit : le premier groupe d'images n'est simplement pas indexé.
+  if (await isCluster(probe)) return;
+  const delta = file.firstClusterOffset - earliest;
+  if (!(await isCluster(probe + delta))) return;
+  for (const cue of file.cues) cue.clusterOffset += delta;
+}
+
 async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
   const first = await readElementAt(source, 0);
   if (!first || first.id !== ID.EBML) throw new Error("Ce fichier n'est pas un conteneur Matroska.");
@@ -512,6 +546,7 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
 
   // Some muxers put Cues at the very end and only reference them from the SeekHead, so the
   // forward walk above stops at the first cluster before ever seeing them.
+  // (Le recalage d'un index décalé se fait plus bas, une fois l'index lu d'où qu'il vienne.)
   if (file.cues.length === 0) {
     const cuesOffset = seekPositions.get(ID.Cues);
     if (cuesOffset !== undefined && cuesOffset < source.size) {
@@ -543,6 +578,7 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
 
   if (file.tracks.length === 0) throw new Error("Aucune piste lisible dans ce fichier.");
   file.cues.sort((a, b) => a.timeUs - b.timeUs);
+  await realignCues(source, file);
   return file;
 }
 
