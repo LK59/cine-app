@@ -96,6 +96,12 @@ describe("fold — une disposition qu'on ne sait pas nommer", () => {
     expect(stereo[1]).toBeCloseTo(2 + 3 * Math.SQRT1_2, 3);
   });
 
+  // Même compte en entrée et en sortie : l'Opus de Firefox accepte cinq canaux, et un 4.1 passé
+  // tel quel y était lu en 5.0 — le caisson dans l'ambiance gauche (relu le 24/09/2026).
+  it("applique sa règle même quand le nombre de canaux ne change pas", () => {
+    expect(channels(fold(fiveOh, 5))).toEqual([1, 2, 3, 0, 0]);
+  });
+
   // Trois canaux, eux, sont sûrs : les trois premiers rangs sont les mêmes partout.
   it("laisse passer un 3.0, dont les trois rangs sont ceux de tout le monde", () => {
     expect(channels(fold([plane(1), plane(2), plane(3)], 6))).toEqual([1, 2, 3, 0, 0, 0]);

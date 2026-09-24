@@ -356,7 +356,13 @@ export interface TranscodePlan {
  */
 export async function chooseTranscodePlan(sampleRate: number, channels: number): Promise<TranscodePlan | null> {
   // Le compte de la source d'abord, puis les deux dispositions qu'un navigateur sait produire.
-  const wanted = [channels, ...[6, 2].filter((n) => n < channels)];
+  // Jamais un compte sans disposition : cinq ou sept canaux ne disent pas où va chaque rang, et un
+  // encodeur qui les accepte les range à sa façon. Portés au compte connu au-dessus — 5 → 6,
+  // 7 → 8 —, ils passent par la règle de `fold` : L R C gardés, le reste muet (DOC-TECH, « Channel
+  // order »). C'est aussi ce qui évite qu'un 5.1 unifié à sept canaux voie son ambiance gauche
+  // rangée au rang de l'arrière central.
+  const first = knownLayoutAtLeast(channels);
+  const wanted = [first, ...[6, 2].filter((n) => n < first)];
   for (const target of wanted) {
     for (const codec of [TARGET_CODEC, FALLBACK_CODEC]) {
       if (target > appleAacCap(codec)) continue;
@@ -534,8 +540,10 @@ export class AudioTranscoder {
     // disposition peut être imposée par le fichier, une piste 5.1 portée à 8 déclenchait un
     // « 6 canaux non encodables, descente à 8 » qui ne veut rien dire. Le seul rabaissement qui
     // mérite d'être signalé est celui que l'encodeur impose.
-    if (outChannels !== wanted) {
+    if (outChannels < wanted) {
       trace(`transcodage audio : ${wanted} canaux non encodables ici, descente à ${outChannels}`);
+    } else if (outChannels > wanted) {
+      trace(`transcodage audio : ${wanted} canaux sans disposition connue, livrés en ${outChannels} (L R C gardés)`);
     }
 
     // Les débits de l'échelle que le navigateur dit accepter, du meilleur au plus sobre — puis
@@ -842,6 +850,12 @@ function toFrame(chunk: EncodedAudioChunk): TranscodedFrame {
  */
 const KNOWN_LAYOUTS = new Set([1, 2, 3, 6, 8]);
 
+/** Le plus petit compte à disposition connue qui contient celui-ci — 5 → 6, 7 → 8. */
+export function knownLayoutAtLeast(channels: number): number {
+  if (KNOWN_LAYOUTS.has(channels)) return channels;
+  return [...KNOWN_LAYOUTS].find((known) => known > channels) ?? 8;
+}
+
 /**
  * Le coefficient de demi-puissance, écrit exactement.
  *
@@ -867,10 +881,12 @@ function frontOnly(planes: Float32Array[]): Float32Array[] {
 
 export function fold(planes: Float32Array[], to: number): Float32Array[] {
   const from = planes.length;
-  if (to === from) return planes;
   // Ramenée à ce qu'on sait d'elle avant toute chose : la suite lit des rangs, et une disposition
-  // inconnue ne les respecte pas. Voir `frontOnly`.
+  // inconnue ne les respecte pas. Voir `frontOnly`. Avant même le cas « rien à changer » : un
+  // 4.1 envoyé tel quel à un encodeur qui accepte cinq canaux — l'Opus de Firefox — était lu en
+  // 5.0, le caisson dans l'ambiance gauche (relu le 24/09/2026).
   if (!KNOWN_LAYOUTS.has(from)) return fold(frontOnly(planes), to);
+  if (to === from) return planes;
 
   /**
    * Compléter vers le haut : les canaux qui manquent sont ajoutés silencieux, à leur place.

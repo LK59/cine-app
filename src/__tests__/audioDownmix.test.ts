@@ -41,6 +41,15 @@ describe("le plan de ré-encodage audio", () => {
     expect(await chooseTranscodePlan(48000, 8)).toMatchObject({ channels: 6 });
   });
 
+  // Cinq ou sept canaux ne nomment pas leur disposition : jamais demandés tels quels à un
+  // encodeur, qui les rangerait à sa façon (relu le 24/09/2026).
+  it("porte un compte sans disposition au compte connu au-dessus", async () => {
+    vi.stubGlobal("AudioEncoder", browserThatStopsAt(8));
+    const { chooseTranscodePlan } = await import("@/lib/webcodecs/audioTranscode");
+    expect(await chooseTranscodePlan(48000, 5)).toMatchObject({ channels: 6 });
+    expect(await chooseTranscodePlan(48000, 7)).toMatchObject({ channels: 8 });
+  });
+
   it("descend jusqu'au stéréo quand rien d'autre ne passe", async () => {
     vi.stubGlobal("AudioEncoder", browserThatStopsAt(2));
     const { chooseTranscodePlan } = await import("@/lib/webcodecs/audioTranscode");
