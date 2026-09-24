@@ -12,6 +12,12 @@
 // retire et la réunit comme un SourceBuffer, un tampon trop plein est refusé, et la tête avance
 // d'elle-même quand il y a du média sous elle.
 //
+// Enrichi le même jour d'un second flux d'actions : changement de piste audio (qui reconstruit),
+// arrière-plan (plus de données voulues, source parfois reprise par iOS), élément qui échoue au
+// décodage, éviction par la plateforme loin de la tête, tampon lent à digérer — et l'hôte qui
+// reconstruit une source perdue, comme ExperimentalPlayerHost, trois fois au plus. Une règle de
+// plus : depuis le dernier geste, la tête n'a bougé que par la lecture (« saut-perdu »).
+//
 // Sauté sans FUZZ. Voir /home/louis/cine-tests/fuzz/run.sh.
 //   FUZZ=1 FUZZ_SEED=1234 FUZZ_RUNS=200 FUZZ_LOG=/logs/fuzz.jsonl npx vitest run fuzz.spec.ts
 
@@ -100,6 +106,16 @@ interface World {
   sourceClosed: boolean;
   destroyed: boolean;
   activityAfterDestroy: number;
+  /** Ce qui a été touché après la destruction, pour le rapport. */
+  activityLog: string[];
+  /**
+   * Le second flux de hasard, celui des actions ajoutées le 24/09/2026 (arrière-plan, éviction,
+   * reconstruction…). Séparé du premier pour que les graines de régression, trouvées avant ces
+   * actions, rejouent exactement la même séquence : elles tournent sans lui.
+   */
+  extra: () => number;
+  /** Un SourceBuffer qui met des centaines de millisecondes à digérer chaque envoi — un vieil iPhone. */
+  slowUpdates: boolean;
 }
 
 class FakeBuffer extends EventTarget {
@@ -114,13 +130,20 @@ class FakeBuffer extends EventTarget {
     return asTimeRanges(this.ranges);
   }
   private busy(what: string) {
-    if (this.world.destroyed) this.world.activityAfterDestroy += 1;
+    if (this.world.destroyed || this.owner.retired) {
+      this.world.activityAfterDestroy += 1;
+      this.world.activityLog.push(`${what}${this.owner.retired ? " (source remplacée)" : ""}`);
+    }
     if (this.owner.readyState === "closed") throw new DOMException(`${what}: source closed`, "InvalidStateError");
     if (this.updating) throw new DOMException(`${what} while updating`, "InvalidStateError");
   }
   private finish() {
     this.updating = true;
-    const delay = this.world.random() < 0.3 ? Math.floor(this.world.random() * 40) : 0;
+    const delay = this.world.slowUpdates
+      ? 150 + Math.floor(this.world.extra() * 650)
+      : this.world.random() < 0.3
+        ? Math.floor(this.world.random() * 40)
+        : 0;
     setTimeout(() => {
       this.updating = false;
       this.dispatchEvent(new Event("updateend"));
@@ -156,6 +179,8 @@ class FakeSource extends EventTarget {
   duration = NaN;
   streaming = true;
   buffers: FakeBuffer[] = [];
+  /** Remplacée par une reconstruction : plus personne ne doit y toucher. */
+  retired = false;
   constructor() {
     super();
     setTimeout(() => {
@@ -176,6 +201,21 @@ class FakeSource extends EventTarget {
   close() {
     this.readyState = "closed";
     this.dispatchEvent(new Event("sourceclose"));
+  }
+  /** ManagedMediaSource : le système ne veut plus de données (arrière-plan, économie d'énergie). */
+  stopStreaming() {
+    if (!this.streaming) return;
+    this.streaming = false;
+    this.dispatchEvent(new Event("endstreaming"));
+  }
+  resumeStreaming() {
+    if (this.streaming) return;
+    this.streaming = true;
+    this.dispatchEvent(new Event("startstreaming"));
+  }
+  /** La plateforme reprend de la mémoire : Safari évince du média loin de la tête, sans prévenir. */
+  evict(from: number, to: number) {
+    for (const buffer of this.buffers) if (!buffer.updating) buffer.ranges = removeRange(buffer.ranges, from, to);
   }
   playable(): Ranges {
     if (this.buffers.length === 0) return [];
@@ -255,15 +295,23 @@ function fakeRemuxer(world: World) {
   const remuxer = {
     seekable: true,
     reads: 0,
+    /** Celui d'une séance remplacée par une reconstruction. */
+    retired: false,
     plan: () => PLAN,
     diagnostics: () => ({ presentationDelaySeconds: DELAY, clampedSamples: 0, segmentStartSeconds: groupStart }),
     keyframeAfter: (s: number) => Math.floor(s / GOP) * GOP + GOP,
     seekTo: (s: number) => {
-      if (world.destroyed) world.activityAfterDestroy += 1;
+      if (world.destroyed || remuxer.retired) {
+        world.activityAfterDestroy += 1;
+        world.activityLog.push(`seekTo(${s})${remuxer.retired ? " (remultiplexeur remplacé)" : ""}`);
+      }
       position = Math.max(0, Math.floor(s / GOP) * GOP);
     },
     nextSegment: async () => {
-      if (world.destroyed) world.activityAfterDestroy += 1;
+      if (world.destroyed || remuxer.retired) {
+        world.activityAfterDestroy += 1;
+        world.activityLog.push(`nextSegment${remuxer.retired ? " (remultiplexeur remplacé)" : ""}`);
+      }
       remuxer.reads += 1;
       const wait = world.slowReads ? 200 + Math.floor(world.random() * 1500) : Math.floor(world.random() * 120);
       await new Promise((r) => setTimeout(r, wait));
@@ -292,8 +340,16 @@ const PLAN: RemuxPlan = {
 
 type Violation = { seed: number; rule: string; detail: string; steps: string[]; trace?: string[] };
 
-async function oneRun(seed: number): Promise<Violation | null> {
+/** Autant de reconstructions que l'hôte en accorde (`spendRebuild`) avant de passer la main. */
+const REBUILDS = 3;
+
+/**
+ * Une séquence. `enriched` ajoute les actions du second flux de hasard ; les graines de régression
+ * tournent sans, puisqu'elles ont été trouvées avant elles.
+ */
+async function oneRun(seed: number, enriched = true): Promise<Violation | null> {
   const random = rng(seed);
+  const extraRandom = rng((seed ^ 0x9e3779b9) >>> 0);
   const world: World = {
     random,
     quotaStrict: random() < 0.5,
@@ -302,6 +358,9 @@ async function oneRun(seed: number): Promise<Violation | null> {
     sourceClosed: false,
     destroyed: false,
     activityAfterDestroy: 0,
+    activityLog: [],
+    extra: extraRandom,
+    slowUpdates: false,
   };
   FakeSource.world = world;
   traceReset();
@@ -327,32 +386,92 @@ async function oneRun(seed: number): Promise<Violation | null> {
     trace: traceText().split("\n").slice(-60),
   });
   const { video, tick, state } = fakeVideo(() => current);
-  const remuxer = fakeRemuxer(world);
+  let remuxer = fakeRemuxer(world);
   let errors = 0;
   const errorReasons: string[] = [];
   const start = Math.floor(random() * 1200);
   const startPaused = random() < 0.2;
   steps.push(`ouverture à ${start}${startPaused ? " (en pause)" : ""}, quota ${world.quotaStrict ? "strict" : "large"}`);
+  // Une erreur levée par une source perdue n'arrête pas la séance : l'hôte reconstruit
+  // (ExperimentalPlayerHost, `remuxRef.current?.lost && spendRebuild()`). Le reste l'arrête.
+  let live: MseSource | null = null;
+  const handlers = {
+    onError: (message: string, kind?: string) => {
+      if (enriched && kind !== "network" && live?.lost) {
+        steps.push(`erreur de source perdue : ${message.slice(0, 80)}`);
+        return;
+      }
+      errors += 1;
+      errorReasons.push(`${kind ?? "?"}: ${message.slice(0, 160)}`);
+    },
+    onWarning: () => {},
+  };
 
   // L'ouverture a besoin que le temps avance (sourceopen, envois des segments d'initialisation) :
   // attendue sans faire tourner les minuteurs, elle ne finissait jamais.
-  let attached: MseSource | null = null;
-  let attachError: unknown = null;
-  MseSource.attach(video, remuxer as unknown as Remuxer, PLAN, { onError: (message: string, kind?: string) => { errors += 1; errorReasons.push(`${kind ?? "?"}: ${message.slice(0, 160)}`); }, onWarning: () => {} }, start, startPaused).then(
-    (m) => (attached = m),
-    (e) => (attachError = e)
-  );
-  for (let i = 0; i < 400 && !attached && !attachError; i++) await vi.advanceTimersByTimeAsync(25);
-  if (attachError) return violation("ouverture", attachError instanceof Error ? attachError.message : String(attachError));
-  if (!attached) return violation("ouverture", "jamais ouverte en 10 s");
-  const mse = attached as MseSource;
-  const internals = mse as unknown as { networkHold?: boolean };
+  const open = async (at: number, paused: boolean): Promise<MseSource | Violation> => {
+    let attached: MseSource | null = null;
+    let attachError: unknown = null;
+    MseSource.attach(video, remuxer as unknown as Remuxer, PLAN, handlers, at, paused).then(
+      (m) => (attached = m),
+      (e) => (attachError = e)
+    );
+    for (let i = 0; i < 400 && !attached && !attachError; i++) await vi.advanceTimersByTimeAsync(25);
+    if (attachError) return violation("ouverture", attachError instanceof Error ? attachError.message : String(attachError));
+    if (!attached) return violation("ouverture", "jamais ouverte en 10 s");
+    return attached;
+  };
+  const opened = await open(start, startPaused);
+  if (!(opened instanceof MseSource)) return opened;
+  let mse = opened;
+  live = mse;
+  let internals = mse as unknown as { networkHold?: boolean };
   if (!startPaused) void video.play();
+
+  // La dernière position demandée par le spectateur, et quand : après elle, la tête ne bouge plus
+  // que par la lecture. Une tête derrière elle, ou loin devant, est un saut perdu ou inventé.
+  let lastTarget = start;
+  let lastTargetAt = Date.now();
+  const aimed = (to: number) => {
+    lastTarget = to;
+    lastTargetAt = Date.now();
+  };
+
+  /**
+   * Ce que fait l'hôte quand la source est perdue, ou quand on change de piste audio : tout
+   * détruire et rouvrir à la position — sur le même élément, avec un remultiplexeur neuf.
+   * Au-delà de REBUILDS, l'hôte passe au lecteur serveur : la séquence s'arrête là.
+   */
+  let rebuilds = 0;
+  const rebuild = async (why: string): Promise<boolean> => {
+    if (rebuilds >= REBUILDS) return false;
+    rebuilds += 1;
+    const at = mse.position;
+    const paused = state.paused;
+    steps.push(`reconstruction (${why}) à ${at.toFixed(1)}${paused ? " en pause" : ""}`);
+    mse.destroy();
+    if (current) current.retired = true;
+    remuxer.retired = true;
+    (video as unknown as { error: unknown }).error = null;
+    remuxer = fakeRemuxer(world);
+    const reopened = await open(at, paused);
+    if (!(reopened instanceof MseSource)) throw reopened;
+    mse = reopened;
+    live = mse;
+    internals = mse as unknown as { networkHold?: boolean };
+    if (!paused) void video.play();
+    return true;
+  };
 
   let holdSince: number | null = null;
   const advance = async (ms: number) => {
     for (let t = 0; t < ms; t += STEP_MS) {
       tick();
+      // Safari rend la main à la source quand ce qu'elle a d'avance s'épuise.
+      if (current && !current.streaming) {
+        const run = current.playable().find(([s, e]) => s <= video.currentTime + 0.01 && video.currentTime < e);
+        if (!run || run[1] - video.currentTime < 3) current.resumeStreaming();
+      }
       await vi.advanceTimersByTimeAsync(STEP_MS);
       if (internals.networkHold) {
         holdSince ??= Date.now();
@@ -361,9 +480,59 @@ async function oneRun(seed: number): Promise<Violation | null> {
     }
   };
 
+  /** Les actions du second flux. */
+  const extraAction = async () => {
+    const r = extraRandom();
+    if (r < 0.2) {
+      // Changer de piste audio reconstruit tout le lecteur (RemuxPlayback.requestAudioTrack).
+      steps.push("changement de piste audio");
+      if (!(await rebuild("piste audio"))) steps.push("plus de reconstruction accordée");
+      await advance(250);
+    } else if (r < 0.45) {
+      // L'arrière-plan : le système ne veut plus de données, et iOS reprend souvent la source.
+      const ms = 1000 * (2 + Math.floor(extraRandom() * 60));
+      const killed = extraRandom() < 0.5;
+      steps.push(`arrière-plan ${ms / 1000} s${killed ? ", source reprise" : ""}`);
+      current?.stopStreaming();
+      await advance(ms);
+      if (killed) {
+        current?.close();
+        world.sourceClosed = true;
+      }
+      current?.resumeStreaming();
+      await advance(250);
+    } else if (r < 0.6) {
+      // Un décodage refusé : l'élément échoue, et sa source se ferme avec lui.
+      steps.push("l'élément échoue (décodage)");
+      (video as unknown as { error: unknown }).error = { code: 3, message: "decode" };
+      video.dispatchEvent(new Event("error"));
+      current?.close();
+      await advance(500);
+    } else if (r < 0.8) {
+      // L'éviction : du média loin de la tête disparaît, derrière ou devant.
+      const head = video.currentTime;
+      const behind = extraRandom() < 0.5;
+      const [from, to] = behind ? [0, Math.max(0, head - 5)] : [head + 10 + extraRandom() * 20, DURATION + 10];
+      steps.push(`éviction de ${from.toFixed(0)} à ${to.toFixed(0)}`);
+      current?.evict(from, to);
+      await advance(250);
+    } else {
+      world.slowUpdates = !world.slowUpdates;
+      steps.push(`tampon ${world.slowUpdates ? "lent" : "normal"}`);
+    }
+  };
+
   try {
     const count = 20 + Math.floor(random() * 60);
-    for (let i = 0; i < count && errors === 0 && !mse.lost; i++) {
+    for (let i = 0; i < count && errors === 0; i++) {
+      if (mse.lost) {
+        if (!enriched || !(await rebuild("source perdue"))) break;
+        continue;
+      }
+      if (enriched && extraRandom() < 0.15) {
+        await extraAction();
+        continue;
+      }
       const r = random();
       if (r < 0.3) {
         const ms = 250 * (1 + Math.floor(random() * 20));
@@ -373,11 +542,13 @@ async function oneRun(seed: number): Promise<Violation | null> {
         const to = Math.floor(random() * DURATION);
         steps.push(`saut vers ${to}`);
         (video as unknown as { currentTime: number }).currentTime = to;
+        aimed(to);
         await advance(250);
       } else if (r < 0.58) {
         const to = Math.max(0, video.currentTime + (random() < 0.5 ? -10 : 10));
         steps.push(`saut relatif vers ${to.toFixed(1)}`);
         (video as unknown as { currentTime: number }).currentTime = to;
+        aimed(to);
         await advance(250);
       } else if (r < 0.66) {
         steps.push(state.paused ? "lecture" : "pause");
@@ -408,6 +579,7 @@ async function oneRun(seed: number): Promise<Violation | null> {
           const gap = Math.floor(random() * 120);
           targets.push(`${to}(+${gap}ms)`);
           (video as unknown as { currentTime: number }).currentTime = to;
+          aimed(to);
           await vi.advanceTimersByTimeAsync(gap);
         }
         steps.push(`rafale de ${burst} sauts : ${targets.join(" ")}`);
@@ -419,6 +591,9 @@ async function oneRun(seed: number): Promise<Violation | null> {
     // qu'il ne pouvait plus (erreur, source perdue) — jamais un lecteur qui attend pour toujours.
     world.networkFailures = 0;
     world.slowReads = false;
+    world.slowUpdates = false;
+    current?.resumeStreaming();
+    if (enriched && errors === 0 && mse.lost) await rebuild("source perdue");
     if (errors === 0 && !mse.lost && !state.ended) {
       steps.push("calme : lecture sans panne pendant 45 s");
       void video.play();
@@ -430,6 +605,16 @@ async function oneRun(seed: number): Promise<Violation | null> {
           "lecture-bloquée",
           `45 s sans panne, la tête n'a avancé que de ${moved.toFixed(2)} s (à ${video.currentTime.toFixed(2)} s, ` +
             `seeking ${state.seeking}, média ${JSON.stringify(current?.playable().slice(0, 3))})`
+        );
+      }
+      // Depuis le dernier geste, la tête n'a bougé que par la lecture : ni derrière la cible (au
+      // plus une image clé avant elle), ni plus loin que le temps écoulé ne le permet.
+      const played = (Date.now() - lastTargetAt) / 1000;
+      const head = video.currentTime;
+      if (errors === 0 && !mse.lost && !state.ended && (head < lastTarget - GOP - DELAY - 0.5 || head > lastTarget + played + 3)) {
+        return violation(
+          "saut-perdu",
+          `dernière cible ${lastTarget.toFixed(1)} s il y a ${played.toFixed(1)} s, tête à ${head.toFixed(2)} s`
         );
       }
     }
@@ -444,9 +629,10 @@ async function oneRun(seed: number): Promise<Violation | null> {
     mse.destroy();
     world.destroyed = true;
     const readsAtDestroy = remuxer.reads;
+    const lastRemuxer = remuxer;
     await advance(10_000);
-    if (world.activityAfterDestroy > 0 || remuxer.reads > readsAtDestroy) {
-      return violation("activité-après-destruction", `${world.activityAfterDestroy} opérations, ${remuxer.reads - readsAtDestroy} lectures`);
+    if (world.activityAfterDestroy > 0 || lastRemuxer.reads > readsAtDestroy) {
+      return violation("activité-après-destruction", `${world.activityAfterDestroy} opérations (${world.activityLog.slice(0, 4).join(", ")}), ${lastRemuxer.reads - readsAtDestroy} lectures`);
     }
     return null;
   } catch (error) {
@@ -499,15 +685,30 @@ describe.skipIf(!process.env.FUZZ)("fuzz du lecteur", () => {
  *  - 30054481 : un saut dans une zone encore chargée pendant qu'un autre était servi était perdu.
  *  - 30063323 : le jeton « déplacement de la source », posé dès le service d'un saut, faisait
  *    ignorer un retour du spectateur à la même position pendant l'attente de la lecture en cours.
+ *
+ * Celles du second flux (`enriched`) dépendent des actions qu'il connaissait le 24/09/2026 : en
+ * ajouter une change leurs séquences. Rejouer alors la graine avec l'ancien correctif retiré, et la
+ * remplacer par une nouvelle trouvée par le fuzz si elle ne reproduit plus.
+ *  - 900841, 901806 : un geste arrivé pendant le vidage des tampons d'un saut en cours était écrasé
+ *    par la cible de ce saut ; une source perdue juste après faisait reconstruire à l'ancienne
+ *    position — 930 s en arrière pour la première.
+ *  - 900025 : un retrait mis en file par un saut s'exécutait sur le tampon d'une source détruite par
+ *    une reconstruction.
  */
-const REGRESSION_SEEDS = [30054481, 30063323];
+const REGRESSION_SEEDS: { seed: number; enriched: boolean }[] = [
+  { seed: 30054481, enriched: false },
+  { seed: 30063323, enriched: false },
+  { seed: 900841, enriched: true },
+  { seed: 901806, enriched: true },
+  { seed: 900025, enriched: true },
+];
 
 describe("fuzz du lecteur — graines de régression", () => {
-  for (const seed of REGRESSION_SEEDS) {
+  for (const { seed, enriched } of REGRESSION_SEEDS) {
     it(`graine ${seed}`, { timeout: 60_000 }, async () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
       try {
-        const found = await oneRun(seed);
+        const found = await oneRun(seed, enriched);
         expect(found).toBeNull();
       } finally {
         vi.clearAllTimers();
@@ -517,4 +718,3 @@ describe("fuzz du lecteur — graines de régression", () => {
     });
   }
 });
-
