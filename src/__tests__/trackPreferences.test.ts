@@ -132,4 +132,26 @@ describe("chooseSubtitleTrack", () => {
   it("n'affiche rien plutôt qu'une langue non demandée", () => {
     expect(chooseSubtitleTrack([english], prefs(), "jpn")).toBeNull();
   });
+
+  // Un compte sans langue de sous-titres : seuls les drapeaux du fichier décident, comme chez
+  // Jellyfin — neuf comptes recevaient la première piste complète, en n'importe quelle langue.
+  describe("sans langue de sous-titres sur le compte", () => {
+    const arabic = track({ language: "ara", name: "Arabic" });
+    const flagged = track({ language: "eng", name: "English", isDefault: true });
+    const noLanguage = (mode: TrackPreferences["subtitleMode"]) => prefs({ subtitleLanguage: "", subtitleMode: mode });
+
+    it("n'allume pas une piste que rien ne désigne", () => {
+      expect(chooseSubtitleTrack([arabic, english], noLanguage("Default"), "eng")).toBeNull();
+      expect(chooseSubtitleTrack([arabic, english], noLanguage("Smart"), "eng")).toBeNull();
+    });
+
+    it("suit les drapeaux du fichier : forcée d'abord, puis par défaut", () => {
+      expect(chooseSubtitleTrack([arabic, flagged], noLanguage("Default"), "eng")).toBe(flagged);
+      expect(chooseSubtitleTrack([arabic, flagged, forced], noLanguage("Default"), "eng")).toBe(forced);
+    });
+
+    it("« toujours » garde son sens", () => {
+      expect(chooseSubtitleTrack([arabic, english], noLanguage("Always"), "eng")).toBe(arabic);
+    });
+  });
 });

@@ -314,6 +314,15 @@ export function chooseSubtitleTrack<T extends NamedTrack>(
   // inside a film the viewer otherwise understands.
   if (mode === "OnlyForced") return inWanted.find(isForcedTrack) ?? null;
 
+  // No subtitle language on the account: nothing says which language to show, so only the file's
+  // own flags can — which is Jellyfin's definition of `Default`, and what the server player does.
+  // Reading the empty language as "any language" switched on the file's first full track, in
+  // whatever language it was: Arabic under an English film, for the nine accounts here that have
+  // `Default` and no language (24/09/2026). `Always` still means always.
+  if (!wanted && mode !== "Always") {
+    return tracks.find(isForcedTrack) ?? tracks.find((track) => track.isDefault) ?? null;
+  }
+
   // Nothing to translate: the film is already being heard in the language the subtitles would
   // have been in. Forced ones still apply, for the lines the audio itself does not cover.
   if ((mode === "Smart" || mode === "Default") && wanted && spoken === wanted) {
