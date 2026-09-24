@@ -131,6 +131,15 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Les captures jointes à un signalement, et surtout leurs originaux, envoyés par n'importe
+        // quel compte et ouverts dans la session de l'administrateur. Placée après la règle
+        // générale, cette politique la remplace (la dernière règle qui pose un en-tête l'emporte) :
+        // celle que la route posait elle-même était écrasée par la générale (vérifié en
+        // production le 24/09/2026). Un fichier ouvert seul n'y exécute rien.
+        source: "/api/reports/:id/images/:imageId",
+        headers: [{ key: "Content-Security-Policy", value: "sandbox; default-src 'none'; img-src 'self'" }],
+      },
     ];
   },
 };

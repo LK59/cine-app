@@ -253,6 +253,16 @@ describe("signalements — images", () => {
     const res = await GET(req("louis", { url: `https://cine.example/api/reports/${body.id}/images/${id}?original=1` }), imageParams(body.id, id));
     expect(res.headers.get("content-type")).toBe("image/png");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(res.headers.get("content-security-policy")).toContain("sandbox");
+  });
+
+  // La route ne peut pas poser sa propre politique : la règle générale de next.config.js l'écrase.
+  // C'est donc la configuration qui doit porter le bac à sable, après la règle générale.
+  it("met les captures en bac à sable dans la configuration, après la règle générale", async () => {
+    const { createRequire } = await import("node:module");
+    const nextConfig = createRequire(`${process.cwd()}/`)("./next.config.js") as { headers: () => Promise<{ source: string; headers: { key: string; value: string }[] }[]> };
+    const rules = await nextConfig.headers();
+    const i = rules.findIndex((r) => r.source === "/api/reports/:id/images/:imageId");
+    expect(i).toBeGreaterThan(rules.findIndex((r) => r.source === "/(.*)"));
+    expect(rules[i].headers.find((h) => h.key === "Content-Security-Policy")?.value).toMatch(/^sandbox;/);
   });
 });

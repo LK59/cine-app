@@ -31,8 +31,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       // lignes d'avant le correctif portent encore le type annoncé à l'envoi.
       "Content-Type": original ? storedImageType(image.original) : "image/webp",
       "X-Content-Type-Options": "nosniff",
-      // Ouvert seul dans un onglet, un fichier n'a le droit de rien exécuter.
-      "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'",
+      // Le bac à sable (`sandbox`) est posé par next.config.js : un en-tête de politique posé ici
+      // serait écrasé par la règle générale du site.
       "Cache-Control": "private, max-age=31536000, immutable",
       ...(original ? { "Content-Disposition": `inline; filename="${name}"` } : {}),
     },
