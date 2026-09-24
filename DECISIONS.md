@@ -598,6 +598,25 @@ lines together »), `webcodecs-externalSubtitles.test.ts`.
 **Voulu.** Le lecteur serveur n'est pas concerné : ses pistes passent par des `<track>` que le
 navigateur dessine lui-même, chevauchements compris.
 
+## 20. Quelle fiche ouvre un résultat de recherche
+
+**Règle.** Un titre de la bibliothèque *regardable* — un film avec son fichier, une série avec au
+moins un épisode — ouvre sa fiche de bibliothèque ; tout le reste, y compris un titre que Radarr ou
+Sonarr suit sans l'avoir encore, ouvre sa fiche TMDB, qui dit où en est la demande.
+
+Un film en salle suivi par Radarr (*L'Odyssée*) ouvrait sa fiche de bibliothèque, qui ne le
+trouvait pas dans le catalogue et se refermait aussitôt : l'adresse passait à `#film=631` et
+revenait, sans un mot.
+
+**Porteur.** `available` dans `/api/search` (même règle que `playableLibrary`), lu par
+`libraryTargetOf` (`src/lib/searchResultTarget.ts`).
+
+**Appelants.** `PlayerSearchPanel`, `PlayerListAdd`.
+
+**Tests.** `search-route.test.ts`, `player-search-panel.test.tsx`.
+
+**Voulu.** La recherche de la gestion ignore ce champ : un titre suivi y reste un titre suivi.
+
 ---
 
 ## Ce qui n'est pas une dette

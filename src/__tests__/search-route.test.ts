@@ -92,6 +92,24 @@ describe("GET /api/search", () => {
     expect(body.tmdb).toHaveLength(0);
   });
 
+  // Suivi par Radarr n'est pas regardable : L'Odyssée, en salle, n'a pas de fichier (24/09/2026).
+  it("dit si un titre de la bibliothèque est regardable", async () => {
+    mockCachedMovies.mockResolvedValue([
+      { tmdbId: 42, id: 7, hasFile: true },
+      { tmdbId: 43, id: 8, hasFile: false },
+    ]);
+    mockTmdbSingleton.searchMulti.mockResolvedValue({
+      results: [
+        { id: 42, media_type: "movie", title: "Dune", popularity: 10, vote_average: 8 },
+        { id: 43, media_type: "movie", title: "Dune Deux", popularity: 9, vote_average: 8 },
+      ],
+    });
+    const { GET } = await import("@/app/api/search/route");
+    const body = await (await GET(fakeReq({ q: "dune" }))).json();
+    const byId = Object.fromEntries(body.library.map((r: { tmdbId: number; available: boolean }) => [r.tmdbId, r.available]));
+    expect(byId).toEqual({ 42: true, 43: false });
+  });
+
   it("rejects searchMulti results whose title score is below the threshold", async () => {
     mockTmdbSingleton.searchMulti.mockResolvedValue({
       results: [{ id: 1, media_type: "movie", title: "Completely Unrelated Title", popularity: 5, vote_average: 5 }],

@@ -17,6 +17,7 @@ import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonResult } from "@/app/api/search/route";
+import { libraryTargetOf } from "@/lib/searchResultTarget";
 
 type Filter = "all" | "movie" | "series" | "person";
 
@@ -250,7 +251,8 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
     }
     const extra: Entry[] = [];
     for (const r of server) {
-      const libraryId = r.type === "movie" ? r.radarrId : r.sonarrId;
+      // Pas encore disponible : la fiche TMDB, pas celle de la bibliothèque — voir `libraryTargetOf`.
+      const libraryId = libraryTargetOf(r);
       if (seen.has(`${r.type}:tmdb:${r.tmdbId}`)) continue;
       if (libraryId !== null && seen.has(`${r.type}:lib:${libraryId}`)) continue;
       extra.push({

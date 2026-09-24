@@ -122,6 +122,16 @@ describe("PlayerSearchPanel", () => {
   // La régression même : une série ouverte depuis un écran resté sur l'onglet « Films » ne se
   // résolvait pas, donc rien ne s'ouvrait — et comme le geste refermait la recherche, on
   // retombait sur l'accueil.
+  // L'Odyssée (24/09/2026) : suivie par Radarr, pas encore téléchargée. Sa fiche de bibliothèque
+  // ne la trouvait pas dans le catalogue et se refermait aussitôt ; c'est sa fiche TMDB qui s'ouvre.
+  it("ouvre la fiche TMDB d'un titre suivi mais pas encore disponible", async () => {
+    payload = { library: [{ ...OWNED, tmdbId: 1368337, title: "L'Odyssée", radarrId: 631, available: false }], tmdb: [], persons: [] };
+    await type("odyssée");
+    fireEvent.click(await screen.findByText("L'Odyssée"));
+    expect(mockNavigate).toHaveBeenCalledWith({ discover: 1368337, discoverType: "movie" });
+    expect(screen.getAllByText("player.notInLibrary")).toHaveLength(1);
+  });
+
   it("carries the series tab when opening a series", async () => {
     payload = { library: [OWNED_SERIES], tmdb: [], persons: [] };
     await type("game of thrones");

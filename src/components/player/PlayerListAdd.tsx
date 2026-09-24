@@ -9,6 +9,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { usePlayerTitleActions } from "@/lib/usePlayerTitleActions";
 import type { UnifiedSearchResult } from "@/app/api/search/route";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { libraryTargetOf } from "@/lib/searchResultTarget";
 
 
 /** En dessous de deux lettres, une recherche rend le catalogue entier et n'apprend rien. */
@@ -130,7 +131,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
    * TMDB, où « Lire » est devenu « Demander ». C'est le même aiguillage que partout ailleurs.
    */
   function open() {
-    const libraryId = result.type === "series" ? result.sonarrId : result.radarrId;
+    const libraryId = libraryTargetOf(result);
     if (libraryId !== null) openLibraryTitle(result.type === "series" ? "series" : "movie", libraryId);
     else cinemaNavigate({ discover: result.tmdbId, discoverType: result.type === "series" ? "series" : "movie" });
   }

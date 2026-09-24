@@ -30,6 +30,14 @@ export interface UnifiedSearchResult {
   radarrId: number | null;
   sonarrId: number | null;
   inLibrary: boolean;
+  /**
+   * Dans la bibliothèque *et* regardable : un film avec son fichier, une série avec au moins un
+   * épisode — la règle de `playableLibrary`. Un titre que Radarr suit sans l'avoir encore (un film
+   * en salle) est `inLibrary` sans l'être : le cinéma ouvrait sa fiche de bibliothèque, qui ne le
+   * trouvait pas dans le catalogue et se refermait aussitôt (L'Odyssée, 24/09/2026). La gestion,
+   * elle, continue de le traiter comme un titre suivi.
+   */
+  available: boolean;
   // Provenance badges
   sources: Array<"radarr" | "sonarr" | "tmdb">;
 }
@@ -94,6 +102,7 @@ function makeEntry(
   radarrByTmdb: Map<number, number>,
   sonarrByTmdb: Map<number, number>,
   source: "tmdb" | "radarr" | "sonarr" = "tmdb",
+  playable?: Set<string>,
 ): UnifiedSearchResult {
   const title = item.title ?? item.name ?? "";
   const dateStr = item.release_date ?? item.first_air_date ?? "";
@@ -111,6 +120,9 @@ function makeEntry(
     radarrId,
     sonarrId,
     inLibrary,
+    available:
+      (radarrId !== null && (playable?.has(`movie:${radarrId}`) ?? false)) ||
+      (sonarrId !== null && (playable?.has(`series:${sonarrId}`) ?? false)),
     sources: inLibrary ? [source === "tmdb" ? (mediaType === "movie" ? "radarr" : "sonarr") : source] : ["tmdb"],
   };
 }
@@ -120,8 +132,9 @@ function makePersonCreditEntry(
   mediaType: "movie" | "series",
   radarrByTmdb: Map<number, number>,
   sonarrByTmdb: Map<number, number>,
+  playable?: Set<string>,
 ): UnifiedSearchResult {
-  return makeEntry({ ...item, overview: "" }, mediaType, radarrByTmdb, sonarrByTmdb);
+  return makeEntry({ ...item, overview: "" }, mediaType, radarrByTmdb, sonarrByTmdb, "tmdb", playable);
 }
 
 function debugKey(entry: Pick<UnifiedSearchResult, "type" | "tmdbId">) {
@@ -229,6 +242,10 @@ export async function GET(req: NextRequest) {
     // Build lookup maps
     const radarrByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
     const sonarrByTmdb = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
+    const playable = new Set<string>([
+      ...movies.filter((m) => m.hasFile).map((m) => `movie:${m.id}`),
+      ...series.filter((s) => (s.statistics?.episodeFileCount ?? 0) > 0).map((s) => `series:${s.id}`),
+    ]);
 
     const library: UnifiedSearchResult[] = [];
     const tmdbNotInLib: UnifiedSearchResult[] = [];
@@ -294,7 +311,7 @@ export async function GET(req: NextRequest) {
         for (const item of batch.value.results.slice(0, 30)) {
           const mediaType = "title" in item ? "movie" : "series";
           const personMatch = await matchesNaturalPeople(mediaType, item.id, castIds, directorIds);
-          const entry = makeEntry(item, mediaType, radarrByTmdb, sonarrByTmdb);
+          const entry = makeEntry(item, mediaType, radarrByTmdb, sonarrByTmdb, "tmdb", playable);
           if (!personMatch) {
             addDebug(
               entry,
@@ -322,7 +339,7 @@ export async function GET(req: NextRequest) {
             ).catch(() => null);
             if (!details?.genres?.some((g) => g.id === genreIds?.tv)) continue;
           }
-          const entry = makePersonCreditEntry(item, "series", radarrByTmdb, sonarrByTmdb);
+          const entry = makePersonCreditEntry(item, "series", radarrByTmdb, sonarrByTmdb, playable);
           addResult(
             entry,
             `natural: person credits intersection series; genre=${natural.genreName ?? "none"}; cast=${natural.castNames.join(",") || "none"} -> ${castIds.join(",") || "none"}`
@@ -357,7 +374,7 @@ export async function GET(req: NextRequest) {
       if (isMovie && !allowMovieResults) continue;
       if (!isMovie && !allowSeriesResults) continue;
 
-      const entry = makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb);
+      const entry = makeEntry(item, isMovie ? "movie" : "series", radarrByTmdb, sonarrByTmdb, "tmdb", playable);
       const score = bestTitleMatchScore(
         [item.title ?? item.name, item.original_title ?? item.original_name, enTitleByKey.get(enResultKey(item))],
         q
