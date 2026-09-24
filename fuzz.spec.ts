@@ -29,6 +29,8 @@ import type { Remuxer, RemuxPlan } from "@/lib/webcodecs/remuxer";
 
 const RUNS = Number(process.env.FUZZ_RUNS ?? 100);
 const BASE_SEED = Number(process.env.FUZZ_SEED ?? 1);
+/** Une liste de graines à rejouer, à la place d'une plage : `FUZZ_SEEDS=12,345,6789`. */
+const SEEDS = process.env.FUZZ_SEEDS ? process.env.FUZZ_SEEDS.split(",").map(Number) : null;
 const LOG = process.env.FUZZ_LOG ?? "";
 const DELAY = 0.2;
 const GOP = 2;
@@ -653,8 +655,8 @@ describe.skipIf(!process.env.FUZZ)("fuzz du lecteur", () => {
     const onUnhandled = (reason: unknown) => unhandled.push(reason instanceof Error ? reason.message : String(reason));
     process.on("unhandledRejection", onUnhandled);
     let failures = 0;
-    for (let i = 0; i < RUNS; i++) {
-      const seed = BASE_SEED + i;
+    const seeds = SEEDS ?? Array.from({ length: RUNS }, (_, i) => BASE_SEED + i);
+    for (const seed of seeds) {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
       let found = await oneRun(seed);
       vi.clearAllTimers();
@@ -672,7 +674,7 @@ describe.skipIf(!process.env.FUZZ)("fuzz du lecteur", () => {
       }
     }
     process.off("unhandledRejection", onUnhandled);
-    if (LOG) appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), kind: "batch", seed: BASE_SEED, runs: RUNS, failures }) + "\n");
+    if (LOG) appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), kind: "batch", seed: BASE_SEED, runs: seeds.length, failures }) + "\n");
   });
 });
 
@@ -694,6 +696,8 @@ describe.skipIf(!process.env.FUZZ)("fuzz du lecteur", () => {
  *    position — 930 s en arrière pour la première.
  *  - 900025 : un retrait mis en file par un saut s'exécutait sur le tampon d'une source détruite par
  *    une reconstruction.
+ *  - 20124805 : l'ouverture différée posait le jeton « déplacement de la source » sans écrire la
+ *    tête ; un spectateur qui sautait puis revenait à la position d'ouverture était ignoré.
  */
 const REGRESSION_SEEDS: { seed: number; enriched: boolean }[] = [
   { seed: 30054481, enriched: false },
@@ -701,6 +705,7 @@ const REGRESSION_SEEDS: { seed: number; enriched: boolean }[] = [
   { seed: 900841, enriched: true },
   { seed: 901806, enriched: true },
   { seed: 900025, enriched: true },
+  { seed: 20124805, enriched: true },
 ];
 
 describe("fuzz du lecteur — graines de régression", () => {

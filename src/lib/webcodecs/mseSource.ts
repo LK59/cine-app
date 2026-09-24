@@ -451,7 +451,13 @@ export class MseSource {
       if (this.plan.durationSeconds > 0) startSeconds = Math.min(startSeconds, Math.max(0, this.plan.durationSeconds - 2));
       if (startSeconds > NO_INDEX_REACH_SECONDS && reachable(this.remuxer.seekable, startSeconds)) {
         this.remuxer.seekTo(startSeconds);
-        this.seekState.moved(startSeconds);
+        // La cible, pas le jeton « déplacement de la source » : la tête n'est écrite qu'à
+        // l'arrivée du média (`placePendingStart`, qui pose alors le jeton). Posé ici, il restait
+        // en place quand le spectateur sautait avant cette arrivée — l'ouverture n'a alors jamais
+        // lieu —, et un retour à la position d'ouverture dans les deux secondes (+10 s puis −10 s
+        // juste après une reconstruction) passait pour la source et était ignoré (fuzz du
+        // 24/09/2026, graine 20124805).
+        this.seekState.serving(startSeconds);
         this.pendingStart = startSeconds;
       }
       // Opening a film is a request to be somewhere, and it is about to be answered with media
