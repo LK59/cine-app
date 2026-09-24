@@ -19,11 +19,30 @@ export function pqToNits(code: number): number {
 }
 
 /**
- * Extended Reinhard on luminance, normalised so 1.0 is the mastering peak.
- * Leaves dark and mid tones near-linear and compresses only near the top.
+ * The HDR level shown as the screen's white: BT.2408's graphics white, 203 nits.
+ *
+ * The curve used to be normalised on the mastering peak (1000 nits, 4000 for *2012*), so 203-nit
+ * white came out at a half, or a quarter, of the screen's white — the same "far too dark" that
+ * Chrome produced on SDR screens, and that was settled by eye on 22/09/2026: 203 nits as white is
+ * the faithful rendering there, better than Firefox's. The canvas now makes the same choice
+ * (24/09/2026). Only to be revisited with an eye on a real screen.
  */
-export function toneMapLuma(luma: number, white = 1): number {
-  return (luma * (1 + luma / Math.max(white * white, 1e-6))) / (1 + luma);
+export const REFERENCE_WHITE_NITS = 203;
+
+/** Below this (in units of reference white), luminance is shown as it is. */
+export const TONE_KNEE = 0.8;
+
+/**
+ * Luminance in units of reference white, to display luminance (1.0 = screen white).
+ *
+ * Linear up to the knee — shadows, faces and mid tones exactly as graded — then a Reinhard
+ * shoulder that reaches white only asymptotically: highlights are compressed instead of clipped,
+ * and the curve joins the straight line with the same slope, so there is no visible edge.
+ */
+export function toneMapLuma(luma: number, knee = TONE_KNEE): number {
+  if (luma <= knee) return luma;
+  const x = (luma - knee) / (1 - knee);
+  return knee + ((1 - knee) * x) / (1 + x);
 }
 
 /** BT.2020 to BT.709 primaries, same matrix the shader applies. */

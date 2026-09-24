@@ -112,13 +112,14 @@ vec3 pqToLinear(vec3 v) {
   return pow(num / max(den, 1e-6), vec3(1.0 / m1)) * 10000.0;
 }
 
-// Extended Reinhard, applied to luminance only: L * (1 + L/white^2) / (1 + L). It leaves the
-// dark and mid tones very close to linear — which is what keeps faces and shadows looking right
-// rather than uniformly dimmed — and compresses only as it approaches the peak, mapping the
-// mastering white exactly to display white. Chosen over a filmic curve on purpose: it has one
-// parameter, it is reversible in the head, and it does not impose a "look" on the grade.
-float toneMapLuma(float l, float white) {
-  return l * (1.0 + l / max(white * white, 1e-6)) / (1.0 + l);
+// Mirrors hdrMath.toneMapLuma, which carries the reasoning and the tests: luminance in units of
+// reference white (203 nits), linear up to the knee, then a Reinhard shoulder that approaches the
+// screen's white without clipping and joins the line with the same slope.
+float toneMapLuma(float l) {
+  const float knee = 0.8;
+  if (l <= knee) return l;
+  float x = (l - knee) / (1.0 - knee);
+  return knee + (1.0 - knee) * x / (1.0 + x);
 }
 
 void main() {
@@ -151,12 +152,14 @@ void main() {
 
   vec3 linear = pqToLinear(clamp(rgb, 0.0, 1.0));
 
-  // Normalised so that 1.0 is the mastering peak, then tone-mapped on luminance alone and
-  // reapplied as a ratio: scaling the three channels by the same factor is what preserves hue,
-  // where mapping each channel separately desaturates bright colours.
-  vec3 normalized = linear / peakNits;
+  // Normalised so that 1.0 is reference white — 203 nits, see hdrMath.REFERENCE_WHITE_NITS —
+  // then tone-mapped on luminance alone and reapplied as a ratio: scaling the three channels by
+  // the same factor is what preserves hue, where mapping each channel separately desaturates
+  // bright colours. It used to be the mastering peak, which put 203-nit white at a half or a
+  // quarter of the screen's white (24/09/2026). The peakNits uniform stays declared for the caller.
+  vec3 normalized = linear / 203.0;
   float luma = dot(normalized, vec3(0.2627, 0.6780, 0.0593));
-  float mapped = toneMapLuma(luma, 1.0);
+  float mapped = toneMapLuma(luma);
   vec3 toned = luma > 1e-6 ? normalized * (mapped / luma) : vec3(0.0);
 
   // BT.2020 to BT.709 primaries.

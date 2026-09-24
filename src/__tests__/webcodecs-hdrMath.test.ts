@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pqToNits, toneMapLuma, bt2020ToBt709, linearToSrgb } from "@/lib/webcodecs/hdrMath";
+import { pqToNits, toneMapLuma, bt2020ToBt709, linearToSrgb, REFERENCE_WHITE_NITS } from "@/lib/webcodecs/hdrMath";
 
 describe("PQ transfer function", () => {
   // Anchor points from ST 2084 itself. A mistyped constant moves these by a lot while still
@@ -26,25 +26,34 @@ describe("PQ transfer function", () => {
 });
 
 describe("tone mapping", () => {
-  it("maps black to black and the mastering peak to display white", () => {
+  // En unités de blanc de référence : 1,0 = 203 nits.
+  const nits = (n: number) => n / REFERENCE_WHITE_NITS;
+
+  it("maps black to black and leaves shadows and mid tones exactly as graded", () => {
     expect(toneMapLuma(0)).toBe(0);
-    expect(toneMapLuma(1)).toBeCloseTo(1, 6);
+    expect(toneMapLuma(nits(20))).toBeCloseTo(nits(20), 9);
+    expect(toneMapLuma(nits(100))).toBeCloseTo(nits(100), 9);
   });
 
-  it("leaves the low end nearly untouched — that's what keeps faces from going grey", () => {
-    // Under 10% of peak, the curve stays within a few percent of linear.
-    expect(toneMapLuma(0.05)).toBeGreaterThan(0.045);
-    expect(toneMapLuma(0.1)).toBeGreaterThan(0.09);
+  // Ce qui a été tranché à l'œil sur Chrome le 22/09/2026 : 203 nits, c'est le blanc de l'écran.
+  // Normalisé sur un pic de 1000 nits, il sortait à 0,52 ; sur 4000 nits (2012), à 0,26.
+  it("shows reference white near the screen's white, whatever the mastering peak", () => {
+    expect(toneMapLuma(nits(203))).toBeGreaterThan(0.85);
+    expect(toneMapLuma(nits(203))).toBeLessThan(1);
   });
 
-  it("compresses above the peak instead of clipping", () => {
-    expect(toneMapLuma(2)).toBeGreaterThan(1);
-    expect(toneMapLuma(4)).toBeGreaterThan(toneMapLuma(2));
+  it("compresses highlights toward white instead of clipping them", () => {
+    expect(toneMapLuma(nits(1000))).toBeGreaterThan(toneMapLuma(nits(400)));
+    expect(toneMapLuma(nits(4000))).toBeGreaterThan(toneMapLuma(nits(1000)));
+    expect(toneMapLuma(nits(10000))).toBeLessThan(1);
   });
 
-  it("never inverts", () => {
+  it("joins the straight line without an edge, and never inverts", () => {
+    const knee = 0.8;
+    const slope = (toneMapLuma(knee + 1e-4) - toneMapLuma(knee)) / 1e-4;
+    expect(slope).toBeCloseTo(1, 2);
     let previous = -1;
-    for (let l = 0; l <= 3; l += 0.1) {
+    for (let l = 0; l <= 50; l += 0.05) {
       const mapped = toneMapLuma(l);
       expect(mapped).toBeGreaterThan(previous);
       previous = mapped;
