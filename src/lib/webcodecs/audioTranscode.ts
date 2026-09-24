@@ -14,6 +14,7 @@ import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
+import { audioConfigFor } from "./codecConfig";
 import { containerAccepts } from "./mseSource";
 import { extractAudioSpecificConfig, opusSampleEntry, parseAacConfig } from "./mp4SampleEntries";
 
@@ -117,6 +118,25 @@ const DECODABLE_HERE = new Set([
   // l'ordre dans lequel le décodeur d'Apple rend un Opus multicanal n'a jamais été mesuré : ces
   // pistes (76, en 3.0) gardent leur chemin d'avant plutôt qu'un pari sur la place des voix.
 ]);
+
+/**
+ * Si cette piste a un décodeur quelque part — le navigateur, ou l'un des nôtres.
+ *
+ * Faux, aucun chemin local ne peut en tirer un son : le remultiplexage la refuse, le canevas la
+ * refuse aussi, un peu plus tard (« Pas de son »), et c'est seulement là que le lecteur serveur
+ * prend la main. C'était le cas du MP2 (« Des gens bien », 6 épisodes, balayage du 24/09/2026) :
+ * mediabunny ne le reconnaît pas (codec nul), aucun navigateur ne l'annonce à WebCodecs.
+ *
+ * Délibérément large : un codec que mediabunny connaît compte comme décodable même sans
+ * configuration dans l'en-tête (un AAC sans AudioSpecificConfig), puisque le canevas l'essaie
+ * alors par ce chemin-là. Ne répondre « non » que pour ce que rien ne sait lire — une erreur ici
+ * enverrait au serveur un fichier qui jouait.
+ */
+export function audioDecoderExists(track: MatroskaTrack): boolean {
+  if (audioConfigFor(track)) return true;
+  if (track.codecId === "A_OPUS" || DECODABLE_HERE.has(track.codecId)) return true;
+  return /^A_(AAC|MPEG\/L3|VORBIS|PCM)/.test(track.codecId);
+}
 
 export function transcodableAudio(track: MatroskaTrack): boolean {
   if (track.codecId === "A_OPUS") return (track.audio?.channels ?? 2) <= 2;

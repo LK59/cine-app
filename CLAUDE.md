@@ -157,10 +157,11 @@ is no server-side player to hand to and the same call surfaces a clean playback 
 
 **A refusal that names the player, not the path, must stop the chain.** `tryRemux` returns either
 a plain string — "not by this route, try the next" — or `{ reason, server: true }`, which means no
-local path can carry this file at all and the server player is the answer. One case reaches it
-now: Dolby Vision with no HDR10 base layer. The second, audio no decoder anywhere could produce —
-TrueHD —, ended on 2026-09-21 when FFmpeg's decoder was compiled to WebAssembly
-(`tools/truehd-wasm`, `src/lib/webcodecs/truehd/`). Both were found the same way: the log showed
+local path can carry this file at all and the server player is the answer. Two cases reach it
+now: Dolby Vision with no HDR10 base layer, and audio no decoder anywhere can read
+(`audioDecoderExists` — MP2, which mediabunny does not recognise). TrueHD used to be the second
+until 2026-09-21, when FFmpeg's decoder was compiled to WebAssembly
+(`tools/truehd-wasm`, `src/lib/webcodecs/truehd/`). All were found the same way: the log showed
 the canvas path being opened, failing on something already known, and only then falling back. Use the **same predicate** that refuses at runtime, never a neighbouring one —
 `playableAudio` means "cannot cross MediaSource", which is true of an AAC in a browser that
 cannot encode, and that shortcut would have handed working files to the server.

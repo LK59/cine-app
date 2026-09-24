@@ -26,7 +26,7 @@ import { unsupportedReason, dolbyVisionInfo } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { playabilityOf } from "./mseSource";
 import { trace } from "./trace";
-import { chooseTranscodePlan, chooseTranscodeCodec } from "./audioTranscode";
+import { audioDecoderExists, chooseTranscodePlan, chooseTranscodeCodec } from "./audioTranscode";
 import {
   Remuxer,
   audioDelivery,
@@ -186,13 +186,20 @@ async function tryRemux(input: PathInput): Promise<{ remuxer: Remuxer; plan: Rem
      * Jusqu'au 21/09/2026, un fichier dont **toutes** les pistes étaient en TrueHD passait
      * directement au lecteur serveur (`server: true`) : aucun décodeur n'existait, nulle part, et
      * essayer le canevas n'aboutissait qu'au même refus un peu plus tard. Le décodeur de FFmpeg,
-     * compilé en WebAssembly, a fermé ce cas — il ne reste plus d'audio que rien ne décode ici.
+     * compilé en WebAssembly, a fermé ce cas.
      *
      * `playableAudio` faux veut donc dire « ne traverse pas MediaSource » — un AAC dans un
      * navigateur qui n'encode rien, par exemple —, et le chemin canevas, qui décode en logiciel,
      * reste la suite normale. Ne pas le confondre avec « aucun décodeur » : c'est l'erreur qu'un
      * test existant avait attrapée la première fois.
+     *
+     * « Aucun décodeur » existe pourtant encore, et c'est un autre prédicat : `audioDecoderExists`,
+     * celui qui fait échouer le canevas. Le MP2 (balayage du 24/09/2026) passait par ce canevas
+     * pour y échouer sur « Pas de son », puis seulement au lecteur serveur.
      */
+    if (!audioDecoderExists(audioTrack)) {
+      return { reason: `audio ${audioTrack.codecId} : aucun décodeur, ni ici ni dans le navigateur`, server: true };
+    }
     return `audio ${audioTrack.codecId} non remultiplexable`;
   }
 

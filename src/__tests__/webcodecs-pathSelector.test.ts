@@ -217,6 +217,28 @@ describe("un fichier tout en TrueHD", () => {
   });
 });
 
+/**
+ * Une piste que rien ne décode : le MP2 de « Des gens bien » (balayage du 24/09/2026). Le canevas
+ * l'essayait pour échouer sur « Pas de son », avant que le lecteur serveur ne prenne la main.
+ */
+describe("un son que rien ne décode", () => {
+  const MP2 = track({ number: 2, type: "audio", codecId: "A_MPEG/L2", audio: { sampleRate: 48000, channels: 2 } });
+
+  it("passe directement au lecteur serveur, sans essayer le canevas", async () => {
+    supported = new Set([mimeFor(VIDEO, null).video]);
+    vi.stubGlobal("AudioEncoder", { isConfigSupported: async () => ({ supported: true }) });
+    await expect(choosePlaybackPath(input(VIDEO, MP2))).rejects.toThrow(/A_MPEG\/L2 : aucun décodeur/);
+  });
+
+  it("mais un AAC sans configuration garde sa chance au canevas", async () => {
+    supported = new Set([mimeFor(VIDEO, null).video]);
+    vi.stubGlobal("AudioEncoder", undefined);
+    const bare = track({ number: 2, type: "audio", codecId: "A_AAC", audio: { sampleRate: 48000, channels: 2 } });
+    const chosen = await choosePlaybackPath(input(VIDEO, bare));
+    expect(chosen.path).toBe("webcodecs");
+  });
+});
+
 describe("describePath", () => {
   it("names the path taken, and every one refused before it", async () => {
     supported = new Set([mimeFor(VIDEO, null).video]);
